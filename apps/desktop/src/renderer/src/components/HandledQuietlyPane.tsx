@@ -26,7 +26,7 @@ function QuietRow(props: { item: QuietReadView; now: Date; onOpenTile: (pick: Ti
             {item.title}
           </span>
         </span>
-        <span className="truncate text-[11.5px] text-muted" title={item.reason === 'bots' || item.reason === 'judged' ? item.bots.join(', ') : quietReasonText(item)}>
+        <span className="truncate text-[11.5px] text-muted" title={item.bots.length > 0 ? item.bots.join(', ') : quietReasonText(item)}>
           {quietReasonText(item)}
         </span>
         <span className="text-right font-mono text-[10.5px] text-faint" title={item.at}>
@@ -54,17 +54,18 @@ export function HandledQuietlyPane(props: { onOpenTile: (pick: TilePick) => void
       <div className="flex flex-col gap-1.5">
         <h1 className="text-[23px] leading-tight font-[650] tracking-[-0.022em]">Handled quietly</h1>
         <p className="max-w-[720px] text-[13px] text-ink-2">
-          PR threads PostPile marked read on GitHub for you, only while GitHub writes are unlocked. After a full sync: threads you had read that came back
-          only because of bots (CI, merge queues, review and deploy bots; never on your own PRs, never while something is your move or new for you),
+          PR threads PostPile marked read on GitHub for you, only while GitHub writes are unlocked. As soon as a sync or the live poll sees them: threads you had read that came back
+          only because of bots (CI, merge queues, review and deploy bots; never while something is your move or new for you),
           threads where you reviewed or replied after everything unread, from the gh CLI, GitHub Mobile or an agent, and threads where everything since
-          you last looked is bots or people the agent judged as not needing you. And PRs you opened here while nothing was asked of you. Never a review
-          request, mention, question or reply to you, and never a merge without your review. Releases and issues are marked read too, and not listed.
+          you last looked is bots or people the agent judged as not needing you. Review requests you never opened that no longer stand (removed, or a
+          teammate reviewed), when nothing since needs you. And PRs you opened here while nothing was asked of you. Never a review request that still
+          stands, a mention, question or reply to you, and never a merge without your review. Releases and issues are marked read too, and not listed.
         </p>
       </div>
       {writes && !writes.enabled && (
         <p className="max-w-[720px] rounded-row bg-subtle px-3 py-2 text-[12px] text-ink-2">GitHub writes are locked, so nothing is handled quietly right now.</p>
       )}
-      {quiet.error && <p className="text-xs text-unread-ink">Could not load the list: {quiet.error.message}</p>}
+      {quiet.error && <p className="text-xs text-status-bad">Could not load the list: {quiet.error.message}</p>}
       {quiet.isPending && <p className="text-xs text-muted">Loading…</p>}
       {!quiet.isPending && !quiet.error && items.length === 0 && (
         <p className="rounded-tile border border-dashed border-frame px-4 py-8 text-center text-xs text-muted">Nothing handled quietly in the last 7 days.</p>

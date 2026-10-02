@@ -12,6 +12,7 @@ function topic(id: string, status: Topic['status'] = 'active'): Topic {
     driver: null,
     userRole: 'watcher',
     status,
+    kind: 'project',
     retiredAt: null,
     area: null,
     createdAt: '2026-09-30T00:00:00Z',

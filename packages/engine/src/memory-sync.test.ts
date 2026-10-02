@@ -86,6 +86,19 @@ describe('dossier updates', () => {
     expect(third?.delta.events.map((e) => [e.prKey, e.kind])).toEqual([[pr2.key, 'review_requested']]);
   });
 
+  it("takes the dossier's kind for the topic without asking, and keeps it when the answer says nothing", async () => {
+    const h = makeHarness();
+    topicWithPrs(h, 'migrations', [reviewRequestedPr(1)]);
+    topicWithPrs(h, 'depot', [reviewRequestedPr(2)]);
+    h.agent.answerDossier((input) => ({ topicKind: input.topic.id === 'migrations' ? 'standing' : null }));
+    h.agent.answerDossier((input) => ({ topicKind: input.topic.id === 'migrations' ? 'standing' : null }));
+
+    await h.engine.sync({ agentJobs: ['dossiers'] });
+
+    expect(h.store.topics.get('migrations')?.kind).toBe('standing');
+    expect(h.store.topics.get('depot')?.kind).toBe('project');
+  });
+
   it('makes no call for a topic without new input', async () => {
     const h = makeHarness();
     topicWithPrs(h, 'depot', [reviewRequestedPr(1)]);

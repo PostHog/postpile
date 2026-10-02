@@ -60,6 +60,9 @@ export function turnTitle(turn: WhoseTurn): string {
   if (turn.kind === 'you') {
     return `Your move: ${turn.what}`;
   }
+  if (turn.kind === 'them' && turn.who === null) {
+    return turn.what;
+  }
   if (turn.kind === 'them' && turn.lead) {
     return [turn.lead, turn.who, turn.what].filter((part) => part).join(' ');
   }

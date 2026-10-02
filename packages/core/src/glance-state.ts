@@ -60,3 +60,35 @@ export function glanceStateOf(input: GlanceStateInput): GlanceState {
   }
   return 'queued';
 }
+
+/**
+ * Why a stale glance waits for the next full sync instead of being
+ * rewritten when the user looks at the PR (DESIGN.md "Glance refresh on
+ * look"): the agent is off, catch-up is off (POSTPILE_CATCHUP_CAP=0), the
+ * daily catch-up cap is spent, or the PR gets no glance at all.
+ */
+export type GlanceRefreshBlock = 'agent_off' | 'catch_up_off' | 'daily_cap' | 'no_glance';
+
+export interface GlanceRefreshInput {
+  /** The PR should have a glance: open, pinged or found, in a tile. */
+  wanted: boolean;
+  agentOff: boolean;
+  /** The daily catch-up cap is 0. */
+  catchUpOff: boolean;
+  /** The daily catch-up cap has no calls left in its 24h window. */
+  dailyCapSpent: boolean;
+}
+
+/** Null when looking at the PR rewrites a stale glance; else why it waits for the next sync. */
+export function glanceRefreshBlockOf(input: GlanceRefreshInput): GlanceRefreshBlock | null {
+  if (!input.wanted) {
+    return 'no_glance';
+  }
+  if (input.agentOff) {
+    return 'agent_off';
+  }
+  if (input.catchUpOff) {
+    return 'catch_up_off';
+  }
+  return input.dailyCapSpent ? 'daily_cap' : null;
+}

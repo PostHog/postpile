@@ -4,19 +4,18 @@ import { CatchUpQueue } from './catch-up-queue.ts';
 /** A run the test ends by hand. */
 interface HeldRun {
   topicId: string | null;
+  /** Null for a whole-topic run. */
+  prKeys: string[] | null;
   finish: () => void;
 }
 
 function heldQueue(canStart: () => boolean = () => true): { queue: CatchUpQueue; runs: HeldRun[] } {
   const runs: HeldRun[] = [];
-  const queue = new CatchUpQueue(
-    (topicId) =>
-      new Promise<void>((resolve) => {
-        runs.push({ topicId, finish: resolve });
-      }),
-    canStart,
-    () => {},
-  );
+  const held = (topicId: string | null, prKeys: string[] | null) =>
+    new Promise<void>((resolve) => {
+      runs.push({ topicId, prKeys, finish: resolve });
+    });
+  const queue = new CatchUpQueue({ topic: (topicId) => held(topicId, null), glances: (topicId, prKeys) => held(topicId, prKeys) }, canStart, () => {});
   return { queue, runs };
 }
 
@@ -97,11 +96,14 @@ describe('CatchUpQueue', () => {
     const lines: string[] = [];
     let calls = 0;
     const queue = new CatchUpQueue(
-      async () => {
-        calls += 1;
-        if (calls === 1) {
-          throw new Error('boom');
-        }
+      {
+        topic: async () => {
+          calls += 1;
+          if (calls === 1) {
+            throw new Error('boom');
+          }
+        },
+        glances: async () => {},
       },
       () => true,
       (line) => lines.push(line),
@@ -114,5 +116,37 @@ describe('CatchUpQueue', () => {
 
     expect(calls).toBe(2);
     expect(lines).toEqual(['catch-up depot: failed: boom']);
+  });
+
+  it("runs one PR's glance alone, and folds it into a queued topic run", async () => {
+    const { queue, runs } = heldQueue();
+
+    expect(queue.requestGlance('depot', 'acme/app#1')).toBe('started');
+    expect(queue.stateOf('depot', 'acme/app#1')).toBe('running');
+    // Another PR of the topic is not being written, and the topic's memory is not either.
+    expect(queue.stateOf('depot', 'acme/app#2')).toBeNull();
+    expect(queue.stateOf('depot')).toBeNull();
+    expect(queue.requestGlance('depot', 'acme/app#2')).toBe('queued');
+    expect(queue.requestGlance('depot', 'acme/app#2')).toBe('covered');
+    expect(queue.stateOf('depot', 'acme/app#2')).toBe('queued');
+    // A whole-topic follow-up covers the queued glance and every later one.
+    expect(queue.request('depot')).toBe('queued');
+    expect(queue.requestGlance('depot', 'acme/app#3')).toBe('covered');
+
+    runs[0]!.finish();
+    await settle();
+    expect(runs.map((run) => run.prKeys)).toEqual([['acme/app#1'], null]);
+  });
+
+  it('queues a glance behind a topic run already going: that run may have read the PR before it changed', async () => {
+    const { queue, runs } = heldQueue();
+    queue.request('depot');
+
+    expect(queue.requestGlance('depot', 'acme/app#1')).toBe('queued');
+    expect(queue.requestGlance('depot', 'acme/app#1')).toBe('covered');
+
+    runs[0]!.finish();
+    await settle();
+    expect(runs.map((run) => run.prKeys)).toEqual([null, ['acme/app#1']]);
   });
 });

@@ -1,7 +1,7 @@
 // Invariants across rules over the sample boards (DESIGN.md "Rules layer:
 // one home per fact", "Tests across rules"). Each rule has its own tests;
 // these check that the rules agree with each other on every sample tile.
-import type { PaneOffers, PrSummary, TileView } from '@postpile/core';
+import type { PaneOffers, PrSummary, TileView, TopicSection } from '@postpile/core';
 import { describe, expect, it } from 'vitest';
 import { FakeEngine } from './fake-engine.ts';
 
@@ -29,6 +29,24 @@ function paneOf(view: TileView, pr: PrSummary): PaneOffers {
 function expectOnlyOpen(pane: PaneOffers): void {
   expect(pane).toMatchObject({ lead: 'open_on_github', open: true, approve: false, ask: false, markLabel: null, snooze: false, removeTeams: [] });
 }
+
+describe('quiet rows on the sample board', () => {
+  it('dims some rows and not others', async () => {
+    const topics = await new FakeEngine({ now: () => NOW }).listTopics();
+    expect(topics.some((item) => item.quiet)).toBe(true);
+    expect(topics.some((item) => !item.quiet)).toBe(true);
+  });
+
+  it('has an owner section with dealt-with topics behind its line and one that is all dealt with', async () => {
+    const topics = await new FakeEngine({ now: () => NOW }).listTopics();
+    const quietIn = (section: TopicSection) => topics.filter((item) => item.section === section).map((item) => item.quiet);
+    // Other work lists a topic with news and hides the rest; every Your team owns topic is dealt with.
+    expect(quietIn('other_work')).toContain(true);
+    expect(quietIn('other_work')).toContain(false);
+    expect(quietIn('team_owns').length).toBeGreaterThan(0);
+    expect(quietIn('team_owns').every(Boolean)).toBe(true);
+  });
+});
 
 describe('rules agree on the sample boards', () => {
   // A done PR on a live tile is not in the sample; packages/core/src/rules-invariants.test.ts covers it.

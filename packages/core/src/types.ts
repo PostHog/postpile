@@ -185,9 +185,9 @@ export interface Pr {
   /**
    * The snapshot was cut off at the query's caps: more reviews, comments,
    * review threads, comments in one thread, commits or timeline items than
-   * it asked for. An event past the caps is missing, so no quiet mark-read
-   * trusts this snapshot. Missing on
-   * snapshots stored before it existed: read as false.
+   * it asked for. An event past the caps may be missing, so the quiet reads
+   * trust it only as far back as `capHits` reaches (`snapshotCoversSince`).
+   * Missing on snapshots stored before it existed: read as false.
    */
   truncated?: boolean;
   /**
@@ -195,8 +195,9 @@ export interface Pr {
    * node was dropped: the list, how many nodes came back, and the oldest
    * item among them (null where no time applies). Empty when no list hit
    * its cap (a snapshot can be `truncated` because GitHub counts items it
-   * never returns). Missing on snapshots stored before it existed: then a
-   * truncated snapshot never vouches (`cutSnapshotCovers`).
+   * never returns). Paging in older items (packages/github `cap-fill.ts`)
+   * moves a hit further back or marks it complete. Missing on snapshots
+   * stored before it existed: then a truncated snapshot never vouches.
    */
   capHits?: CapHit[];
 }
@@ -207,10 +208,20 @@ export type CappedList = 'reviews' | 'comments' | 'review_threads' | 'thread_com
 /** One capped list that came back full with more on GitHub. */
 export interface CapHit {
   list: CappedList;
-  /** Nodes GitHub returned, before normalizing dropped any. */
+  /** Nodes GitHub returned, before normalizing dropped any; older pages paged in add theirs. */
   nodes: number;
   /** The oldest of them; null for review threads and a thread's comments. */
   oldestAt: IsoTime | null;
+  /**
+   * GitHub's cursor for the next page to ask: the start of the oldest page
+   * (`before:`), or for a thread's comments the end of the newest page
+   * (`after:`). Missing on snapshots stored before it was asked for.
+   */
+  cursor?: string | null;
+  /** thread_comments only: the review thread whose comments hit the cap. */
+  threadId?: string;
+  /** Paging reached the end of the list: GitHub had no more pages, so nothing of it is missing. */
+  complete?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -407,8 +418,21 @@ export interface PullIn {
 
 export type UserRole = 'driver' | 'reviewer' | 'stakeholder' | 'watcher';
 
-/** archived: merged away, never comes back. retired: finished, comes back when a new PR joins. */
+/**
+ * archived: merged away, never comes back. retired: nothing left to do, so
+ * it left the sidebar for the Archive drawer; comes back when a new PR joins
+ * or a thread turns unread. The app says "Archive" for retired topics; code
+ * keeps "retired" because "archived" already means merged away.
+ */
 export type TopicStatus = 'active' | 'archived' | 'retired';
+
+/**
+ * project: one goal with a finish line ("Move CI to a new provider").
+ * standing: a standard kept up for months with no finish line ("Migration
+ * safety"); PRs arrive in waves. The kind decides how long a retired topic
+ * still takes new PRs (`takesNewPrs`).
+ */
+export type TopicKind = 'project' | 'standing';
 
 export interface Topic {
   /** Stable id, never reused. Renames keep the id. */
@@ -423,6 +447,8 @@ export interface Topic {
   driver: string | null;
   userRole: UserRole;
   status: TopicStatus;
+  /** Agent-set when the topic is made or tidied; the user can change it. */
+  kind: TopicKind;
   /** When it retired; null unless retired. Only `nextTopicStatus` sets it. */
   retiredAt: IsoTime | null;
   /** Broad area the topic sits in ("CI", "Dev env"), agent-assigned. Null until the first dossier update. */

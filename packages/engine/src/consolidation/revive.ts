@@ -33,7 +33,7 @@ export function reviveRetiredTopics(store: Store, newEventIds: string[], at: str
   return revived;
 }
 
-/** The thread's PR, read as the quiet reads read it, would be cleared by rule (grace aside). Unknown PR or no viewer: not clearable. */
+/** The thread's PR, read as the quiet reads read it, would be cleared by rule. Unknown PR or no viewer: not clearable. */
 function clearableNow(board: Board, prKey: PrKey, fetchedAt: Map<PrKey, string>): boolean {
   const thread = board.threads.get(prKey);
   const pr = board.prs.get(prKey);
@@ -48,7 +48,6 @@ function clearableNow(board: Board, prKey: PrKey, fetchedAt: Map<PrKey, string>)
     viewer: board.viewer,
     notYours: board.notYours.has(prKey),
     prFetchedAt: fetchedAt.get(prKey) ?? null,
-    now: board.now,
   });
 }
 
@@ -61,8 +60,10 @@ function clearableNow(board: Board, prKey: PrKey, fetchedAt: Map<PrKey, string>)
  * reads and reads the unread state they left: a failed or capped quiet
  * write brings the topic back. The poll passes `skipClearableByRule` while
  * GitHub writes are on: a thread the quiet reads clear by rule
- * (`clearableByRule`, grace aside) waits for the next full sync, which
- * clears it or brings the topic back. Returns how many topics came back.
+ * (`clearableByRule`) is left to the poll's own quiet reads at the end of
+ * the cycle; one they leave unread (a failed or capped write) waits for the
+ * next full sync, which clears it or brings the topic back. Returns how
+ * many topics came back.
  */
 export function reviveUnreadTopics(store: Store, at: string, skipClearableByRule: boolean): number {
   const retired = store.topics.list().filter((topic) => topic.status === 'retired');

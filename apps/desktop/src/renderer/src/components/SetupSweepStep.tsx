@@ -67,7 +67,7 @@ export function SetupSweepStep(props: {
       )}
       {finished && view.error && !view.draft && <p className="rounded-row bg-status-bad-soft px-3 py-2 text-xs text-status-bad">{view.error}</p>}
       {blank && (
-        <p className="rounded-row bg-status-queued-soft px-3 py-2 text-xs text-status-queued">
+        <p className="rounded-row bg-amber-soft px-3 py-2 text-xs text-amber-ink">
           No agent draft this time. You can continue with a blank template and write it yourself, or run the sweep again.
         </p>
       )}

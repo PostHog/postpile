@@ -1,7 +1,8 @@
-import { isAutomation } from './bots.ts';
+import { isAutomation, isTrunkBot } from './bots.ts';
 import { CHANGES_ANSWERED_REASON, isChangesAnswerEvent } from './changes-answered.ts';
 import { ADDRESSED_KINDS, PUSH_KINDS } from './kinds.ts';
 import { isViewerSubject, sameLogin } from './mentions.ts';
+import { mergeQueueFailureAt } from './merge-queue.ts';
 import { isPrOwner } from './pr-owners.ts';
 import { viewerAskedToReview } from './review-request.ts';
 import { isRoutingTeam } from './team-roles.ts';
@@ -57,6 +58,19 @@ function isMentionEdit(input: LoudnessInput): boolean {
   return input.kind === 'comment_edited' && typeof input.subject === 'string';
 }
 
+/**
+ * Trunk's comment or edit that took the viewer's own PR out of the merge
+ * queue (`mergeQueueFailureAt`), while it is still out: theirs to re-submit.
+ * Every other trunk status change is plain bot activity.
+ */
+function mergeQueueFailure(input: LoudnessInput) {
+  const trunkStatus = (input.kind === 'bot_comment' || input.kind === 'comment_edited') && isTrunkBot(input.actor);
+  if (!trunkStatus || input.at === undefined || !isViewersPr(input)) {
+    return null;
+  }
+  return mergeQueueFailureAt(input.pr, input.at);
+}
+
 function isRequestForViewer(input: LoudnessInput): boolean {
   return input.kind === 'review_requested' && isViewerSubject(input.subject, input.viewer);
 }
@@ -82,6 +96,16 @@ export const LOUDNESS_TABLE: readonly LoudnessRow[] = [
     when: (input) => input.actor !== '' && sameLogin(input.actor, input.viewer.login),
     loudness: 'quiet',
     reason: 'your own activity',
+  },
+  {
+    // The one bot status that needs the viewer: their PR is out of the queue (DESIGN "Merge queue", 2026-10-02).
+    name: 'removed from the merge queue',
+    when: (input) => mergeQueueFailure(input) !== null,
+    loudness: 'loud',
+    reason: (input) => {
+      const reason = mergeQueueFailure(input)?.reason;
+      return reason ? `removed from the merge queue: ${reason}` : 'removed from the merge queue';
+    },
   },
   {
     // A bot rebasing or updating a draft is pure churn; nobody reviews drafts.

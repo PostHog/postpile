@@ -96,7 +96,7 @@ export function RecheckDialog(props: RecheckDialogProps) {
   let buttons: ReactNode = null;
   if (failed || result?.status === 'unavailable') {
     const message = result?.status === 'unavailable' ? result.message : 'The recheck did not go through.';
-    body = <Verdict title="Could not recheck" tone="text-unread-ink" why={message} />;
+    body = <Verdict title="Could not recheck" tone="text-status-bad" why={message} />;
     buttons = tellButton;
   } else if (result?.outcome === 'holds') {
     body = <Verdict title="Still looks right" tone="text-safe" why={result.why} />;
@@ -115,7 +115,7 @@ export function RecheckDialog(props: RecheckDialogProps) {
   } else if (result?.outcome === 'fix') {
     body = (
       <div className="flex flex-col gap-2">
-        <Verdict title="Needs a fix" tone="text-closer" why={result.why} />
+        <Verdict title="Needs a fix" tone="text-amber-ink" why={result.why} />
         <DiffView before={request.text} after={result.text} />
       </div>
     );
@@ -132,7 +132,7 @@ export function RecheckDialog(props: RecheckDialogProps) {
       </>
     );
   } else if (result?.outcome === 'drop') {
-    body = <Verdict title="This no longer holds" tone="text-unread-ink" why={result.why} />;
+    body = <Verdict title="This no longer holds" tone="text-status-bad" why={result.why} />;
     buttons = (
       <>
         {tellButton}

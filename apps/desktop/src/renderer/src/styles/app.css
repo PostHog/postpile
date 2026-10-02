@@ -59,7 +59,7 @@
   --color-edge-control-soft: var(--ring-control-soft);
   --color-edge-field: var(--ring-field);
   --color-edge-honey: var(--ring-honey);
-  --color-edge-honey-box: var(--ring-honey-box);
+  --color-edge-closer-box: var(--ring-closer-box);
   --color-edge-risk-box: var(--ring-risk-box);
   --color-edge-accent-group: var(--ring-accent-group);
   --color-edge-accent-picked: var(--ring-accent-picked);
@@ -118,19 +118,15 @@
 
   /* PR status pill */
   --color-pill-line: var(--pill-line);
-  --color-status-good-soft: var(--status-good-soft);
-  --color-status-good: var(--status-good);
   --color-status-bad-soft: var(--status-bad-soft);
   --color-status-bad: var(--status-bad);
-  --color-status-queued-soft: var(--status-queued-soft);
-  --color-status-queued: var(--status-queued);
 
   /* Verdicts */
   --color-safe: var(--safe);
   --color-safe-soft: var(--safe-soft);
   --color-safe-hover: var(--safe-hover);
   --color-safe-edge: var(--safe-edge);
-  --color-mark-honey: var(--mark-honey);
+  --color-mark-closer: var(--mark-closer);
   --color-safe-line: var(--safe-line);
   --color-mark-safe: var(--mark-safe);
   --color-risk-line: var(--risk-line);
@@ -146,8 +142,8 @@
   --color-merged-ink: var(--merged-ink);
   --color-merged-soft: var(--merged-soft);
   --color-closed: var(--closed);
-  --color-closed-soft: var(--closed-soft);
   --color-pending: var(--pending);
+  --color-pending-ink: var(--pending-ink);
 
   /* Line diffs */
   --color-diff-add: var(--diff-add);

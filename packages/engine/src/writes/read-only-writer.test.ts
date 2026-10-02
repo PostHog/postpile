@@ -7,6 +7,7 @@ describe('ReadOnlyWriter', () => {
     const ref = { repo: 'o/r', number: 1 };
     await expect(writer.markThreadRead('t1')).rejects.toThrow(/read-only/);
     await expect(writer.approvePr(ref)).rejects.toThrow(/read-only/);
+    await expect(writer.commentReviewPr(ref)).rejects.toThrow(/read-only/);
     await expect(writer.commentOnPr(ref)).rejects.toThrow(/read-only/);
   });
 });

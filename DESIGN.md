@@ -22,7 +22,7 @@ dossier update, consolidation), so all agents cut work at the same grain:
 
 - *Area*: the part of the product or codebase the work touches ("Hogland",
   "Data warehouse", "posthog-cli"), never the user's own field or team
-  ("Dev tooling" held 70 of 113 topics on real data and said nothing). A
+  ("Dev tooling" held most topics and said nothing). A
   label on topics, never a topic itself, a handful to about fifteen topics
   each. The dossier update replaces a catch-all area when it next writes the
   topic (still at most MAX_NEW_AREAS_PER_SYNC new areas per sync).
@@ -49,7 +49,7 @@ seven days (`simulate-start`) gave 150 topics for about 260 PRs, 109 of them
 with one PR: the agent took each PR's own change as its goal, and one
 project of the user's came out as three topics. The assignment prompt now
 carries `TOPIC_SIZE_EXAMPLES`: a topic is a project someone drives for days to
-weeks ("would the driver name it in a weekly update?"), with right-size,
+weeks (or, since the same evening, a standing topic: see "Topic kinds") ("would the driver name it in a weekly update?"), with right-size,
 too-small and too-big examples; a project named in the user's work context is
 the topic for their PRs; the same person on the same product in the same
 stretch of time is usually one project. How PRs are fed changed too: batches
@@ -59,10 +59,49 @@ whole backlog as one fenced line per PR; a new topic comes with a one-sentence
 goal, kept as its summary until the first dossier, so later batches see what
 it is for. Routed one-off PRs still get a topic each.
 
-**Topic status**: `active`, `retired` (finished) or `archived` (merged
-away, never comes back). Every full sync ends by retiring each active topic
-that passes the gate (`RetireGate`, `retireFinishedTopics`): every member PR
-merged or closed, no events for 3 days, every thread of the topic read on
+**Topic kinds** (2026-10-01): a topic is a `project` (one goal with a
+finish line) or `standing` (one standard kept up for months with no finish
+line, "Migration safety", "Code ownership"; its PRs come in waves). "A
+project of days to weeks" had split such standards into deliverables: a real
+database held migration safety as "Django migration runbook docs" and code
+ownership in four topics. `topic.kind` (migration 023, default `project`):
+the agent picks it for a new topic (`topicKind` in the assignment answer), the
+grain 3 tidy sorts existing ones, and `TOPIC_SIZE_EXAMPLES` describes both,
+with sub-parts of a standing topic as too small (a wave of them is a set) and
+a whole product as too big. The kind decides how long a topic in the Archive
+still takes new PRs (`takesNewPrs`, `archiveEndsAt`): a project 30 days after
+it got there, a standing topic until half a year passes without a PR joining
+it (the user's rule). Past that it is retired for good: the agent no longer
+offers it and the Archive drawer drops it. The topic list in the assignment
+prompt says each topic's kind, and a topic in the Archive says "Finished" or
+"Quiet for now"; a quiet standing topic takes the next PR of its standard
+however long it slept. A standing topic's dossier follows the current wave
+and never calls the topic finished (`STANDING_DOSSIER_RULE`).
+The kind is the agent's (owner decision): no switch for the user and no
+proposal. A dossier update may correct it (`topicKind` in the answer, applied
+right away) when the topic was clearly cut as the wrong kind. A project whose
+goal is reached stays a project; when people keep extending what it built
+("GitHub egress" turned into "egress", with others adding to it), the next
+PRs go to a standing topic named after the standard, started if needed.
+**Ownership signal**: the topic list shows each topic's owner team (the
+dossier relation's `ownerTeam`), and a PR that reaches the user through a
+team review request is judged by what that team keeps up: when it changes
+code of a standard a standing topic keeps (same owner team, same code), it
+joins that topic, also when it is a step of someone else's project. Routed
+PRs that fit no standing topic are placed as before. In a sample database over half
+of the one-PR topics were routed reviews, so this is where ownership helps;
+it never cuts topics by team on its own (a team owns many goals). Research
+(PARA, GTD, Linear, Jira, Shape Up) found no third lifecycle worth a kind:
+incidents behave like short projects, chores are single tiles.
+
+**Topic status**: `active`, `retired` (in the Archive) or `archived`
+(merged away, never comes back). The app says "Archive" for retired topics;
+code keeps "retired" because "archived" already means merged away. Every
+full sync ends by retiring each active topic that passes the gate
+(`RetireGate`, `retireFinishedTopics`): every member PR merged or closed, no
+human activity for 2 days (2026-10-01; was any event for 3 days: deploys,
+CI and bot comments land after a merge and kept 18 of 32 finished topics of
+a real database in the sidebar), every thread of the topic read on
 GitHub (since 2026-09-30, "GitHub unread is PostPile unread") and every
 tile done (since 2026-09-29 evening; before, only "no unread or snoozed
 tile", which retired topics holding unseen merges without the user's
@@ -75,15 +114,25 @@ member thread unread on GitHub that the quiet reads would not clear by
 rule (`reviveUnreadTopics`, after the retire step of every full sync and in
 every poll that moved the inbox, also for topics an older build retired
 with an unread thread) or a new PR assigned to it
-(retired topics stay on offer for 30 days) makes it active again. Every
+(while it takes new PRs, see "Topic kinds") makes it active again. Every
 status change goes through `nextTopicStatus` (engine: `changeTopicStatus`),
 and retiring records `retiredAt` (migration 020; before, "retired at" read
 `updatedAt`, which any rename moved). Loud means effective loudness: the
 full sync classifies new events first (retired topics' events included) and
 revives after, so an event the agent turned quiet brings nothing back. The
 live poll does not classify and still revives on the rule's loudness. Retired
-topics leave the sidebar list and wait in its Finished drawer (see "Queue
-sections"). Until 2026-09-29 only the daily consolidation retired topics,
+topics leave the sidebar list and wait in its Archive drawer (see "Queue
+sections"). **Archive now** (2026-10-01): the topic's action row, where ✨
+Approve and "Mark N read" sit under the Tiles count, shows a box once nothing
+is left in the topic (every PR over, every thread read, every tile done;
+`TopicDetail.archive`, `TopicArchiveBox`): "Everything here is dealt with. It
+moves to the Archive by itself on <day>", and an "Archive now" button
+(`POST /api/topics/:id/archive`, refused while anything is open or unread;
+telemetry `topic_archived`) that skips the 2 quiet days. In the Archive the
+box says since when, what brings the topic back, and until when it takes new
+PRs. The renderer refetches the Archive list before the rest, so the open
+topic never sits in neither list (the view would fall back to another topic
+and pin it). Until 2026-09-29 only the daily consolidation retired topics,
 and only when the agent said finished and 14 quiet days had passed; most
 topics with every PR merged never left the sidebar.
 
@@ -138,7 +187,7 @@ agent-grouped among pinged and found PRs; the agent never pulls PRs in.
 | loudness | effect | examples |
 |---|---|---|
 | loud | pings, coral "new since you looked", lights up the topic (the tile is unread while its thread is unread on GitHub, loud or not: "GitHub unread is PostPile unread") | mention, review requested, question to the user, a push after the user approved when the agent raises it, the author's push or comment after the user requested changes ("addressed your changes") |
-| quiet | dot, no ping | bots, CI (always, see "CI is not a signal"), deploys, merge queue, pushes after the user approved (by default), merged without the user's review (never loud; surfaced by the done rule instead, see "Merged without your review") |
+| quiet | dot, no ping | bots, CI (always, see "CI is not a signal"), deploys, merge queue (except trunk taking your own PR out of it: loud, see "Merge queue"), pushes after the user approved (by default), merged without the user's review (never loud; surfaced by the done rule instead, see "Merged without your review") |
 | muted | hidden as noise, one click to unmute | bot rebase on a draft |
 | seen | already read | any of the above after reading, or before the user's own last action on the PR (see "You already dealt with it") |
 
@@ -435,6 +484,84 @@ stale on the PR's next push, review or human comment, a dossier on the
 topic's next real activity, and a bump would rewrite every one of them in
 one go for a line that fades on its own.
 
+## Merge queue
+
+Decided 2026-10-02. The owner wanted PostPile to show a PR in the Trunk
+merge queue the way Trunk's browser extension does on github.com: the PR's
+git state icon is replaced by the merge-queue icon (Primer Octicons
+`git-merge-queue-16`), pending amber while it waits or tests, red once the
+queue took it out; once merged the usual merged icon is back. Words go with
+it: "Merge queue: Submitted / Waiting / Testing / Failed".
+
+**Where it comes from** (`mergeQueueState` in core `merge-queue.ts`):
+trunk-io[bot] (`isTrunkBot` in `bots.ts`, beside `isMergeQueueBot`) keeps one status comment per PR
+(it starts with `<!-- Trunk Merge -->`) and edits it at every step; the
+snapshot holds its latest body and `lastEditedAt`. Stack outcomes mostly
+come as separate trunk comments. The newest trunk status comment (by
+`lastEditedAt ?? createdAt`) decides: `{ state, since, reason, testingOn }`
+or null. Status lines seen in the field (trunk puts an en space after the
+emoji, so whitespace is normalized before matching):
+
+| line starts with | state |
+|---|---|
+| "Merging to \`master\` in this repository is managed by Trunk", "This PR's base branch doesn't have a Merge Queue configured" | null (not queued) |
+| "✨ Submitted to Merge by …", "✨ Stack submitted to Merge by …" | submitted (waiting for branch protection) |
+| "⏳ Waiting to start tests" (on this pull request / stack), "This pull request is queued for merge as part of [N]" | waiting |
+| "🧪 Running tests on this pull request / stack (testing on PR [#N])" | testing, `testingOn` = that PR |
+| "😎 … merged …", "This pull request was merged into \`master\` as part of stacked PR" | null (the PR state covers it) |
+| "🚫 This pull request / stack was removed from the merge queue because …" | failed: "waited too long to become mergeable", "the stack changed", else trunk's words |
+| "❌ This stack could not start testing because there was a merge conflict" | failed: "merge conflict" |
+| "Stacked PR [N] failed testing in the merge queue" | failed: "tests failed" |
+| "Stacked PR [N] was cancelled: <reason>" | failed with the reason; "a user cancelled it" is no failure: null |
+| "Stacked PR [N] was returned to waiting: this pull request was pushed to" | failed: "pushed to while queued" |
+
+Skipped (the status before them stands): the `<!-- Trunk Test Analytics -->`
+badge comment and replies to a `/trunk` command ("This PR is already
+queued …", "An error occurred while handling your Trunk command"). A line
+none of these wordings match reads by its leading emoji (added 2026-10-02:
+a stack layer in the queue showed as not queued because trunk said
+"Running tests on this stack"): ✨ submitted, ⏳ waiting, 🧪 testing
+(`testingOn` when it says "testing on PR [#N]"), 😎 null, 🚫 / ❌ failed
+with the reason after "because …" (shortened as above), else no reason. A
+line without one of these emoji reads as null: never guess a queue state.
+Null as well for merged, closed and draft PRs. A push after a failure keeps it
+failed until trunk says otherwise.
+
+**Icon** (`PrStatus.icon` = `prIcon`, core decides): open and in a queue
+(Trunk's, or GitHub's own `queued` lifecycle) is `merge_queue` (amber
+`--pending`), failed in Trunk's queue `merge_queue_failed` (the one red);
+drafts, merged and closed as before. `PrStatus.mergeQueue` carries the
+state for the words; `PrDetail.status` has both for the detail header.
+Topic rollup (`topicPrState`, sidebar row and header pill): failed if any
+tracked open PR failed in the queue, the queue icon if every tracked open
+PR (drafts included) is in it, else as before (a queued PR counts as
+open). The tooltip mix says "1 in merge queue" / "1 failed in merge queue".
+
+**Words** (renderer `mergeQueueWord` in `lib/pr.ts`): where a row shows the
+review chip, a queued PR shows "Merge queue: Testing" (`--pending-ink`),
+a failed one "Merge queue: Failed" in red; the tooltip has the step, the
+reason and "since 06:28" (`sinceLabel`). The detail header's state line says
+the same plus "since 06:28", and a failed PR gets a red "Failed (reason)"
+line under the branch.
+
+**Whose turn** (any open PR, right after the open asks of rule 2 and before
+every other own or others' PR rule):
+queued (either queue) waits on the queue, `{ kind: 'them', who: null, what:
+'Waiting on the merge queue' }`, drawn with the queue icon in place of a
+face, on someone else's PR too (an approval of yours does not change it, and
+there is no "rowan to merge"). Failed is the author's move: your own PR is
+your move, `merge`, "Re-submit to the merge queue: <reason>"; someone
+else's is `{ kind: 'them', who: <author>, what: 'to re-submit to the merge
+queue: <reason>' }`, never yours. Like "Merge, it is approved" the re-submit
+move shows on the tile but never makes the topic urgent
+(`isMergeApprovedMove`); the failure itself is loud.
+
+**Loudness**: trunk's comment or edit that took the viewer's own open PR
+from any other state to failed is loud, "removed from the merge queue:
+<reason>", while the PR is still failed in the queue (`mergeQueueFailureAt`).
+Every other trunk status change stays quiet bot activity. Pings are
+unchanged (bot events never ping from the poll).
+
 ## Memory / agentic digesting layer (v1 base)
 
 **Engine memory (v2)** below replaced the topic summaries, the per-PR glance
@@ -599,7 +726,8 @@ migration.
 - **seen cursor** per topic: moved by `markTopicSeen(topicId)`, which stores
   the current max `seq` and the current dossier version. `getTopic` builds
   `changesSinceSeen` from it: `recentChanges` entries newer than the cursor,
-  facts recorded or closed after it, and the count of new events.
+  facts recorded or closed after it, and the count of new events that are
+  not noise (see "Event roles").
 - **consolidate cursor**: time and `seq` of the last consolidation run, used
   to decide when the next one is due.
 - **classify cursor** per topic (and `unsorted`): how far the event second
@@ -734,8 +862,8 @@ stale facts and claims, and topic feedback. It:
 
 - adds `joinedHistory`: log entries of joined members at or below the
   cursor (`joinedMembers` decides who joined)
-- drops muted events and CI results ("CI is not a signal"), keeps bots
-  (the prompt compacts them to counts)
+- drops noise (see "Event roles": muted, CI, bot status refreshes), keeps
+  ride-along bots (the prompt compacts them to counts)
 - caps at `DELTA_LIMITS.maxEvents` (120) with at most 15 per PR, newest
   kept; the rest are only counted in `omittedEvents`
 - sets `toSeq` to the highest `seq` after the cursor, capped or not, so
@@ -749,7 +877,66 @@ stale facts and claims, and topic feedback. It:
   once
 - keeps feedback newer than the previous version as `newFeedback`
 
-`isEmptyDelta` = no dossier update for that topic.
+`isEmptyDelta` = no dossier update for that topic: no trigger event and
+nothing else new. The digest then skips to `skipToSeq`: past the noise
+right after the cursor, never past a ride-along event, which waits for the
+next real update.
+
+### Event roles
+
+Decided 2026-10-02. On the owner's real database the dossier updates were
+the biggest agent cost (234 updates, about $13). Of 207 new versions, 49
+had only bot events since the previous one: 27 were real state changes
+(trunk-io merging or closing), 18 pure noise (bot comment edits, deploy
+statuses, merge queue status comments) and 4 only review bot comments. The
+delta dropped only CI and muted events. Separately, "Out of date: 1 newer
+event not in the dossier yet" counted every logged event, CI and bot edits
+included, even ones the digest had already skipped past (skipping moves the
+digest cursor, not the dossier's `throughSeq`): trunk-io editing its merge
+queue comment made a fresh dossier look out of date.
+
+**The rule.** Every event has one role for topic memory (`memoryRole`,
+core `event-roles.ts`), first match wins:
+
+| Event | Role |
+| --- | --- |
+| effective loudness loud (incl. the app's Look closer, an event the agent raised) | trigger |
+| muted (by rule, agent or user), CI result | noise |
+| anything a person did, the viewer included | trigger |
+| a state change, whoever did it: merged, merged without review, closed, reopened, ready for review, back to draft, review requested or removed, a bot's approval, pushes; Look closer even when turned down | trigger |
+| automation: deploy, merge queue add/remove, a comment edit (the original already counted; edits are status refreshes) | noise |
+| a merge queue bot's comment (`isMergeQueueBot`: trunk-io, mergify): "managed by Trunk", submitted, testing, merged, kicked out, test badges | noise (kicked out of the queue on the viewer's own PR is loud, so the first row makes it a trigger; see "Merge queue") |
+| any other automation, a bot's approval aside: review bots (coderabbitai, chatgpt-codex-connector, greptile-apps, copilot-pull-request-reviewer, stamphog, veria-ai, posthog-security-review-bot), github-actions comments, dependabot comments | ride_along |
+
+- *noise*: never in a prompt, never starts an update, never counted as
+  newer.
+- *ride_along*: in the prompt when something else starts an update, never
+  starts one alone. Their findings already feed the per-PR glance. More
+  than `DELTA_LIMITS.maxEvents` of them waiting does start one, so they
+  cannot pile up without bound.
+- *trigger*: starts an update, counts as a newer event.
+
+Loudness and quiet reads are untouched: roles answer what memory reads,
+loudness answers what needs the viewer.
+
+**Where it applies.** The topic delta (noise out, ride-along alone is
+empty and keeps the cursor before it); "Out of date: N newer events" and
+the MCP topic text (`eventsBehind`: triggers after `throughSeq`); "since
+you last looked: N new events" (no noise); the user's relation correction
+holds until a trigger arrives (`placementOf`); the ping decision item and
+the memory recheck drop noise before their per-PR event cut, so a burst of
+status edits cannot push out what people said. Left as they were: the
+catch-up trigger and topic revive read loud events only (loud is never
+noise), the events agent only sees loud events, pushes after approval and
+people's quiet activity (never noise unless muted, which it skips), and the
+glance hash already leaves bot comments and bot reviews out.
+
+The corpus in `packages/core/src/testing/event-corpus.ts` holds real bot
+logins with realistic bodies and invented people; `event-roles.test.ts`
+pins per example whether it is automation, its loudness, its role, whether
+it reaches the dossier prompt alone or with a trigger, whether it counts as
+newer, and its quiet read outcome. `packages/engine/src/bot-noise.test.ts`
+runs a sequence of it through the real digest.
 
 ### Dossier
 
@@ -940,7 +1127,7 @@ stored and before a dossier goes into a glance prompt
   An answered prKey matches its batch key ignoring case and spaces when
   that still points at one PR.
 - Misspelled verdicts are repaired (`repairVerdict`): Sonnet reproducibly
-  wrote `LOOKS_SASAFE` / `LOOKS_SASE` for one real PR (PostHog/posthog#107116),
+  wrote `LOOKS_SASAFE` / `LOOKS_SASE` for one PR (acme/app#1812),
   which the strict enum rejected on both attempts. Only unambiguous
   spellings are read, and anything mentioning "close" wins, so a garbled
   answer never becomes "looks safe" by accident. The prompt asks for
@@ -990,7 +1177,7 @@ Output and what happens:
 | `topicProposals` rename / merge / split | filed as pending `topic_proposal` rows, same "never the same idea twice" rule as v1. Split PR keys must come from the topic's dossier timeline (the prompt has no other member list), so a topic without a dossier gets no split |
 | `factMerges` | applied directly: dropped facts closed with `superseded_by` = kept one, refs moved over (internal memory, nothing the user sees disappears) |
 | `rules` | filed as pending `rule_proposal` rows. Accepted global rules go into every `PromptContext.standingRules`; accepted topic rules are appended to that topic's tailoring |
-| `finished` | topic retired only if the deterministic gate also holds: every member PR merged or closed, no events for 3 days, no unread or snoozed tile. Every full sync retires such topics anyway, agent or not (see "Topic status"). Retiring is reversible |
+| `finished` | topic retired only if the deterministic gate also holds: every member PR merged or closed, no human activity for 2 days, no unread or snoozed tile. Every full sync retires such topics anyway, agent or not (see "Topic status"). Retiring is reversible |
 
 Also deterministic, in the same run: retire topics that pass the gate and
 whose dossier status is `finished`. Dossier versions are pruned on every
@@ -1567,9 +1754,9 @@ work it is.
   its area. Consolidation sees areas and live tile counts; it may propose
   `area_merge` (topic_proposal with `from_area`, applied on accept) and
   splits for topics that keep more than 12 live tiles.
-- **UI**: inside the sidebar's "Other topics" section (see "Queue
-  sections") the groups are Needs you (any relation) / Your team (by area)
-  / Routed to you / FYI, the last two folded by default. The topic header
+- **UI**: the relation no longer picks a sidebar group (since 2026-10-02,
+  see "Ownership sections"): only FYI keeps its fold inside Other topics.
+  The relation chip stays on the header. The topic header
   says "Owned by X · you're here because Y". Tiles: snoozed and done folded
   into one row each.
 
@@ -1669,6 +1856,9 @@ another one. The lead PR (core `leadPrKey`, shipped as
 `TileView.offers.leadPrKey`) now prefers the PR of the tile's turn when
 the turn is not `none`, then the newest unread reason, then the first open
 tracked PR.
+Since 2026-10-01 the pill shows the tile's worst glance instead of the
+lead PR's (see "Tile header" › "The verdict pill shows the tile's worst
+glance").
 
 **Whose turn names the re-reviewer.** "rowan to address ada's
 changes" stayed after rowan pushed and re-requested ada's
@@ -1676,13 +1866,14 @@ review. When the author pushed after a changes request and the requester is
 requested again, it is the requester's move: "ada to re-review"
 (whose-turn rule 4).
 
-**Own merged PRs clear on GitHub too** (changes rule 2 of "Handled quietly"
+**Own merged PRs clear on GitHub too** (changed rule 2 of "Handled quietly"
 and part 2 of "You already dealt with it"). The own-PR exception (bots after
 your last touch keep the thread unread, since on your own PR they can mean
-work) applies only while the PR is open. Every own PR merges through trunk
-after the last comment, so 14 merged own PRs stayed unread after 0.10.0.
+work) first applied only while the PR was open. Every own PR merges through
+trunk after the last comment, so 14 merged own PRs stayed unread after 0.10.0.
 Julian: "my own merged or closed PRs can be cleared when only bots come in
-after my last touch."
+after my last touch." Since 2026-10-01 the exception is gone for open PRs too
+(see rule 2 of "Handled quietly").
 
 **Not marked read from a guess** (decided the same day, recorded to stop the
 question coming back). PostPile marks a thread read on GitHub only from what
@@ -1734,7 +1925,9 @@ not taken; instead the user asked for a PR button: "an unassign team button
   them in memory; tests for the engine flow (success, request removal
   fails, unsubscribe fails, locked) and the renderer visibility rule.
 
-**Marked when you move on** (decided 2026-09-29, after the build above).
+**Marked when you move on** (decided 2026-09-29, after the build above;
+superseded 2026-10-01 by "Marked when the dwell ends" below: the mark now
+fires when the dwell ends, the held place stays).
 Julian, clicking through PostPile: "when clicking through much stuff in
 PostPile, now auto-mark status read, which is a bit jarring because the
 status changes while I look at it ... It almost feels like the agent
@@ -1769,7 +1962,9 @@ updates it while I'm looking at it."
   PostPile can show".
 - The mark button says "Done for now" (was "Mark done"; "Mark read" stays).
   The action is still `mark_done`; only the label changed.
-- The opened-in-PostPile mark shows itself: while the 1.5s dwell runs the
+- Superseded 2026-10-01 ("Marked when the dwell ends" below): the fill
+  stays, "Marks read when you leave" and "Keep unread" are gone.
+  The opened-in-PostPile mark shows itself: while the 1.5s dwell runs the
   button fills left to right (a CSS width transition over
   `OPENED_READ_DELAY_MS`); when full it reads "Marks read when you leave"
   (or "Marks done when you leave", matching the label) with a check, and a
@@ -1782,6 +1977,50 @@ updates it while I'm looking at it."
   retry, and a read elsewhere, interleaved. They found no bug: the stored
   thread is never unread mid-retry, an undo leaves a row GitHub has moved on,
   and a stale undo token cannot touch a later click.
+
+**Marked when the dwell ends** (decided 2026-10-01, supersedes "Marked
+when you move on" and the "Marks read when you leave" part of "Unseen dots
+and a visible auto-mark"). Julian, after living with the deferred mark: "it
+bothers me more that it doesn't act than the reshuffle would". The deferred
+mark read as a promise that sometimes did not fire, and nothing visible
+happened when it did. Chosen from a clickable mockup:
+
+- The opened mark fires when the 1.5s fill completes, while the PR is still
+  on screen, with the same guards as before (`PrSummary.openedRead`,
+  `opensMarkRead`, the server's `openedReadCheck`, writes unlocked).
+  Clicking through faster than the dwell still marks nothing. Once per
+  open. The dwell still needs the window visible and focused (hidden during
+  it, it starts over); after it, hiding or leaving the window changes
+  nothing.
+- The button then reads "✓ Marked read" (or "✓ Done for now", matching the
+  label) in soft green, with an Undo link next to it while the undo window
+  is open. It replaces the "Keep unread" X, and "Marks read when you leave"
+  is gone. The note stays after the PR turned done, when core offers no
+  mark button any more.
+- Undo uses the mark-read queue like every clicked mark-read. The opened
+  mark used to be a quiet, immediate GitHub write; GitHub has no
+  mark-unread, so an Undo needs the write deferred. It is now its own batch
+  (origin `detail`, read cause `opened`) with an undo token and the
+  queue's own expiry (`OpenedReadResult.undoToken`, `undoUntil`; the
+  button hides Undo at that time, not a fresh 6s from the answer, Codex
+  review on PR #75): the PR is seen and handled here right
+  away, the thread goes to GitHub after `UNDO_WINDOW_MS`. Undo inside the
+  window puts it all back and nothing reaches GitHub; the open does not arm
+  again. Side effects: the opened mark no longer shows under Handled
+  quietly (it is visible now; older rows still read "opened in PostPile"),
+  and a lock closed inside the window parks it as a pending write, like any
+  mark-read.
+- The coral dot on the PR row and on the topic row fades and shrinks out
+  over 500ms instead of vanishing.
+- The held place does not change: the selected tile and its topic row keep
+  their place until the selection moves ("only once I move"). Then the move
+  animates (FLIP, `useFlip`): every tile, group heading and topic row that
+  moved slides from its old place over 420ms (`cubic-bezier(.2,.7,.2,1)`),
+  and a tile that changed group gets a soft `--accent-soft` tint that fades
+  out over 1.1s. Moves a sync causes (a tile changing group while not
+  selected, topic rows re-sorting) slide the same way. Only a change of
+  order or group slides; new text or a resize does not. With reduced motion
+  there is no slide and no tint.
 
 **Built as** (2026-09-29):
 
@@ -1802,11 +2041,14 @@ updates it while I'm looking at it."
   A done PR that still has unseen news or a thread unread on GitHub keeps
   the tile from being done, so it keeps its dot until it is read.
 - Lead PR: core `leadPrKey`; the renderer's `leadPr` only looks up that row.
-- Marked when you move on: `OpenedReadTimer` in the renderer's
-  `lib/opened-read.ts` (the dwell arms, `leave()` / `hidden()` fire,
-  `setWanted` keeps `opensMarkRead` current) driven by `useOpenedRead`
-  (leaves when the PR changes or the pane closes, `visibilitychange`,
-  window `blur` / `focus`). The held place is `holdPlace` in
+- Marked when the dwell ends (2026-10-01; was "Marked when you move on"):
+  `OpenedReadTimer` in the renderer's `lib/opened-read.ts` (the dwell end
+  fires, `setWanted` keeps `opensMarkRead` current, `undo()` hands back
+  the token inside the window, phases in `OpenedReadPhase`) driven by
+  `useOpenedRead` (a new open when the PR changes, `visibilitychange` and
+  window `blur` / `focus` pause the dwell only); `OpenedMarkNote` in
+  `MarkButton.tsx`; the slide is `useFlip` (`lib/use-flip.ts`, pure part
+  `lib/flip.ts`) on `TileGrid` and `TopicSidebar`. The held place is `holdPlace` in
   `lib/hold-place.ts` with `useHeldPlace` (the place taken when the
   selection starts): `TileGrid` holds the selected tile across its Unread,
   Open and Dealt with groups,
@@ -1814,15 +2056,16 @@ updates it while I'm looking at it."
   Other topics (`layoutBuckets` / `layoutFromBuckets` in `lib/queues.ts`)
   while its selected tile stays selected.
 - Opened in PostPile: core `openedReadCheck` (per PR), engine
-  `QuietReads.markOpened`, renderer `opensMarkRead`; see "You already dealt
+  `OpenedReads.markOpened` (was `QuietReads.markOpened` until 2026-10-01),
+  renderer `opensMarkRead`; see "You already dealt
   with it" part 3. When GitHub has the thread read already, only the
   PostPile side runs (PR handled, a local log row).
 - Re-reviewer: core `reReviewAsked` (`changes-answered.ts`), used by
   whose turn on the routed team hold, on a team request a teammate picked
   up with a change request, and on the viewer's own PR.
-- Own merged PRs: `isOwnOpenPr` in core `quiet-reads.ts`, in both the
-  bot-only and the "you acted after it" rule; `botOnlySinceRead` leaves the
-  viewer's own events out.
+- Own PRs: no exception in core `quiet-reads.ts` any more (2026-10-01,
+  `isOwnOpenPr` and `isAutomationFinding` removed); `botOnlySinceRead` leaves
+  the viewer's own events out.
 - Remove a team review request: `PrActions.removeTeamRequest` (engine),
   `GitHubWriter.removeTeamReviewRequest` / `unsubscribeThread`, `POST
   /api/prs/:owner/:repo/:number/remove-team-request` `{team}`, renderer
@@ -1878,7 +2121,7 @@ counted as a teammate's.
   `__typename` and login, normalizes it like the PR fetch (`actorLogin`)
   and asks `isBotAuthor`, the same rule `prOwners` uses, so automation on a
   user account (renovate) counts and a deleted author does not. Its reason
-  reads "agent PR assigned to you" (AU, "Your PR", My PRs). A hit a
+  reads "agent PR assigned to you" (AU, "Your PR", the my PRs filter). A hit a
   person opened is found as `assigned`, "assigned to you": code AS, so
   "For you" like an `assign` notification, but the author still owns it
   (tier by author and requests: team for a teammate's PR, To review with a
@@ -1888,6 +2131,34 @@ counted as a teammate's.
   (code AS), so these usually arrive through the inbox anyway.
 - **Shown on the tile**: see "PR rows" under "Tile faces": when someone other
   than the author is assigned, the row and the detail pane say so.
+
+## Colour per meaning (2026-10-01)
+
+The same colour meant several things: amber was the agent's Look closer and
+also "Needs review" and "Queued", closed had its own red next to the red of
+"Changes requested", and approved had a second green beside Looks safe.
+Owner accepted one colour per meaning (tokens in the renderer's
+`styles/tokens.css`):
+
+- **Amber (`--closer`)**: only the agent's Look closer (verdict pill, the
+  detail pane's Look closer box, a ✨ pill greyed for Look closer).
+- **Neutral (`ink-2`)**: "Needs review" with its eye icon.
+- **Merged purple (`--merged`, `--merged-ink`)**: merged. `--status-queued`
+  is gone. In the merge queue was purple too until 2026-10-02; it now has
+  the queue icon in pending amber (`--pending`, words `--pending-ink`), red
+  once failed (see "Merge queue").
+- **One red (`--status-bad`, #b8321f)**: closed (icon and word, `--closed`
+  points at it), changes requested, risk (the risk box reds stay in that
+  family), errors and failed states (was coral `--unread-ink` for errors).
+- **One green (`--safe`, #17733e)**: approved, Looks safe and the Approve
+  button. `--status-good` is gone. Open (`--open`, GitHub's open green)
+  stays as it is.
+- **Coral (`--unread`)**: only new / unread.
+- **Honey**: only aimed at you and your move.
+- App-health warnings (sync capped, read-only, setup hints, out-of-date
+  memory, a winding-down topic, a blocked action toast) use the calm
+  `--amber-*` warning tokens of the update bar, not `--closer`. The
+  "routed" topic tag is neutral, like the routing "for whom" chip.
 
 ## Tile faces: why it's here, status, whose turn
 
@@ -1948,16 +2219,19 @@ from `reviewDecision`. Merged and closed PRs drop review, drafts drop review.
 No checks (2026-09-29, see "CI is not a signal"). Open threads = unresolved
 review threads.
 
-How it shows (2026-09-29, design 3a; `LIFECYCLE_WORDS`, `reviewWord`,
+How it shows (2026-09-29, design 3a; `ICON_WORDS` (was `LIFECYCLE_WORDS`), `reviewWord`,
 `rowStateWord` in the renderer's `lib/pr.ts`): the lifecycle is a
 GitHub-style icon (open: green pull request, draft: dashed grey circle,
-merged: purple merge, closed: red closed pull request, queued: amber pull
-request), words in its tooltip. The review state is an icon + word: "Needs
-review" (eye, honey), "Approved" (green check; "Approved by agent" when only
+merged: purple merge, closed: red closed pull request; in the merge queue
+the Octicons merge-queue icon, amber, red once the queue took it out,
+2026-10-02, see "Merge queue"), words in its tooltip. The icon is core's
+`PrStatus.icon`. The review state is an icon + word: "Needs
+review" (eye, neutral ink), "Approved" (green check; "Approved by agent" when only
 agents approved), "Changes requested" (red). On a PR row drafts show an
 outlined "DRAFT" chip with a pencil and merged / closed PRs show the colored
-word ("Merged" purple, "Closed" red) in place of the review. State colors
-stay on done tiles; only titles and counts go grey. **CI shows only in the
+word ("Merged" purple, "Closed" red) in place of the review. Colours
+follow "Colour per meaning" (2026-10-01; Needs review was honey, queued
+amber). State colors stay on done tiles; only titles and counts go grey. **CI shows only in the
 detail pane's facts** ("Checks"): not on rows, tiles, the detail state line
 or the RISK box, and not in whose turn or any agent text (see "CI is not a
 signal").
@@ -2025,12 +2299,26 @@ above describe the "Not done yet" rule this replaced.
 
 **Tile header**: for-whom chip, the kind ("PR" in grey text; layers icon +
 "Stack · 2"; dashed square + "Set · 3"; blue only while selected), the
-verdict pill with an icon ("Look closer" ring-dot on a honey ring, "Looks
+verdict pill with an icon ("Look closer" ring-dot on an amber ring, "Looks
 safe" check, "Not yours" dash, dashed "No glance yet"; a stale glance adds
 "· out of date", or "· updating" while a sync or catch-up runs, see
 "Out of date wording"), then avatars and age
 on the right. Then the title, the agent's one-to-three-line take, the PR
 rows and the footer.
+
+**The verdict pill shows the tile's worst glance (2026-10-01).** The pill
+used the lead PR's verdict, so a stack whose lead looked safe said "Looks
+safe" while its third layer needed a closer look. Owner: the Look closer on
+a tile is for the worst PR in it, so the whole tile may need a closer look,
+and the user should not have to pick that PR out. Core picks it
+(`tileVerdict`, shipped as `TileView.verdict` with the chosen PR's key,
+verdict and glance state): the worst glance among the tile's tracked
+(not pulled-in), open PRs, in the order Look closer (stale or not), no
+current glance (missing, stale or being written), Looks safe, Not yours.
+Ties go to the lead PR, then tile order. With no open tracked PR (all
+merged or closed) the pill keeps the lead PR's glance. The pill keeps its
+look and its stale and updating words, for the chosen PR. Rejected: a
+glyph per PR row, "N of M" counts, a roll-up in the topic header.
 
 **People** (`tilePeople`): authors, the viewer if they submitted a review,
 other reviewers (submitted, then requested), four at most, bots only as
@@ -2079,7 +2367,13 @@ draft), `merge`. No CI move: `fix_ci` ("Fix failing CI") was dropped
    never consulted it, so a plain "thanks, that's fine" kept saying "Reply
    to …". Julian, 2026-09-29: "if the author just replies 'Oh yeah, that's
    fine,' that's not my move to reply again".
-3. On your own PR:
+3. The merge queue, on any open PR (2026-10-02, see "Merge queue"): in a
+   queue it waits on the queue, "Waiting on the merge queue" (`who` null),
+   on someone else's PR too and whatever you reviewed. Failed in Trunk's
+   queue is the author's: yours on your own PR, "Re-submit to the merge
+   queue: tests failed" (move `merge`); on someone else's "sol to re-submit
+   to the merge queue: tests failed", never yours.
+   Then, on your own PR:
    - you: unresolved threads whose last comment is someone else's ("Answer 3
      threads from mira"), else a standing change request ("Address ada's
      changes"). Failing CI alone is not your move (2026-09-29).
@@ -2097,7 +2391,7 @@ draft), `merge`. No CI move: `fix_ci` ("Fix failing CI") was dropped
    - you: approved and not a draft ("Merge, it is approved"). Not in the
      first rule list; added so an approved own PR does not read as nothing.
    - else none.
-4. On someone else's PR:
+4. On someone else's PR (after the merge queue, rule 3):
    - you: addressed your changes (2026-09-28).
      Your newest verdict review (approve, request changes, dismissed) asks
      for changes, and since your last word (that review, or a later comment
@@ -2269,6 +2563,49 @@ any review ask; on top of that:
   never did. Drafts get an outlined "Approve draft"; draft wins over "as
   well", since not-ready is the bigger caveat and the review glyph already
   shows the approvals.
+- Approve is split on the PR pane (Decided 2026-10-02, `ApproveButtons` in
+  the renderer). The main part approves right away with no body, as before.
+  A narrow right segment with a speech-bubble icon opens "Approve with
+  comment": the agent drafts a one- or two-line note on open ("Drafting…",
+  then an editable textarea), and "Approve with comment" sends the approval
+  with that body (`PrActions.approve(key, headOid, body)`, the same head
+  check). Only the PR pane has it; tiles, the agent's "Approve stack" and the
+  topic's Approve keep approving without a body.
+- **Comment review** (Decided 2026-10-02): an outlined button next to
+  Approve, never the lead, shown wherever Approve is (`PaneOffers.approve`:
+  someone else's open PR, drafts included, not on a done PR). It posts a
+  GitHub review with event `COMMENT` (`POST
+  repos/{repo}/pulls/{n}/reviews`, `commit_id` = the head on screen, body
+  required, so the post button is disabled while the note is empty). Why it
+  exists: it answers a review request (yours or your team's) without being
+  the one who clears the PR for merging, since branch protection does not
+  count a COMMENT review as an approval. Same rules as Approve: refused
+  without a GitHub call when the stored head moved ("nobody reviews commits
+  they have not seen"), blocked while writes are locked (never a pending
+  write), logged as `comment_review`, followed by the same mark-read as
+  approve (events seen, not handled: the review answers the ask). The PR is
+  refetched; when the snapshot does not show a review by the viewer newer
+  than the one before the write (an earlier review on the same head does not
+  count), PostPile adds a COMMENTED review to the stored PR and drops the
+  viewer's pending personal request, as GitHub does, so
+  `reviewedHead` (tiers, whose turn) sees the viewer reviewed until the next
+  sync brings GitHub's copy. The move goes back to the author.
+- Review note drafts (2026-10-02): `PrActions.draftReviewNote(key, kind)`
+  reuses `agent.draftComment` (call kind `draft_comment`, no new kind) with
+  `person: null` (a note addressed to nobody) and an intent per kind:
+  approve, what was checked and why it is fine; comment, observations
+  without approving or asking for changes. The glance's Does / Verdict /
+  Risk lines travel as fenced `notes` (untrusted, they can echo PR text),
+  never in the intent, and the usual context
+  (instructions and work context), so `instructions.md` can steer the tone.
+- One compose popover (2026-10-02, `ComposePopover`): Approve with comment,
+  Comment review and "Ask <owner>" share one popover under the button that
+  opened it (surface, rounded-tile, shadow-menu; title, one-line hint,
+  textarea, Cancel and the primary action), one open at a time. Ask keeps its
+  extras inside it: the person field (default the PR owner) and the optional
+  question with "Draft", then the editable draft and "Post comment" (a plain
+  PR comment through `sendComment`, as before). It replaced the Ask composer
+  that opened as a strip under the action bar.
 - Tiles whose tracked PRs are all yours carry a neutral "Your PR" marker
   (the own/ink look of the AU badge, in words) next to the kind label.
 - News on your own PR that asks nothing of you (a bot, a finished review;
@@ -2366,7 +2703,8 @@ got 57% of his reviews through the team's request. 46 of 236 org members
 are in no team. So each of the viewer's teams gets a role:
 
 - **home**: behaves as every team did before. Members are teammates
-  (`teamMembers`, Team's PRs, the Team filter, faces in the sea team pill).
+  (`teamMembers`, the `team` tier, the team PRs filter, Your team owns,
+  faces in the sea team pill).
   A home team request on a teammate's PR is `team_for_you`; the sea "For
   <slug>" chip and band; human mentions of it are loud.
 - **routing**: only its review requests and mentions matter. Members are
@@ -2376,7 +2714,8 @@ are in no team. So each of the viewer's teams gets a role:
   `team_for_you`. Taken once anyone but the author and bots reviewed the
   head. Neutral "For <slug>" chip, no band. Its mentions are FYI (quiet,
   `ruleLoudness` row "routing team mention"), so they never ask.
-- **No home team is valid**: no teammates, nothing in Team's PRs, the Team
+- **No home team is valid**: no teammates, no `team` tier, Your team owns
+  stays empty, the Team
   filter hides (`ViewerView.homeTeams` empty), no teammate faces. For
   people like the engineer above that is "teams off".
 - **Bot-made review requests count like human ones** (as before, see "A
@@ -2448,11 +2787,11 @@ review on someone else's PR asks for changes, drafts included; added
 `team_mentioned` (thread reason or a stored team_mention event), `rest`.
 A personal request and a team request on a teammate's PR (see whose turn)
 are `to_review` and checked before `team` (2026-09-28): a review owed to a
-teammate is a review, not "Team's PRs". A teammate's PR whose team request
+teammate is a review, not the `team` tier. A teammate's PR whose team request
 another teammate covered stays `team`; routed team requests stay
 `to_review` after the authorship checks. A routing team's open request on
 a teammate's PR is `to_review` too, before `team` (2026-09-30): a review
-owed, not Team's PRs. Without a home team nothing is `team`. Inside To review the topic column
+owed, not `team`. Without a home team nothing is `team`. Inside To review the topic column
 puts "For you" tiles (personal and teammate team requests) before routed
 team requests (`tilesInTierOrder` in the renderer).
 Addressed your changes (see whose turn) is `changes_requested` (was
@@ -2483,7 +2822,7 @@ and detail start equally wide (2026-09-30, was a 420-480px tile clamp). At
   information uses `--hint` (#666b79: 5.3:1 on white, 4.7:1 on the
   sidebar): the why-here line ("Owner not known · you're here because…"),
   out-of-date notes, "Dossier v3", people's roles, the sidebar's fold
-  labels (Routed to you, FYI, Finished), "Earlier activity", empty-state
+  labels (area folds, More, FYI, Archive), "Earlier activity", empty-state
   lines, stale memory lines and hover actions (Why?, Recheck, Wrong,
   Forget). Faint stays for decoration: separators, chevrons, the quote
   mark, ages next to a louder line, done tiles. Light theme only; there is
@@ -2495,7 +2834,8 @@ and detail start equally wide (2026-09-30, was a 420-480px tile clamp). At
   down the block. "Why?" still lists every source of a line.
 - **Detail pane assessment** (2026-09-28, mockup ForWhom2 part 2 variant
   1, "verdict as the box title"; `GlanceCard`, split in `lib/assessment.ts`).
-  Box 1 is titled with the verdict ("LOOK CLOSER · for you", honey; "LOOKS
+  Box 1 is titled with the verdict ("LOOK CLOSER · for you", amber since
+  2026-10-01, was honey; "LOOKS
   SAFE · for you", green; "NOT YOURS", grey; the tag follows the PR's for
   whom) and holds the glance's for-you text as short marked lines: "!" the
   main point, "?" a later sentence that asks for a check. Box 2 "RISK ·
@@ -2584,18 +2924,17 @@ and detail start equally wide (2026-09-30, was a 420-480px tile clamp). At
 The sidebar lists topics under ghatchup's PR queues (mockup "B with
 avatars and filters", QueuesB2).
 
-- **Sections**, in order: Needs reply, Changes you requested, My PRs,
-  Team's PRs, To review, Team mentioned (one per `prTier`), then Other
-  topics. Each lists topics, not PRs, and **each topic once in the whole
-  sidebar** (2026-09-29): in the highest section where it has a PR, with
-  that section's count on the row; a mixed topic follows the work, so your
-  own PR never lifts it (since 2026-10-01, see "Topics with: the sidebar
-  filter"). Other topics holds topics with only
-  `rest` PRs; inside it the old groups stay (Needs you, Your team by area,
-  Routed, FYI; Routed and FYI folded). The "Topics with" switch (any PR,
-  my PRs, team PRs) matches a topic by any of its PRs. Section tint: honey
-  for reply, changes and review, ink for mine, sea for team and team
-  mentioned, grey for other.
+- **Sections**, in order (since 2026-10-02, see "Ownership sections"):
+  Needs reply, Changes you requested, To review, Team mentioned (the asks,
+  one per ask tier), then You drive, Your team owns, Other work, Other
+  topics, and the Archive drawer. Each lists topics, not PRs, and **each
+  topic once in the whole sidebar** (2026-09-29), in the section core gives
+  it (`topicSection`). Until 2026-10-02 My PRs and Team's PRs were sections
+  too, and a topic sat in the highest tier any PR other than the viewer's
+  own gave it. The "Topics with" switch (any PR, my PRs, team PRs) matches
+  a topic by any of its PRs. Section tint: honey for reply, changes and
+  review, ink for You drive, sea for Your team owns and Team mentioned,
+  grey for Other work and Other topics.
   History: until 2026-09-29 a topic sat in every section where it had a PR
   of that tier. That came with the picked mockup (QueuesB2, 2026-09-28) as a
   side effect of per-PR sections over per-topic rows, not as a decision;
@@ -2611,19 +2950,22 @@ avatars and filters", QueuesB2).
   2026-09-30); rows still waiting on the author follow, quiet. The topic column does the same with the section's tiles
   (your move first, `tilesInTierOrder`). Before, only the
   addressed case had a section (To review), and a change request the author
-  had not touched fell to Team's PRs or Other topics.
-- **Authorship**: the viewer's own PR (`prOwners`: also a bot's PR assigned
-  to them, 2026-09-30) stays under My PRs whatever area or
-  team the code belongs to; only Needs reply ranks above it (as in
-  ghatchup). An area is a label for where the code lives and never moves a
-  topic between sections.
-- **Finished drawer** (2026-09-29): under the sections, a folded "Finished"
-  group header lists topics retired in the last 30 days, newest first
+  had not touched fell to Team's PRs or Other topics (both gone since).
+- **Authorship** no longer picks a section (2026-10-02): who drives the
+  topic does. The viewer's own PR (`prOwners`: also a bot's PR assigned to
+  them, 2026-09-30) sorts its topic first inside whatever section it sits
+  in, and the my PRs filter finds it. An area is a label for where the code
+  lives and never moves a topic between sections; only Other work folds by
+  area.
+- **Archive drawer** (2026-09-29 as "Finished", renamed 2026-10-01): under
+  the sections, a folded "Archive" group header lists retired topics that
+  still take new PRs (`takesNewPrs`: projects for 30 days, standing topics
+  until half a year without a new PR), newest first
   (`GET /api/topics/finished`, `FinishedTopic`: name and how long ago it
   retired, PR count in the tooltip). Quiet on purpose: muted names, no
   bubble, no faces, no count on the header. A row opens the topic like any
   other (`getTopic` and `tilesForTopic` work for a retired topic; the
-  breadcrumb says "Finished"). Search and the queue filters cover live
+  breadcrumb says "Archive"). Search and the queue filters cover live
   topics only, so the drawer hides while they narrow. Hidden when empty.
 - **Counts** come from `TopicListItem.queues` (`topicQueues` in core): PRs
   per tier over the PRs in the topic's tiles (each PR once), plus open PRs
@@ -2689,16 +3031,23 @@ avatars and filters", QueuesB2).
   in reviewers.
 - **PR state icon** (`TopicListItem.prState` and `prStateCounts` =
   `topicPrState`, 2026-10-01): one icon per row, the most alive state among
-  the topic's tracked PRs by precedence open (a queued PR counts as open),
-  draft, merged, closed (closed without merging). One open PR among nine
+  the topic's tracked PRs: failed in the merge queue when any tracked open
+  PR is, the merge-queue icon when every tracked open PR is in the queue
+  (2026-10-02, see "Merge queue"), else by precedence open (a queued PR
+  counts as open), draft, merged, closed (closed without merging). One open PR among nine
   merged shows open; merged shows only when nothing is open or draft; closed
   only when everything is closed. Pulled-in stack layers do not count. It is
   the same icon and colour as a PR row (`PrStateIcon`). Every row has a
-  fixed 14px leading slot inside the highlight: the unread dot on line one,
-  the icon on line two, both centred, so the name and the summary start at
-  the same x on every row (and the section labels line up with them; so do
-  the fold headers, whose chevron takes the slot, and the filter, hidden
-  topics and error lines). The
+  fixed 14px leading slot inside the highlight, holding only the unread dot
+  on line one (empty on line two), so the name and the summary start at the
+  same x on every row (and the section labels line up with them; so do the
+  fold headers, including the area headers under Your team, whose chevron
+  takes the slot, and the filter, hidden topics and error lines). The icon
+  sits at the right end of line two, after the summary and the chips, and
+  ends on the same right edge as the unread bubble and faces above it
+  (2026-10-01: icon moved right for a calmer left edge; coloured icons on
+  most rows made the left edge noisy, and the area headers sat deeper than
+  the names). The
   tooltip ("5 open · 1 merged") is the only place the counts show. Chosen
   over counts per state (busier, steals summary width) and a progress bar.
 - **Topic header PR pill** (`TopicDetail.prRollup` = `topicPrRollup`,
@@ -2712,13 +3061,13 @@ avatars and filters", QueuesB2).
   merged; 2 need review, 1 approved".
 - **Breadcrumb = sidebar section** (`TopicDetail.section`, 2026-10-01):
   "Topics › To review › area", with the section's label and coloured dot as
-  the sidebar draws them; Other topics for a topic without a section,
-  Finished for a retired one. It used to say "Needs you" or "Quiet" from
+  the sidebar draws them; Archive for a retired one (core gives `archive`
+  since 2026-10-02). It used to say "Needs you" or "Quiet" from
   `TopicGroup`, which only matches a subgroup inside Other topics.
 - **Urgency** (`topicUrgency` in core): a topic needs you when an unread
   tile still has an open PR, or whose-turn says it's your move on a live
   (not done, not snoozed) tile and that move is more than "Merge, it is approved" on your own PR
-  (`isMergeApprovedMove`). That move still shows on the tile footer and in
+  or "Re-submit to the merge queue" (`isMergeApprovedMove`). That move still shows on the tile footer and in
   the chip count, it just doesn't make the topic urgent. Only then is its unread bubble coral and does it rank as
   `needs_you`. When every unread tile is merged or closed the row shows a
   grey bubble ("merged or closed since you looked") and ranks below the urgent
@@ -2925,8 +3274,7 @@ bot's comments. Now the queue decides it again before putting anything back
 same refresh as after a write (or the running full sync; nothing while the
 quota is critical), then the bot-only rule runs from the click's cutoff (the
 thread's `updated_at` the click saw). Only the viewer's own activity and
-automation since, bot reviews on the viewer's own open PR included (the
-click means "I saw what PostPile showed me"), and the thread is marked read
+automation since (the click means "I saw what PostPile showed me"), and the thread is marked read
 on GitHub now, guarded again against the fresh `updated_at`, logged
 "marked after refresh: only your own activity". A person's activity since,
 or a snapshot that still does not cover the thread, and it stays unread:
@@ -3061,14 +3409,17 @@ the PR, is one of:
 
 Never clearable by itself: a review request to you or your team, a mention, a
 team mention, a question or reply to you, an unseen merge without your review.
+(Since 2026-10-02 a never-opened request that no longer stands may clear, see
+"Handled quietly" › Review requests that no longer stand.)
 These stay unread until you deal with them, also after the PR merged and a
 teammate reviewed. Not clearance evidence either: an agent NOT_YOURS, age,
 merged or closed state, an old handled mark or approval.
 
-The existing safety checks stay: fresh and complete snapshot, the 10-minute
-grace after the newest activity, the writes lock (locked: the thread stays
-unread in PostPile), the guarded re-read of the thread before the write, and an
-action-log entry ("Handled quietly").
+The existing safety checks stay: fresh and complete snapshot, the writes
+lock (locked: the thread stays unread in PostPile), the guarded re-read of
+the thread before the write, and an action-log entry ("Handled quietly").
+The 10-minute grace after the newest activity was removed 2026-10-02
+("Handled quietly" rule 5).
 
 **Notifications that are not PRs** (releases, issues): PostPile marks them read
 on GitHub by itself for now. Julian: "People who use PostPile (for example, to
@@ -3114,8 +3465,7 @@ finished topics included.
   alone (`never_looked`). Judged means an override below loud on the
   event. Asks are `isAskOfViewer`; a mention of only routing teams is FYI
   ("Team roles"), not an ask, so the agent judges it like other quiet news.
-  "Your own open PR" is one the viewer owns (`isPrOwner`, a bot PR assigned
-  to them too). Log detail "nothing that needs you since
+  Log detail "nothing that needs you since
   you last looked: lyra, CI"; Handled quietly says "nothing for you from
   lyra, CI".
 - The events agent (`EventBatchClassifier`) also gets people's quiet
@@ -3124,16 +3474,18 @@ finished topics included.
   newest unread thread first). One it leaves out of its answer gets a quiet
   override "nothing here needs you"; one it raises goes through the raised
   ping path. The budget caps the calls as before.
-- Releases and issues: `isClearableNonPr` (unread, past the grace), marked
+- Releases and issues: `isClearableNonPr` (unread; past the grace until
+  2026-10-02), marked
   by `QuietReads` with detail "not a pull request", in the action log and
   the debug view, not under Handled quietly.
 - Retire gate needs every thread read; `reviveUnreadTopics` runs after the
   retire step of the full sync and in every poll that moved the inbox. The
   full sync reads the unread state its quiet reads left, so a failed or
   capped write brings the topic back. The poll skips a thread the quiet
-  reads would clear by rule (`clearableByRule`, the grace set aside) while
-  writes are on, so a deploy bot on a merged PR does not reopen its topic
-  for three days; the next full sync clears it or brings the topic back.
+  reads would clear by rule (`clearableByRule`) while writes are on, so a
+  deploy bot on a merged PR does not reopen its topic for three days; the
+  poll's own quiet reads clear it at the end of the cycle (since
+  2026-10-02), else the next full sync clears it or brings the topic back.
   The quiet reads moved before the retire step and share one budget of
   `QUIET_READS_PER_RUN` threads, PR threads first.
 - The click's local thread read is put back (undo, parked, not taken) only
@@ -3143,18 +3495,20 @@ finished topics included.
   unread PR threads on the day's real data) used to never clear.
   Normalizing (packages/github, caps in `QUERY_CAPS`) now records from the
   raw answer, before it drops any node, which lists came back full at their
-  cap with more on GitHub, with the node count and the oldest item
-  (`Pr.capHits`). Most capped lists keep the newest N (50 reviews, 60
-  comments, 50 commits, 60 timeline items), so a cut snapshot still covers
-  the unread interval when every list that hit its cap is one of those and
-  came back with an item at or before the rule's boundary (GitHub's read
-  time for bots only, the touch for "you acted after it", the last look for
-  the judged rule). Review threads never vouch: the 50 kept are the newest
-  by creation and each keeps its first 30 comments, so a reply past either
-  cap can come at any time. A snapshot stored before `capHits` existed never
-  vouches until it is fetched again. Core `cutSnapshotCovers` behind
-  `snapshotCoversThread`. A snapshot flagged while no list hit its cap
-  (GitHub counts items the query never returns) covers.
+  cap with more on GitHub, with the node count, the oldest item and the
+  cursor to page on (`Pr.capHits`). Most capped lists keep the newest N (50
+  reviews, 60 comments, 50 commits, 60 timeline items), so a cut snapshot
+  still covers the unread interval when every list that hit its cap is one
+  of those and came back with an item at or before the rule's boundary
+  (GitHub's read time for bots only, the touch for "you acted after it",
+  the last look for the judged rule, the newest review request of the
+  viewer for "request gone"). Review threads count only once complete: the
+  50 kept are the newest by creation and each keeps its first 30 comments,
+  so a reply past either cap can come at any time. A snapshot stored before
+  `capHits` existed never vouches until it is fetched again. A snapshot
+  flagged while no list hit its cap (GitHub counts items the query never
+  returns) covers. Since 2026-10-02 older pages of the capped lists get
+  fetched for unread threads ("Handled quietly" › Capped snapshots).
 
 ## Inbox cleanup
 
@@ -3228,11 +3582,23 @@ check), a second copy of core's rules. Owner decisions (2026-09-30):
   The group's name and count sit right on top of its first tile, no box
   around them. Core's order is `TILE_GROUP_ORDER`; the renderer's copy is
   typed with `TileGroupOrder`, so a drift fails to compile.
+- **Open and Dealt with at once (2026-10-02).** Tile state is about the
+  user's move, PR state is about GitHub, so a PR can be open while its tile
+  is Dealt with (the owner's own draft, a PR waiting on others). The topic
+  then never reaches the Archive box (`RetireGate.nothingLeft` wants every PR
+  merged or closed), and nothing said why. After the Tiles count the header
+  shows a muted "· 1 PR open" / "· 2 PRs open", same type scale as the count,
+  only when core's `TopicDetail.openInDealtWith` has PRs: open PRs that sit
+  only in Dealt with tiles, minus pulled-in stack layers (not topic members,
+  so the Archive gate ignores them and the hint must agree). Its tooltip
+  names them: "Still open: devex-depot-tools#3 (draft). The topic moves to the
+  Archive once every PR is merged or closed." Decided 2026-10-02.
 - **No toggle.** The All / Unread buttons, "switching to Unread deselects",
   the filter-aware auto pick and the "show All" empty text are gone.
 - **Selection:** the selected tile keeps its place (`useHeldPlace`, now over
-  the three groups); a tile moves groups after a mark or when you leave it
-  (the move-on mark), shown once the selection moves on. Its look changes
+  the three groups); a tile moves groups after a mark (a click, or the
+  opened mark when the dwell ends), shown once the selection moves on, with
+  a slide (2026-10-01, "Marked when the dwell ends"). Its look changes
   right away.
 - **Wording:** "Dealt with" labels tiles wherever the app names the group
   (tile grid, counts, MCP `[PR, dealt with]` tile lines, the dev CLI); the
@@ -3273,21 +3639,44 @@ Owner decisions (2026-09-30):
   all: no button.
 - **Tile Approve** (new button in the tile footer). Gone when the tile has no
   approvable PR. Active when at least one approvable PR in the tile is
-  agent-safe: it approves only those (a stack base to head), names the rest
+  covered: it approves only those (a stack base to head), names the rest
   as left out, and the pill shows the highest risk among the covered PRs.
-  The label says "Approve 2 of 3 PRs" when it leaves some out, else
-  "Approve", "Approve stack" or "Approve 3 PRs" on a set. Greyed out only
-  when no approvable PR is agent-safe. The reason is `rechecking…` when any
-  approvable PR's glance is stale or missing, else `look closer` or `high`.
-  The topic's Approve covers exactly the union of what its unsnoozed tiles
-  cover.
+  Greyed out only when nothing is covered. The reason is `rechecking…` when
+  any approvable PR's own glance is stale or missing, else `look closer` or
+  `high`. The topic's Approve covers exactly the union of what its
+  unsnoozed tiles cover.
   Owner, 2026-10-01: the tile Approve is the same magic approval as the
   topic's; the earlier all-or-nothing tile rule was a spec mistake and
   greyed a stack while the topic offered two of its PRs.
+- **Base up on a stack** (owner, 2026-10-01). A stack layer is covered only
+  when it is agent-safe and no approvable layer below it is left out. The
+  lowest approvable layer the agent does not back (rechecking, look closer,
+  high) blocks every approvable layer above it; those are left out as
+  "waits on #N" (`layer_below`, with `waitsOn`). Layers below that need no
+  review from the user do not block: merged or closed, a draft, the user's
+  own PR, one the user or anyone else approved already, one dealt with
+  (done), a pulled-in layer.
+  On a stack only the lowest blocking layer keeps its own reason, so a
+  greyed stack's pill shows that layer's block ("Look closer"), never the
+  new reason. A set's PRs outside a stack keep their own verdicts; a stack
+  inside a set goes base up like a stack tile. Why: the glance on an upper
+  layer says "safe once the base is settled", so approving it above a base
+  that needs a look made no sense, and the topic followed the tiles into
+  the same mistake.
+- **Approve labels** (owner, 2026-10-01; core decides `naming`, the
+  renderer spells it). Exactly one PR covered out of several on the tile
+  (or the topic) names it: "Approve #2107", so "Low risk" can't read as a
+  verdict on the PR the user is looking at. "Approve stack", "Approve 3
+  PRs" on a set, or "Approve" on a single only when every PR on the tile is
+  covered (`prCount`), so never over a draft or pulled-in layer. Else
+  "Approve 2 of 3 PRs" (approvable PRs), or "Approve 2 PRs" when it covers
+  every approvable PR and only drafts or pulled-in layers stay out. Greyed
+  is a plain "Approve".
 - **Topic Approve** (topic header). It covers the approvable PRs in the
   topic's tiles, leaving out snoozed tiles. It approves only the agent-safe
   ones: "Approve 3 of 5 PRs", or "Approve 3 PRs" when all qualify. Each PR
-  left out is named with its reason (look closer, high risk, rechecking).
+  left out is named with its reason (look closer, high risk, rechecking,
+  or "waits on #N" for a stack layer above one that needs a look).
   A PR whose recheck comes back safe joins the count. Greyed out when no
   approvable PR is agent-safe, with `rechecking…` if any is rechecking,
   else `look closer`.
@@ -3300,7 +3689,11 @@ Owner decisions (2026-09-30):
   At click time the engine checks each PR again against the current board
   with the same core rules (`agentApproveRefusal`); one that no longer
   qualifies is refused and named ("the agent now says look closer"), the
-  rest are approved. Mark N read skips and names tiles no longer backed
+  rest are approved. On a stack each covered layer carries the covered
+  layers below it (`dependsOn`); the engine skips it when one of those failed
+  or did not go first in the batch ("skipped: a layer below failed",
+  `agentApproveSkip`), so an upper layer is never approved over a base
+  that wasn't. Unrelated PRs carry on. Mark N read skips and names tiles no longer backed
   (`agentMarkReadRefusal`) and refuses unknown tile ids.
 - **Mark read skips asks.** Only actions carry ✨, never text or lines. A
   tile's Mark read is always on offer, so it stays plain: no ✨, no pill, the
@@ -3320,8 +3713,9 @@ Owner decisions (2026-09-30):
   how many are unread), with a muted "for this topic" trailing them, above
   the first group; the row is gone when both offers are. Active Approve is
   soft green (light green fill, green text and edge) with a green pill;
-  greyed buttons keep the dashed outline with a honey pill, like Look
-  closer. Filled green is only the confirm dialog's "Approve N".
+  greyed buttons keep the dashed outline with a pill in the colour of the
+  reason (2026-10-01, was always honey): amber for Look closer, red for
+  high risk, honey when it asks for you, neutral while rechecking. Filled green is only the confirm dialog's "Approve N".
 - **Tile footer (2026-10-01, design 4b/5e).** No ink button. Left: the turn
   line, then the tile's Approve (✨) right next to it; next to Approve the
   move text needs a wider footer before it shows. Right: Mark read, Snooze,
@@ -3358,14 +3752,14 @@ Owner decisions (2026-10-01), after a UX pass (design "9c"):
   without a home team, as before. Reply and Review are gone: the Needs reply
   and To review sections are those.
 - **The sections stay while it narrows**: the switch says which topics,
-  the sections still say what needs you. Under "team PRs" a topic can sit
-  under To review or Team's PRs, by what it asks of you.
-- **A mixed topic follows the work** (`topicSection` in core, on
-  `TopicListItem.section` and `TopicDetail.section` since 2026-10-01; it was
-  `topicSectionTier` in the renderer): its section is the
-  highest any PR other than your own gives it; My PRs only when nothing else
-  in it asks for a section. Your PR next to a teammate's review request puts
-  the topic under To review; next to FYI PRs only, it stays under My PRs.
+  the sections still say what needs you and whose topic it is. Under "team
+  PRs" a topic can sit under To review or Your team owns, by what it asks
+  of you and who drives it.
+- **A mixed topic follows the work** (2026-10-01, replaced 2026-10-02 by
+  "Ownership sections"): a topic's section was the highest tier any PR
+  other than your own gave it, My PRs only when nothing else asked for one.
+  It let a teammate's plain PR pull the viewer's own project under Team's
+  PRs.
 - **What it hid is said**: "11 topics without your PRs are hidden · Show
   all" under the sections. Other topics narrow with it; Finished steps
   aside, as with search (finished topics have no open PRs).
@@ -3375,6 +3769,187 @@ Owner decisions (2026-10-01), after a UX pass (design "9c"):
   no row chips, no banners.
 - Usage telemetry keeps `queue_filter_changed`; its `filter` is now `mine`,
   `team` or `none`.
+
+## Ownership sections (2026-10-02)
+
+**The problem.** Sections came from PR tiers: a topic sat under the highest
+tier any PR other than the viewer's own gave it (`topicSection` of
+2026-10-01), so "My PRs" and "Team's PRs" said whose PRs a topic held, not
+whose topic it was. Real case: the viewer drives "Snapshot
+triage tooling" (the header said "you're here because you drive it"), has an
+open PR in it, and a teammate has one open PR in it (tier `team`, which asks
+nothing of the viewer). The topic sat under Team's PRs. The rule was
+lopsided as well: a teammate-driven topic with the viewer's PR sat under
+Team's PRs, another team's topic with the viewer's PR under My PRs.
+
+**The data** (an illustrative database, 100 active topics, every one with a
+driver): the viewer drives about a quarter, a teammate about a tenth,
+someone outside the team the rest (most of them reached the viewer as
+routed reviews). A handful of topics held the viewer's open PR, some of
+them driven by others.
+
+**Precedence** (`topicSection` in core `topic-sections.ts`, first match
+wins; the engine, FakeEngine, the row, the breadcrumb and telemetry read the
+same value):
+
+1. Retired: Archive.
+2. An open ask, most urgent first: Needs reply, Changes you requested (any
+   open change request, addressed or not), To review, Team mentioned, as
+   the PR tiers of the same name. An ask pulls a topic up only while it is
+   current; once it clears the topic goes back to its owner section. `mine`
+   and `team` tiers ask nothing and pull nothing up.
+3. FYI (the dossier's relation) without stronger evidence: Other topics,
+   FYI fold. Stronger is the viewer's open PR or move, or the viewer or a
+   teammate driving it.
+4. The viewer drives it: **You drive**.
+5. A teammate drives it (a member of any home team, `Viewer.teamMembers`),
+   or the team does ("Your team" picked, or the dossier's driverTeam):
+   **Your team owns**.
+6. Someone else drives it, or "Someone outside your team" is picked:
+   **Other work**.
+7. Nobody known to drive it: the owner team. Any home team: Your team owns;
+   another known team: Other work; unknown: Other topics.
+
+The driver comes in as a relation: the user's pick when there is one,
+else the automatic driver (`effectiveDriver` in core `topic-driver.ts`, see
+"Driver picker").
+
+**The owner team is only a fallback.** Codex's review (gpt-6.1-sol) pointed
+out how weak the signal is: `relationSignals` names the viewer's first home
+team as owner as soon as the viewer wrote a PR in the topic or drives it.
+So driver beats owner team: Alerting rework (driven outside the team) and
+Tracing basics leave Your team owns for Other work, and a
+teammate-driven topic owned by another team (Python upgrade soak)
+stays under Your team owns. The owner team counts as home when it is any
+of the home teams, not only the first.
+
+**No dossier yet.** A real ask or a known driver places the topic as above
+(without a dossier the sync names the most frequent PR author as driver).
+With neither it goes to Other topics with a small, muted "not sorted yet"
+marker. "Involved" is positive evidence only: the viewer's open PR or
+move, a known driver, an owner team, or a team or routed relation; a
+missing relation does not count. A topic with a dossier but no driver and
+no owner team also stays in Other topics, without the marker.
+
+**Inside a section** core orders the topics (`compareInSection`): the
+viewer's open PR or move first, then unread ones, then the urgency order as
+before. Changes you requested still lists re-reviews first.
+
+**Folds.** You drive and Your team owns are short lists without folds.
+Other work folds and folds by area: areas with two or more topics get a
+fold, alphabetically; single-topic areas and topics without an area gather
+under "More". Other work and each area fold start open when they hold the
+viewer's open PR, a move of theirs or an unread topic, else folded; a
+manual fold is kept for the session. While folded, urgent (coral) unread
+rows stay visible under the header and the header says "· 4 unread · 1
+urgent". The selected topic counts like an urgent row: a fold holding it stays
+open and a folded one keeps its row, so marking it read never makes it vanish
+before the selection moves. The defaults are worked out on the topics the "Topics with"
+switch leaves, so the switch no longer opens these folds; the search still
+opens every fold. FYI and the Archive start folded as before.
+
+**What stays.** The "Topics with any PR | my PRs | team PRs" switch
+answers "where are my PRs" across all sections; sections answer "whose
+topic is this". Section names read as sentences and never say "PRs". The
+header's relation chip (team / routed / FYI) stays and still says why the
+topic reached the viewer.
+
+**Driver picker** (decided 2026-10-02). "<login> drives" on the topic
+header is a button. Its menu ("Who drives this topic?") lists You, each
+teammate by name (`Viewer.teamMembers`), Your team ("Shared, no single
+driver"), Someone outside your team ("No name needed": nobody cares who
+inside another team drives), and Reset to automatic once a pick is set.
+Each item shows the section the topic moves to below the asks
+(`sectionBelowAsks`); while an ask holds the topic, the menu says it stays
+there until the ask clears. Picking moves the topic at once and the
+selection stays on it. The label then reads "You drive", "<login> drives",
+"Your team drives" or "Someone outside your team drives", with a small "set
+by you". The pick lives in its own table (`topic_driver_pick`, migration
+24) as a login, `:team` or `:outside` (colons never appear in GitHub
+logins), apart from `topic.driver`, which each sync's
+`refreshDriversAndRoles` keeps refreshing from the dossier or the PR
+authors. The pick always wins and no new event lifts it, unlike the
+relation "Wrong". The user's role follows the pick ("You" makes them the
+driver). The pick goes into the dossier prompt ("Who drives, as the user
+set it"), so the summary stops calling someone else the driver; the
+agent's own driver never moves a picked topic. "You" on another team's
+code is valid: the header keeps "Owned by <team>" from the owner signal
+and the relation chip as they are. Local only, never a GitHub write;
+telemetry `driver_set` carries the kind (you, teammate, team, outside,
+automatic), never a login. The pick never feeds `relationSignals`, which
+read the automatic driver only: the relation chip says why the topic
+reached the user, so picking "You" on a routed topic keeps it routed.
+
+**Team as driver** (decided 2026-10-02). Standing topics often have no
+single driver: the home team keeps them up and different people lead each
+wave. The dossier agent may say so with `driverTeam: true` (and nobody in
+the driver role) when the user's own team keeps a standing topic up and
+nobody leads the current wave; not when one person clearly runs it. The
+parser keeps driverTeam only while no person has the driver role and the
+topic is standing (project topics drop it, after the answer's own
+`topicKind` correction).
+`driverOf` in engine `digest/topic-roles.ts` stores it as the automatic
+driver `:team`, the same value as the picker's "Your team", so the topic
+sits under Your team owns. Real case: Egress, where the agent named
+lyra, who led one wave. Picked up at each topic's next dossier
+update; no one-time tidy. A manual pick beats it like any automatic driver.
+
+## Dealt-with topics leave the list (2026-10-02)
+
+PostPile is an inbox-clearing tool. A topic where nothing waits on the viewer
+is dealt with, and like Gmail's archive, Superhuman's Done or GitHub
+notifications' Done it leaves the list until something new arrives. Why:
+owner, looking at the new sections: "whew, everything looks dealt with", and
+clicking a dealt-with topic only to find nothing to do is unsatisfying. This
+grew out of dimming those rows (quiet rows, same day): dimmed rows still took
+the space and the clicks.
+
+Dealt with is not Archive. Archive means the topic is over (every PR merged
+or closed, then quiet days); a dealt-with topic is still live, with open PRs
+that need nothing from the viewer right now, and comes back with the next news.
+
+**Rule** (`topicQuiet` in core `topic-sections.ts`, shipped as
+`TopicListItem.quiet`; the engine and FakeEngine fill it): quiet when the
+topic has no unread tile, no your-move (the same `yourMoves` the chip shows,
+so "Merge, it is approved" counts although it never makes a topic urgent), no
+unseen merge without the viewer's review, and it sits in no ask section
+(Needs reply, Changes you requested, To review, Team mentioned). Archive rows
+are never quiet: the drawer is its own context.
+
+**Where they go** (renderer layout, `sidebarBuckets` with `hideDealt` in
+`lib/queues.ts`, labels in `lib/sidebar.ts`): in the owner sections (You
+drive, Your team owns, Other work) quiet topics leave the list. Each such
+section ends with one muted line "+ N dealt with" that opens them as dimmed
+rows and reads "Hide N dealt with" while open; folded by default, as a
+session fold like the others. A section where every topic is dealt with
+shows only its header with "· all N dealt with" and the line. In Other work
+the quiet topics come out of the area folds and gather behind the
+section's one line at its end; area folds count and show the rest only (a
+fold with nothing left goes). Other work's own default (open for your PR,
+move or unread) and its urgent rows while folded look at the rest only.
+
+**Not hidden:**
+
+- The ask sections (a topic there is never quiet), Other topics with FYI,
+  and the Archive.
+- The selected topic. It holds its place until the selection moves (the
+  held place of "Actions act on what you look at"): a topic that turns quiet
+  while selected stays in its spot and slides behind the line once the
+  selection moves; one picked from behind the line stays there, also when
+  the line folds. The quiet topics have their own held-place bucket per
+  section, so this needs no special case.
+- Everything while the search or a "my PRs" / "team PRs" filter is on:
+  filters are for finding things, so quiet rows show in place, dimmed.
+
+A hidden topic that gets news (unread, a your-move, an ask) is not quiet any
+more and comes back to its section; the usual slide covers it. Unread
+counts, the footer totals and "N topics without your PRs are hidden" stay as
+they were: a dealt-with topic is not hidden by the filter.
+
+**Look.** Quiet rows (behind the open line, and in place while filtering):
+name and summary in the faint ink, faces and the PR state icon at 45%
+opacity, hover brings the name back to the read ink. The selected row is
+never dimmed, and nothing is dimmed while the search filters.
 
 ## Tiles hold still (2026-10-01)
 
@@ -3431,9 +4006,10 @@ Owner decisions (2026-09-30 and 2026-10-01), after research on grouping PRs
   the lines its own changes made; feedback or a risk change that arrived
   during the call still triggers the next regroup. A PR that moves topic
   leaves its set with its whole stack.
-- Not part of this: batch approve (PR #48, agent-assisted actions), a
-  rolled-up verdict on the tile (the PR rows show each), shorter "same as
-  #N" glances for same-pattern sets.
+- Not part of this: batch approve (PR #48, agent-assisted actions) and
+  shorter "same as #N" glances for same-pattern sets. The tile's verdict
+  pill rolls up since 2026-10-01: it shows the worst glance among the open
+  tracked PRs ("Tile header").
 
 ## One call per topic (2026-10-01, behind a switch)
 
@@ -3491,23 +4067,35 @@ decision: the first full sync after an upgrade that changes how topics are
 cut tidies them once, by itself, as part of the upgrade, with no proposals
 for the user to work through, and never in later syncs.
 
-- `TOPIC_GRAIN_VERSION` (engine `digest/topic-tidy.ts`, now 2: topics sized
-  like projects) against `meta.topic_grain_version`. A store below it runs
+- `TOPIC_GRAIN_VERSION` (engine `digest/topic-tidy.ts`; 2: topics sized
+  like projects; 3: project and standing topics, the same day) against
+  `meta.topic_grain_version`. A store below it runs
   `TopicTidy` once, inside the full sync's topics phase, before the topic
   assignment; the live poll never does. Raise the version with the next
   steering change that should reshape existing topics.
 - The call runs as its own sync phase, `tidy`, when there are topics to
-  tidy (a fresh install skips it). While that phase runs, the app covers the
+  tidy (a fresh install skips it). Since 2026-10-01 it runs first in a full
+  sync, before the GitHub fetch (`tidyFirst`): it reads only stored topics
+  and PRs, and the cover used to go up half a minute in, after the fetch,
+  while the old topics took clicks. The digest still calls it for a store
+  with no viewer yet and for `digestStored`; once done that is a no-op. While that phase runs, the app covers the
   window with "Tidying up your topics and tiles" and a spinner (0.13.1): the
   call takes a minute or two (about 2 minutes for 117 topics), and a click
   meanwhile could land on a topic about to merge or lose PRs.
-- One `topic_tidy` call (setup model, Opus) reads every active topic: name,
-  goal (dossier goal, else summary) and one line per PR (date, author,
+- One `topic_tidy` call (setup model, Opus) reads every topic that still
+  takes PRs, active or in the Archive (since grain 3: a quiet standing topic
+  needs its kind, or it would drop off after 30 days like a project): name,
+  kind, goal (dossier goal, else summary) and one line per PR (date, author,
   state, title), with the glossary, `TOPIC_SIZE_EXAMPLES`, instructions and
-  work context. It answers `merges` (topics that are one project: fold
-  `fromTopicIds` into `intoTopicId`, optional new name) and `splits` (PRs that
-  do not belong to their topic). `mapTidyAnswer` keeps only known topics, never
-  folds a merge target away, and a split must leave a PR behind.
+  work context. It answers `merges` (topics that are one goal: fold
+  `fromTopicIds` into `intoTopicId`, optional new name), `splits` (PRs that
+  do not belong to their topic; a new destination carries `newKind`),
+  `renames` (a topic named after one step of its goal) and `kinds` (only
+  topics whose kind is wrong). `mapTidyAnswer` keeps only known topics, never
+  folds a merge target away, a split must leave a PR behind, and a renamed or
+  re-kinded topic must stay. Renames are recorded like merges (accepted,
+  source `upgrade`). A topic in the Archive that gains PRs comes back; the
+  sync's retire step sends it back when nothing in it is open.
 - Merges move the PRs the way an accepted merge does (new `created_at`, so
   the target's next dossier update introduces them) and archive the merged-away
   topics; each is recorded as an accepted `merge` proposal with source
@@ -3583,19 +4171,20 @@ Merging or closing counts only when the viewer did it.
 
    Built as core `touchedReadCheck` (`quiet-reads.ts`), run by `QuietReads`
    when the bot-only check says no, same write path (snapshot freshness,
-   thread read again right before, origin `quiet`, grace, at most
-   `QUIET_READS_PER_RUN`). Details the build settled:
+   thread read again right before, origin `quiet`, at most
+   `QUIET_READS_PER_RUN`; the grace until 2026-10-02). Details the build settled:
    - The touch here is a review or a comment (`READING_TOUCH_KINDS`): no
      push, and no merge or close either, for the same reason.
    - "Unread" is every event by someone else after `last_read_at`, or every
      one when the thread was never read. None known: left alone, like the
      bot-only rule.
    - Bots after the touch are fine as in the bot-only rule (CI and the merge
-     queue follow most approvals), except on the viewer's own open PR, where
-     they can mean work. Once the own PR is merged or closed they are fine
-     there too (2026-09-29, "Own merged PRs clear on GitHub too" in "Actions
-     act on what you look at"). The grace counts from the newest of the
-     touch, those bots and the thread's update.
+     queue follow most approvals), on the viewer's own open PR too. Until
+     2026-10-01 a bot's review there kept the thread unread, and until
+     2026-09-29 so did any bot on a merged or closed own PR ("Own merged PRs
+     clear on GitHub too" in "Actions act on what you look at"). Until
+     2026-10-02 the grace counted from the newest of the touch, those bots
+     and the thread's update.
    - No unseen loud news on the PR (until 2026-09-30: the tile must not be
      unread, which since "GitHub unread is PostPile unread" it always is
      while its thread is). Whose turn is not checked: every event before
@@ -3630,28 +4219,30 @@ Merging or closing counts only when the viewer did it.
    since 2026-09-29, before it was the whole tile's `afterRead.done`), no
    tile holding it is snoozed, and only while writes are unlocked. It
    mirrors what github.com does on a visit, limited to cases where it
-   cannot hide a to-do. Also listed under Handled quietly ("opened in
-   PostPile") when the thread was unread on GitHub. A visit on github.com
+   cannot hide a to-do. Until 2026-10-01 also listed under Handled quietly
+   ("opened in PostPile") when the thread was unread on GitHub; since then
+   it is a visible mark with an Undo and not a quiet one. A visit on github.com
    keeps its old effect (events seen, no `handledAt`): PostPile cannot
    check the conditions at the moment of the visit.
 
    Built as `POST /api/prs/:owner/:repo/:number/opened` ->
-   `EngineService.markOpenedRead` -> `QuietReads.markOpened`, with the rule
+   `EngineService.markOpenedRead` -> `OpenedReads.markOpened`, with the rule
    in core `openedReadCheck`. Details the build settled:
    - "Opened" means the PR stayed in the detail pane for 1.5s
      (`OPENED_READ_DELAY_MS`, renderer `useOpenedRead` with
      `OpenedReadTimer`) while the window was visible, so clicking through
-     tiles marks nothing. Since 2026-09-29 that only arms the open: the
-     mark goes out when the user moves on (another PR or tile, the pane
-     closed, the window hidden or blurred), see "Actions act on what you
-     look at" › Marked when you move on. Hidden before that, the wait starts over when the
+     tiles marks nothing. From 2026-09-29 that only armed the open and the
+     mark went out when the user moved on; since 2026-10-01 it goes out
+     when the dwell ends, with an Undo, see "Actions act on what you look
+     at" › Marked when the dwell ends. Hidden before that, the wait starts over when the
      window is visible again with the same PR open (Codex review on PR #10:
      the open used to be dropped). The first tile
      the app shows by itself counts too: it is on screen. One request per
      open; re-renders and refetches of the same PR send nothing.
    - The renderer asks only when the opened PR's `afterRead.done`, the
      tile is not snoozed and the lock is open (`openedRead` on the
-     `GithubWrite` list, blocked while locked, never a pending write); the
+     `GithubWrite` list, blocked while locked; only a lock closed inside the
+     undo window parks it as a pending write, since 2026-10-01); the
      engine checks again (core `openedReadCheck`: a thread, a tile, none
      snoozed, the PR done after a mark-read of it), plus, for an unread
      thread, a snapshot at least as fresh as the thread (the user cannot
@@ -3662,7 +4253,8 @@ Merging or closing counts only when the viewer did it.
      itself. When no list hit PostPile's own caps (empty `capHits`: only
      GitHub's total counted more), the detail pane missed nothing and the
      open marks. When our caps did cut something, it marks only if what
-     fell off is older than GitHub's read time (`cutSnapshotCovers`):
+     fell off is older than GitHub's read time, or paging completed the
+     list (`snapshotCoversSince`, "Handled quietly" › Capped snapshots):
      otherwise the pane the user looked at missed that activity too.
      Before, any truncated snapshot counted as stale, and about half of
      unread PRs (46 of 87, 43 with empty `capHits`) showed "Marks read when
@@ -3673,11 +4265,17 @@ Merging or closing counts only when the viewer did it.
      skip on the server logs one line with the reason.
    - A thread GitHub has read already (an earlier open, a github.com visit)
      gets only the PostPile side: the PR is handled, a `local` action log
-     row (origin `quiet`, detail "no unread GitHub thread") is written,
-     nothing reaches GitHub or shows under Handled quietly. This is the
+     row (origin `detail` since 2026-10-01, was `quiet`; detail "no unread
+     GitHub thread") is written, nothing reaches GitHub or shows under
+     Handled quietly. When nothing would change (seen and handled already)
+     the open marks nothing and has no undo. This is the
      case from "Actions act on what you look at": a PR an earlier open had
      read on GitHub still held its set open.
-   - The write is the sync's quiet mark-read: thread read again right
+   - Since 2026-10-01 the write is a queued mark-read like the pane's
+     Mark read (`ReadMarker`, cause `opened`, origin `detail`, its own
+     batch and undo token, sent after the undo window, a moved thread
+     decided again by `ClickedReadRetry`). Until then it was the sync's
+     quiet mark-read: thread read again right
      before, origin `quiet`, detail "opened in PostPile", no undo window,
      thread and events up to its update mirrored as read. Then the PR is
      handled (every event seen, `handledAt`), so it is done, and the tile
@@ -3707,22 +4305,29 @@ engine `QuietReads` (`writes/quiet-reads.ts`).
    known event by someone else after the read counts as "don't know": left
    alone.
    The stored events only count when the PR snapshot was fetched at or
-   after the thread's `updated_at` (`snapshotCoversThread`). A sync
+   after the thread's `updated_at`. A sync
    refreshes every thread but can leave a PR's snapshot stale (its PR cap, a
    failed fetch); a human comment after the snapshot would then be missing
    and the thread would look bot-only (Codex review on PR #5, 2026-09-29).
-   Not "fetched in this very sync": a PR fetched while its bot activity was
-   still inside the grace period is not fetched again until it moves, and
-   the snapshot from then still covers the thread. A snapshot cut off at
+   Not "fetched in this very sync": a PR fetched earlier is not fetched
+   again until it moves, and the snapshot from then still covers the
+   thread. A snapshot cut off at
    the query's caps covers only when what fell off is older than the read
-   (since 2026-09-30, see "GitHub unread is PostPile unread" › Built).
-2. *No bot finding on the user's own open PR.* A review bot's finding on
-   your own PR can mean work, so it stays unread while it is open. A merged
-   or closed own PR is fine (2026-09-29: every own PR merges through trunk
-   after the last comment, so 14 merged own PRs stayed unread after 0.10.0).
-   Since 2026-09-30 only a finding blocks: a bot's review or its comment in
-   a review thread (core `isAutomationFinding`). Plain bot comments (a
-   stale-PR nudge, a sticky CI report), their edits, CI and deploys do not.
+   (since 2026-09-30, see "GitHub unread is PostPile unread" › Built), or
+   once paging completed the list (`snapshotCoversSince`, since
+   2026-10-02, "Capped snapshots" below); else the rule skips with
+   `stale_snapshot`.
+2. *(Removed 2026-10-01: no bot finding on the user's own open PR.)* A
+   bot's review, or its comment in a review thread, on the user's own open
+   PR used to keep the thread unread, because it can mean work. Owner: "I
+   never care about bot replies... and it's my PR so I will have it on the
+   radar anyway." A finding that matters also shows up as failing checks or
+   unresolved threads that block the merge. The real case: ReviewHog's
+   FLASH-mode review kept an own PR unread. The number stays so references
+   to the other rules hold. History: merged and closed own PRs were let
+   through on 2026-09-29 (every own PR merges through trunk after the last
+   comment, so 14 merged own PRs stayed unread after 0.10.0); on 2026-09-30
+   only findings blocked, not plain bot comments, CI or deploys.
 3. *No unseen merge without the user's review* ("Merged without your
    review", rule 5: PostPile never marks those read by itself). Checked on
    its own, since a merge queue bot merging counts as bot activity.
@@ -3732,9 +4337,22 @@ engine `QuietReads` (`writes/quiet-reads.ts`).
    any `you` blocked). Until 2026-09-30 this read "the PR's tile is not unread";
    since "GitHub unread is PostPile unread" a tile is unread while its
    thread is, so that check would block every quiet read.
-5. *Grace.* 10 minutes (`QUIET_GRACE_MS`) after the newer of the newest
-   bot event and the thread's `updated_at` (a bot push can carry an older
-   commit date), so a person answering the bot right away still counts.
+5. *(Removed 2026-10-02: grace.)* PostPile waited 10 minutes
+   (`QUIET_GRACE_MS`) after the newer of the newest bot event and the
+   thread's `updated_at`, so a person answering the bot right away still
+   counted. It dates from when PostPile kept its own unread state apart
+   from GitHub's. Since "GitHub unread is PostPile unread" a thread is just
+   read or unread, and what the grace guarded is covered: a snapshot older
+   than the thread's update leaves it (rule 1), the thread is read again
+   right before the write and left when it moved (the write below), and a
+   person's reply after the mark makes GitHub mark the thread unread again.
+   Owner decision: drop it. It held bot-only threads unread for up to an
+   hour, because the pass then ran only in the full sync. The real case: a
+   quiet read at 06:19, trunk-io edited its merge queue comment at 06:22
+   (an @mention, so GitHub notified again), and the thread stayed unread
+   until the owner opened it at 06:25. The same goes for the grace of the
+   acted-after rule, the judged rule and notifications that are not PRs.
+   The number stays so references to the other rules hold.
 6. *Lock open.* Only while GitHub writes are unlocked. Locked, nothing
    happens and nothing piles up as a pending write.
 
@@ -3742,9 +4360,18 @@ engine `QuietReads` (`writes/quiet-reads.ts`).
 hourly auto sync), after the digest and before the retire step (since
 2026-09-30: what PostPile clears no longer holds a finished topic). The full sync has
 just fetched the inbox and every moved PR, so threads, events and read times
-are fresh, and the hourly auto sync is also what comes back once a grace
-period ran out. The live poll only fetches what moved and would need its own
-timer for the grace, so it is left out. At most 50 threads per sync
+are fresh. Since 2026-10-02 also at the end of every live poll cycle that
+stored a change (the inbox or read list moved, or a PR was fetched;
+`PollRun`), after the pings, on the threads and PR snapshots the cycle just
+stored. A cycle with nothing new runs no pass: the stored state is what the
+last pass saw, and re-reading threads it left would only cost requests.
+PRs the poll did not fetch keep their older snapshot and wait on rule 1
+until the next change or full sync. The pass is part of the poll cycle, so
+it never runs beside the full sync or itself: the engine blocks a cycle
+while a sync runs, and a sync waits for the running cycle. The judged rule
+needs the events agent's judgement of people's quiet activity (full sync,
+topic catch-up); the next pass after it picks the thread up. Before, the live poll was left out because it would have
+needed its own timer for the grace. At most 50 threads per run
 (`QUIET_READS_PER_RUN`).
 
 **The write**: each thread is read again right before (`GET
@@ -3760,7 +4387,7 @@ sync report and the next sync tries again. The sync log says how many.
 list over the middle and detail columns: the quiet mark-reads that reached
 GitHub in the last 7 days (`HANDLED_QUIETLY_DAYS`), newest first, with
 repo#number, title, why ("only trunk-io, CI", "you approved after it",
-"opened in PostPile"; the other reasons are in "You already dealt with it")
+"opened in PostPile" for rows from before 2026-10-01; the other reasons are in "You already dealt with it")
 and when (`GET /api/handled-quietly`,
 `EngineService.handledQuietly`, read from the action log). A click opens the
 tile when one holds the PR. Quiet on purpose: no coral, the count is faint
@@ -3781,8 +4408,7 @@ extra request), and each comment edited after it was posted gives one
 `comment_edited` event at its latest edit, by the editor (else the author),
 id `<prKey>:comment_edited:<comment id>@<edit time>` so re-syncs keep it and
 a later edit is a new event. A bot editing its comment is automation, so
-the bots-only read clears it, also on the user's own open PR (not a
-finding). A person's edit is quiet news the events agent judges; it is loud
+the bots-only read clears it, also on the user's own open PR. A person's edit is quiet news the events agent judges; it is loud
 and an ask when the edited body mentions the viewer or a home team (Codex
 review: a person editing in "@viewer" is a real ask). The old body is not
 fetched, so a mention already there counts too: the event is new and
@@ -3815,13 +4441,98 @@ team request, a stale-PR bot nudged and CI ran) still stays unread: on Sep
 re-review, address changes); merging an approved PR of theirs never does,
 so the real case clears.
 
+**Review requests that no longer stand** (Decided 2026-10-02). Every
+other rule skips a thread GitHub never saw read (`never_read`, no
+`last_read_at`), so a review request the user never opened stayed unread
+for good, even after it stopped asking anything. The real case (acme/app
+#1812): a bot asked the user's home team and two other teams for a review
+on Sep 12; the thread (reason `review_requested`) was never opened. Later
+the home team's request was removed (pending were only the two other
+teams), and everything since was the author answering review bots, plus
+bot comments; the events agent had judged the replies quiet. The thread
+stayed unread for days. Owner decision: such a thread may clear once the
+request no longer stands. Core `requestGoneReadCheck`, all of these:
+
+- GitHub has it unread, never read, and its reason is `review_requested`.
+  Never-read threads for anything else (a mention, an assignment, the
+  author) keep the `never_read` skip.
+- No request of the user or any of their teams is pending: removed, or
+  answered by them or a teammate (`reviewRequest` is null or `team_taken`).
+  A pending personal or team request keeps it unread as before.
+- Since the newest request of the user or their team (the boundary of the
+  rule), something by someone else happened, and all of it is automation
+  or a person's activity the events agent judged below loud, the standard
+  of the judged rule. A removal by a person, or a teammate's review,
+  counts as a person's activity and waits for the agent like any other.
+- No ask since the request or still unseen (`isAskOfViewer`), no loud
+  news since, no unseen loud news on the PR besides the requests
+  themselves (a team request a teammate answered stays loud by its rule,
+  and it is what this rule reads), no unseen merge without the user's
+  review, no move of theirs new since the request (`isNewYourMove`).
+- The snapshot covers the thread (`snapshotCoversSince` from the request:
+  cut-off lists vouch only for what fell off before it, or once complete).
+
+Log detail "review request no longer stands, nothing that needs you since:
+greptile-apps[bot], paul"; Handled quietly says "request gone, nothing for
+you from greptile-apps, paul". Runs with the other rules in the full sync
+and the live poll pass (engine `QuietReads`). This narrows "Never clearable
+by itself: a review request to you or your team" in "GitHub unread is
+PostPile unread": a request that still stands never clears; one that was
+removed or answered no longer asks anything.
+
+**Capped snapshots** (Decided 2026-10-02). Bot-heavy PRs stayed unread for
+days: review bots post dozens of reviews and threads, the query keeps the
+newest 50 of each, and the kept ones started after the user's last read. Every quiet read skipped them as
+`stale_snapshot`. Example: acme/app#1234, where review bots posted more than
+50 reviews and more than 50 review threads, the oldest kept review two days
+after the last read, so no rule could ever clear the thread.
+
+- **Paging.** When a fetched PR's snapshot hits a cap and its thread is
+  unread, PostPile fetches older pages of the capped lists until they reach
+  back to the thread's `last_read_at` or GitHub has no more (core
+  `needsOlderPages`; a thread never read pages to the end). One GraphQL
+  request per page with `before:` cursors (`pageInfo { hasPreviousPage
+  startCursor }`, asked for in the PR query too); a thread whose comments
+  hit their cap pages forward with `after:`. Paged items are selected and
+  normalized exactly like the PR query and merged in by id
+  (packages/github `cap-fill.ts`, `addOlderPage` in `normalize.ts`). Each
+  list's cap hit moves back (`oldestAt`, `cursor`, `nodes`) or is marked
+  `complete`.
+- **Coverage.** One helper decides for every rule: core
+  `snapshotCoversSince(pr, since)`. A snapshot covers since a time when it
+  was not cut by our caps, or every capped list is complete or reaches back
+  to or before it (`capHitCoversSince`). Review threads and a thread's
+  comments have no usable time (`oldestAt` null): they cover only when
+  complete. Each rule passes its own `since` (read time, touch, last look,
+  newest review request); `null` means from the start, so only complete
+  lists count. The freshness check against the thread's `updated_at` stays
+  as it was. Whatever is still not covered keeps blocking the quiet reads.
+- **When.** In the full sync, between the PR fetch (and the moved-PR fetch)
+  and storing, so the stored snapshot (`prs.upsert`) and its derived events
+  include what came in, before the quiet reads; and in the live poll for
+  the PRs it fetched. The snapshot keeps the time the fetch started as its
+  fetch time, so a thread updated while paging ran does not look covered.
+- **Budgets** (engine `cap-fill.ts`): at most 5 pages per list per PR (and 5
+  over all of one PR's threads' comments, `CAP_FILL_PAGES`), 10 PRs per
+  full sync (`CAP_FILL_SYNC_PRS`), 3 per poll (`CAP_FILL_POLL_PRS`), newest
+  thread first, nothing while the GitHub quota is low (`allowsBackground`,
+  checked before each PR). A list still short of the read after its pages
+  ends that PR's paging: coverage needs every list, so the rest could not
+  help. Skipped PRs, the pages each PR took and lists still short go to the
+  sync log; a failed request ends the pass and the PR keeps its unpaged
+  snapshot.
+- **Expected cost** (illustrative numbers): few PRs hit a cap at all, and
+  paging a capped list to its end usually takes a handful of pages, e.g.
+  acme/app#1234 would take 2 (15 older reviews, 4 older threads); a very
+  long timeline can need more than the budget.
+
 **History**: the idea was parked on 2026-09-29 when "merged, nothing new"
 (mark merged PRs read when nothing happened since) turned out to hide
 merges Julian wants to see (see "Merged without your review"). Bot-only
 activity since the last read is the safe case: the user already read
 everything a person said, and what came after can't ask them anything. Own
-open PRs are excluded because bot reviews there can mean work; merged or
-closed ones are not (2026-09-29).
+open PRs were excluded because bot reviews there can mean work; merged or
+closed ones were not (2026-09-29). The exclusion was dropped on 2026-10-01.
 
 **Fake mode**: seven sample quiet mark-reads in the action log (two for
 "you acted after it", one older than 7 days, so it stays out of the view)
@@ -3937,8 +4648,10 @@ have no glance yet get a glance catch-up run right after the ping decisions
 (see "Glance catch-up" below). Sets, stack layers and fact verification stay
 with the full sync, which still finds the new events through the event log
 and walks stacks and verifies facts for the PRs the poll fetched (meta
-`poll_fetched_since_sync`). Never marks anything read (on GitHub or locally,
-beyond what the full sync already does for threads that left the inbox).
+`poll_fetched_since_sync`). Marks nothing read (on GitHub or locally,
+beyond what the full sync already does for threads that left the inbox),
+except through the quiet reads at the end of a cycle that stored a change
+(since 2026-10-02, "Handled quietly" › Where it runs).
 
 **Decision** (`PingDecider`), one per PR thread with new events, rules first:
 
@@ -4197,8 +4910,10 @@ the sync retries it. Local, agent calls only, not on the `GithubWrite` list.
 **Out of date wording** (2026-09-29, the renderer's `lib/staleness.ts`):
 one wording everywhere for "not up to date". While a full sync runs
 (`useActions().syncing`) or a catch-up run writes for the PR or topic
-(`glanceState` `writing` on the PR, or on any PR of the topic for the
-dossier), every note says "updating": the tile's verdict chip "· updating",
+(`glanceState` `writing` on the PR for its glance; `TopicDetail` /
+`PrDetail.memoryUpdating` for the dossier and facts, set only by a
+whole-topic run, never by a glance-only refresh on look), every note says
+"updating": the tile's verdict chip "· updating",
 the stale verdict box "Updating now: a new assessment is being written.",
 the dossier's "Updating now: 3 newer events.", a stale memory badge
 "updating · PR moved since" and its "Why?" check "Updating now: PR moved
@@ -4207,7 +4922,9 @@ since" (the topic's or PR's updating state is passed into `MemoryLine`,
 "paused while syncing". When nothing runs: "out of date" ("· out of date",
 "Out of date: 3 newer events not in the dossier yet.", "Out of date: PR
 moved since" in "Why?"). "Stale"
-and "Sync to refresh it" are gone from the UI.
+and "Sync to refresh it" are gone from the UI. "Newer events" counts trigger
+events only (2026-10-02, see "Event roles"): a bot refreshing its status
+comment or a CI result never makes the dossier look out of date.
 
 **Refresh**: `LivePollStatus.catchUpChanges` grows on every queue, start and
 end; `useLivePoll` refetches everything when it moves, so a tile flips from
@@ -4216,6 +4933,79 @@ end; `useLivePoll` refetches everything when it moves, so a tile flips from
 **Fake mode**: `FakeCatchUp` walks the first sample PR without a glance
 queued -> writing -> ready (4s + 6s) once the renderer first reads the live
 status, and marks the second one failed so Retry can be tried.
+
+## Glance refresh on look
+
+Decided 2026-10-01: a stale glance is rewritten when the user looks at the
+PR. Quiet news (an author push, bot comments, CI) does not trigger a
+catch-up, so a stale glance waited up to an hour for the full sync, also
+while the user was looking at that very PR. Owner: the hourly sync is too
+slow when they are looking at the PR. The cost stays low because only
+opened PRs with a stale glance refresh. Automatic, not a button: "No
+manual refresh per PR or topic" (2026-09-29) still holds.
+
+**Trigger** (renderer, `useGlanceLook` in `DetailPane`, `GlanceLookTimer`):
+the PR stays in the detail pane for the opened-mark dwell
+(`OPENED_READ_DELAY_MS`, 1.5s) while the window is visible, and
+`wantsGlanceRefresh` holds: `glanceStale`, no `glanceRefreshBlock`, and
+`glanceState` not `writing` or `queued`. Clicking through PRs asks nothing.
+Once per open: re-renders and refetches ask nothing more; a glance that
+turns stale later in the same open asks then. The renderer only asks
+(`POST /api/prs/:owner/:repo/:number/glance/look`,
+`useActions().refreshGlanceOnLook`, quiet, local, not on the `GithubWrite`
+list); the engine decides.
+
+**Engine** (`Engine.refreshGlanceOnLook`, answers `GlanceLookResult`), in
+order: `blocked` while the agent is off, catch-up is off
+(`POSTPILE_CATCHUP_CAP=0`, or `POSTPILE_MAX_AGENT_CALLS=0` in dev) or the
+daily catch-up cap is spent: no call, the existing wording stays.
+`deferred` while a full sync or consolidation runs: the renderer asks only
+once per open, so the engine keeps the look and asks again when that run
+ends (consolidation writes no glances; after a sync the re-check usually
+finds it `current`). `current` when `TopicCatchUp.needsGlance` finds the
+stored input hash still matching (or the PR gets no glance): no call. Else
+`CatchUpQueue.requestGlance`:
+
+- `covered` when a run for its topic is queued (whole-topic, or a glance
+  run for this PR): it starts later and sees the PR as it is now.
+- `queued` behind any run already going for the topic, whole-topic or
+  glance-only: a going run may have read its inputs before the PR changed.
+  The follow-up checks the hash again, so it makes no call when the going
+  run wrote a current glance. A whole-topic follow-up queued meanwhile wins
+  and covers it.
+- `started`: a glance-only run (`TopicCatchUp.runGlances`), still one run
+  per topic at a time, so it never writes beside the topic's own run.
+
+**Run**: the glance batch path of a sync (`GlanceBatchWriter.run` with
+`TopicScope.prKeys`): the same prompt, inputs, store writes and
+`onGlancesStored`, so Look closer pings behave as for any new glance. The
+topic's dossier is used as it is, never rewritten here. The writer checks
+the hash again before it calls. Budget: `2 * ceil(PRs / 18)` per run plus
+the daily `CatchUpCap`, so it counts against the 300 a day. Calls land in
+`catchup:<topic>:glance:<time>`; the log says `catch-up <topic> glance
+<pr>: ...` for the request and the run. No `catch_up_ran` event: that one
+counts whole-topic runs.
+
+**State and wording**: while the run goes, `CatchUpQueue.stateOf(topic,
+pr)` is `running` for that PR only (a whole-topic run still counts for every
+PR of the topic), so `glanceState` is `writing` and the stale verdict box
+says "Updating now: a new assessment is being written." and the tile chip
+"· updating", with no renderer logic of its own. Memory notes (dossier,
+facts) read `memoryUpdating` instead, which only a whole-topic run sets
+(`stateOf(topic)` without a PR): a glance-only run rewrites no memory, so
+stale memory keeps saying "out of date". The run's start and end
+move `catchUpChanges`, so the refreshed glance arrives with the normal
+refetch. `glanceRefreshBlock` (`glanceRefreshBlockOf` in core, on
+`PrSummary`, `TileVerdict` and `PrDetail`) says when a look cannot refresh:
+`no_glance`, `agent_off`, `catch_up_off`, `daily_cap`. Only then the stale
+note keeps "A new assessment will be written on the next sync." (tooltip
+"The next sync writes a new one."); otherwise it says "A new assessment is
+written when you stay on this PR." (tooltip "Opening the PR writes a new
+one.").
+
+**Fake mode**: `FakeEngine.refreshGlanceOnLook` rewrites the stale sample
+glance (#1904) through `FakeCatchUp.refreshOnLook`: writing, then a canned
+current glance.
 
 ## Auto sync
 
@@ -4493,7 +5283,7 @@ topic names are never event props.
    props: no PR, no team slug), `snoozed`
    (the condition name for an event-based snooze — someone replies, a push,
    CI green — or a time bucket for `until_time`), `opened_on_github`,
-   `ask_sent` (AskComposer's send), `chat_message_sent`, `mac_ping_shown` /
+   `ask_sent` (the Ask popover's send), `chat_message_sent`, `mac_ping_shown` /
    `mac_ping_clicked`, `pings_summarized` (pinged, withheld_rules,
    withheld_agent, pinged_glance (Look closer on routed reviews),
    handled_quietly: counts since the last summary, from
@@ -4501,7 +5291,8 @@ topic names are never event props.
    it at most once an hour after a sync or a poll cycle, window end kept in
    meta `pings_summarized_at`; nothing when every count is 0, the first call
    only starts the clock; no per-notification events), `search_used` (throttled, query length bucket only),
-   `queue_filter_changed`, `topic_opened` (section), `update_pill_clicked`
+   `queue_filter_changed`, `topic_opened` (section: core's `TopicSection`, since 2026-10-02 `you_drive`, `team_owns`, `other_work`, `other_topics` instead of `my_prs`, `team_prs`, `other`), `driver_set` (the header's driver menu: kind you / teammate / team / outside / automatic, never a login), `topic_archived` ("Archive
+   now" on a topic with nothing left), `update_pill_clicked`
    (the title bar pill opened) / `update_later_clicked`, `update_bar_shown`
    (releases_behind capped at 10, hours_behind rounded; once per app run) /
    `update_bar_later_clicked`,
@@ -4904,9 +5695,11 @@ Julian under "Open questions".
   past a cap never arrived while the freshness check still passed, and the
   bot-only read could clear an unread human reply (a human comment followed by
   60 bot comments). The query now also asks for the total count of each; a PR
-  with any list cut off is marked truncated, and `snapshotCoversThread` treats
-  it as not covering the thread (no bot-only, touched or opened mark-read on
-  GitHub for it).
+  with any list cut off is marked truncated, and the quiet reads treat it as
+  not covering the thread (no bot-only, touched or opened mark-read on
+  GitHub for it). Since refined: it covers as far back as each capped list
+  reaches, and older pages get fetched (`snapshotCoversSince`, "Handled
+  quietly" › Capped snapshots).
 - **The MCP process never writes, instructions included.** Reading a glance's
   freshness recorded a new instructions version when `instructions.md` had
   changed while the app was closed, and the read-only MCP process threw
@@ -5109,7 +5902,8 @@ Later the same day, from the next runs:
   rows while the tracked PR is not done: the layer for its news, the
   tracked PR for itself. Julian: keep.
 - The quiet-read grace counts from the newest activity, human or bot (the
-  touch, the bots after it, the thread's update). Kept as built.
+  touch, the bots after it, the thread's update). Kept as built. (The grace
+  was removed 2026-10-02.)
 - The ping side of the raised-automation rule: the "only automation" row
   of the ping table counts automation at its rule's loudness only. A bot
   event raised to loud (agent or user) goes on like a person's loud event:
@@ -5176,7 +5970,7 @@ for it, tier, done, unseen count, ping class and text, quiet reads and
 Look closer ping; the tile, read and topic catalogues use the oracles too
 (tile state, offers, the read plan, a board without a viewer). An exact oracle covers liveness as
 well as safety: an addressed ask on an open unsnoozed tile pings, bot-only
-activity past the grace gets a quiet read, nothing unseen stays in a
+activity gets a quiet read, nothing unseen stays in a
 read's scope. Answering is a metamorphic check: a comment by the viewer
 clears Reply, the answered-changes Re-review and Needs reply (a re-review
 a pending request asks for stays). The generator also makes re-requests
@@ -5282,8 +6076,10 @@ preflight and does not know the token, so CORS stays open.
 | `POST /api/topics/:id/tailoring` `{text, keep}` | `decideTailoring()` |
 | `POST /api/proposals/:id` `{accept}` | `decideTopicProposal()` |
 | `GET /api/prs/:owner/:repo/:number` | `getPr()` |
-| `POST /api/prs/:owner/:repo/:number/approve` | `approve()` |
+| `POST /api/prs/:owner/:repo/:number/approve` `{headOid, body?}` | `approve()` (body: "Approve with comment") |
+| `POST /api/prs/:owner/:repo/:number/comment-review` `{headOid, body}` | `commentReview()` (event COMMENT; final; refused while locked) |
 | `POST /api/prs/:owner/:repo/:number/draft-ask` `{person, intent}` | `draftAsk()` |
+| `POST /api/prs/:owner/:repo/:number/draft-review-note` `{kind}` | `draftReviewNote()` (kind `approve` or `comment`; agent only) |
 | `POST /api/prs/:owner/:repo/:number/comment` `{body}` | `sendComment()` |
 | `POST /api/prs/:owner/:repo/:number/opened` | `markOpenedRead()` (opened in the detail pane; `{marked}`: thread marked read or PR handled) |
 | `POST /api/prs/:owner/:repo/:number/remove-team-request` `{team}` | `removeTeamRequest()` (final; refused while locked) |

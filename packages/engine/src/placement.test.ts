@@ -1,5 +1,5 @@
 import { emptyDossier } from '@postpile/core';
-import { makeThreadFor } from '@postpile/core/fixtures';
+import { makeComment, makeThreadFor } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { MAX_NEW_AREAS_PER_SYNC } from './digest/dossiers.ts';
 import { makeHarness, type Harness } from './testing/fakes.ts';
@@ -70,6 +70,23 @@ describe('topic placement', () => {
     await h.engine.sync({ maxAgentCalls: 0 });
 
     expect((await h.engine.getTopic(id!))?.placement).toMatchObject({ relation: 'routed', corrected: false });
+  });
+
+  it('keeps "Wrong" on the relation through bot noise: a status comment edit is nothing new', async () => {
+    const h = makeHarness();
+    const [id] = topics(h, 1);
+    h.agent.answerDossier(() => ({ dossier: { ...emptyDossier(), summary: 's', relation: routed } }));
+    await h.engine.sync({ agentJobs: ['dossiers'] });
+    await h.engine.correctMemory({ kind: 'wrong', factId: null, topicId: id!, text: 'Routed to you', relation: 'fyi' });
+
+    const status = { id: 'c-trunk', author: 'trunk-io[bot]', body: 'Merging to `master` is managed by Trunk.', createdAt: '2026-09-02T10:00:00.000Z' };
+    const edited = { ...status, lastEditedAt: '2026-09-02T11:00:00.000Z', editor: 'trunk-io[bot]' };
+    const pr = reviewRequestedPr(1, { updatedAt: '2026-09-02T11:00:00.000Z', comments: [makeComment(edited)] });
+    h.reader.addPr(pr, makeThreadFor(pr, { updatedAt: '2026-09-02T13:00:00.000Z' }));
+    h.reader.etag = 'etag-2';
+    await h.engine.sync({ maxAgentCalls: 0 });
+
+    expect((await h.engine.getTopic(id!))?.placement).toMatchObject({ relation: 'fyi', corrected: true });
   });
 
   it('files area merges from consolidation once and applies them on accept', async () => {

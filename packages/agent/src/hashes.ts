@@ -13,7 +13,9 @@ import type { DossierUpdateInput, GlanceBatchInput, GlanceBatchItem, PromptConte
  * and older dossiers read fine, their lines show "no source recorded".
  * Dropping CI (NO_CI_RULE, 2026-09-29) kept d2: a dossier is rewritten on
  * the topic's next real activity anyway. So did fencing the area names
- * (2026-09-29): the same data, only moved inside <github_data>.
+ * (2026-09-29): the same data, only moved inside <github_data>. So did
+ * driverTeam and the user's driver pick (2026-10-02): picked up at each
+ * topic's next dossier update.
  */
 export const DOSSIER_PROMPT_VERSION = 'd2';
 
@@ -140,6 +142,7 @@ export function dossierInputHash(input: DossierUpdateInput): string {
     input.context.tailoring,
     input.context.standingRules,
     input.chatTurns.map((message) => message.id),
+    input.driverPick,
   );
 }
 

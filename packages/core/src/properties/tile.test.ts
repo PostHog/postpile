@@ -2,7 +2,7 @@
 // one scenario per decision the properties led to.
 // POSTPILE_PROPERTY_RUNS=10000 pnpm test runs more boards per invariant.
 import { describe, expect, it } from 'vitest';
-import { buildBoard, checkBoards, PROPERTY_TIMEOUT_MS, QUIET_PR, TILE_INVARIANTS, tileViewsOf, type BoardSpec } from '../testing/index.ts';
+import { buildBoard, checkBoards, PROPERTY_TIMEOUT_MS, QUIET_PR, UNSORTED_TOPIC, TILE_INVARIANTS, tileViewsOf, type BoardSpec } from '../testing/index.ts';
 
 describe('tile invariants', () => {
   for (const invariant of TILE_INVARIANTS) {
@@ -31,6 +31,7 @@ describe('Unread dots, scenarios the properties found', () => {
       teams: 'one_home',
       teamMembersUnknown: false,
       nowGap: 60,
+      topic: UNSORTED_TOPIC,
     };
     const view = tileViewsOf(buildBoard(spec))[0]!;
     const [layer, pinged] = view.prs;
@@ -59,6 +60,7 @@ describe('Unread dots, scenarios the properties found', () => {
       teams: 'one_home',
       teamMembersUnknown: false,
       nowGap: 60,
+      topic: UNSORTED_TOPIC,
     };
     const view = tileViewsOf(buildBoard(spec))[0]!;
     const [merged] = view.prs;

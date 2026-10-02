@@ -1,5 +1,5 @@
 import type { AgentService } from '@postpile/agent';
-import { isOwnTeam, prReadScope, teamSlug, type ActionResult, type Pr, type PrKey } from '@postpile/core';
+import { isOwnTeam, prReadScope, teamSlug, viewerHeadReview, type ActionResult, type Pr, type PrKey, type ReviewNoteKind } from '@postpile/core';
 import type { Store } from '@postpile/store';
 import type { PromptContextSource } from '../prompt-context.ts';
 import { errorText } from '../errors.ts';
@@ -7,11 +7,12 @@ import { loadViewer } from '../viewer-meta.ts';
 import type { GitHubWrites } from '../writes/github-writes.ts';
 import type { ReadMarker } from './read-marker.ts';
 import { failed, ok } from './results.ts';
+import { reviewNoteGlanceNotes, reviewNoteIntent } from './review-note.ts';
 
 /** Why an approval is refused when the stored head moved past the one on screen. */
 export const NEW_COMMITS_SINCE_LOOKED = 'New commits since you looked; take another look';
 
-/** Actions on one PR that write to GitHub right away: approve and comment. */
+/** Actions on one PR that write to GitHub right away: approve, comment review and comment. */
 export class PrActions {
   constructor(
     private readonly store: Store,
@@ -20,7 +21,7 @@ export class PrActions {
     private readonly contexts: PromptContextSource,
     private readonly readMarker: ReadMarker,
     private readonly now: () => Date,
-    /** Fetches the PR again right after a write. Comment and "Remove <team>" wait for it; approve does not. */
+    /** Fetches the PR again right after a write. Comment, comment review and "Remove <team>" wait for it; approve does not. */
     private readonly refreshPr: (key: PrKey) => Promise<void> = async () => {},
   ) {}
 
@@ -35,9 +36,10 @@ export class PrActions {
    * state, never the approval. The review is pinned to `headOid`, the commit
    * the renderer showed. A poll can move the stored head a few seconds
    * before the renderer refreshes; then the approval is refused without a
-   * GitHub call, so nobody approves commits they have not seen.
+   * GitHub call, so nobody approves commits they have not seen. `body` is
+   * the optional note from "Approve with comment"; empty sends none.
    */
-  async approve(key: PrKey, headOid: string): Promise<ActionResult> {
+  async approve(key: PrKey, headOid: string, body = ''): Promise<ActionResult> {
     const pr = this.openPr(key);
     if (!pr) {
       return failed(`${key} is not an open PR in the store`);
@@ -47,7 +49,7 @@ export class PrActions {
     }
     const origin = { origin: 'tile' as const, prKey: key };
     try {
-      if ((await this.writes.approvePr(pr.ref, '', pr.headOid, origin)) === 'off') {
+      if ((await this.writes.approvePr(pr.ref, body, pr.headOid, origin)) === 'off') {
         return failed('GitHub writes are off (lock in the footer): nothing was approved');
       }
     } catch (error) {
@@ -63,6 +65,72 @@ export class PrActions {
     // Undo" reads as taking back the approval. The settle token still lets the
     // renderer refetch once the mark-read's window settled.
     return { ...ok('Approved'), settleToken: batch.token };
+  }
+
+  /**
+   * "Comment review" in the detail pane (2026-10-02): a review with event
+   * COMMENT, pinned to `headOid` with the same head check as approve. It
+   * answers a review request without being the approval that clears the PR
+   * for merging. Final like approve, blocked while writes are locked. After
+   * it, the PR's events turn seen like after an approval, and the refreshed
+   * PR carries the review, so the turn rules see the viewer reviewed the head.
+   */
+  async commentReview(key: PrKey, headOid: string, body: string): Promise<ActionResult> {
+    const pr = this.openPr(key);
+    if (!pr) {
+      return failed(`${key} is not an open PR in the store`);
+    }
+    if (body.trim() === '') {
+      return failed('A comment review needs a note');
+    }
+    if (pr.headOid !== headOid) {
+      return failed(NEW_COMMITS_SINCE_LOOKED);
+    }
+    const previousReviewAt = this.viewerReviewAt(key);
+    try {
+      if ((await this.writes.commentReviewPr(pr.ref, body, pr.headOid, { origin: 'tile', prKey: key })) === 'off') {
+        return failed('GitHub writes are off (lock in the footer): nothing was posted');
+      }
+    } catch (error) {
+      return failed(`Comment review failed: ${errorText(error)}`);
+    }
+    // Mark read first: what the refresh brings in is news the user has not seen.
+    const batch = this.readMarker.markRead(prReadScope(key, true), { kind: 'approved' }, { origin: 'tile', tileId: null });
+    await this.refreshPr(key);
+    this.mirrorReview(key, pr.headOid, body, previousReviewAt);
+    return { ...ok('Comment review posted'), settleToken: batch.token };
+  }
+
+  /** When the viewer's newest review of the stored head was submitted, or null without one. */
+  private viewerReviewAt(key: PrKey): string | null {
+    const stored = this.store.prs.get(key);
+    const viewer = loadViewer(this.store);
+    return stored && viewer ? (viewerHeadReview(stored, viewer)?.submittedAt ?? null) : null;
+  }
+
+  /**
+   * GitHub took the comment review; when the stored snapshot does not show a
+   * review by the viewer newer than the one before the write (the refresh
+   * failed or GitHub lagged), it adds one and drops the viewer's pending
+   * personal request, like GitHub does on answering. An earlier review on the
+   * same head (say CHANGES_REQUESTED) must not count as this one. The next
+   * sync brings GitHub's copy.
+   */
+  private mirrorReview(key: PrKey, headOid: string, body: string, previousReviewAt: string | null): void {
+    const stored = this.store.prs.get(key);
+    const fetchedAt = this.store.prs.fetchedAtByKey().get(key);
+    const viewer = loadViewer(this.store);
+    if (!stored || !fetchedAt || !viewer || stored.headOid !== headOid) {
+      return;
+    }
+    const latest = viewerHeadReview(stored, viewer);
+    if (latest !== null && (previousReviewAt === null || latest.submittedAt > previousReviewAt)) {
+      return;
+    }
+    const at = this.now().toISOString();
+    const review = { id: `local-review-${at}`, author: viewer.login, state: 'COMMENTED' as const, body, submittedAt: at, commitOid: headOid };
+    const reviewerUsers = stored.reviewerUsers.filter((login) => login.toLowerCase() !== viewer.login.toLowerCase());
+    this.store.prs.upsert({ ...stored, reviews: [...stored.reviews, review], reviewerUsers }, fetchedAt);
   }
 
   /** Unsubscribes from the PR's thread; says what happened, never throws. */
@@ -128,14 +196,24 @@ export class PrActions {
     }
   }
 
-  async draftAsk(key: PrKey, person: string, intent: string): Promise<{ body: string }> {
+  /** One draft through the agent, with the instructions and work context of the PR's topic. Never sent by the agent. */
+  private async draftComment(key: PrKey, person: string | null, intent: string, notes: string[] = []): Promise<{ body: string }> {
     const pr = this.store.prs.get(key);
     const viewer = loadViewer(this.store);
     if (!pr || !viewer) {
       throw new Error(`${key} is not in the store yet; run a sync first`);
     }
     const topicId = this.store.memberships.get(key)?.topicId ?? null;
-    return this.agent.draftComment({ pr, viewer, person, intent, context: this.contexts.forTopic(topicId) });
+    return this.agent.draftComment({ pr, viewer, person, intent, notes, context: this.contexts.forTopic(topicId) });
+  }
+
+  draftAsk(key: PrKey, person: string, intent: string): Promise<{ body: string }> {
+    return this.draftComment(key, person, intent);
+  }
+
+  /** The draft for the review note popover (Approve with comment, Comment review): addressed to nobody, fed the glance. */
+  draftReviewNote(key: PrKey, kind: ReviewNoteKind): Promise<{ body: string }> {
+    return this.draftComment(key, null, reviewNoteIntent(kind), reviewNoteGlanceNotes(this.store.glances.get(key)));
   }
 
   async sendComment(key: PrKey, body: string): Promise<ActionResult> {

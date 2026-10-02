@@ -11,6 +11,7 @@ import type {
   FactCandidate,
   IsoTime,
   LineSources,
+  TopicKind,
 } from '@postpile/core';
 import type { z } from 'zod';
 import type { DossierRefs } from './dossier-refs.ts';
@@ -167,7 +168,13 @@ function toRelation(answer: DossierAnswer['dossier']['relation'], input: Dossier
   return { kind, ownerTeam: answer?.ownerTeam ?? signals.ownerTeam, whyYou, ...lineSources(answer?.refs ?? [], refs, unchanged) };
 }
 
-function toDossier(answer: DossierAnswer['dossier'], input: DossierUpdateInput, refs: DossierRefs, now: IsoTime): Dossier {
+function toDossier(
+  answer: DossierAnswer['dossier'],
+  kind: TopicKind,
+  input: DossierUpdateInput,
+  refs: DossierRefs,
+  now: IsoTime,
+): Dossier {
   const previous = input.previous?.dossier;
   const sameGoal = previous !== undefined && previous.goal === answer.goal;
   const sameStatus = previous !== undefined && previous.status === answer.status && previous.statusNote === answer.statusNote;
@@ -179,6 +186,8 @@ function toDossier(answer: DossierAnswer['dossier'], input: DossierUpdateInput, 
     statusNote: withoutMetaLead(answer.statusNote),
     statusSources: lineSources(answer.statusRefs, refs, sameStatus ? previous.statusSources : undefined),
     people: answer.people.map((p) => ({ login: login(p.login), role: p.role, note: p.note })),
+    // The team drives only while nobody does: a named driver is the clearer answer. Only standing topics have one.
+    driverTeam: kind === 'standing' && answer.driverTeam && !answer.people.some((p) => p.role === 'driver'),
     openQuestions: toQuestions(answer.openQuestions, input, refs),
     timeline: toTimeline(answer.timeline, input, refs),
     earlier: answer.earlier,
@@ -257,6 +266,8 @@ function toArea(area: string | null): string | null {
 export interface MappedDossierAnswer {
   dossier: Dossier;
   area: string | null;
+  /** The kind the answer judged the topic to be; null keeps it. */
+  topicKind: TopicKind | null;
   flags: DossierFlag[];
   facts: FactCandidate[];
   closeFacts: FactClose[];
@@ -267,9 +278,12 @@ export interface MappedDossierAnswer {
 export function mapDossierAnswer(answer: DossierAnswer, input: DossierUpdateInput, refs: DossierRefs, now: IsoTime): MappedDossierAnswer {
   const memberKeys = new Set(input.prs.map((pr) => pr.key));
   const closeFacts = toCloses(answer.closeFacts, refs);
+  // The kind the topic has after this answer: its own correction wins.
+  const kind = answer.topicKind ?? input.topic.kind;
   return {
-    dossier: toDossier(answer.dossier, input, refs, now),
+    dossier: toDossier(answer.dossier, kind, input, refs, now),
     area: toArea(answer.area),
+    topicKind: answer.topicKind,
     flags: toFlags(answer.flags, memberKeys),
     facts: toCandidates(answer.facts, input.topic.id, refs),
     closeFacts,

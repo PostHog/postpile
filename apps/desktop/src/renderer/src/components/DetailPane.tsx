@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { TileView } from '@postpile/core';
 import { usePr } from '../api/pr.ts';
+import { useGlanceLook } from '../lib/use-glance-look.ts';
 import { ActionBar } from './ActionBar.tsx';
-import { AskComposer } from './AskComposer.tsx';
 import { DetailContext } from './DetailContext.tsx';
 import { PrBody } from './PrBody.tsx';
 import type { ChatRequest } from './TellAgent.tsx';
@@ -24,8 +24,9 @@ const paneFrame = 'flex min-h-0 flex-col bg-surface shadow-[inset_1px_0_0_var(--
 /** Right pane: the selected tile's context header, then one of its PRs in full. */
 export function DetailPane(props: DetailPaneProps) {
   const pr = usePr(props.prKey);
+  // A stale glance on the PR open here is rewritten once it stayed open a moment (refresh on look).
+  useGlanceLook(props.prKey, pr.data ?? null);
   const [chatOpen, setChatOpen] = useState(false);
-  const [askingFor, setAskingFor] = useState<string | null>(null);
   const [chatDraft, setChatDraft] = useState('');
   // The pane remounts per tile; a request made before that is not for this tile's chat.
   const handledSeq = useRef(props.chatRequest?.seq ?? 0);
@@ -54,17 +55,11 @@ export function DetailPane(props: DetailPaneProps) {
   if (chatOpen) {
     body = <TileChat view={view} draft={chatDraft} onDraftChange={setChatDraft} onClose={() => setChatOpen(false)} />;
   } else if (pr.error) {
-    body = <p className="flex-1 px-[22px] py-[18px] text-xs text-unread-ink">Could not load {prKey}: {pr.error.message}</p>;
+    body = <p className="flex-1 px-[22px] py-[18px] text-xs text-status-bad">Could not load {prKey}: {pr.error.message}</p>;
   } else if (pr.data) {
     const detail = pr.data;
-    const actions = (
-      <div className="flex flex-col gap-2">
-        <ActionBar detail={detail} view={view} chatOpen={chatOpen} onAsk={() => setAskingFor(prKey)} onToggleChat={() => setChatOpen(!chatOpen)} />
-        {askingFor === prKey && (
-          <AskComposer key={prKey} prKey={prKey} person={summary?.facts.owners[0] ?? detail.pr.author} onClose={() => setAskingFor(null)} />
-        )}
-      </div>
-    );
+    // Keyed by PR: an open compose popover belongs to the PR it was opened on.
+    const actions = <ActionBar key={prKey} detail={detail} view={view} chatOpen={chatOpen} onToggleChat={() => setChatOpen(!chatOpen)} />;
     body = <PrBody detail={detail} summary={summary} view={view} actions={actions} />;
   }
 

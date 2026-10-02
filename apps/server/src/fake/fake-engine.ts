@@ -74,8 +74,10 @@ import type {
   ApprovePrRequest,
   BatchApproveResult,
   PrApproveResult,
+  ReviewNoteKind,
   ToolsView,
   Topic,
+  TopicArchiveBox,
   TopicDetail,
   TopicListItem,
   TopicQueues,
@@ -94,6 +96,7 @@ import {
   viewerApproval,
   agentPrFacts,
   agentApproveRefusal,
+  agentApproveSkip,
   agentMarkReadRefusal,
   approvalsSummary,
   tilesReadScope,
@@ -103,10 +106,11 @@ import {
   planRead,
   prReadScope,
   deriveTileState,
-  isRetiredSince,
+  takesNewPrs,
+  archiveEndsAt,
   snoozeWrites,
   eventView,
-  compareTopicUrgency,
+  compareInSection,
   actionTrail,
   cleanupCutoff,
   cleanupLook,
@@ -119,7 +123,10 @@ import {
   scopedSettings,
   type ListScope,
   isTracked,
+  glanceRefreshBlockOf,
   glanceStateOf,
+  type GlanceLookResult,
+  type GlanceRefreshBlock,
   type GlanceState,
   labelBaseRepo,
   tileRepoLabels,
@@ -129,7 +136,6 @@ import {
   withQuietRepo,
   debugEventLines,
   emptyAgentCallStats,
-  FINISHED_TOPICS_MS,
   fixedClaimNote,
   topicMove,
   OFF_POLL_STATUS,
@@ -137,15 +143,20 @@ import {
   ownerRelation,
   pingedPrKeys,
   prTier,
+  prStatus,
   prWhoseTurn,
   isReReviewMove,
+  driverPickRefusal,
   searchTopics,
   setIdFromTileId,
   threadPrKey,
   topicFaces,
   topicPeople,
+  openInDealtWith,
   topicPrRollup,
-  topicSection,
+  topicDriverView,
+  topicQuiet,
+  topicSectionOf,
   topicQueues,
   topicUrgency,
   topicYourMoves,
@@ -163,7 +174,6 @@ import {
   prAfterMarkRead,
   ownTeamRequests,
   teamSlug,
-  quietReasonDetail,
   quietReasonFromDetail,
   HANDLED_QUIETLY_DAYS,
   parsePrKey,
@@ -264,6 +274,8 @@ const RECHECK_CYCLE: MemoryRecheckOutcome[] = ['holds', 'fix', 'drop'];
 /** How long before start the sample PRs count as fetched. */
 const SAMPLE_FETCH_AGE_MS = 4 * 60_000;
 
+const NOT_OPENED: OpenedReadResult = { marked: false, undoToken: null, undoUntil: null };
+
 function ok(message: string, undoToken: string | null = null): ActionResult {
   return { ok: true, message, undoToken };
 }
@@ -316,6 +328,8 @@ export class FakeEngine implements EngineService {
   private readonly startedAt: Date;
   /** Snoozes by PR, as in the store. */
   private readonly snoozes = new Map<PrKey, Snooze>();
+  /** The header's driver picks by topic id, like the engine's topic_driver_pick table. */
+  private readonly driverPicks = new Map<string, string>();
   private readonly chats = new Map<string, ChatMessage[]>();
   private readonly feedback: Feedback[];
   private readonly batches: MarkReadBatch[] = [];
@@ -429,23 +443,33 @@ export class FakeEngine implements EngineService {
     return this.catchUp.gapOf(prKey);
   }
 
-  /** One sample glance reads as written before the PR's last push, so the stale verdict box can be seen. */
+  /** One sample glance reads as written before the PR's last push, so the stale verdict box can be seen, until refresh on look rewrites it. */
   private isGlanceStale(prKey: PrKey): boolean {
-    return STALE_SAMPLE_GLANCES.has(prKey) && this.data.glances.some((glance) => glance.prKey === prKey);
+    return STALE_SAMPLE_GLANCES.has(prKey) && !this.catchUp.wrote(prKey) && this.data.glances.some((glance) => glance.prKey === prKey);
+  }
+
+  /** Open and tracked in a tile: the PR should have a glance. */
+  private wantsGlance(prKey: PrKey): boolean {
+    const pr = this.data.prs.find((candidate) => candidate.key === prKey);
+    const tracked = this.data.tiles.some((tile) => tile.members.some((member) => member.prKey === prKey && isTracked(member.provenance)));
+    return pr?.state === 'OPEN' && tracked;
   }
 
   /** Same rule as the engine. */
   private glanceStateOfPr(prKey: PrKey): GlanceState {
-    const pr = this.data.prs.find((candidate) => candidate.key === prKey);
-    const tracked = this.data.tiles.some((tile) => tile.members.some((member) => member.prKey === prKey && isTracked(member.provenance)));
     return glanceStateOf({
       hasGlance: this.data.glances.some((glance) => glance.prKey === prKey),
       stale: this.isGlanceStale(prKey),
-      wanted: pr?.state === 'OPEN' && tracked,
+      wanted: this.wantsGlance(prKey),
       gap: this.glanceGapOf(prKey),
       agentOff: this.toolStatus.agentOff() !== null,
       catchUp: this.catchUp.stateOf(prKey),
     });
+  }
+
+  /** Same rule as the engine; sample data has no daily cap, so catch-up is always on. */
+  private glanceRefreshBlockOfPr(prKey: PrKey): GlanceRefreshBlock | null {
+    return glanceRefreshBlockOf({ wanted: this.wantsGlance(prKey), agentOff: this.toolStatus.agentOff() !== null, catchUpOff: false, dailyCapSpent: false });
   }
 
   /** Sample PRs count as fetched SAMPLE_FETCH_AGE_MS before the engine started, until a fake refresh moves them. */
@@ -592,6 +616,7 @@ export class FakeEngine implements EngineService {
           glanceStale: this.isGlanceStale(pr.key),
           glanceGap: this.glanceGapOf(pr.key),
           glanceState: this.glanceStateOfPr(pr.key),
+          glanceRefreshBlock: this.glanceRefreshBlockOfPr(pr.key),
           quietRepo: isPrInQuietRepo(pr.key, this.repoSettings),
           repoLabel: labels?.prs[index] ?? null,
           tileUnread: state.kind === 'unread',
@@ -838,7 +863,7 @@ export class FakeEngine implements EngineService {
     );
   }
 
-  /** Same urgency rule and order as the engine; ties keep the sample's order. */
+  /** Same sections and order as the engine; ties keep the sample's order. */
   async listTopics(scope?: ListScope): Promise<TopicListItem[]> {
     // A first run without gh: nothing synced yet, so the empty state shows.
     if (this.toolStatus.neverSynced()) {
@@ -863,10 +888,13 @@ export class FakeEngine implements EngineService {
       const prs = this.topicPrs(tiles);
       const queues = this.topicQueuesOf(tiles);
       const prRollup = topicPrRollup(tiles, prs.map(({ pr }) => pr));
+      const placement = this.memory.placement(topic);
+      const section = topicSectionOf({ topic, driverPick: this.driverPicks.get(topic.id) ?? null, queues, moves: urgency.yourMoves.length, placement, viewer });
+      const unseenMergeTiles = views.filter((view) => (view.state.unseenMerges?.length ?? 0) > 0).length;
       return {
         topic,
         statusLine: this.memory.statusLine(topic.id),
-        placement: this.memory.placement(topic),
+        placement,
         group: urgency.needsYou ? 'needs_you' : 'quiet',
         unreadTiles: urgency.unreadTiles,
         unreadPrs: urgency.unreadPrs,
@@ -875,15 +903,16 @@ export class FakeEngine implements EngineService {
         openTiles: views.filter((view) => view.state.kind === 'open').length,
         totalTiles: views.length,
         yourMoves: urgency.yourMoves,
-        unseenMergeTiles: views.filter((view) => (view.state.unseenMerges?.length ?? 0) > 0).length,
+        unseenMergeTiles,
         queues,
-        section: topicSection(queues),
+        quiet: topicQuiet({ section, unreadTiles: urgency.unreadTiles, moves: urgency.yourMoves.length, unseenMergeTiles }),
+        section,
         people: topicFaces(topicPeople(prs.map(({ pr }) => pr), viewer)),
         prState: prRollup.state,
         prStateCounts: prRollup.counts,
       };
     });
-    return items.sort(compareTopicUrgency);
+    return items.sort(compareInSection);
   }
 
   async listRepos(): Promise<RepoOverview> {
@@ -932,12 +961,13 @@ export class FakeEngine implements EngineService {
     return ok(`Hidden for ${CLEANUP_SNOOZE_DAYS} days`);
   }
 
-  /** Retired sample topics from the last 30 days, newest first, like the engine. */
+  /** The Archive's sample topics that still take new PRs, newest first, like the engine. Samples keep no join times. */
   async listFinishedTopics(): Promise<FinishedTopic[]> {
-    const since = new Date(this.now().getTime() - FINISHED_TOPICS_MS).toISOString();
+    const now = this.now();
     const memberTopicIds = [...this.data.membership.values()];
     return this.data.topics
-      .filter((topic) => isRetiredSince(topic, since))
+      .filter((topic) => takesNewPrs(topic, null, now))
+      .filter((topic) => topic.status === 'retired')
       .map((topic) => ({
         id: topic.id,
         name: topic.name,
@@ -968,11 +998,22 @@ export class FakeEngine implements EngineService {
     }
     const tiles = this.topicTileViews(topicId);
     const topicTiles = this.tilesOfTopic(topicId);
+    const placement = this.memory.placement(topic);
+    const yourMoves = topicYourMoves(tiles);
+    const sectionSource = {
+      topic,
+      driverPick: this.driverPicks.get(topicId) ?? null,
+      queues: this.topicQueuesOf(topicTiles),
+      moves: yourMoves.length,
+      placement,
+      viewer: this.viewer(),
+    };
     return {
       topic,
-      placement: this.memory.placement(topic),
+      driver: topicDriverView(sectionSource),
+      placement,
       tiles,
-      yourMoves: topicYourMoves(tiles),
+      yourMoves,
       groupYourMoves: yourMovesByGroup(tiles),
       sets: this.data.sets.filter((set) => set.topicId === topicId && set.status === 'active'),
       setChanges: [],
@@ -980,9 +1021,26 @@ export class FakeEngine implements EngineService {
       decidedProposals: this.topicChanges.decidedForTopic(topicId),
       dossier: this.memory.dossierView(topicId, this.feedback),
       agent: topicAgentOffers(tiles),
+      archive: this.archiveBox(topic, tiles),
+      openInDealtWith: openInDealtWith(tiles),
       prRollup: topicPrRollup(topicTiles, this.topicPrs(topicTiles).map(({ pr }) => pr)),
-      section: topicSection(this.topicQueuesOf(topicTiles)),
+      section: topicSectionOf(sectionSource),
+      memoryUpdating: this.catchUp.memoryUpdating(this.topicPrKeys(topicId)),
     };
+  }
+
+  /** Like the engine's, simpler: samples keep no join times or events, so "ready" means every tile is done, no tracked PR is open (pulled-in layers aside, like the gate) and it would go in a day. */
+  private archiveBox(topic: Topic, tiles: TileView[]): TopicArchiveBox | null {
+    if (topic.status === 'retired') {
+      const until = archiveEndsAt(topic, null);
+      return until !== null && topic.retiredAt !== null ? { state: 'archived', at: topic.retiredAt, until } : null;
+    }
+    const nothingLeft =
+      topic.status === 'active' &&
+      tiles.length > 0 &&
+      tiles.every((view) => view.state.kind === 'done') &&
+      tiles.every((view) => view.prs.every((pr) => pr.state !== 'OPEN' || pr.provenance.kind === 'pulled_in'));
+    return nothingLeft ? { state: 'ready', at: new Date(this.now().getTime() + 24 * 3_600_000).toISOString() } : null;
   }
 
   /** Same matcher as the engine, over the sample topics the sidebar lists. */
@@ -1086,6 +1144,7 @@ export class FakeEngine implements EngineService {
     const news = whatsNew(pr, this.eventsOf(prKey), this.viewer());
     return {
       pr,
+      status: prStatus(pr),
       fetchedAt: this.fetchedAtOf(prKey),
       events,
       activity: activityList(events, this.viewer(), news?.anchor.at ?? null, pr, this.prThreads().get(prKey) ?? null),
@@ -1094,6 +1153,8 @@ export class FakeEngine implements EngineService {
       glanceStale: this.isGlanceStale(prKey),
       glanceGap: this.glanceGapOf(prKey),
       glanceState: this.glanceStateOfPr(prKey),
+      glanceRefreshBlock: this.glanceRefreshBlockOfPr(prKey),
+      memoryUpdating: this.catchUp.memoryUpdating(this.topicPrKeys(this.data.membership.get(prKey) ?? '')),
       userState: this.data.userStates.find((state) => state.prKey === prKey) ?? null,
       viewerApproval: viewerApproval(pr, this.data.userStates.find((state) => state.prKey === prKey) ?? null, this.viewer().login),
       agentApprovers: agentOnlyApprovers(standingApprovals(pr)),
@@ -1133,16 +1194,48 @@ export class FakeEngine implements EngineService {
     return ok(`fake: approved ${prKey} locally, nothing sent to GitHub`);
   }
 
+  /**
+   * Like PrActions.commentReview, in memory: the head check, then a COMMENTED
+   * review by the viewer on the head and the PR's events seen, like after an
+   * approval. Nothing leaves the process.
+   */
+  async commentReview(prKey: PrKey, headOid: string, body: string): Promise<ActionResult> {
+    const index = this.data.prs.findIndex((candidate) => candidate.key === prKey && candidate.state === 'OPEN');
+    const pr = this.data.prs[index];
+    if (!pr) {
+      return fail(`${prKey} is not an open PR in the sample`);
+    }
+    if (body.trim() === '') {
+      return fail('A comment review needs a note');
+    }
+    if (pr.headOid !== headOid) {
+      return fail(NEW_COMMITS_SINCE_LOOKED);
+    }
+    if (!this.writes.isEnabled()) {
+      this.writes.record({ action: 'comment_review', origin: 'tile', outcome: 'skipped', prKey, detail: 'GitHub writes are off' });
+      return fail('GitHub writes are off (lock in the footer): nothing was posted');
+    }
+    this.writes.record({ action: 'comment_review', origin: 'tile', outcome: 'github', prKey, detail: 'sample data: nothing left the process' });
+    const at = this.timestamp();
+    const review = { id: `local-review-${this.newId()}`, author: this.data.viewer, state: 'COMMENTED' as const, body, submittedAt: at, commitOid: pr.headOid };
+    this.data.prs[index] = { ...pr, reviews: [...pr.reviews, review] };
+    for (const event of this.eventsOf(prKey)) {
+      event.seenAt ??= at;
+    }
+    return ok(`fake: comment review kept locally on ${prKey}, nothing sent to GitHub`);
+  }
+
   /** Like the engine's approveMany: each PR through the fake approve, reported per PR, no undo. */
   async approveMany(prs: ApprovePrRequest[], from: AgentActionFrom): Promise<BatchApproveResult> {
     if (prs.length === 0) {
       return { ok: false, message: 'No PRs to approve', undoToken: null, results: [] };
     }
     const results: PrApproveResult[] = [];
-    // Checked up front against the current sample, like the engine.
-    const refusals = new Map(prs.map(({ prKey }) => [prKey, agentApproveRefusal(prKey, this.tilesHolding(prKey).map((tile) => this.tileView(tile)), from)]));
+    // Checked up front against the current sample, like the engine; a stack layer waits for the covered layers below it.
+    const holding = new Map(prs.map(({ prKey }) => [prKey, this.tilesHolding(prKey).map((tile) => this.tileView(tile))]));
     for (const { prKey, headOid } of prs) {
-      const refusal = refusals.get(prKey) ?? null;
+      const views = holding.get(prKey) ?? [];
+      const refusal = agentApproveRefusal(prKey, views, from) ?? agentApproveSkip(prKey, views, from, results);
       if (refusal !== null) {
         results.push({ prKey, ok: false, message: refusal });
         continue;
@@ -1326,30 +1419,34 @@ export class FakeEngine implements EngineService {
   }
 
   /**
-   * Like QuietReads.markOpened, in memory: when a mark-read of that PR would
-   * leave it done, the sample thread turns read (if it is unread) and the PR
-   * is handled, its events seen.
+   * Like OpenedReads.markOpened, in memory: when a mark-read of that PR would
+   * leave it done, the PR is marked read like the pane's Mark read (its own
+   * batch and undo token), unless nothing would change.
    */
   async markOpenedRead(prKey: PrKey): Promise<OpenedReadResult> {
     this.writes.settle();
     if (!this.writes.isEnabled()) {
-      return { marked: false };
+      return NOT_OPENED;
     }
-    const input = this.openedReadInput(prKey);
-    const thread = input.thread;
-    const check = openedReadCheck(input);
-    if (check.kind === 'skip' || thread === null) {
-      return { marked: false };
+    const check = openedReadCheck(this.openedReadInput(prKey));
+    if (check.kind === 'skip') {
+      return NOT_OPENED;
     }
-    if (check.kind === 'mark') {
-      this.writes.quietMarkRead(thread.id, prKey, quietReasonDetail('opened'));
+    if (check.kind === 'handle' && !this.readChangesAnything(prKey)) {
+      return NOT_OPENED;
     }
-    const change = this.readSample(prReadScope(prKey, true), { kind: 'opened' });
-    const handled = change.eventIds.length > 0 || change.handledPrKeys.length > 0;
-    if (check.kind === 'handle' && handled) {
-      this.writes.record({ action: 'mark_read', origin: 'quiet', outcome: 'local', threadId: thread.id, prKey, detail: 'no unread GitHub thread' });
-    }
-    return { marked: check.kind === 'mark' || handled };
+    const marked = this.markPrsRead([prKey], [prKey], 'detail', this.tilesHolding(prKey)[0]?.id ?? null);
+    const batch = this.batches.find((candidate) => candidate.token === marked.undoToken);
+    const undoUntil = batch ? new Date(batch.queuedAt + UNDO_WINDOW_MS).toISOString() : null;
+    return { marked: true, undoToken: marked.undoToken, undoUntil };
+  }
+
+  /** Whether a read of the PR changes anything in the sample: unseen events, or not handled yet. */
+  private readChangesAnything(prKey: PrKey): boolean {
+    const scope = prReadScope(prKey, true);
+    const userStates = new Map([[prKey, this.data.userStates.find((state) => state.prKey === prKey) ?? null]]);
+    const plan = planRead({ scope, cause: { kind: 'opened' }, events: this.eventsByKey(scope.prKeys), userStates, at: this.timestamp() });
+    return plan.change.eventIds.length > 0 || plan.change.handledKeys.length > 0;
   }
 
   async undo(undoToken: string | null): Promise<ActionResult> {
@@ -1414,6 +1511,17 @@ export class FakeEngine implements EngineService {
     const question = intent || 'could you say a bit more about this change?';
     const context = glance ? `\n\n${glance.forYou}` : '';
     return { body: `@${person} ${question}${context}` };
+  }
+
+  /** Canned review notes: the approve one leans on the glance's risk line when the sample has one. */
+  async draftReviewNote(prKey: PrKey, kind: ReviewNoteKind): Promise<{ body: string }> {
+    this.refuseWithoutAgent();
+    const glance = this.data.glances.find((candidate) => candidate.prKey === prKey);
+    if (kind === 'comment') {
+      return { body: 'Read through the change; left no blockers. The retry path could use a test before this merges.' };
+    }
+    const risk = glance ? ` ${glance.risk}` : '';
+    return { body: `Checked the diff and the CI run; the change stays inside its module.${risk}` };
   }
 
   async sendComment(prKey: PrKey, body: string): Promise<ActionResult> {
@@ -1553,6 +1661,36 @@ export class FakeEngine implements EngineService {
 
   async decideRuleProposal(proposalId: string, accept: boolean): Promise<ActionResult> {
     return this.memory.decideRuleProposal(proposalId, accept, this.data.topics);
+  }
+
+  async archiveTopic(topicId: string): Promise<ActionResult> {
+    const topic = this.data.topics.find((candidate) => candidate.id === topicId);
+    if (!topic) {
+      return fail(`no topic ${topicId}`);
+    }
+    if (this.archiveBox(topic, this.topicTileViews(topicId))?.state !== 'ready') {
+      return fail('Something in this topic is still open or unread');
+    }
+    const at = this.timestamp();
+    Object.assign(topic, { status: 'retired', retiredAt: at, updatedAt: at });
+    return ok('Moved to the Archive');
+  }
+
+  /** Like the engine's: a menu value or null (automatic); the sample topic's role stays as it is. */
+  async setTopicDriver(topicId: string, driver: string | null): Promise<ActionResult> {
+    if (!this.data.topics.some((topic) => topic.id === topicId)) {
+      return fail(`no topic ${topicId}`);
+    }
+    const refusal = driverPickRefusal(driver, this.viewer());
+    if (refusal !== null) {
+      return fail(refusal);
+    }
+    if (driver === null) {
+      this.driverPicks.delete(topicId);
+      return ok('Back to the automatic driver');
+    }
+    this.driverPicks.set(topicId, driver);
+    return ok('Driver set');
   }
 
   async markTopicSeen(topicId: string): Promise<ActionResult> {
@@ -1778,6 +1916,25 @@ export class FakeEngine implements EngineService {
       return fail(`${prKey} is not synced yet.`);
     }
     return this.catchUp.retry(prKey);
+  }
+
+  /** The real engine's order over sample data: a stale sample glance looked at is rewritten by the fake catch-up. */
+  async refreshGlanceOnLook(prKey: PrKey): Promise<GlanceLookResult> {
+    if (this.toolStatus.agentOff() !== null) {
+      return { outcome: 'blocked' };
+    }
+    if (!this.data.prs.some((pr) => pr.key === prKey)) {
+      return { outcome: 'skipped' };
+    }
+    if (this.syncing !== null) {
+      // Asked again once the fake sync ends, like the engine does.
+      void this.syncing.catch(() => {}).then(() => this.refreshGlanceOnLook(prKey));
+      return { outcome: 'deferred' };
+    }
+    if (!this.isGlanceStale(prKey)) {
+      return { outcome: 'current' };
+    }
+    return { outcome: this.catchUp.refreshOnLook(prKey) };
   }
 
   /** Sample data never changes on GitHub; one poll cycle (debounced) keeps the flow the same as the real engine. */

@@ -1,6 +1,6 @@
 // Words for the ✨ agent-assisted buttons. Core decides every offer (state,
 // risk, reason, counts); this only spells them out.
-import type { AgentApproveOffer, MarkReadBlock, SkippedTile, TileKind, TopicMarkReadOffer } from '@postpile/core';
+import type { AgentApproveOffer, LeftOutPr, MarkReadBlock, PrKey, SkippedTile, TileKind, TopicMarkReadOffer } from '@postpile/core';
 
 /** Pill words for a greyed action: why the agent cannot back it. */
 const REASON_WORDS: Record<MarkReadBlock, string> = {
@@ -43,28 +43,54 @@ export function markReadPillWord(offer: TopicMarkReadOffer): string {
   return offer.reason ? REASON_WORDS[offer.reason] : '';
 }
 
-/** The topic's label: "Approve 3 of 5 PRs", "Approve 3 PRs" when all qualify, plain "Approve" when greyed. */
-export function topicApproveLabel(offer: AgentApproveOffer): string {
-  if (offer.state === 'greyed') {
-    return 'Approve';
-  }
+/** "#2107" from "acme/app#2107". */
+function prNumber(prKey: PrKey): string {
+  return prKey.slice(prKey.lastIndexOf('#'));
+}
+
+/** "Approve 3 of 5 PRs", or "Approve 3 PRs" when it covers every approvable PR. */
+function countLabel(offer: AgentApproveOffer): string {
   const prs = offer.coveredCount === offer.totalCount ? `${offer.coveredCount}` : `${offer.coveredCount} of ${offer.totalCount}`;
   return `Approve ${prs} ${offer.totalCount === 1 ? 'PR' : 'PRs'}`;
 }
 
+/** The PR an offer names alone (`naming` one): "Approve #2107". */
+function oneLabel(offer: AgentApproveOffer): string {
+  const pr = offer.covered[0];
+  return pr ? `Approve ${prNumber(pr.prKey)}` : 'Approve';
+}
+
+/** The topic's label: "Approve #2107" for one of several, else "Approve 3 of 5 PRs", "Approve 3 PRs"; plain "Approve" when greyed. */
+export function topicApproveLabel(offer: AgentApproveOffer): string {
+  if (offer.naming === 'none') {
+    return 'Approve';
+  }
+  if (offer.naming === 'one') {
+    return oneLabel(offer);
+  }
+  return countLabel(offer);
+}
+
 /**
- * The tile's label: "Approve 2 of 3 PRs" when it leaves some out, like the
- * topic's; else "Approve", "Approve stack", "Approve 3 PRs" on a set.
- * Greyed keeps the plain base.
+ * The tile's label, by core's `naming`: "Approve #2107" for one of
+ * several; "Approve", "Approve stack" or "Approve 3 PRs" on a set when it
+ * covers every PR on the tile; else "Approve 2 of 3 PRs" (or "Approve 2
+ * PRs" when a draft or pulled-in layer is all it leaves). Greyed is plain.
  */
 export function tileApproveLabel(offer: AgentApproveOffer, kind: TileKind): string {
-  if (offer.state === 'active' && offer.coveredCount < offer.totalCount) {
-    return `Approve ${offer.coveredCount} of ${offer.totalCount} PRs`;
+  if (offer.naming === 'none') {
+    return 'Approve';
   }
-  if (kind === 'stack') {
+  if (offer.naming === 'one') {
+    return oneLabel(offer);
+  }
+  if (offer.naming === 'every' && kind === 'stack') {
     return 'Approve stack';
   }
-  return kind === 'set' && offer.state === 'active' ? `Approve ${offer.coveredCount} PRs` : 'Approve';
+  if (offer.naming === 'every' && kind === 'single') {
+    return 'Approve';
+  }
+  return countLabel(offer);
 }
 
 export function topicMarkReadLabel(offer: TopicMarkReadOffer): string {
@@ -100,9 +126,12 @@ export function approvedMessage(count: number): string {
   return count === 1 ? 'Approved' : `Approved ${count} PRs`;
 }
 
-const LEFT_OUT_WORDS = { rechecking: 'rechecking after a push', look_closer: 'look closer', high: 'high risk' } as const;
+const LEFT_OUT_WORDS = { rechecking: 'rechecking after a push', look_closer: 'look closer', high: 'high risk', layer_below: 'a layer below needs a look' } as const;
 
-/** Why the confirm list names a PR as left out. */
-export function leftOutReason(reason: keyof typeof LEFT_OUT_WORDS): string {
-  return LEFT_OUT_WORDS[reason];
+/** Why the confirm list names a PR as left out: "look closer", or "waits on #2104" when a layer below holds it back. */
+export function leftOutReason(pr: Pick<LeftOutPr, 'reason' | 'waitsOn'>): string {
+  if (pr.reason === 'layer_below' && pr.waitsOn) {
+    return `waits on ${prNumber(pr.waitsOn)}`;
+  }
+  return LEFT_OUT_WORDS[pr.reason];
 }

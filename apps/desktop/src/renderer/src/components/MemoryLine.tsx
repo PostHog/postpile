@@ -59,7 +59,7 @@ export function MemoryLine(props: MemoryLineProps) {
             </span>
           )}
           {props.stale && (
-            <span className="ml-1.5 rounded bg-closer-soft px-1.5 text-[10px] font-medium whitespace-nowrap text-closer">
+            <span className="ml-1.5 rounded bg-amber-soft px-1.5 text-[10px] font-medium whitespace-nowrap text-amber-ink">
               {staleBadge(staleLabel(props.stale), props.updating)}
             </span>
           )}

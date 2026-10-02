@@ -36,7 +36,7 @@ Groups pull requests into topics and keeps a short dossier per topic. The agent 
 
 <img src="docs/images/topic-row.png" width="320" alt="A topic in the sidebar">
 
-Sorts topics into queues: Needs reply, Changes you requested, My PRs, Team's PRs, To review, Team mentioned. A queue holds topics, not a flat list of pull requests, and each topic shows once, in its most urgent queue.
+Sorts topics into sections: first what asks something of you (Needs reply, Changes you requested, To review, Team mentioned), then by who drives the topic (You drive, Your team owns, Other work). A section holds topics, not a flat list of pull requests, and each topic shows once.
 
 <img src="docs/images/queues.png" width="320" alt="The queue filters, with counts">
 

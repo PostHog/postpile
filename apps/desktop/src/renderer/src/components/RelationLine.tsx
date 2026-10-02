@@ -66,7 +66,7 @@ export function RelationLine(props: { placement: TopicPlacement; topicId: string
             aria-expanded={choosing}
             title="Say where this topic really belongs. Stays in local memory, nothing goes to GitHub."
             onClick={() => setChoosing(!choosing)}
-            className="text-[11px] text-hint hover:text-unread-ink hover:underline"
+            className="text-[11px] text-hint hover:text-status-bad hover:underline"
           >
             Wrong
           </button>

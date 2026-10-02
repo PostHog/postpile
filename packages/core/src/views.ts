@@ -23,7 +23,7 @@ import type {
 } from './types.ts';
 import type { ActivityList } from './activity.ts';
 import type { TileAfterRead } from './after-read.ts';
-import type { GlanceState } from './glance-state.ts';
+import type { GlanceRefreshBlock, GlanceState } from './glance-state.ts';
 import type { AgentCallStats, DossierStatus, TopicRelation } from './memory.ts';
 import type { DossierView, FactChangeCounts, FactView, MemoryTarget } from './memory-views.ts';
 import type { PrStatus } from './pr-status.ts';
@@ -38,6 +38,8 @@ import type { ReviewRequest } from './review-request.ts';
 import type { PrTier } from './pr-tier.ts';
 import type { ViewerApproval } from './review-request.ts';
 import type { PersonRelation, TopicPerson, TopicQueues } from './topic-queues.ts';
+import type { DriverKind } from './topic-driver.ts';
+import type { TopicSection } from './topic-sections.ts';
 import type { TopicMove } from './topic-urgency.ts';
 import type { TilePerson } from './tile-people.ts';
 import type { WhoseTurn } from './whose-turn.ts';
@@ -105,8 +107,10 @@ export interface TopicListItem {
   unseenMergeTiles: number;
   /** PRs per tier and open PRs by author, over the PRs in the topic's tiles. */
   queues: TopicQueues;
-  /** The sidebar section it sits in (`topicSection` over `queues`); null for Other topics. */
-  section: PrTier | null;
+  /** Nothing waits on the user here (`topicQuiet`): the sidebar dims the row. */
+  quiet: boolean;
+  /** The sidebar section it sits in (`topicSection`: asks, then who drives it, then the owner team). */
+  section: TopicSection;
   /**
    * The row's faces (`topicFaces` over `topicPeople`): PR authors only, you
    * and your teammates first (the team pill), then others by PR count;
@@ -119,10 +123,22 @@ export interface TopicListItem {
   prStateCounts: TopicPrStateCounts;
 }
 
-/** The sidebar's Finished drawer lists topics retired this recently. */
-export const FINISHED_TOPICS_MS = 30 * 24 * 60 * 60 * 1000;
+/** A PR that is open while all its tiles are dealt with; `label` is "repo#number" without the owner. */
+export interface OpenInDealtWithPr {
+  key: PrKey;
+  label: string;
+  isDraft: boolean;
+}
 
-/** A retired topic in the sidebar's Finished drawer. */
+/**
+ * The box under a topic's Tiles count (DESIGN "The Archive"). ready: nothing
+ * is left in the topic; it moves to the Archive by itself at `at` (the next
+ * full sync once that has passed), or now with "Archive now". archived: in
+ * the Archive since `at`; it takes new PRs until `until`, then retires for good.
+ */
+export type TopicArchiveBox = { state: 'ready'; at: IsoTime } | { state: 'archived'; at: IsoTime; until: IsoTime };
+
+/** A retired topic in the sidebar's Archive drawer (code says "finished" for the drawer's list). */
 export interface FinishedTopic {
   id: string;
   name: string;
@@ -180,6 +196,8 @@ export interface PrSummary {
   glanceGap: GlanceGap | null;
   /** Where the glance stands (`glanceStateOf`): ready, queued, writing, failed, agent_off, capped or none. */
   glanceState: GlanceState;
+  /** Why a stale glance waits for the next sync instead of being rewritten when the PR is opened (`glanceRefreshBlockOf`); null when opening it does. */
+  glanceRefreshBlock: GlanceRefreshBlock | null;
   unseenLoudEvents: number;
   /** The PR's notification thread is unread on GitHub: its tile is unread, and the PR keeps a mark button even when done. */
   unreadOnGitHub: boolean;
@@ -275,6 +293,8 @@ export interface TileView {
   agent: TileAgentOffers;
   /** The grey Draft chip, dashed frame and muted title (`isDraftTile`): same rule as the topic's draft icon. */
   draft: boolean;
+  /** The glance the tile's verdict pill shows (`tileVerdict`): the worst one among its open tracked PRs; null without rows. */
+  verdict: TileVerdict | null;
   /** The PRs whose rows get the unread dot (`unreadPrKeys`: what makes the tile unread), in tile order. */
   unreadPrKeys: PrKey[];
   /** Its group in the topic (`tileGroup`): Unread, Open or Dealt with. The renderer groups by it and never works it out itself. */
@@ -290,6 +310,16 @@ export interface TileView {
   repoLabel: string | null;
 }
 
+/** One PR's glance, as its row has it, picked for the tile's verdict pill (`tileVerdict`). */
+export interface TileVerdict {
+  prKey: PrKey;
+  verdict: Verdict | null;
+  glanceStale: boolean;
+  glanceGap: GlanceGap | null;
+  glanceState: GlanceState;
+  glanceRefreshBlock: GlanceRefreshBlock | null;
+}
+
 /** "pending: mark read on GitHub" on a tile. */
 export interface TilePendingWrite {
   since: IsoTime;
@@ -297,8 +327,37 @@ export interface TilePendingWrite {
   error: string | null;
 }
 
+/** One item of the header's driver menu. */
+export interface DriverChoice {
+  /** What `setTopicDriver` takes for it: a login, TEAM_DRIVER or OUTSIDE_DRIVER. */
+  value: string;
+  kind: DriverKind;
+  /** The person's login for you and person; null for the team and someone outside. */
+  login: string | null;
+  /** Where the topic sits with this driver once no ask holds (`sectionBelowAsks`). */
+  section: TopicSection;
+  /** The driver in effect now, picked or automatic. */
+  current: boolean;
+}
+
+/** The header's "<login> drives" button and its menu (`topicDriverView`). */
+export interface TopicDriverView {
+  /** Who drives now (the pick, else the automatic driver); null when nobody is known. */
+  kind: DriverKind | null;
+  /** The driver's login for you and person. */
+  login: string | null;
+  /** The user picked the driver ("set by you"); Reset to automatic shows only then. */
+  picked: boolean;
+  /** The ask section that holds the topic whatever the driver, while the ask lasts; null when none does. */
+  heldByAsk: TopicSection | null;
+  /** You, each teammate, Your team, Someone outside your team. */
+  choices: DriverChoice[];
+}
+
 export interface TopicDetail {
   topic: Topic;
+  /** Who drives and the driver menu; null for Unsorted. */
+  driver: TopicDriverView | null;
   placement: TopicPlacement | null;
   tiles: TileView[];
   /** The viewer's moves on live tiles, most urgent first (`topicYourMoves`): the header's chip, same as the sidebar row's. */
@@ -321,14 +380,28 @@ export interface TopicDetail {
   dossier: DossierView | null;
   /** The header's ✨ Approve and ✨ "Mark N read" (`topicAgentOffers`), from the tiles above. */
   agent: TopicAgentOffers;
+  /** The Archive box in the same row; null while something in the topic is open or unread. */
+  archive: TopicArchiveBox | null;
+  /**
+   * Open PRs that sit only in Dealt with tiles (`openInDealtWith`), the "· 1 PR
+   * open" hint after the Tiles count: why the Archive box does not show.
+   * Empty when there are none.
+   */
+  openInDealtWith: OpenInDealtWithPr[];
   /**
    * The header's PR pill (`topicPrState` over each PR of the tiles once): the
    * same state as the sidebar row's icon, every PR counted (found and
    * pulled-in ones too), and the lifecycle and review mix for its tooltip.
    */
   prRollup: TopicPrStateSummary;
-  /** The sidebar section, as on the list item (`topicSection`): the breadcrumb's label. */
-  section: PrTier | null;
+  /** The sidebar section, as on the list item (`topicSection`; Archive when retired): the breadcrumb's label. */
+  section: TopicSection;
+  /**
+   * A whole-topic catch-up run is going: it rewrites the dossier, so memory
+   * notes say "Updating now". A glance-only refresh (refresh on look) does
+   * not count: it touches no memory.
+   */
+  memoryUpdating: boolean;
 }
 
 export interface EventView {
@@ -340,6 +413,8 @@ export interface EventView {
 
 export interface PrDetail {
   pr: Pr;
+  /** Lifecycle, review, the merge queue and the state icon (`prStatus`), as on the PR's rows: the header's state line. */
+  status: PrStatus;
   /** When the stored snapshot was fetched from GitHub; null when unknown (sample data before a fake fetch). */
   fetchedAt: IsoTime | null;
   /** Every event, unfiltered (search, debug, chat context). */
@@ -355,6 +430,14 @@ export interface PrDetail {
   glanceGap: GlanceGap | null;
   /** Where the glance stands (`glanceStateOf`); failed offers Retry. */
   glanceState: GlanceState;
+  /**
+   * Why a stale glance waits for the next sync instead of being rewritten
+   * once the PR stays open (`glanceRefreshBlockOf`, DESIGN.md "Glance
+   * refresh on look"); null when looking at it rewrites it.
+   */
+  glanceRefreshBlock: GlanceRefreshBlock | null;
+  /** A whole-topic catch-up run for the PR's topic is going: it rewrites the PR's facts. Not for a glance-only refresh. */
+  memoryUpdating: boolean;
   userState: UserPrState | null;
   /** The viewer's standing approval (`viewerApproval`): app record or GitHub, any commit. Null when none. */
   viewerApproval: ViewerApproval | null;
@@ -397,10 +480,10 @@ export interface SyncOptions {
  * (see DESIGN.md › Sync flow › Scheduling), so each timing is the wall time
  * from that step's start to its end, not a slice of the total.
  */
-export type SyncPhase = 'fetch' | 'tidy' | 'topics' | 'dossiers' | 'facts' | 'sets' | 'glances' | 'events';
+export type SyncPhase = 'tidy' | 'fetch' | 'topics' | 'dossiers' | 'facts' | 'sets' | 'glances' | 'events';
 
 /** In the order a sync starts them. */
-export const SYNC_PHASES: SyncPhase[] = ['fetch', 'tidy', 'topics', 'dossiers', 'facts', 'sets', 'glances', 'events'];
+export const SYNC_PHASES: SyncPhase[] = ['tidy', 'fetch', 'topics', 'dossiers', 'facts', 'sets', 'glances', 'events'];
 
 /** Milliseconds per phase that ran. */
 export type SyncPhaseTimings = Partial<Record<SyncPhase, number>>;
@@ -478,6 +561,12 @@ export interface ApprovePrRequest {
   headOid: string;
 }
 
+/**
+ * The review note the agent drafts in the detail pane's popover: one to go
+ * with an approval, or the body of a comment-only review (event COMMENT).
+ */
+export type ReviewNoteKind = 'approve' | 'comment';
+
 export interface PrApproveResult {
   prKey: PrKey;
   ok: boolean;
@@ -495,10 +584,32 @@ export interface BatchApproveResult extends ActionResult {
   results: PrApproveResult[];
 }
 
-/** Opening a PR in PostPile: whether its GitHub thread was marked read or the PR handled ("opened in PostPile"). Nothing to show either way. */
+/**
+ * What a look at a PR with a stale glance did (DESIGN.md "Glance refresh on
+ * look"). started or queued: a glance-only catch-up run writes it, the
+ * renderer refetches for "Updating now". covered: a run for its topic is
+ * queued anyway. current: the glance is up to date (or the PR gets none), no
+ * call. blocked: the agent or catch-up is off, or the daily cap is spent.
+ * deferred: a full sync or consolidation runs; the look is asked again once
+ * it ends. skipped: the PR is not synced. Nothing to show either way.
+ */
+export interface GlanceLookResult {
+  outcome: 'started' | 'queued' | 'covered' | 'current' | 'blocked' | 'deferred' | 'skipped';
+}
+
+/**
+ * Opening a PR in PostPile ("Marked when the dwell ends", 2026-10-01): whether
+ * the open marked it read (its GitHub thread queued, the PR handled here).
+ * The mark goes through the mark-read queue, so it has an undo window like
+ * the detail pane's Mark read.
+ */
 export interface OpenedReadResult {
-  /** Something changed (the thread on GitHub, or the PR's handled state here): the renderer refetches. */
+  /** Something changed (the thread queued for GitHub, or the PR's seen and handled state here): the renderer refetches. */
   marked: boolean;
+  /** Takes the mark back inside the undo window (`POST /api/undo`); null when nothing was marked. */
+  undoToken: string | null;
+  /** When the queue sends it to GitHub and Undo stops working: the window started at the enqueue, not when the renderer got the answer. */
+  undoUntil: IsoTime | null;
 }
 
 export type TileFeedbackKind = 'not_mine' | 'not_related' | 'wrong_topic';

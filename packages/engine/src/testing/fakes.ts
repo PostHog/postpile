@@ -14,10 +14,12 @@ import type {
   ViewerTeamSize,
 } from '@postpile/core';
 import type { RendererExceptionProps } from '@postpile/core';
+import type { IsoTime } from '@postpile/core';
 import { FakeTimers, viewer as fixtureViewer } from '@postpile/core/fixtures';
 import type {
   BranchLookup,
   BranchPr,
+  CapFill,
   GitHubReader,
   PartialPrs,
   GitHubWriter,
@@ -200,6 +202,17 @@ export class FakeReader implements GitHubReader {
     return { prs, errors };
   }
 
+  /** What fillCappedLists answers per PR: the snapshot with its older pages merged in. A PR missing here gains nothing. */
+  filledPrs = new Map<PrKey, Pr>();
+  /** Every fillCappedLists call as [PR key, since]. */
+  fillCalls: [PrKey, IsoTime | null][] = [];
+
+  async fillCappedLists(pr: Pr, since: IsoTime | null): Promise<CapFill> {
+    this.fillCalls.push([pr.key, since]);
+    const filled = this.filledPrs.get(pr.key) ?? pr;
+    return { pr: filled, pages: filled === pr ? 0 : 1 };
+  }
+
   async findPrsByBranch(lookups: BranchLookup[]): Promise<BranchPr[][]> {
     this.branchLookups.push(lookups);
     return lookups.map((lookup) => {
@@ -270,6 +283,8 @@ export class FakeWriter implements GitHubWriter {
   readonly calls: string[] = [];
   /** markThreadRead throws for these ids. */
   readonly failingThreads = new Set<string>();
+  /** PR keys whose approve throws, like a GitHub error or timeout. */
+  readonly failingApprovals = new Set<string>();
   /** removeTeamReviewRequest throws while set. */
   failRemoveTeamRequest = false;
   /** unsubscribeThread throws while set. */
@@ -286,8 +301,15 @@ export class FakeWriter implements GitHubWriter {
     this.calls.push(`markAllReadBefore ${lastReadAt}`);
   }
 
-  async approvePr(ref: PrRef, _body: string, commitOid: string): Promise<void> {
-    this.calls.push(`approvePr ${ref.repo}#${ref.number}@${commitOid}`);
+  async approvePr(ref: PrRef, body: string, commitOid: string): Promise<void> {
+    if (this.failingApprovals.has(`${ref.repo}#${ref.number}`)) {
+      throw new Error('GitHub timed out');
+    }
+    this.calls.push(`approvePr ${ref.repo}#${ref.number}@${commitOid}${body === '' ? '' : ` ${body}`}`);
+  }
+
+  async commentReviewPr(ref: PrRef, body: string, commitOid: string): Promise<void> {
+    this.calls.push(`commentReviewPr ${ref.repo}#${ref.number}@${commitOid} ${body}`);
   }
 
   async commentOnPr(ref: PrRef, body: string): Promise<void> {

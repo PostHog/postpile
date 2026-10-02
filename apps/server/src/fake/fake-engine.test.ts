@@ -126,7 +126,7 @@ describe('FakeEngine tile faces', () => {
     expect(stack?.turn).toMatchObject({ kind: 'you', what: 'Review, lyra mentioned you on #1902' });
     expect(stack?.prs.map((pr) => pr.why)).toEqual(['ST', 'ST', 'RV', 'RV', 'ST']);
     expect(stack?.prs.map((pr) => pr.status.lifecycle)).toEqual(['merged', 'merged', 'open', 'open', 'closed']);
-    expect(depot.find((view) => view.tile.id === 'pr:acme/app#1899')?.turn).toMatchObject({ kind: 'them', who: 'rowan', what: 'to merge' });
+    expect(depot.find((view) => view.tile.id === 'pr:acme/app#1899')?.turn).toMatchObject({ kind: 'them', who: null, what: 'Waiting on the merge queue' });
     const desktop = (await engine.getTopic('topic-desktop-release'))?.tiles[0];
     expect(desktop).toMatchObject({ why: 'FW', turn: { kind: 'none' } });
   });
@@ -408,6 +408,46 @@ describe('FakeEngine queues', () => {
     expect(await new FakeEngine().getViewer()).toEqual({ login: 'you', teamMembers: ['lyra', 'nell', 'rowan', 'sol'], homeTeams: ['acme/team-platform'] });
   });
 
+  it('fills every ownership section, Other work over areas, and a topic not sorted yet', async () => {
+    const engine = new FakeEngine();
+    const topics = await engine.listTopics();
+    const sectionOf = (id: string) => topics.find((item) => item.topic.id === id)?.section;
+    for (const section of ['needs_reply', 'changes_requested', 'to_review', 'you_drive', 'team_owns', 'other_work', 'other_topics'] as const) {
+      expect(topics.some((item) => item.section === section), section).toBe(true);
+    }
+    // A teammate drives it and your PR is in it; a standing topic without a driver goes by its home owner team.
+    expect(sectionOf('topic-flaky-quarantine')).toBe('team_owns');
+    expect(sectionOf('topic-egress-allowlist')).toBe('team_owns');
+    // Driven outside the team, though the owner signal names the home team (you wrote a PR there).
+    expect(sectionOf('topic-usage-exports')).toBe('other_work');
+    expect(topics.filter((item) => item.section === 'other_work').map((item) => item.topic.area)).toEqual(['Billing', 'Replay', 'Replay', 'Alerting']);
+    // No dossier and no driver: not sorted yet. FYI stays FYI.
+    expect(topics.find((item) => item.topic.id === 'topic-docs-search')).toMatchObject({ section: 'other_topics', placement: null });
+    expect(sectionOf('topic-desktop-release')).toBe('other_topics');
+    // The breadcrumb reads the same rule; a retired topic is in the Archive.
+    expect((await engine.getTopic('topic-flaky-quarantine'))?.section).toBe('team_owns');
+    expect((await engine.getTopic('topic-cache-warmer'))?.section).toBe('archive');
+  });
+
+  it('moves a topic by the driver picked in the header and back on reset', async () => {
+    const engine = new FakeEngine();
+    const sectionOf = async (id: string) => (await engine.listTopics()).find((item) => item.topic.id === id)?.section;
+
+    expect((await engine.setTopicDriver('topic-usage-exports', ':team')).ok).toBe(true);
+    expect(await sectionOf('topic-usage-exports')).toBe('team_owns');
+    expect((await engine.getTopic('topic-usage-exports'))?.driver).toMatchObject({ kind: 'team', picked: true });
+    expect((await engine.setTopicDriver('topic-usage-exports', 'stranger')).ok).toBe(false);
+
+    await engine.setTopicDriver('topic-usage-exports', null);
+    expect(await sectionOf('topic-usage-exports')).toBe('other_work');
+  });
+
+  it("lists topics with your open PR or move first inside a section, then unread ones", async () => {
+    const topics = await new FakeEngine().listTopics();
+    const otherWork = topics.filter((item) => item.section === 'other_work').map((item) => item.topic.id);
+    expect(otherWork).toEqual(['topic-usage-exports', 'topic-replay-storage', 'topic-replay-player', 'topic-alert-presets']);
+  });
+
   it('keeps a topic whose only unread tile is merged calm and ranks it below the urgent ones', async () => {
     const topics = await new FakeEngine().listTopics();
     const frontend = topics.find((item) => item.topic.id === 'topic-frontend-build');
@@ -425,6 +465,27 @@ describe('FakeEngine queues', () => {
     expect(approved?.prs[0]?.status).toMatchObject({ review: 'approved', agentApprovers: ['reviewbot'] });
     const item = (await engine.listTopics()).find((entry) => entry.topic.id === 'topic-migrations');
     expect(item?.yourMoves.length).toBe(migrations.filter((view) => view.state.kind !== 'done' && view.turn.kind === 'you').length);
+  });
+
+  it('shows the merge queue samples: every step, a failure, and a PR merged through it', async () => {
+    const engine = new FakeEngine();
+    const runners = await engine.getTopic('topic-runner-images');
+    const rows = new Map((runners?.tiles ?? []).flatMap((view) => view.prs).map((row) => [row.key, row.status]));
+    expect(rows.get('acme/app#1977')).toMatchObject({ icon: 'merge_queue', mergeQueue: { state: 'submitted' } });
+    expect(rows.get('acme/app#1978')).toMatchObject({ icon: 'merge_queue', mergeQueue: { state: 'waiting' } });
+    expect(rows.get('acme/app#1974')).toMatchObject({ icon: 'merged', mergeQueue: null });
+    const testing = runners?.tiles.find((view) => view.tile.id === 'pr:acme/app#1975');
+    expect(testing?.prs[0]?.status).toMatchObject({ icon: 'merge_queue', mergeQueue: { state: 'testing', testingOn: 'acme/app#1976' } });
+    expect(testing?.turn).toMatchObject({ kind: 'them', who: null, what: 'Waiting on the merge queue' });
+    const rowans = runners?.tiles.find((view) => view.tile.id === 'pr:acme/app#1978');
+    expect(rowans?.turn).toMatchObject({ kind: 'them', who: null, what: 'Waiting on the merge queue' });
+    expect(runners?.prRollup.state).toBe('merge_queue');
+    const ci = await engine.getTopic('topic-ci-tests');
+    const failed = ci?.tiles.find((view) => view.tile.id === 'pr:acme/app#1950');
+    expect(failed?.prs[0]?.status).toMatchObject({ icon: 'merge_queue_failed', mergeQueue: { state: 'failed', reason: 'waited too long to become mergeable' } });
+    expect(failed?.turn).toMatchObject({ kind: 'you', what: 'Re-submit to the merge queue: waited too long to become mergeable' });
+    expect(ci?.prRollup.state).toBe('merge_queue_failed');
+    expect((await engine.getPr('acme/app#1950'))?.status.icon).toBe('merge_queue_failed');
   });
 
   it('keeps pulled-in stack layers out of the queues', async () => {

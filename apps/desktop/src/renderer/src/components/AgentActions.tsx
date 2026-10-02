@@ -1,19 +1,32 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { AgentApproveOffer, AgentActionFrom, TopicDetail, TopicMarkReadOffer } from '@postpile/core';
+import type { AgentApproveOffer, AgentActionFrom, MarkReadBlock, TopicDetail, TopicMarkReadOffer } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { approvePillWord, approveTitle, leftOutReason, markReadPillWord, topicApproveLabel, topicMarkReadLabel, topicMarkReadTitle } from '../lib/agent-actions.ts';
 import { markReadNote } from '../lib/guard.ts';
 import { Button } from './Button.tsx';
 import { VerdictPill } from './pills.tsx';
 
+const OFF_NEUTRAL = 'bg-segment text-muted';
+
+/** A greyed pill's look by why: amber Look closer, red high risk, honey when it asks for you, neutral while rechecking. */
+const OFF_LOOKS: Record<MarkReadBlock, string> = {
+  look_closer: 'bg-closer-soft text-closer inset-ring inset-ring-closer-line',
+  high: 'bg-status-bad-soft text-status-bad',
+  asks_for_you: 'bg-honey-soft text-honey-ink',
+  rechecking: OFF_NEUTRAL,
+};
+
 /**
  * The ✨ pill on a button: what the agent judged, or why it cannot back the
  * action. It sits inside the button's own height and never grows it.
  */
-export function AgentPill(props: { word: string; off: boolean }) {
-  // Green when the agent backs the action, the Look closer honey when it cannot.
-  const look = props.off ? 'bg-closer-soft text-closer inset-ring inset-ring-closer-line' : 'bg-mark-safe text-safe';
+export function AgentPill(props: { word: string; off: boolean; reason: MarkReadBlock | null }) {
+  // Green when the agent backs the action; when it cannot, the colour of the reason (one colour per meaning, 2026-10-01).
+  let look = 'bg-mark-safe text-safe';
+  if (props.off) {
+    look = props.reason ? OFF_LOOKS[props.reason] : OFF_NEUTRAL;
+  }
   return (
     <span className={`box-border flex h-[18px] shrink-0 items-center gap-1 rounded-full px-1.5 text-[11px] leading-none font-semibold ${look}`}>
       <span aria-hidden="true">✨</span>
@@ -65,7 +78,7 @@ function ConfirmApprove(props: { offer: AgentApproveOffer; onCancel: () => void;
             <span className="font-medium text-ink-2">Left out</span>
             {offer.leftOut.map((pr) => (
               <span key={pr.prKey}>
-                <code className="font-mono text-[11px]">{pr.prKey}</code> {pr.title}: {leftOutReason(pr.reason)}
+                <code className="font-mono text-[11px]">{pr.prKey}</code> {pr.title}: {leftOutReason(pr)}
               </span>
             ))}
           </div>
@@ -115,7 +128,7 @@ export function AgentApproveButton(props: { offer: AgentApproveOffer | null; lab
         onClick={() => (blocked ? confirm() : setAsking(true))}
       >
         {props.label}
-        <AgentPill word={approvePillWord(offer)} off={!active} />
+        <AgentPill word={approvePillWord(offer)} off={!active} reason={offer.reason} />
       </Button>
       {asking && <ConfirmApprove offer={offer} onCancel={() => setAsking(false)} onConfirm={confirm} />}
     </>
@@ -139,7 +152,7 @@ export function TopicMarkReadButton(props: { offer: TopicMarkReadOffer | null; t
       onClick={() => void actions.markTilesRead({ busyKey, tileIds: offer.coveredTileIds, skipped: offer.skipped })}
     >
       {topicMarkReadLabel(offer)}
-      <AgentPill word={markReadPillWord(offer)} off={!active} />
+      <AgentPill word={markReadPillWord(offer)} off={!active} reason={offer.reason} />
     </Button>
   );
 }

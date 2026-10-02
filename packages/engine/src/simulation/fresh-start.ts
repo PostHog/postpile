@@ -36,6 +36,7 @@ export const WIPED_TABLES: Record<string, string> = {
   topic_dossier: 'agent dossiers',
   cursor: 'digest, classify, seen and consolidate cursors: all counted against old topics',
   topic_membership: 'agent topic assignment',
+  topic_driver_pick: 'drivers the user picked on old topics',
   topic: 'agent topics',
   pr_glance: 'agent glances',
   ping_decision: 'live poll ping decisions (agent and rules)',

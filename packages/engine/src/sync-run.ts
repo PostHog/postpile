@@ -10,13 +10,15 @@ import {
   type SyncOptions,
   type SyncProgress,
   type SyncReport,
+  type Viewer,
 } from '@postpile/core';
 import { noteSyncStart } from './actions/inbox-cleanup.ts';
 import { AgentBudget } from './budget.ts';
 import { retireFinishedTopics } from './consolidation/retire.ts';
 import { reviveRetiredTopics, reviveUnreadTopics } from './consolidation/revive.ts';
-import type { DigestTally } from './digest/deps.ts';
+import type { DigestDeps, DigestTally } from './digest/deps.ts';
 import { Digester } from './digest/digester.ts';
+import { TopicTidy } from './digest/topic-tidy.ts';
 import { errorText } from './errors.ts';
 import type { GitHubQuota, QuotaRunStats } from './github-quota.ts';
 import { saveLastSyncReport, syncReportLogLines } from './last-sync-report.ts';
@@ -105,18 +107,12 @@ export class SyncRun {
   /**
    * After the digest (the events agent judged the new quiet activity), on
    * fresh threads and snapshots, with every event and read time of this sync
-   * counted. The hourly auto sync is also what comes back after the grace
-   * period.
+   * counted. The live poll runs the same pass after each cycle that stored a
+   * change.
    */
   private async handleQuietly(errors: string[]): Promise<void> {
-    const quiet = await this.quietReads.run();
+    const quiet = await this.quietReads.run('sync');
     errors.push(...quiet.errors);
-    if (quiet.marked.length > 0) {
-      this.log(`sync: handled quietly: ${quiet.marked.length} threads marked read on GitHub (only bots, you acted after it, or nothing that needs you since you last looked)`);
-    }
-    if (quiet.otherMarked.length > 0) {
-      this.log(`sync: handled quietly: ${quiet.otherMarked.length} notifications that are not PRs marked read on GitHub`);
-    }
   }
 
   /**
@@ -126,10 +122,50 @@ export class SyncRun {
    * GitHub. The full sync and digestStored share it, so both run the same
    * pipeline.
    */
+  private digestDeps(viewer: Viewer, run: { budget: AgentBudget; tally: DigestTally; errors: string[] }): DigestDeps {
+    return {
+      store: this.deps.store,
+      agent: this.deps.agent,
+      contexts: this.deps.contexts,
+      budget: run.budget,
+      facts: this.deps.facts,
+      viewer,
+      errors: run.errors,
+      tally: run.tally,
+      now: this.deps.now,
+      onGlancesStored: (prKeys) => this.deps.glancePings?.afterGlances(prKeys),
+      onEventsRaised: async (events) => (await this.deps.raisedPings?.afterRaised(events, viewer)) ?? [],
+      topicDigest: this.deps.topicDigest ?? false,
+    };
+  }
+
+  /**
+   * The one-time topic tidy after an upgrade, first thing in a full sync: it
+   * reads only stored topics and PRs, so it need not wait for the fetch, and
+   * the app's cover goes up as the sync starts instead of half a minute in,
+   * while the old topics took clicks. The digest's own call stays for a
+   * store without a viewer yet and for digestStored; once done it is a no-op.
+   * Returns true when it tried: the digest then leaves the tidy alone, so a
+   * failed call waits for the next full sync instead of a second Opus call
+   * in this one.
+   */
+  private async tidyFirst(agentJobs: AgentJob[] | undefined, run: { phases: PhaseClock; budget: AgentBudget; tally: DigestTally; errors: string[] }): Promise<boolean> {
+    const viewer = loadViewer(this.deps.store);
+    if (viewer === null || this.deps.agentOff() !== null || !(agentJobs ?? ALL_AGENT_JOBS).includes('topics')) {
+      return false;
+    }
+    const tidy = new TopicTidy(this.digestDeps(viewer, run));
+    if (!tidy.callsAgent()) {
+      return false;
+    }
+    await run.phases.time('tidy', () => tidy.runOnce());
+    return true;
+  }
+
   private async digest(
     fetched: FetchedForDigest,
     agentJobs: AgentJob[] | undefined,
-    run: { phases: PhaseClock; budget: AgentBudget; tally: DigestTally; errors: string[]; report: SyncReport },
+    run: { phases: PhaseClock; budget: AgentBudget; tally: DigestTally; errors: string[]; report: SyncReport; tidyTried: boolean },
   ): Promise<void> {
     const { store, now } = this.deps;
     new FactVerifier(store, this.deps.facts, now).run(fetched.fetchedPrKeys, run.tally.facts);
@@ -139,20 +175,7 @@ export class SyncRun {
       run.report.agentOff = agentOff;
       this.log(`sync: agent jobs skipped: ${agentOff}`);
     }
-    const digester = new Digester({
-      store,
-      agent: this.deps.agent,
-      contexts: this.deps.contexts,
-      budget: run.budget,
-      facts: this.deps.facts,
-      viewer: fetched.viewer,
-      errors: run.errors,
-      tally: run.tally,
-      now,
-      onGlancesStored: (prKeys) => this.deps.glancePings?.afterGlances(prKeys),
-      onEventsRaised: async (events) => (await this.deps.raisedPings?.afterRaised(events, fetched.viewer)) ?? [],
-      topicDigest: this.deps.topicDigest ?? false,
-    }, run.phases);
+    const digester = new Digester(this.digestDeps(fetched.viewer, run), run.phases, { tidy: !run.tidyTried });
     await digester.run(agentOff === null ? (agentJobs ?? ALL_AGENT_JOBS) : []);
     // After the digest classified the new events, so one the agent turned quiet brings no retired topic back.
     reviveRetiredTopics(store, fetched.newEventIds, now().toISOString());
@@ -200,7 +223,7 @@ export class SyncRun {
       const fetched = this.storedAsFetched(options);
       report.prsFetched = options.prKeys.length;
       report.newEvents = fetched.newEventIds.length;
-      await this.digest(fetched, options.agentJobs, { phases, budget, tally, errors, report });
+      await this.digest(fetched, options.agentJobs, { phases, budget, tally, errors, report, tidyTried: false });
       report.topicsRetired = retireFinishedTopics(store, now().toISOString());
       reviveUnreadTopics(store, now().toISOString(), false);
     } catch (error) {
@@ -254,6 +277,7 @@ export class SyncRun {
     const budget = new AgentBudget(options.maxAgentCalls ?? Number.POSITIVE_INFINITY, report.agentCallStats);
     this.live = { startedAt, phases, budget, stats: report.agentCallStats };
     try {
+      const tidyTried = await this.tidyFirst(options.agentJobs, { phases, budget, tally, errors });
       const fetched = await phases.time('fetch', () => this.github.run(options.maxPrs ?? SYNC_MAX_PRS));
       report.notificationsNotModified = fetched.notModified;
       report.threads = fetched.threads;
@@ -264,7 +288,7 @@ export class SyncRun {
       report.newEvents = fetched.newEventIds.length;
       errors.push(...fetched.errors);
 
-      await this.digest(fetched, options.agentJobs, { phases, budget, tally, errors, report });
+      await this.digest(fetched, options.agentJobs, { phases, budget, tally, errors, report, tidyTried });
       // Before the retire step: what PostPile clears by itself no longer holds a finished topic.
       await this.handleQuietly(errors);
       // Last, so the new events, what was read on GitHub and the quiet reads all count.

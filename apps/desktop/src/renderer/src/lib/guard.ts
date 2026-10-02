@@ -1,10 +1,11 @@
 import type { GitHubWritesStatus } from '@postpile/core';
 
 /** Actions that end up as a GitHub write, now or after the undo window. */
-export type GithubWrite = 'approve' | 'comment' | 'markRead' | 'notMine' | 'cleanup' | 'openedRead' | 'removeTeam';
+export type GithubWrite = 'approve' | 'commentReview' | 'comment' | 'markRead' | 'notMine' | 'cleanup' | 'openedRead' | 'removeTeam';
 
 const WHAT: Record<GithubWrite, string> = {
   approve: 'Approving',
+  commentReview: 'Posting a comment review',
   comment: 'Sending a comment',
   markRead: 'Marking read',
   notMine: '"Not mine"',
@@ -16,13 +17,14 @@ const WHAT: Record<GithubWrite, string> = {
 /**
  * Mark-reads (and the inbox cleanup, one mark-read of everything older) still run with GitHub writes locked: they change nothing in the
  * app and wait as pending writes until the user unlocks and sends them (or
- * discards them). Approve and comment have no pending queue, so they are
+ * discards them). Approve, comment review and comment have no pending queue, so they are
  * blocked while the lock is closed. So is the mark-read on opening a PR:
  * nobody clicked it, so it never piles up as a pending write. Removing a
  * team review request is final like Approve, so it is blocked too.
  */
 const LOCAL_WHEN_OFF: Record<GithubWrite, boolean> = {
   approve: false,
+  commentReview: false,
   comment: false,
   markRead: true,
   notMine: true,

@@ -1,9 +1,9 @@
 import type { ChipTone } from '../lib/setup.ts';
 
 const TONES: Record<ChipTone, string> = {
-  good: 'bg-status-good-soft text-status-good',
+  good: 'bg-safe-soft text-safe',
   bad: 'bg-status-bad-soft text-status-bad',
-  warn: 'bg-status-queued-soft text-status-queued',
+  warn: 'bg-amber-soft text-amber-ink',
   quiet: 'bg-quiet-soft text-muted',
   busy: 'bg-accent-soft text-accent',
 };

@@ -35,6 +35,8 @@ export class Digester {
   constructor(
     private readonly deps: DigestDeps,
     private readonly phases: PhaseClock,
+    /** tidy false: the sync already tried the upgrade tidy before its fetch (`tidyFirst`). */
+    private readonly options: { tidy: boolean } = { tidy: true },
   ) {}
 
   /** Times the job when the sync asked for it; nothing to wait for otherwise. */
@@ -46,11 +48,13 @@ export class Digester {
     // Once after an upgrade that changed how topics are cut, before the assignment places the PRs it split out.
     await this.job(jobs, 'topics', 'topics', async () => {
       // Its own phase when the agent call runs, so the app can cover the window while topics move under it.
-      const tidy = new TopicTidy(this.deps);
-      if (tidy.callsAgent()) {
-        await this.phases.time('tidy', () => tidy.runOnce());
-      } else {
-        await tidy.runOnce();
+      if (this.options.tidy) {
+        const tidy = new TopicTidy(this.deps);
+        if (tidy.callsAgent()) {
+          await this.phases.time('tidy', () => tidy.runOnce());
+        } else {
+          await tidy.runOnce();
+        }
       }
       await new TopicAssigner(this.deps).run();
     });

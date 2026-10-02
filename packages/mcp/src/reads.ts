@@ -1,6 +1,7 @@
 // The four read tools, as plain functions over the engine's read methods.
 // Nothing here writes, syncs or calls an agent.
 import {
+  driverText,
   formatDossier,
   formatFacts,
   OUTSIDE_PROPOSAL_DAYS,
@@ -243,7 +244,7 @@ function fullPrLines(detail: PrDetail, tiles: TileView[]): string[] {
 
 function topicHeadLine(detail: TopicDetail): string {
   const { topic } = detail;
-  return `Topic: ${topic.name} (id ${topic.id}, ${topic.status}), driver ${topic.driver ?? 'unknown'}, the user is ${topic.userRole}`;
+  return `Topic: ${topic.name} (id ${topic.id}, ${topic.status}), driver ${driverText(detail.driver)}, the user is ${topic.userRole}`;
 }
 
 /** The topic's name, dossier and every tile with its PRs. `thisPr` is marked when given. */

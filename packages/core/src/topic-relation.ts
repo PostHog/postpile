@@ -62,6 +62,9 @@ export function relationSignals(input: RelationInput): RelationSignals {
   const notes: string[] = [];
   const authored = input.prs.some((pr) => isPrOwner(pr, viewer.login));
   const drives = input.driver !== null && sameLogin(input.driver, viewer.login);
+  // A guess, not an owner: the viewer's first home team, just because they
+  // wrote a PR here or drive the topic. That is why `topicSection` reads the
+  // owner team only when no driver is known (DESIGN "Ownership sections").
   const ownTeam = homeTeamsOf(viewer)[0] ?? null;
   if (authored || drives) {
     notes.push(drives ? 'the user drives this topic' : 'the user authored PRs here');

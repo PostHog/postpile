@@ -56,7 +56,7 @@
   --ring-control-soft: rgba(16, 24, 40, 0.1); /* small white icon buttons, queue filters, the sync button */
   --ring-field: rgba(16, 24, 40, 0.09); /* the title bar search field */
   --ring-honey: rgba(107, 77, 0, 0.16); /* secondary buttons in the "Your move" footer */
-  --ring-honey-box: rgba(107, 77, 0, 0.13); /* Look closer box */
+  --ring-closer-box: rgba(138, 83, 0, 0.14); /* Look closer box */
   --ring-risk-box: rgba(184, 50, 31, 0.13); /* Risk box */
   --ring-accent-group: rgba(33, 86, 217, 0.13); /* PR group inside the selected tile */
   --ring-accent-picked: rgba(33, 86, 217, 0.28); /* picked PR row inside the selected tile */
@@ -89,9 +89,11 @@
   --unread-when: #c46553;
   --unread-row: #fffaf8;
 
-  /* Amber: a calm warning, for the update bar. Never coral (--unread means
-     "new since you looked") and never the honey of "aimed at you". There is
-     no dark theme yet; when one lands, this block gets its dark values. */
+  /* Amber: a calm warning, for the update bar and app-health notes (sync
+     capped, read-only, setup hints, out-of-date memory). Never coral
+     (--unread means "new since you looked"), never the honey of "aimed at
+     you", and never --closer, which is only the agent's Look closer. There
+     is no dark theme yet; when one lands, this block gets its dark values. */
   --amber-soft: #fff4e0;
   --amber-line: #f1d9a8;
   --amber-ink: #7a4b00;
@@ -124,14 +126,13 @@
   --move-hover: #fffcf4; /* secondary buttons in the "Your move" footer */
 
   /* PR status pill: soft tints per segment. Neutral is --quiet-soft + --muted,
-     merged is --merged-soft + --merged-ink. */
+     merged is --merged-soft + --merged-ink. One colour per meaning
+     (2026-10-01): --status-bad is the one red for bad (closed, changes
+     requested, risk, errors); the one good green is --safe (approved, Looks
+     safe, Approve). */
   --pill-line: #e6e8ec;
-  --status-good-soft: #e5f3ea;
-  --status-good: #1c6e3d;
   --status-bad-soft: #fbe9e6;
   --status-bad: #b8321f;
-  --status-queued-soft: #fbf0dc;
-  --status-queued: #8a5300;
 
   /* Primary buttons are ink. Approve, the one irreversible-and-positive action, uses --safe, the same color as the "Approved" state it produces. Accent blue is for selection and focus only. */
   --on-ink: #ffffff;
@@ -139,15 +140,16 @@
   /* Verdicts */
   --safe: #17733e;
   --safe-soft: #e5f4eb;
-  --safe-hover: #1c6e3d; /* = --status-good */
+  --safe-hover: #1c6e3d; /* Approve's hover */
   --safe-edge: #0f5a2f;
+  /* Amber: only the agent's Look closer (2026-10-01). */
   --closer: #8a5300;
   --closer-soft: #fbf1dc;
   --closer-line: #edd08a;
 
-  /* Assessment boxes in the detail pane: verdict box (honey for look closer,
+  /* Assessment boxes in the detail pane: verdict box (amber for look closer,
      green for looks safe), risk box (red), and the small line marks in them. */
-  --mark-honey: #ffe7a3;
+  --mark-closer: #f6e2b3;
   --safe-line: #c6e4d1;
   --mark-safe: #cdebd9;
   --risk-line: #f2cdc6;
@@ -159,9 +161,12 @@
   --merged: #7a5af0;
   --merged-ink: #5b3fc4;
   --merged-soft: #efeafe;
-  --closed: #c0392b;
-  --closed-soft: #fdecea;
+  /* Closed is the one red for bad, so a closed PR's icon and word match. */
+  --closed: var(--status-bad);
+  /* In the merge queue (DESIGN "Merge queue"): the queue icon, and a darker
+     shade of it for words, so "Merge queue: Testing" reads at 11px. */
   --pending: #d9a400;
+  --pending-ink: #8c6900;
   --diff-add: #e7f5ec;
   --diff-add-ink: #17633a;
   --diff-del: #fdecea;

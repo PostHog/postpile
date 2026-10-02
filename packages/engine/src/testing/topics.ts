@@ -13,6 +13,7 @@ export function makeTopic(id: string, overrides: Partial<Topic> = {}): Topic {
     driver: null,
     userRole: 'reviewer',
     status: 'active',
+    kind: 'project',
     retiredAt: null,
     createdAt: at(0),
     updatedAt: at(0),

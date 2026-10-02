@@ -11,22 +11,25 @@ import type { LookCloserPing } from '../glance-pings.ts';
 import { sameLogin } from '../mentions.ts';
 import type { PingRuleClass } from '../pings.ts';
 import type { PrTier } from '../pr-tier.ts';
-import type { JudgedReadCheck, OpenedReadCheck, QuietReadCheck, TouchedReadCheck } from '../quiet-reads.ts';
+import type { JudgedReadCheck, OpenedReadCheck, QuietReadCheck, RequestGoneReadCheck, TouchedReadCheck } from '../quiet-reads.ts';
 import type { ReadCause, ReadScope } from '../read-plan.ts';
 import type { EventKind, IsoTime, Loudness, NotificationReason, NotificationThread, Pr, PrEvent, PrKey, Snooze, UserPrState, Verdict, Viewer } from '../types.ts';
 import type { WhyCode } from '../why-here.ts';
 import type { YourMove } from '../whose-turn.ts';
-import { answersChanges, editAsks, SPEC_ADDRESSED_KINDS, SPEC_PERSONAL_ASK_KINDS, SPEC_PUSH_KINDS, SPEC_REVIEW_KINDS } from './spec-events.ts';
+import { answersChanges, editAsks, SPEC_ADDRESSED_KINDS, SPEC_PERSONAL_ASK_KINDS, SPEC_PUSH_KINDS } from './spec-events.ts';
 import {
   askedToReReview,
   asksViewer,
   changesAnswer,
+  inGitHubQueue,
   isAutomationLogin,
   isHomeTeam,
   isOwner,
   isRoutedTeam,
   isRoutingTeam,
   isViewerLogin,
+  isViewerRequestEvent,
+  latestViewerRequestAt,
   mentionsOnlyRoutingTeams,
   namedOwner,
   newestTouch,
@@ -36,6 +39,7 @@ import {
   requestSubjectOf,
   reviewStillOwed,
   routedRequestWaits,
+  specMergeQueue,
   specSnapshotAt,
   specUserStateAt,
   standingChangesBy,
@@ -112,7 +116,7 @@ export function openAsk(pr: Pr, events: PrEvent[], viewer: Viewer, kinds: readon
 /** A move and the footer's words for it (a single-PR tile: no " on #n"); `lead` only for "Waiting on". */
 export type ExpectedTurn =
   | { kind: 'you'; move: YourMove; what: string }
-  | { kind: 'them'; who: string; what: string; lead?: string }
+  | { kind: 'them'; who: string | null; what: string; lead?: string }
   | { kind: 'none'; what: '' };
 
 const NONE: ExpectedTurn = { kind: 'none', what: '' };
@@ -170,7 +174,26 @@ function answerThreads(threads: string[]): string {
 }
 
 /**
- * The viewer's own open PR: threads to answer, then changes to address
+ * The merge queue decides first on any open PR: failed in Trunk's queue is
+ * the author's to re-submit, with the reason (the viewer's move on their own
+ * PR, never on someone else's); in either queue: waiting on the queue, no
+ * person named. Null when the PR is in no queue.
+ */
+function queueTurn(input: TurnInput): ExpectedTurn | null {
+  const { pr, viewer } = input;
+  const queue = specMergeQueue(pr);
+  if (queue?.state === 'failed') {
+    const because = queue.reason === null ? '' : `: ${queue.reason}`;
+    return viewerOwns(pr, viewer) ? you('merge', `Re-submit to the merge queue${because}`) : them(namedOwner(pr), `to re-submit to the merge queue${because}`);
+  }
+  if (queue !== null || inGitHubQueue(pr)) {
+    return { kind: 'them', who: null, what: 'Waiting on the merge queue' };
+  }
+  return null;
+}
+
+/**
+ * The viewer's own open PR, after the merge queue: threads to answer, then changes to address
  * (their reviewers' move once every one was asked again after a push),
  * then waiting on the pending reviewers, then merging an approved PR.
  */
@@ -299,7 +322,7 @@ export function expectedTurn(input: TurnInput): ExpectedTurn {
     const words = ASK_WORDS[askKindOfEvent(pr, viewer, ask)]!;
     return you('reply', reviewToo ? `Review, ${ask.actor} ${words.withReview}` : words.alone(ask.actor));
   }
-  return viewerOwns(pr, viewer) ? ownPrTurn(input) : othersPrTurn(input);
+  return queueTurn(input) ?? (viewerOwns(pr, viewer) ? ownPrTurn(input) : othersPrTurn(input));
 }
 
 // ---------------------------------------------------------------------------
@@ -709,33 +732,26 @@ export function expectedLookCloserText(pr: Pr, team: string, firstSentence: stri
 // Quiet reads
 // ---------------------------------------------------------------------------
 
-/** Ten minutes after the newest activity, so a person answering the bot right away still counts. */
-const GRACE_MS = 10 * 60_000;
-
-function withinGrace(now: IsoTime, times: IsoTime[]): boolean {
-  const newest = times.toSorted().at(-1)!;
-  return new Date(now).getTime() - new Date(newest).getTime() < GRACE_MS;
-}
-
 /**
  * A snapshot cut off at the query's caps still holds everything since
- * `since` when it carries the raw cap evidence and every list that hit its
- * cap keeps the newest N (reviews, comments, commits, timeline) with its
- * oldest returned item at or before `since`. A review thread list or a
- * thread's comments at their cap never vouch (a reply there can come at any
- * time); no evidence never vouches.
+ * `since` (null: from the start) when it carries the raw cap evidence and
+ * every list that hit its cap was paged to its end, or keeps the newest N
+ * (reviews, comments, commits, timeline) with its oldest item at or before
+ * `since`. A review thread list or a thread's comments at their cap vouch
+ * only when paged to the end (a reply there can come at any time); no
+ * evidence never vouches.
  */
-export function cutSnapshotHoldsSince(pr: Pr, since: IsoTime): boolean {
+export function cutSnapshotHoldsSince(pr: Pr, since: IsoTime | null): boolean {
   if (pr.capHits === undefined) {
     return false;
   }
   const newestN = ['reviews', 'comments', 'commits', 'timeline'];
-  return pr.capHits.every((hit) => newestN.includes(hit.list) && hit.oldestAt !== null && hit.oldestAt <= since);
+  return pr.capHits.every((hit) => hit.complete === true || (since !== null && newestN.includes(hit.list) && hit.oldestAt !== null && hit.oldestAt <= since));
 }
 
 /** The snapshot vouches for the thread: fetched at or after the thread's last update, and complete, or cut off only before `since`. */
 export function snapshotIsFresh(thread: NotificationThread, prFetchedAt: IsoTime | null, truncated: boolean, pr: Pr | null = null, since: IsoTime | null = null): boolean {
-  if (truncated && !(pr !== null && since !== null && cutSnapshotHoldsSince(pr, since))) {
+  if (truncated && !(pr !== null && cutSnapshotHoldsSince(pr, since))) {
     return false;
   }
   return prFetchedAt !== null && prFetchedAt >= thread.updatedAt;
@@ -750,7 +766,6 @@ export interface QuietReadSpecInput {
   /** The PR's glance says NOT_YOURS. */
   notYours: boolean;
   prFetchedAt: IsoTime | null;
-  now: IsoTime;
 }
 
 /**
@@ -775,15 +790,6 @@ export function expectedNewMove(input: Pick<QuietReadSpecInput, 'pr' | 'events' 
   return then.kind !== 'you' || then.move !== now.move;
 }
 
-/** On the viewer's own open PR, automation that can mean work: a bot's review, or its comment in a review thread (not an edit of one). */
-function isFinding(pr: Pr, event: PrEvent): boolean {
-  if (SPEC_REVIEW_KINDS.includes(event.kind)) {
-    return true;
-  }
-  const comment = pr.comments.find((candidate) => candidate.id === event.sourceId);
-  return event.kind !== 'comment_edited' && comment !== undefined && comment.threadId !== null;
-}
-
 function othersEvents(input: Pick<QuietReadSpecInput, 'events' | 'viewer'>): PrEvent[] {
   return input.events.filter((event) => !isViewerLogin(input.viewer, event.actor));
 }
@@ -798,16 +804,12 @@ function actorNames(events: PrEvent[]): string[] {
   return [...new Set(events.map((event) => (event.actor === '' ? 'CI' : event.actor)))];
 }
 
-function isOwnOpenPr(pr: Pr, viewer: Viewer): boolean {
-  return pr.state === 'OPEN' && viewerOwns(pr, viewer);
-}
-
 /**
  * "Handled quietly", bots only (DESIGN): a thread the viewer had read that
  * turned unread only because of automation, on a fresh complete snapshot,
- * no bot finding on their own open PR, no unseen merge without their
+ * no unseen merge without their
  * review, no unseen loud news on the PR, no move of theirs new since the
- * read, and past the grace. Whether the tile
+ * read. Whether the tile
  * is unread never matters: its thread is unread, so it always is. Liveness
  * too: all of that holds, so it marks.
  */
@@ -827,9 +829,6 @@ export function expectedQuietRead(input: QuietReadSpecInput): QuietReadCheck {
   if (since.length === 0 || !since.every((event) => isAutomationEvent(pr, viewer, event))) {
     return { kind: 'skip', why: 'human_activity' };
   }
-  if (isOwnOpenPr(pr, viewer) && since.some((event) => isFinding(pr, event))) {
-    return { kind: 'skip', why: 'own_pr' };
-  }
   if (input.events.some(isUnseenMergeWithoutViewer)) {
     return { kind: 'skip', why: 'unseen_merge' };
   }
@@ -838,9 +837,6 @@ export function expectedQuietRead(input: QuietReadSpecInput): QuietReadCheck {
   }
   if (expectedNewMove(input, readAt)) {
     return { kind: 'skip', why: 'your_move' };
-  }
-  if (withinGrace(input.now, [thread.updatedAt, ...since.map((event) => event.at)])) {
-    return { kind: 'skip', why: 'grace' };
   }
   return { kind: 'mark', bots: actorNames(since) };
 }
@@ -855,9 +851,9 @@ const TOUCH_REASONS: Partial<Record<SpecTouchKind, 'approved' | 'changes_request
 /**
  * "You already dealt with it": the viewer reviewed or commented after every
  * unread event, having read every person's event before it (a read between
- * the event and the touch, 2026-09-30) (bots after it are fine, except a bot finding on their own open PR), on a
+ * the event and the touch, 2026-09-30) (bots after it are fine), on a
  * fresh complete snapshot, no unseen merge without their review after the
- * touch, no unseen loud news on the PR, and past the grace.
+ * touch, no unseen loud news on the PR.
  */
 export function expectedTouchedRead(input: QuietReadSpecInput): TouchedReadCheck {
   const { thread, pr, viewer } = input;
@@ -883,17 +879,11 @@ export function expectedTouchedRead(input: QuietReadSpecInput): TouchedReadCheck
   if (!late.every((event) => isAutomationEvent(pr, viewer, event))) {
     return { kind: 'skip', why: 'activity_after' };
   }
-  if (late.some((event) => isFinding(pr, event)) && isOwnOpenPr(pr, viewer)) {
-    return { kind: 'skip', why: 'own_pr' };
-  }
   if (input.events.some((event) => isUnseenMergeWithoutViewer(event) && event.at > touch.at)) {
     return { kind: 'skip', why: 'unseen_merge' };
   }
   if (input.events.some(isUnseenLoudEvent)) {
     return { kind: 'skip', why: 'unseen_loud' };
-  }
-  if (withinGrace(input.now, [thread.updatedAt, touch.at, ...late.map((event) => event.at)])) {
-    return { kind: 'skip', why: 'grace' };
   }
   return { kind: 'mark', reason: TOUCH_REASONS[touch.kind]! };
 }
@@ -936,9 +926,8 @@ export function lastLooked(thread: NotificationThread, pr: Pr, viewer: Viewer): 
  * else since the viewer last looked is automation or a person's activity
  * the events agent (or the user) left below loud, with no ask among it and
  * no loud news; at least one person, else the bot-only and acted-after
- * rules decide. Plus the safety checks: fresh complete snapshot, no bot
- * finding on the viewer's own open PR, no unseen merge without their
- * review, no move of theirs new since they last looked, past the grace. Liveness too: all of that holds, so it marks.
+ * rules decide. Plus the safety checks: fresh complete snapshot, no unseen merge without their
+ * review, no move of theirs new since they last looked. Liveness too: all of that holds, so it marks.
  */
 export function expectedJudgedRead(input: QuietReadSpecInput): JudgedReadCheck {
   const { thread, pr, viewer } = input;
@@ -969,18 +958,72 @@ export function expectedJudgedRead(input: QuietReadSpecInput): JudgedReadCheck {
   if (!people.every((event) => event.override !== null && event.override.loudness !== 'loud')) {
     return { kind: 'skip', why: 'not_judged' };
   }
-  const automation = after.filter((event) => isAutomationEvent(pr, viewer, event));
-  if (automation.some((event) => isFinding(pr, event)) && isOwnOpenPr(pr, viewer)) {
-    return { kind: 'skip', why: 'own_pr' };
-  }
   if (input.events.some(isUnseenMergeWithoutViewer)) {
     return { kind: 'skip', why: 'unseen_merge' };
   }
   if (expectedNewMove(input, since)) {
     return { kind: 'skip', why: 'your_move' };
   }
-  if (withinGrace(input.now, [thread.updatedAt, since, ...after.map((event) => event.at)])) {
-    return { kind: 'skip', why: 'grace' };
+  return { kind: 'mark', actors: actorNames(after) };
+}
+
+/**
+ * "Handled quietly" › Review requests that no longer stand (2026-10-02): a
+ * thread GitHub has unread, never read, there for a review request, whose
+ * request no longer stands: nothing pending for the viewer or any of their
+ * teams, or only a team request someone took. Since the newest request of
+ * the viewer or their team: something by someone else, every person's
+ * activity left below loud by the agent, nothing loud; no ask of theirs
+ * besides the requests since then or unseen; no unseen loud news besides
+ * the requests; plus the safety checks: fresh complete snapshot, no
+ * unseen merge without their review, no move of theirs new since the
+ * request. Liveness too: all of that holds, so it marks.
+ */
+export function expectedRequestGoneRead(input: QuietReadSpecInput): RequestGoneReadCheck {
+  const { thread, pr, viewer } = input;
+  if (!thread.unread) {
+    return { kind: 'skip', why: 'not_unread' };
+  }
+  if (thread.lastReadAt !== null) {
+    return { kind: 'skip', why: 'was_read' };
+  }
+  if (thread.reason !== 'review_requested') {
+    return { kind: 'skip', why: 'not_requested' };
+  }
+  const requestAt = latestViewerRequestAt(pr, viewer, input.events);
+  if (!snapshotIsFresh(thread, input.prFetchedAt, pr.truncated === true, pr, requestAt)) {
+    return { kind: 'skip', why: 'stale_snapshot' };
+  }
+  if (requestAt === null) {
+    return { kind: 'skip', why: 'no_request' };
+  }
+  const pending = pendingRequest(pr, viewer);
+  const takenSinceRequest = pending === 'team_taken' && teamTakers(pr, viewer, requestAt).length > 0;
+  if (pending !== null && !takenSinceRequest) {
+    return { kind: 'skip', why: 'request_stands' };
+  }
+  const others = othersEvents(input);
+  const after = others.filter((event) => event.at > requestAt);
+  if (after.length === 0) {
+    return { kind: 'skip', why: 'nothing_known' };
+  }
+  const isRequest = (event: PrEvent) => isViewerRequestEvent(pr, viewer, event);
+  if (others.some((event) => !isRequest(event) && (event.at > requestAt || event.seenAt === null) && isAskEvent(pr, viewer, event))) {
+    return { kind: 'skip', why: 'asks_you' };
+  }
+  const unseenLoud = input.events.some((event) => isUnseenLoudEvent(event) && !isRequest(event));
+  if (unseenLoud || after.some((event) => effectiveLoudnessOf(event) === 'loud')) {
+    return { kind: 'skip', why: 'unseen_loud' };
+  }
+  const people = after.filter((event) => !isAutomationEvent(pr, viewer, event));
+  if (!people.every((event) => event.override !== null && event.override.loudness !== 'loud')) {
+    return { kind: 'skip', why: 'not_judged' };
+  }
+  if (input.events.some(isUnseenMergeWithoutViewer)) {
+    return { kind: 'skip', why: 'unseen_merge' };
+  }
+  if (expectedNewMove(input, requestAt)) {
+    return { kind: 'skip', why: 'your_move' };
   }
   return { kind: 'mark', actors: actorNames(after) };
 }

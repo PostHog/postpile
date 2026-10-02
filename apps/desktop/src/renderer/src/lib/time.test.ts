@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { at } from '@postpile/core/fixtures';
-import { ageLabel, newest, whenLabel } from './time.ts';
+import { ageLabel, newest, sinceLabel, whenLabel } from './time.ts';
 
 describe('time helpers', () => {
   const now = new Date(at(0));
+
+  it('says since when: the clock today, else the day', () => {
+    const today = new Date(at(-30));
+    expect(sinceLabel(at(-30), now)).toBe(`${String(today.getHours()).padStart(2, '0')}:${String(today.getMinutes()).padStart(2, '0')}`);
+    expect(sinceLabel(at(-3 * 24 * 60), now)).toBe(new Date(at(-3 * 24 * 60)).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+    expect(sinceLabel('not a time', now)).toBe('');
+  });
 
   it('formats short ages', () => {
     expect(ageLabel(at(0), now)).toBe('now');

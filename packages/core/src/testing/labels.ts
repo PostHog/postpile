@@ -7,7 +7,7 @@ import { standingApprovals } from '../approvals.ts';
 import { reReviewAsked } from '../changes-answered.ts';
 import { pingRule } from '../pings.ts';
 import { isTracked } from '../provenance.ts';
-import { isAutomationFinding, isNewYourMove, judgedReadCheck, quietReadCheck, touchedReadCheck, type JudgedReadCheck, type QuietReadCheck } from '../quiet-reads.ts';
+import { isNewYourMove, judgedReadCheck, quietReadCheck, requestGoneReadCheck, touchedReadCheck, type JudgedReadCheck, type QuietReadCheck } from '../quiet-reads.ts';
 import { ownedByTeammate, requestedTeam, reviewRequest, teamRequestHold, viewerHeadReview } from '../review-request.ts';
 import { isRoutingTeam } from '../team-roles.ts';
 import { actedAfterSeeing } from '../saw-before-acting.ts';
@@ -15,12 +15,14 @@ import { snoozePhase } from '../snooze.ts';
 import { isPrDone } from '../tiles.ts';
 import { sameLogin } from '../mentions.ts';
 import { isUnseenLoud } from '../loudness.ts';
+import { mergeQueueState } from '../merge-queue.ts';
 import { prWhoseTurn } from '../whose-turn.ts';
 import type { Pr, PrEvent, PrKey } from '../types.ts';
 import type { TileView } from '../views.ts';
 import { LOGINS, REQUEST_BOT, tileViewsOf, type PropertyBoard } from './build-board.ts';
 import type { Person } from './board-spec.ts';
 import { isAutomationLogin, specOwners } from './spec-facts.ts';
+import { expectedSection } from './spec-sections.ts';
 
 function prStateLabel(pr: Pr): string {
   if (pr.state !== 'OPEN') {
@@ -185,7 +187,7 @@ function activityLabels(board: PropertyBoard, key: PrKey, pr: Pr): string[] {
   if (teamRequestHold(pr, board.viewer, board.notYours.has(key))?.kind === 'changes') {
     labels.push('shape:routed request held by changes');
   }
-  labels.push(...editLabels(pr, events));
+  labels.push(...editLabels(pr, events), ...mergeQueueLabels(pr, events));
   const lastReadAt = board.threads.get(key)?.lastReadAt ?? null;
   const userState = board.userStates.get(key) ?? null;
   const actedAfterReading = pr.state === 'OPEN' && !userState?.handledAt && actedAfterSeeing(pr, events, board.viewer, { lastReadAt, handledAt: null });
@@ -204,7 +206,6 @@ function activityLabels(board: PropertyBoard, key: PrKey, pr: Pr): string[] {
       viewer: board.viewer,
       notYours: board.notYours.has(key),
       prFetchedAt: board.prFetchedAt.get(key) ?? null,
-      now: board.now,
     };
     const quiet = quietReadCheck(input);
     const touched = touchedReadCheck(input);
@@ -215,9 +216,21 @@ function activityLabels(board: PropertyBoard, key: PrKey, pr: Pr): string[] {
     const judged = judgedReadCheck(input);
     labels.push(judged.kind === 'mark' ? 'judged-read:mark' : `judged-read:${judged.why}`);
     labels.push(...ownPrQuietLabels(board, key, pr, quiet, judged));
+    const requestGone = requestGoneReadCheck(input);
+    labels.push(requestGone.kind === 'mark' ? 'request-gone-read:mark' : `request-gone-read:${requestGone.why}`);
   }
   if (prWhoseTurn({ pr, events, userState: board.userStates.get(key) ?? null, viewer: board.viewer }).kind === 'them') {
     labels.push('pr-turn:them');
+  }
+  return labels;
+}
+
+/** Where the PR stands in Trunk's queue, and a loud failure on the viewer's own PR (DESIGN "Merge queue"). */
+function mergeQueueLabels(pr: Pr, events: PrEvent[]): string[] {
+  const queue = mergeQueueState(pr);
+  const labels = queue ? [`queue:${queue.state}`] : [];
+  if (events.some((event) => event.ruleLoudness === 'loud' && event.ruleReason.startsWith('removed from the merge queue'))) {
+    labels.push('events:loud merge queue failure');
   }
   return labels;
 }
@@ -238,7 +251,7 @@ function editLabels(pr: Pr, events: PrEvent[]): string[] {
   return labels;
 }
 
-/** The own-PR and new-move branches of the quiet reads (2026-09-30): cleared with only bot noise on an own open PR, kept for a finding, cleared with a move that stood before. */
+/** The own-PR and new-move branches of the quiet reads: cleared with only bot noise on an own open PR (a bot review too, since 2026-10-01), cleared with a move that stood before. */
 function ownPrQuietLabels(board: PropertyBoard, key: PrKey, pr: Pr, quiet: QuietReadCheck, judged: JudgedReadCheck): string[] {
   const labels: string[] = [];
   const ownOpen = pr.state === 'OPEN' && specOwners(pr).some((owner) => sameLogin(owner, board.viewer.login));
@@ -247,9 +260,6 @@ function ownPrQuietLabels(board: PropertyBoard, key: PrKey, pr: Pr, quiet: Quiet
   }
   const events = board.events.get(key) ?? [];
   const lastReadAt = board.threads.get(key)?.lastReadAt ?? null;
-  if (ownOpen && lastReadAt !== null && events.some((event) => event.at > lastReadAt && isAutomationFinding(event, pr))) {
-    labels.push('shape:bot finding on own open PR');
-  }
   const input = { pr, events, userState: board.userStates.get(key) ?? null, viewer: board.viewer, notYours: board.notYours.has(key) };
   if (prWhoseTurn(input).kind === 'you' && (quiet.kind === 'mark' || judged.kind === 'mark')) {
     labels.push('shape:cleared with a move that stood before');
@@ -309,7 +319,29 @@ function approveLabel(prefix: string, offer: AgentApproveOffer | null): string[]
   if (offer.coveredCount < offer.totalCount) {
     labels.push(`${prefix}:partial`);
   }
+  if (offer.naming === 'one') {
+    labels.push(`${prefix}:names one of several`);
+  }
+  if (offer.naming === 'every' && offer.prCount > 1) {
+    labels.push(`${prefix}:every of several`);
+  }
   return labels;
+}
+
+/** Base up on a stack (owner, 2026-10-01): a layer waits on a blocking layer below, also on a greyed offer. */
+function waitingLabels(prefix: string, offer: AgentApproveOffer | null): string[] {
+  if (!offer?.leftOut.some((pr) => pr.reason === 'layer_below')) {
+    return [];
+  }
+  return [`${prefix}:waits on a layer below`, `${prefix}:${offer.state} with a layer waiting`];
+}
+
+/** A covered stack layer with a draft above it: the base goes through, so the label must not say "Approve stack". */
+function draftAboveCovered(view: TileView): boolean {
+  const covered = view.agent.approve?.covered.map((pr) => pr.prKey) ?? [];
+  return view.tile.stacks.some((stack) =>
+    stack.prKeys.some((key, index) => covered.includes(key) && stack.prKeys.slice(index + 1).some((above) => view.prs.find((row) => row.key === above)?.isDraft === true)),
+  );
 }
 
 /**
@@ -319,9 +351,12 @@ function approveLabel(prefix: string, offer: AgentApproveOffer | null): string[]
  * approvable PR someone else approved already.
  */
 function agentLabels(board: PropertyBoard, views: TileView[]): string[] {
-  const labels = views.flatMap((view) => approveLabel('agent-approve-tile', view.agent.approve));
-  const topic = topicAgentOffers(views.map((view) => ({ tile: view.tile, state: view.state, agent: view.agent })));
-  labels.push(...approveLabel('agent-approve-topic', topic.approve));
+  const labels = views.flatMap((view) => [...approveLabel('agent-approve-tile', view.agent.approve), ...waitingLabels('agent-approve-tile', view.agent.approve)]);
+  if (views.some(draftAboveCovered)) {
+    labels.push('agent-approve-tile:draft above a covered layer');
+  }
+  const topic = topicAgentOffers(views.map((view) => ({ tile: view.tile, state: view.state, agent: view.agent, prs: view.prs })));
+  labels.push(...approveLabel('agent-approve-topic', topic.approve), ...waitingLabels('agent-approve-topic', topic.approve));
   const markRead = topic.markRead;
   labels.push(markRead === null ? 'agent-mark-read-topic:absent' : `agent-mark-read-topic:${markRead.state}`);
   if (markRead?.skipped.some((tile) => tile.reason === 'asks_for_you')) {
@@ -356,6 +391,7 @@ export function boardLabels(board: PropertyBoard, views: TileView[] = tileViewsO
     labels.add('shape:dissolved set');
   }
   labels.add(`team-setup:${board.spec.teams}`);
+  labels.add(`section:${expectedSection(board, views)}`);
   return labels;
 }
 
@@ -408,17 +444,22 @@ export const REQUIRED_LABELS: readonly string[] = [
   'judged-read:asks_you',
   'judged-read:not_judged',
   'judged-read:never_looked',
+  'request-gone-read:mark',
+  'request-gone-read:not_judged',
   'shape:done PR with an unread thread',
   'shape:unread with only quiet news',
   'shape:loud news on a read tile',
   'shape:snoozed with an unread thread',
   'shape:unread by the thread alone',
   'edit:bot updates its comment',
+  'queue:submitted',
+  'queue:testing',
+  'queue:failed',
+  'events:loud merge queue failure',
   'edit:person, quiet',
   'edit:person mentions you',
   'touched-read:acted_without_seeing',
   'shape:own open PR cleared with bot noise',
-  'shape:bot finding on own open PR',
   'shape:cleared with a move that stood before',
   'shape:new move since the read',
   'shape:done by acting after reading',
@@ -480,11 +521,19 @@ export const REQUIRED_LABELS: readonly string[] = [
   'agent-approve-tile:greyed:look_closer',
   'agent-approve-tile:greyed:high',
   'agent-approve-tile:absent',
+  'agent-approve-tile:waits on a layer below',
+  'agent-approve-tile:active with a layer waiting',
+  'agent-approve-tile:greyed with a layer waiting',
+  'agent-approve-tile:names one of several',
+  'agent-approve-tile:every of several',
+  'agent-approve-tile:draft above a covered layer',
   'agent-approve-topic:active',
   'agent-approve-topic:partial',
   'agent-approve-topic:greyed:rechecking',
   'agent-approve-topic:greyed:look_closer',
   'agent-approve-topic:absent',
+  'agent-approve-topic:waits on a layer below',
+  'agent-approve-topic:names one of several',
   'agent-mark-read-topic:active',
   'agent-mark-read-topic:greyed',
   'agent-mark-read-topic:absent',
@@ -520,4 +569,5 @@ export const REQUIRED_LABELS: readonly string[] = [
   'tier:to_review',
   'tier:team_mentioned',
   'tier:rest',
+  ...['needs_reply', 'changes_requested', 'to_review', 'team_mentioned', 'you_drive', 'team_owns', 'other_work', 'other_topics'].map((section) => `section:${section}`),
 ];

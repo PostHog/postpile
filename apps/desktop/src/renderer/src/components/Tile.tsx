@@ -31,6 +31,8 @@ interface TileProps {
   /** The PR open in the detail pane, when this tile is selected. */
   selectedPrKey: string | null;
   onSelect: (prKey: string) => void;
+  /** The group the grid shows the tile in (a held tile can sit outside its core group), for the slide when it moves (`useFlip`). */
+  shownGroup: string;
 }
 
 /**
@@ -173,9 +175,11 @@ export function Tile(props: TileProps) {
     titleLook = 'font-medium text-muted';
   }
   const lead = leadPr(view);
+  // The pill shows the worst glance among the open tracked PRs, as core picks it (`TileView.verdict`).
+  const verdict = view.verdict;
   const nextAutoSyncAt = useNextAutoSyncAt();
-  const glanceText = lead ? glanceStateText({ state: lead.glanceState, gap: lead.glanceGap, nextAutoSyncAt, now }) : null;
-  const glanceUpdating = updatingNow({ syncing: actions.syncing, writing: lead?.glanceState === 'writing' });
+  const glanceText = verdict ? glanceStateText({ state: verdict.glanceState, gap: verdict.glanceGap, nextAutoSyncAt, now }) : null;
+  const glanceUpdating = updatingNow({ syncing: actions.syncing, writing: verdict?.glanceState === 'writing' });
   const forYou = tileForYou(view, props.sets);
   const updatedAt = tileUpdatedAt(view);
   let background = 'bg-surface';
@@ -215,6 +219,8 @@ export function Tile(props: TileProps) {
 
   return (
     <article
+      data-flip-key={`tile:${tile.id}`}
+      data-flip-group={props.shownGroup}
       onClick={onTileClick}
       className={`relative flex min-w-0 cursor-pointer flex-col rounded-tile ${background} ${frameClasses(props, draft)}`}
     >
@@ -256,7 +262,14 @@ export function Tile(props: TileProps) {
                 Draft
               </span>
             )}
-            <VerdictPill verdict={lead?.verdict ?? null} stale={lead?.glanceStale} updating={glanceUpdating} greyed={done} missing={glanceText} />
+            <VerdictPill
+              verdict={verdict?.verdict ?? null}
+              stale={verdict?.glanceStale}
+              updating={glanceUpdating}
+              waitsForSync={verdict?.glanceRefreshBlock !== null}
+              greyed={done}
+              missing={glanceText}
+            />
             {state.kind === 'snoozed' && <span className="text-[10.5px] font-medium text-muted">Snoozed</span>}
             {view.repoLabel && <RepoLabel label={view.repoLabel} />}
             {view.quietRepo && (

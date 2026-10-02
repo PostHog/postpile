@@ -349,6 +349,12 @@ export function createApp(
     return c.json(await engine.decideTailoring(c.req.param('id'), body.text, body.keep));
   });
   app.post('/api/topics/:id/seen', async (c) => c.json(await engine.markTopicSeen(c.req.param('id'))));
+  app.post('/api/topics/:id/archive', async (c) => c.json(await engine.archiveTopic(c.req.param('id'))));
+  // The header's driver menu: a login, ':team' or ':outside', null resets to automatic. Local, not a GitHub write.
+  app.post('/api/topics/:id/driver', async (c) => {
+    const body = z.object({ driver: z.string().min(1).nullable() }).parse(await c.req.json());
+    return c.json(await engine.setTopicDriver(c.req.param('id'), body.driver));
+  });
   app.get('/api/proposals', async (c) => c.json(await engine.listProposals()));
   app.post('/api/proposals/:id', async (c) => {
     const body = z.object({ accept: z.boolean() }).parse(await c.req.json());
@@ -422,10 +428,19 @@ export function createApp(
   app.post('/api/prs/:owner/:repo/:number/glance/retry', async (c) => {
     return c.json(await engine.retryGlance(prKeyFromParams(c.req.param())));
   });
-  // headOid: the head commit the renderer showed; the approval is pinned to it or refused.
+  // A stale glance looked at in the detail pane: a glance-only catch-up for the PR when still behind. Agent calls only, never a GitHub write.
+  app.post('/api/prs/:owner/:repo/:number/glance/look', async (c) => {
+    return c.json(await engine.refreshGlanceOnLook(prKeyFromParams(c.req.param())));
+  });
+  // headOid: the head commit the renderer showed; the approval is pinned to it or refused. body: "Approve with comment", empty for none.
   app.post('/api/prs/:owner/:repo/:number/approve', async (c) => {
-    const body = z.object({ headOid: z.string().min(1).max(100) }).parse(await c.req.json());
-    return c.json(await engine.approve(prKeyFromParams(c.req.param()), body.headOid));
+    const body = z.object({ headOid: z.string().min(1).max(100), body: z.string().max(65_536).default('') }).parse(await c.req.json());
+    return c.json(await engine.approve(prKeyFromParams(c.req.param()), body.headOid, body.body));
+  });
+  // "Comment review": a review with event COMMENT, pinned to headOid like approve. Final; refused while writes are locked.
+  app.post('/api/prs/:owner/:repo/:number/comment-review', async (c) => {
+    const body = z.object({ headOid: z.string().min(1).max(100), body: z.string().min(1).max(65_536) }).parse(await c.req.json());
+    return c.json(await engine.commentReview(prKeyFromParams(c.req.param()), body.headOid, body.body));
   });
   // Agent-assisted Approve (a tile's or the topic's ✨ Approve): each PR with the head the confirm list showed, reported per PR.
   app.post('/api/agent-actions/approve', async (c) => {
@@ -449,6 +464,11 @@ export function createApp(
   app.post('/api/prs/:owner/:repo/:number/draft-ask', async (c) => {
     const body = z.object({ person: z.string(), intent: z.string().default('') }).parse(await c.req.json());
     return c.json(await engine.draftAsk(prKeyFromParams(c.req.param()), body.person, body.intent));
+  });
+  // The review note popover's draft (Approve with comment, Comment review). Agent call only, never a GitHub write.
+  app.post('/api/prs/:owner/:repo/:number/draft-review-note', async (c) => {
+    const body = z.object({ kind: z.enum(['approve', 'comment']) }).parse(await c.req.json());
+    return c.json(await engine.draftReviewNote(prKeyFromParams(c.req.param()), body.kind));
   });
   app.post('/api/prs/:owner/:repo/:number/comment', async (c) => {
     const body = z.object({ body: z.string().min(1) }).parse(await c.req.json());

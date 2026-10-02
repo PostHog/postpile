@@ -39,6 +39,7 @@ import type {
   MemorySources,
   MemoryTarget,
   NotificationDebugRow,
+  GlanceLookResult,
   OpenedReadResult,
   QuietReadView,
   PendingProposals,
@@ -46,6 +47,7 @@ import type {
   PrDetail,
   PrKey,
   RepoOverview,
+  ReviewNoteKind,
   SearchResult,
   SetupAcceptRequest,
   SetupAcceptResult,
@@ -117,6 +119,15 @@ export interface EngineService {
    * is going). Local: agent calls only, never a GitHub write.
    */
   retryGlance(prKey: PrKey): Promise<ActionResult>;
+  /**
+   * The PR stayed open in the detail pane with a stale glance (DESIGN.md
+   * "Glance refresh on look"): checks the input hash again and, when the
+   * glance is still behind, runs a glance-only catch-up for that PR from
+   * the topic's dossier as it is. Folded into a run for its topic that is
+   * going or queued; counts against the daily catch-up cap; nothing over it
+   * or with catch-up off. Local: agent calls only, never a GitHub write.
+   */
+  refreshGlanceOnLook(prKey: PrKey): Promise<GlanceLookResult>;
   /**
    * The window got focus: one poll cycle now, unless one started less than
    * 15s ago, none ran yet, or the poll is off or paused by the quota. prKeys are the PRs the
@@ -253,9 +264,16 @@ export interface EngineService {
   /**
    * Immediate and final: GitHub approvals cannot be undone. `headOid` is the
    * head commit the user looked at; a different stored head refuses the
-   * approval without calling GitHub.
+   * approval without calling GitHub. `body`: the note from "Approve with
+   * comment", empty for none.
    */
-  approve(prKey: PrKey, headOid: string): Promise<ActionResult>;
+  approve(prKey: PrKey, headOid: string, body?: string): Promise<ActionResult>;
+  /**
+   * "Comment review": a GitHub review with event COMMENT and `body` (required),
+   * pinned to `headOid` with the same head check as approve. Answers a review
+   * request without approving. Final; refused while GitHub writes are locked.
+   */
+  commentReview(prKey: PrKey, headOid: string, body: string): Promise<ActionResult>;
   /**
    * Agent-assisted Approve (a tile's or the topic's ✨ Approve, DESIGN.md
    * "Agent-assisted actions"): each PR through `approve` with its head guard,
@@ -290,11 +308,12 @@ export interface EngineService {
   /** "Mark read" on a thread in the notifications debug view. Same queue, undo, lock and log as markRead. */
   markThreadRead(threadId: string): Promise<ActionResult>;
   /**
-   * The user opened the PR in the detail pane: when a mark-read of that PR
-   * would leave it done and no tile holding it is snoozed, only while writes
-   * are unlocked, marks its GitHub thread read if it is unread ("opened in
-   * PostPile", origin quiet, no undo) and handles the PR here (events seen,
-   * handledAt). Nothing happens otherwise, not even a pending write.
+   * The PR stayed through the dwell in the detail pane: when a mark-read of
+   * that PR would leave it done and no tile holding it is snoozed, only while
+   * writes are unlocked, marks it read like the pane's Mark read (origin
+   * detail, its own batch and undo token): events seen, handledAt, and an
+   * unread GitHub thread queued for after the undo window. Nothing happens
+   * otherwise, not even a pending write.
    */
   markOpenedRead(prKey: PrKey): Promise<OpenedReadResult>;
   /** undoToken null undoes the most recent pending mark-read batch. Memory correction tokens undo that correction. */
@@ -304,6 +323,8 @@ export interface EngineService {
 
   /** Agent drafts a comment asking `person` something; the user edits it before sendComment. */
   draftAsk(prKey: PrKey, person: string, intent: string): Promise<{ body: string }>;
+  /** Agent drafts the one- or two-line note for "Approve with comment" or "Comment review"; the user edits it first. */
+  draftReviewNote(prKey: PrKey, kind: ReviewNoteKind): Promise<{ body: string }>;
   sendComment(prKey: PrKey, body: string): Promise<ActionResult>;
 
   giveFeedback(input: FeedbackInput): Promise<ActionResult>;
@@ -317,6 +338,14 @@ export interface EngineService {
   decideRuleProposal(proposalId: string, accept: boolean): Promise<ActionResult>;
   /** Moves the topic's seen cursor to now, so "changes since seen" starts over. */
   markTopicSeen(topicId: string): Promise<ActionResult>;
+  /** "Archive now" on a topic with nothing left; refused while anything is open or unread. */
+  archiveTopic(topicId: string): Promise<ActionResult>;
+  /**
+   * The header's driver menu: a value from `TopicDetail.driver.choices`, or
+   * null for Reset to automatic. Moves the topic at once and stands until
+   * changed; new events never lift it. Local, not a GitHub write.
+   */
+  setTopicDriver(topicId: string, driver: string | null): Promise<ActionResult>;
   /**
    * "Forget" on a care, or accepting a recheck outcome: drop (kind wrong),
    * holds (confirm) or fix. A fact changes right away; every correction is

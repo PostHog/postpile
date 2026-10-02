@@ -1,12 +1,15 @@
 import {
   isLiveProposal,
-  isRetiredSince,
+  archiveEndsAt,
+  lastJoinAt,
+  takesNewPrs,
   OUTSIDE_PROPOSAL_DAYS,
   proposalOutcome,
   proposalOutcomeAt,
   type TopicProposal,
   scopedSettings,
   type ListScope,
+  glanceRefreshBlockOf,
   glanceStateOf,
   activityList,
   whatsNew,
@@ -18,9 +21,8 @@ import {
   buildPrSummary,
   buildTileView,
   topicAgentOffers,
-  compareTopicUrgency,
+  compareInSection,
   eventView,
-  FINISHED_TOPICS_MS,
   topicMove,
   isPrInQuietRepo,
   isQuietTile,
@@ -29,6 +31,7 @@ import {
   ownerRelation,
   pingedPrKeys,
   prTier,
+  prStatus,
   prWhoseTurn,
   isReReviewMove,
   repoOverview,
@@ -47,6 +50,7 @@ import {
   type FinishedTopic,
   type CatchUpRunState,
   type GlanceGap,
+  type GlanceRefreshBlock,
   type GlanceState,
   type NotificationDebugRow,
   HANDLED_QUIETLY_DAYS,
@@ -67,9 +71,14 @@ import {
   type SearchResult,
   type Tile,
   type TileView,
+  type Topic,
+  type TopicArchiveBox,
   type TopicDetail,
+  openInDealtWith,
   topicPrRollup,
-  topicSection,
+  topicDriverView,
+  topicQuiet,
+  topicSectionOf,
   type TopicListItem,
   type TopicQueues,
   type Viewer,
@@ -80,6 +89,7 @@ import {
 import type { AgentService } from '@postpile/agent';
 import type { Store } from '@postpile/store';
 import { Board, UNSORTED_TOPIC_ID } from './board.ts';
+import { RetireGate } from './consolidation/retire-gate.ts';
 import { debugNotificationRows, quietReadViews } from './debug-notifications.ts';
 import { glanceGapKey } from './digest/glance-batches.ts';
 import { GlanceInputs, glanceTargetKeys } from './glance-inputs.ts';
@@ -100,10 +110,11 @@ function memberKeys(tile: Tile): PrKey[] {
   return tile.members.map((member) => member.prKey);
 }
 
+/** The order inside each sidebar section (`compareInSection`), then Unsorted last, then by name. */
 function compareTopics(a: TopicListItem, b: TopicListItem): number {
-  const byUrgency = compareTopicUrgency(a, b);
-  if (byUrgency !== 0) {
-    return byUrgency;
+  const inSection = compareInSection(a, b);
+  if (inSection !== 0) {
+    return inSection;
   }
   // Unsorted goes last within its group so real topics come first.
   if ((a.topic.id === UNSORTED_TOPIC_ID) !== (b.topic.id === UNSORTED_TOPIC_ID)) {
@@ -112,13 +123,16 @@ function compareTopics(a: TopicListItem, b: TopicListItem): number {
   return a.topic.name.localeCompare(b.topic.name);
 }
 
-/** What the glance state needs from outside the store: the agent switch and the catch-up runs. */
+/** What the glance state needs from outside the store: the agent switch, the catch-up runs and the daily catch-up cap. */
 export interface GlanceStatusSource {
   agentOff(): boolean;
-  catchUp(topicId: string | null): CatchUpRunState;
+  /** A run for the PR's topic, or a glance-only run for the PR itself. Without a prKey: whole-topic runs only. */
+  catchUp(topicId: string | null, prKey: PrKey | null): CatchUpRunState;
+  /** The daily catch-up cap: 0 (catch-up off), or spent in its 24h window. */
+  catchUpCap(): { off: boolean; spent: boolean };
 }
 
-const NO_GLANCE_STATUS: GlanceStatusSource = { agentOff: () => false, catchUp: () => null };
+const NO_GLANCE_STATUS: GlanceStatusSource = { agentOff: () => false, catchUp: () => null, catchUpCap: () => ({ off: true, spent: false }) };
 
 /** Builds the API read models. Every call loads a fresh Board, so state is always derived. */
 export class ReadModels {
@@ -143,8 +157,19 @@ export class ReadModels {
       wanted: parts.wanted.has(key),
       gap: parts.gap,
       agentOff: this.glanceStatus.agentOff(),
-      catchUp: this.glanceStatus.catchUp(board.memberships.get(key)?.topicId ?? null),
+      catchUp: this.glanceStatus.catchUp(board.memberships.get(key)?.topicId ?? null, key),
     });
+  }
+
+  /** A whole-topic catch-up runs for the topic (null: Unsorted): its dossier and facts are being rewritten. */
+  private memoryUpdating(topicId: string | null): boolean {
+    return this.glanceStatus.catchUp(topicId, null) === 'running';
+  }
+
+  /** Whether looking at the PR rewrites a stale glance, or why not (`glanceRefreshBlockOf`). */
+  private glanceRefreshBlock(key: PrKey, wanted: Set<PrKey>): GlanceRefreshBlock | null {
+    const cap = this.glanceStatus.catchUpCap();
+    return glanceRefreshBlockOf({ wanted: wanted.has(key), agentOff: this.glanceStatus.agentOff(), catchUpOff: cap.off, dailyCapSpent: cap.spent });
   }
 
   private board(): Board {
@@ -237,6 +262,7 @@ export class ReadModels {
           glanceStale: stale.has(pr.key),
           glanceGap: gap,
           glanceState: this.glanceState(board, pr.key, { hasGlance: glance !== null, stale: stale.has(pr.key), gap, wanted }),
+          glanceRefreshBlock: this.glanceRefreshBlock(pr.key, wanted),
           quietRepo: isPrInQuietRepo(pr.key, settings),
           repoLabel: repoLabels[index] ?? null,
           tileUnread,
@@ -343,6 +369,7 @@ export class ReadModels {
     const board = this.board();
     const topics = board.topics();
     const dossiers = this.store.dossiers.latestMany(topics.map((topic) => topic.id));
+    const driverPicks = this.store.driverPicks.all();
     const viewer = loadViewer(this.store);
     const settings = scopedSettings(loadRepoSettings(this.store), scope);
     const items: TopicListItem[] = [];
@@ -376,9 +403,12 @@ export class ReadModels {
       const prRollup = topicPrRollup(tiles, prs);
       const latest = dossiers.get(topic.id);
       const dossier = latest?.dossier;
+      const placement = isUnsortedTopic(topic.id) ? null : placementOf(this.store, topic, latest);
+      const section = topicSectionOf({ topic, driverPick: driverPicks.get(topic.id) ?? null, queues, moves: urgency.yourMoves.length, placement, viewer });
+      const unseenMergeTiles = tiles.filter((tile) => (board.stateOf(tile).unseenMerges?.length ?? 0) > 0).length;
       items.push({
         topic,
-        placement: isUnsortedTopic(topic.id) ? null : placementOf(this.store, topic, latest),
+        placement,
         statusLine: dossier ? { status: dossier.status, note: dossier.statusNote } : null,
         group: urgency.needsYou ? 'needs_you' : 'quiet',
         unreadTiles: urgency.unreadTiles,
@@ -388,9 +418,10 @@ export class ReadModels {
         openTiles: states.filter((kind) => kind === 'open').length,
         totalTiles: states.length,
         yourMoves: urgency.yourMoves,
-        unseenMergeTiles: tiles.filter((tile) => (board.stateOf(tile).unseenMerges?.length ?? 0) > 0).length,
+        unseenMergeTiles,
         queues,
-        section: topicSection(queues),
+        quiet: topicQuiet({ section, unreadTiles: urgency.unreadTiles, moves: urgency.yourMoves.length, unseenMergeTiles }),
+        section,
         people: topicFaces(topicPeople(prs, viewer)),
         prState: prRollup.state,
         prStateCounts: prRollup.counts,
@@ -399,17 +430,23 @@ export class ReadModels {
     return items.sort(compareTopics);
   }
 
-  /** The sidebar's Finished drawer: topics retired in the last 30 days, newest first. Ignores the repo scope. */
+  /**
+   * The sidebar's Archive drawer: retired topics that still take new PRs
+   * (`takesNewPrs`), newest first. Ignores the repo scope.
+   */
   listFinishedTopics(): FinishedTopic[] {
-    const since = new Date(this.now().getTime() - FINISHED_TOPICS_MS).toISOString();
-    const finished = this.store.topics.list().filter((topic) => isRetiredSince(topic, since));
-    return finished
-      .map((topic) => ({
+    const now = this.now();
+    return this.store.topics
+      .list()
+      .filter((topic) => topic.status === 'retired')
+      .map((topic) => ({ topic, memberships: this.store.memberships.listForTopic(topic.id) }))
+      .filter(({ topic, memberships }) => takesNewPrs(topic, lastJoinAt(memberships), now))
+      .map(({ topic, memberships }) => ({
         id: topic.id,
         name: topic.name,
         area: topic.area,
         retiredAt: topic.retiredAt ?? topic.updatedAt,
-        prCount: this.store.memberships.listForTopic(topic.id).length,
+        prCount: memberships.length,
       }))
       .sort((a, b) => b.retiredAt.localeCompare(a.retiredAt));
   }
@@ -437,6 +474,19 @@ export class ReadModels {
     return [...decided, ...expired].sort((a, b) => (proposalOutcomeAt(b, now) ?? '').localeCompare(proposalOutcomeAt(a, now) ?? ''));
   }
 
+  /** The Archive box under the Tiles count (`TopicArchiveBox`); never for Unsorted. */
+  private archiveBox(board: Board, topic: Topic): TopicArchiveBox | null {
+    if (topic.id === UNSORTED_TOPIC_ID) {
+      return null;
+    }
+    if (topic.status === 'retired') {
+      const until = archiveEndsAt(topic, lastJoinAt(this.store.memberships.listForTopic(topic.id)));
+      return until !== null && topic.retiredAt !== null ? { state: 'archived', at: topic.retiredAt, until } : null;
+    }
+    const at = topic.status === 'active' ? new RetireGate(board).archivesAt(topic.id) : null;
+    return at === null ? null : { state: 'ready', at };
+  }
+
   getTopic(topicId: string): TopicDetail | null {
     const now = this.now().toISOString();
     const board = this.board();
@@ -448,12 +498,17 @@ export class ReadModels {
     const tiles = this.tileViews(board, topicId);
     const topicTiles = board.tilesForTopic(topicId);
     const prs = this.topicPrs(board, topicTiles);
-    const queues = this.topicQueuesOf(board, topicTiles, prs, loadViewer(this.store), loadRepoSettings(this.store));
+    const viewer = loadViewer(this.store);
+    const queues = this.topicQueuesOf(board, topicTiles, prs, viewer, loadRepoSettings(this.store));
+    const placement = isUnsorted ? null : placementOf(this.store, topic, this.store.dossiers.latest(topicId) ?? undefined);
+    const yourMoves = topicYourMoves(tiles);
+    const sectionSource = { topic, driverPick: this.store.driverPicks.get(topicId), queues, moves: yourMoves.length, placement, viewer };
     return {
       topic,
-      placement: isUnsorted ? null : placementOf(this.store, topic, this.store.dossiers.latest(topicId) ?? undefined),
+      driver: isUnsorted ? null : topicDriverView(sectionSource),
+      placement,
       tiles,
-      yourMoves: topicYourMoves(tiles),
+      yourMoves,
       groupYourMoves: yourMovesByGroup(tiles),
       sets: isUnsorted ? [] : this.store.sets.listActiveForTopic(topicId),
       setChanges: isUnsorted ? [] : this.store.sets.listChangesForTopic(topicId, SET_CHANGES_SHOWN),
@@ -461,8 +516,11 @@ export class ReadModels {
       decidedProposals: isUnsorted ? [] : this.decidedProposals(topicId, now),
       dossier: isUnsorted ? null : this.memory.dossierView(topicId, board.prs),
       agent: topicAgentOffers(tiles),
+      archive: this.archiveBox(board, topic),
+      openInDealtWith: openInDealtWith(tiles),
       prRollup: topicPrRollup(topicTiles, prs),
-      section: topicSection(queues),
+      section: topicSectionOf(sectionSource),
+      memoryUpdating: this.memoryUpdating(isUnsorted ? null : topicId),
     };
   }
 
@@ -525,8 +583,10 @@ export class ReadModels {
     const news = whatsNew(pr, board.events.get(key) ?? [], viewer);
     const stale = this.staleGlances(board, [key]).has(key);
     const gap = this.glanceGap(key, glance !== null);
+    const wanted = glanceTargetKeys(board);
     return {
       pr,
+      status: prStatus(pr),
       fetchedAt: this.store.prs.fetchedAt(key),
       events,
       activity: activityList(events, viewer, news?.anchor.at ?? null, pr, board.threads.get(key) ?? null),
@@ -534,7 +594,9 @@ export class ReadModels {
       glance,
       glanceStale: stale,
       glanceGap: gap,
-      glanceState: this.glanceState(board, key, { hasGlance: glance !== null, stale, gap, wanted: glanceTargetKeys(board) }),
+      glanceState: this.glanceState(board, key, { hasGlance: glance !== null, stale, gap, wanted }),
+      glanceRefreshBlock: this.glanceRefreshBlock(key, wanted),
+      memoryUpdating: this.memoryUpdating(board.memberships.get(key)?.topicId ?? null),
       userState: board.userStates.get(key) ?? null,
       viewerApproval: viewerApproval(pr, board.userStates.get(key) ?? null, loadViewer(this.store)?.login),
       agentApprovers: agentOnlyApprovers(standingApprovals(pr)),

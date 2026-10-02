@@ -1,6 +1,6 @@
 import type { SearchResult, TopicListItem } from '@postpile/core';
-import { queueLayout } from './queues.ts';
-import { sidebarGroups } from './sidebar.ts';
+import { hiddenAsDealt, sidebarBuckets } from './queues.ts';
+import { areaFolds, otherTopicsGroups } from './sidebar.ts';
 
 /** What the search bar lets through. Null means no filter: the query is empty or has no answer yet. */
 export interface SearchFilter {
@@ -26,17 +26,18 @@ export function filterTopics(items: TopicListItem[], filter: SearchFilter | null
   return filter ? items.filter((item) => filter.tilesByTopic.has(item.topic.id)) : items;
 }
 
-/** Topics top to bottom as the sidebar shows them; the layout lists each once. */
+/** Topics top to bottom as the sidebar shows them, folds open and dealt-with topics in place; each sits in one section. */
 export function sidebarOrder(items: TopicListItem[]): TopicListItem[] {
-  const layout = queueLayout(items);
-  const groups = sidebarGroups(layout.other);
-  return [
-    ...layout.sections.flatMap((section) => section.rows.map((row) => row.item)),
-    ...groups.needsYou,
-    ...groups.team.flatMap((group) => group.items),
-    ...groups.routed,
-    ...groups.fyi,
-  ];
+  return sidebarBuckets(items, false).flatMap((bucket) => {
+    if (bucket.key === 'other_work') {
+      return areaFolds(bucket.items).flatMap((fold) => fold.items);
+    }
+    if (bucket.key === 'other_topics') {
+      const groups = otherTopicsGroups(bucket.items);
+      return [...groups.unplaced, ...groups.fyi];
+    }
+    return bucket.items;
+  });
 }
 
 /**
@@ -44,7 +45,7 @@ export function sidebarOrder(items: TopicListItem[]): TopicListItem[] {
  * hides it. Then the kept one (what was on screen for this pick and these
  * filters, so an approve or a refetch that drops it from the filter does
  * not move the view), else the first shown one in sidebar order. `shown` is
- * null when nothing narrows the list. Without a pick, the sidebar's first topic.
+ * null when nothing narrows the list. Without a pick, the sidebar's first listed topic.
  */
 export function visibleTopic(
   items: TopicListItem[],
@@ -54,7 +55,9 @@ export function visibleTopic(
 ): TopicListItem | null {
   const picked = items.find((item) => item.topic.id === pickedId) ?? null;
   if (!shown) {
-    return picked ?? sidebarOrder(items)[0] ?? null;
+    // The first row the sidebar lists: a topic behind a "+ N dealt with" line only when every one is.
+    const order = sidebarOrder(items);
+    return picked ?? order.find((item) => !hiddenAsDealt(item)) ?? order[0] ?? null;
   }
   if (picked && shown.includes(picked)) {
     return picked;

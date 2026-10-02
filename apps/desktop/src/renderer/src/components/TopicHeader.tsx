@@ -10,6 +10,7 @@ import { sectionLook } from '../lib/sections.ts';
 import { Avatar } from './Avatar.tsx';
 import { Button } from './Button.tsx';
 import { DossierPanel } from './DossierPanel.tsx';
+import { DriverMenu } from './DriverMenu.tsx';
 import { ChevronIcon, PrStateIcon, QuoteIcon } from './icons.tsx';
 import { MemoryLine } from './MemoryLine.tsx';
 import { RelationLine } from './RelationLine.tsx';
@@ -27,8 +28,8 @@ const ROLE_LABELS: Record<UserRole, string> = {
 const STATUS_TONES: Record<DossierStatus, { pill: string; dot: string }> = {
   starting: { pill: 'bg-accent-soft text-accent', dot: 'bg-accent ring-accent/18' },
   active: { pill: 'bg-safe-soft text-safe', dot: 'bg-open ring-open/18' },
-  blocked: { pill: 'bg-unread-soft text-unread-ink', dot: 'bg-unread-ink ring-unread-ink/18' },
-  winding_down: { pill: 'bg-closer-soft text-closer', dot: 'bg-closer ring-closer/18' },
+  blocked: { pill: 'bg-status-bad-soft text-status-bad', dot: 'bg-status-bad ring-status-bad/18' },
+  winding_down: { pill: 'bg-amber-soft text-amber-ink', dot: 'bg-amber ring-amber/18' },
   finished: { pill: 'bg-segment text-muted', dot: 'bg-dot-quiet ring-dot-quiet/18' },
 };
 
@@ -142,12 +143,12 @@ interface Crumb {
 
 /**
  * Topics › section › area. The section is the one the sidebar lists the topic
- * under (core's `TopicDetail.section`), with the same label and dot; a retired
- * topic sits in the Finished drawer instead.
+ * under (core's `TopicDetail.section`, the Archive for a retired topic), with
+ * the same label and dot.
  */
 function breadcrumbs(detail: TopicDetail): Crumb[] {
   const look = sectionLook(detail.section);
-  const crumbs: Crumb[] = [detail.topic.status === 'retired' ? { label: 'Finished', dot: null } : { label: look.label, dot: look.dot }];
+  const crumbs: Crumb[] = [{ label: look.label, dot: look.dot }];
   if (detail.placement?.area) {
     crumbs.push({ label: detail.placement.area, dot: null });
   }
@@ -164,20 +165,19 @@ function PrCountPill(props: { detail: TopicDetail }) {
   const title = prMixTitle(prRollup);
   return (
     <span className={`${pill} px-2`} title={title}>
-      {prRollup.state && <PrStateIcon lifecycle={prRollup.state} size={11} title={title} />}
+      {prRollup.state && <PrStateIcon state={prRollup.state} size={11} title={title} />}
       <span className="font-mono text-[10px] font-semibold tabular-nums">{prRollup.total}</span>
       <span className="text-hint">{prRollup.total === 1 ? 'PR' : 'PRs'}</span>
     </span>
   );
 }
 
-/** Breadcrumb, name, who drives, the dossier (or the plain summary before one exists) and what the user told the agent. */
+/** Breadcrumb, name, who drives (a menu that moves the topic), the dossier (or the plain summary before one exists) and what the user told the agent. */
 export function TopicHeader(props: { detail: TopicDetail; topics: TopicListItem[] }) {
-  const { topic, tiles, pendingProposals, dossier, placement } = props.detail;
+  const { topic, pendingProposals, dossier, placement, driver } = props.detail;
   const actions = useActions();
-  // A catch-up run on the topic updates the dossier too; a PR of the topic writing its glance says one is going.
-  const writing = tiles.some((view) => view.prs.some((pr) => pr.glanceState === 'writing'));
-  const updating = updatingNow({ syncing: actions.syncing, writing });
+  // Only a whole-topic catch-up rewrites the dossier; a glance-only refresh on look does not (server decides).
+  const updating = updatingNow({ syncing: actions.syncing, writing: props.detail.memoryUpdating });
   const crumbs = breadcrumbs(props.detail);
   return (
     <div className="flex flex-col">
@@ -196,17 +196,13 @@ export function TopicHeader(props: { detail: TopicDetail; topics: TopicListItem[
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
         <h1 className="text-[22px] leading-[1.2] font-[650] tracking-[-0.024em] text-balance">{topic.name}</h1>
         <span className="flex gap-1">
-          {topic.driver && topic.userRole !== 'driver' && (
-            <span className={`${pill} pr-2 pl-[3px]`}>
-              <Avatar login={topic.driver} size="xxs" />
-              <span>
-                <span className="font-[550] text-ink">{topic.driver}</span> drives
-              </span>
+          {driver && <DriverMenu topicId={topic.id} driver={driver} />}
+          {/* "You drive" already says the role. */}
+          {topic.userRole !== 'driver' && driver?.kind !== 'you' && (
+            <span className={`${pill} px-2`} title="Your role in this topic">
+              {ROLE_LABELS[topic.userRole]}
             </span>
           )}
-          <span className={`${pill} px-2`} title="Your role in this topic">
-            {ROLE_LABELS[topic.userRole]}
-          </span>
           <PrCountPill detail={props.detail} />
         </span>
         <YourMoveChip moves={props.detail.yourMoves} />

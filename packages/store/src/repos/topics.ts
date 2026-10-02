@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { Topic, TopicStatus, TopicStatusChange, UserRole } from '@postpile/core';
+import type { Topic, TopicKind, TopicStatus, TopicStatusChange, UserRole } from '@postpile/core';
 import { all, one, run } from '../sql.ts';
 
 interface TopicRow {
@@ -11,6 +11,7 @@ interface TopicRow {
   driver: string | null;
   user_role: string;
   status: string;
+  kind: string;
   retired_at: string | null;
   area: string | null;
   created_at: string;
@@ -27,6 +28,7 @@ function toTopic(row: TopicRow): Topic {
     driver: row.driver,
     userRole: row.user_role as UserRole,
     status: row.status as TopicStatus,
+    kind: row.kind as TopicKind,
     retiredAt: row.retired_at,
     area: row.area,
     createdAt: row.created_at,
@@ -41,8 +43,8 @@ export class TopicRepo {
     run(
       this.db,
       `INSERT INTO topic
-         (id, name, summary, summary_input_hash, tailoring, driver, user_role, status, retired_at, area, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (id, name, summary, summary_input_hash, tailoring, driver, user_role, status, kind, retired_at, area, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       topic.id,
       topic.name,
       topic.summary,
@@ -51,6 +53,7 @@ export class TopicRepo {
       topic.driver,
       topic.userRole,
       topic.status,
+      topic.kind,
       topic.retiredAt,
       topic.area,
       topic.createdAt,
@@ -95,6 +98,11 @@ export class TopicRepo {
 
   setDriverAndRole(id: string, driver: string | null, userRole: UserRole, at: string): void {
     run(this.db, 'UPDATE topic SET driver = ?, user_role = ?, updated_at = ? WHERE id = ?', driver, userRole, at, id);
+  }
+
+  /** Set by the topic tidy, a new topic's agent answer, or the user. */
+  setKind(id: string, kind: TopicKind, at: string): void {
+    run(this.db, 'UPDATE topic SET kind = ?, updated_at = ? WHERE id = ?', kind, at, id);
   }
 
   setArea(id: string, area: string | null, at: string): void {

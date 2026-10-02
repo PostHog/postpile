@@ -35,6 +35,7 @@ function defaultDossier(input: DossierUpdateInput): DossierUpdateResult {
     closeFacts: [],
     confirmedFactIds: [],
     area: null,
+    topicKind: null,
     inputHash: '',
     model: FAKE_MODEL,
   };

@@ -24,7 +24,7 @@ function LastSyncBlock() {
     <section className="flex flex-col gap-1.5">
       <h2 className="text-[13px] font-semibold">Last sync</h2>
       {report ? (
-        <pre className={`rounded-tile border border-hairline bg-surface px-3 py-2 font-mono text-[11px] whitespace-pre-wrap ${report.errors.length > 0 ? 'text-unread-ink' : 'text-ink-2'}`}>
+        <pre className={`rounded-tile border border-hairline bg-surface px-3 py-2 font-mono text-[11px] whitespace-pre-wrap ${report.errors.length > 0 ? 'text-status-bad' : 'text-ink-2'}`}>
           {syncReportDetail(report)}
         </pre>
       ) : (
@@ -90,7 +90,7 @@ export function NotificationsPane(props: { onOpenTile: (pick: TilePick) => void 
           {rows.length === LIMIT && ` · newest ${LIMIT}`}
         </span>
       </div>
-      {notifications.error && <p className="text-xs text-unread-ink">Could not load notifications: {notifications.error.message}</p>}
+      {notifications.error && <p className="text-xs text-status-bad">Could not load notifications: {notifications.error.message}</p>}
       {notifications.isPending && <p className="text-xs text-muted">Loading…</p>}
       {!notifications.isPending && rows.length === 0 && !notifications.error && (
         <p className="rounded-tile border border-dashed border-frame px-4 py-8 text-center text-xs text-muted">No notification threads stored yet. Sync pulls them in.</p>

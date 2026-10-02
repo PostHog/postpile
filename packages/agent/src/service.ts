@@ -31,6 +31,7 @@ import type {
   Tile,
   Topic,
   TopicDelta,
+  TopicKind,
   TopicProposal,
   Viewer,
   WhoseTurn,
@@ -65,7 +66,10 @@ export interface TopicChoice {
   id: string;
   name: string;
   summary: string;
-  /** dossierBrief() of the topic's latest dossier; '' when it has none yet. */
+  kind: TopicKind;
+  /** The team that owns the topic's code ("acme/team-devex"), from its dossier; null when unknown. */
+  ownerTeam: string | null;
+  /** dossierBrief() of the topic's latest dossier; '' when it has none yet. In the Archive, says so first. */
   brief: string;
   /** PRs in the topic now. Small topics are where fragmentation shows. */
   memberCount: number;
@@ -88,13 +92,15 @@ export interface TopicAssignmentInput {
   context: PromptContext;
 }
 
-/** Where split PRs go: an existing topic, or a new one named after the project they serve. */
-export type TidyDestination = { kind: 'existing'; topicId: string } | { kind: 'new'; name: string };
+/** Where split PRs go: an existing topic, or a new one named after the goal they serve. */
+export type TidyDestination = { kind: 'existing'; topicId: string } | { kind: 'new'; name: string; topicKind: TopicKind };
 
-/** One active topic as the topic tidy sees it. */
+/** One topic as the topic tidy sees it: active, or in the Archive and still taking new PRs. */
 export interface TidyTopic {
   id: string;
   name: string;
+  kind: TopicKind;
+  inArchive: boolean;
   /** The dossier's goal, else the topic summary; '' when neither exists. */
   goal: string;
   prs: Pr[];
@@ -116,12 +122,16 @@ export interface TopicTidyResult {
   merges: { fromTopicIds: string[]; intoTopicId: string; name: string | null; reason: string }[];
   /** PRs that do not belong to topicId, and where they go instead; the tidy places them itself. */
   splits: { topicId: string; prKeys: PrKey[]; into: TidyDestination; reason: string }[];
+  /** A topic named after one step while it holds the whole goal; never one merged away. */
+  renames: { topicId: string; name: string; reason: string }[];
+  /** Topics whose kind changes; never one merged away. */
+  kinds: { topicId: string; kind: TopicKind }[];
 }
 
 export type TopicAssignment =
   | { prKey: PrKey; kind: 'existing'; topicId: string; reason: string }
   /** goal: one sentence, shown to later batches until the topic's first dossier. */
-  | { prKey: PrKey; kind: 'new'; name: string; goal: string; reason: string };
+  | { prKey: PrKey; kind: 'new'; name: string; goal: string; topicKind: TopicKind; reason: string };
 
 export interface SetGroupingInput {
   topic: Topic;
@@ -162,10 +172,12 @@ export interface EventOverrideProposal {
 export interface DraftCommentInput {
   pr: Pr;
   viewer: Viewer;
-  /** Login of the person being asked. */
-  person: string;
-  /** What the user wants to ask, in their own words. May be empty. */
+  /** Login of the person being asked. Null for a review note, addressed to nobody in particular. */
+  person: string | null;
+  /** What the user wants to ask, in their own words, or what the review note is for. May be empty for an ask. */
   intent: string;
+  /** Untrusted background lines (e.g. an earlier glance). Rendered inside the GitHub data fence, never as instructions. */
+  notes?: string[];
   context: PromptContext;
 }
 
@@ -244,6 +256,12 @@ export interface DossierUpdateInput {
   chatTurns: ChatMessage[];
   /** What the rules could tell about how the topic reaches the user. A decided relation wins over the answer. */
   relationSignals: RelationSignals;
+  /**
+   * The driver the user picked in the topic header (a login, TEAM_DRIVER or
+   * OUTSIDE_DRIVER); null: automatic. The dossier follows it, and the
+   * answer's own driver never moves the topic while it stands.
+   */
+  driverPick: string | null;
   /** Areas other topics use, to reuse. */
   areas: AreaChoice[];
   /** The topic's area now, null before the first update. */
@@ -274,6 +292,8 @@ export interface DossierUpdateResult {
   confirmedFactIds: string[];
   /** The area the answer picked, or null. The engine caps new areas per sync. */
   area: string | null;
+  /** The kind the answer judged the topic to be, or null to keep it. The engine sets it without asking. */
+  topicKind: TopicKind | null;
   inputHash: string;
   model: string;
 }

@@ -8,7 +8,7 @@ import { autoTile, filterKey, keptFor, listedTopics, nextKept, resolveSelection,
 
 /** A topic with `mine` open PRs of the viewer's. */
 function item(id: string, mine: number): TopicListItem {
-  const topic: Topic = { id, name: id, summary: '', summaryInputHash: null, tailoring: '', driver: null, userRole: 'watcher', status: 'active', retiredAt: null, area: null, createdAt: at(0), updatedAt: at(0) };
+  const topic: Topic = { id, name: id, summary: '', summaryInputHash: null, tailoring: '', driver: null, userRole: 'watcher', status: 'active', kind: 'project', retiredAt: null, area: null, createdAt: at(0), updatedAt: at(0) };
   return {
     topic,
     placement: null,
@@ -20,12 +20,12 @@ function item(id: string, mine: number): TopicListItem {
     urgentUnreadTiles: 0,
     openTiles: 0,
     totalTiles: 1,
-    yourMoves: [], unseenMergeTiles: 0,
+    yourMoves: [], unseenMergeTiles: 0, quiet: false,
     queues: { tiers: { needs_reply: 0, changes_requested: 0, mine, team: 0, to_review: 0, team_mentioned: 0, rest: 0 }, byYou: mine, byTeam: 0, changesAddressed: 0 },
-    section: mine > 0 ? 'mine' : null,
+    section: mine > 0 ? 'you_drive' : 'other_topics',
     people: [],
     prState: null,
-    prStateCounts: { open: 0, draft: 0, merged: 0, closed: 0 },
+    prStateCounts: { open: 0, merge_queue: 0, merge_queue_failed: 0, draft: 0, merged: 0, closed: 0 },
   };
 }
 
@@ -44,12 +44,13 @@ function pr(key: string): PrSummary {
     forWhom: { kind: 'you' },
     tier: 'rest',
     authorRelation: 'other',
-    status: { lifecycle: 'open', review: 'review', agentApprovers: [] },
+    status: { lifecycle: 'open', review: 'review', agentApprovers: [], mergeQueue: null, icon: 'open' },
     openThreads: 0,
     verdict: null,
     glanceStale: false,
     forYou: null,
     glanceGap: null,
+    glanceRefreshBlock: null,
     glanceState: 'ready',
     unseenLoudEvents: 0,
     unreadOnGitHub: false,

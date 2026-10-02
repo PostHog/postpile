@@ -1,7 +1,9 @@
-import type { ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
 import { TopicActions } from './AgentActions.tsx';
+import { TopicArchiveBox } from './TopicArchiveBox.tsx';
 import type { TileGroup, TileView, TopicDetail, TopicListItem } from '@postpile/core';
 import { gridGroups } from '../lib/queues.ts';
+import { useFlip } from '../lib/use-flip.ts';
 import { useHeldPlace } from '../lib/use-held-place.ts';
 import { ChevronIcon } from './icons.tsx';
 import { Tile } from './Tile.tsx';
@@ -21,11 +23,32 @@ interface TileGridProps {
   showYourMove: boolean;
 }
 
-/** Group names on screen. "Dealt with" is the tile state `done`; a finished topic stays "Finished". */
+/** Group names on screen. "Dealt with" is the tile state `done`; a topic with nothing left goes to the Archive. */
 const GROUP_LABELS: Record<TileGroup, string> = { unread: 'Unread', open: 'Open', dealt_with: 'Dealt with' };
 
 function TileCount(props: { count: number }) {
   return <span className="font-mono text-[10.5px] font-semibold text-hint tabular-nums">{props.count}</span>;
+}
+
+/**
+ * "· 1 PR open" after the Tiles count: open PRs that sit only in Dealt with
+ * tiles (core's `TopicDetail.openInDealtWith`). They are why the Archive box
+ * does not show. Nothing at 0.
+ */
+function OpenInDealtWithHint(props: { openIn: TopicDetail['openInDealtWith'] }) {
+  if (props.openIn.length === 0) {
+    return null;
+  }
+  const names = props.openIn.map((pr) => `${pr.label}${pr.isDraft ? ' (draft)' : ''}`).join(', ');
+  const title = `Still open: ${names}. The topic moves to the Archive once every PR is merged or closed.`;
+  return (
+    <>
+      <span className="text-ghost">·</span>
+      <span title={title}>
+        {props.openIn.length} {props.openIn.length === 1 ? 'PR' : 'PRs'} open
+      </span>
+    </>
+  );
 }
 
 /**
@@ -50,12 +73,13 @@ function YourMoveCount(props: { count: number }) {
  * Tiles in one column, never side by side: the selected tile's notch then
  * always points straight at the detail pane.
  */
-function Grid(props: TileGridProps & { views: TileView[] }) {
+function Grid(props: TileGridProps & { group: TileGroup; views: TileView[] }) {
   return (
     <div className="flex flex-col gap-3.5">
       {props.views.map((view) => (
         <Tile
           key={view.tile.id}
+          shownGroup={props.group}
           view={view}
           sets={props.detail.sets}
           topics={props.topics}
@@ -85,7 +109,7 @@ function GroupSection(props: TileGridProps & { group: TileGroup; views: TileView
   return (
     <section className="flex flex-col gap-2">
       {/* 16px in: the tile's 15px padding plus its 1px frame. */}
-      <h3 className="relative flex items-baseline gap-1.5 pl-4 text-[11.5px] leading-[normal] font-semibold text-ink-2">
+      <h3 data-flip-key={`group:${props.group}`} className="relative flex items-baseline gap-1.5 pl-4 text-[11.5px] leading-[normal] font-semibold text-ink-2">
         {props.group === 'unread' && (
           <GroupMarker>
             <span className="size-1.5 rounded-full bg-unread" />
@@ -114,7 +138,7 @@ function DealtWithGroup(props: TileGridProps & { views: TileView[] }) {
   const box = expanded ? 'h-7' : 'h-8 rounded-row bg-done inset-ring inset-ring-edge-hairline pr-3';
   return (
     <section className="flex flex-col gap-2">
-      <h3>
+      <h3 data-flip-key="group:dealt_with">
         <button
           type="button"
           aria-expanded={expanded}
@@ -137,7 +161,7 @@ function DealtWithGroup(props: TileGridProps & { views: TileView[] }) {
           <span className="shrink-0 text-[11px] font-normal text-hint group-hover:text-ink">{expanded ? 'Hide' : 'Show'}</span>
         </button>
       </h3>
-      {expanded && <Grid {...props} />}
+      {expanded && <Grid {...props} group="dealt_with" />}
     </section>
   );
 }
@@ -153,9 +177,14 @@ function tileId(view: TileView): string {
  * queue order (needs reply first, rest last). The selected tile keeps the
  * place it had when it was selected, even when its group changed (a mark,
  * the opened mark, a sync), until the selection moves ("Marked when you move
- * on", `useHeldPlace`); its look changes right away.
+ * on", `useHeldPlace`); its look changes right away. When it then takes its
+ * new place, or a sync moves a tile, the tiles and headings in between slide
+ * there and the moved tile lights up briefly (`useFlip`, "Marked when the
+ * dwell ends").
  */
 export function TileGrid(props: Omit<TileGridProps, 'showYourMove'>) {
+  const listRef = useRef<HTMLDivElement>(null);
+  useFlip(listRef, { landed: true });
   const matching = props.matchingTileIds;
   const tiles = matching ? props.detail.tiles.filter((view) => matching.has(view.tile.id)) : props.detail.tiles;
   const groups = useHeldPlace(props.selectedTileId, props.selectedTileId, gridGroups(tiles), tileId).filter((bucket) => bucket.items.length > 0);
@@ -163,13 +192,14 @@ export function TileGrid(props: Omit<TileGridProps, 'showYourMove'>) {
   const held = groups.some((bucket) => bucket.items.some((view) => view.group !== bucket.key));
   const showYourMove = matching === null && !held;
   return (
-    <div className="flex flex-col gap-5">
+    <div ref={listRef} className="flex flex-col gap-5">
       <div className="flex flex-col gap-3 pt-[13px] shadow-[inset_0_1px_0_var(--hairline)]">
         {/* Only the count: the Unread group's label right below already says how many are unread. */}
         <div className="flex items-center gap-2.5">
           <span className="text-xs font-semibold text-ink-2">Tiles</span>
           <span className="flex items-baseline gap-[5px] text-[11px] text-faint">
             <TileCount count={tiles.length} />
+            <OpenInDealtWithHint openIn={props.detail.openInDealtWith} />
             {tiles.length < props.detail.tiles.length && (
               <>
                 <span className="text-ghost">·</span>
@@ -181,6 +211,7 @@ export function TileGrid(props: Omit<TileGridProps, 'showYourMove'>) {
           </span>
         </div>
         <TopicActions detail={props.detail} />
+        <TopicArchiveBox detail={props.detail} />
       </div>
       {tiles.length === 0 && (
         <p className="rounded-tile border border-dashed border-frame px-4 py-8 text-center text-xs text-muted">

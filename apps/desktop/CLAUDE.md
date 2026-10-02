@@ -29,7 +29,7 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
 ## Data: typed query hooks, types from core
 
 - One file per resource in `api/`: `topics.ts` (`useTopics`, `useTopic`,
-  `useFinishedTopics` for the sidebar's Finished drawer),
+  `useFinishedTopics` for the sidebar's Archive drawer),
   `pr.ts` (`usePr`), `chat.ts` (`useChat`), `config.ts` (`useAppConfig`),
   `viewer.ts` (`useViewer`, login, teammates and home teams for the filter
   buttons; no home team hides Team, `visibleQueueFilters`),
@@ -210,24 +210,36 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   (`lib/sources.ts`: `lineTarget`, `changePath`) and shows "Why?".
 - `markTopicSeen` is quiet (no toast). `App.tsx` calls it when the user
   leaves a topic (another topic or the Inbox), not on a timer.
-- `markOpenedRead` is quiet too (no toast, no undo) and on the
-  `GithubWrite` list as `openedRead`, blocked while locked (never a
-  pending write). `useOpenedRead` in `App.tsx` calls it once per open,
-  when the user moves on (another PR or tile, the pane closed, the window
-  hidden or blurred) after the PR stayed 1.5s in the detail pane with the
-  window visible and focused (`OpenedReadTimer`: the dwell arms, leaving
-  fires; hidden before the dwell restarts the wait). Never while the PR is
-  still on screen: the status must not change under the user's eyes. Only when
-  `opensMarkRead` (`lib/opened-read.ts`) says a mark-read of that PR
+- `markOpenedRead` has no toast and is on the `GithubWrite` list as
+  `openedRead`, blocked while locked. `useOpenedRead` in `App.tsx` calls it
+  once per open, when the PR has stayed 1.5s in the detail pane with the
+  window visible and focused (`OpenedReadTimer`: the dwell end fires;
+  hidden before that restarts the wait, after it changes nothing). Only
+  when `opensMarkRead` (`lib/opened-read.ts`) says a mark-read of that PR
   leaves it done (`PrSummary.afterRead.done`, per PR, not the tile's). The
-  server checks again, marks the GitHub thread read if it is unread
-  ("opened in PostPile", listed under Handled quietly) and handles the PR
-  (done in PostPile too).
+  server checks again and marks it read like the pane's Mark read (its own
+  batch, undo token in `OpenedReadResult`). The pane then shows
+  `OpenedMarkNote` ("✓ Marked read" / "✓ Done for now") in the mark
+  button's place with Undo while the window lasts (`UNDO_WINDOW_MS` in
+  `lib/undo-window.ts`); Undo goes through `useActions().undo` and the open
+  does not arm again. Never a "Marks read when you leave" promise
+  (2026-10-01, DESIGN.md "Marked when the dwell ends").
+- The selected tile and its topic row hold their place (`useHeldPlace`)
+  until the selection moves; list moves then slide with `useFlip`
+  (`lib/use-flip.ts`): mark the moving elements `data-flip-key` (never one
+  inside another) and `data-flip-group`. The unread dot (`UnreadDot`
+  `shown`) stays mounted and fades out. Respect `prefers-reduced-motion`
+  (`motion-reduce:` or the hook's check) in any new motion.
 - A missing glance is worded from `PrSummary.glanceState` /
   `PrDetail.glanceState` through `glanceStateText` (`lib/glance.ts`),
   never "the next sync picks it up". Only a failed glance gets a button:
   Retry (`useActions().retryGlance`, local, not on the `GithubWrite`
   list). No manual refresh per PR or topic (decided 2026-09-29).
+  Refresh on look is automatic, not a button (2026-10-01): `useGlanceLook`
+  in `DetailPane` asks `useActions().refreshGlanceOnLook` once per open
+  after the 1.5s dwell when the glance is stale; the server decides, and
+  the words come from `glanceState` and `glanceRefreshBlock`. Its timer
+  (`lib/glance-look.ts`) is its own, apart from the opened mark's.
 - Approve is final (GitHub has no un-approve). Keep it a deliberate click in
   the detail pane, in the action bar right under the assessment boxes.
 - The detail pane acts on the selected PR, the tile footer on the tile
@@ -246,10 +258,12 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   team's review request, unsubscribes and marks the PR done. It asks once
   in a small popover and has no undo. Never the primary.
 - "Not up to date" has one wording (`lib/staleness.ts`): "updating" while
-  `useActions().syncing` or a catch-up writes (`glanceState` `writing`),
-  else "out of date". Never write "stale" or "Sync to refresh" in the UI.
-  `MemoryLine` and `WhyPanel` take `updating` from their caller (topic or
-  PR state via `updatingNow`); don't read `syncing` alone there.
+  `useActions().syncing` or a catch-up writes (`glanceState` `writing`
+  for a glance; `memoryUpdating` on the topic or PR for dossier and facts,
+  since a glance-only refresh rewrites no memory), else "out of date".
+  Never write "stale" or "Sync to refresh" in the UI. `MemoryLine` and
+  `WhyPanel` take `updating` from their caller (topic or PR state via
+  `updatingNow`); don't read `syncing` alone there.
   A stale glance shows `StaleVerdictBox` (grey, dashed) with the advice
   folded behind "Show old assessment".
 
@@ -266,6 +280,12 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   chevrons, ages next to a louder line, done tiles.
 - **Diff red**: `--diff-red` for deletions in the Size fact. Coral
   (`unread`) is never a diff or CI colour; the Checks fact is grey.
+- **One colour per meaning** (2026-10-01, DESIGN.md "Colour per
+  meaning"): `closer` only for the agent's Look closer; `status-bad` the
+  one red for bad (closed, changes requested, risk, errors); `safe` the one
+  good green (approved, Looks safe, Approve); merged purple also for
+  queued; coral only for unread; honey only for aimed at you and your
+  move; app-health warnings use `amber-*`.
 - **Tailwind's default palette is switched off** (`--color-*: initial`). Only
   token colors exist as utilities. Need a new color? Add a token to
   `tokens.css` and a `--color-*` line to `@theme`, don't reach for hex in a
@@ -325,7 +345,7 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   `DetailPane` (+ `DetailContext`, `PrBody`, `GlanceCard`, `KeyFiles`,
   `PrDescription`, `PrFacts`, `ReviewList`, `NewSinceBox` (under the
   title; the activity list then shows only earlier events),
-  `AgentFacts`, `ActivityTimeline`, `ActionBar` (+ `RemoveTeamButton`), `AskComposer`, `TileChat`),
+  `AgentFacts`, `ActivityTimeline`, `ActionBar` (+ `RemoveTeamButton`, `ApproveButtons` (split Approve and Comment review), `ComposePopover` (Approve with comment, Comment review and Ask share it)), `TileChat`),
   `StatusFooter` (+ `WritesLock`), `Toast`, `SearchField` (title bar filter),
   `ToolsNotice` (missing gh or claude, with `FixCommand`, shared with setup),
   `RepoScopeMenu` (title bar repo scope + "Let it go stale"),
@@ -365,9 +385,12 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
 - One-path glyphs go in `GLYPH_PATHS` (`Glyph`); anything with a fill or
   a dash pattern gets its own small component (`PrStateIcon` draft,
   `RingDotIcon`).
-- PR state: `PrStateIcon` (open green pull request, draft dashed grey
-  circle, merged purple, closed red, queued amber; the word from
-  `LIFECYCLE_WORDS` as its title). Review state: `StateWordLabel` with a
+- PR state: `PrStateIcon` with core's `PrStatus.icon` (open green pull
+  request, draft dashed grey circle, merged purple, closed red, the filled
+  Octicons merge-queue icon in `--pending` amber while queued and red once
+  the queue took it out; the word from `ICON_WORDS` as its title). A queued
+  PR's row shows `mergeQueueWord` ("Merge queue: Testing") in place of the
+  review word. Review state: `StateWordLabel` with a
   `StateWord` from `reviewWord` / `rowStateWord` (`lib/pr.ts`). Never a CI
   icon or word outside `PrFacts`.
 - Icons carry words: a lone icon gets a `title` (and `aria-label` when it
@@ -468,16 +491,29 @@ them into the team pill (you and teammates: sea tint, `inset-ring-sea-ring`,
 `PeopleIcon` first, avatars overlapping, tooltip "You and your team: …")
 and the other authors after it, overlapping the same way.
 
-The sidebar lists topics in queue sections (`lib/queues.ts`,
-`queueLayout`; DESIGN.md "Queue sections"): Needs reply, Changes you
-requested, My PRs, Team's PRs, To review, Team mentioned, then Other
-topics, which keeps the old groups from `lib/sidebar.ts` (`sidebarGroups`:
-Needs you, Your team by area, Routed, FYI). Each topic sits once, in its
-section core gives it (`TopicListItem.section`, `topicSection`); the
-topic header's breadcrumb reads the same field on `TopicDetail` and the same
-label and dot (`lib/sections.ts`). The queue filters still match it by
-any PR. Fold state is local UI state; Routed, FYI and Finished start
-folded. The Finished drawer (retired topics, `useFinishedTopics`) hides while search
+The sidebar lists topics in sections (`lib/queues.ts`, `sidebarBuckets`,
+order typed with core's `TopicSectionOrder`; DESIGN.md "Ownership
+sections"): Needs reply, Changes you requested, To review, Team mentioned,
+You drive, Your team owns, Other work, then Other topics. Each topic sits
+once, in the section core gives it (`TopicListItem.section`,
+`topicSection`), in core's order; the topic header's breadcrumb reads the
+same field on `TopicDetail` and the same label and dot
+(`lib/sections.ts`). `lib/sidebar.ts` holds the folds: Other work's area
+folds (`areaFolds`, "More" for single-topic areas), their default
+(`startsOpen`: your PR, move or unread), the rows a folded fold keeps
+(`rowsWhileFolded`, urgent unread) and its header summary; the selected topic counts like an urgent row (a fold holding it stays open, a folded one keeps its row); Other topics
+splits into unplaced rows ("not sorted yet" without a dossier) and the FYI
+fold. The queue filters still match a topic by any PR. Fold choices are
+local UI state for the session; FYI and the Archive start folded.
+Dealt-with topics (core `quiet`) leave You drive, Your team owns and Other
+work (DESIGN.md "Dealt-with topics leave the list"): `sidebarBuckets(items,
+hideDealt)` puts them in a `dealt:<section>` bucket after their section
+(`dealtItems`), so `useHeldPlace` keeps a selected row that turns quiet or
+gets news; `DealtLine` ("+ N dealt with", `dealtLineLabel`, fold key
+`dealtKey`) opens them, folded it keeps only the selected one
+(`rowsWhileFolded`), `allDealtNote` marks an all-dealt header, and Other
+work's default is `otherWorkStartsOpen`. `hideDealt` is off while the
+search or a queue filter narrows. The Archive drawer (retired topics, `useFinishedTopics`) hides while search
 or a queue filter narrows; a finished topic is not in `useTopics`, so
 `App` opens it by id (`pickedFinishedId`) instead of through `visibleTopic`. The "Topics with
 any PR | my PRs | team PRs" switch (`QueueFilters`) is plain UI state in

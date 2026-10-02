@@ -1,4 +1,4 @@
-import { cutSnapshotCovers, deriveEvents, quietReadCheck, touchedReadCheck, type Pr } from '@postpile/core';
+import { snapshotCoversSince, deriveEvents, quietReadCheck, touchedReadCheck, type Pr } from '@postpile/core';
 import { viewer } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { loadFixture } from './fake-fetch.ts';
@@ -99,7 +99,6 @@ describe('toPr: pending reviews', () => {
       userState: null,
       viewer,
       prFetchedAt: '2026-09-21T00:00:00.000Z',
-      now: '2026-09-21T00:00:00.000Z',
     });
     expect(check).toEqual({ kind: 'skip', why: 'no_touch' });
   });
@@ -169,7 +168,6 @@ describe('toPr: truncation', () => {
         viewer,
         notYours: false,
         prFetchedAt: '2026-09-21T00:00:00.000Z',
-        now: '2026-09-21T00:00:00.000Z',
       });
 
     expect(pr.truncated).toBe(true);
@@ -191,7 +189,7 @@ describe('toPr: truncation', () => {
     const pr = toPr(ref, raw);
     expect(pr.threads).toHaveLength(44);
     expect(pr.capHits).toEqual([{ list: 'review_threads', nodes: 50, oldestAt: null }]);
-    expect(cutSnapshotCovers(pr, '2026-09-30T00:00:00.000Z')).toBe(false);
+    expect(snapshotCoversSince(pr, '2026-09-30T00:00:00.000Z')).toBe(false);
   });
 
   it('records no cap hit for a list GitHub counts longer than it returns below the cap', () => {
@@ -200,7 +198,7 @@ describe('toPr: truncation', () => {
     const pr = toPr(ref, raw);
     expect(pr.truncated).toBe(true);
     expect(pr.capHits).toEqual([]);
-    expect(cutSnapshotCovers(pr, '2020-01-01T00:00:00.000Z')).toBe(true);
+    expect(snapshotCoversSince(pr, '2020-01-01T00:00:00.000Z')).toBe(true);
   });
 
   it('flags a PR with more comments in one thread than the query took', () => {

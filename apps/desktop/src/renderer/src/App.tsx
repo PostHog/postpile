@@ -41,7 +41,6 @@ import { filterKey, keptFor, listedTopics, nextKept, resolveSelection, revealedF
 import { clampPaneWidth, DETAIL_MIN_WIDTH, paneColumns, resolvedColumnWidths, type ResizablePane } from './lib/pane-widths.ts';
 import { tileOpenedProps } from './lib/tile-telemetry.ts';
 import { toolsNotice } from './lib/tools.ts';
-import { topicTelemetrySection } from './lib/topic-section.ts';
 import { usePaneWidths } from './lib/use-pane-widths.ts';
 import { useNavHistory, useNavShortcuts } from './lib/use-nav-history.ts';
 import { OpenedReadContext, useOpenedRead } from './lib/use-opened-read.ts';
@@ -138,7 +137,7 @@ export function App() {
   // (2026-10-01). It holds while the user stays in that topic under the same filters.
   const [revealed, setRevealed] = useState<KeptView | null>(null);
   const revealedNow = revealedFor(revealed, nav.current, currentFilterKey);
-  // A topic picked in the Finished drawer is not in the list, so it opens by id.
+  // A topic picked in the Archive drawer is not in the list, so it opens by id.
   // Search and the queue filters cover live topics only: while they narrow, their first match shows.
   // A revealed topic the list does not hold (another repo, finished) opens by id the same way.
   const pickedFinishedId = nav.current.topicId !== null && finishedIds.has(nav.current.topicId) ? nav.current.topicId : null;
@@ -371,7 +370,7 @@ export function App() {
               onSelect={(topicId) => {
                 const item = items.find((candidate) => candidate.topic.id === topicId);
                 if (item) {
-                  sendTelemetry('topic_opened', { section: topicTelemetrySection(item.queues) });
+                  sendTelemetry('topic_opened', { section: item.section });
                 }
                 go({ pane: 'topic', topicId, tileId: null, prKey: null });
               }}

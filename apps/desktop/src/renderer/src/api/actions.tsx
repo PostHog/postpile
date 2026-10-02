@@ -13,6 +13,7 @@ import type {
   FeedbackInput,
   GitHubWritesChange,
   GitHubWritesStatus,
+  GlanceLookResult,
   InstructionsChatReply,
   InstructionsDecision,
   InstructionsProposal,
@@ -28,6 +29,7 @@ import type {
   PrDetail,
   PrKey,
   RepoOverview,
+  ReviewNoteKind,
   SetupAcceptRequest,
   SetupAcceptResult,
   SetupFitRequest,
@@ -55,6 +57,7 @@ import { markReadNotice } from '../lib/mark-read.ts';
 import { approvedDetail, markedReadPr, markedReadTile, snoozedTile, withApprovedPrs, withTile, withTiles } from '../lib/optimistic.ts';
 import { newerReport } from '../lib/sync-report.ts';
 import { teamRoleNotice } from '../lib/team-roles.ts';
+import { UNDO_WINDOW_MS } from '../lib/undo-window.ts';
 import { useLiveStatus } from './live.ts';
 import { useAppConfig } from './config.ts';
 import { useLastSyncReport } from './sync.ts';
@@ -64,8 +67,6 @@ import { queryKeys } from './keys.ts';
 import { sendTelemetry } from './telemetry.ts';
 import { webPinger } from '../lib/web-pings.ts';
 
-// Matches UNDO_WINDOW_MS in the engine. The renderer imports types only.
-const UNDO_WINDOW_MS = 6000;
 const NOTICE_MS = 6000;
 // Matches the engine's memory correction undo tokens.
 const MEMORY_UNDO_PREFIX = 'memory:';
@@ -108,6 +109,12 @@ export interface Actions {
   dismissNotice(): void;
   /** A full sync runs: this window's "Sync now", or one the engine started (start sync elsewhere, the hourly auto sync). */
   syncing: boolean;
+  /**
+   * Counts the user's explicit topic moves (driver picks). The sidebar holds
+   * the open topic's row while a tile stays selected; a move re-takes that
+   * place, so the picked topic goes to its new section at once.
+   */
+  topicMoves: number;
   lastSync: SyncReport | null;
   /** Mark-reads still inside their undo window, as far as this window knows. */
   pendingMarkReads: number;
@@ -126,13 +133,24 @@ export interface Actions {
   /** "Mark read" on a thread in the notifications debug view. Same queue, undo and lock as a tile. */
   markThreadRead(threadId: string): Promise<void>;
   /**
-   * The PR stayed open in the detail pane: the server marks its GitHub thread
-   * read when nothing is asked of the user. Quiet (no toast, no undo), and
-   * never sent while GitHub writes are locked.
+   * The PR stayed through the dwell in the detail pane: the server marks it
+   * read when nothing is asked of the user, like the pane's Mark read. No
+   * toast: the mark button says it and offers the Undo (`undo` with the
+   * result's token). Never sent while GitHub writes are locked; null when it
+   * was not sent or failed.
    */
-  markOpenedRead(prKey: PrKey): Promise<void>;
-  /** `headOid`: the head commit on screen; the server refuses the approval when the PR moved past it. */
-  approve(prKey: PrKey, headOid: string): Promise<void>;
+  markOpenedRead(prKey: PrKey): Promise<OpenedReadResult | null>;
+  /**
+   * `headOid`: the head commit on screen; the server refuses the approval when
+   * the PR moved past it. `body`: the note from "Approve with comment", empty for none.
+   */
+  approve(prKey: PrKey, headOid: string, body?: string): Promise<void>;
+  /**
+   * "Comment review": a review with event COMMENT on `headOid`, refused like
+   * approve when the PR moved past it. Final, blocked while locked. Returns
+   * true when it went out.
+   */
+  commentReview(prKey: PrKey, headOid: string, body: string): Promise<boolean>;
   /**
    * The ✨ Approve of a tile or the topic, after the confirm list: one call for
    * the covered PRs. Optimistic like the pane's approve, never an Undo.
@@ -143,6 +161,12 @@ export interface Actions {
   removeTeamRequest(prKey: PrKey, team: string): Promise<void>;
   /** Retry on a failed glance: a catch-up run for the PR's topic. Agent calls only, not a GitHub write. */
   retryGlance(prKey: PrKey): Promise<void>;
+  /**
+   * The PR stayed open with a stale glance (`useGlanceLook`): the server
+   * writes a new one when it is still behind and a refresh can run. Quiet
+   * (no toast, no busy key). Agent calls only, not a GitHub write.
+   */
+  refreshGlanceOnLook(prKey: PrKey): Promise<void>;
   /** `afterRead`: what the tile would be after it (`TileView.afterRead`), so the toast can say it is still your move. */
   markRead(tileId: string, afterRead?: TileAfterRead): Promise<void>;
   /** The topic's ✨ "Mark N read": the covered tiles as one batch with one Undo. `skipped` only words the toast. */
@@ -191,8 +215,14 @@ export interface Actions {
   sendTestNotification(): Promise<void>;
   /** Quiet: no toast. Called when the user leaves a topic. */
   markTopicSeen(topicId: string): Promise<void>;
+  /** "Archive now" on a topic with nothing left. Local, not a GitHub write. */
+  archiveTopic(topicId: string): Promise<void>;
+  /** The header's driver menu: a choice's value, null for Reset to automatic. Local, not a GitHub write. */
+  setTopicDriver(topicId: string, driver: string | null): Promise<void>;
   /** Returns the agent's draft, or null when drafting failed. */
   draftAsk(prKey: PrKey, person: string, intent: string): Promise<string | null>;
+  /** The agent's draft for "Approve with comment" or "Comment review", or null when drafting failed. */
+  draftReviewNote(prKey: PrKey, kind: ReviewNoteKind): Promise<string | null>;
   /** Returns true when the comment went out. */
   sendComment(prKey: PrKey, body: string): Promise<boolean>;
   chat(tileId: string, message: string): Promise<ChatReply | null>;
@@ -242,6 +272,7 @@ export function ActionsProvider(props: { children: ReactNode }) {
   const [busy, setBusy] = useState<string[]>([]);
   const [pendingUndos, setPendingUndos] = useState<PendingUndo[]>([]);
   const [syncing, setSyncing] = useState(false);
+  const [topicMoves, setTopicMoves] = useState(0);
   const [lastSync, setLastSync] = useState<SyncReport | null>(null);
   // Before this window's first sync: the one the engine stored, e.g. a start sync that failed.
   const storedLastSync = useLastSyncReport().data ?? null;
@@ -505,13 +536,63 @@ export function ActionsProvider(props: { children: ReactNode }) {
     }
   }
 
-  async function markOpenedRead(prKey: PrKey): Promise<void> {
+  async function archiveTopic(topicId: string): Promise<void> {
+    try {
+      const path = `/api/topics/${encodeURIComponent(topicId)}/archive`;
+      const result = await withBusy(`archiveTopic:${topicId}`, () => request<ActionResult>('POST', path));
+      show(result.ok ? 'ok' : 'error', result.message);
+      // The Archive list first: a topic in neither list makes the view fall back to another topic and pin it.
+      await queryClient.invalidateQueries({ queryKey: queryKeys.finishedTopics });
+      await refreshAll();
+    } catch (error) {
+      show('error', `Could not archive the topic: ${errorText(error)}`);
+    }
+  }
+
+  async function setTopicDriver(topicId: string, driver: string | null): Promise<void> {
+    try {
+      const path = `/api/topics/${encodeURIComponent(topicId)}/driver`;
+      const result = await withBusy(`topicDriver:${topicId}`, () => request<ActionResult>('POST', path, { driver }));
+      // The topic moving in the sidebar is the confirmation; only a refusal says something.
+      await refreshAll();
+      if (result.ok) {
+        setTopicMoves((count) => count + 1);
+      } else {
+        show('error', result.message);
+      }
+    } catch (error) {
+      show('error', `Could not set the driver: ${errorText(error)}`);
+    }
+  }
+
+  async function markOpenedRead(prKey: PrKey): Promise<OpenedReadResult | null> {
     if (writeBlockedReason('openedRead', writes) !== null) {
-      return;
+      return null;
     }
     try {
       const result = await request<OpenedReadResult>('POST', `${prPath(prKey)}/opened`);
+      const token = result.undoToken;
+      if (token) {
+        // Counted in the footer and refetched when the engine's window ends, like a clicked mark-read.
+        const until = result.undoUntil === null ? Date.now() + UNDO_WINDOW_MS : Date.parse(result.undoUntil);
+        setPendingUndos((current) => [...current, { token, until }]);
+      }
       if (result.marked) {
+        // Not awaited: the button's Undo window runs from this answer, not from when the refetch lands.
+        void refreshAll();
+      }
+      return result;
+    } catch {
+      // Nobody clicked anything, so nothing to report: the next open or sync tries again.
+      return null;
+    }
+  }
+
+  async function refreshGlanceOnLook(prKey: PrKey): Promise<void> {
+    try {
+      const result = await request<GlanceLookResult>('POST', `${prPath(prKey)}/glance/look`);
+      // A run started or queued: refetch now, so the card says "Updating now" without waiting for the live status.
+      if (result.outcome === 'started' || result.outcome === 'queued') {
         await refreshAll();
       }
     } catch {
@@ -571,12 +652,11 @@ export function ActionsProvider(props: { children: ReactNode }) {
     }
   }
 
-  async function draftAsk(prKey: PrKey, person: string, intent: string): Promise<string | null> {
+  /** An agent draft of a PR comment from `path`; a failure says why in the toast and returns null. */
+  async function draft(busyKey: string, path: string, body: object): Promise<string | null> {
     try {
-      const draft = await withBusy(`ask:${prKey}`, () =>
-        request<{ body: string }>('POST', `${prPath(prKey)}/draft-ask`, { person, intent }),
-      );
-      return draft.body;
+      const result = await withBusy(busyKey, () => request<{ body: string }>('POST', path, body));
+      return result.body;
     } catch (error) {
       show('error', `Draft failed: ${errorText(error)}`);
       return null;
@@ -704,6 +784,7 @@ export function ActionsProvider(props: { children: ReactNode }) {
     notice,
     dismissNotice: () => setNotice(null),
     syncing: syncing || backgroundSync,
+    topicMoves,
     // A background sync after this window's last "Sync now" is the newer one.
     lastSync: newerReport(lastSync, storedLastSync),
     // Memory corrections carry undo tokens too, but only mark-reads wait to reach GitHub.
@@ -719,12 +800,14 @@ export function ActionsProvider(props: { children: ReactNode }) {
     markThreadRead: async (threadId) => {
       await run(`markThread:${threadId}`, 'markRead', () => request('POST', `/api/notifications/${encodeURIComponent(threadId)}/mark-read`));
     },
-    approve: async (prKey, headOid) => {
+    approve: async (prKey, headOid, body = '') => {
       await runApprove(`approve:${prKey}`, [prKey], async () => {
-        const result = await request<ActionResult>('POST', `${prPath(prKey)}/approve`, { headOid });
+        const result = await request<ActionResult>('POST', `${prPath(prKey)}/approve`, { headOid, body });
         return { ...result, results: [{ prKey, ok: result.ok, message: result.message }] };
       });
     },
+    commentReview: (prKey, headOid, body) =>
+      run(`commentReview:${prKey}`, 'commentReview', () => request('POST', `${prPath(prKey)}/comment-review`, { headOid, body })),
     approveAgent: async (input) => {
       const prKeys = input.prs.map((pr) => pr.prKey);
       await runApprove(input.busyKey, prKeys, () => request<BatchApproveResult>('POST', '/api/agent-actions/approve', { prs: input.prs, from: input.from }));
@@ -801,8 +884,12 @@ export function ActionsProvider(props: { children: ReactNode }) {
     connectMcp: (from) => run('mcp:connect', null, () => request('POST', '/api/mcp-connection', { from })),
     hideMcpConnect: () => run('mcp:not-now', null, () => request('POST', '/api/mcp-connection/not-now')),
     markTopicSeen,
+    archiveTopic,
+    setTopicDriver,
     markOpenedRead,
-    draftAsk,
+    refreshGlanceOnLook,
+    draftAsk: (prKey, person, intent) => draft(`ask:${prKey}`, `${prPath(prKey)}/draft-ask`, { person, intent }),
+    draftReviewNote: (prKey, kind) => draft(`reviewNote:${prKey}`, `${prPath(prKey)}/draft-review-note`, { kind }),
     sendComment: (prKey, body) => run(`comment:${prKey}`, 'comment', () => request('POST', `${prPath(prKey)}/comment`, { body })),
     chat,
     instructionsChat,

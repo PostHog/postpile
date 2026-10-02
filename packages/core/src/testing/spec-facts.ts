@@ -6,9 +6,9 @@
 // can never move both sides of a check. Nothing here imports a rule module;
 // only `sameLogin` and the builder's names are shared.
 import { sameLogin } from '../mentions.ts';
-import type { Comment, IsoTime, Pr, Review, TimelineItem, UserPrState, Viewer } from '../types.ts';
-import type { CommentText } from './board-spec.ts';
-import { AUTOMATION_LOGINS, COMMENT_BODIES, MENTIONED_TEAMS } from './build-board.ts';
+import type { Comment, IsoTime, Pr, PrEvent, Review, TimelineItem, UserPrState, Viewer } from '../types.ts';
+import type { CommentText, TrunkText } from './board-spec.ts';
+import { AUTOMATION_LOGINS, COMMENT_BODIES, MENTIONED_TEAMS, TRUNK_BODIES, TRUNK_LOGIN } from './build-board.ts';
 
 // ---------------------------------------------------------------------------
 // People
@@ -145,6 +145,90 @@ export function saysDeploy(body: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// The merge queue (DESIGN "Merge queue"; the builder writes one body per TrunkText)
+// ---------------------------------------------------------------------------
+
+/** A step in Trunk's queue as the spec reads it, and when trunk said it. */
+export interface SpecQueueStep {
+  state: 'submitted' | 'testing' | 'failed';
+  /** failed: why ("tests failed"), null when trunk gives none; null for the other steps. */
+  reason: string | null;
+  at: IsoTime;
+}
+
+/**
+ * What each trunk body says: a step, or nothing (the offer, cancelled by a
+ * user, merged, a line nobody knows). A stack testing reads as testing; a
+ * ❌ line in words nobody knows is failed, with no reason to give.
+ */
+const TRUNK_STEPS: Record<TrunkText, Omit<SpecQueueStep, 'at'> | null> = {
+  offer: null,
+  submitted: { state: 'submitted', reason: null },
+  testing: { state: 'testing', reason: null },
+  stack_testing: { state: 'testing', reason: null },
+  failed: { state: 'failed', reason: 'tests failed' },
+  emoji_failed: { state: 'failed', reason: null },
+  cancelled: null,
+  merged: null,
+  garbage: null,
+};
+
+/** Each trunk comment at its last edit (else when posted), oldest first, with what it says; a body the builder never wrote for trunk says nothing. */
+function trunkStatuses(pr: Pr): { at: IsoTime; step: Omit<SpecQueueStep, 'at'> | null }[] {
+  return pr.comments
+    .filter((comment) => sameLogin(comment.author, TRUNK_LOGIN))
+    .map((comment) => {
+      const text = (Object.entries(TRUNK_BODIES) as [TrunkText, string][]).find(([, body]) => body === comment.body)?.[0];
+      return { at: comment.lastEditedAt ?? comment.createdAt, step: text === undefined ? null : TRUNK_STEPS[text] };
+    })
+    .toSorted((a, b) => a.at.localeCompare(b.at));
+}
+
+/** Where an open PR stands in Trunk's queue: what trunk's newest comment says. */
+export function specMergeQueue(pr: Pr): SpecQueueStep | null {
+  const newest = trunkStatuses(pr).at(-1);
+  return pr.state === 'OPEN' && !pr.isDraft && newest?.step ? { ...newest.step, at: newest.at } : null;
+}
+
+/** Trunk's comment or edit at `at` took the PR from anything else to failed, and it is failed still. */
+export function specQueueFailedAt(pr: Pr, at: IsoTime): SpecQueueStep | null {
+  if (specMergeQueue(pr)?.state !== 'failed') {
+    return null;
+  }
+  const statuses = trunkStatuses(pr);
+  const then = statuses.filter((status) => status.at <= at).at(-1);
+  const before = statuses.filter((status) => status.at < at).at(-1);
+  if (then?.at !== at || then.step?.state !== 'failed' || before?.step?.state === 'failed') {
+    return null;
+  }
+  return { ...then.step, at };
+}
+
+/** In GitHub's own merge queue: the newest queue entry on the timeline is an add. */
+export function inGitHubQueue(pr: Pr): boolean {
+  const entries = pr.timeline.filter((item) => item.kind === 'added_to_merge_queue' || item.kind === 'removed_from_merge_queue');
+  return entries.at(-1)?.kind === 'added_to_merge_queue';
+}
+
+/** The PR's state icon: merged, closed and drafts as they are; an open PR failed in Trunk's queue red, in either queue amber, else open. */
+export function specPrIcon(pr: Pr): string {
+  if (pr.state === 'MERGED') {
+    return 'merged';
+  }
+  if (pr.state === 'CLOSED') {
+    return 'closed';
+  }
+  if (pr.isDraft) {
+    return 'draft';
+  }
+  const queue = specMergeQueue(pr);
+  if (queue?.state === 'failed') {
+    return 'merge_queue_failed';
+  }
+  return queue !== null || inGitHubQueue(pr) ? 'merge_queue' : 'open';
+}
+
+// ---------------------------------------------------------------------------
 // Reviews
 // ---------------------------------------------------------------------------
 
@@ -230,6 +314,16 @@ export function requestSubjectOf(pr: Pr, event: { kind: string; sourceId: string
   return pr.timeline.find((item) => item.id === event.sourceId)?.subject ?? null;
 }
 
+/** A review request event naming the viewer or one of their teams, whoever made it. */
+export function isViewerRequestEvent(pr: Pr, viewer: Viewer, event: PrEvent): boolean {
+  return event.kind === 'review_requested' && asksViewer(viewer, requestSubjectOf(pr, event));
+}
+
+/** When the newest review request of the viewer or one of their teams came, null when none did. */
+export function latestViewerRequestAt(pr: Pr, viewer: Viewer, events: PrEvent[]): IsoTime | null {
+  return events.filter((event) => isViewerRequestEvent(pr, viewer, event)).map((event) => event.at).toSorted().at(-1) ?? null;
+}
+
 /** The viewer or their team was asked at some point: pending now, or in the timeline. */
 export function viewerWasAsked(pr: Pr, viewer: Viewer): boolean {
   const pending = [...pr.reviewerUsers, ...pr.reviewerTeams].some((subject) => asksViewer(viewer, subject));
@@ -242,12 +336,15 @@ export function viewerWasAsked(pr: Pr, viewer: Viewer): boolean {
  * the list is unknown). On a teammate's PR only an approval or a changes
  * request.
  */
-function homeTeamTakers(pr: Pr, viewer: Viewer): string[] {
+function homeTeamTakers(pr: Pr, viewer: Viewer, since: IsoTime | null = null): string[] {
   const teammatesPr = teammateOwns(pr, viewer);
   const takers: string[] = [];
   for (const review of pr.reviews) {
     const who = review.author;
     if (review.state === 'PENDING' || sameLogin(who, viewer.login) || isOwner(pr, who) || isAutomationLogin(who)) {
+      continue;
+    }
+    if (since !== null && review.submittedAt <= since) {
       continue;
     }
     if (viewer.teamMembers !== undefined && !isKnownTeammate(viewer, who)) {
@@ -268,11 +365,11 @@ function homeTeamTakers(pr: Pr, viewer: Viewer): string[] {
  * (not dismissed) other than the viewer, the author, the owners and
  * automation. Its members are not known, so anyone counts.
  */
-function headReviewers(pr: Pr, viewer: Viewer): string[] {
+function headReviewers(pr: Pr, viewer: Viewer, since: IsoTime | null = null): string[] {
   const takers: string[] = [];
   for (const review of pr.reviews) {
     const who = review.author;
-    const sent = review.state !== 'PENDING' && review.state !== 'DISMISSED' && review.commitOid === pr.headOid;
+    const sent = review.state !== 'PENDING' && review.state !== 'DISMISSED' && review.commitOid === pr.headOid && (since === null || review.submittedAt > since);
     const someoneElse = !sameLogin(who, viewer.login) && !sameLogin(who, pr.author) && !isOwner(pr, who) && !isAutomationLogin(who);
     if (sent && someoneElse && !takers.some((login) => sameLogin(login, who))) {
       takers.push(who);
@@ -290,9 +387,9 @@ function routingTeamPending(pr: Pr, viewer: Viewer): boolean {
 }
 
 /** Who picked up the viewer's pending team requests: teammates for a home team, anyone who reviewed the head for a routing team. */
-export function teamTakers(pr: Pr, viewer: Viewer): string[] {
-  const takers = homeTeamPending(pr, viewer) ? homeTeamTakers(pr, viewer) : [];
-  for (const who of routingTeamPending(pr, viewer) ? headReviewers(pr, viewer) : []) {
+export function teamTakers(pr: Pr, viewer: Viewer, since: IsoTime | null = null): string[] {
+  const takers = homeTeamPending(pr, viewer) ? homeTeamTakers(pr, viewer, since) : [];
+  for (const who of routingTeamPending(pr, viewer) ? headReviewers(pr, viewer, since) : []) {
     if (!takers.some((login) => sameLogin(login, who))) {
       takers.push(who);
     }

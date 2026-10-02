@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { at, makeEvent, makePr, makeUserState, NO_OPENED_READ, NO_OPENED_READ_INPUT, NO_PR_FACTS, viewer } from './fixtures.ts';
-import { buildPrSummary, tileUnreadPrKeys, type PrSummaryInput } from './tile-view.ts';
+import { buildPrSummary, tileUnreadPrKeys, tileVerdict, type PrSummaryInput } from './tile-view.ts';
 import type { Pr, PrEvent, TileMember, TileState } from './types.ts';
 import type { PrSummary } from './views.ts';
 
@@ -17,6 +17,7 @@ function summaryInput(pr: Pr, events: PrEvent[], overrides: Partial<PrSummaryInp
     glance: null,
     glanceStale: false,
     glanceGap: null,
+    glanceRefreshBlock: null,
     glanceState: 'none',
     quietRepo: false,
     repoLabel: null,
@@ -81,12 +82,13 @@ function row(number: number, overrides: Partial<PrSummary> = {}): PrSummary {
     forWhom: { kind: 'you' },
     tier: 'to_review',
     authorRelation: 'team',
-    status: { lifecycle: 'open', review: 'review', agentApprovers: [] },
+    status: { lifecycle: 'open', review: 'review', agentApprovers: [], mergeQueue: null, icon: 'open' },
     openThreads: 0,
     verdict: 'LOOKS_SAFE',
     glanceStale: false,
     forYou: null,
     glanceGap: null,
+    glanceRefreshBlock: null,
     glanceState: 'ready',
     unseenLoudEvents: 0,
     unreadOnGitHub: false,
@@ -132,5 +134,24 @@ describe('tileUnreadPrKeys: the unread dots', () => {
 
   it('keeps the unread threads of a snoozed tile dotted', () => {
     expect(dotsOf([row(1, { unreadOnGitHub: true }), row(2)], 'snoozed')).toEqual(['acme/app#1']);
+  });
+});
+
+describe('tileVerdict: the tile pill shows the worst open tracked glance', () => {
+  it('says Look closer on a stack whose lead looks safe but whose layer 3 needs a look', () => {
+    const stack = [row(1), row(2), row(3, { verdict: 'LOOK_CLOSER' })];
+    expect(tileVerdict(stack, 'acme/app#1')).toMatchObject({ prKey: 'acme/app#3', verdict: 'LOOK_CLOSER' });
+  });
+
+  it('lets a stale glance beat Looks safe', () => {
+    const verdict = tileVerdict([row(1), row(2, { glanceStale: true })], 'acme/app#1');
+    expect(verdict).toMatchObject({ prKey: 'acme/app#2', verdict: 'LOOKS_SAFE', glanceStale: true });
+  });
+
+  it('keeps the lead PR when nothing tracked is open, and leaves pulled-in layers out', () => {
+    const merged = { state: 'MERGED' as const };
+    expect(tileVerdict([row(1, { ...merged, verdict: 'NOT_YOURS' }), row(2, { ...merged, verdict: 'LOOK_CLOSER' })], 'acme/app#1')).toMatchObject({ prKey: 'acme/app#1' });
+    const pulled = { provenance: { kind: 'pulled_in', reason: 'stack layer below #2' } } as const;
+    expect(tileVerdict([row(1, { ...pulled, verdict: 'LOOK_CLOSER' }), row(2)], 'acme/app#2')).toMatchObject({ prKey: 'acme/app#2', verdict: 'LOOKS_SAFE' });
   });
 });

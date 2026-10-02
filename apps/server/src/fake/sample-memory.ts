@@ -390,6 +390,12 @@ function buildRelations(): Map<string, DossierRelation> {
     ['topic-dependency-bumps', { kind: 'fyi', ownerTeam: null, whyYou: 'subscribed to bot bumps' }],
     ['topic-desktop-release', { kind: 'fyi', ownerTeam: 'acme/team-desktop', whyYou: 'subscribed to the release thread' }],
     ['topic-sdk-uploads', { kind: 'routed', ownerTeam: 'acme/team-clients', whyYou: 'client-approvers review requested' }],
+    ['topic-flaky-quarantine', { kind: 'team', ownerTeam: 'acme/team-platform', whyYou: 'you author PRs here' }],
+    ['topic-egress-allowlist', { kind: 'team', ownerTeam: 'acme/team-platform', whyYou: 'your team keeps the allowlist' }],
+    ['topic-replay-storage', { kind: 'routed', ownerTeam: 'acme/team-replay', whyYou: 'touches the CI disk limits you own' }],
+    ['topic-replay-player', { kind: 'routed', ownerTeam: 'acme/team-replay', whyYou: 'subscribed to the replay repo' }],
+    ['topic-usage-exports', { kind: 'team', ownerTeam: 'acme/team-platform', whyYou: 'you author PRs here' }],
+    ['topic-alert-presets', { kind: 'routed', ownerTeam: 'acme/team-alerts', whyYou: 'subscribed to alerting changes' }],
   ]);
 }
 

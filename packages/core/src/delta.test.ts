@@ -9,6 +9,7 @@ const empty: TopicDelta = {
   topicId: 'ci',
   fromSeq: 10,
   toSeq: 10,
+  skipToSeq: 10,
   events: [],
   omittedEvents: 0,
   joinedPrKeys: [],
@@ -91,6 +92,29 @@ describe('selectTopicDelta', () => {
     expect(onlyCi.toSeq).toBe(12);
     const mixed = selectTopicDelta(input({ logged: [logged(11, pr1, ci), logged(12, pr1)] }));
     expect(mixed.events.map((event) => event.sourceId)).toEqual(['12']);
+  });
+
+  it('lets review bot comments ride along: alone they start nothing and keep the cursor before them', () => {
+    const rabbit = { kind: 'bot_comment', actor: 'coderabbitai[bot]', isBot: true, ruleLoudness: 'quiet' } as const;
+    const alone = selectTopicDelta(input({ logged: [logged(11, pr1, rabbit)] }));
+    expect(isEmptyDelta(alone)).toBe(true);
+    expect(alone.skipToSeq).toBe(10);
+    const withPerson = selectTopicDelta(input({ logged: [logged(11, pr1, rabbit), logged(12, pr1)] }));
+    expect(isEmptyDelta(withPerson)).toBe(false);
+    expect(withPerson.events.map((event) => event.sourceId)).toEqual(['11', '12']);
+  });
+
+  it('skips past noise up to the first ride-along event, never past it', () => {
+    const edit = { kind: 'comment_edited', actor: 'trunk-io[bot]', isBot: true, ruleLoudness: 'quiet' } as const;
+    const report = { kind: 'bot_comment', actor: 'github-actions[bot]', isBot: true, ruleLoudness: 'quiet' } as const;
+    const onlyNoise = selectTopicDelta(input({ logged: [logged(11, pr1, edit), logged(12, pr2, edit)] }));
+    expect(isEmptyDelta(onlyNoise)).toBe(true);
+    expect(onlyNoise.events).toEqual([]);
+    expect(onlyNoise.skipToSeq).toBe(12);
+    const mixed = selectTopicDelta(input({ logged: [logged(11, pr1, edit), logged(12, pr1, report), logged(13, pr1, edit)] }));
+    expect(isEmptyDelta(mixed)).toBe(true);
+    expect(mixed.skipToSeq).toBe(11);
+    expect(mixed.toSeq).toBe(13);
   });
 
   it('caps a big delta per PR and overall, newest kept, rest counted', () => {

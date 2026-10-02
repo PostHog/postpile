@@ -8,7 +8,7 @@ import { prKey } from './keys.ts';
 import { tileOffers } from './offers.ts';
 import type { OpenedReadCheck, OpenedReadInput } from './quiet-reads.ts';
 import { tileGroup } from './tile-groups.ts';
-import { tileNewBadge, tileUnreadPrKeys } from './tile-view.ts';
+import { tileNewBadge, tileUnreadPrKeys, tileVerdict } from './tile-view.ts';
 import { isDraftTile } from './topic-pr-state.ts';
 import type { PrFacts, TileView } from './views.ts';
 import type { DossierVersion, Fact, FactCandidate, FactRef } from './memory.ts';
@@ -263,17 +263,18 @@ export const NO_OPENED_READ_INPUT: OpenedReadInput = { thread: null, prFetchedAt
 /** The opened-read verdict of a PR without a thread, for hand-built `PrSummary` rows. */
 export const NO_OPENED_READ: OpenedReadCheck = { kind: 'skip', why: 'no_thread' };
 
-/** A hand-built tile view with the offers, Draft chip, dots, group and NEW pill core would give it (`tileOffers`, `isDraftTile`, `tileUnreadPrKeys`, `tileGroup`, `tileNewBadge`). */
-export function withOffers(view: Omit<TileView, 'offers' | 'agent' | 'draft' | 'unreadPrKeys' | 'group' | 'newBadge'>, agentPrs: AgentPrFacts[] = []): TileView {
+/** A hand-built tile view with the offers, Draft chip, dots, group, NEW pill and verdict core would give it (`tileOffers`, `isDraftTile`, `tileUnreadPrKeys`, `tileGroup`, `tileNewBadge`, `tileVerdict`). */
+export function withOffers(view: Omit<TileView, 'offers' | 'agent' | 'draft' | 'unreadPrKeys' | 'group' | 'newBadge' | 'verdict'>, agentPrs: AgentPrFacts[] = []): TileView {
   const offers = tileOffers(view);
   const unreadPrKeys = tileUnreadPrKeys(view.state, view.prs);
   return {
     ...view,
     offers,
-    agent: tileAgentOffers({ prs: view.prs, offers, state: view.state, unreadPrKeys }, agentPrs),
+    agent: tileAgentOffers({ tile: view.tile, prs: view.prs, offers, state: view.state, unreadPrKeys }, agentPrs),
     draft: isDraftTile(view.prs),
     unreadPrKeys,
     group: tileGroup(view.state),
     newBadge: tileNewBadge(view.state),
+    verdict: tileVerdict(view.prs, offers.leadPrKey),
   };
 }

@@ -6,6 +6,7 @@
 // the [bot] suffix, acme-agent[bot] the coding agent that opens PRs for
 // people).
 import fc from 'fast-check';
+import type { TopicRelation } from '../memory.ts';
 import type { NotificationReason, Verdict } from '../types.ts';
 
 /**
@@ -46,6 +47,14 @@ export type ReviewVerdict = 'APPROVED' | 'CHANGES_REQUESTED' | 'COMMENTED' | 'DI
 /** Automation on the timeline: the merge queue took the PR or dropped it, or a deploy ran. */
 export type AutomationItem = 'queued' | 'unqueued' | 'deployed';
 
+/**
+ * What trunk-io[bot] says about its merge queue (DESIGN "Merge queue"):
+ * the merge offer, submitted, testing (a PR, or a stack on a stack layer),
+ * failed (tests), failed in a wording only its ❌ tells, cancelled by a
+ * user, merged, or a line nobody knows.
+ */
+export type TrunkText = 'offer' | 'submitted' | 'testing' | 'stack_testing' | 'failed' | 'emoji_failed' | 'cancelled' | 'merged' | 'garbage';
+
 /** One thing that happened on the PR, in order. Steps GitHub would not allow are skipped when the PR is built. */
 export type StepSpec =
   | { kind: 'request'; target: RequestTarget; byBot: boolean }
@@ -65,7 +74,9 @@ export type StepSpec =
   | { kind: 'push'; by: Person; force: boolean }
   | { kind: 'ready' }
   | { kind: 'to_draft' }
-  | { kind: 'automation'; item: AutomationItem };
+  | { kind: 'automation'; item: AutomationItem }
+  /** Trunk says `text`: edits its first comment on the PR when `sticky` and it has one, else posts a new comment. */
+  | { kind: 'trunk'; text: TrunkText; sticky: boolean };
 
 export type EndSpec = { kind: 'open' } | { kind: 'merged'; by: Person } | { kind: 'closed'; by: Person };
 
@@ -180,8 +191,29 @@ export interface GroupSpec {
   snooze: SnoozeSpec | null;
 }
 
+/**
+ * The topic itself, for its sidebar section (DESIGN "Ownership sections",
+ * "Driver picker"): who drives it automatically (a person, the team as
+ * the dossier's driverTeam names it, null: nobody known), the user's pick
+ * in the header menu (null: automatic; outside: someone outside the team,
+ * no name), and its dossier's relation and owner team. relation null: no
+ * dossier yet, so no owner team either. Owner home is team-platform,
+ * routing the approvers team (home only while roles are undecided), other
+ * team-infra.
+ */
+export interface TopicSpec {
+  driver: 'viewer' | 'teammate' | 'other' | 'outsider' | 'team' | null;
+  pick: 'viewer' | 'teammate' | 'team' | 'outside' | null;
+  relation: TopicRelation | null;
+  ownerTeam: 'home' | 'routing' | 'other' | null;
+}
+
+/** A topic nothing places: no driver known, none picked, no dossier yet. */
+export const UNSORTED_TOPIC: TopicSpec = { driver: null, pick: null, relation: null, ownerTeam: null };
+
 export interface BoardSpec {
   groups: GroupSpec[];
+  topic: TopicSpec;
   teams: TeamSetup;
   /** GitHub writes are locked, so mark-reads wait as pending writes. */
   writesLocked: boolean;
@@ -270,6 +302,19 @@ const stepArb: fc.Arbitrary<StepSpec> = fc.oneof(
   { weight: 1, arbitrary: fc.constant({ kind: 'ready' as const }) },
   { weight: 1, arbitrary: fc.constant({ kind: 'to_draft' as const }) },
   { weight: 1, arbitrary: fc.record({ kind: fc.constant('automation' as const), item: fc.constantFrom<AutomationItem>('queued', 'unqueued', 'deployed') }) },
+  {
+    weight: 1,
+    arbitrary: fc.record({
+      kind: fc.constant('trunk' as const),
+      // Failures most: a loud one needs the viewer's own open PR as well.
+      text: fc.oneof(
+        { weight: 3, arbitrary: fc.constant<TrunkText>('failed') },
+        { weight: 2, arbitrary: fc.constantFrom<TrunkText>('submitted', 'testing', 'stack_testing', 'emoji_failed') },
+        { weight: 1, arbitrary: fc.constantFrom<TrunkText>('offer', 'cancelled', 'merged', 'garbage') },
+      ),
+      sticky: fc.boolean(),
+    }),
+  },
 );
 
 const endArb: fc.Arbitrary<EndSpec> = fc.oneof(
@@ -333,17 +378,96 @@ function groupArb(kind: GroupKind, minLength: number, maxLength: number): fc.Arb
   });
 }
 
+/**
+ * A PR asking the viewer for a review, so the pane leads with Approve:
+ * ada's open PR with a request for the viewer and a glance that is mostly
+ * Looks safe, now and then a draft, stale, missing or at any risk word.
+ * Stacks of these mix covered, blocking and draft layers, the shapes the
+ * agent Approve's base-up rule branches on (owner, 2026-10-01).
+ */
+const reviewPrSpecArb: fc.Arbitrary<PrSpec> = fc
+  .record({
+    draft: sometimes(1, 4),
+    glance: fc.oneof(
+      { weight: 5, arbitrary: fc.constant<Verdict | null>('LOOKS_SAFE') },
+      { weight: 2, arbitrary: fc.constant<Verdict | null>('LOOK_CLOSER') },
+      { weight: 1, arbitrary: fc.constant<Verdict | null>(null) },
+    ),
+    glanceRisk: fc.oneof(
+      { weight: 3, arbitrary: fc.constantFrom<RiskWord>('low', 'medium') },
+      { weight: 1, arbitrary: fc.constantFrom<RiskWord>('high', 'garbage') },
+    ),
+    glanceStale: sometimes(1, 7),
+  })
+  .map((picked) => ({ ...QUIET_PR, steps: [{ kind: 'request' as const, target: 'viewer' as const, byBot: false }], ...picked }));
+
+/** Mostly a stack of review PRs, sometimes the same inside a set. */
+const reviewGroupArb: fc.Arbitrary<GroupSpec> = fc.record({
+  kind: fc.constantFrom<GroupKind>('stack', 'stack', 'stack', 'set_with_stack', 'set'),
+  prs: fc.array(reviewPrSpecArb, { minLength: 2, maxLength: 4 }),
+  snooze: maybe(snoozeArb, 10),
+});
+
+/** Another reviewer asks for changes, the author pushes and asks again: a re-review request on the side. */
+const RE_REVIEW_STEPS: StepSpec[] = [
+  { kind: 'review', by: 'outsider', state: 'CHANGES_REQUESTED', body: null },
+  { kind: 'push', by: 'other', force: false },
+  { kind: 'rerequest' },
+];
+
+/**
+ * A review request the viewer never opened that no longer stands
+ * (DESIGN "Handled quietly" › Review requests that no longer stand): the
+ * viewer, their team or a routing team asked, then the request was removed
+ * or a teammate reviewed, then a little more activity, mostly judged by
+ * the events agent. The general generator reaches the clearable case on
+ * about one board in 4000.
+ */
+const requestGonePrSpecArb: fc.Arbitrary<PrSpec> = fc
+  .record({
+    target: fc.constantFrom<RequestTarget>('viewer', 'team', 'routing_team'),
+    byBot: fc.boolean(),
+    answer: fc.constantFrom('unrequest', 'approve', 'comment'),
+    reReview: fc.boolean(),
+    askedAgain: sometimes(1, 4),
+    more: fc.array(stepArb, { maxLength: 3 }),
+    end: endArb,
+    judged: sometimes(3, 1),
+    staleSnapshot: sometimes(1, 6),
+  })
+  .map(({ target, byBot, answer, reReview, askedAgain, more, ...picked }) => {
+    const answers: Record<typeof answer, StepSpec> = {
+      unrequest: { kind: 'unrequest', target },
+      approve: { kind: 'review', by: 'teammate', state: 'APPROVED', body: null },
+      comment: { kind: 'review', by: 'teammate', state: 'COMMENTED', body: 'plain' },
+    };
+    const askAgain: StepSpec[] = askedAgain ? [{ kind: 'request', target, byBot: false }] : [];
+    const steps: StepSpec[] = [{ kind: 'request', target, byBot }, answers[answer], ...askAgain, ...(reReview ? RE_REVIEW_STEPS : []), ...more];
+    return { ...QUIET_PR, steps, ...picked };
+  });
+
 const anyGroupArb: fc.Arbitrary<GroupSpec> = fc.oneof(
   { weight: 6, arbitrary: groupArb('single', 1, 1) },
+  { weight: 3, arbitrary: reviewGroupArb },
+  { weight: 1, arbitrary: fc.record({ kind: fc.constant<GroupKind>('single'), prs: fc.tuple(requestGonePrSpecArb), snooze: fc.constant(null) }) },
   { weight: 4, arbitrary: groupArb('stack', 2, 4) },
   { weight: 4, arbitrary: groupArb('set', 2, 4) },
   { weight: 1, arbitrary: groupArb('set_with_stack', 2, 4) },
   { weight: 1, arbitrary: groupArb('dissolved_set', 2, 3) },
 );
 
+/** Every driver, pick, relation and owner team, a missing one as often as any other. */
+const topicSpecArb: fc.Arbitrary<TopicSpec> = fc.record({
+  driver: fc.constantFrom<TopicSpec['driver']>(null, 'viewer', 'teammate', 'other', 'outsider', 'team'),
+  pick: fc.constantFrom<TopicSpec['pick']>(null, 'viewer', 'teammate', 'team', 'outside'),
+  relation: fc.constantFrom<TopicSpec['relation']>(null, 'team', 'routed', 'fyi'),
+  ownerTeam: fc.constantFrom<TopicSpec['ownerTeam']>(null, 'home', 'routing', 'other'),
+});
+
 /** A board: one topic with one to three tiles, 1-4 PRs each. */
 export const boardSpecArb: fc.Arbitrary<BoardSpec> = fc.record({
   groups: fc.array(anyGroupArb, { minLength: 1, maxLength: 3 }),
+  topic: topicSpecArb,
   teams: fc.constantFrom<TeamSetup>('one_home', 'home_and_routing', 'no_home', 'undecided'),
   writesLocked: fc.boolean(),
   teamMembersUnknown: sometimes(1, 9),

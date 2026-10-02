@@ -15,7 +15,7 @@ export interface TilePick {
 const TONE: Record<ActionTone, string> = {
   app: 'text-accent',
   local: 'text-ink-2',
-  problem: 'text-unread-ink',
+  problem: 'text-status-bad',
   outside: 'text-faint',
   pending: 'text-muted',
 };

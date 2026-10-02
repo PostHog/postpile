@@ -52,6 +52,32 @@ describe('GitHub unread is PostPile unread', () => {
     expect(h.store.notifications.getByPrKeys([pr.key]).get(pr.key)?.unread).toBe(true);
   });
 
+  it('clears a never-opened team review request once it was removed and only bots and a quiet reply came since', async () => {
+    const h = makeHarness();
+    h.reader.teams.set(TEAM, ['lyra']);
+    const pr = makePr({
+      number: 14,
+      reviewerTeams: ['acme/team-web'],
+      timeline: [
+        makeTimelineItem({ id: 'rr-team', kind: 'review_requested', actor: 'assign-bot[bot]', subject: TEAM, at: at(1) }),
+        makeTimelineItem({ id: 'rr-web', kind: 'review_requested', actor: 'assign-bot[bot]', subject: 'acme/team-web', at: at(1) }),
+        makeTimelineItem({ id: 'rm-team', kind: 'review_request_removed', actor: 'assign-bot[bot]', subject: TEAM, at: at(2) }),
+      ],
+      comments: [
+        makeComment({ id: 'c-bot', author: 'greptile-apps[bot]', body: 'One finding in the facade.', createdAt: at(10) }),
+        makeComment({ id: 'c-alice', author: 'alice', body: 'Fixed, thanks.', createdAt: at(12) }),
+      ],
+      updatedAt: at(12),
+    });
+    topicWithPrs(h, 'facade', [pr]);
+    h.reader.addPr(pr, makeThreadFor(pr, { reason: 'review_requested', updatedAt: at(12) }));
+
+    await h.engine.sync({ agentJobs: ['events'] });
+
+    expect(markReadCalls(h)).toEqual([`markThreadRead ${makeThreadFor(pr).id}`]);
+    expect(await h.engine.handledQuietly()).toEqual([expect.objectContaining({ prKey: pr.key, reason: 'request_gone', bots: ['assign-bot[bot]', 'greptile-apps[bot]', 'alice'] })]);
+  });
+
   it("clears a teammate's comment after the viewer's read once the events agent judged it quiet", async () => {
     const h = makeHarness();
     const pr = makePr({

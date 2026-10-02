@@ -56,6 +56,7 @@ const dossierInput: DossierUpdateInput = {
   staleFacts: [],
   chatTurns: [],
   relationSignals: { relation: null, ownerTeam: null, whyYou: 'review requested', notes: [] },
+  driverPick: null,
   areas: [{ name: AREA_NAME, topics: 2 }],
   currentArea: AREA_NAME,
   viewer,
@@ -85,7 +86,7 @@ const prompts: Record<string, string> = {
   topics: topicAssignmentPrompt({
     prs: [pr],
     viewer,
-    topics: [{ id: topic.id, name: TOPIC_NAME, summary: '', brief: '', memberCount: 1, openCount: 1, lastActivityAt: null }],
+    topics: [{ id: topic.id, name: TOPIC_NAME, summary: '', kind: 'project', ownerTeam: null, brief: '', memberCount: 1, openCount: 1, lastActivityAt: null }],
     context: fullContext,
   }),
   consolidation: consolidationPrompt({

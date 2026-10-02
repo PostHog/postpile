@@ -9,6 +9,7 @@ import { NO_FOCUS, type GitHubSync, type PollFocus } from '../github-sync.ts';
 import { emptyFactCounts } from '../memory/fact-writer.ts';
 import { advanceSeenFromGitHub } from '../memory/seen-from-github.ts';
 import type { RunDeps } from '../run-deps.ts';
+import type { QuietReads } from '../writes/quiet-reads.ts';
 import type { PingDecider } from './ping-decider.ts';
 import type { PollCycle } from './poll-cycle.ts';
 
@@ -24,15 +25,17 @@ export const POLL_TOPIC_CALLS = 1;
  * a topic, and decide pings. The topics whose PRs brought loud news or have
  * no glance yet go to onCatchUp, which runs their dossier and glances right
  * away (TopicCatchUp) instead of waiting for the next full sync. Sets and
- * stack layers stay with the full sync. Never marks anything read on GitHub.
+ * stack layers stay with the full sync. A cycle that stored a change ends
+ * with the quiet reads ("Handled quietly"), the only GitHub writes it makes.
  */
 export class PollRun {
   constructor(
     private readonly deps: RunDeps,
     private readonly github: GitHubSync,
     private readonly decider: PingDecider,
+    private readonly quietReads: QuietReads,
     private readonly onCatchUp: (topicIds: (string | null)[]) => void = () => {},
-    /** GitHub writes are on: a thread the next full sync clears by rule brings no finished topic back. */
+    /** GitHub writes are on: a thread the quiet reads clear by rule brings no finished topic back. */
     private readonly writesOn: () => boolean = () => false,
   ) {}
 
@@ -65,11 +68,26 @@ export class PollRun {
   }
 
   /**
-   * One cycle, plus the Look closer pings glances wrote and the pings for
+   * After a cycle that stored new threads or PR snapshots: mark read what the
+   * quiet reads clear by rule, so bot-only noise goes away within a cycle
+   * instead of waiting for the next full sync. A cycle with nothing new has
+   * nothing new to clear: the stored state is what the last pass saw.
+   * Nothing while GitHub writes are locked (QuietReads.run checks).
+   */
+  private async handleQuietly(cycle: PollCycle): Promise<PollCycle> {
+    if (cycle.kind !== 'done' || cycle.notModified) {
+      return cycle;
+    }
+    const quiet = await this.quietReads.run('poll');
+    return quiet.errors.length > 0 ? { ...cycle, errors: [...cycle.errors, ...quiet.errors] } : cycle;
+  }
+
+  /**
+   * One cycle and its quiet reads, plus the Look closer pings glances wrote and the pings for
    * events the agent raised since the last one (they wait for the poll to reach the Mac).
    */
   async run(focus: PollFocus = NO_FOCUS): Promise<PollCycle> {
-    const cycle = await this.runCycle(focus);
+    const cycle = await this.handleQuietly(await this.runCycle(focus));
     const waiting = [...(this.deps.glancePings?.drain() ?? []), ...(this.deps.raisedPings?.drain() ?? [])];
     return cycle.kind === 'done' && waiting.length > 0 ? { ...cycle, pings: [...cycle.pings, ...waiting] } : cycle;
   }
@@ -80,7 +98,7 @@ export class PollRun {
     const done = { kind: 'done' as const, notModified: inbox.notModified, githubPollIntervalSeconds: inbox.pollIntervalSeconds };
     // A thread read on github.com usually brings no PR to fetch, only read times.
     advanceSeenFromGitHub(store, inbox.readOnGitHub, now().toISOString());
-    // A finished topic whose thread turned unread comes back, fetched PR or not, unless the next full sync clears it by rule.
+    // A finished topic whose thread turned unread comes back, fetched PR or not, unless the quiet reads clear it by rule.
     if (!inbox.notModified) {
       reviveUnreadTopics(store, now().toISOString(), this.writesOn());
     }

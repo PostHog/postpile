@@ -2,7 +2,7 @@
 // one scenario per decision the properties led to.
 // POSTPILE_PROPERTY_RUNS=10000 pnpm test runs more boards per invariant.
 import { describe, expect, it } from 'vitest';
-import { buildBoard, checkBoards, PROPERTY_TIMEOUT_MS, QUIET_PR, tileStateOf, TOPIC_INVARIANTS, type BoardSpec } from '../testing/index.ts';
+import { buildBoard, checkBoards, PROPERTY_TIMEOUT_MS, QUIET_PR, UNSORTED_TOPIC, tileStateOf, TOPIC_INVARIANTS, type BoardSpec } from '../testing/index.ts';
 
 describe('topic invariants', () => {
   for (const invariant of TOPIC_INVARIANTS) {
@@ -30,6 +30,7 @@ describe('finished topics, scenarios the properties found', () => {
         teams: 'one_home',
         teamMembersUnknown: false,
         nowGap: 60,
+        topic: UNSORTED_TOPIC,
       };
       const board = buildBoard(spec);
       expect(board.snoozes.size).toBe(1);

@@ -8,6 +8,7 @@ import type {
   ApprovePrRequest,
   BatchApproveResult,
   PrApproveResult,
+  ReviewNoteKind,
   AgentRefreshOptions,
   AgentRefreshResult,
   AgentRefreshTarget,
@@ -68,6 +69,7 @@ import type {
   TopicProposalKind,
   ViewerView,
   NotificationDebugRow,
+  GlanceLookResult,
   OpenedReadResult,
   QuietReadView,
   Timers,
@@ -79,8 +81,10 @@ import type {
 import { arch, release } from 'node:os';
 import {
   agentApproveRefusal,
+  agentApproveSkip,
   agentMarkReadRefusal,
   approvalsSummary,
+  driverKind,
   emptyAgentCallStats,
   normalizeRepoScope,
   OFF_POLL_STATUS,
@@ -107,15 +111,19 @@ import { OutsideProposals } from './agent-requests/topic-change.ts';
 import { FeedbackActions } from './actions/feedback-actions.ts';
 import { InboxCleanup } from './actions/inbox-cleanup.ts';
 import { failed } from './actions/results.ts';
+import { setTopicDriver } from './actions/driver-pick.ts';
 import { InstructionsActions } from './actions/instructions-actions.ts';
 import { PrActions } from './actions/pr-actions.ts';
 import { MemoryActions } from './actions/memory-actions.ts';
 import { ProposalActions } from './actions/proposal-actions.ts';
 import { ReadMarker } from './actions/read-marker.ts';
 import { TileActions } from './actions/tile-actions.ts';
+import { OpenedReads } from './actions/opened-reads.ts';
 import type { AgentCallLog } from './agent-call-log.ts';
 import { AutoSyncSchedule } from './auto-sync.ts';
 import { Board } from './board.ts';
+import { RetireGate } from './consolidation/retire-gate.ts';
+import { changeTopicStatus } from './topic-status.ts';
 import { CatchUpCap } from './catch-up/catch-up-cap.ts';
 import { CatchUpQueue } from './catch-up/catch-up-queue.ts';
 import { TopicCatchUp } from './catch-up/topic-catch-up.ts';
@@ -255,6 +263,7 @@ function topicProposalTelemetryKind(kind: TopicProposalKind | undefined): 'topic
 export class Engine implements EngineService {
   private readonly reads: ReadModels;
   private readonly tiles: TileActions;
+  private readonly openedReads: OpenedReads;
   private readonly prActions: PrActions;
   private readonly feedback: FeedbackActions;
   private readonly chats: ChatActions;
@@ -287,6 +296,9 @@ export class Engine implements EngineService {
   private autoSync: AutoSyncSchedule | null = null;
   private readonly catchUpCap: CatchUpCap;
   private readonly catchUps: CatchUpQueue;
+  private readonly topicCatchUp: TopicCatchUp;
+  /** Stale glances looked at while a full sync or consolidation ran; asked again when it ends. */
+  private readonly deferredLooks = new Set<PrKey>();
   private readonly github: GitHubSync;
   private readonly quietReads: QuietReads;
   private readonly telemetry: Telemetry;
@@ -333,11 +345,13 @@ export class Engine implements EngineService {
     const contexts = new PromptContextSource(store, history, () => this.workContext.promptText());
     this.reads = new ReadModels(store, deps.agent, contexts, now, deps.pendingWrites, {
       agentOff: () => agentOff() !== null,
-      catchUp: (topicId) => this.catchUps.stateOf(topicId),
+      catchUp: (topicId, prKey) => this.catchUps.stateOf(topicId, prKey),
+      catchUpCap: () => ({ off: this.catchUpCap.perDay === 0, spent: this.catchUpCap.remaining() === 0 }),
     });
     const log = deps.writes.log;
     const readMarker = new ReadMarker(store, deps.markReadQueue, log, now);
     this.tiles = new TileActions(store, readMarker, now);
+    this.openedReads = new OpenedReads(store, readMarker, deps.writes, now, deps.syncLog ?? ((line) => console.log(line)));
     this.prActions = new PrActions(store, deps.writes, deps.agent, contexts, readMarker, now, (key) => this.refreshAfterWrite(key));
     this.feedback = new FeedbackActions(store, readMarker, now);
     this.chats = new ChatActions(store, deps.agent, contexts, now);
@@ -387,13 +401,14 @@ export class Engine implements EngineService {
     const lineLog = deps.syncLog ?? ((line: string) => console.log(line));
     this.catchUpCap = new CatchUpCap(deps.catchUpCallsPerDay ?? 0, now);
     const topicCatchUp = new TopicCatchUp(runDeps, this.catchUpCap, lineLog);
+    this.topicCatchUp = topicCatchUp;
     // Never beside a full sync or a consolidation: the request is skipped and the sync covers the topic.
     this.catchUps = new CatchUpQueue(
-      (topicId) => topicCatchUp.run(topicId),
+      { topic: (topicId) => topicCatchUp.run(topicId), glances: (topicId, prKeys) => topicCatchUp.runGlances(topicId, prKeys) },
       () => !this.syncing && !this.consolidating && agentOff() === null,
       lineLog,
     );
-    this.pollRun = new PollRun(runDeps, github, decider, (topicIds) => this.requestCatchUps(topicIds), () => deps.writes.enabled());
+    this.pollRun = new PollRun(runDeps, github, decider, this.quietReads, (topicIds) => this.requestCatchUps(topicIds), () => deps.writes.enabled());
     this.cleanup = new InboxCleanup(store, deps.writes, deps.pendingWrites, now, () => this.rereadInbox());
     this.teamMembers = new TeamMembers(store, deps.reader, now);
     this.teamRoles = new TeamRoleKeeper(store, deps.reader, now, this.quota, deps.syncLog ?? ((line) => console.log(line)));
@@ -639,6 +654,7 @@ export class Engine implements EngineService {
           this.syncsDone += 1;
           this.summarizePings();
           this.autoSync?.reschedule(backlog);
+          this.askDeferredLooks();
           // The poll was blocked while the sync ran; catch up on what happened meanwhile.
           void this.livePoller?.runCycle();
         });
@@ -662,6 +678,7 @@ export class Engine implements EngineService {
         .then(() => this.consolidationRun.run(options))
         .finally(() => {
           this.consolidating = null;
+          this.askDeferredLooks();
         });
     }
     return this.consolidating;
@@ -768,6 +785,37 @@ export class Engine implements EngineService {
     const request = this.catchUps.request(topicId);
     const message = request === 'queued' ? 'Glance queued: its topic is being caught up, one more run follows.' : 'Writing the glance…';
     return { ok: true, message, undoToken: null };
+  }
+
+  /** Looks that came in during a full sync or consolidation, asked again once it ended (`refreshGlanceOnLook` re-checks everything). */
+  private askDeferredLooks(): void {
+    const keys = [...this.deferredLooks];
+    this.deferredLooks.clear();
+    for (const key of keys) {
+      void this.refreshGlanceOnLook(key).catch((error: unknown) => (this.deps.syncLog ?? console.log)(`catch-up glance ${key}: ${errorText(error)}`));
+    }
+  }
+
+  async refreshGlanceOnLook(prKey: PrKey): Promise<GlanceLookResult> {
+    const { store, now } = this.deps;
+    if (this.toolHealth.agentOffReason() !== null || this.catchUpCap.perDay === 0 || this.catchUpCap.remaining() === 0) {
+      return { outcome: 'blocked' };
+    }
+    if (!store.prs.get(prKey)) {
+      return { outcome: 'skipped' };
+    }
+    if (this.syncing || this.consolidating) {
+      // The renderer asks once per open: keep the look and ask again when the run ends (the sync may have written it by then).
+      this.deferredLooks.add(prKey);
+      return { outcome: 'deferred' };
+    }
+    if (!this.topicCatchUp.needsGlance(prKey)) {
+      return { outcome: 'current' };
+    }
+    const topicId = Board.load(store, now().toISOString()).memberships.get(prKey)?.topicId ?? null;
+    const request = this.catchUps.requestGlance(topicId, prKey);
+    (this.deps.syncLog ?? console.log)(`catch-up ${topicId ?? 'unsorted'} glance ${prKey}: looked at, ${request}`);
+    return { outcome: request };
   }
 
   async refreshOnFocus(prKeys: PrKey[]): Promise<void> {
@@ -979,8 +1027,8 @@ export class Engine implements EngineService {
     return this.chats.getChat(tileId);
   }
 
-  async approve(prKey: PrKey, headOid: string): Promise<ActionResult> {
-    const result = await this.prActions.approve(prKey, headOid);
+  async approve(prKey: PrKey, headOid: string, body = ''): Promise<ActionResult> {
+    const result = await this.prActions.approve(prKey, headOid, body);
     if (result.ok) {
       // The single approve runs from the detail pane's action bar (CLAUDE.md
       // "Approve is final"); the agent-backed ones go through approveMany.
@@ -993,14 +1041,15 @@ export class Engine implements EngineService {
     if (prs.length === 0) {
       return { ok: false, message: 'No PRs to approve', undoToken: null, results: [] };
     }
-    // Approve is final: every PR is checked against the current board first, with the same core rules as the offer.
+    // Approve is final: every PR is checked against the current board first, with the same core rules as the offer,
+    // and a stack layer only goes through after the covered layers below it did (base up).
     const keys = new Set(prs.map((pr) => pr.prKey));
     const views = this.reads.currentTileViews((tile) => tile.members.some((member) => keys.has(member.prKey)));
     const results: PrApproveResult[] = [];
     let settleToken: string | undefined;
     for (const { prKey, headOid } of prs) {
       const holding = views.filter((view) => view.tile.members.some((member) => member.prKey === prKey));
-      const refusal = agentApproveRefusal(prKey, holding, from);
+      const refusal = agentApproveRefusal(prKey, holding, from) ?? agentApproveSkip(prKey, holding, from, results);
       if (refusal !== null) {
         results.push({ prKey, ok: false, message: refusal });
         continue;
@@ -1072,13 +1121,7 @@ export class Engine implements EngineService {
   }
 
   async markOpenedRead(prKey: PrKey): Promise<OpenedReadResult> {
-    try {
-      return { marked: await this.quietReads.markOpened(prKey) };
-    } catch (error) {
-      // GitHubWrites logged it as failed; the thread stays unread for the next open or sync.
-      (this.deps.syncLog ?? console.log)(`opened in PostPile: mark-read of ${prKey}: ${errorText(error)}`);
-      return { marked: false };
-    }
+    return this.openedReads.markOpened(prKey);
   }
 
   async undo(undoToken: string | null): Promise<ActionResult> {
@@ -1103,12 +1146,20 @@ export class Engine implements EngineService {
     return this.tiles.unsnooze(tileId);
   }
 
+  commentReview(prKey: PrKey, headOid: string, body: string): Promise<ActionResult> {
+    return this.prActions.commentReview(prKey, headOid, body);
+  }
+
   draftAsk(prKey: PrKey, person: string, intent: string): Promise<{ body: string }> {
     return this.prActions.draftAsk(prKey, person, intent);
   }
 
+  draftReviewNote(prKey: PrKey, kind: ReviewNoteKind): Promise<{ body: string }> {
+    return this.prActions.draftReviewNote(prKey, kind);
+  }
+
   async sendComment(prKey: PrKey, body: string): Promise<ActionResult> {
-    // The only caller is AskComposer (apps/desktop/src/renderer/src/components/AskComposer.tsx).
+    // The only caller is the Ask mode of the detail pane's compose popover (renderer components/ComposePopover.tsx).
     const result = await this.prActions.sendComment(prKey, body);
     if (result.ok) {
       this.telemetry.capture('ask_sent', {});
@@ -1173,6 +1224,35 @@ export class Engine implements EngineService {
 
   async markTopicSeen(topicId: string): Promise<ActionResult> {
     return this.memoryActions.markTopicSeen(topicId);
+  }
+
+  /**
+   * "Archive now": a topic with nothing left moves to the Archive without
+   * waiting its 2 quiet days. It comes back like any topic there: a new PR,
+   * or a thread turning unread.
+   */
+  async archiveTopic(topicId: string): Promise<ActionResult> {
+    const { store } = this.deps;
+    const at = this.deps.now().toISOString();
+    if (!new RetireGate(Board.load(store, at)).nothingLeft(topicId)) {
+      return { ok: false, message: 'Something in this topic is still open or unread', undoToken: null };
+    }
+    if (!changeTopicStatus(store, topicId, 'retire', at)) {
+      return { ok: false, message: 'This topic is not in the sidebar', undoToken: null };
+    }
+    this.telemetry.capture('topic_archived', {});
+    return { ok: true, message: 'Moved to the Archive', undoToken: null };
+  }
+
+  async setTopicDriver(topicId: string, driver: string | null): Promise<ActionResult> {
+    const { store } = this.deps;
+    const result = setTopicDriver(store, topicId, driver, this.deps.now().toISOString());
+    if (result.ok) {
+      const kind = driver === null ? 'automatic' : driverKind(driver, loadViewer(store));
+      // Only teammates are offered by name, so a named person is one.
+      this.telemetry.capture('driver_set', { kind: kind === 'person' ? 'teammate' : kind });
+    }
+    return result;
   }
 
   async correctMemory(input: MemoryCorrection): Promise<ActionResult> {

@@ -45,6 +45,25 @@ describe('topic list queues', () => {
     expect(await h.engine.getViewer()).toEqual({ login: viewer.login, teamMembers: ['lyra'], homeTeams: ['acme/team-platform'] });
   });
 
+  it('sorts topics into sections by who drives them, the same on the row and the breadcrumb', async () => {
+    const h = harnessWithTeam();
+    const own = (number: number) => makePr({ number, author: viewer.login });
+    topicWithPrs(h, 'own', [own(20), makePr({ number: 21, author: 'lyra' })]);
+    topicWithPrs(h, 'lyras', [own(22)]);
+    topicWithPrs(h, 'outside', [own(23)]);
+    topicWithPrs(h, 'asks', [reviewRequestedPr(24, { reviewerUsers: [viewer.login] })]);
+
+    await h.engine.sync({ maxAgentCalls: 0 });
+    // Without a dossier the sync names the most frequent PR author; a dossier would name someone else.
+    h.store.topics.setDriverAndRole('lyras', 'lyra', 'reviewer', at(1));
+    h.store.topics.setDriverAndRole('outside', 'ada', 'reviewer', at(1));
+
+    const sections = Object.fromEntries((await h.engine.listTopics()).map((item) => [item.topic.id, item.section]));
+    // A teammate's plain PR asks nothing, so your own project stays under You drive; a review request pulls a topic up.
+    expect(sections).toEqual({ own: 'you_drive', lyras: 'team_owns', outside: 'other_work', asks: 'to_review' });
+    expect((await h.engine.getTopic('lyras'))?.section).toBe('team_owns');
+  });
+
   it('keeps a topic calm when every unread tile is merged', async () => {
     const h = harnessWithTeam();
     topicWithPrs(h, 'merged', [reviewRequestedPr(4, { state: 'MERGED' })]);

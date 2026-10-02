@@ -10,6 +10,7 @@ import {
   type SetGroupingInput,
 } from '@postpile/agent';
 import {
+  driverLogin,
   GLANCE_BATCH_SIZE,
   isEmptyDelta,
   joinedMembers,
@@ -156,16 +157,17 @@ export class DossierUpdater {
   }
 
   /**
-   * A delta with nothing to read (only CI results or muted events after the
-   * cursor) still moves the digest cursor past them. Without it every sync
-   * would read the same history again. The dossier version stays.
+   * A delta that starts no update still moves the digest cursor past the
+   * noise in it (CI, muted events, bot status refreshes), up to the first
+   * ride-along event (`TopicDelta.skipToSeq`). Without it every sync would
+   * read the same history again. The dossier version stays.
    */
-  private skipPast(topicId: string, cursorSeq: number, toSeq: number, previous: DossierVersion | null): void {
-    if (toSeq <= cursorSeq) {
+  private skipPast(topicId: string, cursorSeq: number, skipToSeq: number, previous: DossierVersion | null): void {
+    if (skipToSeq <= cursorSeq) {
       return;
     }
     const at = this.deps.now().toISOString();
-    this.deps.store.cursors.advance({ kind: 'digest', scope: topicId, seq: toSeq, dossierVersion: previous?.version ?? null, updatedAt: at });
+    this.deps.store.cursors.advance({ kind: 'digest', scope: topicId, seq: skipToSeq, dossierVersion: previous?.version ?? null, updatedAt: at });
   }
 
   private input(topic: Topic): DossierUpdateInput | null {
@@ -198,18 +200,20 @@ export class DossierUpdater {
     // No stored hash yet (a database from before it existed) counts as unchanged, so an upgrade costs nothing.
     const storedContextHash = store.meta.get(contextHashKey(topic.id));
     const contextChanged = storedContextHash !== null && storedContextHash !== dossierContextHash(context);
+    const driverPick = store.driverPicks.get(topic.id);
+    // The relation says why the topic reached the user, so it follows the automatic driver, never the pick.
     const signals = relationSignals({
       viewer: this.deps.viewer,
       prs: [...prs.values()],
       threads: [...store.notifications.getByPrKeys(memberKeys).values()],
-      driver: topic.driver,
+      driver: driverLogin(topic.driver),
     });
     // The rules now decide a relation the dossier does not hold, with no new event to trigger an update: an
     // agent PR that became the viewer's through its assignee (2026-09-30). Versions without a relation stay as they are.
     const storedRelation = previous?.dossier.relation?.kind;
     const relationOutdated = signals.relation !== null && storedRelation !== undefined && storedRelation !== signals.relation;
     if (isEmptyDelta(delta) && !contextChanged && !relationOutdated) {
-      this.skipPast(topic.id, cursorSeq, delta.toSeq, previous);
+      this.skipPast(topic.id, cursorSeq, delta.skipToSeq, previous);
       return null;
     }
     return {
@@ -221,6 +225,7 @@ export class DossierUpdater {
       staleFacts,
       chatTurns: store.chat.listUserForTopicSince(topic.id, previous?.createdAt ?? '', CHAT_TURNS_IN_DOSSIER_PROMPT),
       relationSignals: signals,
+      driverPick,
       areas: this.areasInUse(topic.id),
       currentArea: topic.area,
       viewer: this.deps.viewer,
@@ -256,6 +261,10 @@ export class DossierUpdater {
       });
       store.topics.updateSummary(topicId, result.dossier.summary, result.inputHash, at);
       store.topics.setArea(topicId, this.areaFor(input, result.area), at);
+      // The agent's call, applied without asking (the user left the kind to the agent).
+      if (result.topicKind !== null && result.topicKind !== input.topic.kind) {
+        store.topics.setKind(topicId, result.topicKind, at);
+      }
       store.cursors.advance({ kind: 'digest', scope: topicId, seq: input.delta.toSeq, dossierVersion: version, updatedAt: at });
       store.meta.set(contextHashKey(topicId), dossierContextHash(input.context));
       store.dossiers.prune(topicId, DOSSIER_VERSIONS_KEPT);

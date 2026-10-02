@@ -12,10 +12,63 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - `pnpm server` runs the desktop app's background jobs: the live poll, background syncs, consolidation, the work context schedule and requests from Claude Code.
 - In the browser, pings show as browser notifications while a PostPile tab is open. "pings: off · turn on" in the status bar asks for the permission; a click opens the tile, and opening a tile takes its pings back, like Mac notifications in the app.
 - In the browser, the tab title shows how many topics have something unread, "(9) PostPile", the same number as the app's Dock badge.
+- "<login> drives" on the topic header is now a menu: pick You, a teammate, Your team or Someone outside your team, and the topic moves to that section at once. Each item shows where the topic would go. The pick sticks until you change it or choose Reset to automatic; new activity never lifts it, and the agent's topic memory follows it. Local only, nothing goes to GitHub.
+- The agent can name your team as the driver of a standing topic that your team keeps up with nobody leading the current wave, so such topics sit under Your team owns instead of under whoever led one wave.
+- Approve on the PR pane is split: the main part approves right away as before, the speech-bubble segment opens "Approve with comment" with a short review note the agent drafts for you to edit.
+- "Comment review" next to Approve posts a review with a comment only. It answers a review request (yours or your team's) without approving, so branch protection does not count it as the approval that clears the PR. The agent drafts the note; an empty note cannot be posted.
 
 ### Changed
 
-- Each topic in the sidebar shows one PR state icon in front of its summary: open if any PR is open, else draft, else merged, else closed. Hover it for the counts ("5 open · 1 merged").
+- Sidebar sections now say whose topic it is, not whose PRs it holds. Below the asks (Needs reply, Changes you requested, To review, Team mentioned) topics sit under You drive, Your team owns or Other work, by who drives them; the owner team only decides when nobody is known to drive a topic. My PRs and Team's PRs are gone, so your own project no longer lands under Team's PRs because a teammate has a PR in it. The "Topics with any PR | my PRs | team PRs" switch still finds your PRs in any section.
+- Inside each section, topics with your open PR or your move come first, then unread ones.
+- Other work folds by area, single-topic areas under "More". It starts open when it holds your PR, your move or something unread, else folded; folded, urgent unread topics stay visible and the header counts what is unread.
+- Topics without a dossier and without a known driver sit in Other topics with a "not sorted yet" mark. The Needs you, Your team and Routed to you groups inside Other topics are gone; FYI stays.
+- Topics you have dealt with (nothing unread, no move of yours) leave You drive, Your team owns and Other work until something new comes in, like archiving in Gmail. Each of these sections ends with "+ N dealt with", which shows them dimmed; a section with nothing left says "all N dealt with". The selected topic stays put until you move on, and the search and the my PRs / team PRs filters still show everything. Archive stays for topics that are over.
+- "Ask <owner>" opens in the same small popover as the review notes instead of a strip under the action bar. It works as before: pick the person, say what to ask, draft, edit, post.
+- A review request you never opened no longer stays unread forever once it stops asking anything: when the request for you and your teams was removed or a teammate reviewed, and since then only bots and replies that don't need you came in, PostPile marks the thread read on GitHub and lists it under Handled quietly ("request gone"). A request that still stands stays unread as before.
+
+### Fixed
+
+- PRs with lots of bot reviews no longer stay unread for days. When a PR has more reviews, comments or review threads than PostPile reads in one go and its notification is unread, PostPile now fetches the older ones back to your last read (a few pages per list, a handful of PRs per sync) and then checks it like any other PR. If the older pages still don't reach your last read, the PR stays unread as before.
+- A stack layer in the Trunk merge queue showed as not queued while Trunk tested the stack ("Running tests on this stack"). Trunk status lines in a wording PostPile does not know yet are now read by their emoji, so a PR keeps its queue state when Trunk rewords a message.
+
+## 0.14.1 (2026-10-02)
+
+### Added
+
+- A topic whose tiles are all Dealt with but that still holds an open PR now says so after the Tiles count ("· 1 PR open"), with the PR named in the tooltip. Before, the Archive box stayed away without a reason.
+- PRs in the Trunk merge queue show it like Trunk's browser extension: the merge queue icon replaces the PR icon, amber while it waits or tests and red when the queue takes it out, with "Merge queue: Testing" (or Submitted, Waiting, Failed) in place of the review status. The sidebar row and the topic header follow. A queued PR says "Waiting on the merge queue" instead of asking anyone to merge it; a failed one asks its author to re-submit it and says why, and on your own PR it counts as new activity.
+
+### Changed
+
+- Threads that came back unread only because of bots are marked read on the next live poll, usually within a minute. Before, PostPile waited 10 minutes after the last bot activity and then for the next sync, often up to an hour. Still only while GitHub writes are unlocked. The same goes for PRs you already dealt with, activity judged as not needing you, and releases and issues.
+- Bot noise no longer rewrites topic memory. Merge queue status comments (Trunk's "Submitted", "Testing", "Merged successfully"), bot comment edits, deploy statuses and CI never start a dossier update. Review bot findings (CodeRabbit, Codex, Greptile, Copilot, stamphog) wait and are read with the next real update. A bot merging or closing a PR still counts.
+- "Out of date: N newer events" counts only what would update the dossier, so a bot refreshing its comment no longer makes memory look out of date. "Since you last looked" no longer counts CI results and bot status refreshes either.
+
+## 0.14.0 (2026-10-02)
+
+### Added
+
+- "Archive now": once everything in a topic is dealt with (every PR merged or closed, every thread read), a box under the Tiles count says when the topic moves to the Archive by itself, with a button to do it right away. In the Archive the box says what brings the topic back.
+
+### Changed
+
+- ✨ Approve on a stack goes from the base up: a layer is only offered when no layer below it needs a closer look. The confirm list says what the others wait on ("waits on #2104"). When the button approves one PR out of several it names it ("Approve #2107"), and "Approve stack" shows only when it approves the whole stack. If a lower layer fails to approve, the layers above it are skipped.
+- Bot reviews and bot comments in review threads on your own open PR no longer keep it unread. They clear quietly like other bot activity; failing checks and unresolved threads still show up on the PR.
+- Opening a PR marks it read as soon as the 1.5s fill completes, instead of later when you move on. The button then says "✓ Marked read" with an Undo link for a few seconds, and the unread dot fades out. The tile and its topic row stay put until you pick something else, then slide to their new place. Tiles a sync moves slide too. "Marks read when you leave" and the "Keep unread" X are gone, and these marks no longer show under Handled quietly.
+- Topics come in two kinds: projects, which have a finish line, and standing topics, which keep a standard up for months ("Migration safety"). A standing topic stays ready for its next PR for half a year after the last one joined; a finished project takes follow-ups for 30 days.
+- After this update, PostPile tidies your topics once more: it sorts them into projects and standing topics, folds the pieces of one standard into one topic, and renames a topic named after one step of its goal. PRs you moved by hand stay where you put them. It runs as the first step of the first full sync, behind the sync overlay, and takes about a minute on a large database.
+- A topic with nothing left moves to the Archive 2 days after the last human activity (was 3 days of any activity). Deploy, CI and bot comments after a merge no longer keep it in the sidebar.
+- The sidebar's "Finished" drawer is now "Archive".
+- An out-of-date assessment is rewritten when you look at the PR: keep it open in the detail pane for a moment and it says "Updating now" instead of waiting up to an hour for the next sync. Only the PR you look at is rewritten, and it counts against the daily catch-up limit (`POSTPILE_CATCHUP_CAP`). The note says "next sync" only when that limit is spent or catch-up is off.
+
+## 0.13.3 (2026-10-01)
+
+### Changed
+
+- Each topic in the sidebar shows one PR state icon at the end of its summary line: open if any PR is open, else draft, else merged, else closed. Hover it for the counts ("5 open · 1 merged").
+- A tile's verdict pill shows the worst glance among its open PRs, not only the lead PR's. A stack whose top PR looks safe but whose third layer needs a closer look now says "Look closer"; a missing or out-of-date glance beats "Looks safe".
+- One colour per meaning: amber is only the agent's "Look closer". "Needs review" is now neutral, a queued PR is merged purple, closed PRs, changes requested, risk and errors share one red, and approved, "Looks safe" and Approve share one green.
 - The topic header's PR pill counts every PR in the topic, also the ones the sync found on its own (your open PRs, review requests, recent merges), so a topic of only found PRs no longer says "0 PRs". It shows the same state icon as the sidebar; hover it for the mix ("3 open · 1 draft · 1 merged; 2 need review, 1 approved").
 - The topic header's breadcrumb names the sidebar section the topic sits in (To review, My PRs, …) with its coloured dot, instead of "Needs you" or "Quiet".
 - A tile's Draft chip and the topic's draft icon follow one rule, so they can't disagree.

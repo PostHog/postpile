@@ -12,7 +12,7 @@ function destinationOf(split: TidyAnswer['splits'][number], known: Set<string>, 
     return { kind: 'existing', topicId: into };
   }
   const name = split.newName?.trim();
-  return name ? { kind: 'new', name } : null;
+  return name ? { kind: 'new', name, topicKind: split.newKind } : null;
 }
 
 /**
@@ -20,7 +20,9 @@ function destinationOf(split: TidyAnswer['splits'][number], known: Set<string>, 
  * other known topic, each folded away once; a target is never folded away
  * itself. A split names member PRs of a topic that stays (not folded away)
  * and where they go (another known topic, or a new name), and all splits of
- * a topic together leave at least one PR behind.
+ * a topic together leave at least one PR behind. Renames and kind changes
+ * name a known topic that stays, once each; a kind that is already the
+ * topic's is no change.
  */
 export function mapTidyAnswer(answer: TidyAnswer, input: TopicTidyInput): TopicTidyResult {
   const members = new Map(input.topics.map((topic) => [topic.id, new Set(topic.prs.map((pr) => pr.key))]));
@@ -58,5 +60,27 @@ export function mapTidyAnswer(answer: TidyAnswer, input: TopicTidyInput): TopicT
       splits.push({ topicId: split.topicId, prKeys, into, reason: split.reason });
     }
   }
-  return { merges, splits };
+  const renamed = new Set<string>();
+  const renames: TopicTidyResult['renames'] = [];
+  for (const rename of answer.renames) {
+    const name = rename.name.trim();
+    const topic = input.topics.find((t) => t.id === rename.topicId);
+    if (!topic || folded.has(topic.id) || renamed.has(topic.id) || !name || name === topic.name) {
+      continue;
+    }
+    renamed.add(topic.id);
+    renames.push({ topicId: topic.id, name, reason: rename.reason });
+  }
+
+  const kindsSet = new Set<string>();
+  const kinds: TopicTidyResult['kinds'] = [];
+  for (const change of answer.kinds) {
+    const topic = input.topics.find((t) => t.id === change.topicId);
+    if (!topic || folded.has(topic.id) || kindsSet.has(topic.id) || topic.kind === change.kind) {
+      continue;
+    }
+    kindsSet.add(topic.id);
+    kinds.push({ topicId: topic.id, kind: change.kind });
+  }
+  return { merges, splits, renames, kinds };
 }

@@ -1,9 +1,18 @@
-import { DOSSIER_LIMITS } from '@postpile/core';
+import { DOSSIER_LIMITS, driverKind } from '@postpile/core';
 import type { Fact, PrEvent } from '@postpile/core';
 import type { DossierRefs, UserSource } from '../dossier-refs.ts';
 import type { DossierUpdateInput } from '../service.ts';
 import { renderDossier } from './dossier.ts';
 import { clip, contextBlock, entityText, GITHUB_DATA_RULE, githubData, jsonOnly, NO_CI_RULE, prLine, viewerLine, withoutCi, WORK_GLOSSARY, workContextBlock } from './shared.ts';
+
+/**
+ * A standing topic has no finish line (core TopicKind): its dossier follows
+ * the current wave, and a wave that ends is not the topic finishing.
+ */
+const STANDING_DOSSIER_RULE = `It is a standing topic: one standard kept up for months, with no finish line. goal: the
+standard. summary and status: the current wave of work. When a wave ends the topic goes quiet; it
+is not finished, so never use status "finished" or the looks_finished flag for it. Fold waves that
+are over into earlier.`;
 
 function factLine(fact: Fact, shortId: string, staleNote: string): string {
   const since = fact.validFrom.slice(0, 10);
@@ -133,6 +142,26 @@ function placementBlock(input: DossierUpdateInput): string {
   ]);
 }
 
+/** The line saying who the user set as the driver. */
+function driverPickLine(pick: string, viewer: DossierUpdateInput['viewer']): string {
+  const kind = driverKind(pick, viewer);
+  if (kind === 'team') {
+    return '- Their own team drives, no single person. Set driverTeam true and give nobody the driver role.';
+  }
+  if (kind === 'outside') {
+    return '- Someone outside their team drives (name not given). Never call the user or a teammate the driver.';
+  }
+  return `- @${pick} drives. Give ${pick} the driver role and nobody else.`;
+}
+
+/** The driver the user picked in the header: it stands over what the activity suggests. */
+function driverPickBlock(input: DossierUpdateInput): string {
+  if (input.driverPick === null) {
+    return '';
+  }
+  return block('Who drives, as the user set it (it stands, whatever the activity suggests):', [driverPickLine(input.driverPick, input.viewer)]);
+}
+
 function feedbackBlock(input: DossierUpdateInput): string {
   const lines = input.delta.newFeedback.map((f) => `- ${f.createdAt.slice(0, 10)} ${f.kind}${f.prKey ? ` (${f.prKey})` : ''}: ${clip(f.note, 300)}`);
   return block('New corrections from the user since the last version. Take them into the dossier:', lines);
@@ -144,6 +173,7 @@ export const DOSSIER_ANSWER_FIELDS = `  "dossier": {
     "summary": "...", "status": "starting" | "active" | "blocked" | "winding_down" | "finished",
     "statusNote": "...", "statusRefs": ["e4"],
     "people": [{"login": "alice", "role": "driver" | "contributor" | "reviewer" | "stakeholder", "note": "..."}],
+    "driverTeam": false,
     "openQuestions": [{"text": "...", "askedBy": "carol" | null, "refs": ["e3"]}],
     "timeline": [{"prKey": "owner/repo#1", "role": "...", "refs": ["owner/repo#1"]}],
     "earlier": "...",
@@ -152,6 +182,7 @@ export const DOSSIER_ANSWER_FIELDS = `  "dossier": {
     "relation": {"kind": "team" | "routed" | "fyi", "ownerTeam": "org/team" | null, "whyYou": "...", "refs": ["e2"]}
   },
   "area": "CI",
+  "topicKind": "project" | "standing",
   "flags": [{"kind": "needs_user" | "contradiction" | "looks_finished" | "off_topic_pr", "text": "...", "prKey": "owner/repo#1" | null}],
   "facts": [{"subject": {"kind": "person", "key": "alice"}, "predicate": "works_on", "object": {"kind": "pr", "key": "owner/repo#1"} | null, "text": "...", "refs": ["e2"]}],
   "closeFacts": [{"factId": "F2", "reason": "..."}],
@@ -174,13 +205,13 @@ export function dossierUpdateInstructions(input: DossierUpdateInput, refs: Dossi
 for a developer who follows it on GitHub. You get the previous dossier and only what happened
 since. Rewrite the dossier so it is true now. The topic's current name:
 ${githubData(input.topic.name)}
-${WORK_GLOSSARY}
+${input.topic.kind === 'standing' ? `${STANDING_DOSSIER_RULE}\n` : ''}${WORK_GLOSSARY}
 ${viewerLine(input.viewer)}
 ${GITHUB_DATA_RULE}
 ${contextBlock(input.context)}${workContextBlock(input.context)}
 Previous dossier:
 ${previous}
-${membersBlock(input)}${joinedBlock(input)}${eventsBlock(input, refs)}${userSourcesBlock(refs)}${block('PRs that left the topic (drop them from the timeline, mention in earlier if they mattered):', left)}${placementBlock(input)}${factsBlocks(input, refs)}${dataBlock('Claims in the previous dossier that failed a check (fix or drop them):', claims)}${feedbackBlock(input)}
+${membersBlock(input)}${joinedBlock(input)}${eventsBlock(input, refs)}${userSourcesBlock(refs)}${block('PRs that left the topic (drop them from the timeline, mention in earlier if they mattered):', left)}${placementBlock(input)}${driverPickBlock(input)}${factsBlocks(input, refs)}${dataBlock('Claims in the previous dossier that failed a check (fix or drop them):', claims)}${feedbackBlock(input)}
 How to write the dossier:
 - Keep what is still true, change what moved, drop what is over. Plain words, no filler.
 - Every field is read by the user as a fact about the work. Never write about the dossier itself
@@ -190,6 +221,8 @@ How to write the dossier:
 - goal: what the initiative is for, max ${limits.goal} chars. summary: where it stands, max ${limits.summary}.
 - status and statusNote (max ${limits.statusNote}): why that status.
 - people: max ${limits.people}, the driver first; note max ${limits.personNote} chars. Logins without "@".
+- driverTeam: true when the user's own team keeps a standing topic up and nobody leads the current
+  wave; then nobody gets the driver role. False when one person clearly runs the work.
 - openQuestions: max ${limits.openQuestions}, only questions still open; text max ${limits.questionText}.
 - timeline: member PRs only, oldest first, role = what the PR does for the initiative, max
   ${limits.timelineRole} chars. Max ${limits.timeline} entries; fold older ones into earlier (max ${limits.earlier}).
@@ -218,6 +251,11 @@ area: the part of the product or codebase the topic's work touches, 1 to 3 words
 every topic they see would fit it. Reuse an area in use when the work touches that part; replace
 the current area when it is such a catch-all or no longer fits; a new one when no area in use
 names that part.
+
+topicKind: the topic is ${input.topic.kind === 'standing' ? 'a standing topic' : 'a project'} now. Keep that unless it was clearly cut as
+the wrong kind: "standing" for one standard kept up for months with no finish line, "project" for one goal
+that ends. A project whose goal is reached stays a project, also when its PRs keep coming: the next
+ones start a standing topic of their own.
 
 flags: needs_user when the user should act or decide something; contradiction when new activity
 contradicts the dossier or a fact; looks_finished when the work seems done; off_topic_pr (with

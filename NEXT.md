@@ -6,6 +6,15 @@ now".
 
 ## Done
 
+- Merge queue state (2026-10-02, DESIGN.md "Merge queue"): `mergeQueueState`
+  reads trunk-io[bot]'s status comment; the PR icon turns into the Octicons
+  merge-queue icon (amber, red once failed) on rows, the detail header, the
+  sidebar row and the header pill; "Merge queue: Testing" replaces the
+  review chip; own queued PRs wait on the queue, failed ones are the user's
+  move ("Re-submit to the merge queue") and loud. Fake mode: #1977 submitted,
+  #1978 waiting, #1975 testing, #1974 merged through the queue (topic
+  "Runner image pinning", amber rollup),
+  #1950 failed (CI & tests, red rollup).
 - Lasting sets (2026-10-01, DESIGN.md "Tiles hold still"): the set prompt
   asks for PRs one judgement covers and answers with changes only; a regroup
   runs on new triggers only (open PR in no set, risk level change, feedback,
@@ -911,7 +920,7 @@ the app meanwhile.
   2m` from `GET /api/sync/progress`. The total is what the sync planned so
   far and grows (glances are planned as dossiers land).
 - Glance "missing or invalid in the answer" (two real PRs, one of them
-  posthog#107116): replaying posthog#107116 alone against Sonnet gave a
+  acme/app#1812): replaying acme/app#1812 alone against Sonnet gave a
   misspelled verdict (`LOOKS_SASAFE`, `LOOKS_SASE`) in 4 of 6 runs, once
   with the other fields cut to "placeholder", once as broken JSON. The
   strict enum dropped the entry on both attempts. Verdicts are now repaired
@@ -1095,6 +1104,45 @@ the app meanwhile.
 
 ## Decided
 
+- **Capped snapshots get older pages** (2026-10-02, DESIGN.md "Handled
+  quietly" › Capped snapshots): when a fetched PR's snapshot hits a query
+  cap and its thread is unread, the capped lists are paged back to the
+  thread's `last_read_at` (to the end for a never-read thread), then the
+  normal quiet-read rules apply. Coverage is one core helper
+  (`snapshotCoversSince(pr, since)`, each rule passes its own `since`);
+  review threads count only when complete. Budgets: 5 pages per list, 10
+  PRs per sync, 3 per poll, none while the quota is low.
+- **Dealt-with topics leave the list** (2026-10-02, DESIGN.md "Dealt-with
+  topics leave the list"): quiet topics in You drive, Your team owns and
+  Other work go behind one "+ N dealt with" line per section, like Gmail
+  archive or GitHub's Done; not while the search or a PR filter is on, never
+  the selected topic. Dimming alone (quiet rows) still took space and
+  clicks. Dealt with is not Archive.
+- **Approve with comment and Comment review** (2026-10-02, DESIGN.md "Own
+  PRs never ask for a review"): Approve on the PR pane is split (approve
+  now, or with an agent-drafted note); "Comment review" posts a COMMENT
+  review on the seen head, to answer a review request without being the
+  approval that clears the PR. Ask, both notes share one compose popover.
+  Tiles and the agent's Approve stay without a body.
+- **Ownership sections** (2026-10-02, DESIGN.md "Ownership sections"):
+  below the asks, topics sit under You drive, Your team owns or Other work
+  by who drives them; the owner team only places a topic without a known
+  driver (a weak signal, Codex's point). My PRs and Team's PRs are gone, and
+  so are the Needs you / Your team / Routed to you groups in Other topics;
+  FYI and the Archive stay. Other work folds by area ("More" for
+  single-topic areas) and starts open only for your PR, move or unread.
+  Topics without a dossier or driver are "not sorted yet".
+- **Driver picker and team as driver** (2026-10-02, DESIGN.md "Driver
+  picker", "Team as driver"): "<login> drives" on the header is a menu (You,
+  each teammate, Your team, Someone outside your team, Reset to automatic);
+  the pick moves the topic, stands until changed, beats the agent and goes
+  into the dossier prompt. The dossier agent may name the home team as a
+  standing topic's driver (`driverTeam`), stored like the picker's "Your
+  team".
+- **Merge queue like Trunk's extension** (2026-10-02, DESIGN.md "Merge
+  queue"): the queue icon replaces the git icon while a PR is in the merge
+  queue, pending amber, red once the queue took it out, the merged icon
+  back once merged. Also for GitHub's own queue (was a purple open icon).
 - **PostPile in the browser ships with the app** (2026-10-01): `postpile
   browser` from the cask runs the app's own binary as Node (like
   `postpile-mcp`), not a separate `postpile-server` Homebrew formula (built,
@@ -1104,6 +1152,62 @@ the app meanwhile.
   resolve `*.localhost` themselves and treat it as a secure context, so
   notifications work over plain HTTP; `.dev` and other custom names would
   need DNS and TLS.
+- **Marked when the dwell ends** (2026-10-01, DESIGN.md "Actions act on
+  what you look at" › "Marked when the dwell ends", supersedes "Marked when
+  you move on"): the opened mark fires when the 1.5s fill completes, and
+  the button says "✓ Marked read" with an Undo (the mark-read undo window).
+  Owner: "it bothers me more that it doesn't act than the reshuffle would".
+  The tile and its topic row still hold their place until the selection
+  moves, then slide there (FLIP, 420ms) and the tile lights up briefly; the
+  unread dot fades out. "Marks read when you leave" and "Keep unread" are
+  gone. The opened mark now goes through the mark-read queue, so it no
+  longer shows under Handled quietly.
+- **Project and standing topics** (2026-10-01, DESIGN.md "Topic kinds"):
+  `topic.kind` is `project` or `standing`; the agent picks it, the grain 3
+  tidy sorts existing topics. Projects in the Archive take follow-ups for 30
+  days; standing topics retire only after 6 months with no new PR (user's
+  rule). No third kind (research: incidents are short projects, chores are
+  single tiles). The kind is the agent's: no user switch, no proposals; a
+  dossier update may correct it. A finished project's afterlife (others
+  extending it) starts a standing topic instead of converting the project.
+  Ownership: routed PRs join the standing topic that keeps their standard.
+- **The Archive** (2026-10-01, DESIGN.md "Topic status"): a topic with
+  nothing left goes after 2 days without human activity (bots don't count);
+  "Archive now" in a box in the topic's action row, at the Approve height,
+  skips the wait (user picked the box over a header button or a sidebar row
+  action). "Finished" drawer renamed "Archive"; code keeps `retired`.
+- **Refresh a stale glance on look** (2026-10-01, DESIGN.md "Glance
+  refresh on look"): a PR shown in the detail pane for 1.5s with a stale
+  glance asks for a glance-only catch-up of that PR, from the topic's
+  dossier as it is. Coalesced with the topic's catch-up queue, counted
+  against the daily catch-up cap, nothing over it or with catch-up off.
+  Owner: the hourly sync is too slow when they are looking at the PR; only
+  opened PRs refresh, so the cost stays low. The stale note says "next
+  sync" only when the refresh can't run (`glanceRefreshBlock`). Automatic,
+  so "No manual refresh per PR or topic" (2026-09-29) stays.
+- **Bots on your own open PR clear quietly too** (2026-10-01, DESIGN.md
+  "Handled quietly" rule 2, removed): a bot's review or inline comment no
+  longer keeps your own open PR unread. Owner: "I never care about bot
+  replies... and it's my PR so I will have it on the radar anyway." A
+  finding that matters shows as failing checks or unresolved threads.
+  Triggered by ReviewHog's FLASH-mode review keeping an own PR unread. The
+  other own-PR logic (loudness, pings, whose turn) stays.
+- **Agent Approve goes base up on a stack** (2026-10-01, DESIGN.md
+  "Agent-assisted actions" › "Base up on a stack", "Approve labels"): a
+  layer is covered only when no approvable layer below it needs a look;
+  the layers above wait on it ("waits on #N"). Layers below that need no
+  review (merged, draft, own, approved already, pulled in) don't block. One
+  covered PR out of several is named ("Approve #2107"); "Approve stack"
+  only when every PR on the tile is covered.
+- **One colour per meaning** (2026-10-01, DESIGN.md "Colour per meaning"):
+  amber only for Look closer, Needs review neutral ink, queued merged
+  purple, one red for bad (closed, changes requested, risk), one green for
+  good (approved, Looks safe, Approve), coral only for unread, honey only
+  for your move.
+- **The tile pill shows the worst verdict** (2026-10-01, DESIGN.md "Tile
+  faces" › "The verdict pill shows the tile's worst glance"): the worst
+  glance among the tile's open tracked PRs, not the lead PR's. No row
+  glyphs, no "N of M", no topic header roll-up.
 - **Your move in the topic header and group headings** (2026-10-01,
   DESIGN.md "Your move in the header and the group headings"): the header
   shows the sidebar's chip, group headings add "· N your move", both counted
@@ -1144,7 +1248,7 @@ the app meanwhile.
   already dealt with it" › Read before acting): a comment's latest edit is a
   `comment_edited` event (bots clear quietly, a person's edit that mentions
   you is an ask); on your own open PR only a bot review or inline comment
-  keeps the thread unread; a move that stood before your last read does not;
+  kept the thread unread (dropped 2026-10-01); a move that stood before your last read does not;
   acting counts as having seen earlier news only with a read in between,
   and then also makes the PR done without a click.
 - **Tiles lead with the important news** (2026-09-30, DESIGN.md "Tile faces"
@@ -1224,14 +1328,15 @@ the app meanwhile.
   unread tiles (owner, 2026-09-30).
   Opening a PR in PostPile also handles it, checked per PR. The lead PR
   (core `leadPrKey`) prefers the turn's PR. Whose turn names the
-  re-reviewer after a push and a re-request. The own-PR bot exception only applies while the PR is
-  open. Marking read from a guess (finished team requests handled by a
+  re-reviewer after a push and a re-request. The own-PR bot exception first applied only while the PR was
+  open (dropped altogether 2026-10-01). Marking read from a guess (finished team requests handled by a
   teammate, lost mentions) stays turned down. Added the same day: "Remove
   <team>" in the detail pane removes a team review request, unsubscribes
   and marks the PR done (confirm once, no undo, blocked while locked);
   moving read routed requests down on their own was turned down. Also the
   same day: the opened mark fires when you move on (dwell arms, leaving
-  fires), and the selected tile and its topic row keep their place until
+  fires; superseded 2026-10-01: it fires when the dwell ends, with an
+  Undo), and the selected tile and its topic row keep their place until
   the selection moves. DESIGN.md "Actions act on what you look at".
 
 - **UI fixes from the screen review (2026-09-29)**: Julian signed off on ten
@@ -1288,8 +1393,7 @@ the app meanwhile.
 - **Handled quietly: bot-only activity gets marked read** (2026-09-29): a
   thread you had read that turned unread only because of bots is marked read
   on GitHub by PostPile after a full sync, 10 minutes after the last bot
-  activity at the earliest, only while writes are unlocked. Never your own PR
-  (bot reviews can mean work), never with an unseen merge without your
+  activity at the earliest, only while writes are unlocked. Never with an unseen merge without your
   review, never while the tile is unread or it is your move. Rules only, no
   agent. The sidebar's "Handled quietly" lists the last 7 days. Pings get
   one hourly telemetry summary (`pings_summarized`, counts only), and the

@@ -193,12 +193,6 @@ export class FakeWrites {
     return { ...thread, unread: !readHere && (this.githubUnread.get(thread.id) ?? thread.unread) };
   }
 
-  /** A mark-read PostPile does by itself (origin quiet), right away and without undo, like QuietReads. */
-  quietMarkRead(threadId: string, prKey: PrKey, detail: string): void {
-    this.githubUnread.set(threadId, false);
-    this.record({ action: 'mark_read', origin: 'quiet', outcome: 'github', threadId, prKey, detail });
-  }
-
   /** Logs the click the same way ReadMarker does: queued per thread, local for PRs without one that changed right away. */
   queued(batch: FakeBatch): void {
     this.batches.push(batch);

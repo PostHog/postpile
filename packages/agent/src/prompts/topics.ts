@@ -5,7 +5,8 @@ import { clip, contextBlock, GITHUB_DATA_RULE, githubData, jsonOnly, NO_CI_RULE,
 /** The dossier brief (goal, status, driver) says far more than a name; the summary is the fallback. */
 function topicLine(topic: TopicChoice): string {
   const about = topic.brief || clip(topic.summary, 400);
-  const size = `${topic.memberCount} ${topic.memberCount === 1 ? 'PR' : 'PRs'}, ${topic.openCount} open`;
+  const owner = topic.ownerTeam ? `, owned by ${topic.ownerTeam}` : '';
+  const size = `${topic.kind}${owner}, ${topic.memberCount} ${topic.memberCount === 1 ? 'PR' : 'PRs'}, ${topic.openCount} open`;
   const active = topic.lastActivityAt ? `, last activity ${topic.lastActivityAt.slice(0, 10)}` : '';
   return `- id ${topic.id}: "${topic.name}" (${size}${active})${about ? ` - ${about}` : ''}`;
 }
@@ -15,28 +16,37 @@ function topicLine(topic: TopicChoice): string {
  * PR's own change as its goal: on a fresh start 109 of 150 topics held one PR,
  * and one project of the user's came out as three topics. The examples bound
  * the size from both sides, so the rule against catch-alls still holds.
+ * Standing topics came the same day: "a project of days to weeks" split a
+ * standard kept up for a year ("Migration safety") into deliverables.
  */
-export const TOPIC_SIZE_EXAMPLES = `How big a topic is: a project someone drives for days to weeks, usually across several PRs.
-Ask: would the driver name it in a weekly update? If the name only fits this one PR, it is too
-small; if it fits half the repo, it is too big.
+export const TOPIC_SIZE_EXAMPLES = `How big a topic is. Two kinds fit:
+- project: one goal with a finish line, driven for days to weeks, usually across several PRs. Its
+  driver can say what "done" means and would name it in a weekly update.
+- standing: one standard someone keeps up for months, with no finish line. PRs arrive in waves,
+  and every one is judged by the same question ("does this keep migrations safe?").
+Ask: can one sentence say what a PR must do to belong? If it only fits this one PR, the topic is
+too small. If it needs "and" between unrelated goals, or would fit any project ("bugs",
+"front-end"), it is too big.
 
-Right size (a goal):
-- "Desktop review app": polling GitHub, the MCP server's tools, packaging and the Homebrew listing
-  are all PRs of this one project.
-- "Dev box rollout": provisioning spare nodes, dashboard access to their accounts, memory reclaim
-  and the status doc all serve it.
-- "Move CI runners to a new provider", "Cut p95 latency of the query service", "Migrate the tests
-  to pytest".
+Right size:
+- Projects: "Desktop review app" (polling GitHub, the MCP server's tools, packaging and the
+  Homebrew listing are all PRs of it), "Dev box rollout", "Move CI runners to a new provider",
+  "Cut p95 latency of the query service", "Migrate the tests to pytest".
+- Standing: "Migration safety" (runbooks, lock rules, migration guards and the migration skill,
+  for a year), "Code ownership" (teams claiming paths, routing reviews to owners), "Egress"
+  (every outbound call through one layer: labels, budgets, tracing, guards, whoever adds to it).
 
-Too small (a single change; put it in the goal it serves):
-- "Homebrew cask listing", "MCP server tools", "GitHub polling interval": steps of "Desktop review
-  app".
-- "Warm-spare roaming", "Status doc refresh": steps of "Dev box rollout".
+Too small (put it in the topic it serves):
+- "Homebrew cask listing", "MCP server tools": steps of "Desktop review app".
+- "Hot-table migration locks", "Migration runbook docs": parts of "Migration safety". A wave of
+  them is a set inside that topic, not a topic of its own.
 - Anything named after what one PR changes ("Bump the linter", "Fix flaky login test") when it
   clearly belongs to a bigger piece of work.
+A wave inside a standing topic is its own project only when it has its own finish line and
+someone drives it for days ("Move migrations to an init step that waits for them").
 
-Too big (a field, not a goal; never a topic):
-- "Repo conventions", "CI fixes", "DevEx upkeep", "Security", "Tooling".`;
+Too big (a field: several unrelated goals, never a topic):
+- "Repo conventions", "CI fixes", "DevEx upkeep", "Security", "Tooling", a whole product or app.`;
 
 /** One line per PR waiting in this sync: enough to see who works on what, and when. */
 function waitingLine(pr: Pr): string {
@@ -91,18 +101,29 @@ Rules:
 - When what the user is working on (above) names a project and the PR is part of it, that project
   is the topic: join it, or start it under that project's name.
 - Use an existing topic when the PR serves its goal, or came out of that work while the goal is
-  live: same people, same code, recent. A goal is live when the topic has open PRs or activity in
-  the last two weeks. Judge by the topic's goal and people, not by its exact name or area: a topic
+  live: same people, same code, recent. A project is live when it has open PRs or activity in the
+  last two weeks; a standing topic is live for as long as it is listed. Judge by the topic's goal and people, not by its exact name or area: a topic
   named after one step of a project still stands for the whole project.
 - The same person working on the same product or tool in the same stretch of time is usually one
   project. Look at the waiting list too before starting a new topic.
-- A finished or quiet topic only takes a PR that clearly continues that exact goal (a follow-up
-  fix to it). Anything else there is a new topic.
+- Topics in the Archive say so in their brief. A finished project there only takes a PR that
+  clearly continues that exact goal (a follow-up fix to it). A quiet standing topic there takes
+  the next PR of its standard, however long it slept.
+- When a finished project built something that people now extend (new uses, follow-ups by others,
+  weeks later), those PRs serve a standard, not the old goal: put them in the standing topic that
+  keeps it, or start one named after the standard ("Egress", not "GitHub egress tracing").
+- Ownership: a PR that reaches the user through a team review request (see its pending review
+  requests and the user's teams) is judged by what that team keeps up. When it changes code that
+  belongs to a standard a listed standing topic keeps (same owner team, same code), it joins that
+  topic, also when it is a step of someone else's project. A routed PR that fits no standing topic
+  is placed like any other PR.
 - When no live topic's goal fits, use kind "new", also for a single PR, but name the project the
   PR serves, 2 to 6 words, never what the PR itself changes. PRs above or in the waiting list that
   serve the same project get the same new name. goal: one sentence on what that project is for.
+  topicKind: "project" when the goal has a finish line, "standing" when it is a standard kept up
+  with no end.
   Never park a PR in a topic it only shares a repo, an area or a word with.
 - reason: one short sentence on why the PR belongs there.
 ${NO_CI_RULE}
-${jsonOnly('{"assignments": [{"prKey": "owner/repo#1", "kind": "existing", "topicId": "<id>", "reason": "..."} | {"prKey": "owner/repo#2", "kind": "new", "name": "...", "goal": "...", "reason": "..."}]}')}`;
+${jsonOnly('{"assignments": [{"prKey": "owner/repo#1", "kind": "existing", "topicId": "<id>", "reason": "..."} | {"prKey": "owner/repo#2", "kind": "new", "name": "...", "goal": "...", "topicKind": "project", "reason": "..."}]}')}`;
 }

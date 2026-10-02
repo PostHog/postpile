@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { glanceStateOf, type GlanceStateInput } from './glance-state.ts';
+import { glanceRefreshBlockOf, glanceStateOf, type GlanceStateInput } from './glance-state.ts';
 
 const AT = '2026-09-29T10:00:00.000Z';
 
@@ -33,5 +33,17 @@ describe('glanceStateOf', () => {
     expect(glanceStateOf(input({ gap: { reason: 'call_cap', detail: 'x', at: AT } }))).toBe('capped');
     expect(glanceStateOf(input({ gap: { reason: 'daily_cap', detail: 'x', at: AT } }))).toBe('capped');
     expect(glanceStateOf(input())).toBe('queued');
+  });
+});
+
+describe('glanceRefreshBlockOf', () => {
+  const open = { wanted: true, agentOff: false, catchUpOff: false, dailyCapSpent: false };
+
+  it('lets a look refresh the glance unless the PR gets none, the agent or catch-up is off, or the cap is spent', () => {
+    expect(glanceRefreshBlockOf(open)).toBeNull();
+    expect(glanceRefreshBlockOf({ ...open, wanted: false, agentOff: true })).toBe('no_glance');
+    expect(glanceRefreshBlockOf({ ...open, agentOff: true, catchUpOff: true })).toBe('agent_off');
+    expect(glanceRefreshBlockOf({ ...open, catchUpOff: true, dailyCapSpent: true })).toBe('catch_up_off');
+    expect(glanceRefreshBlockOf({ ...open, dailyCapSpent: true })).toBe('daily_cap');
   });
 });

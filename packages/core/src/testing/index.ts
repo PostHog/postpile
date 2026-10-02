@@ -1,7 +1,8 @@
 // Property-test helpers: board recipes (fast-check arbitraries), the board
 // builder, coverage labels, the spec oracles (spec-*.ts: the rules restated
-// from the raw snapshot) and the invariant catalogues. Test code only;
-// import from '@postpile/core/testing'.
+// from the raw snapshot), the invariant catalogues, and the event corpus
+// (who does what on a PR, for table tests). Test code only; import from
+// '@postpile/core/testing'.
 export * from './board-spec.ts';
 export * from './build-board.ts';
 export * from './labels.ts';
@@ -16,8 +17,10 @@ export * from './spec-facts.ts';
 export * from './spec-events.ts';
 export * from './spec-rules.ts';
 export * from './spec-layout.ts';
+export * from './spec-sections.ts';
 export * from './spec-offers.ts';
 export * from './spec-agent-actions.ts';
 export * from './invariants-board.ts';
 export * from './invariants-rules.ts';
 export * from './invariants-agent-actions.ts';
+export * from './event-corpus.ts';

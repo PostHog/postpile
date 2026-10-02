@@ -13,6 +13,7 @@ export { WorkContextRepo, WORK_CONTEXT_VERSIONS_KEPT } from './repos/work-contex
 export { EventRepo } from './repos/events.ts';
 export { UserPrStateRepo } from './repos/user-pr-state.ts';
 export { TopicRepo } from './repos/topics.ts';
+export { DriverPickRepo } from './repos/driver-picks.ts';
 export { TopicMembershipRepo } from './repos/memberships.ts';
 export { TopicProposalRepo } from './repos/proposals.ts';
 export { PrSetRepo } from './repos/sets.ts';

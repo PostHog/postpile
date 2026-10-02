@@ -1,16 +1,18 @@
 import type { ReactNode } from 'react';
-import type { PrDetail, PrLifecycle, PrStatus, PrSummary, TileView } from '@postpile/core';
+import type { PrDetail, PrIcon, PrStatus, PrSummary, TileView } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { useViewer } from '../api/viewer.ts';
 import { assigneeLine } from '../lib/assignees.ts';
 import { updatingNow } from '../lib/staleness.ts';
+import { sinceLabel } from '../lib/time.ts';
+import { useNow } from '../lib/use-now.ts';
 import { ActivityTimeline } from './ActivityTimeline.tsx';
 import { AssignedTo } from './AssignedTo.tsx';
 import { Avatar } from './Avatar.tsx';
 import { AgentFacts } from './AgentFacts.tsx';
 import { GlanceCard } from './GlanceCard.tsx';
 import { NewSinceBox } from './NewSinceBox.tsx';
-import { LIFECYCLE_WORDS, reviewWord } from '../lib/pr.ts';
+import { ICON_WORDS, mergeQueueWord, reviewWord } from '../lib/pr.ts';
 import { type StackPlace, stackPlaces } from '../lib/stacks.ts';
 import { BranchArrowIcon, ExternalIcon, PrStateIcon } from './icons.tsx';
 import { StackMark, StateWordLabel } from './pills.tsx';
@@ -54,29 +56,35 @@ function RepoRef(props: { prKey: string }) {
   );
 }
 
-const LIFECYCLE_TEXT_TONES: Record<PrLifecycle, string> = {
+const ICON_TEXT_TONES: Record<PrIcon, string> = {
   open: 'text-open',
   draft: 'text-muted',
-  queued: 'text-status-queued',
+  merge_queue: 'text-pending-ink',
+  merge_queue_failed: 'text-status-bad',
   merged: 'text-merged-ink',
   closed: 'text-status-bad',
 };
 
 /**
- * The state line: big state icon and lifecycle word, the review state as
- * icon + word, the PR key, and the GitHub link. No CI (only in the facts).
+ * The state line: big state icon and its word, the review state as icon +
+ * word, the PR key, and the GitHub link. A PR in the merge queue says where
+ * it stands there instead of the review ("Merge queue: Testing"), and since
+ * when; the reason of a failure gets its own line (`QueueFailure`). No CI
+ * (only in the facts).
  */
-function StateLine(props: { pr: PrBodyProps['detail']['pr']; status: PrStatus | null }) {
+function StateLine(props: { pr: PrBodyProps['detail']['pr']; status: PrStatus }) {
   const { pr, status } = props;
-  const lifecycle: PrLifecycle = status?.lifecycle ?? (pr.isDraft ? 'draft' : 'open');
-  const words = LIFECYCLE_WORDS[lifecycle];
-  const review = status ? reviewWord(status) : null;
+  const now = useNow();
+  const queue = mergeQueueWord(status, now);
+  const words = queue ?? ICON_WORDS[status.icon];
+  const review = queue ? null : reviewWord(status);
   return (
     <div className="flex items-center gap-2.5">
-      <span title={words.title} className={`flex items-center gap-2 text-[12.5px] font-semibold ${LIFECYCLE_TEXT_TONES[lifecycle]}`}>
-        <PrStateIcon lifecycle={lifecycle} title={words.title} size={14} className="mx-[3px]" />
-        {words.text}
+      <span title={words.title} className={`flex min-w-0 items-center gap-2 text-[12.5px] font-semibold ${ICON_TEXT_TONES[status.icon]}`}>
+        <PrStateIcon state={status.icon} title={words.title} size={14} className="mx-[3px]" />
+        <span className="truncate">{words.text}</span>
       </span>
+      {status.mergeQueue && <span className="shrink-0 text-[11px] text-hint">since {sinceLabel(status.mergeQueue.since, now)}</span>}
       {review && <StateWordLabel word={review} size="md" />}
       <RepoRef prKey={pr.key} />
       <a
@@ -93,6 +101,21 @@ function StateLine(props: { pr: PrBodyProps['detail']['pr']; status: PrStatus | 
   );
 }
 
+/** Under the branch line of a PR the merge queue took out: "Failed (tests failed)", in red, the full story in the tooltip. */
+function QueueFailure(props: { status: PrStatus }) {
+  const now = useNow();
+  const word = mergeQueueWord(props.status, now);
+  if (word?.kind !== 'merge_queue_failed') {
+    return null;
+  }
+  const reason = props.status.mergeQueue?.reason;
+  return (
+    <span title={word.title} className="truncate text-[11px] font-medium text-status-bad">
+      {reason ? `Failed (${reason})` : 'Failed'}
+    </span>
+  );
+}
+
 /** The scrolling part of the detail pane for one PR. */
 export function PrBody(props: PrBodyProps) {
   const { syncing } = useActions();
@@ -100,13 +123,13 @@ export function PrBody(props: PrBodyProps) {
   const place = stackPlaces(props.view.tile.stacks).get(pr.key) ?? null;
   const viewerLogin = useViewer().data?.login ?? null;
   const assigned = assigneeLine(pr.author, pr.assignees ?? [], viewerLogin);
-  // A catch-up run on the PR's topic shows as its glance writing; facts get rewritten by it too.
-  const updating = updatingNow({ syncing, writing: props.detail.glanceState === 'writing' });
+  // A whole-topic catch-up rewrites the facts; a glance-only refresh on look does not (server decides).
+  const updating = updatingNow({ syncing, writing: props.detail.memoryUpdating });
   return (
     // 22px pane edge: boxes and rows run from here; lines of text start 12px in (px-3), at 34.
     <div className="pane-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-auto pl-[22px] pr-[12px] pt-[18px] pb-6">
       <div className="flex flex-col gap-[5px] px-3">
-        <StateLine pr={pr} status={props.summary?.status ?? null} />
+        <StateLine pr={pr} status={props.detail.status} />
         <div className="flex items-start gap-2">
           {/* The mark sits on the title's first line: 18px tag, nudged to its center. */}
           {place && (
@@ -117,6 +140,7 @@ export function PrBody(props: PrBodyProps) {
           <h2 className="min-w-0 text-[16px] leading-[1.3] font-[650] tracking-[-0.016em] text-balance select-text">{pr.title}</h2>
         </div>
         <BranchLine pr={pr} place={place} />
+        <QueueFailure status={props.detail.status} />
         {assigned && (
           // Only when someone other than the author is assigned: whose agent PR it is.
           <span className="flex min-w-0 items-center gap-1 text-[11px] text-hint">

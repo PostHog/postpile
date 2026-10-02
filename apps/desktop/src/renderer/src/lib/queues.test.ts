@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { topicSection, type PrSummary, type PrTier, type TileView, type Topic, type TopicListItem } from '@postpile/core';
+import type { PrSummary, PrTier, TileView, Topic, TopicListItem, TopicSection } from '@postpile/core';
 import { at, NO_OPENED_READ, NO_PR_FACTS, withOffers } from '@postpile/core/fixtures';
 import { holdPlace, placeIn } from './hold-place.ts';
 import {
   applyQueueFilter,
   filterCounts,
   prMatchesFilter,
-  layoutBuckets,
-  layoutFromBuckets,
-  queueLayout,
-  queueRowId,
+  bucketItems,
+  dealtItems,
+  sidebarBuckets,
+  topicRowId,
   gridGroups,
   tilesInTierOrder,
   unreadLook,
@@ -18,9 +18,9 @@ import {
 
 type Tiers = Partial<Record<PrTier, number>>;
 
-/** A topic with these PRs per tier, in the section core gives it (`topicSection`). */
-function item(id: string, tiers: Tiers, extra: Partial<TopicListItem> = {}): TopicListItem {
-  const topic: Topic = { id, name: id, summary: '', summaryInputHash: null, tailoring: '', driver: null, userRole: 'watcher', status: 'active', retiredAt: null, area: null, createdAt: at(0), updatedAt: at(0) };
+/** A topic with these PRs per tier, in the section given (core's `topicSection` in the app). */
+function item(id: string, tiers: Tiers, extra: Partial<TopicListItem> = {}, section: TopicSection = 'other_topics'): TopicListItem {
+  const topic: Topic = { id, name: id, summary: '', summaryInputHash: null, tailoring: '', driver: null, userRole: 'watcher', status: 'active', kind: 'project', retiredAt: null, area: null, createdAt: at(0), updatedAt: at(0) };
   const queues = { tiers: { needs_reply: 0, changes_requested: 0, mine: 0, team: 0, to_review: 0, team_mentioned: 0, rest: 0, ...tiers }, byYou: 0, byTeam: 0, changesAddressed: 0 };
   return {
     topic,
@@ -33,12 +33,12 @@ function item(id: string, tiers: Tiers, extra: Partial<TopicListItem> = {}): Top
     urgentUnreadTiles: 0,
     openTiles: 0,
     totalTiles: 1,
-    yourMoves: [], unseenMergeTiles: 0,
+    yourMoves: [], unseenMergeTiles: 0, quiet: false,
     queues,
-    section: topicSection(queues),
+    section,
     people: [],
     prState: null,
-    prStateCounts: { open: 0, draft: 0, merged: 0, closed: 0 },
+    prStateCounts: { open: 0, merge_queue: 0, merge_queue_failed: 0, draft: 0, merged: 0, closed: 0 },
     ...extra,
   };
 }
@@ -58,12 +58,13 @@ function pr(overrides: Partial<PrSummary>): PrSummary {
     forWhom: { kind: 'you' },
     tier: 'rest',
     authorRelation: 'other',
-    status: { lifecycle: 'open', review: 'review', agentApprovers: [] },
+    status: { lifecycle: 'open', review: 'review', agentApprovers: [], mergeQueue: null, icon: 'open' },
     openThreads: 0,
     verdict: null,
     glanceStale: false,
     forYou: null,
     glanceGap: null,
+    glanceRefreshBlock: null,
     glanceState: 'ready',
     unseenLoudEvents: 0,
     unreadOnGitHub: false,
@@ -104,55 +105,95 @@ function withAddressed(entry: TopicListItem, changesAddressed: number): TopicLis
 }
 
 describe('holding the open topic row in place', () => {
-  it('round-trips a layout through its buckets', () => {
-    const layout = queueLayout([item('depot', { needs_reply: 1 }), item('docs', { rest: 1 })]);
-    expect(layoutFromBuckets(layoutBuckets(layout))).toEqual(layout);
-  });
-
   it('keeps the open topic in its section while its selected tile turned done, then lets it move', () => {
-    const before = queueLayout([item('cache', { to_review: 1 }), item('ci', { to_review: 2 })]);
-    const held = placeIn(layoutBuckets(before), 'cache', queueRowId);
-    // The tile was marked done: the topic has nothing to review any more and would drop to Other topics.
-    const after = queueLayout([item('cache', { rest: 1 }), item('ci', { to_review: 2 })]);
+    const before = sidebarBuckets([item('cache', { to_review: 1 }, {}, 'to_review'), item('ci', { to_review: 2 }, {}, 'to_review')], true);
+    const held = placeIn(before, 'cache', topicRowId);
+    // The tile was marked done: the topic has nothing to review any more and goes back to its owner section.
+    const after = sidebarBuckets([item('cache', { rest: 1 }, {}, 'you_drive'), item('ci', { to_review: 2 }, {}, 'to_review')], true);
 
-    const shown = layoutFromBuckets(holdPlace(layoutBuckets(after), held, queueRowId));
+    const shown = holdPlace(after, held, topicRowId);
 
-    expect(shown.sections.map((section) => [section.tier, section.rows.map((row) => row.item.topic.id), section.count])).toEqual([['to_review', ['cache', 'ci'], 2]]);
-    expect(shown.other).toEqual([]);
+    expect(bucketItems(shown, 'to_review').map((entry) => entry.topic.id)).toEqual(['cache', 'ci']);
+    expect(bucketItems(shown, 'you_drive')).toEqual([]);
     // Once the selection moves, nothing is held and the real layout shows.
-    expect(layoutFromBuckets(holdPlace(layoutBuckets(after), null, queueRowId))).toEqual(after);
+    expect(holdPlace(after, null, topicRowId)).toEqual(after);
   });
 });
 
-describe('queueLayout', () => {
-  it('lists each topic once, in its highest section, and keeps rest-only topics apart', () => {
-    const depot = item('depot', { needs_reply: 1, team: 2, rest: 3 });
-    const ci = item('ci', { team: 1 });
+describe('sidebarBuckets', () => {
+  it("lists each topic once, in core's section, every section but the Archive in order", () => {
+    const depot = item('depot', { needs_reply: 1, team: 2 }, {}, 'needs_reply');
+    const own = item('own', { mine: 1 }, {}, 'you_drive');
     const docs = item('docs', { rest: 2 });
-    const layout = queueLayout([depot, ci, docs]);
-    expect(layout.sections.map((section) => [section.tier, section.count, section.rows.map((row) => [row.item.topic.id, row.count])])).toEqual([
-      ['needs_reply', 1, [['depot', 1]]],
-      ['team', 1, [['ci', 1]]],
-    ]);
-    expect(layout.other.map((entry) => entry.topic.id)).toEqual(['docs']);
-  });
-
-  it('puts Changes you requested under Needs reply and above My PRs', () => {
-    const cache = item('cache', { changes_requested: 1, mine: 2 });
-    const own = item('own', { mine: 1 });
-    const layout = queueLayout([own, cache]);
-    expect(layout.sections.map((section) => [section.tier, section.rows.map((row) => [row.item.topic.id, row.count])])).toEqual([
-      ['changes_requested', [['cache', 1]]],
-      ['mine', [['own', 1]]],
+    const buckets = sidebarBuckets([docs, own, depot], false);
+    expect(buckets.map((bucket) => bucket.key)).toEqual(['needs_reply', 'changes_requested', 'to_review', 'team_mentioned', 'you_drive', 'team_owns', 'other_work', 'other_topics']);
+    expect(buckets.filter((bucket) => bucket.items.length > 0).map((bucket) => [bucket.key, bucket.items.map((entry) => entry.topic.id)])).toEqual([
+      ['needs_reply', ['depot']],
+      ['you_drive', ['own']],
+      ['other_topics', ['docs']],
     ]);
   });
 
   it('lists addressed change requests before ones waiting on the author, else keeps the API order', () => {
-    const waiting = item('waiting', { changes_requested: 1 });
-    const addressed = withAddressed(item('addressed', { changes_requested: 2 }), 1);
-    const alsoWaiting = item('also-waiting', { changes_requested: 1 });
-    const layout = queueLayout([waiting, addressed, alsoWaiting]);
-    expect(layout.sections[0]?.rows.map((row) => row.item.topic.id)).toEqual(['addressed', 'waiting', 'also-waiting']);
+    const waiting = item('waiting', { changes_requested: 1 }, {}, 'changes_requested');
+    const addressed = withAddressed(item('addressed', { changes_requested: 2 }, {}, 'changes_requested'), 1);
+    const alsoWaiting = item('also-waiting', { changes_requested: 1 }, {}, 'changes_requested');
+    expect(bucketItems(sidebarBuckets([waiting, addressed, alsoWaiting], false), 'changes_requested').map((entry) => entry.topic.id)).toEqual(['addressed', 'waiting', 'also-waiting']);
+  });
+});
+
+describe('dealt-with topics', () => {
+  const ids = (entries: TopicListItem[]) => entries.map((entry) => entry.topic.id);
+  const quiet = (id: string, section: TopicSection) => item(id, { rest: 1 }, { quiet: true }, section);
+  const loud = (id: string, section: TopicSection) => item(id, { rest: 1 }, { unreadTiles: 1 }, section);
+
+  it('moves quiet topics of the owner sections to a bucket right after their section', () => {
+    const buckets = sidebarBuckets([loud('cache', 'you_drive'), quiet('done', 'you_drive'), quiet('allow', 'team_owns'), quiet('fyi', 'other_topics'), quiet('bills', 'other_work')], true);
+    expect(buckets.map((bucket) => bucket.key)).toEqual([
+      'needs_reply',
+      'changes_requested',
+      'to_review',
+      'team_mentioned',
+      'you_drive',
+      'dealt:you_drive',
+      'team_owns',
+      'dealt:team_owns',
+      'other_work',
+      'dealt:other_work',
+      'other_topics',
+    ]);
+    expect(ids(bucketItems(buckets, 'you_drive'))).toEqual(['cache']);
+    expect(ids(dealtItems(buckets, 'you_drive'))).toEqual(['done']);
+    expect(ids(bucketItems(buckets, 'team_owns'))).toEqual([]);
+    expect(ids(dealtItems(buckets, 'team_owns'))).toEqual(['allow']);
+    expect(ids(dealtItems(buckets, 'other_work'))).toEqual(['bills']);
+    // Other topics keeps its quiet rows.
+    expect(ids(bucketItems(buckets, 'other_topics'))).toEqual(['fyi']);
+  });
+
+  it('shows everything in place while the search or a queue filter narrows', () => {
+    const buckets = sidebarBuckets([loud('cache', 'you_drive'), quiet('done', 'you_drive')], false);
+    expect(ids(bucketItems(buckets, 'you_drive'))).toEqual(['cache', 'done']);
+    expect(dealtItems(buckets, 'you_drive')).toEqual([]);
+  });
+
+  it('keeps the selected topic in place when it turns quiet, then lets it go behind the line', () => {
+    const before = sidebarBuckets([loud('cache', 'you_drive'), loud('ci', 'you_drive')], true);
+    const held = placeIn(before, 'cache', topicRowId);
+    const after = sidebarBuckets([quiet('cache', 'you_drive'), loud('ci', 'you_drive')], true);
+
+    const shown = holdPlace(after, held, topicRowId);
+    expect(ids(bucketItems(shown, 'you_drive'))).toEqual(['cache', 'ci']);
+    expect(dealtItems(shown, 'you_drive')).toEqual([]);
+    expect(ids(dealtItems(holdPlace(after, null, topicRowId), 'you_drive'))).toEqual(['cache']);
+  });
+
+  it('keeps a selected dealt-with topic behind the line when it gets news, until the selection moves', () => {
+    const before = sidebarBuckets([quiet('done', 'team_owns')], true);
+    const held = placeIn(before, 'done', topicRowId);
+    const after = sidebarBuckets([loud('done', 'team_owns')], true);
+    expect(ids(dealtItems(holdPlace(after, held, topicRowId), 'team_owns'))).toEqual(['done']);
+    expect(ids(bucketItems(holdPlace(after, null, topicRowId), 'team_owns'))).toEqual(['done']);
   });
 });
 

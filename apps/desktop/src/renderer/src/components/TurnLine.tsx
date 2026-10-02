@@ -1,25 +1,37 @@
 import type { WhoseTurn } from '@postpile/core';
 import { turnTitle } from '../lib/why.ts';
 import { Avatar } from './Avatar.tsx';
+import { PrStateIcon } from './icons.tsx';
 
 /**
  * Whose turn, as one line: "Your move" plus the move, or the person it waits
- * on ("sol to merge", on your own PR "Waiting on sol"). Renders nothing when
- * it is nobody's turn.
+ * on ("sol to merge", on your own PR "Waiting on sol"), or the merge queue
+ * (no person: its icon in place of a face). Renders nothing when it is
+ * nobody's turn.
  */
 export function TurnLine(props: { turn: WhoseTurn; greyed?: boolean; besideButton?: boolean }) {
   const { turn } = props;
   // The move needs room to read: below 14rem of footer it drops out whole (no sliver), and the label truncates alone.
   // A button right after the line (the agent's Approve) takes up to 14rem of that footer too.
   const moveShows = props.besideButton ? '@min-[28rem]:block' : '@min-[14rem]:block';
+  // While the move shows, a long one ("Re-submit to the merge queue: ...") truncates, never "Your move".
+  const labelHolds = props.besideButton ? '@min-[28rem]:shrink-0' : '@min-[14rem]:shrink-0';
   if (turn.kind === 'you') {
     return (
       <span title={turnTitle(turn)} className={`flex min-w-0 items-center gap-[7px] text-xs ${props.greyed ? 'text-muted' : 'text-ink-2'}`}>
-        <span className={`flex min-w-0 items-center gap-1.5 font-[650] ${props.greyed ? 'text-muted' : 'text-honey-ink'}`}>
+        <span className={`flex min-w-0 items-center gap-1.5 font-[650] ${labelHolds} ${props.greyed ? 'text-muted' : 'text-honey-ink'}`}>
           <span aria-hidden="true" className={`size-1.5 shrink-0 rounded-full ${props.greyed ? 'bg-ghost' : 'bg-honey ring-2 ring-honey/22'}`} />
           <span className="truncate">Your move</span>
         </span>
         <span className={`hidden min-w-0 truncate ${moveShows}`}>{turn.what}</span>
+      </span>
+    );
+  }
+  if (turn.kind === 'them' && turn.who === null) {
+    return (
+      <span title={turnTitle(turn)} className="flex min-w-0 items-center gap-1.5 text-[11.5px] text-muted">
+        <PrStateIcon state="merge_queue" size={12} title="Merge queue" />
+        <span className="truncate">{turn.what}</span>
       </span>
     );
   }

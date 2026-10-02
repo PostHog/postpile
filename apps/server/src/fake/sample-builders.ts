@@ -1,26 +1,7 @@
 // Small builders that keep sample-data.ts readable. Everything here fills in
 // the fields a fake does not care about with plain defaults.
 import { prKey } from '@postpile/core';
-import type {
-  CheckRollup,
-  ReviewDecision,
-  EventKind,
-  Glance,
-  KeyFile,
-  Loudness,
-  Pr,
-  PrEvent,
-  PrKey,
-  PrState,
-  Provenance,
-  ReviewState,
-  Tile,
-  TileKind,
-  TileMember,
-  Topic,
-  UserRole,
-  Verdict,
-} from '@postpile/core';
+import type { CheckRollup, EventKind, Glance, KeyFile, Loudness, Pr, PrEvent, PrKey, Provenance, PrState, ReviewDecision, ReviewState, Tile, TileKind, TileMember, Topic, TopicKind, UserRole, Verdict } from '@postpile/core';
 
 export const SAMPLE_REPO = 'acme/app';
 export const SAMPLE_VIEWER = 'you';
@@ -60,6 +41,8 @@ export interface SampleCommentInput {
   author: string;
   body: string;
   hoursAgo: number;
+  /** The author edited it since (a bot's sticky status comment); never when left out. */
+  editedHoursAgo?: number;
 }
 
 export interface SampleCommitInput {
@@ -169,6 +152,8 @@ export function samplePr(clock: SampleClock, input: SamplePrInput): Pr {
       url: `https://github.com/${repo}/pull/${input.number}#${comment.id}`,
       path: null,
       threadId: null,
+      lastEditedAt: comment.editedHoursAgo === undefined ? null : clock.hoursAgo(comment.editedHoursAgo),
+      editor: comment.editedHoursAgo === undefined ? null : comment.author,
     })),
     threads: (input.threads ?? []).map((thread) => ({
       id: thread.id,
@@ -276,11 +261,14 @@ export interface SampleTopicInput {
   driver: string | null;
   userRole: UserRole;
   area: string | null;
+  /** Project unless given. */
+  kind?: TopicKind;
 }
 
 export function sampleTopic(clock: SampleClock, input: SampleTopicInput): Topic {
   return {
     ...input,
+    kind: input.kind ?? 'project',
     summaryInputHash: null,
     status: 'active',
     retiredAt: null,

@@ -1,6 +1,7 @@
 // Topic-level queue facts for the sidebar: how many PRs of each tier a topic
 // holds, who is involved, and which tier a tile sorts under. Built on
-// `prTier`; the engine and FakeEngine call the same functions.
+// `prTier`; the engine and FakeEngine call the same functions. The section a
+// topic sits in is `topicSection` (topic-sections.ts).
 import { isBot } from './bots.ts';
 import { sameLogin } from './mentions.ts';
 import { prOwners } from './pr-owners.ts';
@@ -140,24 +141,6 @@ export function topicQueues(prs: QueuedPr[]): TopicQueues {
     }
   }
   return { tiers, byYou, byTeam, changesAddressed };
-}
-
-/**
- * The sidebar section a topic sits in, or null for Other topics (only rest
- * PRs, or none). A mixed topic follows the work (2026-10-01): the highest
- * section any PR other than your own gives it, so a review waiting on you
- * inside a topic that also holds your PR shows under To review. My PRs only
- * when nothing else in the topic asks for a section. The sidebar and the
- * topic header's breadcrumb both read it (`TopicListItem.section`,
- * `TopicDetail.section`).
- */
-export function topicSection(queues: Pick<TopicQueues, 'tiers'>): PrTier | null {
-  const tiers = queues.tiers;
-  const work = PR_TIER_ORDER.find((tier) => tier !== 'rest' && tier !== 'mine' && tiers[tier] > 0);
-  if (work) {
-    return work;
-  }
-  return tiers.mine > 0 ? 'mine' : null;
 }
 
 /** The tile sorts under its most urgent PR's tier. A tile without PRs is `rest`. */

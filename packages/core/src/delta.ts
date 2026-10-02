@@ -1,10 +1,10 @@
-import { effectiveLoudness } from './loudness.ts';
+import { isMemoryNoise, isMemoryTrigger } from './event-roles.ts';
 import type { DossierIssue, DossierVersion, Fact, LoggedEvent, TopicDelta } from './memory.ts';
-import type { Feedback, PrEvent, PrKey } from './types.ts';
+import type { Feedback, PrKey } from './types.ts';
 
 /** Bounds one dossier update. The first update of a big topic hits these; later ones rarely do. */
 export const DELTA_LIMITS = {
-  /** Events per update after dropping muted ones; the oldest go first. */
+  /** Events per update after dropping noise (`memoryRole`); the oldest go first. */
   maxEvents: 120,
   /** Newest events kept per PR when the cap bites, so one busy PR cannot crowd out the rest. */
   maxEventsPerPr: 15,
@@ -31,18 +31,6 @@ export interface TopicDeltaInput {
   staleClaims: DossierIssue[];
   /** Topic feedback, newest first. Only entries newer than previous.createdAt count as new. */
   feedback: Feedback[];
-}
-
-function isMuted(event: PrEvent): boolean {
-  return effectiveLoudness(event) === 'muted';
-}
-
-/**
- * CI results are not a signal (DESIGN.md "CI is not a signal"): they never
- * reach a dossier prompt, and a CI-only change must not start an update.
- */
-function isCi(event: PrEvent): boolean {
-  return event.kind === 'ci';
 }
 
 function bySeq(a: LoggedEvent, b: LoggedEvent): number {
@@ -93,11 +81,28 @@ export function joinedMembers(
 }
 
 /**
+ * Where the digest cursor may move when the delta starts no update: past
+ * the noise right after the cursor, up to the first event that is not
+ * noise. A ride-along event (a review bot's comment) waits there for the
+ * next real update, so the dossier still reads it then.
+ */
+function skipToSeq(fresh: LoggedEvent[], cursorSeq: number): number {
+  let seq = cursorSeq;
+  for (const entry of [...fresh].sort(bySeq)) {
+    if (!isMemoryNoise(entry.event)) {
+      break;
+    }
+    seq = entry.seq;
+  }
+  return seq;
+}
+
+/**
  * Picks what a dossier update gets to read: new events plus the history of
- * joined members (muted and CI dropped, capped by DELTA_LIMITS, bots kept
- * since the prompt compacts them), members that joined after the previous version,
- * members that left, stale facts and claims, and new feedback. toSeq is the
- * highest seq in `logged`, capped or not.
+ * joined members (noise dropped by `memoryRole`, capped by DELTA_LIMITS,
+ * ride-along bots kept since the prompt compacts them), members that joined
+ * after the previous version, members that left, stale facts and claims,
+ * and new feedback. toSeq is the highest seq in `logged`, capped or not.
  */
 export function selectTopicDelta(input: TopicDeltaInput): TopicDelta {
   const members = new Set(input.memberKeys);
@@ -108,7 +113,7 @@ export function selectTopicDelta(input: TopicDeltaInput): TopicDelta {
   const history = input.joinedHistory.filter(
     (entry) => entry.seq <= input.cursorSeq && joinedKeys.has(entry.event.prKey),
   );
-  const audible = [...history, ...fresh].sort(bySeq).filter((entry) => !isMuted(entry.event) && !isCi(entry.event));
+  const audible = [...history, ...fresh].sort(bySeq).filter((entry) => !isMemoryNoise(entry.event));
   const kept = capEvents(audible);
   const timelineKeys = new Set(input.previous?.dossier.timeline.map((entry) => entry.prKey) ?? []);
   const previousAt = input.previous?.createdAt ?? null;
@@ -117,6 +122,7 @@ export function selectTopicDelta(input: TopicDeltaInput): TopicDelta {
     topicId: input.topicId,
     fromSeq: input.cursorSeq,
     toSeq,
+    skipToSeq: skipToSeq(fresh, input.cursorSeq),
     events: kept.map((entry) => entry.event),
     omittedEvents: audible.length - kept.length,
     joinedPrKeys: joined,
@@ -127,10 +133,15 @@ export function selectTopicDelta(input: TopicDeltaInput): TopicDelta {
   };
 }
 
-/** Nothing new: no dossier update needed for this topic. */
+/**
+ * Nothing that starts an update: no trigger event (`memoryRole`), nothing
+ * past the cap, no member change, nothing stale, no feedback. Ride-along
+ * events alone count as empty; they wait for the next real update. A pile
+ * of them past the cap does start one, so they cannot grow without bound.
+ */
 export function isEmptyDelta(delta: TopicDelta): boolean {
   return (
-    delta.events.length === 0 &&
+    !delta.events.some(isMemoryTrigger) &&
     delta.omittedEvents === 0 &&
     delta.joinedPrKeys.length === 0 &&
     delta.leftPrKeys.length === 0 &&

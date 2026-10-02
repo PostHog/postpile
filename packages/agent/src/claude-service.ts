@@ -223,7 +223,7 @@ export class RunnerAgentService implements AgentService {
 
   async tidyTopics(input: TopicTidyInput): Promise<TopicTidyResult> {
     if (input.topics.length === 0) {
-      return { merges: [], splits: [] };
+      return { merges: [], splits: [], renames: [], kinds: [] };
     }
     const { value } = await this.ask('topic_tidy', topicTidyPrompt(input), topicTidyOutput);
     return mapTidyAnswer(value, input);

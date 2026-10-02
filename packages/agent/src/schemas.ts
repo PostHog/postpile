@@ -40,11 +40,14 @@ const glanceOutput = z.object({
   keyFiles: z.array(z.object({ path: text.min(1), why: text.default('') })).default([]),
 });
 
+/** project: has a finish line. standing: a standard kept up with no end (core TopicKind). Missing or unknown reads as a project. */
+const topicKind = z.enum(['project', 'standing']).catch('project');
+
 export const topicAssignmentOutput = z.object({
   assignments: z.array(
     z.discriminatedUnion('kind', [
       z.object({ prKey: text, kind: z.literal('existing'), topicId: text, reason: text }),
-      z.object({ prKey: text, kind: z.literal('new'), name: text.min(1), goal: text.default(''), reason: text }),
+      z.object({ prKey: text, kind: z.literal('new'), name: text.min(1), goal: text.default(''), topicKind, reason: text }),
       // No longer asked for. Still parsed so one such entry does not fail the
       // whole batch; the service drops it and the engine asks again.
       z.object({ prKey: text, kind: z.literal('unsorted'), reason: text.default('') }),
@@ -63,10 +66,13 @@ export const topicTidyOutput = z.object({
         prKeys: z.array(text),
         intoTopicId: text.nullable().default(null),
         newName: text.nullable().default(null),
+        newKind: topicKind,
         reason: text.min(1),
       }),
     )
     .default([]),
+  renames: z.array(z.object({ topicId: text, name: text.min(1), reason: text.min(1) })).default([]),
+  kinds: z.array(z.object({ topicId: text, kind: topicKind })).default([]),
 });
 
 /** Only what changes: anything the answer leaves out stays as it is. */
@@ -219,6 +225,8 @@ export const dossierOutput = z.object({
       }),
     )
     .default([]),
+  // The user's home team drives (a standing topic, nobody leads the wave). Kept only while no person is the driver.
+  driverTeam: z.boolean().catch(false),
   openQuestions: z.array(z.object({ text: text.min(1), askedBy: text.nullable().default(null), refs: refIds })).default([]),
   timeline: z.array(z.object({ prKey: text, role: text.default(''), refs: refIds })).default([]),
   earlier: text.default(''),
@@ -263,6 +271,8 @@ export const dossierUpdateOutput = z.object({
   closeFacts: z.array(z.object({ factId: text, reason: text.default('closed by the dossier update') })).default([]),
   confirmedFactIds: z.array(text).default([]),
   area: text.nullable().catch(null).default(null),
+  // Null or anything unknown keeps the topic's kind.
+  topicKind: z.enum(['project', 'standing']).nullable().catch(null).default(null),
 });
 
 /** item is the 0-based index into FactReconcileInput.items. */

@@ -33,10 +33,10 @@ function TeamsSection() {
   return (
     <Section title="Your teams">
       <p className="text-[11.5px] text-muted">
-        A home team's members are your teammates: Team's PRs, the Team filter, "For you" on their PRs. A routing-only team just brings you its review requests
+        A home team's members are your teammates: Your team owns, the team PRs filter, "For you" on their PRs. A routing-only team just brings you its review requests
         and mentions. Decided from how your reviews of the last 90 days reached you; a change here sticks.
       </p>
-      {roles.error && <p className="text-xs text-unread-ink">Could not load your teams: {roles.error.message}</p>}
+      {roles.error && <p className="text-xs text-status-bad">Could not load your teams: {roles.error.message}</p>}
       {roles.data && teams.length === 0 && <p className="text-xs text-faint">No teams visible to your GitHub token yet.</p>}
       {teams.length > 0 && <TeamRolesList teams={teams} />}
     </Section>
@@ -85,7 +85,7 @@ export function InstructionsPane(props: { onOpenTopic: (topicId: string) => void
         {data && <InstructionsFileLine path={data.path} />}
       </div>
       {setup.data?.flag === 'skipped' && <SkippedSetupBanner onRunSetup={props.onRunSetup} />}
-      {instructions.error && <p className="text-xs text-unread-ink">Could not load your instructions: {instructions.error.message}</p>}
+      {instructions.error && <p className="text-xs text-status-bad">Could not load your instructions: {instructions.error.message}</p>}
       <Section title="Change something">
         <InstructionsChat />
       </Section>

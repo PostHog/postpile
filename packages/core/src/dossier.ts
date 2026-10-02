@@ -94,6 +94,7 @@ export function clampDossier(dossier: Dossier): Dossier {
     people: dossier.people
       .slice(0, limits.people)
       .map((person) => ({ ...person, note: clipText(person.note, limits.personNote) })),
+    ...(dossier.driverTeam ? { driverTeam: true } : {}),
     openQuestions: dossier.openQuestions
       .slice(0, limits.openQuestions)
       .map((question) => ({
@@ -132,6 +133,9 @@ function statusLine(dossier: Dossier): string {
 }
 
 function driverLine(dossier: Dossier): string {
+  if (dossier.driverTeam) {
+    return "Driver: the user's team.";
+  }
   const drivers = dossier.people.filter((person) => person.role === 'driver').map((person) => `@${person.login}`);
   return drivers.length === 0 ? '' : `Driver: ${drivers.join(', ')}.`;
 }

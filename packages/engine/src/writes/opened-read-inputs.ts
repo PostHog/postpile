@@ -4,7 +4,7 @@ import type { Board } from '../board.ts';
 
 /**
  * What the "opened in PostPile" rule (`openedReadCheck`) reads of a PR, for
- * one Board snapshot. The server's check (`QuietReads.markOpened`) and each
+ * one Board snapshot. The server's check (`OpenedReads.markOpened`) and each
  * row's verdict (`PrSummary.openedRead`) both gather it here, so the detail
  * pane never promises a mark the server then refuses.
  */

@@ -1,6 +1,7 @@
 // PR tiers, ported from ghatchup's triage.Classify: which PR-level queue an
-// open PR belongs to. Rules only, no agent. The sidebar's queue sections
-// are built on it (`topicQueues`).
+// open PR belongs to. Rules only, no agent. The ask tiers pull a topic into
+// the sidebar's ask sections (`topicQueues`, `topicSection`); every tier
+// orders the tiles inside a topic.
 import { changesAnswered } from './changes-answered.ts';
 import { PERSONAL_ASK_KINDS } from './kinds.ts';
 import { isPrOwner } from './pr-owners.ts';
@@ -81,7 +82,7 @@ export function prTier(input: PrTierInput): PrTier {
   if (isPersonalRequest(request)) {
     return 'to_review';
   }
-  // Routed on a teammate's PR can only be a routing team's request (2026-09-30): a review owed, not Team's PRs.
+  // Routed on a teammate's PR can only be a routing team's request (2026-09-30): a review owed, not `team`.
   if (request === 'team' && ownedByTeammate(pr, viewer)) {
     return 'to_review';
   }

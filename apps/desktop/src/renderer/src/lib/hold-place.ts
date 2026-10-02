@@ -1,8 +1,9 @@
 // "Marked when you move on" (DESIGN.md "Actions act on what you look at",
-// 2026-09-29): while a tile is selected it keeps its place, and so does the
-// topic row it sits in, even when its state changed (a mark, the opened
-// mark, a sync). Only the selected item is held; everything else sorts as
-// usual. The held place applies until the selection moves.
+// 2026-09-29, kept by "Marked when the dwell ends", 2026-10-01): while a tile
+// is selected it keeps its place, and so does the topic row it sits in, even
+// when its state changed (a mark, the opened mark, a sync). Only the selected
+// item is held; everything else sorts as usual. The held place applies until
+// the selection moves; then `useFlip` slides it to its new place.
 
 /** A list the item can sit in: a tile section (live, snoozed, done) or a sidebar section. */
 export interface Bucket<T> {

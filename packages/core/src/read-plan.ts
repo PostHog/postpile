@@ -15,7 +15,7 @@ import type { IsoTime, PrEvent, PrKey, Tile, UserPrState } from './types.ts';
 export type ReadCause =
   /** Mark read / Done for now on a tile or PR, Not mine, the debug view, Remove team: everything seen now, the scope's handle keys handled. */
   | { kind: 'button' }
-  /** Approve's follow-up mark-read: everything seen now, nothing handled (the approval answers the ask). */
+  /** Approve's (or a comment review's) follow-up mark-read: everything seen now, nothing handled (the review answers the ask). */
   | { kind: 'approved' }
   /** Opened in PostPile, after `openedReadCheck`: everything seen now, handled. */
   | { kind: 'opened' }

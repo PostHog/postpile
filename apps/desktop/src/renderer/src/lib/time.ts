@@ -29,6 +29,18 @@ export function clockLabel(date: Date): string {
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
+/** When something started, for "since 06:28": the clock time today, else the day ("Sep 30"). */
+export function sinceLabel(iso: string, now: Date): string {
+  const then = new Date(iso);
+  if (Number.isNaN(then.getTime())) {
+    return '';
+  }
+  if (then.toDateString() === now.toDateString()) {
+    return clockLabel(then);
+  }
+  return then.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
 /** The newest of a list of ISO times; ISO strings compare correctly as text. */
 export function newest(times: string[]): string | null {
   let result: string | null = null;

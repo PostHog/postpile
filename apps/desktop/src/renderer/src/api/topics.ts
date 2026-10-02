@@ -11,7 +11,7 @@ export function useTopics() {
   });
 }
 
-/** The sidebar's Finished drawer: topics retired in the last 30 days, newest first. */
+/** The sidebar's Archive drawer: retired topics that still take new PRs, newest first. */
 export function useFinishedTopics() {
   return useQuery({
     queryKey: queryKeys.finishedTopics,

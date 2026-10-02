@@ -23,10 +23,21 @@ const VERDICTS: Record<Verdict, { icon: ReactNode; label: string; tone: string }
  * with loud news, an unseen Look closer event), and on a topic with unread
  * PRs. It means exactly "unread", so the dots add up to GitHub's unread
  * count. What is seen but still owed is the honey "Your move" instead.
+ *
+ * It stays mounted when the PR turns read and fades and shrinks out over
+ * 500ms (2026-10-01, "Marked when the dwell ends"), so the mark the user just
+ * caused is seen to happen; instant with reduced motion.
  */
-export function UnreadDot(props: { className?: string }) {
+export function UnreadDot(props: { shown: boolean; className?: string }) {
+  const look = props.shown ? 'scale-100 opacity-100' : 'scale-30 opacity-0';
   return (
-    <span role="img" aria-label="Unread" title="Unread" className={`size-1.5 shrink-0 rounded-full bg-unread ring-2 ring-unread-soft ${props.className ?? ''}`} />
+    <span
+      role={props.shown ? 'img' : undefined}
+      aria-label={props.shown ? 'Unread' : undefined}
+      aria-hidden={props.shown ? undefined : true}
+      title={props.shown ? 'Unread' : undefined}
+      className={`size-1.5 shrink-0 rounded-full bg-unread ring-2 ring-unread-soft transition-[opacity,scale] duration-500 ease-out motion-reduce:transition-none ${look} ${props.className ?? ''}`}
+    />
   );
 }
 
@@ -52,7 +63,15 @@ export function PendingWritePill(props: { pending: TilePendingWrite }) {
  * (`lib/staleness.ts`). Without a verdict it says where the glance stands
  * (`glanceStateText`). Same height as the "for whom" chip.
  */
-export function VerdictPill(props: { verdict: Verdict | null; stale?: boolean; updating?: boolean; greyed?: boolean; missing?: GlanceStateText | null }) {
+export function VerdictPill(props: {
+  verdict: Verdict | null;
+  stale?: boolean;
+  updating?: boolean;
+  /** Only the next sync rewrites a stale verdict (`glanceRefreshBlock` set), not opening the PR. */
+  waitsForSync?: boolean;
+  greyed?: boolean;
+  missing?: GlanceStateText | null;
+}) {
   if (!props.verdict) {
     const text = props.missing;
     const tone = text?.problem ? 'border-status-bad text-status-bad' : 'border-frame text-hint';
@@ -71,7 +90,7 @@ export function VerdictPill(props: { verdict: Verdict | null; stale?: boolean; u
   return (
     <span
       className={`flex h-5 shrink-0 items-center gap-[5px] rounded-full pr-2 pl-1.5 text-[11px] font-semibold whitespace-nowrap inset-ring ${tone}`}
-      title={props.stale ? staleVerdictTitle(props.updating ?? false) : undefined}
+      title={props.stale ? staleVerdictTitle(props.updating ?? false, props.waitsForSync ?? true) : undefined}
     >
       {verdict.icon}
       {verdict.label}
@@ -116,11 +135,14 @@ export function ForWhomChip(props: { forWhom: ForWhom; code: WhyCode; provenance
 }
 
 const STATE_WORD_LOOKS: Record<Exclude<StateWord['kind'], 'draft'>, { glyph: EventGlyph | null; stroke: number; tone: string }> = {
-  review: { glyph: 'eye', stroke: 1.7, tone: 'text-closer' },
-  approved: { glyph: 'check', stroke: 1.9, tone: 'text-status-good' },
+  review: { glyph: 'eye', stroke: 1.7, tone: 'text-ink-2' },
+  approved: { glyph: 'check', stroke: 1.9, tone: 'text-safe' },
   changes: { glyph: 'changes', stroke: 1.7, tone: 'text-status-bad' },
   merged: { glyph: null, stroke: 0, tone: 'text-merged-ink' },
   closed: { glyph: null, stroke: 0, tone: 'text-status-bad' },
+  // The row's icon already is the queue's; the word only takes its colour.
+  merge_queue: { glyph: null, stroke: 0, tone: 'text-pending-ink' },
+  merge_queue_failed: { glyph: null, stroke: 0, tone: 'text-status-bad' },
 };
 
 const STATE_WORD_SIZES = {
@@ -130,8 +152,10 @@ const STATE_WORD_SIZES = {
 
 /**
  * A PR's state word with its icon (`reviewWord` / `rowStateWord` in
- * lib/pr.ts): "Needs review" honey eye, "Approved" green check, "Changes
- * requested" red, merged / closed as the colored word, drafts as an
+ * lib/pr.ts): "Needs review" neutral eye, "Approved" green check, "Changes
+ * requested" red, merged / closed as the colored word (one colour per
+ * meaning, 2026-10-01), the merge queue as a pending amber word ("Merge
+ * queue: Testing", red once it failed), drafts as an
  * outlined DRAFT chip with a pencil. Never CI.
  */
 export function StateWordLabel(props: { word: StateWord; size?: keyof typeof STATE_WORD_SIZES }) {
@@ -159,7 +183,8 @@ export function StateWordLabel(props: { word: StateWord; size?: keyof typeof STA
 
 const RELATION_TONES: Record<TopicRelation, string> = {
   team: 'bg-sea-soft text-sea-ink',
-  routed: 'bg-closer-soft text-closer',
+  // Neutral like the routing "for whom" chip: amber is only the agent's Look closer (2026-10-01).
+  routed: 'bg-segment text-ink-2',
   fyi: 'bg-segment text-muted',
 };
 

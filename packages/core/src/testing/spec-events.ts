@@ -20,10 +20,12 @@ import {
   mentionsViewer,
   mentionsViewerTeam,
   saysDeploy,
+  specQueueFailedAt,
   viewerOwns,
   viewerTeamsMentioned,
   viewerWasAsked,
 } from './spec-facts.ts';
+import { TRUNK_LOGIN } from './build-board.ts';
 
 export interface ExpectedEvent {
   id: string;
@@ -233,8 +235,9 @@ function spokeAfter(pr: Pr, login: string, at: IsoTime, reviewsOnly = false): bo
  * request for the viewer or their team that is still open on a non-draft
  * PR, ready for review when the viewer was asked, a comment on the
  * viewer's PR, a person's comment edit whose body now mentions the viewer or
- * a home team (not spoken after). Never loud: the viewer's own activity and
- * automation (a bot push to a draft is muted). A request for the viewer counts as a person's
+ * a home team (not spoken after), trunk's comment or edit that took the
+ * viewer's own PR out of the merge queue while it is still out. Never loud:
+ * the viewer's own activity and other automation (a bot push to a draft is muted). A request for the viewer counts as a person's
  * whoever clicked it. Everything else is quiet.
  */
 function loudnessOf(pr: Pr, viewer: Viewer, event: RawExpected): { loudness: Loudness; reason: string } {
@@ -242,6 +245,12 @@ function loudnessOf(pr: Pr, viewer: Viewer, event: RawExpected): { loudness: Lou
   const loud = (reason: string) => ({ loudness: 'loud' as const, reason });
   if (event.actor !== '' && sameLogin(event.actor, viewer.login)) {
     return quiet('your own activity');
+  }
+  // Trunk's comment or edit that took the viewer's own PR out of the merge queue, while it is still out (DESIGN "Merge queue").
+  const trunkStatus = (event.kind === 'bot_comment' || event.kind === 'comment_edited') && sameLogin(event.actor, TRUNK_LOGIN);
+  const failure = trunkStatus && viewerOwns(pr, viewer) ? specQueueFailedAt(pr, event.at) : null;
+  if (failure !== null) {
+    return loud(failure.reason === null ? 'removed from the merge queue' : `removed from the merge queue: ${failure.reason}`);
   }
   const requestForViewer = event.kind === 'review_requested' && asksViewer(viewer, event.subject);
   const automation = (event.isBot || event.actor === '') && !requestForViewer;

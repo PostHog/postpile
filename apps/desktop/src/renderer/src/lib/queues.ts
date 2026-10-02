@@ -1,10 +1,10 @@
-import type { PrSummary, PrTier, PrTierOrder, TileGroupOrder, TileView, TopicListItem } from '@postpile/core';
+import type { PrSummary, PrTierOrder, TileGroupOrder, TileView, TopicListItem, TopicSection, TopicSectionOrder } from '@postpile/core';
 import type { Bucket } from './hold-place.ts';
 
 /**
- * Queue tiers in section order: core's PR_TIER_ORDER. The renderer imports
- * types only, so this copy is typed with core's `PrTierOrder` and fails to
- * compile when the two differ.
+ * PR tiers in core's PR_TIER_ORDER, for the tiles inside a topic. The
+ * renderer imports types only, so this copy is typed with core's
+ * `PrTierOrder` and fails to compile when the two differ.
  */
 export const TIER_ORDER: PrTierOrder = ['needs_reply', 'changes_requested', 'mine', 'team', 'to_review', 'team_mentioned', 'rest'];
 
@@ -56,78 +56,93 @@ export function applyQueueFilter(items: TopicListItem[], filter: QueueFilter | n
   return filter ? items.filter((item) => topicFilterCount(item, filter) > 0) : items;
 }
 
-export interface QueueRow {
-  item: TopicListItem;
-  /** PRs of this section's tier in the topic. */
-  count: number;
-}
-
-export interface QueueSection {
-  tier: PrTier;
-  rows: QueueRow[];
-  /** PRs of this tier over the section's topics. */
-  count: number;
-}
-
-export interface QueueLayout {
-  /** Needs reply to Team mentioned; empty sections are left out. Each topic sits in one at most. */
-  sections: QueueSection[];
-  /** Topics with only rest PRs (or none). */
-  other: TopicListItem[];
-}
+/**
+ * Core's TOPIC_SECTION_ORDER. The renderer imports types only, so this copy
+ * is typed with core's `TopicSectionOrder` and fails to compile when the two differ.
+ */
+export const SECTION_ORDER: TopicSectionOrder = [
+  'needs_reply',
+  'changes_requested',
+  'to_review',
+  'team_mentioned',
+  'you_drive',
+  'team_owns',
+  'other_work',
+  'other_topics',
+  'archive',
+];
 
 /**
  * Inside Changes you requested: topics where the move is a re-review (the
  * author addressed the changes or asked again) before topics still waiting
  * on the author.
  */
-function changesRequestedRows(rows: QueueRow[]): QueueRow[] {
-  const addressed = rows.filter((row) => row.item.queues.changesAddressed > 0);
-  const waiting = rows.filter((row) => row.item.queues.changesAddressed === 0);
+function changesRequestedFirst(items: TopicListItem[]): TopicListItem[] {
+  const addressed = items.filter((item) => item.queues.changesAddressed > 0);
+  const waiting = items.filter((item) => item.queues.changesAddressed === 0);
   return [...addressed, ...waiting];
 }
 
 /**
- * Each topic once, in the section core put it in (`TopicListItem.section`),
- * with that section's PR count.
- * Topics keep the API order (urgent first) inside a section, except that
- * Changes you requested lists addressed ones first.
+ * The owner sections whose dealt-with topics (core's `quiet`) leave the list
+ * for a "+ N dealt with" line (DESIGN.md "Dealt-with topics leave the
+ * list"). The asks never hold a quiet topic; Other topics and the Archive
+ * keep theirs.
  */
-export function queueLayout(items: TopicListItem[]): QueueLayout {
-  const sections: QueueSection[] = [];
-  for (const tier of TIER_ORDER.filter((entry) => entry !== 'rest')) {
-    const inTier = items.filter((item) => item.section === tier).map((item) => ({ item, count: item.queues.tiers[tier] }));
-    const rows = tier === 'changes_requested' ? changesRequestedRows(inTier) : inTier;
-    if (rows.length > 0) {
-      sections.push({ tier, rows, count: rows.reduce((total, row) => total + row.count, 0) });
+const DEALT_SECTIONS: TopicSection[] = ['you_drive', 'team_owns', 'other_work'];
+
+/** A dealt-with topic in an owner section: it waits behind the section's "+ N dealt with" line while nothing narrows the list. */
+export function hiddenAsDealt(item: TopicListItem): boolean {
+  return item.quiet && DEALT_SECTIONS.includes(item.section);
+}
+
+/** The bucket key of a section's dealt-with topics, also its fold key. */
+export function dealtKey(section: TopicSection): string {
+  return `dealt:${section}`;
+}
+
+/**
+ * Each topic once, in the section core put it in (`TopicListItem.section`):
+ * every section in order, empty ones too, so a held row has its list to sit
+ * in (`holdPlace`). The Archive is left out: its drawer lists retired
+ * topics. Topics keep the API order (core's order inside a section), except
+ * that Changes you requested lists addressed ones first. With `hideDealt`,
+ * an owner section's quiet topics go to their own bucket right after it
+ * (`dealtKey`), so the held place also keeps a row that turns quiet, or gets
+ * news, while it is selected.
+ */
+export function sidebarBuckets(items: TopicListItem[], hideDealt: boolean): Bucket<TopicListItem>[] {
+  return SECTION_ORDER.filter((section) => section !== 'archive').flatMap((section) => {
+    const inSection = items.filter((item) => item.section === section);
+    const ordered = section === 'changes_requested' ? changesRequestedFirst(inSection) : inSection;
+    if (!hideDealt || !DEALT_SECTIONS.includes(section)) {
+      return [{ key: section, items: ordered }];
     }
-  }
-  return { sections, other: items.filter((item) => item.section === null) };
+    return [
+      { key: section, items: ordered.filter((item) => !hiddenAsDealt(item)) },
+      { key: dealtKey(section), items: ordered.filter(hiddenAsDealt) },
+    ];
+  });
 }
 
-/** The sidebar layout as lists to hold a row in (`holdPlace`): every section, empty ones too, then Other topics. */
-export function layoutBuckets(layout: QueueLayout): Bucket<QueueRow>[] {
-  const sections = TIER_ORDER.filter((tier) => tier !== 'rest').map((tier) => ({
-    key: tier,
-    items: layout.sections.find((section) => section.tier === tier)?.rows ?? [],
-  }));
-  return [...sections, { key: 'other', items: layout.other.map((item) => ({ item, count: 0 })) }];
+/** The topics of the bucket with this key, none when it is not there. */
+function itemsOf(buckets: Bucket<TopicListItem>[], key: string): TopicListItem[] {
+  return buckets.find((bucket) => bucket.key === key)?.items ?? [];
 }
 
-/** Back from `layoutBuckets`: empty sections left out, counts from each row's topic for its section's tier. */
-export function layoutFromBuckets(buckets: Bucket<QueueRow>[]): QueueLayout {
-  const sections: QueueSection[] = [];
-  for (const bucket of buckets.filter((entry) => entry.key !== 'other' && entry.items.length > 0)) {
-    const tier = bucket.key as PrTier;
-    const rows = bucket.items.map((row) => ({ item: row.item, count: row.item.queues.tiers[tier] }));
-    sections.push({ tier, rows, count: rows.reduce((total, row) => total + row.count, 0) });
-  }
-  return { sections, other: buckets.find((entry) => entry.key === 'other')?.items.map((row) => row.item) ?? [] };
+/** The topics of one section in the buckets, none when it is not there. */
+export function bucketItems(buckets: Bucket<TopicListItem>[], section: TopicSection): TopicListItem[] {
+  return itemsOf(buckets, section);
+}
+
+/** A section's dealt-with topics in the buckets, none when nothing is hidden. */
+export function dealtItems(buckets: Bucket<TopicListItem>[], section: TopicSection): TopicListItem[] {
+  return itemsOf(buckets, dealtKey(section));
 }
 
 /** A sidebar row's topic id, for `holdPlace`. */
-export function queueRowId(row: QueueRow): string {
-  return row.item.topic.id;
+export function topicRowId(item: TopicListItem): string {
+  return item.topic.id;
 }
 
 /**

@@ -259,6 +259,12 @@ export interface Dossier {
   /** Sources of status and statusNote together. */
   statusSources?: LineSources;
   people: DossierPerson[];
+  /**
+   * The viewer's home team drives this standing topic and nobody leads the
+   * current wave (2026-10-02): no person has the driver role then. Stored
+   * as the topic's driver TEAM_DRIVER. Optional: older versions have none.
+   */
+  driverTeam?: boolean;
   openQuestions: DossierQuestion[];
   /** Oldest first. PRs that roll off are folded into `earlier`. */
   timeline: DossierPrEntry[];
@@ -320,7 +326,13 @@ export interface TopicDelta {
   fromSeq: number;
   /** Highest seq read, including events dropped by the size cap. The cursor moves here. */
   toSeq: number;
-  /** New events on member PRs, oldest first, after the size cap. */
+  /**
+   * Where the cursor moves when the delta starts no update (`isEmptyDelta`):
+   * past noise, never past a ride-along event, which waits for the next
+   * real update (`memoryRole`).
+   */
+  skipToSeq: number;
+  /** New events on member PRs, oldest first, after the size cap and without noise. */
   events: PrEvent[];
   /** Events past the cap, only counted. */
   omittedEvents: number;

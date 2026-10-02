@@ -25,14 +25,16 @@ describe('staleness wording', () => {
     expect(staleBadge('PR moved since', false)).toBe('out of date · PR moved since');
   });
 
-  it('words the stale verdict box line for both cases', () => {
-    expect(staleGlanceNote(true)).toBe('Written before the last change. Updating now: a new assessment is being written.');
-    expect(staleGlanceNote(false)).toBe('Written before the last change. A new assessment will be written on the next sync.');
+  it('words the stale verdict box line: updating, rewritten on look, or only on the next sync', () => {
+    expect(staleGlanceNote(true, false)).toBe('Written before the last change. Updating now: a new assessment is being written.');
+    expect(staleGlanceNote(false, false)).toBe('Written before the last change. A new assessment is written when you stay on this PR.');
+    expect(staleGlanceNote(false, true)).toBe('Written before the last change. A new assessment will be written on the next sync.');
   });
 
   it('starts the chip tooltip with the same word', () => {
-    expect(staleVerdictTitle(true)).toMatch(/^Updating now:/);
-    expect(staleVerdictTitle(false)).toMatch(/^Out of date:/);
+    expect(staleVerdictTitle(true, false)).toMatch(/^Updating now:/);
+    expect(staleVerdictTitle(false, false)).toMatch(/^Out of date:.*Opening the PR writes a new one\.$/);
+    expect(staleVerdictTitle(false, true)).toMatch(/^Out of date:.*The next sync writes a new one\.$/);
   });
 
   it('counts the events the dossier trails', () => {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { deriveEvents } from './events.ts';
 import { at, makeComment, makeCommit, makeEvent, makePr, makeReview, makeThreadFor, makeTimelineItem, makeUserState, viewer } from './fixtures.ts';
 import {
+  awaitsJudgement,
   botNames,
   botOnlySinceRead,
   actorsFromQuietDetail,
@@ -18,12 +19,14 @@ import {
   quietReadDetail,
   quietReasonDetail,
   quietReasonFromDetail,
+  requestGoneReadCheck,
+  requestGoneReadDetail,
   touchedReadCheck,
   type ClickedReadInput,
   type QuietReadInput,
   type TouchedReadInput,
 } from './quiet-reads.ts';
-import type { Pr, PrEvent } from './types.ts';
+import type { Pr, PrEvent, Viewer } from './types.ts';
 import { prWhoseTurn } from './whose-turn.ts';
 
 const pr = makePr({ number: 7, author: 'alice' });
@@ -53,7 +56,6 @@ function input(overrides: Partial<QuietReadInput> = {}): QuietReadInput {
     viewer,
     notYours: false,
     prFetchedAt: at(50),
-    now: at(60),
     ...overrides,
   };
 }
@@ -134,12 +136,12 @@ describe('quietReadCheck', () => {
     expect(quietReadCheck(input({ events: [botComment(30), humanComment(33)] }))).toEqual({ kind: 'skip', why: 'human_activity' });
   });
 
-  it('never marks the user own open PR after a bot finding: a bot review or inline comment can mean work', () => {
+  it('marks the user own open PR after a bot review or inline comment too (2026-10-01)', () => {
     const own = { ...pr, author: viewer.login };
-    expect(quietReadCheck(input({ pr: own, events: [humanComment(5), botReview(30), ciResult(31)] }))).toEqual({ kind: 'skip', why: 'own_pr' });
+    expect(quietReadCheck(input({ pr: own, events: [humanComment(5), botReview(30), ciResult(31)] })).kind).toBe('mark');
     const inline = makeComment({ id: 'rc9', kind: 'review_comment', threadId: 't1', path: 'a.ts', author: 'coderabbitai[bot]', createdAt: at(30) });
     const inlineEvent = makeEvent({ id: 'inline', prKey: pr.key, kind: 'bot_comment', actor: 'coderabbitai[bot]', isBot: true, at: at(30), sourceId: 'rc9' });
-    expect(quietReadCheck(input({ pr: { ...own, comments: [inline] }, events: [humanComment(5), inlineEvent, ciResult(31)] }))).toEqual({ kind: 'skip', why: 'own_pr' });
+    expect(quietReadCheck(input({ pr: { ...own, comments: [inline] }, events: [humanComment(5), inlineEvent, ciResult(31)] })).kind).toBe('mark');
   });
 
   it('marks the user own open PR when the bots only commented, ran CI or deployed (2026-09-30)', () => {
@@ -181,11 +183,9 @@ describe('quietReadCheck', () => {
     expect(quietReadCheck(input({ pr: asked })).kind).toBe('mark');
   });
 
-  it('waits the grace period after the newest bot activity or thread update', () => {
-    expect(quietReadCheck(input({ now: at(40) }))).toEqual({ kind: 'skip', why: 'grace' });
-    const lateThread = makeThreadFor(pr, { lastReadAt: at(20), updatedAt: at(55), unread: true });
-    expect(quietReadCheck(input({ thread: lateThread, prFetchedAt: at(56) }))).toEqual({ kind: 'skip', why: 'grace' });
-    expect(quietReadCheck(input({ now: at(41) })).kind).toBe('mark');
+  it('marks right away: no wait after the newest bot activity or thread update', () => {
+    const justNow = makeThreadFor(pr, { lastReadAt: at(20), updatedAt: at(55), unread: true });
+    expect(quietReadCheck(input({ thread: justNow, events: [humanComment(5), botComment(55)], prFetchedAt: at(55) }))).toEqual({ kind: 'mark', bots: ['trunk-io[bot]'] });
   });
 });
 
@@ -195,7 +195,7 @@ describe('touchedReadCheck', () => {
   }
 
   // Read at 20 on GitHub; alice commented at 25 and 26; the viewer read them with Mark read in
-  // PostPile at 28 (writes locked, so GitHub still says 20) and approved from the CLI at 30. Now is 60.
+  // PostPile at 28 (writes locked, so GitHub still says 20) and approved from the CLI at 30.
   function touched(overrides: Partial<TouchedReadInput> = {}): TouchedReadInput {
     return {
       thread: makeThreadFor(pr, { lastReadAt: at(20), updatedAt: at(30), unread: true }),
@@ -204,7 +204,6 @@ describe('touchedReadCheck', () => {
       userState: makeUserState({ prKey: pr.key, handledAt: at(28) }),
       viewer,
       prFetchedAt: at(50),
-      now: at(60),
       ...overrides,
     };
   }
@@ -243,11 +242,11 @@ describe('touchedReadCheck', () => {
     expect(touchedReadCheck(touched({ events: [humanComment(25), own('merged', 30)] }))).toEqual({ kind: 'skip', why: 'no_touch' });
   });
 
-  it('includes the user own PR, unless a bot finding came after the touch', () => {
+  it('includes the user own PR, a bot review after the touch included', () => {
     const ownPr = { ...pr, author: viewer.login };
     expect(touchedReadCheck(touched({ pr: ownPr, events: [humanComment(25), own('comment', 30)] }))).toEqual({ kind: 'mark', reason: 'replied' });
     expect(touchedReadCheck(touched({ pr: ownPr, events: [humanComment(25), own('comment', 30), ciResult(35)] }))).toEqual({ kind: 'mark', reason: 'replied' });
-    expect(touchedReadCheck(touched({ pr: ownPr, events: [humanComment(25), own('comment', 30), botReview(35)] }))).toEqual({ kind: 'skip', why: 'own_pr' });
+    expect(touchedReadCheck(touched({ pr: ownPr, events: [humanComment(25), own('comment', 30), botReview(35)] })).kind).toBe('mark');
   });
 
   it('lets bots after the touch pass on the user own PR once it is merged', () => {
@@ -256,15 +255,13 @@ describe('touchedReadCheck', () => {
     expect(touchedReadCheck(touched({ pr: merged, events }))).toEqual({ kind: 'mark', reason: 'replied' });
   });
 
-  it('tolerates bots after the touch on someone else PR, and waits the grace after them', () => {
+  it('tolerates bots after the touch on someone else PR', () => {
     const events = [humanComment(25), own('review_approved', 30), botComment(45)];
     expect(touchedReadCheck(touched({ events }))).toEqual({ kind: 'mark', reason: 'approved' });
-    expect(touchedReadCheck(touched({ events, now: at(50) }))).toEqual({ kind: 'skip', why: 'grace' });
   });
 
-  it('waits the grace period after the touch itself', () => {
-    expect(touchedReadCheck(touched({ now: at(39) }))).toEqual({ kind: 'skip', why: 'grace' });
-    expect(touchedReadCheck(touched({ now: at(41) })).kind).toBe('mark');
+  it('marks right after the touch, no wait', () => {
+    expect(touchedReadCheck(touched({ prFetchedAt: at(30) }))).toEqual({ kind: 'mark', reason: 'approved' });
   });
 
   it('blocks on an unseen merge without the user review unless the touch came after it', () => {
@@ -293,7 +290,7 @@ describe('judgedReadCheck', () => {
   const teammate = (minute: number, overrides: Partial<PrEvent> = {}) =>
     makeEvent({ id: `lyra-${minute}`, prKey: pr.key, kind: 'comment', actor: 'lyra', at: at(minute), summary: 'lyra commented', ...overrides });
 
-  // Read at 20; lyra commented at 30 and the agent judged it quiet; CI at 31. Now is 60.
+  // Read at 20; lyra commented at 30 and the agent judged it quiet; CI at 31.
   function judged(overrides: Partial<QuietReadInput> = {}): QuietReadInput {
     return input({ events: [humanComment(5), teammate(30, { override: judgedQuiet }), ciResult(31)], ...overrides });
   }
@@ -331,14 +328,14 @@ describe('judgedReadCheck', () => {
     expect(judgedReadCheck(judged({ pr: merged, events: [merge] }))).toEqual({ kind: 'skip', why: 'asks_you' });
   });
 
-  it('leaves bots-only threads to the other rules, and a bot finding on your own open PR alone', () => {
+  it('leaves bots-only threads to the other rules, a bot review on your own open PR included', () => {
     expect(judgedReadCheck(judged({ events: [ciResult(31)] }))).toEqual({ kind: 'skip', why: 'no_people' });
     const own = { ...pr, author: viewer.login };
-    expect(judgedReadCheck(judged({ pr: own, events: [teammate(30, { override: judgedQuiet }), botReview(31)] }))).toEqual({ kind: 'skip', why: 'own_pr' });
+    expect(judgedReadCheck(judged({ pr: own, events: [teammate(30, { override: judgedQuiet }), botReview(31)] }))).toEqual({ kind: 'mark', actors: ['lyra', 'coderabbitai[bot]'] });
     expect(judgedReadCheck(judged({ pr: own }))).toEqual({ kind: 'mark', actors: ['lyra', 'CI'] });
   });
 
-  it('keeps the safety checks: snapshot, a new move, grace', () => {
+  it('keeps the safety checks: snapshot, a new move', () => {
     expect(judgedReadCheck(judged({ prFetchedAt: at(30) }))).toEqual({ kind: 'skip', why: 'stale_snapshot' });
     const request = makeTimelineItem({ actor: 'alice', subject: viewer.login, at: at(1) });
     const readied = makePr({ number: 7, author: 'alice', reviewerUsers: [viewer.login], timeline: [request, makeTimelineItem({ id: 'rd', kind: 'ready_for_review', actor: 'alice', subject: null, at: at(30) })] });
@@ -346,18 +343,16 @@ describe('judgedReadCheck', () => {
     expect(judgedReadCheck(judged({ pr: readied, events: [ready] }))).toEqual({ kind: 'skip', why: 'your_move' });
     const asked = makePr({ number: 7, author: 'alice', reviewerUsers: [viewer.login], timeline: [request] });
     expect(judgedReadCheck(judged({ pr: asked })).kind).toBe('mark');
-    expect(judgedReadCheck(judged({ now: at(40) }))).toEqual({ kind: 'skip', why: 'grace' });
     expect(judgedReadCheck(judged({ events: [humanComment(5)] }))).toEqual({ kind: 'skip', why: 'nothing_known' });
   });
 });
 
 describe('isClearableNonPr', () => {
-  it('clears releases and issues past the grace, never PRs or read threads', () => {
+  it('clears unread releases and issues right away, never PRs or read threads', () => {
     const release = { ...makeThreadFor(pr, { updatedAt: at(10) }), subjectType: 'Release', number: null };
-    expect(isClearableNonPr(release, at(21))).toBe(true);
-    expect(isClearableNonPr(release, at(15))).toBe(false);
-    expect(isClearableNonPr({ ...release, unread: false }, at(60))).toBe(false);
-    expect(isClearableNonPr(makeThreadFor(pr, { updatedAt: at(10) }), at(60))).toBe(false);
+    expect(isClearableNonPr(release)).toBe(true);
+    expect(isClearableNonPr({ ...release, unread: false })).toBe(false);
+    expect(isClearableNonPr(makeThreadFor(pr, { updatedAt: at(10) }))).toBe(false);
   });
 });
 
@@ -520,7 +515,7 @@ describe('scenario: own approved PR, only old moves and bot nudges since the rea
       return event.sourceId === 'rm' ? { ...seen, override: judgedQuiet } : seen;
     });
     const thread = makeThreadFor(realPr, { lastReadAt, updatedAt: realPr.updatedAt, unread: true, reason: 'author' });
-    return { thread, pr: realPr, events, userState: null, viewer, notYours: false, prFetchedAt: day(30, 12), now: day(31) };
+    return { thread, pr: realPr, events, userState: null, viewer, notYours: false, prFetchedAt: day(30, 12) };
   }
 
   it('clears it: a new merge move asks nothing, and a stale nudge and CI are no finding', () => {
@@ -554,10 +549,10 @@ describe('scenario: own approved PR, only old moves and bot nudges since the rea
     expect(quietReadCheck(input).kind).toBe('mark');
   });
 
-  it('still blocks after a bot review on the own open PR: that can be a finding', () => {
+  it('clears it after a bot review on the own open PR: findings show up as checks and threads', () => {
     const review = makeReview({ id: 'cr', author: 'coderabbitai[bot]', state: 'COMMENTED', submittedAt: day(30, 9) });
     const base = agentPr();
-    expect(judgedReadCheck(caseInput(agentPr({ reviews: [...base.reviews, review] })))).toEqual({ kind: 'skip', why: 'own_pr' });
+    expect(judgedReadCheck(caseInput(agentPr({ reviews: [...base.reviews, review] }))).kind).toBe('mark');
   });
 
   it('still blocks after a re-review request: the move is new since the read', () => {
@@ -579,5 +574,97 @@ describe('scenario: own approved PR, only old moves and bot nudges since the rea
     expect(isNewYourMove(input, lastReadAt)).toBe(true);
     expect(judgedReadCheck(input).kind).toBe('skip');
     expect(quietReadCheck(input).kind).toBe('skip');
+  });
+});
+
+// The real case of 2026-10-02 (names and repo invented): a bot asked the
+// viewer's home team and two other teams for a review on an outsider's PR.
+// The viewer never opened the thread. The author removed the home team's
+// request, then only answered review bots, and the events agent judged those
+// replies quiet. The request no longer stands, so the thread clears.
+describe('requestGoneReadCheck', () => {
+  const day = (date: number, hour = 12) => new Date(Date.UTC(2026, 8, date, hour)).toISOString();
+  const home = 'acme/team-devex';
+  const devexViewer: Viewer = { login: 'viewer', teams: [home], homeTeams: [home], teamMembers: ['lyra'] };
+  const judgedQuiet = { loudness: 'quiet' as const, reason: 'nothing here needs you', by: 'agent' as const };
+  const request = (subject: string, id: string) => makeTimelineItem({ id, actor: 'assign-bot[bot]', subject, at: day(12) });
+
+  function facadePr(extra: Partial<Pr> = {}): Pr {
+    return makePr({
+      number: 990,
+      author: 'paul',
+      reviewerTeams: ['acme/team-desktop', 'acme/team-data-tools'],
+      timeline: [
+        request(home, 'rq-devex'),
+        request('acme/team-desktop', 'rq-desktop'),
+        request('acme/team-data-tools', 'rq-data'),
+        makeTimelineItem({ id: 'rm-devex', kind: 'review_request_removed', actor: 'assign-bot[bot]', subject: home, at: day(13) }),
+      ],
+      comments: [
+        makeComment({ id: 'c-bot', author: 'greptile-apps[bot]', body: 'Two findings in the facade.', createdAt: day(14) }),
+        makeComment({ id: 'c-paul', author: 'paul', body: 'Fixed both, thanks.', createdAt: day(15) }),
+      ],
+      updatedAt: day(15),
+      ...extra,
+    });
+  }
+
+  /** The sync: the events agent left every person's quiet activity quiet, unless `unjudged` names its source. */
+  function facade(pr: Pr, options: { unjudged?: string; prFetchedAt?: string } = {}): QuietReadInput {
+    const events = deriveEvents(pr, devexViewer, null).map((event) =>
+      awaitsJudgement(event, pr, devexViewer) && event.sourceId !== options.unjudged ? { ...event, override: judgedQuiet } : event,
+    );
+    const thread = makeThreadFor(pr, { reason: 'review_requested', lastReadAt: null, updatedAt: pr.updatedAt, unread: true });
+    return { thread, pr, events, userState: null, viewer: devexViewer, notYours: false, prFetchedAt: options.prFetchedAt ?? day(16) };
+  }
+
+  it('marks a never-opened thread once the request is removed and only bots and quiet replies came since', () => {
+    const input = facade(facadePr());
+    expect(quietReadCheck(input)).toEqual({ kind: 'skip', why: 'never_read' });
+    expect(requestGoneReadCheck(input)).toEqual({ kind: 'mark', actors: ['assign-bot[bot]', 'greptile-apps[bot]', 'paul'] });
+    const detail = requestGoneReadDetail(['greptile-apps[bot]', 'paul']);
+    expect(detail).toBe('review request no longer stands, nothing that needs you since: greptile-apps[bot], paul');
+    expect(quietReasonFromDetail(detail)).toBe('request_gone');
+    expect(actorsFromQuietDetail(detail)).toEqual(['greptile-apps[bot]', 'paul']);
+    // A snapshot older than the thread's update leaves it.
+    expect(requestGoneReadCheck(facade(facadePr(), { prFetchedAt: day(14) }))).toEqual({ kind: 'skip', why: 'stale_snapshot' });
+  });
+
+  it('leaves it while the team request is pending, or the personal one', () => {
+    const teamPending = facadePr({ reviewerTeams: [home, 'acme/team-desktop'], timeline: [request(home, 'rq-devex')] });
+    expect(requestGoneReadCheck(facade(teamPending))).toEqual({ kind: 'skip', why: 'request_stands' });
+    const personal = facadePr({ reviewerUsers: [devexViewer.login], timeline: [...facadePr().timeline, request(devexViewer.login, 'rq-me')] });
+    expect(requestGoneReadCheck(facade(personal))).toEqual({ kind: 'skip', why: 'request_stands' });
+  });
+
+  it("marks it once a teammate's review answered the team request", () => {
+    const answered = facadePr({
+      reviewerTeams: [home],
+      timeline: [request(home, 'rq-devex')],
+      reviews: [makeReview({ id: 'r-lyra', author: 'lyra', state: 'APPROVED', submittedAt: day(14) })],
+    });
+    expect(requestGoneReadCheck(facade(answered))).toEqual({ kind: 'mark', actors: ['greptile-apps[bot]', 'lyra', 'paul'] });
+  });
+
+  it("leaves it when the team was asked again after a teammate's older review", () => {
+    const asked = (reviewAt: string, askedAgainAt: string) =>
+      facadePr({
+        reviewerTeams: [home],
+        timeline: [request(home, 'rq-devex'), makeTimelineItem({ id: 'rq-again', actor: 'assign-bot[bot]', subject: home, at: askedAgainAt })],
+        reviews: [makeReview({ id: 'r-lyra', author: 'lyra', state: 'APPROVED', submittedAt: reviewAt })],
+      });
+    expect(requestGoneReadCheck(facade(asked(day(13), day(14, 6))))).toEqual({ kind: 'skip', why: 'request_stands' });
+    expect(requestGoneReadCheck(facade(asked(day(14, 13), day(13))))).toEqual({ kind: 'mark', actors: ['greptile-apps[bot]', 'lyra', 'paul'] });
+  });
+
+  it('leaves it for a person the events agent has not judged quiet', () => {
+    expect(requestGoneReadCheck(facade(facadePr(), { unjudged: 'c-paul' }))).toEqual({ kind: 'skip', why: 'not_judged' });
+  });
+
+  it('leaves other never-read threads alone, a mention among them', () => {
+    const input = facade(facadePr());
+    const mention = { ...input.thread, reason: 'mention' as const };
+    expect(requestGoneReadCheck({ ...input, thread: mention })).toEqual({ kind: 'skip', why: 'not_requested' });
+    expect(requestGoneReadCheck({ ...input, thread: { ...input.thread, lastReadAt: day(12, 13) } })).toEqual({ kind: 'skip', why: 'was_read' });
   });
 });
