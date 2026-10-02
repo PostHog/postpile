@@ -907,7 +907,7 @@ the app meanwhile.
   2m` from `GET /api/sync/progress`. The total is what the sync planned so
   far and grows (glances are planned as dossiers land).
 - Glance "missing or invalid in the answer" (two real PRs, one of them
-  posthog#107116): replaying posthog#107116 alone against Sonnet gave a
+  acme/app#1812): replaying acme/app#1812 alone against Sonnet gave a
   misspelled verdict (`LOOKS_SASAFE`, `LOOKS_SASE`) in 4 of 6 runs, once
   with the other fields cut to "placeholder", once as broken JSON. The
   strict enum dropped the entry on both attempts. Verdicts are now repaired
@@ -1175,7 +1175,7 @@ the app meanwhile.
   layer is covered only when no approvable layer below it needs a look;
   the layers above wait on it ("waits on #N"). Layers below that need no
   review (merged, draft, own, approved already, pulled in) don't block. One
-  covered PR out of several is named ("Approve #109533"); "Approve stack"
+  covered PR out of several is named ("Approve #2107"); "Approve stack"
   only when every PR on the tile is covered.
 - **One colour per meaning** (2026-10-01, DESIGN.md "Colour per meaning"):
   amber only for Look closer, Needs review neutral ink, queued merged

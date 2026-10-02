@@ -79,13 +79,13 @@ const SCENARIOS: Scenario[] = [
   { says: "jo drives, has an open PR, and gabe has one too (was Team's PRs)", driver: 'jo', relation: 'team', owner: DEVEX, yourPr: true, tiers: { team: 1 }, section: 'you_drive' },
   { says: 'jo drives but nothing of theirs is open', driver: 'jo', relation: 'team', owner: DEVEX, tiers: { rest: 4 }, section: 'you_drive' },
   { says: "jo drives work on another team's code", driver: 'jo', relation: 'team', owner: ALERTS, section: 'you_drive' },
-  { says: "gabe drives and jo has a PR in it (CI speed): Your team owns", driver: 'gabe', relation: 'team', owner: DEVEX, yourPr: true, section: 'team_owns' },
+  { says: "gabe drives and jo has a PR in it (CI timing): Your team owns", driver: 'gabe', relation: 'team', owner: DEVEX, yourPr: true, section: 'team_owns' },
   { says: 'gabe drives, owned by another team (Python upgrade soak)', driver: 'gabe', relation: 'team', owner: 'acme/team-hogql', section: 'team_owns' },
   { says: 'rio from the second home team drives', driver: 'rio', relation: 'team', owner: CI, section: 'team_owns' },
-  { says: 'a teammate drives a topic that reached jo as routed (merge queue lanes)', driver: 'gabe', relation: 'routed', owner: ALERTS, section: 'team_owns' },
-  { says: 'jules drives, owner signal says home team, jo has a PR in it (Alerting V2)', driver: 'jules', relation: 'team', owner: DEVEX, yourPr: true, section: 'other_work' },
+  { says: 'a teammate drives a topic that reached jo as routed (queue lanes)', driver: 'gabe', relation: 'routed', owner: ALERTS, section: 'team_owns' },
+  { says: 'jules drives, owner signal says home team, jo has a PR in it (Alerting rework)', driver: 'jules', relation: 'team', owner: DEVEX, yourPr: true, section: 'other_work' },
   { says: 'gil drives a routed review topic', driver: 'gil', relation: 'routed', owner: ALERTS, section: 'other_work' },
-  { says: 'jules drives an unread, urgent topic (Replay Vision scanner quality): unread does not place it', driver: 'jules', relation: 'routed', section: 'other_work' },
+  { says: 'jules drives an unread, urgent topic (scanner quality): unread does not place it', driver: 'jules', relation: 'routed', section: 'other_work' },
   { says: 'gil drives and the owner team is unknown', driver: 'gil', relation: 'team', owner: null, section: 'other_work' },
 
   // Nobody known to drive it: the owner team decides.
