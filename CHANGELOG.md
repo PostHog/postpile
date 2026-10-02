@@ -11,6 +11,8 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 ### Changed
 
 - Threads that came back unread only because of bots are marked read on the next live poll, usually within a minute. Before, PostPile waited 10 minutes after the last bot activity and then for the next sync, often up to an hour. Still only while GitHub writes are unlocked. The same goes for PRs you already dealt with, activity judged as not needing you, and releases and issues.
+- Bot noise no longer rewrites topic memory. Merge queue status comments (Trunk's "Submitted", "Testing", "Merged successfully"), bot comment edits, deploy statuses and CI never start a dossier update. Review bot findings (CodeRabbit, Codex, Greptile, Copilot, stamphog) wait and are read with the next real update. A bot merging or closing a PR still counts.
+- "Out of date: N newer events" counts only what would update the dossier, so a bot refreshing its comment no longer makes memory look out of date. "Since you last looked" no longer counts CI results and bot status refreshes either.
 
 ## 0.14.0 (2026-10-02)
 

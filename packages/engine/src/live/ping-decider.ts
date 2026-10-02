@@ -1,6 +1,7 @@
 import { EVENTS_PER_PING_ITEM, type AgentService, type PingDecisionAnswer, type PingDecisionItem } from '@postpile/agent';
 import {
   dossierBrief,
+  isMemoryNoise,
   isPersonalPing,
   isPrInQuietRepo,
   pingRule,
@@ -138,7 +139,8 @@ export class PingDecider {
       tailoring: topic ? contexts.forTopic(topic.id).tailoring : '',
       dossierBrief: dossier ? dossierBrief(dossier.dossier) : '',
       glance: store.glances.get(candidate.pr.key),
-      events: candidate.events.slice(0, EVENTS_PER_PING_ITEM),
+      // Noise (CI, a bot refreshing its status comment) would only push the person's words out of the slice.
+      events: candidate.events.filter((event) => !isMemoryNoise(event)).slice(0, EVENTS_PER_PING_ITEM),
       rule: {
         loudness: candidate.rule.loudness,
         reason: candidate.rule.reason,
