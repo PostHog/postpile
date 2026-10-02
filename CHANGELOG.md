@@ -9,6 +9,10 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - In a stack, the layers below one that sits in the merge queue say "Merge queue: with 3/3" instead of "Approved", because queueing a layer merges the ones under it too. If the queue takes the top layer out, they show their review again.
 - The download is about 19 MB smaller (about 15%), and the app takes about 65 MB less disk space. PostPile no longer ships Chromium's translations for languages other than English (the app is English only), or a software graphics library it never uses. Side effect: the few dates and times that followed your system's language now use the US format, like the rest of the app.
 
+### Fixed
+
+- Clicking between the PRs of a stack or set could leave an extra action bar under the assessment for every PR visited, each with that PR's buttons. The detail pane now shows one action bar, for the PR that is open.
+
 ## 0.15.1 (2026-10-02)
 
 ### Added

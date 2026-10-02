@@ -94,6 +94,15 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   (`TileView.newBadge`) come from core too; never compare `state.kind`
   with `unread` / `done` or read `unreadOnGitHub` / `automation` here.
   `src/main/renderer-rules.test.ts` greps for that and fails.
+- Component tests are rare and only for wiring bugs a `lib/` test cannot
+  see (keys, remounts). They are `*.test.tsx` next to the component, start
+  with `// @vitest-environment jsdom`, render with `@testing-library/react`
+  and build their views with `@postpile/core/fixtures`
+  (`DetailPane.test.tsx`).
+- **One key per PR, on `PrBody`.** `DetailPane` keys the whole body by PR
+  key, so everything under it starts fresh per PR. Don't key the body's
+  children by PR key as well: siblings with the same key make React leave
+  stale copies in the DOM (0.15.1 showed one action bar per PR visited).
 
 ## Mutations: one guarded ActionsProvider
 

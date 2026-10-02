@@ -144,15 +144,14 @@ function MissingGlance(props: { detail: PrDetail }) {
 export function GlanceCard(props: GlanceCardProps) {
   const actions = useActions();
   const { glance, glanceStale } = props.detail;
-  // Which PR the old assessment is unfolded for: the card stays mounted while the pane moves between PRs.
-  const [oldShownFor, setOldShownFor] = useState<string | null>(null);
+  // The detail pane remounts the body per PR, so this starts folded on every PR.
+  const [showOld, setShowOld] = useState(false);
   const summary = props.summary;
   const stackLayer = summary?.provenance.kind === 'pulled_in' && !glance;
   // Sets are grouped by the agent among pinged PRs; any member can be wrong there.
   const canUnrelate = props.view.tile.kind === 'set';
   const view = glance ? assessment(glance, summary?.forWhom ?? null) : null;
   const prKey = props.detail.pr.key;
-  const showOld = oldShownFor === prKey;
   // A stale glance folds its advice away; "Show old assessment" brings it back.
   const folded = glanceStale && !showOld;
   const updating = updatingNow({ syncing: actions.syncing, writing: props.detail.glanceState === 'writing' });
@@ -167,7 +166,7 @@ export function GlanceCard(props: GlanceCardProps) {
               updating={updating}
               waitsForSync={props.detail.glanceRefreshBlock !== null}
               showOld={showOld}
-              onToggle={() => setOldShownFor(showOld ? null : prKey)}
+              onToggle={() => setShowOld(!showOld)}
             />
           ) : (
             <Box title={view.title} tag={view.tag} look={VERDICT_BOX[view.verdict]} lines={view.lines} />
@@ -180,8 +179,7 @@ export function GlanceCard(props: GlanceCardProps) {
               <PlainLine mark="“" label="Others:" text={view.others} />
             </div>
           )}
-          {/* Keyed by PR: the card stays mounted while the pane moves, the composer must not. */}
-          <TeachLesson key={prKey} prKey={prKey} />
+          <TeachLesson prKey={prKey} />
         </div>
       )}
       {!folded && glance && <KeyFiles keyFiles={glance.keyFiles} pr={props.detail.pr} />}
