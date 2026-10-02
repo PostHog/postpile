@@ -8,6 +8,8 @@ import { ActionsProvider } from '../api/actions.tsx';
 import { queryKeys } from '../api/keys.ts';
 import { DetailPane } from './DetailPane.tsx';
 
+const NO_TURN = { kind: 'none', who: null, what: '', prKey: null } as const;
+
 const layers = [
   makePr({ number: 11, title: 'Add the cache key' }),
   makePr({ number: 12, title: 'Read the cache' }),
@@ -42,9 +44,9 @@ function summaryOf(pr: Pr): PrSummary {
     done: false,
     ownTeamRequests: [],
     pendingWrite: null,
-    turn: { kind: 'none', who: null, what: '', prKey: null },
+    turn: NO_TURN,
     facts: NO_PR_FACTS,
-    afterRead: { done: false, turn: { kind: 'none', who: null, what: '', prKey: null } },
+    afterRead: { done: false, turn: NO_TURN },
     openedRead: NO_OPENED_READ,
     whatsNew: null,
     updatedAt: at(pr.ref.number),
@@ -91,16 +93,12 @@ const stackView: TileView = withOffers({
   forWhom: { kind: 'you' },
   tier: 'to_review',
   people: [],
-  turn: { kind: 'none', who: null, what: '', prKey: null },
-  afterRead: { done: false, turn: { kind: 'none', who: null, what: '', prKey: null } },
+  turn: NO_TURN,
+  afterRead: { done: false, turn: NO_TURN },
   pendingWrite: null,
   quietRepo: false,
   repoLabel: null,
 });
-
-function pane(prKey: string) {
-  return <DetailPane view={stackView} prKey={prKey} onSelectPr={() => {}} chatRequest={null} noSelectionText="" />;
-}
 
 afterEach(() => {
   cleanup();
@@ -117,7 +115,9 @@ describe('DetailPane', () => {
     }
     const wrap = (prKey: string) => (
       <QueryClientProvider client={client}>
-        <ActionsProvider>{pane(prKey)}</ActionsProvider>
+        <ActionsProvider>
+          <DetailPane view={stackView} prKey={prKey} onSelectPr={() => {}} chatRequest={null} noSelectionText="" />
+        </ActionsProvider>
       </QueryClientProvider>
     );
 
