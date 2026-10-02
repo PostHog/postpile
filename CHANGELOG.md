@@ -7,7 +7,6 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 ### Fixed
 
 - A stack layer in the Trunk merge queue showed as not queued while Trunk tested the stack ("Running tests on this stack"). Trunk status lines in a wording PostPile does not know yet are now read by their emoji, so a PR keeps its queue state when Trunk rewords a message.
-- A topic with your own open PR no longer sits under Team's PRs because a teammate's PR is in it too. It shows under My PRs unless something in it asks for you (a reply, a review, a team mention).
 
 ## 0.14.1 (2026-10-02)
 

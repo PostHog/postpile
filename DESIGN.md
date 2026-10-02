@@ -2882,10 +2882,9 @@ avatars and filters", QueuesB2).
   Team's PRs, To review, Team mentioned (one per `prTier`), then Other
   topics. Each lists topics, not PRs, and **each topic once in the whole
   sidebar** (2026-09-29): in the highest section where it has a PR, with
-  that section's count on the row; a mixed topic follows what it asks of
-  you, so your own PR never lifts it above an ask and a teammate's PR never
-  lifts it above yours (since 2026-10-01, changed 2026-10-02, see "Topics
-  with: the sidebar filter"). Other topics holds topics with only
+  that section's count on the row; a mixed topic follows the work, so your
+  own PR never lifts it (since 2026-10-01, see "Topics with: the sidebar
+  filter"). Other topics holds topics with only
   `rest` PRs; inside it the old groups stay (Needs you, Your team by area,
   Routed, FYI; Routed and FYI folded). The "Topics with" switch (any PR,
   my PRs, team PRs) matches a topic by any of its PRs. Section tint: honey
@@ -3707,13 +3706,10 @@ Owner decisions (2026-10-01), after a UX pass (design "9c"):
   under To review or Team's PRs, by what it asks of you.
 - **A mixed topic follows the work** (`topicSection` in core, on
   `TopicListItem.section` and `TopicDetail.section` since 2026-10-01; it was
-  `topicSectionTier` in the renderer): its section follows what the topic
-  asks of you, the highest of Needs reply, Changes you requested, To review
-  and Team mentioned; My PRs when nothing asks and it holds your PR; Team's
-  PRs only when it holds neither. Your PR next to a teammate's review
-  request puts the topic under To review; next to a teammate's PR or FYI
-  PRs, it stays under My PRs. Changed 2026-10-02: a teammate's PR no longer
-  outranks your own; the owner's driven topic sat under Team's PRs.
+  `topicSectionTier` in the renderer): its section is the
+  highest any PR other than your own gives it; My PRs only when nothing else
+  in it asks for a section. Your PR next to a teammate's review request puts
+  the topic under To review; next to FYI PRs only, it stays under My PRs.
 - **What it hid is said**: "11 topics without your PRs are hidden · Show
   all" under the sections. Other topics narrow with it; Finished steps
   aside, as with search (finished topics have no open PRs).
