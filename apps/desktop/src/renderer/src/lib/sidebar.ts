@@ -61,21 +61,22 @@ function holdsYours(item: TopicListItem): boolean {
 
 /**
  * Other work and its area folds start open when they hold the viewer's open
- * PR, a move of theirs or an unread topic; else folded.
+ * PR, a move of theirs or an unread topic; else folded. It stays open while
+ * it holds the selected topic, so marking that topic read does not close it.
  */
-export function startsOpen(items: TopicListItem[]): boolean {
-  return items.some((item) => holdsYours(item) || item.unreadTiles > 0);
+export function startsOpen(items: TopicListItem[], activeTopicId: string | null = null): boolean {
+  return items.some((item) => holdsYours(item) || item.unreadTiles > 0 || item.topic.id === activeTopicId);
 }
 
-/** The rows a folded fold keeps showing: urgent unread ones (coral), so nothing urgent hides. */
-export function rowsWhileFolded(items: TopicListItem[]): TopicListItem[] {
-  return items.filter((item) => unreadLook(item) === 'urgent');
+/** The rows a folded fold keeps showing: urgent unread ones (coral) and the selected topic, so nothing urgent hides and the open row stays. */
+export function rowsWhileFolded(items: TopicListItem[], activeTopicId: string | null = null): TopicListItem[] {
+  return items.filter((item) => unreadLook(item) === 'urgent' || item.topic.id === activeTopicId);
 }
 
 /** "· 4 unread · 1 urgent" for a folded header, counted by topic; empty when nothing is unread. */
 export function foldedSummary(items: TopicListItem[]): string {
   const unread = items.filter((item) => item.unreadTiles > 0).length;
-  const urgent = rowsWhileFolded(items).length;
+  const urgent = items.filter((item) => unreadLook(item) === 'urgent').length;
   const parts = [unread > 0 ? `${unread} unread` : null, urgent > 0 ? `${urgent} urgent` : null];
   return parts.flatMap((part) => (part === null ? [] : [`· ${part}`])).join(' ');
 }

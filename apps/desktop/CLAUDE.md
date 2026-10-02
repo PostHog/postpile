@@ -488,7 +488,7 @@ same field on `TopicDetail` and the same label and dot
 (`lib/sections.ts`). `lib/sidebar.ts` holds the folds: Other work's area
 folds (`areaFolds`, "More" for single-topic areas), their default
 (`startsOpen`: your PR, move or unread), the rows a folded fold keeps
-(`rowsWhileFolded`, urgent unread) and its header summary; Other topics
+(`rowsWhileFolded`, urgent unread) and its header summary; the selected topic counts like an urgent row (a fold holding it stays open, a folded one keeps its row); Other topics
 splits into unplaced rows ("not sorted yet" without a dossier) and the FYI
 fold. The queue filters still match a topic by any PR. Fold choices are
 local UI state for the session; FYI and the Archive start folded. The Archive drawer (retired topics, `useFinishedTopics`) hides while search

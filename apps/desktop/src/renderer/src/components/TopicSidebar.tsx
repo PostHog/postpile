@@ -443,14 +443,14 @@ export function TopicSidebar(props: TopicSidebarProps) {
       onSelect={() => props.onSelect(item.topic.id)}
     />
   );
-  // Other work and its area folds open by what they hold (`startsOpen`, over the topics the queue filter left); folded, urgent unread rows stay.
-  const otherWorkOpen = isOpen('other_work', startsOpen(otherWork), searching);
+  // Other work and its area folds open by what they hold (`startsOpen`, over the topics the queue filter left); folded, urgent unread rows and the selected topic stay.
+  const otherWorkOpen = isOpen('other_work', startsOpen(otherWork, props.activeTopicId), searching);
   const areaFold = (fold: AreaFold) => {
-    const open = isOpen(fold.key, startsOpen(fold.items), searching);
+    const open = isOpen(fold.key, startsOpen(fold.items, props.activeTopicId), searching);
     return (
       <div key={fold.key} className="flex flex-col gap-px">
         <GroupHeader small label={fold.label} open={open} onToggle={() => toggle(fold.key, open)} flipKey={`group:${fold.key}`} summary={foldedSummary(fold.items)} />
-        {(open ? fold.items : rowsWhileFolded(fold.items)).map((item) => topicItem(item, fold.key))}
+        {(open ? fold.items : rowsWhileFolded(fold.items, props.activeTopicId)).map((item) => topicItem(item, fold.key))}
       </div>
     );
   };
@@ -487,7 +487,7 @@ export function TopicSidebar(props: TopicSidebarProps) {
           {otherWorkOpen ? (
             areaFolds(otherWork).map(areaFold)
           ) : (
-            <div className="flex flex-col gap-px">{rowsWhileFolded(otherWork).map((item) => topicItem(item, 'other_work'))}</div>
+            <div className="flex flex-col gap-px">{rowsWhileFolded(otherWork, props.activeTopicId).map((item) => topicItem(item, 'other_work'))}</div>
           )}
         </div>
       )}

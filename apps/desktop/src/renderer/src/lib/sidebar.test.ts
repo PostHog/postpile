@@ -73,6 +73,14 @@ describe('Other work folds', () => {
     expect(startsOpen([item('news', { unread: 1 })])).toBe(true);
   });
 
+  it('keep the selected topic while folded and open while it sits inside', () => {
+    const items = [item('quiet'), item('open-one')];
+    expect(ids(rowsWhileFolded(items, 'open-one'))).toEqual(['open-one']);
+    expect(startsOpen(items)).toBe(false);
+    expect(startsOpen(items, 'open-one')).toBe(true);
+    expect(startsOpen(items, 'elsewhere')).toBe(false);
+  });
+
   it('keep urgent unread rows while folded and say what is unread', () => {
     const items = [item('quiet'), item('calm', { unread: 2 }), item('urgent', { unread: 1, urgent: 1 })];
     expect(ids(rowsWhileFolded(items))).toEqual(['urgent']);

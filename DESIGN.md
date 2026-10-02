@@ -3791,7 +3791,9 @@ under "More". Other work and each area fold start open when they hold the
 viewer's open PR, a move of theirs or an unread topic, else folded; a
 manual fold is kept for the session. While folded, urgent (coral) unread
 rows stay visible under the header and the header says "· 4 unread · 1
-urgent". The defaults are worked out on the topics the "Topics with"
+urgent". The selected topic counts like an urgent row: a fold holding it stays
+open and a folded one keeps its row, so marking it read never makes it vanish
+before the selection moves. The defaults are worked out on the topics the "Topics with"
 switch leaves, so the switch no longer opens these folds; the search still
 opens every fold. FYI and the Archive start folded as before.
 
