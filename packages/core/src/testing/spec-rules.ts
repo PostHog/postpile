@@ -734,23 +734,24 @@ export function expectedLookCloserText(pr: Pr, team: string, firstSentence: stri
 
 /**
  * A snapshot cut off at the query's caps still holds everything since
- * `since` when it carries the raw cap evidence and every list that hit its
- * cap keeps the newest N (reviews, comments, commits, timeline) with its
- * oldest returned item at or before `since`. A review thread list or a
- * thread's comments at their cap never vouch (a reply there can come at any
- * time); no evidence never vouches.
+ * `since` (null: from the start) when it carries the raw cap evidence and
+ * every list that hit its cap was paged to its end, or keeps the newest N
+ * (reviews, comments, commits, timeline) with its oldest item at or before
+ * `since`. A review thread list or a thread's comments at their cap vouch
+ * only when paged to the end (a reply there can come at any time); no
+ * evidence never vouches.
  */
-export function cutSnapshotHoldsSince(pr: Pr, since: IsoTime): boolean {
+export function cutSnapshotHoldsSince(pr: Pr, since: IsoTime | null): boolean {
   if (pr.capHits === undefined) {
     return false;
   }
   const newestN = ['reviews', 'comments', 'commits', 'timeline'];
-  return pr.capHits.every((hit) => newestN.includes(hit.list) && hit.oldestAt !== null && hit.oldestAt <= since);
+  return pr.capHits.every((hit) => hit.complete === true || (since !== null && newestN.includes(hit.list) && hit.oldestAt !== null && hit.oldestAt <= since));
 }
 
 /** The snapshot vouches for the thread: fetched at or after the thread's last update, and complete, or cut off only before `since`. */
 export function snapshotIsFresh(thread: NotificationThread, prFetchedAt: IsoTime | null, truncated: boolean, pr: Pr | null = null, since: IsoTime | null = null): boolean {
-  if (truncated && !(pr !== null && since !== null && cutSnapshotHoldsSince(pr, since))) {
+  if (truncated && !(pr !== null && cutSnapshotHoldsSince(pr, since))) {
     return false;
   }
   return prFetchedAt !== null && prFetchedAt >= thread.updatedAt;

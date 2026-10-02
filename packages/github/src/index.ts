@@ -5,6 +5,7 @@ export {
   UPDATED_AT_BATCH_SIZE,
   type BranchLookup,
   type BranchPr,
+  type CapFill,
   type GitHubReader,
   type NotificationConditions,
   type NotificationsResult,

@@ -3494,18 +3494,20 @@ finished topics included.
   unread PR threads on the day's real data) used to never clear.
   Normalizing (packages/github, caps in `QUERY_CAPS`) now records from the
   raw answer, before it drops any node, which lists came back full at their
-  cap with more on GitHub, with the node count and the oldest item
-  (`Pr.capHits`). Most capped lists keep the newest N (50 reviews, 60
-  comments, 50 commits, 60 timeline items), so a cut snapshot still covers
-  the unread interval when every list that hit its cap is one of those and
-  came back with an item at or before the rule's boundary (GitHub's read
-  time for bots only, the touch for "you acted after it", the last look for
-  the judged rule). Review threads never vouch: the 50 kept are the newest
-  by creation and each keeps its first 30 comments, so a reply past either
-  cap can come at any time. A snapshot stored before `capHits` existed never
-  vouches until it is fetched again. Core `cutSnapshotCovers` behind
-  `snapshotCoversThread`. A snapshot flagged while no list hit its cap
-  (GitHub counts items the query never returns) covers.
+  cap with more on GitHub, with the node count, the oldest item and the
+  cursor to page on (`Pr.capHits`). Most capped lists keep the newest N (50
+  reviews, 60 comments, 50 commits, 60 timeline items), so a cut snapshot
+  still covers the unread interval when every list that hit its cap is one
+  of those and came back with an item at or before the rule's boundary
+  (GitHub's read time for bots only, the touch for "you acted after it",
+  the last look for the judged rule, the newest review request of the
+  viewer for "request gone"). Review threads count only once complete: the
+  50 kept are the newest by creation and each keeps its first 30 comments,
+  so a reply past either cap can come at any time. A snapshot stored before
+  `capHits` existed never vouches until it is fetched again. A snapshot
+  flagged while no list hit its cap (GitHub counts items the query never
+  returns) covers. Since 2026-10-02 older pages of the capped lists get
+  fetched for unread threads ("Handled quietly" › Capped snapshots).
 
 ## Inbox cleanup
 
@@ -4213,7 +4215,8 @@ Merging or closing counts only when the viewer did it.
      itself. When no list hit PostPile's own caps (empty `capHits`: only
      GitHub's total counted more), the detail pane missed nothing and the
      open marks. When our caps did cut something, it marks only if what
-     fell off is older than GitHub's read time (`cutSnapshotCovers`):
+     fell off is older than GitHub's read time, or paging completed the
+     list (`snapshotCoversSince`, "Handled quietly" › Capped snapshots):
      otherwise the pane the user looked at missed that activity too.
      Before, any truncated snapshot counted as stale, and about half of
      unread PRs (46 of 87, 43 with empty `capHits`) showed "Marks read when
@@ -4264,7 +4267,7 @@ engine `QuietReads` (`writes/quiet-reads.ts`).
    known event by someone else after the read counts as "don't know": left
    alone.
    The stored events only count when the PR snapshot was fetched at or
-   after the thread's `updated_at` (`snapshotCoversThread`). A sync
+   after the thread's `updated_at`. A sync
    refreshes every thread but can leave a PR's snapshot stale (its PR cap, a
    failed fetch); a human comment after the snapshot would then be missing
    and the thread would look bot-only (Codex review on PR #5, 2026-09-29).
@@ -4272,7 +4275,10 @@ engine `QuietReads` (`writes/quiet-reads.ts`).
    again until it moves, and the snapshot from then still covers the
    thread. A snapshot cut off at
    the query's caps covers only when what fell off is older than the read
-   (since 2026-09-30, see "GitHub unread is PostPile unread" › Built).
+   (since 2026-09-30, see "GitHub unread is PostPile unread" › Built), or
+   once paging completed the list (`snapshotCoversSince`, since
+   2026-10-02, "Capped snapshots" below); else the rule skips with
+   `stale_snapshot`.
 2. *(Removed 2026-10-01: no bot finding on the user's own open PR.)* A
    bot's review, or its comment in a review thread, on the user's own open
    PR used to keep the thread unread, because it can mean work. Owner: "I
@@ -4425,8 +4431,8 @@ request no longer stands. Core `requestGoneReadCheck`, all of these:
   themselves (a team request a teammate answered stays loud by its rule,
   and it is what this rule reads), no unseen merge without the user's
   review, no move of theirs new since the request (`isNewYourMove`).
-- The snapshot covers the thread (`snapshotCoversThread`, cut-off lists
-  vouch only for what fell off before the request).
+- The snapshot covers the thread (`snapshotCoversSince` from the request:
+  cut-off lists vouch only for what fell off before it, or once complete).
 
 Log detail "review request no longer stands, nothing that needs you since:
 greptile-apps[bot], paul"; Handled quietly says "request gone, nothing for
@@ -4435,6 +4441,52 @@ and the live poll pass (engine `QuietReads`). This narrows "Never clearable
 by itself: a review request to you or your team" in "GitHub unread is
 PostPile unread": a request that still stands never clears; one that was
 removed or answered no longer asks anything.
+
+**Capped snapshots** (Decided 2026-10-02). Bot-heavy PRs stayed unread for
+days: review bots post dozens of reviews and threads, the query keeps the
+newest 50 of each, and the kept ones started after the user's last read. Every quiet read skipped them as
+`stale_snapshot`. Example: acme/app#1234, where review bots posted more than
+50 reviews and more than 50 review threads, the oldest kept review two days
+after the last read, so no rule could ever clear the thread.
+
+- **Paging.** When a fetched PR's snapshot hits a cap and its thread is
+  unread, PostPile fetches older pages of the capped lists until they reach
+  back to the thread's `last_read_at` or GitHub has no more (core
+  `needsOlderPages`; a thread never read pages to the end). One GraphQL
+  request per page with `before:` cursors (`pageInfo { hasPreviousPage
+  startCursor }`, asked for in the PR query too); a thread whose comments
+  hit their cap pages forward with `after:`. Paged items are selected and
+  normalized exactly like the PR query and merged in by id
+  (packages/github `cap-fill.ts`, `addOlderPage` in `normalize.ts`). Each
+  list's cap hit moves back (`oldestAt`, `cursor`, `nodes`) or is marked
+  `complete`.
+- **Coverage.** One helper decides for every rule: core
+  `snapshotCoversSince(pr, since)`. A snapshot covers since a time when it
+  was not cut by our caps, or every capped list is complete or reaches back
+  to or before it (`capHitCoversSince`). Review threads and a thread's
+  comments have no usable time (`oldestAt` null): they cover only when
+  complete. Each rule passes its own `since` (read time, touch, last look,
+  newest review request); `null` means from the start, so only complete
+  lists count. The freshness check against the thread's `updated_at` stays
+  as it was. Whatever is still not covered keeps blocking the quiet reads.
+- **When.** In the full sync, between the PR fetch (and the moved-PR fetch)
+  and storing, so the stored snapshot (`prs.upsert`) and its derived events
+  include what came in, before the quiet reads; and in the live poll for
+  the PRs it fetched. The snapshot keeps the time the fetch started as its
+  fetch time, so a thread updated while paging ran does not look covered.
+- **Budgets** (engine `cap-fill.ts`): at most 5 pages per list per PR (and 5
+  over all of one PR's threads' comments, `CAP_FILL_PAGES`), 10 PRs per
+  full sync (`CAP_FILL_SYNC_PRS`), 3 per poll (`CAP_FILL_POLL_PRS`), newest
+  thread first, nothing while the GitHub quota is low (`allowsBackground`,
+  checked before each PR). A list still short of the read after its pages
+  ends that PR's paging: coverage needs every list, so the rest could not
+  help. Skipped PRs, the pages each PR took and lists still short go to the
+  sync log; a failed request ends the pass and the PR keeps its unpaged
+  snapshot.
+- **Expected cost** (illustrative numbers): few PRs hit a cap at all, and
+  paging a capped list to its end usually takes a handful of pages, e.g.
+  acme/app#1234 would take 2 (15 older reviews, 4 older threads); a very
+  long timeline can need more than the budget.
 
 **History**: the idea was parked on 2026-09-29 when "merged, nothing new"
 (mark merged PRs read when nothing happened since) turned out to hide
@@ -5601,9 +5653,11 @@ Julian under "Open questions".
   past a cap never arrived while the freshness check still passed, and the
   bot-only read could clear an unread human reply (a human comment followed by
   60 bot comments). The query now also asks for the total count of each; a PR
-  with any list cut off is marked truncated, and `snapshotCoversThread` treats
-  it as not covering the thread (no bot-only, touched or opened mark-read on
-  GitHub for it).
+  with any list cut off is marked truncated, and the quiet reads treat it as
+  not covering the thread (no bot-only, touched or opened mark-read on
+  GitHub for it). Since refined: it covers as far back as each capped list
+  reaches, and older pages get fetched (`snapshotCoversSince`, "Handled
+  quietly" › Capped snapshots).
 - **The MCP process never writes, instructions included.** Reading a glance's
   freshness recorded a new instructions version when `instructions.md` had
   changed while the app was closed, and the read-only MCP process threw

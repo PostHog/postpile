@@ -23,6 +23,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ### Fixed
 
+- PRs with lots of bot reviews no longer stay unread for days. When a PR has more reviews, comments or review threads than PostPile reads in one go and its notification is unread, PostPile now fetches the older ones back to your last read (a few pages per list, a handful of PRs per sync) and then checks it like any other PR. If the older pages still don't reach your last read, the PR stays unread as before.
 - A stack layer in the Trunk merge queue showed as not queued while Trunk tested the stack ("Running tests on this stack"). Trunk status lines in a wording PostPile does not know yet are now read by their emoji, so a PR keeps its queue state when Trunk rewords a message.
 
 ## 0.14.1 (2026-10-02)

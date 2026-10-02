@@ -27,7 +27,8 @@ import { isViewerSubject } from './mentions.ts';
 import { eventsAsOf, prAsOf, userStateAsOf } from './pr-as-of.ts';
 import { reviewRequest, reviewRequestTarget, teamRequestTakenBy } from './review-request.ts';
 import { sawEverythingBefore } from './saw-before-acting.ts';
-import type { CappedList, EventKind, IsoTime, NotificationThread, Pr, PrEvent, PrKey, UserPrState, Viewer } from './types.ts';
+import { snapshotCoversSince } from './snapshot-coverage.ts';
+import type { EventKind, IsoTime, NotificationThread, Pr, PrEvent, PrKey, UserPrState, Viewer } from './types.ts';
 import { prWhoseTurn } from './whose-turn.ts';
 
 /** How far back the "Handled quietly" view looks. */
@@ -72,8 +73,8 @@ export function botNames(events: PrEvent[]): string[] {
  * - not_unread: GitHub has it read already
  * - never_read: the user never read it (no last_read_at), so it is not "back" because of bots
  * - stale_snapshot: the stored PR snapshot is older than the thread's last update (a PR the
- *   sync left out at its cap, or whose fetch failed), or it was cut off at the query's caps
- *   (`Pr.truncated`), so a person's comment may be missing
+ *   sync left out at its cap, or whose fetch failed), or the query's caps cut it inside the
+ *   unread interval (`snapshotCoversSince`), so a person's comment may be missing
  * - human_activity: someone else did something since the last read, or nothing known happened
  * - unseen_merge: a merge without the user's review is never marked read by PostPile
  * - unseen_loud: the PR has unseen loud news (an automation event the agent raised, the app's Look closer)
@@ -95,57 +96,22 @@ export interface QuietReadInput {
   prFetchedAt: IsoTime | null;
 }
 
-export interface SnapshotCoverInput {
-  thread: NotificationThread;
-  prFetchedAt: IsoTime | null;
-  /** The snapshot was cut off at the query's caps (`Pr.truncated`). */
-  prTruncated: boolean;
-  /** The snapshot itself, so a cut-off one can still vouch (`cutSnapshotCovers`); without it a cut-off snapshot never does. */
-  pr?: Pr;
-  /** Where the unread interval the rule reads starts (GitHub's read time, the last reading touch); null: from the start. */
-  since?: IsoTime | null;
-}
-
-/** Capped lists that keep the newest N items: what falls off is older than what came back. */
-const NEWEST_N_LISTS: readonly CappedList[] = ['reviews', 'comments', 'commits', 'timeline'];
-
 /**
- * A snapshot cut off at the caps still holds everything since `since` when
- * every list that hit its cap (`Pr.capHits`, read from the raw answer) keeps
- * the newest N and came back with an item at or before `since`: what fell
- * off is older than that. Review threads never vouch: the query keeps the
- * newest threads by creation and each thread's first 30 comments, so a reply
- * past either cap can come at any time. Without the raw evidence (a snapshot
- * stored before it was recorded) a cut snapshot never vouches.
- */
-export function cutSnapshotCovers(pr: Pr, since: IsoTime): boolean {
-  if (pr.capHits === undefined) {
-    return false;
-  }
-  return pr.capHits.every((hit) => NEWEST_N_LISTS.includes(hit.list) && hit.oldestAt !== null && hit.oldestAt <= since);
-}
-
-/**
- * The stored events can only vouch for "bots only" when the snapshot was
- * fetched at or after the thread's last update. A sync refreshes every
+ * The stored events can only vouch for the unread interval from `since`
+ * when the snapshot was fetched at or after the thread's last update, and
+ * reaches back to `since` past the query's caps. A sync refreshes every
  * thread but may leave a PR out (its cap, a failed fetch): then the thread
  * can be fresher than the snapshot, and a person's comment missing from it.
- * A snapshot cut off at the query's caps (any capped activity list: reviews,
- * comments, review threads and their comments, commits, timeline) covers the
- * thread only when what fell off is older than the unread interval
- * (`cutSnapshotCovers`, since 2026-09-30); before, it never did, and 48 of
- * 130 unread PR threads on real data could never clear.
+ * A snapshot cut off at the caps covers only as far back as each capped
+ * list reaches, or where paging completed the list (`snapshotCoversSince`;
+ * since 2026-09-30, paging since 2026-10-02); before, it never did, and
+ * threads on bot-heavy PRs could never clear.
  */
-export function snapshotCoversThread(input: SnapshotCoverInput): boolean {
-  if (input.prTruncated && !(input.pr && input.since != null && cutSnapshotCovers(input.pr, input.since))) {
+function prCoversThread(input: Pick<QuietReadInput, 'thread' | 'pr' | 'prFetchedAt'>, since: IsoTime | null): boolean {
+  if (!snapshotCoversSince(input.pr, since)) {
     return false;
   }
   return input.prFetchedAt !== null && input.prFetchedAt >= input.thread.updatedAt;
-}
-
-/** The snapshot check for an input that carries the PR itself, for the unread interval from `since`. */
-function prCoversThread(input: Pick<QuietReadInput, 'thread' | 'pr' | 'prFetchedAt'>, since: IsoTime | null): boolean {
-  return snapshotCoversThread({ thread: input.thread, prFetchedAt: input.prFetchedAt, prTruncated: input.pr.truncated === true, pr: input.pr, since });
 }
 
 /**
@@ -699,22 +665,15 @@ export interface OpenedReadInput {
 /**
  * The detail pane the user looked at showed everything up to the thread's
  * last update: the snapshot was fetched at or after it, and PostPile's caps
- * cut nothing from the unread interval. A truncated snapshot passes when no
- * list hit our caps (empty `capHits`: only GitHub's total counted more), or
- * when what fell off is older than GitHub's read time (`cutSnapshotCovers`).
- * Looser than the quiet reads' rule only in the first case (2026-10-01).
+ * cut nothing from the unread interval since GitHub's read time
+ * (`snapshotCoversSince`: no list hit our caps, or each one reaches back
+ * to the read or is complete).
  */
 function openedSnapshotCovers(thread: NotificationThread, prFetchedAt: IsoTime | null, pr: Pr | null): boolean {
   if (prFetchedAt === null || prFetchedAt < thread.updatedAt) {
     return false;
   }
-  if (pr === null || pr.truncated !== true) {
-    return true;
-  }
-  if (pr.capHits !== undefined && pr.capHits.length === 0) {
-    return true;
-  }
-  return thread.lastReadAt !== null && cutSnapshotCovers(pr, thread.lastReadAt);
+  return pr === null || snapshotCoversSince(pr, thread.lastReadAt);
 }
 
 /**

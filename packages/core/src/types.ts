@@ -185,9 +185,9 @@ export interface Pr {
   /**
    * The snapshot was cut off at the query's caps: more reviews, comments,
    * review threads, comments in one thread, commits or timeline items than
-   * it asked for. An event past the caps is missing, so no quiet mark-read
-   * trusts this snapshot. Missing on
-   * snapshots stored before it existed: read as false.
+   * it asked for. An event past the caps may be missing, so the quiet reads
+   * trust it only as far back as `capHits` reaches (`snapshotCoversSince`).
+   * Missing on snapshots stored before it existed: read as false.
    */
   truncated?: boolean;
   /**
@@ -195,8 +195,9 @@ export interface Pr {
    * node was dropped: the list, how many nodes came back, and the oldest
    * item among them (null where no time applies). Empty when no list hit
    * its cap (a snapshot can be `truncated` because GitHub counts items it
-   * never returns). Missing on snapshots stored before it existed: then a
-   * truncated snapshot never vouches (`cutSnapshotCovers`).
+   * never returns). Paging in older items (packages/github `cap-fill.ts`)
+   * moves a hit further back or marks it complete. Missing on snapshots
+   * stored before it existed: then a truncated snapshot never vouches.
    */
   capHits?: CapHit[];
 }
@@ -207,10 +208,20 @@ export type CappedList = 'reviews' | 'comments' | 'review_threads' | 'thread_com
 /** One capped list that came back full with more on GitHub. */
 export interface CapHit {
   list: CappedList;
-  /** Nodes GitHub returned, before normalizing dropped any. */
+  /** Nodes GitHub returned, before normalizing dropped any; older pages paged in add theirs. */
   nodes: number;
   /** The oldest of them; null for review threads and a thread's comments. */
   oldestAt: IsoTime | null;
+  /**
+   * GitHub's cursor for the next page to ask: the start of the oldest page
+   * (`before:`), or for a thread's comments the end of the newest page
+   * (`after:`). Missing on snapshots stored before it was asked for.
+   */
+  cursor?: string | null;
+  /** thread_comments only: the review thread whose comments hit the cap. */
+  threadId?: string;
+  /** Paging reached the end of the list: GitHub had no more pages, so nothing of it is missing. */
+  complete?: boolean;
 }
 
 // ---------------------------------------------------------------------------

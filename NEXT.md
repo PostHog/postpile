@@ -1091,6 +1091,14 @@ the app meanwhile.
 
 ## Decided
 
+- **Capped snapshots get older pages** (2026-10-02, DESIGN.md "Handled
+  quietly" › Capped snapshots): when a fetched PR's snapshot hits a query
+  cap and its thread is unread, the capped lists are paged back to the
+  thread's `last_read_at` (to the end for a never-read thread), then the
+  normal quiet-read rules apply. Coverage is one core helper
+  (`snapshotCoversSince(pr, since)`, each rule passes its own `since`);
+  review threads count only when complete. Budgets: 5 pages per list, 10
+  PRs per sync, 3 per poll, none while the quota is low.
 - **Approve with comment and Comment review** (2026-10-02, DESIGN.md "Own
   PRs never ask for a review"): Approve on the PR pane is split (approve
   now, or with an agent-drafted note); "Comment review" posts a COMMENT
