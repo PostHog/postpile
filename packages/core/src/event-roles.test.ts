@@ -87,7 +87,7 @@ const ROWS: Row[] = [
   { scenario: 'ownOpen', entry: 'copilotReview', kind: 'review_commented', automation: true, loudness: 'quiet', role: 'ride_along', alone: false, withTrigger: true, newer: false, quietRead: 'mark' },
   { scenario: 'teamRouted', entry: 'securityBotComment', kind: 'bot_comment', automation: true, loudness: 'quiet', role: 'ride_along', alone: false, withTrigger: true, newer: false, quietRead: 'mark' },
   { scenario: 'ownOpen', entry: 'stamphogNotYet', kind: 'bot_comment', automation: true, loudness: 'quiet', role: 'ride_along', alone: false, withTrigger: true, newer: false, quietRead: 'mark' },
-  { scenario: 'ownOpen', entry: 'stamphogApproves', kind: 'review_approved', automation: true, loudness: 'quiet', role: 'ride_along', alone: false, withTrigger: true, newer: false, quietRead: 'mark' },
+  { scenario: 'ownOpen', entry: 'stamphogApproves', kind: 'review_approved', automation: true, loudness: 'quiet', role: 'trigger', alone: true, withTrigger: true, newer: true, quietRead: 'mark' },
   { scenario: 'reviewing', entry: 'veriaComment', kind: 'bot_comment', automation: true, loudness: 'quiet', role: 'ride_along', alone: false, withTrigger: true, newer: false, quietRead: 'mark' },
   // The events agent raised a codex finding to loud: loud is never noise and never waits.
   { scenario: 'ownOpen', entry: 'codexFindings', kind: 'review_commented', override: 'loud', automation: true, loudness: 'quiet', role: 'trigger', alone: true, withTrigger: true, newer: true, quietRead: 'unseen_loud' },

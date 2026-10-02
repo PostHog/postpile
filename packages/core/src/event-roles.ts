@@ -18,7 +18,8 @@ export type MemoryRole = 'noise' | 'ride_along' | 'trigger';
 /**
  * Changes to the PR itself start an update whoever made them, a bot
  * included: trunk merging, a bot asking a team for review, dependabot
- * pushing. The app's Look closer stays a trigger even when the events agent
+ * pushing, a bot approving (the review state changes: approved, ready to
+ * merge). The app's Look closer stays a trigger even when the events agent
  * turned it down from loud.
  */
 const ALWAYS_TRIGGER_KINDS: readonly EventKind[] = [
@@ -30,6 +31,7 @@ const ALWAYS_TRIGGER_KINDS: readonly EventKind[] = [
   'converted_to_draft',
   'review_requested',
   'review_request_removed',
+  'review_approved',
   ...PUSH_KINDS,
   'look_closer',
 ];
@@ -44,8 +46,8 @@ const STATUS_KINDS: readonly EventKind[] = ['deploy', 'merge_queue', 'comment_ed
 /**
  * The role of one event, first match wins: loud is always a trigger, muted
  * and CI are always noise, a person's event is a trigger, then a bot's
- * event by what it is. Bot reviews and comments (review bots, github-actions)
- * ride along: their findings feed the glance, and the dossier reads them
+ * event by what it is. Other bot reviews and comments (review bots,
+ * github-actions) ride along: their findings feed the glance, and the dossier reads them
  * once something real happens. "Made by automation" is the actor half of
  * `isAutomation`; the review request half does not matter here, since every
  * review request is a trigger.
