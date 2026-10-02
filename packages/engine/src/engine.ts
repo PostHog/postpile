@@ -384,6 +384,7 @@ export class Engine implements EngineService {
       telemetry: this.telemetry,
       glancePings: new GlancePings(store, now),
       raisedPings: new RaisedPings(decider),
+      pingDecider: decider,
       topicDigest: deps.topicDigest ?? false,
     };
     const github = new GitHubSync(

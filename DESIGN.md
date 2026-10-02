@@ -4806,7 +4806,9 @@ except through the quiet reads at the end of a cycle that stored a change
   (`PingDecider.waitingForUnread`, in memory like the throttle) and decides
   them in the cycle that finds the thread unread, fetched again or not; a
   cycle that fetched nothing, or got a 304 because a full sync read the
-  change first, still decides while something waits. Events
+  change first, still decides while something waits. A full sync hands its
+  new events on read threads over too (`keepReadNews`), since it can be
+  the one that stores the reply first. Events
   that go stale or seen drop out, and a thread read on github.com stays
   read, so nothing waits forever.
 - `pingRule` in core classes the events: `bot` (bot-only), `muted`, `quiet`,
@@ -4846,7 +4848,8 @@ except through the quiet reads at the end of a cycle that stored a change
   question from a person at most two hours (`CONVERSATION_WINDOW_MS`) after
   the viewer's own comment or review on the PR (an approval or a push alone
   is not talking) always pings, whichever of the item's events leads it
-  (a newer team mention must not hide the reply). The agent writes the text but cannot veto
+  (a newer team mention must not hide the reply), and the notification is
+  about the reply: its template text and the Dock bounce come from it. The agent writes the text but cannot veto
   it: it used to drop such answers as "asks nothing", which is still the
   answer the viewer waits for. The item says "Live conversation" in the
   prompt; a veto is stored as a ping with the reason "live conversation,

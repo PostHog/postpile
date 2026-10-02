@@ -289,6 +289,8 @@ export class SyncRun {
       report.prsFound = fetched.prsFound;
       report.newEvents = fetched.newEventIds.length;
       errors.push(...fetched.errors);
+      // A reply the sync stored while its thread was still read pings once the poll finds it unread.
+      this.deps.pingDecider?.keepReadNews(fetched.fetchedPrKeys, fetched.newEventIds);
 
       await this.digest(fetched, options.agentJobs, { phases, budget, tally, errors, report, tidyTried });
       // Before the retire step: what PostPile clears by itself no longer holds a finished topic.

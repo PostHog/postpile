@@ -62,10 +62,18 @@ interface Candidate {
   pr: Pr;
   events: PrEvent[];
   rule: PingRule;
-  /** One of its events answers the viewer in a live conversation (`isLiveConversation`): it pings whatever the agent says. */
-  conversation: boolean;
+  /**
+   * The event that answers the viewer in a live conversation (`isLiveConversation`), null when none does.
+   * It pings whatever the agent says, and the notification is about it, not about a newer event.
+   */
+  conversation: PrEvent | null;
   target: PingTarget;
   tile: Tile | null;
+}
+
+/** What the notification is about: the live reply when there is one, else the rule's event. */
+function leadEvent(candidate: Candidate): PrEvent {
+  return candidate.conversation ?? candidate.rule.event!;
 }
 
 function newestFirst(events: PrEvent[]): PrEvent[] {
@@ -110,7 +118,7 @@ export class PingDecider {
   }
 
   private fallback(candidate: Candidate, why: string): PingDecision {
-    const text = pingTemplate(candidate.rule.event!, candidate.pr);
+    const text = pingTemplate(leadEvent(candidate), candidate.pr);
     return this.decision(candidate, { ping: true, ...text, reason: `${why}; rules: ${candidate.rule.reason}`, source: 'fallback' });
   }
 
@@ -156,7 +164,9 @@ export class PingDecider {
       // Any of the events, not only the rule's: a newer review request must not hide the reply. Addressed
       // first, so a reply the viewer already answered (quiet) or one on a draft stays out, as in pingRule.
       const conversation =
-        rule.class === 'addressed' && events.some((e) => isAddressedToViewer(e, pr, viewer) && isLiveConversation(e, pr, allEvents, viewer));
+        rule.class === 'addressed'
+          ? (newestFirst(events).find((e) => isAddressedToViewer(e, pr, viewer) && isLiveConversation(e, pr, allEvents, viewer)) ?? null)
+          : null;
       result.push({ threadId: thread.id, pr, events: newestFirst(events), rule, conversation, ...located });
     }
     return result;
@@ -186,9 +196,9 @@ export class PingDecider {
         reason: candidate.rule.reason,
         whoseTurn: turn,
         why: whyHere(member?.provenance ?? { kind: 'pinged', reason: 'subscribed' }, candidate.pr, viewer),
-        conversation: candidate.conversation,
+        conversation: candidate.conversation !== null,
       },
-      template: pingTemplate(candidate.rule.event!, candidate.pr),
+      template: pingTemplate(leadEvent(candidate), candidate.pr),
     };
   }
 
@@ -224,10 +234,10 @@ export class PingDecider {
   /** The agent's answer, except that a live conversation pings even when the agent said no. */
   private fromAgent(candidate: Candidate, answer: PingDecisionAnswer): PingDecision {
     const { ping, title, body, reason } = answer;
-    if (ping || !candidate.conversation) {
+    if (ping || candidate.conversation === null) {
       return this.decision(candidate, { ping, title, body, reason, source: 'agent' });
     }
-    const text = title.trim() === '' ? pingTemplate(candidate.rule.event!, candidate.pr) : { title, body };
+    const text = title.trim() === '' ? pingTemplate(leadEvent(candidate), candidate.pr) : { title, body };
     return this.decision(candidate, { ping: true, ...text, reason: `live conversation, pings anyway; agent: ${reason}`, source: 'agent' });
   }
 
@@ -264,9 +274,29 @@ export class PingDecider {
       .filter((d) => d.ping && this.stillNews(byThread.get(d.threadId)!))
       .map((d): Ping => {
         const candidate = byThread.get(d.threadId)!;
-        return { title: d.title, body: d.body, target: candidate.target, personal: isPersonalPing(candidate.rule.event!, candidate.pr, viewer) };
+        return { title: d.title, body: d.body, target: candidate.target, personal: isPersonalPing(leadEvent(candidate), candidate.pr, viewer) };
       });
     return { decisions, pings, errors };
+  }
+
+  /**
+   * A full sync's new events on read threads wait like the poll's: the sync
+   * can store a reply first and take the inbox change (shared ETag) the poll
+   * would have seen. Decides nothing; the next poll cycle does.
+   */
+  keepReadNews(prKeys: PrKey[], newEventIds: string[]): void {
+    const board = Board.load(this.deps.store, this.deps.now().toISOString());
+    const cutoff = new Date(this.deps.now().getTime() - PING_FRESH_MS).toISOString();
+    const news = new Set(newEventIds);
+    for (const key of prKeys) {
+      const thread = board.threads.get(key);
+      if (!thread || thread.unread) {
+        continue;
+      }
+      const kept = this.waitingForUnread.get(key);
+      const events = (board.events.get(key) ?? []).filter((e) => (news.has(e.id) || (kept?.has(e.id) ?? false)) && e.seenAt === null && e.at >= cutoff);
+      this.waitForUnread(key, events);
+    }
   }
 
   /** Some read thread's news waits to be decided once GitHub marks it unread: worth a decision even when the poll fetched nothing. */

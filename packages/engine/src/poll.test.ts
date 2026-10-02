@@ -290,7 +290,8 @@ describe('Engine.pollOnce', () => {
 
     const cycle = await h.engine.pollOnce();
 
-    expect(cycle).toMatchObject({ kind: 'done', pings: [{ target: { prKey: pr.key } }] });
+    // About the reply, not the newer team mention: its text, and the Dock bounces for it.
+    expect(cycle).toMatchObject({ kind: 'done', pings: [{ title: '@bob mentioned you · app#1', target: { prKey: pr.key }, personal: true }] });
     expect(h.store.pingDecisions.listRecent(1)[0]?.reason).toBe('live conversation, pings anyway; agent: team chatter');
   });
 
@@ -310,6 +311,25 @@ describe('Engine.pollOnce', () => {
     const cycle = await h.engine.pollOnce();
 
     expect(cycle).toMatchObject({ kind: 'done', notModified: true });
+    if (cycle.kind !== 'done') throw new Error('expected a done cycle');
+    expect(cycle.pings.map((ping) => ping.title)).toEqual(['@bob asks about the cache key']);
+  });
+
+  it('pings a reply a full sync stored first while its thread was still read', async () => {
+    let clock = NOW;
+    const h = makeHarness({ now: () => clock });
+    const pr = await syncedPr(h, 1);
+    const next = withActivity(h, pr, mention(pr), 'etag-2');
+    h.reader.addPr(next, makeThreadFor(next, { updatedAt: LATER, unread: false }));
+    clock = new Date('2026-09-02T12:05:00.000Z');
+    await h.engine.sync({ maxAgentCalls: 0 });
+
+    h.reader.addPr(next, makeThreadFor(next, { updatedAt: LATER, unread: true }));
+    h.reader.etag = 'etag-3';
+    h.runner.answer('ping_decision', { decisions: [{ id: 'thread-1', ping: true, title: '@bob asks about the cache key', body: 'On #1.', reason: 'direct question' }] });
+    clock = new Date('2026-09-02T12:05:30.000Z');
+    const cycle = await h.engine.pollOnce();
+
     if (cycle.kind !== 'done') throw new Error('expected a done cycle');
     expect(cycle.pings.map((ping) => ping.title)).toEqual(['@bob asks about the cache key']);
   });
