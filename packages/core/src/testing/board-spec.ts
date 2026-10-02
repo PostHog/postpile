@@ -408,9 +408,44 @@ const reviewGroupArb: fc.Arbitrary<GroupSpec> = fc.record({
   snooze: maybe(snoozeArb, 10),
 });
 
+/**
+ * A review request the viewer never opened that no longer stands
+ * (DESIGN "Handled quietly" › Review requests that no longer stand): the
+ * viewer, their team or a routing team asked, then the request removed or
+ * a teammate's review, then a little more activity (now and then another
+ * reviewer's changes request, a push and the author asking again), mostly judged by the
+ * events agent. The general generator reaches the clearable shape on
+ * about one board in 4000.
+ */
+const requestGonePrSpecArb: fc.Arbitrary<PrSpec> = fc
+  .record({
+    target: fc.constantFrom<RequestTarget>('viewer', 'team', 'routing_team'),
+    byBot: fc.boolean(),
+    answer: fc.constantFrom<StepSpec>(
+      { kind: 'review', by: 'teammate', state: 'APPROVED', body: null },
+      { kind: 'review', by: 'teammate', state: 'COMMENTED', body: 'plain' },
+    ),
+    unrequest: fc.boolean(),
+    reReview: fc.boolean(),
+    more: fc.array(stepArb, { maxLength: 3 }),
+    end: endArb,
+    judged: sometimes(3, 1),
+    staleSnapshot: sometimes(1, 6),
+  })
+  .map(({ target, byBot, answer, unrequest, reReview, more, ...picked }) => {
+    const changes: StepSpec[] = [
+      { kind: 'review', by: 'outsider', state: 'CHANGES_REQUESTED', body: null },
+      { kind: 'push', by: 'other', force: false },
+      { kind: 'rerequest' },
+    ];
+    const steps: StepSpec[] = [{ kind: 'request', target, byBot }, unrequest ? { kind: 'unrequest', target } : answer, ...(reReview ? changes : []), ...more];
+    return { ...QUIET_PR, steps, ...picked };
+  });
+
 const anyGroupArb: fc.Arbitrary<GroupSpec> = fc.oneof(
   { weight: 6, arbitrary: groupArb('single', 1, 1) },
   { weight: 3, arbitrary: reviewGroupArb },
+  { weight: 1, arbitrary: fc.record({ kind: fc.constant<GroupKind>('single'), prs: fc.tuple(requestGonePrSpecArb), snooze: fc.constant(null) }) },
   { weight: 4, arbitrary: groupArb('stack', 2, 4) },
   { weight: 4, arbitrary: groupArb('set', 2, 4) },
   { weight: 1, arbitrary: groupArb('set_with_stack', 2, 4) },

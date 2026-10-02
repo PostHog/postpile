@@ -7,6 +7,8 @@ import {
   quietReadDetail,
   quietReasonDetail,
   QUIET_READS_PER_RUN,
+  requestGoneReadCheck,
+  requestGoneReadDetail,
   touchedReadCheck,
   type NotificationThread,
   type PrKey,
@@ -41,7 +43,9 @@ const NOTHING_DONE: QuietReadsResult = { marked: [], otherMarked: [], errors: []
 /**
  * The log detail when a thread may be marked read: only bots since the last
  * read, else the user acted after it, else everything since they last looked
- * is automation or a person the events agent judged as not needing them.
+ * is automation or a person the events agent judged as not needing them,
+ * else a never-opened review request no longer stands and nothing since
+ * needs them.
  */
 function quietDetail(input: QuietReadInput): string | null {
   const bots = quietReadCheck(input);
@@ -56,6 +60,10 @@ function quietDetail(input: QuietReadInput): string | null {
   if (judged.kind === 'mark') {
     return judgedReadDetail(judged.actors);
   }
+  const requestGone = requestGoneReadCheck(input);
+  if (requestGone.kind === 'mark') {
+    return requestGoneReadDetail(requestGone.actors);
+  }
   return null;
 }
 
@@ -68,7 +76,9 @@ function quietDetail(input: QuietReadInput): string | null {
  * (`touchedReadCheck`, "You already dealt with it"), and threads where
  * everything since the user last looked is automation or a person's
  * activity the events agent judged as not needing them (`judgedReadCheck`,
- * "GitHub unread is PostPile unread"). Notifications that are not PRs are
+ * "GitHub unread is PostPile unread"), and never-opened review request
+ * threads whose request no longer stands (`requestGoneReadCheck`).
+ * Notifications that are not PRs are
  * marked read too (`isClearableNonPr`): PostPile shows none of them. Only
  * while GitHub writes are unlocked: locked, nothing happens and nothing
  * piles up as a pending write, and the thread stays unread in PostPile.

@@ -19,9 +19,11 @@ import {
   quietReadDetail,
   quietReasonDetail,
   quietReasonFromDetail,
+  requestGoneReadCheck,
+  requestGoneReadDetail,
   touchedReadCheck,
 } from '../quiet-reads.ts';
-import type { JudgedReadCheck, QuietReadCheck, TouchedReadCheck } from '../quiet-reads.ts';
+import type { JudgedReadCheck, QuietReadCheck, RequestGoneReadCheck, TouchedReadCheck } from '../quiet-reads.ts';
 import { prAsOf } from '../pr-as-of.ts';
 import type { Pr, PrEvent, PrKey, Verdict } from '../types.ts';
 import type { PrSummary, TileView } from '../views.ts';
@@ -40,6 +42,7 @@ import {
   expectedPing,
   expectedPingText,
   expectedQuietRead,
+  expectedRequestGoneRead,
   expectedTier,
   expectedTileForWhom,
   expectedTouchedRead,
@@ -232,11 +235,12 @@ export const pingsMatchTheSpec: Invariant = {
  * quietly", "You already dealt with it", "GitHub unread is PostPile
  * unread"), and mark when nothing on them holds: bot-only activity on
  * someone else's PR gets read, and so does a person's activity the agent
- * judged as not needing the viewer. Whether the tile is unread is no input any more: a thread unread on GitHub
+ * judged as not needing the viewer, and a never-opened review request that
+ * no longer stands. Whether the tile is unread is no input any more: a thread unread on GitHub
  * always makes it so.
  */
 export const quietReadsMatchTheSpec: Invariant = {
-  name: 'quiet reads skip for the spec reasons and mark when none holds (bots only, acted after, judged by the agent)',
+  name: 'quiet reads skip for the spec reasons and mark when none holds (bots only, acted after, judged by the agent, request gone)',
   check(board, views) {
     for (const [key, thread] of board.threads) {
       const holding = holdingViews(views, key);
@@ -262,13 +266,16 @@ export const quietReadsMatchTheSpec: Invariant = {
       const judgedCheck = judgedReadCheck(input);
       const expectedJudged = JSON.stringify(expectedJudgedRead(input));
       ensure(JSON.stringify(judgedCheck) === expectedJudged, `${key}: judged read ${JSON.stringify(judgedCheck)}, expected ${expectedJudged}`);
-      quietDetailsReadBack(key, quietCheck, touchedCheck, judgedCheck);
+      const requestGoneCheck = requestGoneReadCheck(input);
+      const expectedRequestGone = JSON.stringify(expectedRequestGoneRead(input));
+      ensure(JSON.stringify(requestGoneCheck) === expectedRequestGone, `${key}: request-gone read ${JSON.stringify(requestGoneCheck)}, expected ${expectedRequestGone}`);
+      quietDetailsReadBack(key, quietCheck, touchedCheck, judgedCheck, requestGoneCheck);
     }
   },
 };
 
 /** The action log detail of a quiet read gives its reason (and who acted) back, so the Handled quietly view can say why. */
-function quietDetailsReadBack(key: PrKey, quiet: QuietReadCheck, touched: TouchedReadCheck, judged: JudgedReadCheck): void {
+function quietDetailsReadBack(key: PrKey, quiet: QuietReadCheck, touched: TouchedReadCheck, judged: JudgedReadCheck, requestGone: RequestGoneReadCheck): void {
   if (quiet.kind === 'mark') {
     const detail = quietReadDetail(quiet.bots);
     ensure(JSON.stringify(botsFromQuietDetail(detail)) === JSON.stringify(quiet.bots) && quietReasonFromDetail(detail) === 'bots', `${key}: "${detail}" does not read back`);
@@ -280,6 +287,10 @@ function quietDetailsReadBack(key: PrKey, quiet: QuietReadCheck, touched: Touche
   if (judged.kind === 'mark') {
     const detail = judgedReadDetail(judged.actors);
     ensure(quietReasonFromDetail(detail) === 'judged' && JSON.stringify(actorsFromQuietDetail(detail)) === JSON.stringify(judged.actors), `${key}: "${detail}" does not read back`);
+  }
+  if (requestGone.kind === 'mark') {
+    const detail = requestGoneReadDetail(requestGone.actors);
+    ensure(quietReasonFromDetail(detail) === 'request_gone' && JSON.stringify(actorsFromQuietDetail(detail)) === JSON.stringify(requestGone.actors), `${key}: "${detail}" does not read back`);
   }
 }
 

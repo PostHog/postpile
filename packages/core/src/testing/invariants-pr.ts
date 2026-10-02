@@ -3,14 +3,14 @@
 // unread is PostPile unread", "Live poll and Mac pings", "Look closer pings").
 import { lookCloserEvent } from '../glance-pings.ts';
 import { pingRule } from '../pings.ts';
-import { judgedReadCheck, quietReadCheck, touchedReadCheck } from '../quiet-reads.ts';
+import { judgedReadCheck, quietReadCheck, requestGoneReadCheck, touchedReadCheck } from '../quiet-reads.ts';
 import { snoozePhase } from '../snooze.ts';
 import type { NotificationThread, Pr, PrEvent, PrKey } from '../types.ts';
 import type { PrSummary, TileView } from '../views.ts';
 import type { BoardSpec, RequestTarget } from './board-spec.ts';
 import { buildBoard, tileViewsOf, type PropertyBoard } from './build-board.ts';
 import { describeTurn, ensure, eventsOf, isNews, prOf, trackedRows, type Invariant } from './invariant.ts';
-import { inGitHubQueue, isViewerLogin, newestTouch, READING_TOUCHES, routedRequestWaits, specMergeQueue, specPrIcon } from './spec-facts.ts';
+import { asksViewer, inGitHubQueue, isViewerLogin, newestTouch, pendingRequest, READING_TOUCHES, requestSubjectOf, routedRequestWaits, specMergeQueue, specPrIcon } from './spec-facts.ts';
 import { cutSnapshotHoldsSince, expectedSnoozePhase, isAskEvent, isAutomationEvent, lastLooked } from './spec-rules.ts';
 
 /**
@@ -103,12 +103,24 @@ function quietInput(board: PropertyBoard, key: PrKey, thread: NotificationThread
   };
 }
 
+/** A review request of the viewer or one of their teams, whoever made it. */
+function isViewerRequest(pr: Pr, viewer: PropertyBoard['viewer'], event: PrEvent): boolean {
+  return event.kind === 'review_requested' && asksViewer(viewer, requestSubjectOf(pr, event));
+}
+
+/** When the newest review request of the viewer or one of their teams came, null when none did. */
+function latestViewerRequest(pr: Pr, viewer: PropertyBoard['viewer'], events: PrEvent[]): string | null {
+  return events.filter((event) => isViewerRequest(pr, viewer, event)).map((event) => event.at).toSorted().at(-1) ?? null;
+}
+
 /**
  * The quiet mark-reads never hide an ask: the bot-only rule never marks
  * while a person's loud news is unseen, the acted-after rule only when the
  * viewer reviewed or commented after every such news, the judged rule never
  * while a person's activity since the viewer last looked is loud or not
- * judged by the agent, and none trusts a snapshot cut off inside the unread interval.
+ * judged by the agent, the request-gone rule never while the viewer's
+ * request stands or a person's activity since it is not judged quiet, and
+ * none trusts a snapshot cut off inside the unread interval.
  */
 export const quietReadsNeverHideAsks: Invariant = {
   name: 'quiet reads never hide unseen human news the viewer did not act after or the agent did not judge, nor trust a snapshot cut off inside the unread interval',
@@ -143,6 +155,16 @@ export const quietReadsNeverHideAsks: Invariant = {
         );
         ensure(unjudged.length === 0, `${key}: judged quiet read with activity the agent did not judge quiet: ${unjudged.map((event) => event.id).join(', ')}`);
       }
+      if (requestGoneReadCheck(input).kind === 'mark') {
+        const pending = pendingRequest(pr, board.viewer);
+        ensure(pending === null || pending === 'team_taken', `${key}: request-gone quiet read while the request is ${pending}`);
+        const requestAt = latestViewerRequest(pr, board.viewer, events)!;
+        ensure(!pr.truncated || cutSnapshotHoldsSince(pr, requestAt), `${key}: request-gone quiet read on a snapshot cut off after the request`);
+        const unjudged = events.filter(
+          (event) => event.at > requestAt && !isViewerLogin(board.viewer, event.actor) && !isAutomationEvent(pr, board.viewer, event) && (event.override === null || event.override.loudness === 'loud'),
+        );
+        ensure(unjudged.length === 0, `${key}: request-gone quiet read with activity the agent did not judge quiet: ${unjudged.map((event) => event.id).join(', ')}`);
+      }
     }
   },
 };
@@ -153,7 +175,8 @@ export const quietReadsNeverHideAsks: Invariant = {
  * viewer on it is unseen, nor while one came after the viewer last looked
  * (a review request of them or their team, a mention, a team mention, a
  * question or reply to them, an unseen merge without their review), also
- * after the agent lowered it.
+ * after the agent lowered it. The request-gone rule reads the viewer's own
+ * review requests instead (none may stand) and counts every other ask.
  */
 export const asksNeverAutoClear: Invariant = {
   name: 'no quiet read marks a thread while an ask of the viewer on it is unseen or came since they last looked',
@@ -169,14 +192,28 @@ export const asksNeverAutoClear: Invariant = {
         touchedReadCheck(input).kind === 'mark' ? 'acted after' : null,
         judgedReadCheck(input).kind === 'mark' ? 'judged' : null,
       ].filter((reason) => reason !== null);
-      if (reasons.length === 0) {
+      const requestGone = requestGoneReadCheck(input).kind === 'mark';
+      if (reasons.length === 0 && !requestGone) {
         continue;
       }
+      const events = eventsOf(board, key);
       const since = lastLooked(thread, pr, board.viewer);
-      const asks = eventsOf(board, key).filter(
+      const asks = events.filter(
         (event) => !isViewerLogin(board.viewer, event.actor) && isAskEvent(pr, board.viewer, event) && (event.seenAt === null || (since !== null && event.at > since)),
       );
-      ensure(asks.length === 0, `${key}: quiet read (${reasons.join(', ')}) with asks ${asks.map((event) => event.id).join(', ')}`);
+      ensure(reasons.length === 0 || asks.length === 0, `${key}: quiet read (${reasons.join(', ')}) with asks ${asks.map((event) => event.id).join(', ')}`);
+      // The request-gone rule reads the viewer's own review requests (none may stand); every other ask counts, unseen or since the newest request.
+      if (requestGone) {
+        const requestAt = latestViewerRequest(pr, board.viewer, events)!;
+        const otherAsks = events.filter(
+          (event) =>
+            !isViewerLogin(board.viewer, event.actor) &&
+            isAskEvent(pr, board.viewer, event) &&
+            !isViewerRequest(pr, board.viewer, event) &&
+            (event.seenAt === null || event.at > requestAt),
+        );
+        ensure(otherAsks.length === 0, `${key}: request-gone quiet read with asks ${otherAsks.map((event) => event.id).join(', ')}`);
+      }
     }
   },
 };

@@ -19,6 +19,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - Topics without a dossier and without a known driver sit in Other topics with a "not sorted yet" mark. The Needs you, Your team and Routed to you groups inside Other topics are gone; FYI stays.
 - Sidebar rows where nothing waits on you are dimmed, so unread rows and rows with a your-move chip stand out. The selected row and search results stay as they were.
 - "Ask <owner>" opens in the same small popover as the review notes instead of a strip under the action bar. It works as before: pick the person, say what to ask, draft, edit, post.
+- A review request you never opened no longer stays unread forever once it stops asking anything: when the request for you and your teams was removed or a teammate reviewed, and since then only bots and replies that don't need you came in, PostPile marks the thread read on GitHub and lists it under Handled quietly ("request gone"). A request that still stands stays unread as before.
 
 ### Fixed
 
