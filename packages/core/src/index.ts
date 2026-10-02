@@ -22,6 +22,7 @@ export * from './tiles.ts';
 export * from './why-here.ts';
 export * from './for-whom.ts';
 export * from './approvals.ts';
+export * from './merge-queue.ts';
 export * from './pr-status.ts';
 export * from './tile-people.ts';
 export * from './changes-answered.ts';

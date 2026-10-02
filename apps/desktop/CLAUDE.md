@@ -372,9 +372,12 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
 - One-path glyphs go in `GLYPH_PATHS` (`Glyph`); anything with a fill or
   a dash pattern gets its own small component (`PrStateIcon` draft,
   `RingDotIcon`).
-- PR state: `PrStateIcon` (open green pull request, draft dashed grey
-  circle, merged purple, closed red, queued purple; the word from
-  `LIFECYCLE_WORDS` as its title). Review state: `StateWordLabel` with a
+- PR state: `PrStateIcon` with core's `PrStatus.icon` (open green pull
+  request, draft dashed grey circle, merged purple, closed red, the filled
+  Octicons merge-queue icon in `--pending` amber while queued and red once
+  the queue took it out; the word from `ICON_WORDS` as its title). A queued
+  PR's row shows `mergeQueueWord` ("Merge queue: Testing") in place of the
+  review word. Review state: `StateWordLabel` with a
   `StateWord` from `reviewWord` / `rowStateWord` (`lib/pr.ts`). Never a CI
   icon or word outside `PrFacts`.
 - Icons carry words: a lone icon gets a `title` (and `aria-label` when it

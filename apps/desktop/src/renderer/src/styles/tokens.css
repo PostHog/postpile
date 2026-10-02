@@ -163,7 +163,10 @@
   --merged-soft: #efeafe;
   /* Closed is the one red for bad, so a closed PR's icon and word match. */
   --closed: var(--status-bad);
+  /* In the merge queue (DESIGN "Merge queue"): the queue icon, and a darker
+     shade of it for words, so "Merge queue: Testing" reads at 11px. */
   --pending: #d9a400;
+  --pending-ink: #8c6900;
   --diff-add: #e7f5ec;
   --diff-add-ink: #17633a;
   --diff-del: #fdecea;

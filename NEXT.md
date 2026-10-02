@@ -6,6 +6,15 @@ now".
 
 ## Done
 
+- Merge queue state (2026-10-02, DESIGN.md "Merge queue"): `mergeQueueState`
+  reads trunk-io[bot]'s status comment; the PR icon turns into the Octicons
+  merge-queue icon (amber, red once failed) on rows, the detail header, the
+  sidebar row and the header pill; "Merge queue: Testing" replaces the
+  review chip; own queued PRs wait on the queue, failed ones are the user's
+  move ("Re-submit to the merge queue") and loud. Fake mode: #1977 submitted,
+  #1978 waiting, #1975 testing, #1974 merged through the queue (topic
+  "Runner image pinning", amber rollup),
+  #1950 failed (CI & tests, red rollup).
 - Lasting sets (2026-10-01, DESIGN.md "Tiles hold still"): the set prompt
   asks for PRs one judgement covers and answers with changes only; a regroup
   runs on new triggers only (open PR in no set, risk level change, feedback,
@@ -1082,6 +1091,10 @@ the app meanwhile.
 
 ## Decided
 
+- **Merge queue like Trunk's extension** (2026-10-02, DESIGN.md "Merge
+  queue"): the queue icon replaces the git icon while a PR is in the merge
+  queue, pending amber, red once the queue took it out, the merged icon
+  back once merged. Also for GitHub's own queue (was a purple open icon).
 - **Marked when the dwell ends** (2026-10-01, DESIGN.md "Actions act on
   what you look at" › "Marked when the dwell ends", supersedes "Marked when
   you move on"): the opened mark fires when the 1.5s fill completes, and

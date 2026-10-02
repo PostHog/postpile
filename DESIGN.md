@@ -187,7 +187,7 @@ agent-grouped among pinged and found PRs; the agent never pulls PRs in.
 | loudness | effect | examples |
 |---|---|---|
 | loud | pings, coral "new since you looked", lights up the topic (the tile is unread while its thread is unread on GitHub, loud or not: "GitHub unread is PostPile unread") | mention, review requested, question to the user, a push after the user approved when the agent raises it, the author's push or comment after the user requested changes ("addressed your changes") |
-| quiet | dot, no ping | bots, CI (always, see "CI is not a signal"), deploys, merge queue, pushes after the user approved (by default), merged without the user's review (never loud; surfaced by the done rule instead, see "Merged without your review") |
+| quiet | dot, no ping | bots, CI (always, see "CI is not a signal"), deploys, merge queue (except trunk taking your own PR out of it: loud, see "Merge queue"), pushes after the user approved (by default), merged without the user's review (never loud; surfaced by the done rule instead, see "Merged without your review") |
 | muted | hidden as noise, one click to unmute | bot rebase on a draft |
 | seen | already read | any of the above after reading, or before the user's own last action on the PR (see "You already dealt with it") |
 
@@ -483,6 +483,79 @@ Existing glances and dossiers that mention CI are not regenerated on purpose
 stale on the PR's next push, review or human comment, a dossier on the
 topic's next real activity, and a bump would rewrite every one of them in
 one go for a line that fades on its own.
+
+## Merge queue
+
+Decided 2026-10-02. The owner wanted PostPile to show a PR in the Trunk
+merge queue the way Trunk's browser extension does on github.com: the PR's
+git state icon is replaced by the merge-queue icon (Primer Octicons
+`git-merge-queue-16`), pending amber while it waits or tests, red once the
+queue took it out; once merged the usual merged icon is back. Words go with
+it: "Merge queue: Submitted / Waiting / Testing / Failed".
+
+**Where it comes from** (`mergeQueueState` in core `merge-queue.ts`):
+trunk-io[bot] (`isTrunkBot` in `bots.ts`, beside `isMergeQueueBot`) keeps one status comment per PR
+(it starts with `<!-- Trunk Merge -->`) and edits it at every step; the
+snapshot holds its latest body and `lastEditedAt`. Stack outcomes mostly
+come as separate trunk comments. The newest trunk status comment (by
+`lastEditedAt ?? createdAt`) decides: `{ state, since, reason, testingOn }`
+or null. Status lines seen in the field (trunk puts an en space after the
+emoji, so whitespace is normalized before matching):
+
+| line starts with | state |
+|---|---|
+| "Merging to \`master\` in this repository is managed by Trunk", "This PR's base branch doesn't have a Merge Queue configured" | null (not queued) |
+| "✨ Submitted to Merge by …", "✨ Stack submitted to Merge by …" | submitted (waiting for branch protection) |
+| "⏳ Waiting to start tests", "This pull request is queued for merge as part of [N]" | waiting |
+| "🧪 Running tests on this pull request (testing on PR [#N])" | testing, `testingOn` = that PR |
+| "😎 … merged …", "This pull request was merged into \`master\` as part of stacked PR" | null (the PR state covers it) |
+| "🚫 This pull request / stack was removed from the merge queue because …" | failed: "waited too long to become mergeable", "the stack changed", else trunk's words |
+| "❌ This stack could not start testing because there was a merge conflict" | failed: "merge conflict" |
+| "Stacked PR [N] failed testing in the merge queue" | failed: "tests failed" |
+| "Stacked PR [N] was cancelled: <reason>" | failed with the reason; "a user cancelled it" is no failure: null |
+| "Stacked PR [N] was returned to waiting: this pull request was pushed to" | failed: "pushed to while queued" |
+
+Skipped (the status before them stands): the `<!-- Trunk Test Analytics -->`
+badge comment and replies to a `/trunk` command ("This PR is already
+queued …", "An error occurred while handling your Trunk command"). Text
+the table does not know reads as null: never guess a queue state. Null as
+well for merged, closed and draft PRs. A push after a failure keeps it
+failed until trunk says otherwise.
+
+**Icon** (`PrStatus.icon` = `prIcon`, core decides): open and in a queue
+(Trunk's, or GitHub's own `queued` lifecycle) is `merge_queue` (amber
+`--pending`), failed in Trunk's queue `merge_queue_failed` (the one red);
+drafts, merged and closed as before. `PrStatus.mergeQueue` carries the
+state for the words; `PrDetail.status` has both for the detail header.
+Topic rollup (`topicPrState`, sidebar row and header pill): failed if any
+tracked open PR failed in the queue, the queue icon if every tracked open
+PR (drafts included) is in it, else as before (a queued PR counts as
+open). The tooltip mix says "1 in merge queue" / "1 failed in merge queue".
+
+**Words** (renderer `mergeQueueWord` in `lib/pr.ts`): where a row shows the
+review chip, a queued PR shows "Merge queue: Testing" (`--pending-ink`),
+a failed one "Merge queue: Failed" in red; the tooltip has the step, the
+reason and "since 06:28" (`sinceLabel`). The detail header's state line says
+the same plus "since 06:28", and a failed PR gets a red "Failed (reason)"
+line under the branch.
+
+**Whose turn** (any open PR, right after the open asks of rule 2 and before
+every other own or others' PR rule):
+queued (either queue) waits on the queue, `{ kind: 'them', who: null, what:
+'Waiting on the merge queue' }`, drawn with the queue icon in place of a
+face, on someone else's PR too (an approval of yours does not change it, and
+there is no "rowan to merge"). Failed is the author's move: your own PR is
+your move, `merge`, "Re-submit to the merge queue: <reason>"; someone
+else's is `{ kind: 'them', who: <author>, what: 'to re-submit to the merge
+queue: <reason>' }`, never yours. Like "Merge, it is approved" the re-submit
+move shows on the tile but never makes the topic urgent
+(`isMergeApprovedMove`); the failure itself is loud.
+
+**Loudness**: trunk's comment or edit that took the viewer's own open PR
+from any other state to failed is loud, "removed from the merge queue:
+<reason>", while the PR is still failed in the queue (`mergeQueueFailureAt`).
+Every other trunk status change stays quiet bot activity. Pings are
+unchanged (bot events never ping from the poll).
 
 ## Memory / agentic digesting layer (v1 base)
 
@@ -827,7 +900,7 @@ core `event-roles.ts`), first match wins:
 | anything a person did, the viewer included | trigger |
 | a state change, whoever did it: merged, merged without review, closed, reopened, ready for review, back to draft, review requested or removed, a bot's approval, pushes; Look closer even when turned down | trigger |
 | automation: deploy, merge queue add/remove, a comment edit (the original already counted; edits are status refreshes) | noise |
-| a merge queue bot's comment (`isMergeQueueBot`: trunk-io, mergify): "managed by Trunk", submitted, testing, merged, kicked out, test badges | noise |
+| a merge queue bot's comment (`isMergeQueueBot`: trunk-io, mergify): "managed by Trunk", submitted, testing, merged, kicked out, test badges | noise (kicked out of the queue on the viewer's own PR is loud, so the first row makes it a trigger; see "Merge queue") |
 | any other automation, a bot's approval aside: review bots (coderabbitai, chatgpt-codex-connector, greptile-apps, copilot-pull-request-reviewer, stamphog, veria-ai, posthog-security-review-bot), github-actions comments, dependabot comments | ride_along |
 
 - *noise*: never in a prompt, never starts an update, never counted as
@@ -2064,9 +2137,10 @@ Owner accepted one colour per meaning (tokens in the renderer's
 - **Amber (`--closer`)**: only the agent's Look closer (verdict pill, the
   detail pane's Look closer box, a ✨ pill greyed for Look closer).
 - **Neutral (`ink-2`)**: "Needs review" with its eye icon.
-- **Merged purple (`--merged`, `--merged-ink`)**: merged and queued (in the
-  merge queue, on its way to merged; queued keeps the open-PR outline icon).
-  `--status-queued` is gone.
+- **Merged purple (`--merged`, `--merged-ink`)**: merged. `--status-queued`
+  is gone. In the merge queue was purple too until 2026-10-02; it now has
+  the queue icon in pending amber (`--pending`, words `--pending-ink`), red
+  once failed (see "Merge queue").
 - **One red (`--status-bad`, #b8321f)**: closed (icon and word, `--closed`
   points at it), changes requested, risk (the risk box reds stay in that
   family), errors and failed states (was coral `--unread-ink` for errors).
@@ -2139,11 +2213,13 @@ from `reviewDecision`. Merged and closed PRs drop review, drafts drop review.
 No checks (2026-09-29, see "CI is not a signal"). Open threads = unresolved
 review threads.
 
-How it shows (2026-09-29, design 3a; `LIFECYCLE_WORDS`, `reviewWord`,
+How it shows (2026-09-29, design 3a; `ICON_WORDS` (was `LIFECYCLE_WORDS`), `reviewWord`,
 `rowStateWord` in the renderer's `lib/pr.ts`): the lifecycle is a
 GitHub-style icon (open: green pull request, draft: dashed grey circle,
-merged: purple merge, closed: red closed pull request, queued: purple pull
-request), words in its tooltip. The review state is an icon + word: "Needs
+merged: purple merge, closed: red closed pull request; in the merge queue
+the Octicons merge-queue icon, amber, red once the queue took it out,
+2026-10-02, see "Merge queue"), words in its tooltip. The icon is core's
+`PrStatus.icon`. The review state is an icon + word: "Needs
 review" (eye, neutral ink), "Approved" (green check; "Approved by agent" when only
 agents approved), "Changes requested" (red). On a PR row drafts show an
 outlined "DRAFT" chip with a pencil and merged / closed PRs show the colored
@@ -2285,7 +2361,13 @@ draft), `merge`. No CI move: `fix_ci` ("Fix failing CI") was dropped
    never consulted it, so a plain "thanks, that's fine" kept saying "Reply
    to …". Julian, 2026-09-29: "if the author just replies 'Oh yeah, that's
    fine,' that's not my move to reply again".
-3. On your own PR:
+3. The merge queue, on any open PR (2026-10-02, see "Merge queue"): in a
+   queue it waits on the queue, "Waiting on the merge queue" (`who` null),
+   on someone else's PR too and whatever you reviewed. Failed in Trunk's
+   queue is the author's: yours on your own PR, "Re-submit to the merge
+   queue: tests failed" (move `merge`); on someone else's "sol to re-submit
+   to the merge queue: tests failed", never yours.
+   Then, on your own PR:
    - you: unresolved threads whose last comment is someone else's ("Answer 3
      threads from mira"), else a standing change request ("Address ada's
      changes"). Failing CI alone is not your move (2026-09-29).
@@ -2303,7 +2385,7 @@ draft), `merge`. No CI move: `fix_ci` ("Fix failing CI") was dropped
    - you: approved and not a draft ("Merge, it is approved"). Not in the
      first rule list; added so an approved own PR does not read as nothing.
    - else none.
-4. On someone else's PR:
+4. On someone else's PR (after the merge queue, rule 3):
    - you: addressed your changes (2026-09-28).
      Your newest verdict review (approve, request changes, dismissed) asks
      for changes, and since your last word (that review, or a later comment
@@ -2898,8 +2980,10 @@ avatars and filters", QueuesB2).
   in reviewers.
 - **PR state icon** (`TopicListItem.prState` and `prStateCounts` =
   `topicPrState`, 2026-10-01): one icon per row, the most alive state among
-  the topic's tracked PRs by precedence open (a queued PR counts as open),
-  draft, merged, closed (closed without merging). One open PR among nine
+  the topic's tracked PRs: failed in the merge queue when any tracked open
+  PR is, the merge-queue icon when every tracked open PR is in the queue
+  (2026-10-02, see "Merge queue"), else by precedence open (a queued PR
+  counts as open), draft, merged, closed (closed without merging). One open PR among nine
   merged shows open; merged shows only when nothing is open or draft; closed
   only when everything is closed. Pulled-in stack layers do not count. It is
   the same icon and colour as a PR row (`PrStateIcon`). Every row has a
@@ -2932,7 +3016,7 @@ avatars and filters", QueuesB2).
 - **Urgency** (`topicUrgency` in core): a topic needs you when an unread
   tile still has an open PR, or whose-turn says it's your move on a live
   (not done, not snoozed) tile and that move is more than "Merge, it is approved" on your own PR
-  (`isMergeApprovedMove`). That move still shows on the tile footer and in
+  or "Re-submit to the merge queue" (`isMergeApprovedMove`). That move still shows on the tile footer and in
   the chip count, it just doesn't make the topic urgent. Only then is its unread bubble coral and does it rank as
   `needs_you`. When every unread tile is merged or closed the row shows a
   grey bubble ("merged or closed since you looked") and ranks below the urgent

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { at, makeComment, makeCommit, makeEvent, makePr, makeReview, makeThread, makeTimelineItem, makeUserState, singleTile, viewer } from './fixtures.ts';
 import type { Pr, PrEvent, Tile, UserPrState, Viewer } from './types.ts';
+import { mergeQueueFailureAt, mergeQueueState } from './merge-queue.ts';
+import { prStatus } from './pr-status.ts';
 import { isMergeApprovedMove, NO_TURN, whoseTurn, YOUR_MOVE_ORDER, type WhoseTurn } from './whose-turn.ts';
 
 const me = viewer.login;
@@ -311,6 +313,48 @@ describe('whoseTurn: on your own PR', () => {
     expect(isMergeApprovedMove(single({ ...own, reviewDecision: 'APPROVED' }))).toBe(true);
     expect(isMergeApprovedMove(single({ ...own, checks: { ...own.checks, rollup: 'FAILURE' }, reviewDecision: 'APPROVED' }))).toBe(true);
     expect(single({ ...own, reviewDecision: 'APPROVED', isDraft: true }).kind).toBe('none');
+  });
+
+  describe('in the merge queue', () => {
+    const trunk = (body: string, minutes: number) => makeComment({ id: `t${minutes}`, author: 'trunk-io[bot]', body, createdAt: at(minutes) });
+    const testing = trunk('🧪\u2002Running tests on this pull request - [details](https://trunk.example/1).', 5);
+    const failed = trunk('Stacked PR [12](https://github.com/acme/app/pull/12) failed testing in the merge queue. Please investigate the failure and re-submit the stack.', 9);
+    const approved = { ...own, reviewDecision: 'APPROVED' as const };
+
+    it('waits on the queue, not on you, while it is queued', () => {
+      const turn = single({ ...approved, comments: [testing] });
+      expect(turn).toEqual({ kind: 'them', who: null, what: 'Waiting on the merge queue', prKey: own.key });
+      expect(isMergeApprovedMove(turn)).toBe(false);
+      // GitHub's own merge queue too.
+      const queued = { ...approved, timeline: [makeTimelineItem({ id: 'q1', kind: 'added_to_merge_queue', subject: null })] };
+      expect(single(queued).what).toBe('Waiting on the merge queue');
+    });
+
+    it('asks you to re-submit once the queue took it out, with the reason', () => {
+      const turn = single({ ...approved, comments: [testing, failed] });
+      expect(turn).toEqual({ kind: 'you', move: 'merge', who: null, what: 'Re-submit to the merge queue: tests failed', prKey: own.key });
+      expect(isMergeApprovedMove(turn)).toBe(true);
+    });
+
+    it('ignores a stale queue failure once the PR is converted to draft', () => {
+      const draft = { ...approved, isDraft: true, comments: [testing, failed] };
+      expect(single(draft).what).not.toContain('merge queue');
+      expect(prStatus(draft)).toMatchObject({ lifecycle: 'draft', mergeQueue: null, icon: 'draft' });
+      expect(mergeQueueState(draft)).toBeNull();
+      expect(mergeQueueFailureAt(draft, at(9))).toBeNull();
+    });
+
+    it("waits on the queue on someone else's PR too, even after you approved it", () => {
+      const theirs = makePr({ author: 'sol', comments: [testing], reviews: [makeReview({ author: me, commitOid: 'head' })] });
+      expect(single(theirs)).toEqual({ kind: 'them', who: null, what: 'Waiting on the merge queue', prKey: theirs.key });
+      const queued = { ...theirs, comments: [], timeline: [makeTimelineItem({ id: 'q1', kind: 'added_to_merge_queue', subject: null })] };
+      expect(single(queued).what).toBe('Waiting on the merge queue');
+    });
+
+    it("leaves the re-submit to the author on someone else's PR, with the reason", () => {
+      const theirs = makePr({ author: 'sol', comments: [testing, failed], reviews: [makeReview({ author: me, commitOid: 'head' })] });
+      expect(single(theirs)).toEqual({ kind: 'them', who: 'sol', what: 'to re-submit to the merge queue: tests failed', prKey: theirs.key });
+    });
   });
 });
 

@@ -21,6 +21,7 @@ import {
   askedToReReview,
   asksViewer,
   changesAnswer,
+  inGitHubQueue,
   isAutomationLogin,
   isHomeTeam,
   isOwner,
@@ -36,6 +37,7 @@ import {
   requestSubjectOf,
   reviewStillOwed,
   routedRequestWaits,
+  specMergeQueue,
   specSnapshotAt,
   specUserStateAt,
   standingChangesBy,
@@ -112,7 +114,7 @@ export function openAsk(pr: Pr, events: PrEvent[], viewer: Viewer, kinds: readon
 /** A move and the footer's words for it (a single-PR tile: no " on #n"); `lead` only for "Waiting on". */
 export type ExpectedTurn =
   | { kind: 'you'; move: YourMove; what: string }
-  | { kind: 'them'; who: string; what: string; lead?: string }
+  | { kind: 'them'; who: string | null; what: string; lead?: string }
   | { kind: 'none'; what: '' };
 
 const NONE: ExpectedTurn = { kind: 'none', what: '' };
@@ -170,7 +172,25 @@ function answerThreads(threads: string[]): string {
 }
 
 /**
- * The viewer's own open PR: threads to answer, then changes to address
+ * The merge queue decides first on any open PR: failed in Trunk's queue is
+ * the author's to re-submit, with the reason (the viewer's move on their own
+ * PR, never on someone else's); in either queue: waiting on the queue, no
+ * person named. Null when the PR is in no queue.
+ */
+function queueTurn(input: TurnInput): ExpectedTurn | null {
+  const { pr, viewer } = input;
+  const queue = specMergeQueue(pr);
+  if (queue?.state === 'failed') {
+    return viewerOwns(pr, viewer) ? you('merge', `Re-submit to the merge queue: ${queue.reason}`) : them(namedOwner(pr), `to re-submit to the merge queue: ${queue.reason}`);
+  }
+  if (queue !== null || inGitHubQueue(pr)) {
+    return { kind: 'them', who: null, what: 'Waiting on the merge queue' };
+  }
+  return null;
+}
+
+/**
+ * The viewer's own open PR, after the merge queue: threads to answer, then changes to address
  * (their reviewers' move once every one was asked again after a push),
  * then waiting on the pending reviewers, then merging an approved PR.
  */
@@ -299,7 +319,7 @@ export function expectedTurn(input: TurnInput): ExpectedTurn {
     const words = ASK_WORDS[askKindOfEvent(pr, viewer, ask)]!;
     return you('reply', reviewToo ? `Review, ${ask.actor} ${words.withReview}` : words.alone(ask.actor));
   }
-  return viewerOwns(pr, viewer) ? ownPrTurn(input) : othersPrTurn(input);
+  return queueTurn(input) ?? (viewerOwns(pr, viewer) ? ownPrTurn(input) : othersPrTurn(input));
 }
 
 // ---------------------------------------------------------------------------

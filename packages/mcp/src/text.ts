@@ -97,6 +97,9 @@ export function turnText(turn: WhoseTurn): string {
   if (turn.kind === 'you') {
     return `Your move: ${turn.what}`;
   }
+  if (turn.kind === 'them' && turn.who === null) {
+    return `Their move: ${turn.what}`;
+  }
   if (turn.kind === 'them') {
     const who = turn.lead ? `${turn.lead} ${turn.who}` : `${turn.who}`;
     return `Their move: ${who}${turn.what ? ` ${turn.what}` : ''}`;

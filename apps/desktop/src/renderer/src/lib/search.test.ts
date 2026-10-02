@@ -16,7 +16,7 @@ function item(id: string, unreadTiles: number): TopicListItem {
     section: null,
     people: [],
     prState: null,
-    prStateCounts: { open: 0, draft: 0, merged: 0, closed: 0 },
+    prStateCounts: { open: 0, merge_queue: 0, merge_queue_failed: 0, draft: 0, merged: 0, closed: 0 },
   };
 }
 

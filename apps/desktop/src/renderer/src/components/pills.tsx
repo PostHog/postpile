@@ -140,6 +140,9 @@ const STATE_WORD_LOOKS: Record<Exclude<StateWord['kind'], 'draft'>, { glyph: Eve
   changes: { glyph: 'changes', stroke: 1.7, tone: 'text-status-bad' },
   merged: { glyph: null, stroke: 0, tone: 'text-merged-ink' },
   closed: { glyph: null, stroke: 0, tone: 'text-status-bad' },
+  // The row's icon already is the queue's; the word only takes its colour.
+  merge_queue: { glyph: null, stroke: 0, tone: 'text-pending-ink' },
+  merge_queue_failed: { glyph: null, stroke: 0, tone: 'text-status-bad' },
 };
 
 const STATE_WORD_SIZES = {
@@ -151,7 +154,8 @@ const STATE_WORD_SIZES = {
  * A PR's state word with its icon (`reviewWord` / `rowStateWord` in
  * lib/pr.ts): "Needs review" neutral eye, "Approved" green check, "Changes
  * requested" red, merged / closed as the colored word (one colour per
- * meaning, 2026-10-01), drafts as an
+ * meaning, 2026-10-01), the merge queue as a pending amber word ("Merge
+ * queue: Testing", red once it failed), drafts as an
  * outlined DRAFT chip with a pencil. Never CI.
  */
 export function StateWordLabel(props: { word: StateWord; size?: keyof typeof STATE_WORD_SIZES }) {

@@ -31,6 +31,7 @@ import {
   ownerRelation,
   pingedPrKeys,
   prTier,
+  prStatus,
   prWhoseTurn,
   isReReviewMove,
   repoOverview,
@@ -572,6 +573,7 @@ export class ReadModels {
     const wanted = glanceTargetKeys(board);
     return {
       pr,
+      status: prStatus(pr),
       fetchedAt: this.store.prs.fetchedAt(key),
       events,
       activity: activityList(events, viewer, news?.anchor.at ?? null, pr, board.threads.get(key) ?? null),

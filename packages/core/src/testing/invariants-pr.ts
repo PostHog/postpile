@@ -10,7 +10,7 @@ import type { PrSummary, TileView } from '../views.ts';
 import type { BoardSpec, RequestTarget } from './board-spec.ts';
 import { buildBoard, tileViewsOf, type PropertyBoard } from './build-board.ts';
 import { describeTurn, ensure, eventsOf, isNews, prOf, trackedRows, type Invariant } from './invariant.ts';
-import { isViewerLogin, newestTouch, READING_TOUCHES, routedRequestWaits } from './spec-facts.ts';
+import { inGitHubQueue, isViewerLogin, newestTouch, READING_TOUCHES, routedRequestWaits, specMergeQueue, specPrIcon } from './spec-facts.ts';
 import { cutSnapshotHoldsSince, expectedSnoozePhase, isAskEvent, isAutomationEvent, lastLooked } from './spec-rules.ts';
 
 /**
@@ -18,7 +18,7 @@ import { cutSnapshotHoldsSince, expectedSnoozePhase, isAskEvent, isAutomationEve
  * on purpose (DESIGN "Look closer pings", team coverage, "Whose turn"):
  * a routed team request the glance calls not yours, a routed request
  * waiting on someone else's change request, a team request a teammate took,
- * or an ask (a team mention) that comes first.
+ * an ask (a team mention) that comes first, or the merge queue (its turn goes first, 2026-10-02).
  */
 export function toReviewException(board: PropertyBoard, pr: Pr, row: PrSummary): string | null {
   const notYours = board.notYours.has(pr.key);
@@ -33,6 +33,9 @@ export function toReviewException(board: PropertyBoard, pr: Pr, row: PrSummary):
   }
   if (row.turn.kind === 'you' && row.turn.move === 'reply') {
     return 'an ask comes first';
+  }
+  if (specMergeQueue(pr) !== null || inGitHubQueue(pr)) {
+    return 'in the merge queue';
   }
   return null;
 }
@@ -253,7 +256,28 @@ export const botRequestWorksLikeHuman: Invariant = {
   },
 };
 
+/**
+ * Every PR row's state icon and merge queue step are the spec's (DESIGN
+ * "Merge queue"): an open PR in a queue shows the queue icon, failed in
+ * Trunk's queue the red one, and a merged PR shows merged again.
+ */
+export const prIconMatchesTheSpec: Invariant = {
+  name: "each PR row's state icon and merge queue step are the spec's",
+  check(board, views) {
+    for (const row of views.flatMap((view) => view.prs)) {
+      const pr = prOf(board, row.key);
+      const icon = specPrIcon(pr);
+      ensure(row.status.icon === icon, `${row.key}: icon ${row.status.icon}, expected ${icon}`);
+      const queue = pr.isDraft ? null : specMergeQueue(pr);
+      const got = row.status.mergeQueue === null ? 'none' : `${row.status.mergeQueue.state} since ${row.status.mergeQueue.since}`;
+      const want = queue === null ? 'none' : `${queue.state} since ${queue.at}`;
+      ensure(got === want, `${row.key}: merge queue ${got}, expected ${want}`);
+    }
+  },
+};
+
 export const PR_INVARIANTS: readonly Invariant[] = [
+  prIconMatchesTheSpec,
   toReviewMatchesReviewMove,
   snoozeLifecycle,
   quietReadsNeverHideAsks,
