@@ -288,11 +288,15 @@ export class FakeWriter implements GitHubWriter {
     this.calls.push(`markAllReadBefore ${lastReadAt}`);
   }
 
-  async approvePr(ref: PrRef, _body: string, commitOid: string): Promise<void> {
+  async approvePr(ref: PrRef, body: string, commitOid: string): Promise<void> {
     if (this.failingApprovals.has(`${ref.repo}#${ref.number}`)) {
       throw new Error('GitHub timed out');
     }
-    this.calls.push(`approvePr ${ref.repo}#${ref.number}@${commitOid}`);
+    this.calls.push(`approvePr ${ref.repo}#${ref.number}@${commitOid}${body === '' ? '' : ` ${body}`}`);
+  }
+
+  async commentReviewPr(ref: PrRef, body: string, commitOid: string): Promise<void> {
+    this.calls.push(`commentReviewPr ${ref.repo}#${ref.number}@${commitOid} ${body}`);
   }
 
   async commentOnPr(ref: PrRef, body: string): Promise<void> {

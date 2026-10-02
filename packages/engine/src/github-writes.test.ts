@@ -156,14 +156,18 @@ describe('action log at every write path', () => {
     ]);
   });
 
-  it('approve and comment while read-only are logged as skipped', async () => {
+  it('approve, comment review and comment while read-only are logged as skipped', async () => {
     const h = await synced({ writesEnabled: false });
     await h.engine.approve(pr.key, pr.headOid);
+    const review = await h.engine.commentReview(pr.key, pr.headOid, 'looks fine');
     await h.engine.sendComment(pr.key, 'looks good');
     expect(logRows(h)).toEqual([
       ['approve', 'tile', 'skipped'],
+      ['comment_review', 'tile', 'skipped'],
       ['comment', 'tile', 'skipped'],
     ]);
+    expect(review).toMatchObject({ ok: false, message: 'GitHub writes are off (lock in the footer): nothing was posted' });
+    expect(h.writer.calls).toEqual([]);
     expect(h.store.userPrStates.get(pr.key)?.approvedAt ?? null).toBeNull();
   });
 

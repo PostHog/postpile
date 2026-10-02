@@ -41,6 +41,14 @@ describe('GitHubWriteClient', () => {
     expect(fake.requests[0]?.headers['content-type']).toBe('application/json');
   });
 
+  it('posts a comment review as a COMMENT review pinned to the commit', async () => {
+    const fake = new FakeFetch([{ body: { id: 4 } }]);
+    await new GitHubWriteClient(fakeTokens, fake.fn).commentReviewPr(ref, 'Read the cache change, no concerns.', 'abc123');
+    expect(fake.requests.map((r) => [r.method, r.url, r.body])).toEqual([
+      ['POST', 'https://api.github.com/repos/acme/app/pulls/42/reviews', { event: 'COMMENT', commit_id: 'abc123', body: 'Read the cache change, no concerns.' }],
+    ]);
+  });
+
   it('comments through the issue comments endpoint', async () => {
     const fake = new FakeFetch([{ status: 201, body: { id: 3 } }]);
     await new GitHubWriteClient(fakeTokens, fake.fn).commentOnPr(ref, '@bob can you check this?');

@@ -1091,6 +1091,12 @@ the app meanwhile.
 
 ## Decided
 
+- **Approve with comment and Comment review** (2026-10-02, DESIGN.md "Own
+  PRs never ask for a review"): Approve on the PR pane is split (approve
+  now, or with an agent-drafted note); "Comment review" posts a COMMENT
+  review on the seen head, to answer a review request without being the
+  approval that clears the PR. Ask, both notes share one compose popover.
+  Tiles and the agent's Approve stay without a body.
 - **Ownership sections** (2026-10-02, DESIGN.md "Ownership sections"):
   below the asks, topics sit under You drive, Your team owns or Other work
   by who drives them; the owner team only places a topic without a known

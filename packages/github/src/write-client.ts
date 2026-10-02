@@ -41,6 +41,18 @@ export class GitHubWriteClient implements GitHubWriter {
     await this.http.requestOk('POST', `repos/${ref.repo}/pulls/${ref.number}/reviews`, { body: payload });
   }
 
+  /**
+   * https://docs.github.com/en/rest/pulls/reviews#create-a-review-for-a-pull-request
+   * A review with event COMMENT: answers a review request without approving,
+   * and branch protection does not count it as an approval. GitHub requires
+   * the body for this event. Pinned to `commitOid` like approvePr.
+   */
+  async commentReviewPr(ref: PrRef, body: string, commitOid: string): Promise<void> {
+    await this.http.requestOk('POST', `repos/${ref.repo}/pulls/${ref.number}/reviews`, {
+      body: { event: 'COMMENT', commit_id: commitOid, body },
+    });
+  }
+
   /** A top-level PR comment. PR conversations are issue comments in the REST API. */
   async commentOnPr(ref: PrRef, body: string): Promise<void> {
     await this.http.requestOk('POST', `repos/${ref.repo}/issues/${ref.number}/comments`, { body: { body } });

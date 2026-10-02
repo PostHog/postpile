@@ -23,6 +23,10 @@ export class ReadOnlyWriter implements GitHubWriter {
     return this.refuse(`approve ${ref.repo}#${ref.number}`);
   }
 
+  commentReviewPr(ref: PrRef): Promise<void> {
+    return this.refuse(`post a comment review on ${ref.repo}#${ref.number}`);
+  }
+
   commentOnPr(ref: PrRef): Promise<void> {
     return this.refuse(`comment on ${ref.repo}#${ref.number}`);
   }

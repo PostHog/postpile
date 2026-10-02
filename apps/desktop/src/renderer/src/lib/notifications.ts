@@ -200,6 +200,8 @@ function entryText(last: ActionLogEntry, decidedBy: ActionLogEntry | null): { te
       return writeText('approved', last);
     case 'comment':
       return writeText('commented', last);
+    case 'comment_review':
+      return writeText('comment review posted', last);
     case 'remove_team_request':
       return writeText('team review request removed', last);
     case 'unsubscribe':

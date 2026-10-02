@@ -29,6 +29,7 @@ import type {
   PrDetail,
   PrKey,
   RepoOverview,
+  ReviewNoteKind,
   SetupAcceptRequest,
   SetupAcceptResult,
   SetupFitRequest,
@@ -138,8 +139,17 @@ export interface Actions {
    * was not sent or failed.
    */
   markOpenedRead(prKey: PrKey): Promise<OpenedReadResult | null>;
-  /** `headOid`: the head commit on screen; the server refuses the approval when the PR moved past it. */
-  approve(prKey: PrKey, headOid: string): Promise<void>;
+  /**
+   * `headOid`: the head commit on screen; the server refuses the approval when
+   * the PR moved past it. `body`: the note from "Approve with comment", empty for none.
+   */
+  approve(prKey: PrKey, headOid: string, body?: string): Promise<void>;
+  /**
+   * "Comment review": a review with event COMMENT on `headOid`, refused like
+   * approve when the PR moved past it. Final, blocked while locked. Returns
+   * true when it went out.
+   */
+  commentReview(prKey: PrKey, headOid: string, body: string): Promise<boolean>;
   /**
    * The ✨ Approve of a tile or the topic, after the confirm list: one call for
    * the covered PRs. Optimistic like the pane's approve, never an Undo.
@@ -210,6 +220,8 @@ export interface Actions {
   setTopicDriver(topicId: string, driver: string | null): Promise<void>;
   /** Returns the agent's draft, or null when drafting failed. */
   draftAsk(prKey: PrKey, person: string, intent: string): Promise<string | null>;
+  /** The agent's draft for "Approve with comment" or "Comment review", or null when drafting failed. */
+  draftReviewNote(prKey: PrKey, kind: ReviewNoteKind): Promise<string | null>;
   /** Returns true when the comment went out. */
   sendComment(prKey: PrKey, body: string): Promise<boolean>;
   chat(tileId: string, message: string): Promise<ChatReply | null>;
@@ -632,12 +644,11 @@ export function ActionsProvider(props: { children: ReactNode }) {
     }
   }
 
-  async function draftAsk(prKey: PrKey, person: string, intent: string): Promise<string | null> {
+  /** An agent draft of a PR comment from `path`; a failure says why in the toast and returns null. */
+  async function draft(busyKey: string, path: string, body: object): Promise<string | null> {
     try {
-      const draft = await withBusy(`ask:${prKey}`, () =>
-        request<{ body: string }>('POST', `${prPath(prKey)}/draft-ask`, { person, intent }),
-      );
-      return draft.body;
+      const result = await withBusy(busyKey, () => request<{ body: string }>('POST', path, body));
+      return result.body;
     } catch (error) {
       show('error', `Draft failed: ${errorText(error)}`);
       return null;
@@ -781,12 +792,14 @@ export function ActionsProvider(props: { children: ReactNode }) {
     markThreadRead: async (threadId) => {
       await run(`markThread:${threadId}`, 'markRead', () => request('POST', `/api/notifications/${encodeURIComponent(threadId)}/mark-read`));
     },
-    approve: async (prKey, headOid) => {
+    approve: async (prKey, headOid, body = '') => {
       await runApprove(`approve:${prKey}`, [prKey], async () => {
-        const result = await request<ActionResult>('POST', `${prPath(prKey)}/approve`, { headOid });
+        const result = await request<ActionResult>('POST', `${prPath(prKey)}/approve`, { headOid, body });
         return { ...result, results: [{ prKey, ok: result.ok, message: result.message }] };
       });
     },
+    commentReview: (prKey, headOid, body) =>
+      run(`commentReview:${prKey}`, 'commentReview', () => request('POST', `${prPath(prKey)}/comment-review`, { headOid, body })),
     approveAgent: async (input) => {
       const prKeys = input.prs.map((pr) => pr.prKey);
       await runApprove(input.busyKey, prKeys, () => request<BatchApproveResult>('POST', '/api/agent-actions/approve', { prs: input.prs, from: input.from }));
@@ -867,7 +880,8 @@ export function ActionsProvider(props: { children: ReactNode }) {
     setTopicDriver,
     markOpenedRead,
     refreshGlanceOnLook,
-    draftAsk,
+    draftAsk: (prKey, person, intent) => draft(`ask:${prKey}`, `${prPath(prKey)}/draft-ask`, { person, intent }),
+    draftReviewNote: (prKey, kind) => draft(`reviewNote:${prKey}`, `${prPath(prKey)}/draft-review-note`, { kind }),
     sendComment: (prKey, body) => run(`comment:${prKey}`, 'comment', () => request('POST', `${prPath(prKey)}/comment`, { body })),
     chat,
     instructionsChat,

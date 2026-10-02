@@ -150,6 +150,56 @@ describe('approve', () => {
   });
 });
 
+describe('approve with comment and comment review', () => {
+  it('sends the note from Approve with comment along with the approval', async () => {
+    const h = await synced();
+
+    await h.engine.approve(pr.key, pr.headOid, 'Checked the migration, safe to ship.');
+
+    expect(h.writer.calls).toEqual(['approvePr acme/app#1@head Checked the migration, safe to ship.']);
+  });
+
+  it('posts a COMMENT review on the seen head, marks the PR seen and keeps the review for the turn rules', async () => {
+    const h = await synced();
+
+    const result = await h.engine.commentReview(pr.key, pr.headOid, 'Read it, one question on the retry.');
+
+    expect(result.ok).toBe(true);
+    expect(h.writer.calls).toEqual(['commentReviewPr acme/app#1@head Read it, one question on the retry.']);
+    // The fake reader's refresh does not carry the review yet; the mirror keeps it until a sync does.
+    expect(h.store.prs.get(pr.key)?.reviews).toContainEqual(expect.objectContaining({ author: 'viewer', state: 'COMMENTED', commitOid: 'head' }));
+    expect(h.store.userPrStates.get(pr.key)?.approvedAt ?? null).toBeNull();
+    // Read, and the move goes back to the author: a comment review is not an approval.
+    const view = (await h.engine.getTopic(UNSORTED_TOPIC_ID))?.tiles.find((t) => t.tile.id === tileId);
+    expect(view?.state).toMatchObject({ kind: 'open', unreadBecause: [] });
+    expect(view?.turn).toMatchObject({ kind: 'them', who: 'alice' });
+  });
+
+  it('refuses a comment review without a GitHub call when the head moved or the note is empty', async () => {
+    const h = await synced();
+
+    expect(await h.engine.commentReview(pr.key, 'older-head', 'note')).toMatchObject({ ok: false, message: 'New commits since you looked; take another look' });
+    expect((await h.engine.commentReview(pr.key, pr.headOid, '  ')).ok).toBe(false);
+    expect(h.writer.calls).toEqual([]);
+  });
+
+  it('drafts a review note through the agent with the glance, addressed to nobody', async () => {
+    const h = makeHarness();
+    h.reader.addPr(pr, makeThreadFor(pr));
+    await h.engine.sync({ maxAgentCalls: 50 });
+    h.runner.answer('draft_comment', { body: 'Read the change, nothing blocking.' });
+
+    const draft = await h.engine.draftReviewNote(pr.key, 'comment');
+
+    expect(draft.body).toBe('Read the change, nothing blocking.');
+    const prompt = h.runner.promptsFor('draft_comment').at(-1) ?? '';
+    expect(prompt).toContain('comment-only review');
+    expect(prompt).toContain('Verdict: ');
+    expect(prompt).not.toContain('The comment is addressed to @');
+    expect(h.writer.calls).toEqual([]);
+  });
+});
+
 describe('snooze', () => {
   it('snoozes until a time and wakes up after it', async () => {
     const h = await synced();

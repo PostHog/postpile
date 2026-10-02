@@ -559,6 +559,12 @@ export interface ApprovePrRequest {
   headOid: string;
 }
 
+/**
+ * The review note the agent drafts in the detail pane's popover: one to go
+ * with an approval, or the body of a comment-only review (event COMMENT).
+ */
+export type ReviewNoteKind = 'approve' | 'comment';
+
 export interface PrApproveResult {
   prKey: PrKey;
   ok: boolean;

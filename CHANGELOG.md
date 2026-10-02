@@ -8,6 +8,8 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 - "<login> drives" on the topic header is now a menu: pick You, a teammate, Your team or Someone outside your team, and the topic moves to that section at once. Each item shows where the topic would go. The pick sticks until you change it or choose Reset to automatic; new activity never lifts it, and the agent's topic memory follows it. Local only, nothing goes to GitHub.
 - The agent can name your team as the driver of a standing topic that your team keeps up with nobody leading the current wave, so such topics sit under Your team owns instead of under whoever led one wave.
+- Approve on the PR pane is split: the main part approves right away as before, the speech-bubble segment opens "Approve with comment" with a short review note the agent drafts for you to edit.
+- "Comment review" next to Approve posts a review with a comment only. It answers a review request (yours or your team's) without approving, so branch protection does not count it as the approval that clears the PR. The agent drafts the note; an empty note cannot be posted.
 
 ### Changed
 
@@ -15,6 +17,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - Inside each section, topics with your open PR or your move come first, then unread ones.
 - Other work folds by area, single-topic areas under "More". It starts open when it holds your PR, your move or something unread, else folded; folded, urgent unread topics stay visible and the header counts what is unread.
 - Topics without a dossier and without a known driver sit in Other topics with a "not sorted yet" mark. The Needs you, Your team and Routed to you groups inside Other topics are gone; FYI stays.
+- "Ask <owner>" opens in the same small popover as the review notes instead of a strip under the action bar. It works as before: pick the person, say what to ask, draft, edit, post.
 
 ### Fixed
 
