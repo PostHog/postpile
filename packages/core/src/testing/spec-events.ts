@@ -250,7 +250,7 @@ function loudnessOf(pr: Pr, viewer: Viewer, event: RawExpected): { loudness: Lou
   const trunkStatus = (event.kind === 'bot_comment' || event.kind === 'comment_edited') && sameLogin(event.actor, TRUNK_LOGIN);
   const failure = trunkStatus && viewerOwns(pr, viewer) ? specQueueFailedAt(pr, event.at) : null;
   if (failure !== null) {
-    return loud(`removed from the merge queue: ${failure.reason}`);
+    return loud(failure.reason === null ? 'removed from the merge queue' : `removed from the merge queue: ${failure.reason}`);
   }
   const requestForViewer = event.kind === 'review_requested' && asksViewer(viewer, event.subject);
   const automation = (event.isBot || event.actor === '') && !requestForViewer;

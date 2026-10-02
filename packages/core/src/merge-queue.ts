@@ -2,8 +2,9 @@
 // it (DESIGN.md "Merge queue"). Trunk keeps one status comment per PR (it
 // starts with `<!-- Trunk Merge -->`) and edits it at every step; the
 // snapshot holds its latest text. Some outcomes, stack ones mostly, come as
-// separate comments. The newest status line wins. Text this file does not
-// know reads as nothing: never guess a queue state. Rules only, no IO.
+// separate comments. The newest status line wins. A wording this file does
+// not know reads by its leading emoji; text without a known one reads as
+// nothing: never guess a queue state. Rules only, no IO.
 import { isTrunkBot } from './bots.ts';
 import { prKey } from './keys.ts';
 import type { Comment, IsoTime, Pr, PrKey } from './types.ts';
@@ -88,7 +89,35 @@ function removedBecause(reason: string): string {
   return reason.split(' (')[0]!.split('. ')[0]!.replace(/\.$/, '');
 }
 
-/** One trunk status line, as seen in the field (DESIGN.md "Merge queue" lists them). */
+/** The PR trunk tests on, from "testing on PR [#N]"; null when the line does not say. */
+function testingOnPr(line: string): number | null {
+  const match = line.match(/testing on PR \[#?(\d+)\]/);
+  return match ? Number(match[1]) : null;
+}
+
+/**
+ * A line the known wordings below miss, read by trunk's leading emoji, so a
+ * new wording still lands on the right step instead of "not queued". A 😎
+ * line and a line without one of these emoji stay out: never guess.
+ */
+function trunkLineByEmoji(line: string): TrunkLine {
+  if (line.startsWith('✨')) {
+    return step('submitted');
+  }
+  if (line.startsWith('⏳')) {
+    return step('waiting');
+  }
+  if (line.startsWith('🧪')) {
+    return step('testing', null, testingOnPr(line));
+  }
+  if (line.startsWith('🚫') || line.startsWith('❌')) {
+    const because = line.match(/\bbecause (.+)$/);
+    return step('failed', because ? removedBecause(because[1]!) : null);
+  }
+  return { kind: 'out' };
+}
+
+/** One trunk status line: the known wordings first (DESIGN.md "Merge queue" lists them), then by its emoji. */
 function trunkLine(body: string): TrunkLine {
   const line = firstLine(body);
   let match: RegExpMatchArray | null;
@@ -107,9 +136,8 @@ function trunkLine(body: string): TrunkLine {
   if (/^This pull request is queued for merge as part of \[\d+\]/.test(line)) {
     return step('waiting');
   }
-  if (line.startsWith('🧪 Running tests on this pull request')) {
-    match = line.match(/testing on PR \[#?(\d+)\]/);
-    return step('testing', null, match ? Number(match[1]) : null);
+  if (/^🧪 Running tests on this (?:pull request|stack)/.test(line)) {
+    return step('testing', null, testingOnPr(line));
   }
   if (/^😎 .*\bmerged\b/i.test(line) || /^This pull request was merged into `[^`]+` as part of stacked PR/.test(line)) {
     return { kind: 'out' };
@@ -129,7 +157,7 @@ function trunkLine(body: string): TrunkLine {
   if ((match = line.match(/^Stacked PR \[\d+\]\([^)]*\) was returned to waiting: (.+?)\./))) {
     return step('failed', match[1] === 'this pull request was pushed to' ? 'pushed to while queued' : match[1]!);
   }
-  return { kind: 'out' };
+  return trunkLineByEmoji(line);
 }
 
 /** Trunk's status comments, oldest first, each at its last edit (else when posted). */
@@ -157,8 +185,8 @@ function stateOf(status: StatusComment | undefined, pr: Pr): MergeQueueState | n
  * The PR's place in the Trunk merge queue, from the newest trunk status
  * comment. Null for a PR that is not open, not submitted, merged, cancelled
  * by a user, a draft (a stale failure on a PR converted to draft is
- * ignored), or whose newest status trunk words in a way this file does not
- * know. A push after a failure keeps it failed until trunk says otherwise.
+ * ignored), or whose newest status this file can read neither by its
+ * wording nor by its emoji. A push after a failure keeps it failed until trunk says otherwise.
  */
 export function mergeQueueState(pr: Pr): MergeQueueState | null {
   if (pr.state !== 'OPEN' || pr.isDraft) {

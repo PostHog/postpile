@@ -506,8 +506,8 @@ emoji, so whitespace is normalized before matching):
 |---|---|
 | "Merging to \`master\` in this repository is managed by Trunk", "This PR's base branch doesn't have a Merge Queue configured" | null (not queued) |
 | "✨ Submitted to Merge by …", "✨ Stack submitted to Merge by …" | submitted (waiting for branch protection) |
-| "⏳ Waiting to start tests", "This pull request is queued for merge as part of [N]" | waiting |
-| "🧪 Running tests on this pull request (testing on PR [#N])" | testing, `testingOn` = that PR |
+| "⏳ Waiting to start tests" (on this pull request / stack), "This pull request is queued for merge as part of [N]" | waiting |
+| "🧪 Running tests on this pull request / stack (testing on PR [#N])" | testing, `testingOn` = that PR |
 | "😎 … merged …", "This pull request was merged into \`master\` as part of stacked PR" | null (the PR state covers it) |
 | "🚫 This pull request / stack was removed from the merge queue because …" | failed: "waited too long to become mergeable", "the stack changed", else trunk's words |
 | "❌ This stack could not start testing because there was a merge conflict" | failed: "merge conflict" |
@@ -517,9 +517,14 @@ emoji, so whitespace is normalized before matching):
 
 Skipped (the status before them stands): the `<!-- Trunk Test Analytics -->`
 badge comment and replies to a `/trunk` command ("This PR is already
-queued …", "An error occurred while handling your Trunk command"). Text
-the table does not know reads as null: never guess a queue state. Null as
-well for merged, closed and draft PRs. A push after a failure keeps it
+queued …", "An error occurred while handling your Trunk command"). A line
+none of these wordings match reads by its leading emoji (added 2026-10-02:
+a stack layer in the queue showed as not queued because trunk said
+"Running tests on this stack"): ✨ submitted, ⏳ waiting, 🧪 testing
+(`testingOn` when it says "testing on PR [#N]"), 😎 null, 🚫 / ❌ failed
+with the reason after "because …" (shortened as above), else no reason. A
+line without one of these emoji reads as null: never guess a queue state.
+Null as well for merged, closed and draft PRs. A push after a failure keeps it
 failed until trunk says otherwise.
 
 **Icon** (`PrStatus.icon` = `prIcon`, core decides): open and in a queue

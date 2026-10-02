@@ -19,6 +19,8 @@ const SUBMITTED = '<!-- Trunk Merge -->\n✨\u2002Submitted to Merge by Alice Ex
 const STACK_SUBMITTED = '<!-- Trunk Merge -->\n✨\u2002Stack submitted to Merge by Bob Example (a GitHub user). It will be added to the merge queue once all branch protection rules pass. See more details [here](https://trunk.example/q/2).';
 const WAITING = '<!-- Trunk Merge -->\n⏳\u2002Waiting to start tests on this pull request - [details](https://trunk.example/q/3)';
 const TESTING = '<!-- Trunk Merge -->\n🧪\u2002Running tests on this pull request (testing on PR [#1205](https://github.com/acme/app/pull/1205)) - [details](https://trunk.example/q/4).';
+const STACK_WAITING = '<!-- Trunk Merge -->\n⏳\u2002Waiting to start tests on this stack - [details](https://trunk.example/q/3)';
+const STACK_TESTING = '<!-- Trunk Merge -->\n🧪\u2002Running tests on this stack (testing on PR [#1207](https://github.com/acme/app/pull/1207)) - [details](https://trunk.example/q/4).';
 const STACK_QUEUED = 'This pull request is queued for merge as part of [1203](https://github.com/acme/app/pull/1203), which will merge [1201](https://github.com/acme/app/pull/1201), [1203](https://github.com/acme/app/pull/1203).';
 const MERGED_LINES = [
   '😎\u2002Merged successfully - [details](https://trunk.example/q/5).',
@@ -50,15 +52,34 @@ describe('mergeQueueState', () => {
     ['submitted', SUBMITTED],
     ['submitted', STACK_SUBMITTED],
     ['waiting', WAITING],
+    ['waiting', STACK_WAITING],
     ['waiting', STACK_QUEUED],
     ['testing', TESTING],
+    ['testing', STACK_TESTING],
   ])('reads %s from trunk status line', (state, body) => {
     expect(stateOf(trunk(body, 5))).toMatchObject({ state, since: at(5), reason: null });
   });
 
   it('names the PR trunk tests on', () => {
     expect(stateOf(trunk(TESTING, 5))?.testingOn).toBe('acme/app#1205');
+    expect(stateOf(trunk(STACK_TESTING, 5))?.testingOn).toBe('acme/app#1207');
     expect(stateOf(trunk(WAITING, 5))?.testingOn).toBeNull();
+  });
+
+  // A wording trunk has not used yet, read by its leading emoji.
+  it.each([
+    ['✨\u2002Queued up for merging by Alice Example (@alice).', { state: 'submitted', reason: null, testingOn: null }],
+    ['⏳\u2002Holding this pull request until the queue has room.', { state: 'waiting', reason: null, testingOn: null }],
+    ['🧪\u2002Verifying this change (testing on PR [#1209](https://github.com/acme/app/pull/1209)).', { state: 'testing', reason: null, testingOn: 'acme/app#1209' }],
+    ['🧪\u2002Verifying this change.', { state: 'testing', reason: null, testingOn: null }],
+    ['🚫\u2002This pull request left the merge queue because there was a merge conflict.', { state: 'failed', reason: 'merge conflict', testingOn: null }],
+    ['❌\u2002Tests for this pull request did not pass.', { state: 'failed', reason: null, testingOn: null }],
+  ])('reads a new wording by its emoji: %s', (line, state) => {
+    expect(stateOf(trunk(`<!-- Trunk Merge -->\n${line}`, 5))).toEqual({ ...state, since: at(5) });
+  });
+
+  it('reads a new 😎 wording as out of the queue', () => {
+    expect(stateOf(trunk(TESTING, 5), trunk('😎\u2002All done here.', 6))).toBeNull();
   });
 
   it.each([
@@ -156,6 +177,7 @@ describe('the Trunk corpus entries', () => {
     ['trunkSubmitted', 'ownOpen', 'submitted', 'quiet', 'noise'],
     ['trunkWaiting', 'ownOpen', 'waiting', 'quiet', 'noise'],
     ['trunkTesting', 'ownOpen', 'testing', 'quiet', 'noise'],
+    ['trunkStackTesting', 'ownOpen', 'testing', 'quiet', 'noise'],
     ['trunkRemoved', 'ownOpen', 'failed', 'loud', 'trigger'],
     ['trunkStackFailed', 'ownOpen', 'failed', 'loud', 'trigger'],
     ['trunkRemoved', 'reviewing', 'failed', 'quiet', 'noise'],

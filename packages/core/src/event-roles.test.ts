@@ -53,6 +53,7 @@ const ROWS: Row[] = [
   { scenario: 'ownOpen', entry: 'trunkSubmitted', kind: 'comment_edited', automation: true, loudness: 'quiet', role: 'noise', alone: false, withTrigger: false, newer: false, quietRead: 'mark' },
   { scenario: 'ownOpen', entry: 'trunkWaiting', kind: 'comment_edited', automation: true, loudness: 'quiet', role: 'noise', alone: false, withTrigger: false, newer: false, quietRead: 'mark' },
   { scenario: 'ownOpen', entry: 'trunkTesting', kind: 'comment_edited', automation: true, loudness: 'quiet', role: 'noise', alone: false, withTrigger: false, newer: false, quietRead: 'mark' },
+  { scenario: 'ownOpen', entry: 'trunkStackTesting', kind: 'comment_edited', automation: true, loudness: 'quiet', role: 'noise', alone: false, withTrigger: false, newer: false, quietRead: 'mark' },
   { scenario: 'reviewing', entry: 'trunkMergedComment', kind: 'comment_edited', automation: true, loudness: 'quiet', role: 'noise', alone: false, withTrigger: false, newer: false, quietRead: 'mark' },
   { scenario: 'merged', entry: 'trunkMergedComment', kind: 'comment_edited', automation: true, loudness: 'quiet', role: 'noise', alone: false, withTrigger: false, newer: false, quietRead: 'mark' },
   // Out of the queue on the viewer's own PR is loud (DESIGN "Merge queue"), so it is a trigger; on a PR they review it stays noise.

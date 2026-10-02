@@ -158,6 +158,11 @@ export const CORPUS = {
     before: [{ comment: trunkSticky() }],
     adds: trunkEdit('🧪\u2002Running tests on this pull request (testing on PR [#4412](https://github.com/acme/app/pull/4412)) - [details](https://app.trunk.io/acme/merge/app/4411).'),
   },
+  trunkStackTesting: {
+    says: 'trunk-io edits its comment on a stack layer: "🧪 Running tests on this stack (testing on PR #4413)"',
+    before: [{ comment: trunkSticky() }],
+    adds: trunkEdit('🧪\u2002Running tests on this stack (testing on PR [#4413](https://github.com/acme/app/pull/4413)) - [details](https://app.trunk.io/acme/merge/app/4411).'),
+  },
   trunkMergedComment: {
     says: 'trunk-io edits its comment: "😎 Merged successfully"',
     before: [{ comment: trunkSticky() }],
