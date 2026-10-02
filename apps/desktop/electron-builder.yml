@@ -35,6 +35,9 @@ asar: true
 # effect: Chromium's locale is en-US, so the few dates and times formatted
 # with the default locale use the US format, like the ones that ask for en-US.
 electronLanguages: [en]
+# Drops SwiftShader (16 MB) before signing; see the file for why the app
+# doesn't need it.
+afterPack: ./build/after-pack.mjs
 # The MCP launcher (see the file). Lands in Contents/Resources, executable,
 # and is signed and notarized with the rest of the bundle.
 extraResources:
