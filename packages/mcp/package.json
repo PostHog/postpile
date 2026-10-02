@@ -1,6 +1,6 @@
 {
   "name": "@postpile/mcp",
-  "version": "0.15.0",
+  "version": "0.15.1",
   "description": "PostPile MCP server: lets other agents ask what PostPile knows about a PR and its topic, refresh it, and suggest topic changes",
   "private": true,
   "license": "MIT",
