@@ -1007,13 +1007,17 @@ export class FakeEngine implements EngineService {
     };
   }
 
-  /** Like the engine's, simpler: samples keep no join times or events, so "ready" means every tile is done and it would go in a day. */
+  /** Like the engine's, simpler: samples keep no join times or events, so "ready" means every tile is done, no tracked PR is open (pulled-in layers aside, like the gate) and it would go in a day. */
   private archiveBox(topic: Topic, tiles: TileView[]): TopicArchiveBox | null {
     if (topic.status === 'retired') {
       const until = archiveEndsAt(topic, null);
       return until !== null && topic.retiredAt !== null ? { state: 'archived', at: topic.retiredAt, until } : null;
     }
-    const nothingLeft = topic.status === 'active' && tiles.length > 0 && tiles.every((view) => view.state.kind === 'done');
+    const nothingLeft =
+      topic.status === 'active' &&
+      tiles.length > 0 &&
+      tiles.every((view) => view.state.kind === 'done') &&
+      tiles.every((view) => view.prs.every((pr) => pr.state !== 'OPEN' || pr.provenance.kind === 'pulled_in'));
     return nothingLeft ? { state: 'ready', at: new Date(this.now().getTime() + 24 * 3_600_000).toISOString() } : null;
   }
 

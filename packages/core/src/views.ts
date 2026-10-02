@@ -119,27 +119,19 @@ export interface TopicListItem {
   prStateCounts: TopicPrStateCounts;
 }
 
+/** A PR that is open while all its tiles are dealt with; `label` is "repo#number" without the owner. */
+export interface OpenInDealtWithPr {
+  key: PrKey;
+  label: string;
+  isDraft: boolean;
+}
+
 /**
  * The box under a topic's Tiles count (DESIGN "The Archive"). ready: nothing
  * is left in the topic; it moves to the Archive by itself at `at` (the next
  * full sync once that has passed), or now with "Archive now". archived: in
  * the Archive since `at`; it takes new PRs until `until`, then retires for good.
  */
-/** A PR that is open while all its tiles are dealt with; `label` is "repo#number" without the owner. */
-export interface OpenInDealtWithPr {
-  key: PrKey;
-  number: number;
-  repo: string;
-  label: string;
-  isDraft: boolean;
-  author: string;
-}
-
-export interface OpenInDealtWith {
-  count: number;
-  prs: OpenInDealtWithPr[];
-}
-
 export type TopicArchiveBox = { state: 'ready'; at: IsoTime } | { state: 'archived'; at: IsoTime; until: IsoTime };
 
 /** A retired topic in the sidebar's Archive drawer (code says "finished" for the drawer's list). */
@@ -360,9 +352,9 @@ export interface TopicDetail {
   /**
    * Open PRs that sit only in Dealt with tiles (`openInDealtWith`), the "· 1 PR
    * open" hint after the Tiles count: why the Archive box does not show.
-   * Null when there are none.
+   * Empty when there are none.
    */
-  openInDealtWith: OpenInDealtWith | null;
+  openInDealtWith: OpenInDealtWithPr[];
   /**
    * The header's PR pill (`topicPrState` over each PR of the tiles once): the
    * same state as the sidebar row's icon, every PR counted (found and

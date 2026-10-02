@@ -36,16 +36,16 @@ function TileCount(props: { count: number }) {
  * does not show. Nothing at 0.
  */
 function OpenInDealtWithHint(props: { openIn: TopicDetail['openInDealtWith'] }) {
-  if (!props.openIn || props.openIn.count === 0) {
+  if (props.openIn.length === 0) {
     return null;
   }
-  const names = props.openIn.prs.map((pr) => `${pr.label}${pr.isDraft ? ' (draft)' : ''}`).join(', ');
+  const names = props.openIn.map((pr) => `${pr.label}${pr.isDraft ? ' (draft)' : ''}`).join(', ');
   const title = `Still open: ${names}. The topic moves to the Archive once every PR is merged or closed.`;
   return (
     <>
       <span className="text-ghost">·</span>
       <span title={title}>
-        {props.openIn.count} {props.openIn.count === 1 ? 'PR' : 'PRs'} open
+        {props.openIn.length} {props.openIn.length === 1 ? 'PR' : 'PRs'} open
       </span>
     </>
   );
