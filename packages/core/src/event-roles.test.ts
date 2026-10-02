@@ -181,7 +181,6 @@ function outcomes(row: Row): Omit<Row, 'scenario' | 'entry' | 'kind' | 'override
     viewer: CORPUS_VIEWER,
     notYours: false,
     prFetchedAt: CORPUS_NOW,
-    now: CORPUS_NOW,
   });
   return {
     automation: isAutomation(event, reviewRequestTarget(event, corpus.pr), CORPUS_VIEWER),
