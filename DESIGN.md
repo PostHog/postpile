@@ -2717,11 +2717,17 @@ any review ask; on top of that:
 - Review note drafts (2026-10-02): `PrActions.draftReviewNote(key, kind)`
   reuses `agent.draftComment` (call kind `draft_comment`, no new kind) with
   `person: null` (a note addressed to nobody) and an intent per kind:
-  approve, what was checked and why it is fine; comment, observations
-  without approving or asking for changes. The glance's Does / Verdict /
-  Risk lines travel as fenced `notes` (untrusted, they can echo PR text),
-  never in the intent, and the usual context
-  (instructions and work context), so `instructions.md` can steer the tone.
+  approve, only what the author does not already know (a risk to watch, a
+  follow-up), else one short sentence; comment, the one point that stood
+  out, without approving or asking for changes. Both are one or two
+  sentences, never more, and never retell the change or list what was
+  checked: the author wrote the diff (2026-10-02, after the first drafts
+  read like a summary of the PR). Plain sentences: active voice, under 25
+  words, no hedging, idioms, em dashes or bullets. The glance's Verdict / Risk / For you lines travel
+  as fenced `notes` (untrusted, they can echo PR text), never in the
+  intent; its Does line stays out, since a summary handed in came back out.
+  The usual context (instructions and work context) goes along, so
+  `instructions.md` can steer the tone.
 - One compose popover (2026-10-02, `ComposePopover`): Approve with comment,
   Comment review and "Ask <owner>" share one popover under the button that
   opened it (surface, rounded-tile, shadow-menu; title, one-line hint,

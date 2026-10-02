@@ -17,7 +17,9 @@ function askLines(person: string, intent: string): { audience: string; shape: st
 function reviewNoteLines(intent: string): { audience: string; shape: string } {
   return {
     audience: `The comment is the body of the user's review, addressed to nobody in particular.\n${intent}`,
-    shape: 'Write it the way the user would: short, direct, no filler, no greeting, no sign-off. GitHub markdown is fine.',
+    shape: `Write it the way the user would, as plain sentences: active voice, present tense, each under 25 words.
+No hedging ("I think", "it seems", "just"), no idioms, no em dashes, no greeting, no sign-off, no headings or
+bullets. Keep real identifiers and file paths, in backticks.`,
   };
 }
 
