@@ -83,11 +83,12 @@ const RE_REVIEW = 'to re-review';
 /** The move on the viewer's own approved PR. It shows on the tile, but it is not urgent. */
 export const MERGE_APPROVED_MOVE = 'Merge, it is approved';
 
-/** The viewer's own PR sits in the merge queue: nobody's move but the queue's. */
+/** A PR sits in the merge queue, the viewer's or not: nobody's move but the queue's. */
 const MERGE_QUEUE_WAIT = 'Waiting on the merge queue';
 
-/** The move on the viewer's own PR the merge queue took out; the reason follows. */
+/** The move on a PR the merge queue took out; the reason follows. The author's on someone else's PR ("sol to re-submit ..."). */
 const MERGE_QUEUE_RESUBMIT = 'Re-submit to the merge queue';
+const MERGE_QUEUE_RESUBMIT_BY_AUTHOR = 'to re-submit to the merge queue';
 
 export const NO_TURN: WhoseTurn = { kind: 'none', who: null, what: '', prKey: null };
 
@@ -258,20 +259,30 @@ function threadsViewerOpened(ctx: PrContext): number {
 }
 
 /**
- * The merge queue decides first on the viewer's own PR (DESIGN.md "Merge
- * queue"): failed in Trunk's queue is theirs to re-submit, with the reason;
- * in Trunk's queue or GitHub's own it waits on the queue. Else threads,
- * changes, reviewers, then merging an approved PR.
+ * The merge queue decides first on any open PR (DESIGN.md "Merge queue"):
+ * failed in Trunk's queue is the author's to re-submit, with the reason (the
+ * viewer's move on their own PR, never on someone else's); in Trunk's queue
+ * or GitHub's own it waits on the queue. Null when the PR is in no queue.
  */
-function ownPrTurn(ctx: PrContext): WhoseTurn {
+function queueTurn(ctx: PrContext): WhoseTurn | null {
   const { pr } = ctx;
   const queue = mergeQueueState(pr);
   if (queue?.state === 'failed') {
-    return you(ctx, 'merge', queue.reason ? `${MERGE_QUEUE_RESUBMIT}: ${queue.reason}` : MERGE_QUEUE_RESUBMIT);
+    const because = queue.reason ? `: ${queue.reason}` : '';
+    if (isPrOwner(pr, ctx.viewer.login)) {
+      return you(ctx, 'merge', `${MERGE_QUEUE_RESUBMIT}${because}`);
+    }
+    return them(ctx, prOwner(pr), `${MERGE_QUEUE_RESUBMIT_BY_AUTHOR}${because}`);
   }
   if (queue !== null || isQueued(pr)) {
     return waitingOnQueue(ctx);
   }
+  return null;
+}
+
+/** The viewer's own PR, after the merge queue: threads, changes, reviewers, then merging an approved PR. */
+function ownPrTurn(ctx: PrContext): WhoseTurn {
+  const { pr } = ctx;
   const threads = threadsWaitingOnViewer(ctx);
   if (threads.count > 0) {
     return you(ctx, 'address_changes', `Answer ${plural(threads.count, 'thread')}${threads.from ? ` from ${threads.from}` : ''}`);
@@ -400,6 +411,10 @@ function prTurn(ctx: PrContext): WhoseTurn {
       ? false
       : isPersonalRequest(reviewRequest(ctx.pr, ctx.viewer)) && viewerHeadReview(ctx.pr, ctx.viewer) === null && !isApprovedByViewer(ctx.pr, ctx.userState, ctx.viewer.login);
     return you(ctx, 'reply', askText(ctx, ask, reviewToo));
+  }
+  const queue = queueTurn(ctx);
+  if (queue) {
+    return queue;
   }
   return isPrOwner(ctx.pr, ctx.viewer.login) ? ownPrTurn(ctx) : othersPrTurn(ctx);
 }

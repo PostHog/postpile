@@ -172,21 +172,30 @@ function answerThreads(threads: string[]): string {
 }
 
 /**
- * The viewer's own open PR: the merge queue first (failed in Trunk's queue:
- * re-submit, with the reason; in either queue: waiting on the queue, no
- * person named), then threads to answer, then changes to address
+ * The merge queue decides first on any open PR: failed in Trunk's queue is
+ * the author's to re-submit, with the reason (the viewer's move on their own
+ * PR, never on someone else's); in either queue: waiting on the queue, no
+ * person named. Null when the PR is in no queue.
+ */
+function queueTurn(input: TurnInput): ExpectedTurn | null {
+  const { pr, viewer } = input;
+  const queue = specMergeQueue(pr);
+  if (queue?.state === 'failed') {
+    return viewerOwns(pr, viewer) ? you('merge', `Re-submit to the merge queue: ${queue.reason}`) : them(namedOwner(pr), `to re-submit to the merge queue: ${queue.reason}`);
+  }
+  if (queue !== null || inGitHubQueue(pr)) {
+    return { kind: 'them', who: null, what: 'Waiting on the merge queue' };
+  }
+  return null;
+}
+
+/**
+ * The viewer's own open PR, after the merge queue: threads to answer, then changes to address
  * (their reviewers' move once every one was asked again after a push),
  * then waiting on the pending reviewers, then merging an approved PR.
  */
 function ownPrTurn(input: TurnInput): ExpectedTurn {
   const { pr, viewer } = input;
-  const queue = specMergeQueue(pr);
-  if (queue?.state === 'failed') {
-    return you('merge', `Re-submit to the merge queue: ${queue.reason}`);
-  }
-  if (queue !== null || inGitHubQueue(pr)) {
-    return { kind: 'them', who: null, what: 'Waiting on the merge queue' };
-  }
   const threads = threadsWaitingOnViewer(pr, viewer);
   if (threads.length > 0) {
     return you('address_changes', answerThreads(threads));
@@ -310,7 +319,7 @@ export function expectedTurn(input: TurnInput): ExpectedTurn {
     const words = ASK_WORDS[askKindOfEvent(pr, viewer, ask)]!;
     return you('reply', reviewToo ? `Review, ${ask.actor} ${words.withReview}` : words.alone(ask.actor));
   }
-  return viewerOwns(pr, viewer) ? ownPrTurn(input) : othersPrTurn(input);
+  return queueTurn(input) ?? (viewerOwns(pr, viewer) ? ownPrTurn(input) : othersPrTurn(input));
 }
 
 // ---------------------------------------------------------------------------

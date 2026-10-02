@@ -10,7 +10,7 @@ import type { PrSummary, TileView } from '../views.ts';
 import type { BoardSpec, RequestTarget } from './board-spec.ts';
 import { buildBoard, tileViewsOf, type PropertyBoard } from './build-board.ts';
 import { describeTurn, ensure, eventsOf, isNews, prOf, trackedRows, type Invariant } from './invariant.ts';
-import { isViewerLogin, newestTouch, READING_TOUCHES, routedRequestWaits, specMergeQueue, specPrIcon } from './spec-facts.ts';
+import { inGitHubQueue, isViewerLogin, newestTouch, READING_TOUCHES, routedRequestWaits, specMergeQueue, specPrIcon } from './spec-facts.ts';
 import { cutSnapshotHoldsSince, expectedSnoozePhase, isAskEvent, isAutomationEvent, lastLooked } from './spec-rules.ts';
 
 /**
@@ -18,7 +18,7 @@ import { cutSnapshotHoldsSince, expectedSnoozePhase, isAskEvent, isAutomationEve
  * on purpose (DESIGN "Look closer pings", team coverage, "Whose turn"):
  * a routed team request the glance calls not yours, a routed request
  * waiting on someone else's change request, a team request a teammate took,
- * or an ask (a team mention) that comes first.
+ * an ask (a team mention) that comes first, or the merge queue (its turn goes first, 2026-10-02).
  */
 export function toReviewException(board: PropertyBoard, pr: Pr, row: PrSummary): string | null {
   const notYours = board.notYours.has(pr.key);
@@ -33,6 +33,9 @@ export function toReviewException(board: PropertyBoard, pr: Pr, row: PrSummary):
   }
   if (row.turn.kind === 'you' && row.turn.move === 'reply') {
     return 'an ask comes first';
+  }
+  if (specMergeQueue(pr) !== null || inGitHubQueue(pr)) {
+    return 'in the merge queue';
   }
   return null;
 }

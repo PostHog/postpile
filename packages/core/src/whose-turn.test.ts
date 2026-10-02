@@ -334,9 +334,16 @@ describe('whoseTurn: on your own PR', () => {
       expect(isMergeApprovedMove(turn)).toBe(true);
     });
 
-    it("leaves someone else's PR in the queue as it was", () => {
-      const theirs = makePr({ author: 'sol', comments: [failed], reviews: [makeReview({ author: me, commitOid: 'head' })] });
-      expect(single(theirs)).toMatchObject({ kind: 'them', who: 'sol', what: 'to merge' });
+    it("waits on the queue on someone else's PR too, even after you approved it", () => {
+      const theirs = makePr({ author: 'sol', comments: [testing], reviews: [makeReview({ author: me, commitOid: 'head' })] });
+      expect(single(theirs)).toEqual({ kind: 'them', who: null, what: 'Waiting on the merge queue', prKey: theirs.key });
+      const queued = { ...theirs, comments: [], timeline: [makeTimelineItem({ id: 'q1', kind: 'added_to_merge_queue', subject: null })] };
+      expect(single(queued).what).toBe('Waiting on the merge queue');
+    });
+
+    it("leaves the re-submit to the author on someone else's PR, with the reason", () => {
+      const theirs = makePr({ author: 'sol', comments: [testing, failed], reviews: [makeReview({ author: me, commitOid: 'head' })] });
+      expect(single(theirs)).toEqual({ kind: 'them', who: 'sol', what: 'to re-submit to the merge queue: tests failed', prKey: theirs.key });
     });
   });
 });

@@ -126,7 +126,7 @@ describe('FakeEngine tile faces', () => {
     expect(stack?.turn).toMatchObject({ kind: 'you', what: 'Review, lyra mentioned you on #1902' });
     expect(stack?.prs.map((pr) => pr.why)).toEqual(['ST', 'ST', 'RV', 'RV', 'ST']);
     expect(stack?.prs.map((pr) => pr.status.lifecycle)).toEqual(['merged', 'merged', 'open', 'open', 'closed']);
-    expect(depot.find((view) => view.tile.id === 'pr:acme/app#1899')?.turn).toMatchObject({ kind: 'them', who: 'rowan', what: 'to merge' });
+    expect(depot.find((view) => view.tile.id === 'pr:acme/app#1899')?.turn).toMatchObject({ kind: 'them', who: null, what: 'Waiting on the merge queue' });
     const desktop = (await engine.getTopic('topic-desktop-release'))?.tiles[0];
     expect(desktop).toMatchObject({ why: 'FW', turn: { kind: 'none' } });
   });
@@ -437,6 +437,8 @@ describe('FakeEngine queues', () => {
     const testing = runners?.tiles.find((view) => view.tile.id === 'pr:acme/app#1975');
     expect(testing?.prs[0]?.status).toMatchObject({ icon: 'merge_queue', mergeQueue: { state: 'testing', testingOn: 'acme/app#1976' } });
     expect(testing?.turn).toMatchObject({ kind: 'them', who: null, what: 'Waiting on the merge queue' });
+    const rowans = runners?.tiles.find((view) => view.tile.id === 'pr:acme/app#1978');
+    expect(rowans?.turn).toMatchObject({ kind: 'them', who: null, what: 'Waiting on the merge queue' });
     expect(runners?.prRollup.state).toBe('merge_queue');
     const ci = await engine.getTopic('topic-ci-tests');
     const failed = ci?.tiles.find((view) => view.tile.id === 'pr:acme/app#1950');

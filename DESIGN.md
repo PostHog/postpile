@@ -539,12 +539,17 @@ reason and "since 06:28" (`sinceLabel`). The detail header's state line says
 the same plus "since 06:28", and a failed PR gets a red "Failed (reason)"
 line under the branch.
 
-**Whose turn** (own PRs only, before every other own-PR rule): failed is
-your move, `merge`, "Re-submit to the merge queue: <reason>"; queued (either
-queue) waits on the queue, `{ kind: 'them', who: null, what: 'Waiting on the
-merge queue' }`, drawn with the queue icon in place of a face. Like "Merge,
-it is approved" the re-submit move shows on the tile but never makes the
-topic urgent (`isMergeApprovedMove`); the failure itself is loud.
+**Whose turn** (any open PR, right after the open asks of rule 2 and before
+every other own or others' PR rule):
+queued (either queue) waits on the queue, `{ kind: 'them', who: null, what:
+'Waiting on the merge queue' }`, drawn with the queue icon in place of a
+face, on someone else's PR too (an approval of yours does not change it, and
+there is no "rowan to merge"). Failed is the author's move: your own PR is
+your move, `merge`, "Re-submit to the merge queue: <reason>"; someone
+else's is `{ kind: 'them', who: <author>, what: 'to re-submit to the merge
+queue: <reason>' }`, never yours. Like "Merge, it is approved" the re-submit
+move shows on the tile but never makes the topic urgent
+(`isMergeApprovedMove`); the failure itself is loud.
 
 **Loudness**: trunk's comment or edit that took the viewer's own open PR
 from any other state to failed is loud, "removed from the merge queue:
@@ -2356,11 +2361,13 @@ draft), `merge`. No CI move: `fix_ci` ("Fix failing CI") was dropped
    never consulted it, so a plain "thanks, that's fine" kept saying "Reply
    to …". Julian, 2026-09-29: "if the author just replies 'Oh yeah, that's
    fine,' that's not my move to reply again".
-3. On your own PR:
-   - first the merge queue (2026-10-02, see "Merge queue"): failed in
-     Trunk's queue is yours, "Re-submit to the merge queue: tests failed"
-     (move `merge`); in a queue it waits on the queue, "Waiting on the merge
-     queue" (`who` null).
+3. The merge queue, on any open PR (2026-10-02, see "Merge queue"): in a
+   queue it waits on the queue, "Waiting on the merge queue" (`who` null),
+   on someone else's PR too and whatever you reviewed. Failed in Trunk's
+   queue is the author's: yours on your own PR, "Re-submit to the merge
+   queue: tests failed" (move `merge`); on someone else's "sol to re-submit
+   to the merge queue: tests failed", never yours.
+   Then, on your own PR:
    - you: unresolved threads whose last comment is someone else's ("Answer 3
      threads from mira"), else a standing change request ("Address ada's
      changes"). Failing CI alone is not your move (2026-09-29).
@@ -2378,7 +2385,7 @@ draft), `merge`. No CI move: `fix_ci` ("Fix failing CI") was dropped
    - you: approved and not a draft ("Merge, it is approved"). Not in the
      first rule list; added so an approved own PR does not read as nothing.
    - else none.
-4. On someone else's PR:
+4. On someone else's PR (after the merge queue, rule 3):
    - you: addressed your changes (2026-09-28).
      Your newest verdict review (approve, request changes, dismissed) asks
      for changes, and since your last word (that review, or a later comment
