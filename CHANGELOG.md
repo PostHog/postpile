@@ -2,6 +2,12 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## Unreleased
+
+### Changed
+
+- The download is about 19 MB smaller (about 15%), and the app takes about 65 MB less disk space. PostPile no longer ships Chromium's translations for languages other than English (the app is English only), or a software graphics library it never uses. Side effect: the few dates and times that followed your system's language now use the US format, like the rest of the app.
+
 ## 0.15.1 (2026-10-02)
 
 ### Added
