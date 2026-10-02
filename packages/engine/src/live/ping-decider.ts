@@ -1,6 +1,7 @@
 import { EVENTS_PER_PING_ITEM, type AgentService, type PingDecisionAnswer, type PingDecisionItem } from '@postpile/agent';
 import {
   dossierBrief,
+  isAddressedToViewer,
   isLiveConversation,
   isMemoryNoise,
   isPersonalPing,
@@ -61,7 +62,7 @@ interface Candidate {
   pr: Pr;
   events: PrEvent[];
   rule: PingRule;
-  /** `isLiveConversation` for the rule's event: it pings whatever the agent says. */
+  /** One of its events answers the viewer in a live conversation (`isLiveConversation`): it pings whatever the agent says. */
   conversation: boolean;
   target: PingTarget;
   tile: Tile | null;
@@ -156,7 +157,9 @@ export class PingDecider {
       // New human news wakes a snooze before the board is read, so a tile still snoozed here has nothing that should ping yet. An event the agent raises to loud later comes back through decideRaised.
       const snoozed = located.tile !== null && board.stateOf(located.tile).kind === 'snoozed';
       const rule = pingRule(events, pr, viewer, isPrInQuietRepo(key, settings), snoozed);
-      const conversation = rule.class === 'addressed' && rule.event !== null && isLiveConversation(rule.event, pr, allEvents, viewer);
+      // Any of the events, not only the rule's: a newer review request must not hide the reply.
+      const conversation =
+        rule.class === 'addressed' && events.some((e) => isAddressedToViewer(e, pr, viewer) && isLiveConversation(e, pr, allEvents, viewer));
       result.push({ threadId: thread.id, pr, events: newestFirst(events), rule, conversation, ...located });
     }
     return result;
