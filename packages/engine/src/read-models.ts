@@ -37,6 +37,7 @@ import {
   repoOverview,
   searchTopics,
   tileRepoLabels,
+  topicRepoLine,
   tileListRank,
   topicFaces,
   topicPeople,
@@ -499,7 +500,8 @@ export class ReadModels {
     const topicTiles = board.tilesForTopic(topicId);
     const prs = this.topicPrs(board, topicTiles);
     const viewer = loadViewer(this.store);
-    const queues = this.topicQueuesOf(board, topicTiles, prs, viewer, loadRepoSettings(this.store));
+    const settings = loadRepoSettings(this.store);
+    const queues = this.topicQueuesOf(board, topicTiles, prs, viewer, settings);
     const placement = isUnsorted ? null : placementOf(this.store, topic, this.store.dossiers.latest(topicId) ?? undefined);
     const yourMoves = topicYourMoves(tiles);
     const sectionSource = { topic, driverPick: this.store.driverPicks.get(topicId), queues, moves: yourMoves.length, placement, viewer };
@@ -507,6 +509,7 @@ export class ReadModels {
       topic,
       driver: isUnsorted ? null : topicDriverView(sectionSource),
       placement,
+      repoLine: isUnsorted ? null : topicRepoLine(topicTiles.flatMap(memberKeys), settings, viewerOrgs(viewer?.teams ?? [])),
       tiles,
       yourMoves,
       groupYourMoves: yourMovesByGroup(tiles),

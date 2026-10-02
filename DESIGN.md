@@ -3267,11 +3267,25 @@ local; nothing goes to GitHub.
   label is the short name (`infra`, `docs`) when the org is one
   of the viewer's team orgs (`viewerOrgs`, falling back to the base repo's
   org), else `owner/name`.
+- **Topic header repo**: the opened topic's main repo sits on the owner
+  line, before "Owned by", as a book glyph and the short name in mono
+  (plain text, not a pill), with "+N" when its PRs touch N other repos
+  (`topicRepoLine`, `TopicDetail.repoLine`; same PR keys as the tile
+  labels, ties go to the picked repo). When a repo is picked and the topic
+  has PRs in it but most sit elsewhere, it reads "mostly in infra" in
+  honey, and the hover says why it is listed ("Listed because 1 PR is in
+  app; most of its PRs are in infra"). Without a placement it shows alone
+  in the same spot; no PRs, no repo.
+- **Narrowed button**: "Only app" in the accent with a soft accent ring,
+  like a narrowing "Topics with" option, plus an × that goes back to All
+  repos in one click. "All repos" keeps the quiet look.
 - **Menu rows**: each repo with its topic count (PR count in the tooltip),
   counted over every topic so the menu does not shrink while narrowed; the
   "All repos" row counts every topic with PRs. A repo the settings name
   but with no PRs left still shows with 0, so it can be picked away from
-  or woken up.
+  or woken up. "All repos" carries a green "Recommended" tag and a hint:
+  dealt-with topics hide on their own, so the full list stays short, and
+  one repo is for focusing a while.
 - **Migration**: a scope stored as a list (the multi-select before
   2026-09-28) reads as that repo when it held one entry, else "All repos"
   (`migrateRepoScope`); the next change stores the new shape.

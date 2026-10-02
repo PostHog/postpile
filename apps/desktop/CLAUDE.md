@@ -343,7 +343,7 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
 
 - One component per file in `components/`, named like the UI part:
   `TitleBar`, `TopicSidebar`, `TopicHeader` (+ `SinceLastLooked`,
-  `DossierPanel`), `InboxPane`, `TileGrid`, `Tile`, `PrRow` (+ `AssignedTo`, also in `PrBody`), `NotificationsPane` (+ `NotificationRow`), `HandledQuietlyPane`,
+  `DossierPanel`, `TopicRepo` on the owner line), `InboxPane`, `TileGrid`, `Tile`, `PrRow` (+ `AssignedTo`, also in `PrBody`), `NotificationsPane` (+ `NotificationRow`), `HandledQuietlyPane`,
   `DetailPane` (+ `DetailContext`, `PrBody`, `GlanceCard`, `KeyFiles`,
   `PrDescription`, `PrFacts`, `ReviewList`, `NewSinceBox` (under the
   title; the activity list then shows only earlier events),

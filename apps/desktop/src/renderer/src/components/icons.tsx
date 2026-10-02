@@ -226,6 +226,17 @@ export function PeopleIcon(props: IconProps) {
   );
 }
 
+/** A book (Octicons "repo"): the topic's repo on the header's owner line. */
+export function RepoIcon(props: IconProps) {
+  const size = props.size ?? 11;
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" className={props.className} aria-hidden="true">
+      <path d="M3 13.5V3.25C3 2.56 3.56 2 4.25 2H13v9.5H4.25C3.56 11.5 3 12.06 3 12.75v.5c0 .69.56 1.25 1.25 1.25H6" />
+      <path d="M8 13v2.25l1.25-.9 1.25.9V13" />
+    </svg>
+  );
+}
+
 /** A circle as a path, so a glyph stays one <path>. */
 function ring(cx: number, cy: number, r: number): string {
   return `M${cx} ${cy - r}a${r} ${r} 0 1 0 0 ${2 * r}a${r} ${r} 0 1 0 0 -${2 * r}z`;
