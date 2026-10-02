@@ -31,6 +31,27 @@ function TileCount(props: { count: number }) {
 }
 
 /**
+ * "· 1 PR open" after the Tiles count: open PRs that sit only in Dealt with
+ * tiles (core's `TopicDetail.openInDealtWith`). They are why the Archive box
+ * does not show. Nothing at 0.
+ */
+function OpenInDealtWithHint(props: { openIn: TopicDetail['openInDealtWith'] }) {
+  if (props.openIn.length === 0) {
+    return null;
+  }
+  const names = props.openIn.map((pr) => `${pr.label}${pr.isDraft ? ' (draft)' : ''}`).join(', ');
+  const title = `Still open: ${names}. The topic moves to the Archive once every PR is merged or closed.`;
+  return (
+    <>
+      <span className="text-ghost">·</span>
+      <span title={title}>
+        {props.openIn.length} {props.openIn.length === 1 ? 'PR' : 'PRs'} open
+      </span>
+    </>
+  );
+}
+
+/**
  * "· 2 your move" after the count, in the honey of the sidebar's chip; core
  * counts it (`TopicDetail.groupYourMoves`). Nothing at 0, and nothing while
  * the search filters the grid or a held tile sits outside its core group:
@@ -178,6 +199,7 @@ export function TileGrid(props: Omit<TileGridProps, 'showYourMove'>) {
           <span className="text-xs font-semibold text-ink-2">Tiles</span>
           <span className="flex items-baseline gap-[5px] text-[11px] text-faint">
             <TileCount count={tiles.length} />
+            <OpenInDealtWithHint openIn={props.detail.openInDealtWith} />
             {tiles.length < props.detail.tiles.length && (
               <>
                 <span className="text-ghost">·</span>

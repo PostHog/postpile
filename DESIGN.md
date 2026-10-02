@@ -3380,6 +3380,17 @@ check), a second copy of core's rules. Owner decisions (2026-09-30):
   The group's name and count sit right on top of its first tile, no box
   around them. Core's order is `TILE_GROUP_ORDER`; the renderer's copy is
   typed with `TileGroupOrder`, so a drift fails to compile.
+- **Open and Dealt with at once (2026-10-02).** Tile state is about the
+  user's move, PR state is about GitHub, so a PR can be open while its tile
+  is Dealt with (the owner's own draft, a PR waiting on others). The topic
+  then never reaches the Archive box (`RetireGate.nothingLeft` wants every PR
+  merged or closed), and nothing said why. After the Tiles count the header
+  shows a muted "· 1 PR open" / "· 2 PRs open", same type scale as the count,
+  only when core's `TopicDetail.openInDealtWith` has PRs: open PRs that sit
+  only in Dealt with tiles, minus pulled-in stack layers (not topic members,
+  so the Archive gate ignores them and the hint must agree). Its tooltip
+  names them: "Still open: devex-depot-tools#3 (draft). The topic moves to the
+  Archive once every PR is merged or closed." Decided 2026-10-02.
 - **No toggle.** The All / Unread buttons, "switching to Unread deselects",
   the filter-aware auto pick and the "show All" empty text are gone.
 - **Selection:** the selected tile keeps its place (`useHeldPlace`, now over

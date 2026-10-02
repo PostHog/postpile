@@ -34,6 +34,7 @@ export * from './primary-action.ts';
 export * from './offers.ts';
 export * from './pr-tier.ts';
 export * from './topic-queues.ts';
+export * from './open-in-dealt-with.ts';
 export * from './topic-pr-state.ts';
 export * from './topic-urgency.ts';
 export * from './topics.ts';

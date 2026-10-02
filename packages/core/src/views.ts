@@ -119,6 +119,13 @@ export interface TopicListItem {
   prStateCounts: TopicPrStateCounts;
 }
 
+/** A PR that is open while all its tiles are dealt with; `label` is "repo#number" without the owner. */
+export interface OpenInDealtWithPr {
+  key: PrKey;
+  label: string;
+  isDraft: boolean;
+}
+
 /**
  * The box under a topic's Tiles count (DESIGN "The Archive"). ready: nothing
  * is left in the topic; it moves to the Archive by itself at `at` (the next
@@ -342,6 +349,12 @@ export interface TopicDetail {
   agent: TopicAgentOffers;
   /** The Archive box in the same row; null while something in the topic is open or unread. */
   archive: TopicArchiveBox | null;
+  /**
+   * Open PRs that sit only in Dealt with tiles (`openInDealtWith`), the "· 1 PR
+   * open" hint after the Tiles count: why the Archive box does not show.
+   * Empty when there are none.
+   */
+  openInDealtWith: OpenInDealtWithPr[];
   /**
    * The header's PR pill (`topicPrState` over each PR of the tiles once): the
    * same state as the sidebar row's icon, every PR counted (found and
