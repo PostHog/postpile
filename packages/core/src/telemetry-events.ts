@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { TOPIC_SECTION_ORDER } from './topic-sections.ts';
 
 // The whole telemetry surface in one place: every event PostPile is allowed
 // to send, and the shape of its properties. apps/server's /api/telemetry
@@ -39,7 +40,8 @@ const markReadOrigin = z.enum(['tile', 'detail', 'debug', 'cleanup', 'agent_tile
 const snoozeDurationBucket = z.enum(['hours', 'a_day', 'days', 'a_week', 'someone_replies', 'new_push', 'ci_green']);
 const queryLengthBucket = z.enum(['short', 'medium', 'long']);
 const queueFilter = z.enum(['mine', 'team', 'reply', 'review', 'none']);
-const topicSection = z.enum(['needs_reply', 'changes_requested', 'my_prs', 'team_prs', 'to_review', 'team_mentioned', 'other']);
+// The sidebar section the opened topic sits in, core's `TopicSection` as is.
+const sidebarSection = z.enum(TOPIC_SECTION_ORDER);
 
 // -----------------------------------------------------------------------
 // 4. Agent trust
@@ -108,7 +110,7 @@ export const TELEMETRY_EVENTS = {
   pings_summarized: z.object({ pinged: count, withheld_rules: count, withheld_agent: count, pinged_glance: count, handled_quietly: count }).strict(),
   search_used: z.object({ query_length_bucket: queryLengthBucket }).strict(),
   queue_filter_changed: z.object({ filter: queueFilter }).strict(),
-  topic_opened: z.object({ section: topicSection }).strict(),
+  topic_opened: z.object({ section: sidebarSection }).strict(),
   // "Archive now" on a topic with nothing left, before it would go by itself.
   topic_archived: NO_PROPS,
   update_pill_clicked: NO_PROPS,

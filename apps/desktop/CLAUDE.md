@@ -478,16 +478,20 @@ them into the team pill (you and teammates: sea tint, `inset-ring-sea-ring`,
 `PeopleIcon` first, avatars overlapping, tooltip "You and your team: …")
 and the other authors after it, overlapping the same way.
 
-The sidebar lists topics in queue sections (`lib/queues.ts`,
-`queueLayout`; DESIGN.md "Queue sections"): Needs reply, Changes you
-requested, My PRs, Team's PRs, To review, Team mentioned, then Other
-topics, which keeps the old groups from `lib/sidebar.ts` (`sidebarGroups`:
-Needs you, Your team by area, Routed, FYI). Each topic sits once, in its
-section core gives it (`TopicListItem.section`, `topicSection`); the
-topic header's breadcrumb reads the same field on `TopicDetail` and the same
-label and dot (`lib/sections.ts`). The queue filters still match it by
-any PR. Fold state is local UI state; Routed, FYI and the Archive start
-folded. The Archive drawer (retired topics, `useFinishedTopics`) hides while search
+The sidebar lists topics in sections (`lib/queues.ts`, `sidebarBuckets`,
+order typed with core's `TopicSectionOrder`; DESIGN.md "Ownership
+sections"): Needs reply, Changes you requested, To review, Team mentioned,
+You drive, Your team owns, Other work, then Other topics. Each topic sits
+once, in the section core gives it (`TopicListItem.section`,
+`topicSection`), in core's order; the topic header's breadcrumb reads the
+same field on `TopicDetail` and the same label and dot
+(`lib/sections.ts`). `lib/sidebar.ts` holds the folds: Other work's area
+folds (`areaFolds`, "More" for single-topic areas), their default
+(`startsOpen`: your PR, move or unread), the rows a folded fold keeps
+(`rowsWhileFolded`, urgent unread) and its header summary; the selected topic counts like an urgent row (a fold holding it stays open, a folded one keeps its row); Other topics
+splits into unplaced rows ("not sorted yet" without a dossier) and the FYI
+fold. The queue filters still match a topic by any PR. Fold choices are
+local UI state for the session; FYI and the Archive start folded. The Archive drawer (retired topics, `useFinishedTopics`) hides while search
 or a queue filter narrows; a finished topic is not in `useTopics`, so
 `App` opens it by id (`pickedFinishedId`) instead of through `visibleTopic`. The "Topics with
 any PR | my PRs | team PRs" switch (`QueueFilters`) is plain UI state in

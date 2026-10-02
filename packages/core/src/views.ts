@@ -38,6 +38,7 @@ import type { ReviewRequest } from './review-request.ts';
 import type { PrTier } from './pr-tier.ts';
 import type { ViewerApproval } from './review-request.ts';
 import type { PersonRelation, TopicPerson, TopicQueues } from './topic-queues.ts';
+import type { TopicSection } from './topic-sections.ts';
 import type { TopicMove } from './topic-urgency.ts';
 import type { TilePerson } from './tile-people.ts';
 import type { WhoseTurn } from './whose-turn.ts';
@@ -105,8 +106,8 @@ export interface TopicListItem {
   unseenMergeTiles: number;
   /** PRs per tier and open PRs by author, over the PRs in the topic's tiles. */
   queues: TopicQueues;
-  /** The sidebar section it sits in (`topicSection` over `queues`); null for Other topics. */
-  section: PrTier | null;
+  /** The sidebar section it sits in (`topicSection`: asks, then who drives it, then the owner team). */
+  section: TopicSection;
   /**
    * The row's faces (`topicFaces` over `topicPeople`): PR authors only, you
    * and your teammates first (the team pill), then others by PR count;
@@ -361,8 +362,8 @@ export interface TopicDetail {
    * pulled-in ones too), and the lifecycle and review mix for its tooltip.
    */
   prRollup: TopicPrStateSummary;
-  /** The sidebar section, as on the list item (`topicSection`): the breadcrumb's label. */
-  section: PrTier | null;
+  /** The sidebar section, as on the list item (`topicSection`; Archive when retired): the breadcrumb's label. */
+  section: TopicSection;
   /**
    * A whole-topic catch-up run is going: it rewrites the dossier, so memory
    * notes say "Updating now". A glance-only refresh (refresh on look) does

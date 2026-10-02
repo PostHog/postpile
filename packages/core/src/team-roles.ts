@@ -1,5 +1,5 @@
 // Team roles (DESIGN.md "Team roles", 2026-09-30). Each of the viewer's
-// GitHub teams is a home team (its members are teammates: Team's PRs, the
+// GitHub teams is a home team (its members are teammates: Your team owns, the
 // Team filter, faces, "For you" on a teammate's PR) or a routing team (only
 // its review requests and mentions matter). Rules decide from how the
 // viewer's reviews reached them; the user can flip a role. Rules only, no IO.

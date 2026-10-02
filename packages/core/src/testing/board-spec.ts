@@ -6,6 +6,7 @@
 // the [bot] suffix, acme-agent[bot] the coding agent that opens PRs for
 // people).
 import fc from 'fast-check';
+import type { TopicRelation } from '../memory.ts';
 import type { NotificationReason, Verdict } from '../types.ts';
 
 /**
@@ -190,8 +191,25 @@ export interface GroupSpec {
   snooze: SnoozeSpec | null;
 }
 
+/**
+ * The topic itself, for its sidebar section (DESIGN "Ownership sections"):
+ * who drives it (null: nobody known), and its dossier's relation and owner
+ * team. relation null: no dossier yet, so no owner team either. Owner home
+ * is team-platform, routing the approvers team (home only while roles are
+ * undecided), other team-infra.
+ */
+export interface TopicSpec {
+  driver: 'viewer' | 'teammate' | 'other' | 'outsider' | null;
+  relation: TopicRelation | null;
+  ownerTeam: 'home' | 'routing' | 'other' | null;
+}
+
+/** A topic nothing places: no driver known, no dossier yet. */
+export const UNSORTED_TOPIC: TopicSpec = { driver: null, relation: null, ownerTeam: null };
+
 export interface BoardSpec {
   groups: GroupSpec[];
+  topic: TopicSpec;
   teams: TeamSetup;
   /** GitHub writes are locked, so mark-reads wait as pending writes. */
   writesLocked: boolean;
@@ -395,9 +413,17 @@ const anyGroupArb: fc.Arbitrary<GroupSpec> = fc.oneof(
   { weight: 1, arbitrary: groupArb('dissolved_set', 2, 3) },
 );
 
+/** Every driver, relation and owner team, a missing one as often as any other. */
+const topicSpecArb: fc.Arbitrary<TopicSpec> = fc.record({
+  driver: fc.constantFrom<TopicSpec['driver']>(null, 'viewer', 'teammate', 'other', 'outsider'),
+  relation: fc.constantFrom<TopicSpec['relation']>(null, 'team', 'routed', 'fyi'),
+  ownerTeam: fc.constantFrom<TopicSpec['ownerTeam']>(null, 'home', 'routing', 'other'),
+});
+
 /** A board: one topic with one to three tiles, 1-4 PRs each. */
 export const boardSpecArb: fc.Arbitrary<BoardSpec> = fc.record({
   groups: fc.array(anyGroupArb, { minLength: 1, maxLength: 3 }),
+  topic: topicSpecArb,
   teams: fc.constantFrom<TeamSetup>('one_home', 'home_and_routing', 'no_home', 'undecided'),
   writesLocked: fc.boolean(),
   teamMembersUnknown: sometimes(1, 9),

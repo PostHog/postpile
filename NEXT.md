@@ -1091,6 +1091,16 @@ the app meanwhile.
 
 ## Decided
 
+- **Ownership sections** (2026-10-02, DESIGN.md "Ownership sections"):
+  below the asks, topics sit under You drive, Your team owns or Other work
+  by who drives them; the owner team only places a topic without a known
+  driver (a weak signal, Codex's point). My PRs and Team's PRs are gone, and
+  so are the Needs you / Your team / Routed to you groups in Other topics;
+  FYI and the Archive stay. Other work folds by area ("More" for
+  single-topic areas) and starts open only for your PR, move or unread.
+  Topics without a dossier or driver are "not sorted yet". Next: the driver
+  picker on the header (You, a teammate, Your team, Someone outside your
+  team, Reset).
 - **Merge queue like Trunk's extension** (2026-10-02, DESIGN.md "Merge
   queue"): the queue icon replaces the git icon while a PR is in the merge
   queue, pending amber, red once the queue took it out, the merged icon

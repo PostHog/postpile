@@ -21,7 +21,7 @@ import {
   buildPrSummary,
   buildTileView,
   topicAgentOffers,
-  compareTopicUrgency,
+  compareInSection,
   eventView,
   topicMove,
   isPrInQuietRepo,
@@ -76,7 +76,7 @@ import {
   type TopicDetail,
   openInDealtWith,
   topicPrRollup,
-  topicSection,
+  topicSectionOf,
   type TopicListItem,
   type TopicQueues,
   type Viewer,
@@ -108,10 +108,11 @@ function memberKeys(tile: Tile): PrKey[] {
   return tile.members.map((member) => member.prKey);
 }
 
+/** The order inside each sidebar section (`compareInSection`), then Unsorted last, then by name. */
 function compareTopics(a: TopicListItem, b: TopicListItem): number {
-  const byUrgency = compareTopicUrgency(a, b);
-  if (byUrgency !== 0) {
-    return byUrgency;
+  const inSection = compareInSection(a, b);
+  if (inSection !== 0) {
+    return inSection;
   }
   // Unsorted goes last within its group so real topics come first.
   if ((a.topic.id === UNSORTED_TOPIC_ID) !== (b.topic.id === UNSORTED_TOPIC_ID)) {
@@ -399,9 +400,10 @@ export class ReadModels {
       const prRollup = topicPrRollup(tiles, prs);
       const latest = dossiers.get(topic.id);
       const dossier = latest?.dossier;
+      const placement = isUnsortedTopic(topic.id) ? null : placementOf(this.store, topic, latest);
       items.push({
         topic,
-        placement: isUnsortedTopic(topic.id) ? null : placementOf(this.store, topic, latest),
+        placement,
         statusLine: dossier ? { status: dossier.status, note: dossier.statusNote } : null,
         group: urgency.needsYou ? 'needs_you' : 'quiet',
         unreadTiles: urgency.unreadTiles,
@@ -413,7 +415,7 @@ export class ReadModels {
         yourMoves: urgency.yourMoves,
         unseenMergeTiles: tiles.filter((tile) => (board.stateOf(tile).unseenMerges?.length ?? 0) > 0).length,
         queues,
-        section: topicSection(queues),
+        section: topicSectionOf({ topic, queues, moves: urgency.yourMoves.length, placement, viewer }),
         people: topicFaces(topicPeople(prs, viewer)),
         prState: prRollup.state,
         prStateCounts: prRollup.counts,
@@ -490,12 +492,15 @@ export class ReadModels {
     const tiles = this.tileViews(board, topicId);
     const topicTiles = board.tilesForTopic(topicId);
     const prs = this.topicPrs(board, topicTiles);
-    const queues = this.topicQueuesOf(board, topicTiles, prs, loadViewer(this.store), loadRepoSettings(this.store));
+    const viewer = loadViewer(this.store);
+    const queues = this.topicQueuesOf(board, topicTiles, prs, viewer, loadRepoSettings(this.store));
+    const placement = isUnsorted ? null : placementOf(this.store, topic, this.store.dossiers.latest(topicId) ?? undefined);
+    const yourMoves = topicYourMoves(tiles);
     return {
       topic,
-      placement: isUnsorted ? null : placementOf(this.store, topic, this.store.dossiers.latest(topicId) ?? undefined),
+      placement,
       tiles,
-      yourMoves: topicYourMoves(tiles),
+      yourMoves,
       groupYourMoves: yourMovesByGroup(tiles),
       sets: isUnsorted ? [] : this.store.sets.listActiveForTopic(topicId),
       setChanges: isUnsorted ? [] : this.store.sets.listChangesForTopic(topicId, SET_CHANGES_SHOWN),
@@ -506,7 +511,7 @@ export class ReadModels {
       archive: this.archiveBox(board, topic),
       openInDealtWith: openInDealtWith(tiles),
       prRollup: topicPrRollup(topicTiles, prs),
-      section: topicSection(queues),
+      section: topicSectionOf({ topic, queues, moves: yourMoves.length, placement, viewer }),
       memoryUpdating: this.memoryUpdating(isUnsorted ? null : topicId),
     };
   }

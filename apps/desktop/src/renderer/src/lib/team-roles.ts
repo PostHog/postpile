@@ -15,7 +15,7 @@ export function teamRoleFlipTitle(team: TeamRoleView): string {
   if (team.role === 'home') {
     return `Only ${team.slug}'s review requests and mentions count; its members stop being your teammates. Local, sticks over later checks.`;
   }
-  return `${team.slug}'s members become your teammates: Team's PRs, the Team filter, "For you" on their PRs. Local, sticks over later checks.`;
+  return `${team.slug}'s members become your teammates: Your team owns, the team PRs filter, "For you" on their PRs. Local, sticks over later checks.`;
 }
 
 /** The toast after a flip. */

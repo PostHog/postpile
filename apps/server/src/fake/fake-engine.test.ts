@@ -408,6 +408,33 @@ describe('FakeEngine queues', () => {
     expect(await new FakeEngine().getViewer()).toEqual({ login: 'you', teamMembers: ['lyra', 'nell', 'rowan', 'sol'], homeTeams: ['acme/team-platform'] });
   });
 
+  it('fills every ownership section, Other work over areas, and a topic not sorted yet', async () => {
+    const engine = new FakeEngine();
+    const topics = await engine.listTopics();
+    const sectionOf = (id: string) => topics.find((item) => item.topic.id === id)?.section;
+    for (const section of ['needs_reply', 'changes_requested', 'to_review', 'you_drive', 'team_owns', 'other_work', 'other_topics'] as const) {
+      expect(topics.some((item) => item.section === section), section).toBe(true);
+    }
+    // A teammate drives it and your PR is in it; a standing topic without a driver goes by its home owner team.
+    expect(sectionOf('topic-flaky-quarantine')).toBe('team_owns');
+    expect(sectionOf('topic-egress-allowlist')).toBe('team_owns');
+    // Driven outside the team, though the owner signal names the home team (you wrote a PR there).
+    expect(sectionOf('topic-usage-exports')).toBe('other_work');
+    expect(topics.filter((item) => item.section === 'other_work').map((item) => item.topic.area)).toEqual(['Billing', 'Replay', 'Replay', 'Alerting']);
+    // No dossier and no driver: not sorted yet. FYI stays FYI.
+    expect(topics.find((item) => item.topic.id === 'topic-docs-search')).toMatchObject({ section: 'other_topics', placement: null });
+    expect(sectionOf('topic-desktop-release')).toBe('other_topics');
+    // The breadcrumb reads the same rule; a retired topic is in the Archive.
+    expect((await engine.getTopic('topic-flaky-quarantine'))?.section).toBe('team_owns');
+    expect((await engine.getTopic('topic-cache-warmer'))?.section).toBe('archive');
+  });
+
+  it("lists topics with your open PR or move first inside a section, then unread ones", async () => {
+    const topics = await new FakeEngine().listTopics();
+    const otherWork = topics.filter((item) => item.section === 'other_work').map((item) => item.topic.id);
+    expect(otherWork).toEqual(['topic-usage-exports', 'topic-replay-storage', 'topic-replay-player', 'topic-alert-presets']);
+  });
+
   it('keeps a topic whose only unread tile is merged calm and ranks it below the urgent ones', async () => {
     const topics = await new FakeEngine().listTopics();
     const frontend = topics.find((item) => item.topic.id === 'topic-frontend-build');

@@ -33,7 +33,7 @@ function TeamsSection() {
   return (
     <Section title="Your teams">
       <p className="text-[11.5px] text-muted">
-        A home team's members are your teammates: Team's PRs, the Team filter, "For you" on their PRs. A routing-only team just brings you its review requests
+        A home team's members are your teammates: Your team owns, the team PRs filter, "For you" on their PRs. A routing-only team just brings you its review requests
         and mentions. Decided from how your reviews of the last 90 days reached you; a change here sticks.
       </p>
       {roles.error && <p className="text-xs text-status-bad">Could not load your teams: {roles.error.message}</p>}

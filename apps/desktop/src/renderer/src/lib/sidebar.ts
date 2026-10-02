@@ -1,21 +1,5 @@
 import type { TopicListItem, TopicRelation } from '@postpile/core';
-
-export interface AreaGroup {
-  area: string;
-  items: TopicListItem[];
-}
-
-export interface SidebarGroups {
-  /** Topics that need you (`TopicListItem.group`) from every relation. */
-  needsYou: TopicListItem[];
-  /** The user's team's other topics, by area. */
-  team: AreaGroup[];
-  routed: TopicListItem[];
-  fyi: TopicListItem[];
-}
-
-/** Topics without a placement yet (no dossier, Unsorted) go with the team's, under this area. */
-const NO_AREA = 'Other';
+import { unreadLook } from './queues.ts';
 
 const RELATION_LABELS: Record<TopicRelation, string> = { team: 'team', routed: 'routed', fyi: 'FYI' };
 
@@ -23,29 +7,76 @@ export function relationLabel(relation: TopicRelation): string {
   return RELATION_LABELS[relation];
 }
 
-function byArea(items: TopicListItem[]): AreaGroup[] {
-  const groups = new Map<string, TopicListItem[]>();
-  for (const item of items) {
-    const area = item.placement?.area ?? NO_AREA;
-    groups.set(area, [...(groups.get(area) ?? []), item]);
-  }
-  // Named areas alphabetically, "Other" last.
-  return [...groups]
-    .map(([area, members]) => ({ area, items: members }))
-    .sort((a, b) => (a.area === NO_AREA ? 1 : b.area === NO_AREA ? -1 : a.area.localeCompare(b.area)));
+export interface AreaFold {
+  /** The fold key: "area:<name>", or "more" for the shared fold. */
+  key: string;
+  label: string;
+  items: TopicListItem[];
 }
 
 /**
- * The groups inside "Other topics": topics that need you first whatever their
- * relation, then the rest by relation. Unread tiles that are all merged or
- * closed do not count as needing you. Topics keep the API order in a group.
+ * The area folds inside Other work (DESIGN.md "Ownership sections"): areas
+ * with two or more topics alphabetically, then "More" for single-topic
+ * areas and topics without an area yet. Topics keep their order in a fold.
  */
-export function sidebarGroups(items: TopicListItem[]): SidebarGroups {
-  const quiet = items.filter((item) => item.group !== 'needs_you');
+export function areaFolds(items: TopicListItem[]): AreaFold[] {
+  const counts = new Map<string, number>();
+  for (const area of items.flatMap((item) => item.topic.area ?? [])) {
+    counts.set(area, (counts.get(area) ?? 0) + 1);
+  }
+  const named = [...counts].filter(([, count]) => count >= 2).map(([area]) => area).sort((a, b) => a.localeCompare(b));
+  const folds = named.map((area) => ({ key: `area:${area}`, label: area, items: items.filter((item) => item.topic.area === area) }));
+  const more = items.filter((item) => item.topic.area === null || !named.includes(item.topic.area));
+  return more.length > 0 ? [...folds, { key: 'more', label: 'More', items: more }] : folds;
+}
+
+/**
+ * A topic without a dossier yet: nothing tells whose it is, so it sits in
+ * Other topics with a "not sorted yet" marker, unless an ask or a known
+ * driver placed it elsewhere.
+ */
+export function isNotSorted(item: TopicListItem): boolean {
+  return item.placement === null;
+}
+
+export interface OtherTopicsGroups {
+  /** Topics nothing places yet (no dossier, or no driver and no owner team), listed open. */
+  unplaced: TopicListItem[];
+  /** FYI topics, folded by default. */
+  fyi: TopicListItem[];
+}
+
+/** Inside Other topics: topics nothing places yet, then the FYI fold. */
+export function otherTopicsGroups(items: TopicListItem[]): OtherTopicsGroups {
   return {
-    needsYou: items.filter((item) => item.group === 'needs_you'),
-    team: byArea(quiet.filter((item) => (item.placement?.relation ?? 'team') === 'team')),
-    routed: quiet.filter((item) => item.placement?.relation === 'routed'),
-    fyi: quiet.filter((item) => item.placement?.relation === 'fyi'),
+    unplaced: items.filter((item) => item.placement?.relation !== 'fyi'),
+    fyi: items.filter((item) => item.placement?.relation === 'fyi'),
   };
+}
+
+/** The viewer's open PR or a move of theirs is in the topic: core's `holdsYours` (the renderer imports types only). */
+function holdsYours(item: TopicListItem): boolean {
+  return item.queues.byYou > 0 || item.yourMoves.length > 0;
+}
+
+/**
+ * Other work and its area folds start open when they hold the viewer's open
+ * PR, a move of theirs or an unread topic; else folded. It stays open while
+ * it holds the selected topic, so marking that topic read does not close it.
+ */
+export function startsOpen(items: TopicListItem[], activeTopicId: string | null = null): boolean {
+  return items.some((item) => holdsYours(item) || item.unreadTiles > 0 || item.topic.id === activeTopicId);
+}
+
+/** The rows a folded fold keeps showing: urgent unread ones (coral) and the selected topic, so nothing urgent hides and the open row stays. */
+export function rowsWhileFolded(items: TopicListItem[], activeTopicId: string | null = null): TopicListItem[] {
+  return items.filter((item) => unreadLook(item) === 'urgent' || item.topic.id === activeTopicId);
+}
+
+/** "· 4 unread · 1 urgent" for a folded header, counted by topic; empty when nothing is unread. */
+export function foldedSummary(items: TopicListItem[]): string {
+  const unread = items.filter((item) => item.unreadTiles > 0).length;
+  const urgent = items.filter((item) => unreadLook(item) === 'urgent').length;
+  const parts = [unread > 0 ? `${unread} unread` : null, urgent > 0 ? `${urgent} urgent` : null];
+  return parts.flatMap((part) => (part === null ? [] : [`· ${part}`])).join(' ');
 }

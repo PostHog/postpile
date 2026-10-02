@@ -109,7 +109,7 @@ import {
   archiveEndsAt,
   snoozeWrites,
   eventView,
-  compareTopicUrgency,
+  compareInSection,
   actionTrail,
   cleanupCutoff,
   cleanupLook,
@@ -152,7 +152,7 @@ import {
   topicPeople,
   openInDealtWith,
   topicPrRollup,
-  topicSection,
+  topicSectionOf,
   topicQueues,
   topicUrgency,
   topicYourMoves,
@@ -857,7 +857,7 @@ export class FakeEngine implements EngineService {
     );
   }
 
-  /** Same urgency rule and order as the engine; ties keep the sample's order. */
+  /** Same sections and order as the engine; ties keep the sample's order. */
   async listTopics(scope?: ListScope): Promise<TopicListItem[]> {
     // A first run without gh: nothing synced yet, so the empty state shows.
     if (this.toolStatus.neverSynced()) {
@@ -882,10 +882,11 @@ export class FakeEngine implements EngineService {
       const prs = this.topicPrs(tiles);
       const queues = this.topicQueuesOf(tiles);
       const prRollup = topicPrRollup(tiles, prs.map(({ pr }) => pr));
+      const placement = this.memory.placement(topic);
       return {
         topic,
         statusLine: this.memory.statusLine(topic.id),
-        placement: this.memory.placement(topic),
+        placement,
         group: urgency.needsYou ? 'needs_you' : 'quiet',
         unreadTiles: urgency.unreadTiles,
         unreadPrs: urgency.unreadPrs,
@@ -896,13 +897,13 @@ export class FakeEngine implements EngineService {
         yourMoves: urgency.yourMoves,
         unseenMergeTiles: views.filter((view) => (view.state.unseenMerges?.length ?? 0) > 0).length,
         queues,
-        section: topicSection(queues),
+        section: topicSectionOf({ topic, queues, moves: urgency.yourMoves.length, placement, viewer }),
         people: topicFaces(topicPeople(prs.map(({ pr }) => pr), viewer)),
         prState: prRollup.state,
         prStateCounts: prRollup.counts,
       };
     });
-    return items.sort(compareTopicUrgency);
+    return items.sort(compareInSection);
   }
 
   async listRepos(): Promise<RepoOverview> {
@@ -988,11 +989,13 @@ export class FakeEngine implements EngineService {
     }
     const tiles = this.topicTileViews(topicId);
     const topicTiles = this.tilesOfTopic(topicId);
+    const placement = this.memory.placement(topic);
+    const yourMoves = topicYourMoves(tiles);
     return {
       topic,
-      placement: this.memory.placement(topic),
+      placement,
       tiles,
-      yourMoves: topicYourMoves(tiles),
+      yourMoves,
       groupYourMoves: yourMovesByGroup(tiles),
       sets: this.data.sets.filter((set) => set.topicId === topicId && set.status === 'active'),
       setChanges: [],
@@ -1003,7 +1006,7 @@ export class FakeEngine implements EngineService {
       archive: this.archiveBox(topic, tiles),
       openInDealtWith: openInDealtWith(tiles),
       prRollup: topicPrRollup(topicTiles, this.topicPrs(topicTiles).map(({ pr }) => pr)),
-      section: topicSection(this.topicQueuesOf(topicTiles)),
+      section: topicSectionOf({ topic, queues: this.topicQueuesOf(topicTiles), moves: yourMoves.length, placement, viewer: this.viewer() }),
       memoryUpdating: this.catchUp.memoryUpdating(this.topicPrKeys(topicId)),
     };
   }

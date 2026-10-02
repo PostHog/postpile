@@ -1,7 +1,10 @@
-// Topic-level invariants: the sidebar row's counts come from its tiles, and a
-// finished topic can retire (DESIGN.md "Queue sections", "Snoozes belong to
-// PRs", engine `RetireGate`). Plus determinism over the whole board.
-import { topicQueues, emptyTierCounts, pingedPrKeys, ownerRelation } from '../topic-queues.ts';
+// Topic-level invariants: the sidebar row's counts come from its tiles, its
+// section is the spec's, and a finished topic can retire (DESIGN.md "Queue
+// sections", "Ownership sections", "Snoozes belong to PRs", engine
+// `RetireGate`). Plus determinism over the whole board.
+import { topicQueues, emptyTierCounts, pingedPrKeys, ownerRelation, type TopicQueues } from '../topic-queues.ts';
+import { driverRelation, topicSection } from '../topic-sections.ts';
+import { homeTeamsOf } from '../team-roles.ts';
 import { topicMove, topicUrgency } from '../topic-urgency.ts';
 import { prTier } from '../pr-tier.ts';
 import type { PrEvent } from '../types.ts';
@@ -10,6 +13,7 @@ import { isReReviewMove, prWhoseTurn, type YourMove } from '../whose-turn.ts';
 import { tileViewsOf, type PropertyBoard } from './build-board.ts';
 import { ensure, eventsOf, expectedUnreadRows, isNews, isTrackedHere, prOf, type Invariant } from './invariant.ts';
 import { expectedTurn, isUnseenMergeWithoutViewer } from './spec-rules.ts';
+import { expectedSection } from './spec-sections.ts';
 
 /** Unseen loud news on a PR of the tile that is not found. */
 function tileHasNews(board: PropertyBoard, view: TileView): boolean {
@@ -62,6 +66,27 @@ export const topicCountsMatchTiles: Invariant = {
   },
 };
 
+/** The topic's queue counts as the read models build them, over every PR of its tiles. */
+function queuesOf(board: PropertyBoard, views: TileView[]): TopicQueues {
+  const pinged = pingedPrKeys(views.map((view) => view.tile));
+  const keys = [...new Set(views.flatMap((view) => view.tile.members.map((member) => member.prKey)))];
+  return topicQueues(
+    keys.map((key) => {
+      const pr = prOf(board, key);
+      const userState = board.userStates.get(key) ?? null;
+      const turn = prWhoseTurn({ pr, events: eventsOf(board, key), userState, viewer: board.viewer, notYours: board.notYours.has(key) });
+      return {
+        tier: prTier({ pr, events: eventsOf(board, key), viewer: board.viewer, userState, reason: board.threads.get(key)?.reason ?? null }),
+        author: ownerRelation(pr, board.viewer),
+        state: pr.state,
+        pulledIn: !pinged.has(key),
+        quiet: false,
+        changesAddressed: isReReviewMove(turn),
+      };
+    }),
+  );
+}
+
 /**
  * The queue counts count each tracked PR once, by the tier its rows show;
  * pulled-in layers never count. Changes you requested PRs whose spec move
@@ -71,23 +96,7 @@ export const topicCountsMatchTiles: Invariant = {
 export const queueCountsMatchRows: Invariant = {
   name: "a topic's queue counts match its tracked rows, re-reviews counted as addressed",
   check(board, views) {
-    const pinged = pingedPrKeys(views.map((view) => view.tile));
-    const keys = [...new Set(views.flatMap((view) => view.tile.members.map((member) => member.prKey)))];
-    const queues = topicQueues(
-      keys.map((key) => {
-        const pr = prOf(board, key);
-        const userState = board.userStates.get(key) ?? null;
-        const turn = prWhoseTurn({ pr, events: eventsOf(board, key), userState, viewer: board.viewer, notYours: board.notYours.has(key) });
-        return {
-          tier: prTier({ pr, events: eventsOf(board, key), viewer: board.viewer, userState: board.userStates.get(key) ?? null, reason: board.threads.get(key)?.reason ?? null }),
-          author: ownerRelation(pr, board.viewer),
-          state: pr.state,
-          pulledIn: !pinged.has(key),
-          quiet: false,
-          changesAddressed: isReReviewMove(turn),
-        };
-      }),
-    );
+    const queues = queuesOf(board, views);
     const expected = emptyTierCounts();
     let reReviews = 0;
     const counted = new Set<string>();
@@ -103,6 +112,27 @@ export const queueCountsMatchRows: Invariant = {
     }
     ensure(JSON.stringify(queues.tiers) === JSON.stringify(expected), `queue counts ${JSON.stringify(queues.tiers)}, rows ${JSON.stringify(expected)}`);
     ensure(queues.changesAddressed === reReviews, `addressed ${queues.changesAddressed}, spec re-reviews under Changes you requested ${reReviews}`);
+  },
+};
+
+/**
+ * The sidebar section (`topicSection` over the row's queues, moves, driver
+ * and placement, as the read models call it) is the one the spec gives
+ * from the raw board (`expectedSection`).
+ */
+export const sectionMatchesSpec: Invariant = {
+  name: "a topic's section is the one the ownership spec gives",
+  check(board, views) {
+    const section = topicSection({
+      retired: false,
+      queues: queuesOf(board, views),
+      moves: urgencyOf(views).yourMoves.length,
+      driver: driverRelation(board.driver, board.viewer),
+      placement: board.placement,
+      homeTeams: homeTeamsOf(board.viewer),
+    });
+    const expected = expectedSection(board, views);
+    ensure(section === expected, `section ${section}, spec ${expected}`);
   },
 };
 
@@ -176,5 +206,5 @@ export const eventOrderDoesNotMatter: Invariant = {
   },
 };
 
-export const TOPIC_INVARIANTS: readonly Invariant[] = [topicCountsMatchTiles, queueCountsMatchRows, finishedTopicRetires, sameBoardSameViews, eventOrderDoesNotMatter];
+export const TOPIC_INVARIANTS: readonly Invariant[] = [topicCountsMatchTiles, queueCountsMatchRows, sectionMatchesSpec, finishedTopicRetires, sameBoardSameViews, eventOrderDoesNotMatter];
 

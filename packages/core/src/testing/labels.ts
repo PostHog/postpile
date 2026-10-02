@@ -22,6 +22,7 @@ import type { TileView } from '../views.ts';
 import { LOGINS, REQUEST_BOT, tileViewsOf, type PropertyBoard } from './build-board.ts';
 import type { Person } from './board-spec.ts';
 import { isAutomationLogin, specOwners } from './spec-facts.ts';
+import { expectedSection } from './spec-sections.ts';
 
 function prStateLabel(pr: Pr): string {
   if (pr.state !== 'OPEN') {
@@ -388,6 +389,7 @@ export function boardLabels(board: PropertyBoard, views: TileView[] = tileViewsO
     labels.add('shape:dissolved set');
   }
   labels.add(`team-setup:${board.spec.teams}`);
+  labels.add(`section:${expectedSection(board, views)}`);
   return labels;
 }
 
@@ -563,4 +565,5 @@ export const REQUIRED_LABELS: readonly string[] = [
   'tier:to_review',
   'tier:team_mentioned',
   'tier:rest',
+  ...['needs_reply', 'changes_requested', 'to_review', 'team_mentioned', 'you_drive', 'team_owns', 'other_work', 'other_topics'].map((section) => `section:${section}`),
 ];

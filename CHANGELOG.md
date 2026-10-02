@@ -4,6 +4,13 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ## Unreleased
 
+### Changed
+
+- Sidebar sections now say whose topic it is, not whose PRs it holds. Below the asks (Needs reply, Changes you requested, To review, Team mentioned) topics sit under You drive, Your team owns or Other work, by who drives them; the owner team only decides when nobody is known to drive a topic. My PRs and Team's PRs are gone, so your own project no longer lands under Team's PRs because a teammate has a PR in it. The "Topics with any PR | my PRs | team PRs" switch still finds your PRs in any section.
+- Inside each section, topics with your open PR or your move come first, then unread ones.
+- Other work folds by area, single-topic areas under "More". It starts open when it holds your PR, your move or something unread, else folded; folded, urgent unread topics stay visible and the header counts what is unread.
+- Topics without a dossier and without a known driver sit in Other topics with a "not sorted yet" mark. The Needs you, Your team and Routed to you groups inside Other topics are gone; FYI stays.
+
 ### Fixed
 
 - A stack layer in the Trunk merge queue showed as not queued while Trunk tested the stack ("Running tests on this stack"). Trunk status lines in a wording PostPile does not know yet are now read by their emoji, so a PR keeps its queue state when Trunk rewords a message.
