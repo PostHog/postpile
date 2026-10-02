@@ -31,11 +31,12 @@ export function reviewNoteIntent(kind: ReviewNoteKind): string {
  * head), so the draft does not start from nothing. The fields can echo
  * PR-author text, so these lines travel as fenced notes, never in the intent.
  * The glance's "does" line stays out: handed a summary of the change, the
- * draft retold it to the author.
+ * draft retold it to the author. "For you" stays out too: it can carry the
+ * user's local work context, which must never reach a GitHub-facing note.
  */
 export function reviewNoteGlanceNotes(glance: Glance | null): string[] {
   if (glance === null) {
     return [];
   }
-  return [`Verdict: ${VERDICT_WORDS[glance.verdict]}`, `Risk: ${glance.risk}`, `For the user: ${glance.forYou}`];
+  return [`Verdict: ${VERDICT_WORDS[glance.verdict]}`, `Risk: ${glance.risk}`];
 }

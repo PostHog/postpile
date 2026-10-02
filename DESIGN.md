@@ -2723,9 +2723,11 @@ any review ask; on top of that:
   sentences, never more, and never retell the change or list what was
   checked: the author wrote the diff (2026-10-02, after the first drafts
   read like a summary of the PR). Plain sentences: active voice, under 25
-  words, no hedging, idioms, em dashes or bullets. The glance's Verdict / Risk / For you lines travel
-  as fenced `notes` (untrusted, they can echo PR text), never in the
-  intent; its Does line stays out, since a summary handed in came back out.
+  words, no hedging, idioms, em dashes or bullets. The glance's Verdict / Risk lines travel as fenced
+  `notes` (untrusted, they can echo PR text), never in the intent. Its Does
+  line stays out, since a summary handed in came back out, and so does For
+  you, which can carry local work context into a public note (Codex on
+  #94).
   The usual context (instructions and work context) goes along, so
   `instructions.md` can steer the tone.
 - One compose popover (2026-10-02, `ComposePopover`): Approve with comment,
