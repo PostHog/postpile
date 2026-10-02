@@ -183,9 +183,10 @@ describe('RunnerAgentService.updateDossier relation and area', () => {
     runner.answer('dossier_update', { ...answer, dossier: { ...answer.dossier, driverTeam: true } });
     runner.answer('dossier_update', { ...answer, dossier: { ...answer.dossier, people: noDriver, driverTeam: 'yes' } });
 
-    const team = await service.updateDossier({ ...dossierInput(), driverPick: TEAM_DRIVER });
-    const named = await service.updateDossier(dossierInput());
-    const odd = await service.updateDossier({ ...dossierInput(), driverPick: 'alice' });
+    const standing = { ...dossierInput(), topic: makeTopic({ kind: 'standing' }) };
+    const team = await service.updateDossier({ ...standing, driverPick: TEAM_DRIVER });
+    const named = await service.updateDossier(standing);
+    const odd = await service.updateDossier({ ...standing, driverPick: 'alice' });
 
     expect(team.dossier.driverTeam).toBe(true);
     // alice has the driver role: one person clearly runs it.
@@ -195,6 +196,24 @@ describe('RunnerAgentService.updateDossier relation and area', () => {
     expect(prompts[0]).toContain('Their own team drives, no single person. Set driverTeam true');
     expect(prompts[1]).not.toContain('Who drives, as the user set it');
     expect(prompts[2]).toContain('@alice drives. Give alice the driver role and nobody else.');
+  });
+
+  it('keeps driverTeam only on standing topics, after the answer corrects the kind', async () => {
+    const { runner, service } = setup();
+    const answer = dossierAnswer();
+    const noDriver = [{ login: 'bob', role: 'contributor', note: '' }];
+    const team = { ...answer, dossier: { ...answer.dossier, people: noDriver, driverTeam: true } };
+    runner.answer('dossier_update', team);
+    runner.answer('dossier_update', team);
+    runner.answer('dossier_update', { ...team, topicKind: 'standing' });
+
+    const project = await service.updateDossier(dossierInput());
+    const standing = await service.updateDossier({ ...dossierInput(), topic: makeTopic({ kind: 'standing' }) });
+    const corrected = await service.updateDossier(dossierInput());
+
+    expect(project.dossier.driverTeam).toBeUndefined();
+    expect(standing.dossier.driverTeam).toBe(true);
+    expect(corrected.dossier.driverTeam).toBe(true);
   });
 });
 

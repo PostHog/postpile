@@ -3827,14 +3827,18 @@ agent's own driver never moves a picked topic. "You" on another team's
 code is valid: the header keeps "Owned by <team>" from the owner signal
 and the relation chip as they are. Local only, never a GitHub write;
 telemetry `driver_set` carries the kind (you, teammate, team, outside,
-automatic), never a login.
+automatic), never a login. The pick never feeds `relationSignals`, which
+read the automatic driver only: the relation chip says why the topic
+reached the user, so picking "You" on a routed topic keeps it routed.
 
 **Team as driver** (decided 2026-10-02). Standing topics often have no
 single driver: the home team keeps them up and different people lead each
 wave. The dossier agent may say so with `driverTeam: true` (and nobody in
 the driver role) when the user's own team keeps a standing topic up and
 nobody leads the current wave; not when one person clearly runs it. The
-parser keeps driverTeam only while no person has the driver role.
+parser keeps driverTeam only while no person has the driver role and the
+topic is standing (project topics drop it, after the answer's own
+`topicKind` correction).
 `driverOf` in engine `digest/topic-roles.ts` stores it as the automatic
 driver `:team`, the same value as the picker's "Your team", so the topic
 sits under Your team owns. Real case: Egress, where the agent named

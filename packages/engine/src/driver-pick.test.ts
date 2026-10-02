@@ -74,4 +74,22 @@ describe('the driver picker', () => {
     expect(detail?.section).toBe('team_owns');
     expect(detail?.driver).toMatchObject({ kind: 'team', login: null, picked: false });
   });
+
+  it('keeps the relation on the automatic driver when the user picks themselves', async () => {
+    const h = harnessWithTeam();
+    const pr = makePr({ number: 33, author: 'rowan', reviewerTeams: ['acme/team-platform'], updatedAt: at(1) });
+    topicWithPrs(h, 'routed', [pr]);
+    const routed = () => ({ dossier: { ...emptyDossier(), summary: 's', relation: { kind: 'routed' as const, ownerTeam: null, whyYou: 'review requested' } } });
+    h.agent.answerDossier(routed).answerDossier(routed);
+    await h.engine.sync({ agentJobs: ['dossiers'] });
+    expect(h.store.dossiers.latest('routed')?.dossier.relation?.kind).toBe('routed');
+    const calls = h.agent.dossierInputs.length;
+
+    await h.engine.setTopicDriver('routed', viewer.login);
+    h.reader.etag = 'etag-2';
+    await h.engine.sync({ agentJobs: ['dossiers'] });
+
+    expect(h.agent.dossierInputs).toHaveLength(calls);
+    expect(h.store.dossiers.latest('routed')?.dossier.relation?.kind).toBe('routed');
+  });
 });
