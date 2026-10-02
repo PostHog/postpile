@@ -610,14 +610,12 @@ describe('requestGoneReadCheck', () => {
   }
 
   /** The sync: the events agent left every person's quiet activity quiet, unless `unjudged` names its source. */
-  function facade(pr: Pr, overrides: Partial<QuietReadInput> & { unjudged?: string } = {}): QuietReadInput {
-    const { unjudged, ...rest } = overrides;
-    const viewerOf = rest.viewer ?? devexViewer;
-    const events = deriveEvents(pr, viewerOf, null).map((event) =>
-      awaitsJudgement(event, pr, viewerOf) && event.sourceId !== unjudged ? { ...event, override: judgedQuiet } : event,
+  function facade(pr: Pr, options: { unjudged?: string; prFetchedAt?: string } = {}): QuietReadInput {
+    const events = deriveEvents(pr, devexViewer, null).map((event) =>
+      awaitsJudgement(event, pr, devexViewer) && event.sourceId !== options.unjudged ? { ...event, override: judgedQuiet } : event,
     );
     const thread = makeThreadFor(pr, { reason: 'review_requested', lastReadAt: null, updatedAt: pr.updatedAt, unread: true });
-    return { thread, pr, events, userState: null, viewer: devexViewer, notYours: false, prFetchedAt: day(16), ...rest };
+    return { thread, pr, events, userState: null, viewer: devexViewer, notYours: false, prFetchedAt: options.prFetchedAt ?? day(16) };
   }
 
   it('marks a never-opened thread once the request is removed and only bots and quiet replies came since', () => {

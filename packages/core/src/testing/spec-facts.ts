@@ -6,7 +6,7 @@
 // can never move both sides of a check. Nothing here imports a rule module;
 // only `sameLogin` and the builder's names are shared.
 import { sameLogin } from '../mentions.ts';
-import type { Comment, IsoTime, Pr, Review, TimelineItem, UserPrState, Viewer } from '../types.ts';
+import type { Comment, IsoTime, Pr, PrEvent, Review, TimelineItem, UserPrState, Viewer } from '../types.ts';
 import type { CommentText, TrunkText } from './board-spec.ts';
 import { AUTOMATION_LOGINS, COMMENT_BODIES, MENTIONED_TEAMS, TRUNK_BODIES, TRUNK_LOGIN } from './build-board.ts';
 
@@ -312,6 +312,16 @@ export function requestSubjectOf(pr: Pr, event: { kind: string; sourceId: string
     return null;
   }
   return pr.timeline.find((item) => item.id === event.sourceId)?.subject ?? null;
+}
+
+/** A review request event naming the viewer or one of their teams, whoever made it. */
+export function isViewerRequestEvent(pr: Pr, viewer: Viewer, event: PrEvent): boolean {
+  return event.kind === 'review_requested' && asksViewer(viewer, requestSubjectOf(pr, event));
+}
+
+/** When the newest review request of the viewer or one of their teams came, null when none did. */
+export function latestViewerRequestAt(pr: Pr, viewer: Viewer, events: PrEvent[]): IsoTime | null {
+  return events.filter((event) => isViewerRequestEvent(pr, viewer, event)).map((event) => event.at).toSorted().at(-1) ?? null;
 }
 
 /** The viewer or their team was asked at some point: pending now, or in the timeline. */

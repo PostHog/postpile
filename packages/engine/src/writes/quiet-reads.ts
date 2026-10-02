@@ -78,10 +78,10 @@ function quietDetail(input: QuietReadInput): string | null {
  * activity the events agent judged as not needing them (`judgedReadCheck`,
  * "GitHub unread is PostPile unread"), and never-opened review request
  * threads whose request no longer stands (`requestGoneReadCheck`).
- * Notifications that are not PRs are
- * marked read too (`isClearableNonPr`): PostPile shows none of them. Only
- * while GitHub writes are unlocked: locked, nothing happens and nothing
- * piles up as a pending write, and the thread stays unread in PostPile.
+ * Notifications that are not PRs are marked read too
+ * (`isClearableNonPr`): PostPile shows none of them. Only while GitHub
+ * writes are unlocked: locked, nothing happens and nothing piles up as a
+ * pending write, and the thread stays unread in PostPile.
  * Each thread is read again right before the write and left alone when it
  * moved since the sync or poll stored it. Every write goes through
  * GitHubWrites and is logged with origin `quiet`. The engine never runs two

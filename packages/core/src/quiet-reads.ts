@@ -456,7 +456,7 @@ export type RequestGoneReadCheck = { kind: 'mark'; actors: string[] } | { kind: 
 /** When the newest review request of the viewer or one of their teams was made; null when there is none. */
 function latestRequestOfViewer(pr: Pr, events: PrEvent[], viewer: Viewer): IsoTime | null {
   const times = events.filter((event) => isRequestOfViewer(event, pr, viewer)).map((event) => event.at);
-  return times.sort().at(-1) ?? null;
+  return times.toSorted().at(-1) ?? null;
 }
 
 /**
@@ -498,11 +498,11 @@ export function requestGoneReadCheck(input: QuietReadInput): RequestGoneReadChec
   if (after.length === 0) {
     return { kind: 'skip', why: 'nothing_known' };
   }
-  const openAsks = others.filter((event) => (event.at > requestAt || event.seenAt === null) && !isRequestOfViewer(event, pr, viewer));
-  if (openAsks.some((event) => isAskOfViewer(event, pr, viewer))) {
+  const isRequest = (event: PrEvent) => isRequestOfViewer(event, pr, viewer);
+  if (others.some((event) => !isRequest(event) && (event.at > requestAt || event.seenAt === null) && isAskOfViewer(event, pr, viewer))) {
     return { kind: 'skip', why: 'asks_you' };
   }
-  const unseenLoud = events.some((event) => isUnseenLoud(event) && !isRequestOfViewer(event, pr, viewer));
+  const unseenLoud = events.some((event) => isUnseenLoud(event) && !isRequest(event));
   if (unseenLoud || after.some((event) => effectiveLoudness(event) === 'loud')) {
     return { kind: 'skip', why: 'unseen_loud' };
   }
@@ -522,9 +522,9 @@ export function requestGoneReadCheck(input: QuietReadInput): RequestGoneReadChec
 /**
  * The quiet reads would mark this PR thread read: only bots since the last
  * read, the user acted after it, everything since they last looked judged
- * quiet, or a never-opened review request that no longer stands. A retired topic comes back only for a thread that is not
- * (`reviveUnreadTopics`): bot-only noise the quiet reads clear brings
- * nothing back.
+ * quiet, or a never-opened review request that no longer stands. A retired
+ * topic comes back only for a thread that is not (`reviveUnreadTopics`):
+ * bot-only noise the quiet reads clear brings nothing back.
  */
 export function clearableByRule(input: QuietReadInput): boolean {
   return (
@@ -752,6 +752,12 @@ const REQUEST_GONE_DETAIL_PREFIX = 'review request no longer stands, nothing tha
 /** The quiet reasons whose log detail names who acted. */
 type NamedReason = 'bots' | 'judged' | 'request_gone';
 
+/** The detail prefixes of the reasons that name people as well as bots, and the reason each one gives. */
+const PEOPLE_DETAIL_PREFIXES: [string, 'judged' | 'request_gone'][] = [
+  [JUDGED_DETAIL_PREFIX, 'judged'],
+  [REQUEST_GONE_DETAIL_PREFIX, 'request_gone'],
+];
+
 /** Action log details of the quiet mark-reads that name nobody; the Handled quietly view reads the reason back. */
 const QUIET_REASON_DETAILS: Record<Exclude<QuietReason, NamedReason>, string> = {
   approved: 'you approved after it',
@@ -791,13 +797,8 @@ export function botsFromQuietDetail(detail: string): string[] {
 
 /** Who a quiet mark-read's log detail names: the bots, everyone since the user last looked, or since the request; empty for any other detail. */
 export function actorsFromQuietDetail(detail: string): string[] {
-  if (detail.startsWith(JUDGED_DETAIL_PREFIX)) {
-    return namesAfter(detail, JUDGED_DETAIL_PREFIX);
-  }
-  if (detail.startsWith(REQUEST_GONE_DETAIL_PREFIX)) {
-    return namesAfter(detail, REQUEST_GONE_DETAIL_PREFIX);
-  }
-  return botsFromQuietDetail(detail);
+  const prefix = PEOPLE_DETAIL_PREFIXES.find(([text]) => detail.startsWith(text))?.[0];
+  return prefix === undefined ? botsFromQuietDetail(detail) : namesAfter(detail, prefix);
 }
 
 /** Action log detail of a quiet mark-read for a reason that names nobody. */
@@ -807,11 +808,9 @@ export function quietReasonDetail(reason: Exclude<QuietReason, NamedReason>): st
 
 /** The reason behind a quiet mark-read's log detail. Anything else is a bot-only one, the first and once the only reason. */
 export function quietReasonFromDetail(detail: string): QuietReason {
-  if (detail.startsWith(JUDGED_DETAIL_PREFIX)) {
-    return 'judged';
-  }
-  if (detail.startsWith(REQUEST_GONE_DETAIL_PREFIX)) {
-    return 'request_gone';
+  const named = PEOPLE_DETAIL_PREFIXES.find(([text]) => detail.startsWith(text));
+  if (named !== undefined) {
+    return named[1];
   }
   for (const [reason, text] of Object.entries(QUIET_REASON_DETAILS)) {
     if (detail === text) {

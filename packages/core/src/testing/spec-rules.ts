@@ -28,6 +28,8 @@ import {
   isRoutedTeam,
   isRoutingTeam,
   isViewerLogin,
+  isViewerRequestEvent,
+  latestViewerRequestAt,
   mentionsOnlyRoutingTeams,
   namedOwner,
   newestTouch,
@@ -964,11 +966,6 @@ export function expectedJudgedRead(input: QuietReadSpecInput): JudgedReadCheck {
   return { kind: 'mark', actors: actorNames(after) };
 }
 
-/** A review request naming the viewer or one of their teams, whoever made it. */
-function isViewerRequestEvent(pr: Pr, viewer: Viewer, event: PrEvent): boolean {
-  return event.kind === 'review_requested' && asksViewer(viewer, requestSubjectOf(pr, event));
-}
-
 /**
  * "Handled quietly" › Review requests that no longer stand (2026-10-02): a
  * thread GitHub has unread, never read, there for a review request, whose
@@ -992,8 +989,7 @@ export function expectedRequestGoneRead(input: QuietReadSpecInput): RequestGoneR
   if (thread.reason !== 'review_requested') {
     return { kind: 'skip', why: 'not_requested' };
   }
-  const requests = input.events.filter((event) => isViewerRequestEvent(pr, viewer, event));
-  const requestAt = requests.map((event) => event.at).toSorted().at(-1) ?? null;
+  const requestAt = latestViewerRequestAt(pr, viewer, input.events);
   if (!snapshotIsFresh(thread, input.prFetchedAt, pr.truncated === true, pr, requestAt)) {
     return { kind: 'skip', why: 'stale_snapshot' };
   }
@@ -1004,15 +1000,16 @@ export function expectedRequestGoneRead(input: QuietReadSpecInput): RequestGoneR
   if (pending !== null && pending !== 'team_taken') {
     return { kind: 'skip', why: 'request_stands' };
   }
-  const after = othersEvents(input).filter((event) => event.at > requestAt);
+  const others = othersEvents(input);
+  const after = others.filter((event) => event.at > requestAt);
   if (after.length === 0) {
     return { kind: 'skip', why: 'nothing_known' };
   }
-  const otherAsks = othersEvents(input).filter((event) => !requests.includes(event) && isAskEvent(pr, viewer, event));
-  if (otherAsks.some((event) => event.at > requestAt || event.seenAt === null)) {
+  const isRequest = (event: PrEvent) => isViewerRequestEvent(pr, viewer, event);
+  if (others.some((event) => !isRequest(event) && (event.at > requestAt || event.seenAt === null) && isAskEvent(pr, viewer, event))) {
     return { kind: 'skip', why: 'asks_you' };
   }
-  const unseenLoud = input.events.some((event) => isUnseenLoudEvent(event) && !requests.includes(event));
+  const unseenLoud = input.events.some((event) => isUnseenLoudEvent(event) && !isRequest(event));
   if (unseenLoud || after.some((event) => effectiveLoudnessOf(event) === 'loud')) {
     return { kind: 'skip', why: 'unseen_loud' };
   }
