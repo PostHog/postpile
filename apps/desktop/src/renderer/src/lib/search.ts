@@ -26,9 +26,9 @@ export function filterTopics(items: TopicListItem[], filter: SearchFilter | null
   return filter ? items.filter((item) => filter.tilesByTopic.has(item.topic.id)) : items;
 }
 
-/** Topics top to bottom as the sidebar shows them, folds open; each sits in one section. */
+/** Topics top to bottom as the sidebar shows them, folds open and dealt-with topics in place; each sits in one section. */
 export function sidebarOrder(items: TopicListItem[]): TopicListItem[] {
-  return sidebarBuckets(items).flatMap((bucket) => {
+  return sidebarBuckets(items, false).flatMap((bucket) => {
     if (bucket.key === 'other_work') {
       return areaFolds(bucket.items).flatMap((fold) => fold.items);
     }

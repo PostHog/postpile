@@ -4,13 +4,24 @@ import { useActions } from '../api/actions.tsx';
 import { useTools } from '../api/tools.ts';
 import { useFinishedTopics } from '../api/topics.ts';
 import { statusLabel } from '../lib/memory.ts';
-import { bucketItems, sidebarBuckets, topicRowId, unreadLook, type QueueFilter } from '../lib/queues.ts';
+import { bucketItems, dealtItems, dealtKey, sidebarBuckets, topicRowId, unreadLook, type QueueFilter } from '../lib/queues.ts';
 import { useFlip } from '../lib/use-flip.ts';
 import { useHeldPlace } from '../lib/use-held-place.ts';
 import { type SearchFilter } from '../lib/search.ts';
 import { stateMix } from '../lib/pr-mix.ts';
 import { sectionLook } from '../lib/sections.ts';
-import { areaFolds, foldedSummary, isNotSorted, otherTopicsGroups, rowsWhileFolded, startsOpen, type AreaFold } from '../lib/sidebar.ts';
+import {
+  allDealtNote,
+  areaFolds,
+  dealtLineLabel,
+  foldedSummary,
+  isNotSorted,
+  otherTopicsGroups,
+  otherWorkStartsOpen,
+  rowsWhileFolded,
+  startsOpen,
+  type AreaFold,
+} from '../lib/sidebar.ts';
 import { ageLabel, whenLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
 import { teamPill } from '../lib/faces.ts';
@@ -233,12 +244,17 @@ function FoldChevron(props: { open: boolean }) {
   );
 }
 
-/** "· 4 unread · 1 urgent" after a folded header's label; nothing while open or with nothing to say. */
-function FoldedSummary(props: { open: boolean; text: string | undefined }) {
-  if (props.open || !props.text) {
+/** A short note after a header's label ("· all 3 dealt with"); nothing when empty. */
+function HeaderNote(props: { text: string | undefined }) {
+  if (!props.text) {
     return null;
   }
   return <span className="ml-[5px] text-[10.5px] font-medium tracking-normal text-hint normal-case">{props.text}</span>;
+}
+
+/** "· 4 unread · 1 urgent" after a folded header's label; nothing while open or with nothing to say. */
+function FoldedSummary(props: { open: boolean; text: string | undefined }) {
+  return props.open ? null : <HeaderNote text={props.text} />;
 }
 
 /**
@@ -268,9 +284,9 @@ interface SectionFold {
  * Section title: colored dot and label. No count: a PR count read like an
  * unread count, and how many PRs a queue holds does not matter. With `fold`
  * it is a button with the chevron in the leading slot and, folded, says what
- * is unread inside.
+ * is unread inside. `note` says when every topic in it is dealt with.
  */
-function SectionHeader(props: { section: TopicSection; fold?: SectionFold }) {
+function SectionHeader(props: { section: TopicSection; fold?: SectionFold; note?: string }) {
   const look = sectionLook(props.section);
   const text = `flex items-center pt-1.5 pr-2 pb-1 text-[10px] leading-[normal] font-bold tracking-[0.07em] uppercase ${look.text}`;
   const dot = <span className={`mr-[5px] size-[5px] rounded-[1.5px] ${look.dot}`} />;
@@ -280,6 +296,7 @@ function SectionHeader(props: { section: TopicSection; fold?: SectionFold }) {
       <span data-flip-key={`section:${props.section}`} className={`${text} pl-3`}>
         {dot}
         {look.label}
+        <HeaderNote text={props.note} />
       </span>
     );
   }
@@ -290,6 +307,7 @@ function SectionHeader(props: { section: TopicSection; fold?: SectionFold }) {
       {dot}
       {look.label}
       <FoldedSummary open={open} text={summary} />
+      <HeaderNote text={props.note} />
     </button>
   );
 }
@@ -387,7 +405,26 @@ interface TopicSidebarProps {
 /** Plain lines in the list (filter, hidden topics, errors) start on the topic names' x: a row's 8px padding plus its 14px leading slot. */
 const TEXT_COLUMN = 'pr-2.5 pl-[22px]';
 
-/** Fold keys: "other_work", "area:<name>" and "more" inside it, "fyi", "finished". */
+/**
+ * "+ 3 dealt with" at the end of an owner section: opens its dealt-with
+ * topics (dimmed quiet rows) under it and reads "Hide 3 dealt with" while
+ * open (DESIGN.md "Dealt-with topics leave the list").
+ */
+function DealtLine(props: { count: number; open: boolean; onToggle: () => void; flipKey: string }) {
+  return (
+    <button
+      type="button"
+      data-flip-key={props.flipKey}
+      aria-expanded={props.open}
+      onClick={props.onToggle}
+      className={`mt-0.5 py-[3px] text-left text-[11px] leading-[normal] text-hint hover:text-ink-read ${TEXT_COLUMN}`}
+    >
+      {dealtLineLabel(props.count, props.open)}
+    </button>
+  );
+}
+
+/** Fold keys: "other_work", "area:<name>" and "more" inside it, "dealt:<section>" (`dealtKey`), "fyi", "finished". */
 type FoldKey = string;
 
 /** The sections listed flat, without folds: the asks, You drive and Your team owns (short lists), in `SECTION_ORDER`. */
@@ -440,8 +477,10 @@ export function TopicSidebar(props: TopicSidebarProps) {
   useFlip(navRef, { landed: false });
   const { topicMoves } = useActions();
   const holdKey = props.selectedTileId === null ? null : `${props.selectedTileId}#${topicMoves}`;
-  const buckets = useHeldPlace(holdKey, props.activeTopicId, sidebarBuckets(props.shown), topicRowId);
+  // Dealt-with topics leave the owner sections, except while the search or a queue filter narrows: filters are for finding things.
+  const buckets = useHeldPlace(holdKey, props.activeTopicId, sidebarBuckets(props.shown, !narrowed), topicRowId);
   const otherWork = bucketItems(buckets, 'other_work');
+  const otherWorkDealt = dealtItems(buckets, 'other_work');
   const otherTopics = otherTopicsGroups(bucketItems(buckets, 'other_topics'));
   // `forcedOpen`: while the search filters, no match hides in a fold.
   const isOpen = (key: FoldKey, openByDefault: boolean, forcedOpen: boolean) => forcedOpen || (foldChoices.get(key) ?? openByDefault);
@@ -457,8 +496,22 @@ export function TopicSidebar(props: TopicSidebarProps) {
       onSelect={() => props.onSelect(item.topic.id)}
     />
   );
-  // Other work and its area folds open by what they hold (`startsOpen`, over the topics the queue filter left); folded, urgent unread rows and the selected topic stay.
-  const otherWorkOpen = isOpen('other_work', startsOpen(otherWork, props.activeTopicId), searching);
+  // "+ 3 dealt with" and, open, the dealt-with rows under it; folded, only the selected topic stays.
+  const dealtFooter = (section: TopicSection, dealt: TopicListItem[]) => {
+    if (dealt.length === 0) {
+      return null;
+    }
+    const key = dealtKey(section);
+    const open = isOpen(key, false, false);
+    return (
+      <>
+        <DealtLine count={dealt.length} open={open} onToggle={() => toggle(key, open)} flipKey={`group:${key}`} />
+        {(open ? dealt : rowsWhileFolded(dealt, props.activeTopicId)).map((item) => topicItem(item, key))}
+      </>
+    );
+  };
+  // Other work and its area folds open by what they hold (`startsOpen`, over the topics the queue filter left and not dealt with); folded, urgent unread rows and the selected topic stay.
+  const otherWorkOpen = isOpen('other_work', otherWorkStartsOpen(otherWork, otherWorkDealt, props.activeTopicId), searching);
   const areaFold = (fold: AreaFold) => {
     const open = isOpen(fold.key, startsOpen(fold.items, props.activeTopicId), searching);
     return (
@@ -488,20 +541,31 @@ export function TopicSidebar(props: TopicSidebarProps) {
       )}
       {FLAT_SECTIONS.map((section) => {
         const items = bucketItems(buckets, section);
-        return items.length === 0 ? null : (
+        const dealt = dealtItems(buckets, section);
+        return items.length === 0 && dealt.length === 0 ? null : (
           <div key={section} className="flex flex-col gap-px">
-            <SectionHeader section={section} />
+            <SectionHeader section={section} note={allDealtNote(items, dealt)} />
             {items.map((item) => topicItem(item, section))}
+            {dealtFooter(section, dealt)}
           </div>
         );
       })}
-      {otherWork.length > 0 && (
+      {(otherWork.length > 0 || otherWorkDealt.length > 0) && (
         <div className="flex flex-col gap-1">
-          <SectionHeader section="other_work" fold={{ open: otherWorkOpen, onToggle: () => toggle('other_work', otherWorkOpen), summary: foldedSummary(otherWork) }} />
+          <SectionHeader
+            section="other_work"
+            note={allDealtNote(otherWork, otherWorkDealt)}
+            fold={{ open: otherWorkOpen, onToggle: () => toggle('other_work', otherWorkOpen), summary: foldedSummary(otherWork) }}
+          />
           {otherWorkOpen ? (
-            areaFolds(otherWork).map(areaFold)
+            <>
+              {areaFolds(otherWork).map(areaFold)}
+              {otherWorkDealt.length > 0 && <div className="flex flex-col gap-px">{dealtFooter('other_work', otherWorkDealt)}</div>}
+            </>
           ) : (
-            <div className="flex flex-col gap-px">{rowsWhileFolded(otherWork, props.activeTopicId).map((item) => topicItem(item, 'other_work'))}</div>
+            <div className="flex flex-col gap-px">
+              {rowsWhileFolded([...otherWork, ...otherWorkDealt], props.activeTopicId).map((item) => topicItem(item, 'other_work'))}
+            </div>
           )}
         </div>
       )}

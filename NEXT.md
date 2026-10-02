@@ -1099,6 +1099,12 @@ the app meanwhile.
   (`snapshotCoversSince(pr, since)`, each rule passes its own `since`);
   review threads count only when complete. Budgets: 5 pages per list, 10
   PRs per sync, 3 per poll, none while the quota is low.
+- **Dealt-with topics leave the list** (2026-10-02, DESIGN.md "Dealt-with
+  topics leave the list"): quiet topics in You drive, Your team owns and
+  Other work go behind one "+ N dealt with" line per section, like Gmail
+  archive or GitHub's Done; not while the search or a PR filter is on, never
+  the selected topic. Dimming alone (quiet rows) still took space and
+  clicks. Dealt with is not Archive.
 - **Approve with comment and Comment review** (2026-10-02, DESIGN.md "Own
   PRs never ask for a review"): Approve on the PR pane is split (approve
   now, or with an agent-drafted note); "Comment review" posts a COMMENT
