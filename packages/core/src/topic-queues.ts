@@ -142,8 +142,8 @@ export function topicQueues(prs: QueuedPr[]): TopicQueues {
   return { tiers, byYou, byTeam, changesAddressed };
 }
 
-/** The sections that ask something of you, in `PR_TIER_ORDER`'s order. */
-const ASK_TIERS: readonly PrTier[] = ['needs_reply', 'changes_requested', 'to_review', 'team_mentioned'];
+/** The sections that ask something of you, in queue order: every tier but your PRs, your team's PRs and the rest. */
+const ASK_TIERS = PR_TIER_ORDER.filter((tier) => tier !== 'mine' && tier !== 'team' && tier !== 'rest');
 
 /**
  * The sidebar section a topic sits in, or null for Other topics (only rest
