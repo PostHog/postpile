@@ -467,7 +467,7 @@ describe('RunnerAgentService.glanceBatch', () => {
   });
 
   it('repairs a misspelled verdict and says why the rest is missing', async () => {
-    // Real answers for acme/app#107116, reproducible on the same PR: "LOOKS_SASAFE", "LOOKS_SASE".
+    // Real answers for acme/app#1812, reproducible on the same PR: "LOOKS_SASAFE", "LOOKS_SASE".
     const { runner, service } = setup();
     runner.answer('glance_batch', {
       glances: [

@@ -22,7 +22,7 @@ dossier update, consolidation), so all agents cut work at the same grain:
 
 - *Area*: the part of the product or codebase the work touches ("Hogland",
   "Data warehouse", "posthog-cli"), never the user's own field or team
-  ("Dev tooling" held 70 of 113 topics on real data and said nothing). A
+  ("Dev tooling" held most topics and said nothing). A
   label on topics, never a topic itself, a handful to about fifteen topics
   each. The dossier update replaces a catch-all area when it next writes the
   topic (still at most MAX_NEW_AREAS_PER_SYNC new areas per sync).
@@ -88,8 +88,8 @@ dossier relation's `ownerTeam`), and a PR that reaches the user through a
 team review request is judged by what that team keeps up: when it changes
 code of a standard a standing topic keeps (same owner team, same code), it
 joins that topic, also when it is a step of someone else's project. Routed
-PRs that fit no standing topic are placed as before. On a real database 35
-of 53 one-PR topics were routed reviews, so this is where ownership helps;
+PRs that fit no standing topic are placed as before. In a sample database over half
+of the one-PR topics were routed reviews, so this is where ownership helps;
 it never cuts topics by team on its own (a team owns many goals). Research
 (PARA, GTD, Linear, Jira, Shape Up) found no third lifecycle worth a kind:
 incidents behave like short projects, chores are single tiles.
@@ -1127,7 +1127,7 @@ stored and before a dossier goes into a glance prompt
   An answered prKey matches its batch key ignoring case and spaces when
   that still points at one PR.
 - Misspelled verdicts are repaired (`repairVerdict`): Sonnet reproducibly
-  wrote `LOOKS_SASAFE` / `LOOKS_SASE` for one real PR (PostHog/posthog#107116),
+  wrote `LOOKS_SASAFE` / `LOOKS_SASE` for one PR (acme/app#1812),
   which the strict enum rejected on both attempts. Only unambiguous
   spellings are read, and anything mentioning "close" wins, so a garbled
   answer never becomes "looks safe" by accident. The prompt asks for
@@ -3664,7 +3664,7 @@ Owner decisions (2026-09-30):
   the same mistake.
 - **Approve labels** (owner, 2026-10-01; core decides `naming`, the
   renderer spells it). Exactly one PR covered out of several on the tile
-  (or the topic) names it: "Approve #109533", so "Low risk" can't read as a
+  (or the topic) names it: "Approve #2107", so "Low risk" can't read as a
   verdict on the PR the user is looking at. "Approve stack", "Approve 3
   PRs" on a set, or "Approve" on a single only when every PR on the tile is
   covered (`prCount`), so never over a draft or pulled-in layer. Else
@@ -3774,17 +3774,18 @@ Owner decisions (2026-10-01), after a UX pass (design "9c"):
 **The problem.** Sections came from PR tiers: a topic sat under the highest
 tier any PR other than the viewer's own gave it (`topicSection` of
 2026-10-01), so "My PRs" and "Team's PRs" said whose PRs a topic held, not
-whose topic it was. Real case: the viewer drives "Visual review flakiness
+whose topic it was. Real case: the viewer drives "Snapshot
 triage tooling" (the header said "you're here because you drive it"), has an
 open PR in it, and a teammate has one open PR in it (tier `team`, which asks
 nothing of the viewer). The topic sat under Team's PRs. The rule was
 lopsided as well: a teammate-driven topic with the viewer's PR sat under
 Team's PRs, another team's topic with the viewer's PR under My PRs.
 
-**The data** (owner's DB, 107 active topics, every one with a driver): the
-viewer drives 25, a teammate 11, someone outside the team 71 (54 of them
-reached the viewer as routed reviews). 12 topics held the viewer's open
-PR, 5 of them driven by others.
+**The data** (an illustrative database, 100 active topics, every one with a
+driver): the viewer drives about a quarter, a teammate about a tenth,
+someone outside the team the rest (most of them reached the viewer as
+routed reviews). A handful of topics held the viewer's open PR, some of
+them driven by others.
 
 **Precedence** (`topicSection` in core `topic-sections.ts`, first match
 wins; the engine, FakeEngine, the row, the breadcrumb and telemetry read the
@@ -3815,9 +3816,9 @@ else the automatic driver (`effectiveDriver` in core `topic-driver.ts`, see
 **The owner team is only a fallback.** Codex's review (gpt-6.1-sol) pointed
 out how weak the signal is: `relationSignals` names the viewer's first home
 team as owner as soon as the viewer wrote a PR in the topic or drives it.
-So driver beats owner team: Alerting V2 (driven outside the team) and
-Hogland observability leave Your team owns for Other work, and a
-teammate-driven topic owned by another team (Python 3.14 upgrade soak)
+So driver beats owner team: Alerting rework (driven outside the team) and
+Tracing basics leave Your team owns for Other work, and a
+teammate-driven topic owned by another team (Python upgrade soak)
 stays under Your team owns. The owner team counts as home when it is any
 of the home teams, not only the first.
 
@@ -3889,7 +3890,7 @@ topic is standing (project topics drop it, after the answer's own
 `driverOf` in engine `digest/topic-roles.ts` stores it as the automatic
 driver `:team`, the same value as the picker's "Your team", so the topic
 sits under Your team owns. Real case: Egress, where the agent named
-pauldambra, who led one wave. Picked up at each topic's next dossier
+lyra, who led one wave. Picked up at each topic's next dossier
 update; no one-time tidy. A manual pick beats it like any automatic driver.
 
 ## Dealt-with topics leave the list (2026-10-02)
@@ -4442,8 +4443,8 @@ so the real case clears.
 **Review requests that no longer stand** (Decided 2026-10-02). Every
 other rule skips a thread GitHub never saw read (`never_read`, no
 `last_read_at`), so a review request the user never opened stayed unread
-for good, even after it stopped asking anything. The real case (PostHog
-#99069): a bot asked the user's home team and two other teams for a review
+for good, even after it stopped asking anything. The real case (acme/app
+#1812): a bot asked the user's home team and two other teams for a review
 on Sep 12; the thread (reason `review_requested`) was never opened. Later
 the home team's request was removed (pending were only the two other
 teams), and everything since was the author answering review bots, plus

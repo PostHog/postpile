@@ -6,7 +6,7 @@ function offer(overrides: Partial<AgentApproveOffer>): AgentApproveOffer {
   return { state: 'active', risk: 'medium', reason: null, covered: [], leftOut: [], coveredCount: 3, totalCount: 5, prCount: 5, naming: 'some', ...overrides };
 }
 
-const BASE: AgentApprovePr = { prKey: 'acme/app#109533', title: 'Base', headOid: 'abc', verdict: 'LOOKS_SAFE', riskLine: 'low', risk: 'low', dependsOn: [] };
+const BASE: AgentApprovePr = { prKey: 'acme/app#2107', title: 'Base', headOid: 'abc', verdict: 'LOOKS_SAFE', riskLine: 'low', risk: 'low', dependsOn: [] };
 
 describe('approve wording', () => {
   it('says the risk when active and the reason when greyed', () => {
@@ -33,12 +33,12 @@ describe('approve wording', () => {
   // Owner, 2026-10-01: one PR out of several is named, so "Low risk" can't read as a verdict on the whole stack.
   it('names the one PR it covers out of several', () => {
     const one = offer({ covered: [BASE], coveredCount: 1, totalCount: 1, prCount: 3, naming: 'one' });
-    expect(tileApproveLabel(one, 'stack')).toBe('Approve #109533');
-    expect(topicApproveLabel(offer({ covered: [BASE], coveredCount: 1, totalCount: 3, naming: 'one' }))).toBe('Approve #109533');
+    expect(tileApproveLabel(one, 'stack')).toBe('Approve #2107');
+    expect(topicApproveLabel(offer({ covered: [BASE], coveredCount: 1, totalCount: 3, naming: 'one' }))).toBe('Approve #2107');
   });
 
   it('says what a left-out layer waits on', () => {
-    expect(leftOutReason({ reason: 'layer_below', waitsOn: 'acme/app#109499' })).toBe('waits on #109499');
+    expect(leftOutReason({ reason: 'layer_below', waitsOn: 'acme/app#2104' })).toBe('waits on #2104');
     expect(leftOutReason({ reason: 'look_closer', waitsOn: null })).toBe('look closer');
   });
 });

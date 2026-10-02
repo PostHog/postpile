@@ -43,7 +43,7 @@ export function markReadPillWord(offer: TopicMarkReadOffer): string {
   return offer.reason ? REASON_WORDS[offer.reason] : '';
 }
 
-/** "#109533" from "acme/app#109533". */
+/** "#2107" from "acme/app#2107". */
 function prNumber(prKey: PrKey): string {
   return prKey.slice(prKey.lastIndexOf('#'));
 }
@@ -54,13 +54,13 @@ function countLabel(offer: AgentApproveOffer): string {
   return `Approve ${prs} ${offer.totalCount === 1 ? 'PR' : 'PRs'}`;
 }
 
-/** The PR an offer names alone (`naming` one): "Approve #109533". */
+/** The PR an offer names alone (`naming` one): "Approve #2107". */
 function oneLabel(offer: AgentApproveOffer): string {
   const pr = offer.covered[0];
   return pr ? `Approve ${prNumber(pr.prKey)}` : 'Approve';
 }
 
-/** The topic's label: "Approve #109533" for one of several, else "Approve 3 of 5 PRs", "Approve 3 PRs"; plain "Approve" when greyed. */
+/** The topic's label: "Approve #2107" for one of several, else "Approve 3 of 5 PRs", "Approve 3 PRs"; plain "Approve" when greyed. */
 export function topicApproveLabel(offer: AgentApproveOffer): string {
   if (offer.naming === 'none') {
     return 'Approve';
@@ -72,7 +72,7 @@ export function topicApproveLabel(offer: AgentApproveOffer): string {
 }
 
 /**
- * The tile's label, by core's `naming`: "Approve #109533" for one of
+ * The tile's label, by core's `naming`: "Approve #2107" for one of
  * several; "Approve", "Approve stack" or "Approve 3 PRs" on a set when it
  * covers every PR on the tile; else "Approve 2 of 3 PRs" (or "Approve 2
  * PRs" when a draft or pulled-in layer is all it leaves). Greyed is plain.
@@ -128,7 +128,7 @@ export function approvedMessage(count: number): string {
 
 const LEFT_OUT_WORDS = { rechecking: 'rechecking after a push', look_closer: 'look closer', high: 'high risk', layer_below: 'a layer below needs a look' } as const;
 
-/** Why the confirm list names a PR as left out: "look closer", or "waits on #109499" when a layer below holds it back. */
+/** Why the confirm list names a PR as left out: "look closer", or "waits on #2104" when a layer below holds it back. */
 export function leftOutReason(pr: Pick<LeftOutPr, 'reason' | 'waitsOn'>): string {
   if (pr.reason === 'layer_below' && pr.waitsOn) {
     return `waits on ${prNumber(pr.waitsOn)}`;
