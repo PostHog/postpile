@@ -6,6 +6,16 @@ now".
 
 ## Done
 
+- Lessons from your reviews (2026-10-02, DESIGN.md "Lessons from your
+  reviews"): a change request on a PR the glance called safe (or low risk,
+  or not yours) on the same commit is noted with structured evidence
+  (glance, review body, inline comments); `lesson_write` turns it into a
+  "when X, do Y" line or none; the topic shows "Remember for future
+  assessments?" with Remember in this topic (tailoring) / Use across
+  topics… (instructions diff that may only add the line) / Dismiss. "Teach
+  future assessments" in the detail pane does the same from the user's own
+  words. Edited reviews restart a candidate, deleted ones and retired
+  topics withdraw it. Unaccepted lessons reach no prompt.
 - Merge queue state (2026-10-02, DESIGN.md "Merge queue"): `mergeQueueState`
   reads trunk-io[bot]'s status comment; the PR icon turns into the Octicons
   merge-queue icon (amber, red once failed) on rows, the detail header, the
@@ -1091,6 +1101,15 @@ the app meanwhile.
 
 ## Decided
 
+- **Lessons, not silent learning** (2026-10-02, DESIGN.md "Lessons from your
+  reviews"): a review is evidence, accepting a lesson is authority. Misses
+  become candidate lines in the topic; nothing changes later glances until
+  the user picks "Remember in this topic" or "Use across topics…". The
+  agent writes the instructions text, the user's click makes it theirs.
+  The user's own GitHub review may feed an instructions proposal (fenced,
+  additions only). Rejected: "Disagree" / "Wrong" / "Why?" affordances (read
+  as asking for an explanation, not as teaching), writing misses straight
+  into topic corrections, and global proposals after N misses.
 - **Approve with comment and Comment review** (2026-10-02, DESIGN.md "Own
   PRs never ask for a review"): Approve on the PR pane is split (approve
   now, or with an agent-drafted note); "Comment review" posts a COMMENT

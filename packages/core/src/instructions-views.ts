@@ -1,6 +1,7 @@
 // The user's general instructions (instructions.md) and their versions. The
 // user owns this text: the agent only proposes changes, from the user's own
-// chat messages, and nothing is written until the user accepts.
+// chat messages or a lesson they chose to use across topics, and nothing is
+// written until the user accepts.
 
 import type { ActionResult } from './views.ts';
 import type { ChatMessage, IsoTime } from './types.ts';
@@ -8,8 +9,9 @@ import type { ChatMessage, IsoTime } from './types.ts';
 /**
  * chat: an accepted proposal. outside: the file changed on disk (hand edit,
  * or the first time the app saw it). setup: accepted in the setup flow.
+ * lesson: an accepted proposal from a lesson ("Use across topics").
  */
-export type InstructionsOrigin = 'chat' | 'outside' | 'setup';
+export type InstructionsOrigin = 'chat' | 'outside' | 'setup' | 'lesson';
 
 export interface InstructionsVersion {
   /** 1, 2, 3, ... */
@@ -17,14 +19,16 @@ export interface InstructionsVersion {
   text: string;
   summary: string;
   origin: InstructionsOrigin;
-  /** The user's chat message the change came from. Null for outside edits and setup. */
+  /** The user's chat message the change came from. Null for outside edits, setup and lessons. */
   sourceChatMessageId: number | null;
+  /** The lesson the user chose to use across topics (origin lesson). Null otherwise. */
+  sourceLessonId: number | null;
   createdAt: IsoTime;
 }
 
 /** A version plus where it came from, for the history list. */
 export interface InstructionsVersionView extends InstructionsVersion {
-  /** The chat message text behind a chat version, when it is still stored. */
+  /** The chat message text behind a chat version, or the lesson line behind a lesson version, when still stored. */
   sourceText: string | null;
 }
 
@@ -37,8 +41,13 @@ export interface InstructionsProposal {
   text: string;
   /** One short line on what changes. */
   summary: string;
-  /** The user's own chat message it came from. Proposals never come from anything else. */
-  sourceChatMessageId: number;
+  /**
+   * Where it came from: one of the user's own chat messages, or a lesson
+   * they chose to use across topics. Exactly one is set; proposals never
+   * come from anything else.
+   */
+  sourceChatMessageId: number | null;
+  sourceLessonId: number | null;
   /** Topic dossiers that refresh once on the next sync if this is accepted. */
   dossiersToRefresh: number;
 }

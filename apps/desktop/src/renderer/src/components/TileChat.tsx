@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { InstructionsProposal, LastingPointProposal, TileView } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { useChat } from '../api/chat.ts';
+import { proposalKey } from '../lib/instructions.ts';
 import { Button } from './Button.tsx';
 import { InstructionsProposalCard } from './InstructionsProposalCard.tsx';
 
@@ -107,7 +108,7 @@ export function TileChat(props: { view: TileView; draft: string; onDraftChange: 
           </div>
         )}
         {instructions && (
-          <InstructionsProposalCard key={instructions.sourceChatMessageId} proposal={instructions} onDone={() => setInstructions(null)} />
+          <InstructionsProposalCard key={proposalKey(instructions)} proposal={instructions} onDone={() => setInstructions(null)} />
         )}
       </div>
       <form

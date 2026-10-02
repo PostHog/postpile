@@ -1322,21 +1322,94 @@ restores a confirmed fact's check state, or restores a relation override.
 The undo map is in memory, like the mark-read queue. The relation "Wrong"
 (with the real relation) stays as it was; it is a choice, not a claim.
 
+**Lessons from your reviews** (2026-10-02, with a second opinion from
+another model). Some glances miss: the user requests changes on a PR the
+glance called safe, or sees a problem in the diff the glance did not name.
+The app should learn what the user pushes back on, but a review is
+evidence, and only accepting a lesson gives it authority. So a miss becomes
+a candidate line in the topic, and nothing reaches a prompt until the user
+picks where it applies. Types and rules: core `lessons.ts`; table `lesson`
+(migration 025, which also adds `pr_glance.head_oid` and
+`instructions_version.source_lesson_id`).
+
+- **Possible misses** (`possibleMisses`, deterministic, in `storePr` through
+  `LessonKeeper`, before the glance can be written again and replace the
+  verdict): the viewer's new `review_changes_requested` on a PR whose stored
+  glance was written before the review, on the same head commit when both
+  are known (a review on newer code judged code the glance never saw), with
+  a mismatch: `safety` (LOOKS_SAFE), `risk` (LOOK_CLOSER with a `low` risk)
+  or `relevance` (NOT_YOURS). A real Look closer is no miss, and an approval
+  on a Look closer PR is not counted: the user may well have looked closer
+  first. One lesson per review id (unique), status `new`.
+- **Structured evidence**: what the glance said (verdict, risk, for you,
+  does, time, head) and the review: body plus the user's inline comments
+  written after their previous review and up to this one (GitHub does not
+  link them to the review in our snapshot; a change request often says
+  everything inline). Nothing is clipped in storage.
+- **The source moves**: every `storePr` compares pending lessons with the
+  review now (`reviewNow`). An edited body or inline comment starts the
+  candidate over (`new`, line cleared); a deleted or dismissed review
+  withdraws it. `checkOpenLesson` repeats the check right before the user's
+  decision lands.
+- **Writing the line** (`lesson_write`, sonnet, one call per topic for up to
+  8 new lessons, in the sync's digest after topics, `LessonWriter`): the
+  review, inline comments, PR line and earlier glance are fenced as GitHub
+  text (the user wrote the review, but it can quote anyone); the call runs
+  without tools like every call. The answer is per lesson: a line "When
+  <condition>, <what to check or how to judge>" of at most 200 chars that
+  the user's words support, or null for nits, empty reviews and one-offs
+  (`none`), or `sameAs` an open line in the topic (`joined`, shown there as
+  one more review). A line equal to one the user dismissed (words compared,
+  `repeatsDismissed`) reads as none; dismissed lines also go into the
+  prompt. One miss is enough to offer a line; repeats are more evidence,
+  not consent.
+- **The topic marker** ("Remember for future assessments?"): the topic's
+  open lessons with "From your review on #4521 · Earlier assessment: Looks
+  safe" and three choices. "Remember in this topic" appends the line to the
+  topic's tailoring (logged as `tailoring_kept`), which every later prompt
+  for the topic reads. "Use across topics…" asks
+  `proposeInstructionsFromLesson` for the instructions with that one line
+  added: the prompt gets the chosen line and the review fenced as context,
+  and the engine drops any answer that changes or removes an existing line
+  or adds more than 4 lines / 600 chars (`onlyAddsLesson`). The user sees
+  the usual line diff (Accept, Edit inline, Reject); an accepted one is
+  saved with origin `lesson` and `sourceLessonId`, the lesson turns
+  `kept_all`. A hand edit in the diff is the user's own and is not
+  checked. "Dismiss" drops the line for good.
+- **"Teach future assessments"** in the detail pane, under the glance's
+  verdict: "What should it check next time?" The note is the user's own
+  words (not fenced); `teachLesson` stores a `taught` lesson with the
+  current glance and writes its line right away (capped at 30 per rolling
+  24h), then shows it with the same three choices. A wording like
+  "Disagree", "Wrong" or "Why?" was rejected: the user reads those as
+  asking for an explanation, not as changing what the agent does next time.
+- **Lifecycle**: a pending lesson whose topic retires, is archived or
+  deleted is withdrawn at the next digest (`LessonKeeper.sweep`); one noted
+  while its PR was unsorted moves to the PR's topic once it has one.
+  Statuses: new, open, none, joined, kept_topic, kept_all, dismissed,
+  withdrawn.
+
+Unaccepted lessons never reach a prompt: no feedback row, no dossier input,
+no glance context. The dossier still reads the review itself as an ordinary
+event.
+
 **Instructions changes via chat.** Tile chat returns a lasting point
 without a scope; the user picks it: "Keep for this topic" stores tailoring,
 "Just this once" only logs it, "Keep for all topics" calls
 `proposeInstructionsChange`, which gets only the current text and the
-user's own message (never GitHub text), is told the user chose all topics,
+user's own message (never GitHub text; a lesson's proposal is the one
+exception, see "Lessons from your reviews"), is told the user chose all topics,
 and returns the full new text plus a summary. The UI shows it as a line
 diff: Accept, Edit inline, Reject. The general chat in "Your instructions"
 always goes to the same call. When that call finds no change, the point
 stays on screen so it can still go to the topic. Proposals must cite a
-stored user chat message (`sourceChatMessageId`); the engine refuses
-anything else.
+stored user chat message (`sourceChatMessageId`) or an open lesson
+(`sourceLessonId`); the engine refuses anything else.
 
 **Versions** (`instructions_version`, migration 004): `version`, `text`,
 `summary`, `origin` (`chat` / `outside`), `source_chat_message_id`,
-`created_at` (origin `setup` for the setup flow's Accept). The file stays the source of truth. `InstructionsHistory`
+`created_at` (origin `setup` for the setup flow's Accept; origin `lesson`
+with `source_lesson_id`, migration 025, for a lesson used across topics). The file stays the source of truth. `InstructionsHistory`
 reads it on every prompt context and stores a text that differs from the
 newest version as "Edited outside the app" (the first one as "Found on
 disk"), so every prompt knows its instructions version. Saving checks the

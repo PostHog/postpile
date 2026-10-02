@@ -15,6 +15,7 @@ import { ChevronIcon, PrStateIcon, QuoteIcon } from './icons.tsx';
 import { MemoryLine } from './MemoryLine.tsx';
 import { RelationLine } from './RelationLine.tsx';
 import { SinceLastLooked } from './SinceLastLooked.tsx';
+import { TopicLessons } from './TopicLessons.tsx';
 import { YourMoveChip } from './YourMoveChip.tsx';
 
 /** Your role in the topic as a noun (2026-09-29): "You review" read like an order next to "lyra drives". */
@@ -172,7 +173,7 @@ function PrCountPill(props: { detail: TopicDetail }) {
   );
 }
 
-/** Breadcrumb, name, who drives (a menu that moves the topic), the dossier (or the plain summary before one exists) and what the user told the agent. */
+/** Breadcrumb, name, who drives (a menu that moves the topic), the dossier (or the plain summary before one exists), what the user told the agent and the lessons waiting for a decision. */
 export function TopicHeader(props: { detail: TopicDetail; topics: TopicListItem[] }) {
   const { topic, pendingProposals, dossier, placement, driver } = props.detail;
   const actions = useActions();
@@ -222,6 +223,8 @@ export function TopicHeader(props: { detail: TopicDetail; topics: TopicListItem[
           <span>You told the agent: {topic.tailoring}</span>
         </div>
       )}
+      {/* Lessons from the user's pushback sit right under what they told the agent: "Remember in this topic" adds to that line. */}
+      <TopicLessons topicId={topic.id} />
       {pendingProposals.map((proposal) => (
         <ProposalRow key={proposal.id} proposal={proposal} topics={props.topics} />
       ))}

@@ -1,5 +1,5 @@
 import type { AgentService } from '@postpile/agent';
-import type { ChatMessage, InstructionsProposalReply } from '@postpile/core';
+import { onlyAddsLesson, type ChatMessage, type InstructionsProposalReply, type Lesson } from '@postpile/core';
 import type { Store } from '@postpile/store';
 import { contextHashKey } from '../digest/dossiers.ts';
 import type { InstructionsHistory } from './history.ts';
@@ -8,9 +8,10 @@ import type { InstructionsHistory } from './history.ts';
 const EARLIER_MESSAGES = 5;
 
 /**
- * Turns one of the user's own chat messages into an instructions proposal.
- * Only a stored user message can be the source, never agent text or GitHub
- * text, and only its words go to the agent.
+ * Turns one of the user's own chat messages, or a lesson they chose to use
+ * across topics, into an instructions proposal. A chat source sends only
+ * the user's words; a lesson sends its line, with the review it came from
+ * fenced as GitHub text, and may only add that line (`onlyAddsLesson`).
  */
 export class InstructionsProposer {
   constructor(
@@ -57,6 +58,31 @@ export class InstructionsProposer {
         text: answer.change.text,
         summary: answer.change.summary,
         sourceChatMessageId: message.id,
+        sourceLessonId: null,
+        dossiersToRefresh: this.dossiersToRefresh(),
+      },
+    };
+  }
+
+  /** The caller checked that the lesson is open and its review unchanged (checkOpenLesson). */
+  async proposeFromLesson(lesson: Lesson, evidence: string): Promise<InstructionsProposalReply> {
+    const current = this.history.current();
+    const answer = await this.agent.proposeInstructionsFromLesson({ instructions: current.text, lesson: lesson.text, evidence });
+    if (!answer.change) {
+      return { reply: answer.reply, proposal: null };
+    }
+    if (!onlyAddsLesson(current.text, answer.change.text)) {
+      return { reply: 'The proposed change rewrote more than this one lesson, so it was dropped. Try again, or add the line by hand.', proposal: null };
+    }
+    return {
+      reply: answer.reply,
+      proposal: {
+        baseVersion: current.version?.version ?? null,
+        baseText: current.text,
+        text: answer.change.text,
+        summary: answer.change.summary,
+        sourceChatMessageId: null,
+        sourceLessonId: lesson.id,
         dossiersToRefresh: this.dossiersToRefresh(),
       },
     };

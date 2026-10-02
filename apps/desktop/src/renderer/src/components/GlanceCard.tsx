@@ -9,6 +9,7 @@ import { useNow } from '../lib/use-now.ts';
 import { Button } from './Button.tsx';
 import { SpinnerIcon } from './icons.tsx';
 import { KeyFiles } from './KeyFiles.tsx';
+import { TeachLesson } from './TeachLesson.tsx';
 
 interface GlanceCardProps {
   detail: PrDetail;
@@ -135,7 +136,9 @@ function MissingGlance(props: { detail: PrDetail }) {
  * "RISK · level" the agent's risks (never an auto CI line, none for a low
  * risk), then plain Does and Others lines.
  * The verdict and the risk level each show once. A stale glance shows
- * `StaleVerdictBox` instead and folds the rest away. Pulled-in stack layers
+ * `StaleVerdictBox` instead and folds the rest away. "Teach future
+ * assessments" (`TeachLesson`) sits right under the verdict explanation,
+ * only when there is a glance. Pulled-in stack layers
  * get no glance; the card says so.
  */
 export function GlanceCard(props: GlanceCardProps) {
@@ -177,6 +180,8 @@ export function GlanceCard(props: GlanceCardProps) {
               <PlainLine mark="“" label="Others:" text={view.others} />
             </div>
           )}
+          {/* Keyed by PR: the card stays mounted while the pane moves, the composer must not. */}
+          <TeachLesson key={prKey} prKey={prKey} />
         </div>
       )}
       {!folded && glance && <KeyFiles keyFiles={glance.keyFiles} pr={props.detail.pr} />}

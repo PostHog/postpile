@@ -102,6 +102,17 @@ export const chatOutput = z.object({
   lasting: z.object({ text: text.min(1) }).nullable().default(null),
 });
 
+export const lessonWriteOutput = z.object({
+  lessons: z.array(
+    z.object({
+      id: z.coerce.number().int(),
+      text: text.nullable().default(null),
+      sameAs: z.coerce.number().int().nullable().default(null),
+      why: text.default(''),
+    }),
+  ),
+});
+
 export const memoryRecheckOutput = z.object({
   outcome: z.enum(['holds', 'fix', 'drop']),
   text: text.default(''),

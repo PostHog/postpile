@@ -460,6 +460,7 @@ describe('RunnerAgentService.glanceBatch', () => {
         inputHash: glanceItemInputHash(input, input.items[0]!),
         model: 'claude-sonnet-5-5',
         createdAt: NOW,
+        headOid: input.items[0]!.pr.headOid,
       },
     ]);
     expect(result.missing).toEqual(['acme/app#2', 'acme/app#3']);

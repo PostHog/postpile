@@ -27,6 +27,7 @@ import type {
   InstructionsProposalReply,
   InstructionsSaveResult,
   InstructionsView,
+  LessonView,
   ListScope,
   LivePollStatus,
   MacNotification,
@@ -64,6 +65,7 @@ import type {
   TeamRole,
   TeamRolesView,
   ToolsView,
+  TeachLessonResult,
   TopicDetail,
   TopicListItem,
   WorkContextSweepResult,
@@ -370,6 +372,18 @@ export interface EngineService {
   instructionsChat(message: string): Promise<InstructionsChatReply>;
   /** "Keep for all topics" on a lasting point: the user's chat message asked as an instructions change. */
   proposeInstructions(sourceChatMessageId: number): Promise<InstructionsProposalReply>;
+  /** "Use across topics" on a lesson: its line added to the instructions, as a proposal. Nothing is written to the file. */
+  proposeInstructionsFromLesson(lessonId: number): Promise<InstructionsProposalReply>;
+
+  /** The topic's open lessons ("Remember for future assessments?"), oldest first. */
+  getLessons(topicId: string): Promise<LessonView[]>;
+  /** "Teach future assessments" on a PR: the agent turns the note into a candidate line right away. */
+  teachLesson(prKey: PrKey, note: string): Promise<TeachLessonResult>;
+  /** "Remember in this topic": the line goes into the topic's instructions. */
+  keepLessonForTopic(lessonId: number): Promise<ActionResult>;
+  /** "Dismiss": the line is dropped and not offered again. */
+  dismissLesson(lessonId: number): Promise<ActionResult>;
+
   /**
    * Writes an accepted proposal to instructions.md and stores the version.
    * Refuses to overwrite a hand edit made after the proposal: that edit is

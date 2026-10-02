@@ -1,4 +1,4 @@
-import { clipText, mapSetupDraft, mapSetupFit, PING_BODY_MAX, PING_TITLE_MAX, type ReconcileAction, type SetupFitNote } from '@postpile/core';
+import { clipText, LESSON_TEXT_MAX, mapSetupDraft, mapSetupFit, PING_BODY_MAX, PING_TITLE_MAX, type ReconcileAction, type SetupFitNote } from '@postpile/core';
 import type { z } from 'zod';
 import { mapConsolidationAnswer } from './consolidation-answer.ts';
 import { mapDossierAnswer } from './dossier-answer.ts';
@@ -14,6 +14,7 @@ import { contextSweepPrompt } from './prompts/context-sweep.ts';
 import { INSTRUCTIONS_MAX_CHARS, INSTRUCTIONS_SUMMARY_MAX, instructionsChangePrompt } from './prompts/instructions.ts';
 import { dossierUpdatePrompt } from './prompts/dossier-update.ts';
 import { eventBatchPrompt } from './prompts/event-batch.ts';
+import { lessonInstructionsPrompt, lessonWritePrompt } from './prompts/lesson.ts';
 import { memoryRecheckPrompt } from './prompts/memory-recheck.ts';
 import { pingDecisionPrompt } from './prompts/ping-decision.ts';
 import { glanceBatchPrompt } from './prompts/glance-batch.ts';
@@ -37,6 +38,7 @@ import {
   factReconcileOutput,
   glanceBatchOutput,
   instructionsChangeOutput,
+  lessonWriteOutput,
   memoryRecheckOutput,
   pingDecisionOutput,
   setGroupingOutput,
@@ -66,6 +68,9 @@ import type {
   GlanceBatchResult,
   InstructionsChangeInput,
   InstructionsChangeReply,
+  LessonInstructionsInput,
+  LessonWriteAnswer,
+  LessonWriteInput,
   MemoryRecheckAnswer,
   MemoryRecheckInput,
   PingDecisionAnswer,
@@ -102,6 +107,8 @@ const timeouts: Record<AgentPurpose, number> = {
   chat: 120_000,
   instructions_change: 120_000,
   memory_recheck: 120_000,
+  // A few reviews per topic; the user may be waiting on a taught one.
+  lesson_write: 120_000,
   // A ping that arrives minutes late is worth little; the rules take over after this.
   ping_decision: 60_000,
   // Opus over up to ~60k chars of notes; nobody waits on it.
@@ -350,6 +357,48 @@ export class RunnerAgentService implements AgentService {
       seen.add(o.eventId);
       return keep;
     });
+  }
+
+  /**
+   * Answers for ids that were not asked, or asked twice, are dropped. A
+   * sameAs that names no open line, or a line past LESSON_TEXT_MAX, reads as
+   * no lesson rather than a cut-off one.
+   */
+  async writeLessons(input: LessonWriteInput): Promise<LessonWriteAnswer[]> {
+    if (input.items.length === 0) {
+      return [];
+    }
+    const { value } = await this.ask('lesson_write', lessonWritePrompt(input), lessonWriteOutput, {
+      topicId: input.topic?.id ?? null,
+      attempt: 1,
+    });
+    const asked = new Set(input.items.map((item) => item.id));
+    const open = new Set(input.open.map((lesson) => lesson.id));
+    const answers: LessonWriteAnswer[] = [];
+    for (const entry of value.lessons) {
+      if (!asked.has(entry.id)) {
+        continue;
+      }
+      asked.delete(entry.id);
+      const sameAs = entry.sameAs !== null && open.has(entry.sameAs) ? entry.sameAs : null;
+      const lessonText = entry.text ?? '';
+      const usable = sameAs === null && lessonText !== '' && lessonText.length <= LESSON_TEXT_MAX;
+      answers.push({ id: entry.id, text: usable ? lessonText : null, sameAs, why: clipText(entry.why, 300) });
+    }
+    return answers;
+  }
+
+  /** Same bounds as proposeInstructionsChange; whether it only adds is the engine's check. */
+  async proposeInstructionsFromLesson(input: LessonInstructionsInput): Promise<InstructionsChangeReply> {
+    const { value } = await this.ask('instructions_change', lessonInstructionsPrompt(input), instructionsChangeOutput);
+    const text = value.change?.text.trim() ?? '';
+    if (!value.change || text === '' || text === input.instructions.trim()) {
+      return { reply: value.reply, change: null };
+    }
+    if (text.length > INSTRUCTIONS_MAX_CHARS) {
+      return { reply: 'The proposed text came back far too long, so it was dropped.', change: null };
+    }
+    return { reply: value.reply, change: { text: `${text}\n`, summary: clipText(value.change.summary, INSTRUCTIONS_SUMMARY_MAX) } };
   }
 
   /** A fix without a usable new line (empty or the same text) counts as holds. */

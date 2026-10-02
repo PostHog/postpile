@@ -20,6 +20,7 @@ export { PrSetRepo } from './repos/sets.ts';
 export { GlanceRepo } from './repos/glances.ts';
 export { SnoozeRepo } from './repos/snoozes.ts';
 export { FeedbackRepo, type NewFeedback } from './repos/feedback.ts';
+export { LessonRepo } from './repos/lessons.ts';
 export { ChatRepo, type NewChatMessage } from './repos/chat.ts';
 export { EventLogRepo } from './repos/event-log.ts';
 export { CursorRepo } from './repos/cursors.ts';

@@ -668,6 +668,12 @@ export interface Glance {
   inputHash: string;
   model: string;
   createdAt: IsoTime;
+  /**
+   * The head commit the glance read. A later review on another commit
+   * judged code the glance never saw (lessons.ts). Missing or null on
+   * glances stored before it was recorded.
+   */
+  headOid?: string | null;
 }
 
 // ---------------------------------------------------------------------------

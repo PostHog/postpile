@@ -10,6 +10,7 @@ import { EventLogRepo } from './repos/event-log.ts';
 import { EventRepo } from './repos/events.ts';
 import { FactRepo } from './repos/facts.ts';
 import { FeedbackRepo } from './repos/feedback.ts';
+import { LessonRepo } from './repos/lessons.ts';
 import { GlanceRepo } from './repos/glances.ts';
 import { InstructionsRepo } from './repos/instructions.ts';
 import { TopicMembershipRepo } from './repos/memberships.ts';
@@ -43,6 +44,7 @@ export class Store {
   readonly glances: GlanceRepo;
   readonly snoozes: SnoozeRepo;
   readonly feedback: FeedbackRepo;
+  readonly lessons: LessonRepo;
   readonly chat: ChatRepo;
   readonly eventLog: EventLogRepo;
   readonly cursors: CursorRepo;
@@ -73,6 +75,7 @@ export class Store {
     this.glances = new GlanceRepo(db);
     this.snoozes = new SnoozeRepo(db);
     this.feedback = new FeedbackRepo(db);
+    this.lessons = new LessonRepo(db);
     this.chat = new ChatRepo(db);
     this.eventLog = new EventLogRepo(db);
     this.cursors = new CursorRepo(db);

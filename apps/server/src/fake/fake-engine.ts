@@ -29,6 +29,8 @@ import type {
   InstructionsProposalReply,
   InstructionsSaveResult,
   InstructionsView,
+  LessonView,
+  TeachLessonResult,
   WorkContextSweepResult,
   WorkContextView,
   WorkThreadForget,
@@ -188,6 +190,7 @@ import {
 import { AgentRefresher, AutoSyncSchedule, LivePoller, NEW_COMMITS_SINCE_LOOKED, type AutoSyncOptions, type EngineService, type GitHubQuota, type LivePollOptions, type PollCycle } from '@postpile/engine';
 import { FakeCatchUp } from './fake-catch-up.ts';
 import { FakeInstructions } from './fake-instructions.ts';
+import { FakeLessons } from './fake-lessons.ts';
 import { FakeSetup } from './fake-setup.ts';
 import { FakeTeamRoles } from './fake-team-roles.ts';
 import { FakeMcp } from './fake-mcp.ts';
@@ -310,6 +313,7 @@ export class FakeEngine implements EngineService {
   private readonly data: SampleData;
   private readonly memory: FakeMemory;
   private readonly instructions: FakeInstructions;
+  private readonly lessons: FakeLessons;
   private readonly live: FakeLivePoll;
   private readonly workContext: FakeWorkContext;
   private readonly setup: FakeSetup;
@@ -400,13 +404,16 @@ export class FakeEngine implements EngineService {
     }
     this.pingDecisions = samplePingDecisions(this.now());
     this.workContext = new FakeWorkContext(this.data.topics, this.now, options.sweepDelayMs ?? 2000);
+    this.lessons = new FakeLessons({ data: this.data, now: this.now, newId: () => this.newId() });
     this.instructions = new FakeInstructions({
-    now: this.now,
-    newId: () => this.newId(),
-    dossiersToRefresh: () => this.memory.topicsWithDossier(),
-    findTileMessage: (id) => [...this.chats.values()].flat().find((message) => message.id === id),
-    empty: options.forceSetup ?? false,
-  });
+      now: this.now,
+      newId: () => this.newId(),
+      dossiersToRefresh: () => this.memory.topicsWithDossier(),
+      findTileMessage: (id) => [...this.chats.values()].flat().find((message) => message.id === id),
+      findLesson: (id) => this.lessons.find(id),
+      lessonKept: (id) => this.lessons.close(id),
+      empty: options.forceSetup ?? false,
+    });
     this.teamRoles = new FakeTeamRoles(this.data, this.now);
     this.setup = new FakeSetup({
       instructions: this.instructions,
@@ -1814,6 +1821,57 @@ export class FakeEngine implements EngineService {
 
   async saveInstructions(decision: InstructionsDecision): Promise<InstructionsSaveResult> {
     return this.instructions.save(decision);
+  }
+
+  // Lessons from the user's pushback, backed by FakeLessons. Never an agent call.
+
+  async proposeInstructionsFromLesson(lessonId: number): Promise<InstructionsProposalReply> {
+    const agentOff = this.toolStatus.agentOff();
+    if (agentOff !== null) {
+      return { reply: agentOff, proposal: null };
+    }
+    const lesson = this.lessons.find(lessonId);
+    if (!lesson) {
+      return { reply: 'This lesson was already decided or withdrawn.', proposal: null };
+    }
+    return { reply: 'Proposed.', proposal: this.instructions.proposalFromLesson(lesson) };
+  }
+
+  async getLessons(topicId: string): Promise<LessonView[]> {
+    return this.lessons.open(topicId);
+  }
+
+  async teachLesson(prKey: PrKey, note: string): Promise<TeachLessonResult> {
+    const agentOff = this.toolStatus.agentOff();
+    if (agentOff !== null) {
+      return { lesson: null, reply: agentOff };
+    }
+    return this.lessons.teach(prKey, note);
+  }
+
+  /** "Remember in this topic": the line joins the topic's tailoring, like the engine's. */
+  async keepLessonForTopic(lessonId: number): Promise<ActionResult> {
+    const lesson = this.lessons.find(lessonId);
+    if (!lesson) {
+      return fail('This lesson was already decided or withdrawn.');
+    }
+    if (lesson.topicId === null) {
+      return fail('Its PR is not in a topic yet. Use it across topics, or wait for the next sync to sort it.');
+    }
+    const kept = await this.decideTailoring(lesson.topicId, lesson.text, true);
+    if (!kept.ok) {
+      return kept;
+    }
+    this.lessons.close(lessonId);
+    return ok('Remembered in this topic');
+  }
+
+  async dismissLesson(lessonId: number): Promise<ActionResult> {
+    if (!this.lessons.find(lessonId)) {
+      return fail('This lesson was already decided or withdrawn.');
+    }
+    this.lessons.close(lessonId);
+    return ok('Dismissed');
   }
 
   async getWorkContext(): Promise<WorkContextView> {

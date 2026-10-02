@@ -6,6 +6,8 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ### Added
 
+- When you request changes on a PR whose assessment said Looks safe (or rated it low risk), PostPile turns your review into a line it could check next time, such as "When core imports from ee/, say Look closer". The topic shows it under "Remember for future assessments?": keep it for the topic, add it to your instructions (you see the diff first), or dismiss it. Nothing changes until you pick. Reviews with nothing reusable in them, like nits, give no line.
+- "Teach future assessments" under a PR's assessment: say what it should check next time, and PostPile offers the same three choices.
 - "<login> drives" on the topic header is now a menu: pick You, a teammate, Your team or Someone outside your team, and the topic moves to that section at once. Each item shows where the topic would go. The pick sticks until you change it or choose Reset to automatic; new activity never lifts it, and the agent's topic memory follows it. Local only, nothing goes to GitHub.
 - The agent can name your team as the driver of a standing topic that your team keeps up with nobody leading the current wave, so such topics sit under Your team owns instead of under whoever led one wave.
 - Approve on the PR pane is split: the main part approves right away as before, the speech-bubble segment opens "Approve with comment" with a short review note the agent drafts for you to edit.

@@ -44,6 +44,7 @@ export class InstructionsHistory {
       summary: latest === null ? 'Found on disk' : 'Edited outside the app',
       origin: 'outside',
       sourceChatMessageId: null,
+      sourceLessonId: null,
       createdAt: this.now().toISOString(),
     });
     return { text, version };
@@ -52,12 +53,18 @@ export class InstructionsHistory {
   /** Writes the file and stores the version. The caller has checked that nothing changed on disk since the proposal. */
   save(text: string, summary: string, sourceChatMessageId: number): InstructionsVersion {
     writeInstructionsAtomically(this.file, text);
-    return this.store.instructions.add({ text, summary, origin: 'chat', sourceChatMessageId, createdAt: this.now().toISOString() });
+    return this.store.instructions.add({ text, summary, origin: 'chat', sourceChatMessageId, sourceLessonId: null, createdAt: this.now().toISOString() });
+  }
+
+  /** Writes the file and stores a lesson version. The caller has checked the base version and the lesson. */
+  saveFromLesson(text: string, summary: string, lessonId: number): InstructionsVersion {
+    writeInstructionsAtomically(this.file, text);
+    return this.store.instructions.add({ text, summary, origin: 'lesson', sourceChatMessageId: null, sourceLessonId: lessonId, createdAt: this.now().toISOString() });
   }
 
   /** Writes the file and stores a setup version. The caller has checked the version the draft was reviewed against. */
   saveFromSetup(text: string, summary: string): InstructionsVersion {
     writeInstructionsAtomically(this.file, text);
-    return this.store.instructions.add({ text, summary, origin: 'setup', sourceChatMessageId: null, createdAt: this.now().toISOString() });
+    return this.store.instructions.add({ text, summary, origin: 'setup', sourceChatMessageId: null, sourceLessonId: null, createdAt: this.now().toISOString() });
   }
 }

@@ -9,6 +9,7 @@ interface InstructionsRow {
   summary: string;
   origin: string;
   source_chat_message_id: number | null;
+  source_lesson_id: number | null;
   created_at: string;
 }
 
@@ -19,6 +20,7 @@ function toVersion(row: InstructionsRow): InstructionsVersion {
     summary: row.summary,
     origin: row.origin as InstructionsOrigin,
     sourceChatMessageId: row.source_chat_message_id,
+    sourceLessonId: row.source_lesson_id,
     createdAt: row.created_at,
   };
 }
@@ -50,13 +52,14 @@ export class InstructionsRepo {
       const next = (this.latest()?.version ?? 0) + 1;
       run(
         this.db,
-        `INSERT INTO instructions_version (version, text, summary, origin, source_chat_message_id, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO instructions_version (version, text, summary, origin, source_chat_message_id, source_lesson_id, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
         next,
         version.text,
         version.summary,
         version.origin,
         version.sourceChatMessageId,
+        version.sourceLessonId,
         version.createdAt,
       );
       return { version: next, ...version };
