@@ -42,8 +42,8 @@ import type {
   Verdict,
   Viewer,
 } from '../types.ts';
-import type { TilePendingWrite, TileView } from '../views.ts';
-import type { BoardSpec, CommentText, GroupKind, GroupSpec, Person, PrSpec, RequestTarget, RiskWord, SnoozeSpec, StepSpec, TeamSetup, TrunkText } from './board-spec.ts';
+import type { TilePendingWrite, TileView, TopicPlacement } from '../views.ts';
+import type { BoardSpec, CommentText, GroupKind, GroupSpec, Person, PrSpec, RequestTarget, RiskWord, SnoozeSpec, StepSpec, TeamSetup, TopicSpec, TrunkText } from './board-spec.ts';
 
 export const PROPERTY_REPO = 'acme/app';
 export const PROPERTY_TOPIC_ID = 'topic-1';
@@ -566,6 +566,20 @@ export interface PropertyBoard {
   markedReadAt: Map<PrKey, IsoTime>;
   /** The topic's tiles, from `buildTopicTiles`. */
   tiles: Tile[];
+  /** The topic's driver login, null when nobody is known. */
+  driver: string | null;
+  /** The dossier's relation and owner team; null without a dossier. */
+  placement: Pick<TopicPlacement, 'relation' | 'ownerTeam'> | null;
+}
+
+const OWNER_TEAMS: Record<NonNullable<TopicSpec['ownerTeam']>, string> = { home: PROPERTY_TEAM, routing: ROUTING_TEAM, other: OTHER_TEAM };
+
+/** The topic's placement as a dossier would give it: none without a dossier. */
+function placementOf(topic: TopicSpec): PropertyBoard['placement'] {
+  if (topic.relation === null) {
+    return null;
+  }
+  return { relation: topic.relation, ownerTeam: topic.ownerTeam === null ? null : OWNER_TEAMS[topic.ownerTeam] };
 }
 
 /**
@@ -727,6 +741,8 @@ export function buildBoard(spec: BoardSpec): PropertyBoard {
     groupKeys: spec.groups.map((_, groupIndex) => compiled.filter((entry) => entry.group === groupIndex).map((entry) => entry.compiled.pr.key)),
     markedReadAt: new Map(),
     tiles: [],
+    driver: spec.topic.driver === null ? null : LOGINS[spec.topic.driver],
+    placement: placementOf(spec.topic),
   };
   const pullInReasons = new Map<PrKey, string>();
   for (const entry of compiled) {

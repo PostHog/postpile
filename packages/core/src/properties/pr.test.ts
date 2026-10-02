@@ -3,7 +3,7 @@
 // POSTPILE_PROPERTY_RUNS=10000 pnpm test runs more boards per invariant.
 import { describe, expect, it } from 'vitest';
 import { pingRule } from '../pings.ts';
-import { buildBoard, checkBoards, PR_INVARIANTS, PROPERTY_TIMEOUT_MS, QUIET_PR, tileStateOf, tileViewsOf, type BoardSpec, type StepSpec } from '../testing/index.ts';
+import { buildBoard, checkBoards, PR_INVARIANTS, PROPERTY_TIMEOUT_MS, QUIET_PR, UNSORTED_TOPIC, tileStateOf, tileViewsOf, type BoardSpec, type StepSpec } from '../testing/index.ts';
 
 describe('pr invariants', () => {
   for (const invariant of PR_INVARIANTS) {
@@ -35,6 +35,7 @@ describe('pings, scenarios the properties found', () => {
       teams: 'one_home',
       teamMembersUnknown: false,
       nowGap: 60,
+      topic: UNSORTED_TOPIC,
     };
   }
 
@@ -78,6 +79,7 @@ describe('whose move, scenarios the properties found', () => {
       teams: 'one_home',
       teamMembersUnknown: false,
       nowGap: 60,
+      topic: UNSORTED_TOPIC,
     };
   }
 
