@@ -42,6 +42,7 @@ const queryLengthBucket = z.enum(['short', 'medium', 'long']);
 const queueFilter = z.enum(['mine', 'team', 'reply', 'review', 'none']);
 // The sidebar section the opened topic sits in, core's `TopicSection` as is.
 const sidebarSection = z.enum(TOPIC_SECTION_ORDER);
+const driverPickKind = z.enum(['you', 'teammate', 'team', 'outside', 'automatic']);
 
 // -----------------------------------------------------------------------
 // 4. Agent trust
@@ -113,6 +114,8 @@ export const TELEMETRY_EVENTS = {
   topic_opened: z.object({ section: sidebarSection }).strict(),
   // "Archive now" on a topic with nothing left, before it would go by itself.
   topic_archived: NO_PROPS,
+  // The header's driver menu: which kind of driver the user picked, automatic for a reset. Never the login.
+  driver_set: z.object({ kind: driverPickKind }).strict(),
   update_pill_clicked: NO_PROPS,
   update_later_clicked: NO_PROPS,
   // The bar under the title bar (24h or more behind): once per app run, when it first shows.

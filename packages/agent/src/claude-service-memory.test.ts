@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { AmbiguousCandidate, FactCandidate } from '@postpile/core';
+import { TEAM_DRIVER, type AmbiguousCandidate, type FactCandidate } from '@postpile/core';
 import { RunnerAgentService } from './claude-service.ts';
 import { FakeRunner } from './fake-runner.ts';
 import { dossierInputHash, glanceItemInputHash } from './hashes.ts';
@@ -45,6 +45,7 @@ function dossierInput(): DossierUpdateInput {
     staleFacts: [makeFact({ id: 'fact-2', staleReason: 'head_moved' })],
     chatTurns: [],
     relationSignals: { relation: null, ownerTeam: null, whyYou: 'team-platform review requested', notes: ['review requested from the user team'] },
+    driverPick: null,
     areas: [{ name: 'CI', topics: 3 }],
     currentArea: null,
     viewer,
@@ -172,6 +173,47 @@ describe('RunnerAgentService.updateDossier relation and area', () => {
     expect(open.area).toBe('CI');
     expect(decided.dossier.relation).toMatchObject({ kind: 'team', whyYou: 'you drive it' });
     expect(runner.promptsFor('dossier_update')[0]).toContain('Rules could not decide between team and routed');
+  });
+
+  it('keeps driverTeam only while nobody is the driver, and tells the agent who the user said drives', async () => {
+    const { runner, service } = setup();
+    const answer = dossierAnswer();
+    const noDriver = [{ login: 'bob', role: 'contributor', note: '' }];
+    runner.answer('dossier_update', { ...answer, dossier: { ...answer.dossier, people: noDriver, driverTeam: true } });
+    runner.answer('dossier_update', { ...answer, dossier: { ...answer.dossier, driverTeam: true } });
+    runner.answer('dossier_update', { ...answer, dossier: { ...answer.dossier, people: noDriver, driverTeam: 'yes' } });
+
+    const standing = { ...dossierInput(), topic: makeTopic({ kind: 'standing' }) };
+    const team = await service.updateDossier({ ...standing, driverPick: TEAM_DRIVER });
+    const named = await service.updateDossier(standing);
+    const odd = await service.updateDossier({ ...standing, driverPick: 'alice' });
+
+    expect(team.dossier.driverTeam).toBe(true);
+    // alice has the driver role: one person clearly runs it.
+    expect(named.dossier.driverTeam).toBeUndefined();
+    expect(odd.dossier.driverTeam).toBeUndefined();
+    const prompts = runner.promptsFor('dossier_update');
+    expect(prompts[0]).toContain('Their own team drives, no single person. Set driverTeam true');
+    expect(prompts[1]).not.toContain('Who drives, as the user set it');
+    expect(prompts[2]).toContain('@alice drives. Give alice the driver role and nobody else.');
+  });
+
+  it('keeps driverTeam only on standing topics, after the answer corrects the kind', async () => {
+    const { runner, service } = setup();
+    const answer = dossierAnswer();
+    const noDriver = [{ login: 'bob', role: 'contributor', note: '' }];
+    const team = { ...answer, dossier: { ...answer.dossier, people: noDriver, driverTeam: true } };
+    runner.answer('dossier_update', team);
+    runner.answer('dossier_update', team);
+    runner.answer('dossier_update', { ...team, topicKind: 'standing' });
+
+    const project = await service.updateDossier(dossierInput());
+    const standing = await service.updateDossier({ ...dossierInput(), topic: makeTopic({ kind: 'standing' }) });
+    const corrected = await service.updateDossier(dossierInput());
+
+    expect(project.dossier.driverTeam).toBeUndefined();
+    expect(standing.dossier.driverTeam).toBe(true);
+    expect(corrected.dossier.driverTeam).toBe(true);
   });
 });
 

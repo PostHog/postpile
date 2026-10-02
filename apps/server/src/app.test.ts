@@ -95,6 +95,7 @@ function fakeEngine(overrides: Partial<EngineService>): EngineService {
     decideRuleProposal: notImplemented,
     markTopicSeen: notImplemented,
     archiveTopic: notImplemented,
+    setTopicDriver: notImplemented,
     correctMemory: notImplemented,
     recheckMemory: notImplemented,
     getMemorySources: notImplemented,

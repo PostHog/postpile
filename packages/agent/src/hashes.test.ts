@@ -148,6 +148,7 @@ function dossierInput(overrides: Partial<DossierUpdateInput> = {}): DossierUpdat
     staleFacts: [],
     chatTurns: [],
     relationSignals: { relation: null, ownerTeam: null, whyYou: 'team-platform review requested', notes: ['review requested from the user team'] },
+    driverPick: null,
     areas: [{ name: 'CI', topics: 3 }],
     currentArea: null,
     viewer,

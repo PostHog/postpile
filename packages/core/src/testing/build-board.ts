@@ -16,6 +16,7 @@ import { isTracked } from '../provenance.ts';
 import { applyReadPlan, planRead, prReadScope, type ReadCause } from '../read-plan.ts';
 import { snoozeWrites } from '../snooze.ts';
 import { buildStacks } from '../stacks.ts';
+import { OUTSIDE_DRIVER, TEAM_DRIVER } from '../topic-driver.ts';
 import { buildTopicTiles, deriveTileState } from '../tiles.ts';
 import { prAfterMarkRead } from '../after-read.ts';
 import { agentPrFacts } from '../agent-actions.ts';
@@ -566,13 +567,26 @@ export interface PropertyBoard {
   markedReadAt: Map<PrKey, IsoTime>;
   /** The topic's tiles, from `buildTopicTiles`. */
   tiles: Tile[];
-  /** The topic's driver login, null when nobody is known. */
+  /** The topic's automatic driver as stored: a login or TEAM_DRIVER, null when nobody is known. */
   driver: string | null;
+  /** The user's driver pick as stored: a login, TEAM_DRIVER or OUTSIDE_DRIVER; null: automatic. */
+  driverPick: string | null;
   /** The dossier's relation and owner team; null without a dossier. */
   placement: Pick<TopicPlacement, 'relation' | 'ownerTeam'> | null;
 }
 
 const OWNER_TEAMS: Record<NonNullable<TopicSpec['ownerTeam']>, string> = { home: PROPERTY_TEAM, routing: ROUTING_TEAM, other: OTHER_TEAM };
+
+/** A spec driver or pick as the store holds it. */
+function storedDriver(who: TopicSpec['driver'] | TopicSpec['pick']): string | null {
+  if (who === null) {
+    return null;
+  }
+  if (who === 'team') {
+    return TEAM_DRIVER;
+  }
+  return who === 'outside' ? OUTSIDE_DRIVER : LOGINS[who];
+}
 
 /** The topic's placement as a dossier would give it: none without a dossier. */
 function placementOf(topic: TopicSpec): PropertyBoard['placement'] {
@@ -741,7 +755,8 @@ export function buildBoard(spec: BoardSpec): PropertyBoard {
     groupKeys: spec.groups.map((_, groupIndex) => compiled.filter((entry) => entry.group === groupIndex).map((entry) => entry.compiled.pr.key)),
     markedReadAt: new Map(),
     tiles: [],
-    driver: spec.topic.driver === null ? null : LOGINS[spec.topic.driver],
+    driver: storedDriver(spec.topic.driver),
+    driverPick: storedDriver(spec.topic.pick),
     placement: placementOf(spec.topic),
   };
   const pullInReasons = new Map<PrKey, string>();

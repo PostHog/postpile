@@ -192,20 +192,24 @@ export interface GroupSpec {
 }
 
 /**
- * The topic itself, for its sidebar section (DESIGN "Ownership sections"):
- * who drives it (null: nobody known), and its dossier's relation and owner
- * team. relation null: no dossier yet, so no owner team either. Owner home
- * is team-platform, routing the approvers team (home only while roles are
- * undecided), other team-infra.
+ * The topic itself, for its sidebar section (DESIGN "Ownership sections",
+ * "Driver picker"): who drives it automatically (a person, the team as
+ * the dossier's driverTeam names it, null: nobody known), the user's pick
+ * in the header menu (null: automatic; outside: someone outside the team,
+ * no name), and its dossier's relation and owner team. relation null: no
+ * dossier yet, so no owner team either. Owner home is team-platform,
+ * routing the approvers team (home only while roles are undecided), other
+ * team-infra.
  */
 export interface TopicSpec {
-  driver: 'viewer' | 'teammate' | 'other' | 'outsider' | null;
+  driver: 'viewer' | 'teammate' | 'other' | 'outsider' | 'team' | null;
+  pick: 'viewer' | 'teammate' | 'team' | 'outside' | null;
   relation: TopicRelation | null;
   ownerTeam: 'home' | 'routing' | 'other' | null;
 }
 
-/** A topic nothing places: no driver known, no dossier yet. */
-export const UNSORTED_TOPIC: TopicSpec = { driver: null, relation: null, ownerTeam: null };
+/** A topic nothing places: no driver known, none picked, no dossier yet. */
+export const UNSORTED_TOPIC: TopicSpec = { driver: null, pick: null, relation: null, ownerTeam: null };
 
 export interface BoardSpec {
   groups: GroupSpec[];
@@ -413,9 +417,10 @@ const anyGroupArb: fc.Arbitrary<GroupSpec> = fc.oneof(
   { weight: 1, arbitrary: groupArb('dissolved_set', 2, 3) },
 );
 
-/** Every driver, relation and owner team, a missing one as often as any other. */
+/** Every driver, pick, relation and owner team, a missing one as often as any other. */
 const topicSpecArb: fc.Arbitrary<TopicSpec> = fc.record({
-  driver: fc.constantFrom<TopicSpec['driver']>(null, 'viewer', 'teammate', 'other', 'outsider'),
+  driver: fc.constantFrom<TopicSpec['driver']>(null, 'viewer', 'teammate', 'other', 'outsider', 'team'),
+  pick: fc.constantFrom<TopicSpec['pick']>(null, 'viewer', 'teammate', 'team', 'outside'),
   relation: fc.constantFrom<TopicSpec['relation']>(null, 'team', 'routed', 'fyi'),
   ownerTeam: fc.constantFrom<TopicSpec['ownerTeam']>(null, 'home', 'routing', 'other'),
 });

@@ -1,4 +1,4 @@
-import { formatDossier, formatFacts, setChangeText, TILE_GROUP_LABELS, type PrDetail, type SyncReport, type TopicDetail, type TopicListItem } from '@postpile/core';
+import { driverText, formatDossier, formatFacts, setChangeText, TILE_GROUP_LABELS, type PrDetail, type SyncReport, type TopicDetail, type TopicListItem } from '@postpile/core';
 import type { PollCycle } from '@postpile/engine';
 import { formatCallStats, formatFactCounts } from './format-memory.ts';
 
@@ -63,7 +63,7 @@ export function formatTopics(items: TopicListItem[]): string {
 
 export function formatTopic(detail: TopicDetail): string {
   const { topic } = detail;
-  const lines = [`${topic.name}  (driver ${topic.driver ?? 'unknown'}, you: ${topic.userRole})`, topic.summary];
+  const lines = [`${topic.name}  (driver ${driverText(detail.driver)}, you: ${topic.userRole})`, topic.summary];
   if (topic.tailoring) {
     lines.push(`tailoring: ${topic.tailoring}`);
   }

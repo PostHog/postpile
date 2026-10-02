@@ -145,6 +145,7 @@ import {
   prStatus,
   prWhoseTurn,
   isReReviewMove,
+  driverPickRefusal,
   searchTopics,
   setIdFromTileId,
   threadPrKey,
@@ -152,6 +153,7 @@ import {
   topicPeople,
   openInDealtWith,
   topicPrRollup,
+  topicDriverView,
   topicSectionOf,
   topicQueues,
   topicUrgency,
@@ -324,6 +326,8 @@ export class FakeEngine implements EngineService {
   private readonly startedAt: Date;
   /** Snoozes by PR, as in the store. */
   private readonly snoozes = new Map<PrKey, Snooze>();
+  /** The header's driver picks by topic id, like the engine's topic_driver_pick table. */
+  private readonly driverPicks = new Map<string, string>();
   private readonly chats = new Map<string, ChatMessage[]>();
   private readonly feedback: Feedback[];
   private readonly batches: MarkReadBatch[] = [];
@@ -897,7 +901,7 @@ export class FakeEngine implements EngineService {
         yourMoves: urgency.yourMoves,
         unseenMergeTiles: views.filter((view) => (view.state.unseenMerges?.length ?? 0) > 0).length,
         queues,
-        section: topicSectionOf({ topic, queues, moves: urgency.yourMoves.length, placement, viewer }),
+        section: topicSectionOf({ topic, driverPick: this.driverPicks.get(topic.id) ?? null, queues, moves: urgency.yourMoves.length, placement, viewer }),
         people: topicFaces(topicPeople(prs.map(({ pr }) => pr), viewer)),
         prState: prRollup.state,
         prStateCounts: prRollup.counts,
@@ -991,8 +995,17 @@ export class FakeEngine implements EngineService {
     const topicTiles = this.tilesOfTopic(topicId);
     const placement = this.memory.placement(topic);
     const yourMoves = topicYourMoves(tiles);
+    const sectionSource = {
+      topic,
+      driverPick: this.driverPicks.get(topicId) ?? null,
+      queues: this.topicQueuesOf(topicTiles),
+      moves: yourMoves.length,
+      placement,
+      viewer: this.viewer(),
+    };
     return {
       topic,
+      driver: topicDriverView(sectionSource),
       placement,
       tiles,
       yourMoves,
@@ -1006,7 +1019,7 @@ export class FakeEngine implements EngineService {
       archive: this.archiveBox(topic, tiles),
       openInDealtWith: openInDealtWith(tiles),
       prRollup: topicPrRollup(topicTiles, this.topicPrs(topicTiles).map(({ pr }) => pr)),
-      section: topicSectionOf({ topic, queues: this.topicQueuesOf(topicTiles), moves: yourMoves.length, placement, viewer: this.viewer() }),
+      section: topicSectionOf(sectionSource),
       memoryUpdating: this.catchUp.memoryUpdating(this.topicPrKeys(topicId)),
     };
   }
@@ -1614,6 +1627,23 @@ export class FakeEngine implements EngineService {
     const at = this.timestamp();
     Object.assign(topic, { status: 'retired', retiredAt: at, updatedAt: at });
     return ok('Moved to the Archive');
+  }
+
+  /** Like the engine's: a menu value or null (automatic); the sample topic's role stays as it is. */
+  async setTopicDriver(topicId: string, driver: string | null): Promise<ActionResult> {
+    if (!this.data.topics.some((topic) => topic.id === topicId)) {
+      return fail(`no topic ${topicId}`);
+    }
+    const refusal = driverPickRefusal(driver, this.viewer());
+    if (refusal !== null) {
+      return fail(refusal);
+    }
+    if (driver === null) {
+      this.driverPicks.delete(topicId);
+      return ok('Back to the automatic driver');
+    }
+    this.driverPicks.set(topicId, driver);
+    return ok('Driver set');
   }
 
   async markTopicSeen(topicId: string): Promise<ActionResult> {

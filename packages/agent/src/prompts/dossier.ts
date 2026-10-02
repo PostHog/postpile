@@ -50,7 +50,10 @@ export function renderDossier(version: DossierVersion, prs: Map<PrKey, Pr>): str
     ...(d.relation ? [`Relation to the user: ${d.relation.kind}${d.relation.ownerTeam ? `, owned by ${d.relation.ownerTeam}` : ''} (${d.relation.whyYou})`] : []),
     ...section(
       'People:',
-      d.people.map((p) => `- @${p.login} ${p.role}${p.note ? `: ${p.note}` : ''}`),
+      [
+        ...(d.driverTeam ? ["- the user's own team drives (driverTeam), no single driver"] : []),
+        ...d.people.map((p) => `- @${p.login} ${p.role}${p.note ? `: ${p.note}` : ''}`),
+      ],
     ),
     ...section('What the user cares about here:', d.userCares.map(careLine)),
     ...section('Open questions:', d.openQuestions.map(questionLine)),

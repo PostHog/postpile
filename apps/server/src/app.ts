@@ -326,6 +326,11 @@ export function createApp(
   });
   app.post('/api/topics/:id/seen', async (c) => c.json(await engine.markTopicSeen(c.req.param('id'))));
   app.post('/api/topics/:id/archive', async (c) => c.json(await engine.archiveTopic(c.req.param('id'))));
+  // The header's driver menu: a login, ':team' or ':outside', null resets to automatic. Local, not a GitHub write.
+  app.post('/api/topics/:id/driver', async (c) => {
+    const body = z.object({ driver: z.string().min(1).nullable() }).parse(await c.req.json());
+    return c.json(await engine.setTopicDriver(c.req.param('id'), body.driver));
+  });
   app.get('/api/proposals', async (c) => c.json(await engine.listProposals()));
   app.post('/api/proposals/:id', async (c) => {
     const body = z.object({ accept: z.boolean() }).parse(await c.req.json());

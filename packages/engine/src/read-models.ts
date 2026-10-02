@@ -76,6 +76,7 @@ import {
   type TopicDetail,
   openInDealtWith,
   topicPrRollup,
+  topicDriverView,
   topicSectionOf,
   type TopicListItem,
   type TopicQueues,
@@ -367,6 +368,7 @@ export class ReadModels {
     const board = this.board();
     const topics = board.topics();
     const dossiers = this.store.dossiers.latestMany(topics.map((topic) => topic.id));
+    const driverPicks = this.store.driverPicks.all();
     const viewer = loadViewer(this.store);
     const settings = scopedSettings(loadRepoSettings(this.store), scope);
     const items: TopicListItem[] = [];
@@ -415,7 +417,7 @@ export class ReadModels {
         yourMoves: urgency.yourMoves,
         unseenMergeTiles: tiles.filter((tile) => (board.stateOf(tile).unseenMerges?.length ?? 0) > 0).length,
         queues,
-        section: topicSectionOf({ topic, queues, moves: urgency.yourMoves.length, placement, viewer }),
+        section: topicSectionOf({ topic, driverPick: driverPicks.get(topic.id) ?? null, queues, moves: urgency.yourMoves.length, placement, viewer }),
         people: topicFaces(topicPeople(prs, viewer)),
         prState: prRollup.state,
         prStateCounts: prRollup.counts,
@@ -496,8 +498,10 @@ export class ReadModels {
     const queues = this.topicQueuesOf(board, topicTiles, prs, viewer, loadRepoSettings(this.store));
     const placement = isUnsorted ? null : placementOf(this.store, topic, this.store.dossiers.latest(topicId) ?? undefined);
     const yourMoves = topicYourMoves(tiles);
+    const sectionSource = { topic, driverPick: this.store.driverPicks.get(topicId), queues, moves: yourMoves.length, placement, viewer };
     return {
       topic,
+      driver: isUnsorted ? null : topicDriverView(sectionSource),
       placement,
       tiles,
       yourMoves,
@@ -511,7 +515,7 @@ export class ReadModels {
       archive: this.archiveBox(board, topic),
       openInDealtWith: openInDealtWith(tiles),
       prRollup: topicPrRollup(topicTiles, prs),
-      section: topicSectionOf({ topic, queues, moves: yourMoves.length, placement, viewer }),
+      section: topicSectionOf(sectionSource),
       memoryUpdating: this.memoryUpdating(isUnsorted ? null : topicId),
     };
   }

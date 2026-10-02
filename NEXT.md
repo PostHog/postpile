@@ -1098,9 +1098,14 @@ the app meanwhile.
   so are the Needs you / Your team / Routed to you groups in Other topics;
   FYI and the Archive stay. Other work folds by area ("More" for
   single-topic areas) and starts open only for your PR, move or unread.
-  Topics without a dossier or driver are "not sorted yet". Next: the driver
-  picker on the header (You, a teammate, Your team, Someone outside your
-  team, Reset).
+  Topics without a dossier or driver are "not sorted yet".
+- **Driver picker and team as driver** (2026-10-02, DESIGN.md "Driver
+  picker", "Team as driver"): "<login> drives" on the header is a menu (You,
+  each teammate, Your team, Someone outside your team, Reset to automatic);
+  the pick moves the topic, stands until changed, beats the agent and goes
+  into the dossier prompt. The dossier agent may name the home team as a
+  standing topic's driver (`driverTeam`), stored like the picker's "Your
+  team".
 - **Merge queue like Trunk's extension** (2026-10-02, DESIGN.md "Merge
   queue"): the queue icon replaces the git icon while a PR is in the merge
   queue, pending amber, red once the queue took it out, the merged icon

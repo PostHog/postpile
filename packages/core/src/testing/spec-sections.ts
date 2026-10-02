@@ -1,14 +1,15 @@
 // The ownership sections restated from the spec (DESIGN "Ownership
-// sections", 2026-10-02) over the raw board: the tracked PRs' tiers by the
-// tier spec, the viewer's open PRs from the snapshots, the topic's driver,
-// relation and owner team from the recipe. The only rule answer it reads is
+// sections", "Driver picker", 2026-10-02) over the raw board: the tracked
+// PRs' tiers by the tier spec, the viewer's open PRs from the snapshots,
+// the topic's driver, the user's pick, relation and owner team from the
+// recipe. The only rule answer it reads is
 // whose turn on each tile, which the tile invariants pin to the spec. Type
 // imports only from the rule modules.
 import type { PrTier } from '../pr-tier.ts';
 import type { TopicSection } from '../topic-sections.ts';
 import type { PrKey } from '../types.ts';
 import type { TileView } from '../views.ts';
-import type { PropertyBoard } from './build-board.ts';
+import { LOGINS, type PropertyBoard } from './build-board.ts';
 import { eventsOf, isTrackedHere, prOf } from './invariant.ts';
 import { isHomeTeam, specRelation, viewerOwns } from './spec-facts.ts';
 import { expectedTier } from './spec-rules.ts';
@@ -44,8 +45,25 @@ function viewerHasWorkHere(board: PropertyBoard, views: TileView[]): boolean {
 }
 
 /**
+ * Who drives, as the recipe says: the user's pick over the automatic
+ * driver. The team counts like a teammate, someone outside like anyone
+ * outside the team.
+ */
+function specDriver(board: PropertyBoard): 'you' | 'team' | 'other' | null {
+  const who = board.spec.topic.pick ?? board.spec.topic.driver;
+  if (who === null) {
+    return null;
+  }
+  if (who === 'team') {
+    return 'team';
+  }
+  return who === 'outside' ? 'other' : specRelation(LOGINS[who], board.viewer);
+}
+
+/**
  * Where the topic sits. An ask first, the most urgent one. Then who drives
- * it: the viewer, a teammate (a member of any home team), anyone else. An
+ * it (`specDriver`): the viewer, a teammate (a member of any home team) or
+ * the team, anyone else. An
  * FYI topic only leaves Other topics for the viewer's own work or when the
  * viewer or a teammate drives it. Without a driver the owner team places
  * it: a home team, another team, or nothing known (Other topics).
@@ -56,7 +74,7 @@ export function expectedSection(board: PropertyBoard, views: TileView[]): TopicS
   if (ask !== undefined) {
     return ask as TopicSection;
   }
-  const driver = board.driver === null ? null : specRelation(board.driver, board.viewer);
+  const driver = specDriver(board);
   const drivenByUs = driver === 'you' || driver === 'team';
   if (board.placement?.relation === 'fyi' && !drivenByUs && !viewerHasWorkHere(board, views)) {
     return 'other_topics';

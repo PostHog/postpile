@@ -3,8 +3,7 @@
 // sections", "Ownership sections", "Snoozes belong to PRs", engine
 // `RetireGate`). Plus determinism over the whole board.
 import { topicQueues, emptyTierCounts, pingedPrKeys, ownerRelation, type TopicQueues } from '../topic-queues.ts';
-import { driverRelation, topicSection } from '../topic-sections.ts';
-import { homeTeamsOf } from '../team-roles.ts';
+import { topicSectionOf } from '../topic-sections.ts';
 import { topicMove, topicUrgency } from '../topic-urgency.ts';
 import { prTier } from '../pr-tier.ts';
 import type { PrEvent } from '../types.ts';
@@ -116,20 +115,20 @@ export const queueCountsMatchRows: Invariant = {
 };
 
 /**
- * The sidebar section (`topicSection` over the row's queues, moves, driver
- * and placement, as the read models call it) is the one the spec gives
- * from the raw board (`expectedSection`).
+ * The sidebar section (`topicSectionOf` over the row's queues, moves, the
+ * stored driver and pick, and placement, as the read models call it) is
+ * the one the spec gives from the raw board (`expectedSection`).
  */
 export const sectionMatchesSpec: Invariant = {
   name: "a topic's section is the one the ownership spec gives",
   check(board, views) {
-    const section = topicSection({
-      retired: false,
+    const section = topicSectionOf({
+      topic: { status: 'active', driver: board.driver },
+      driverPick: board.driverPick,
       queues: queuesOf(board, views),
       moves: urgencyOf(views).yourMoves.length,
-      driver: driverRelation(board.driver, board.viewer),
       placement: board.placement,
-      homeTeams: homeTeamsOf(board.viewer),
+      viewer: board.viewer,
     });
     const expected = expectedSection(board, views);
     ensure(section === expected, `section ${section}, spec ${expected}`);

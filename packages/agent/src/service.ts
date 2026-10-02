@@ -254,6 +254,12 @@ export interface DossierUpdateInput {
   chatTurns: ChatMessage[];
   /** What the rules could tell about how the topic reaches the user. A decided relation wins over the answer. */
   relationSignals: RelationSignals;
+  /**
+   * The driver the user picked in the topic header (a login, TEAM_DRIVER or
+   * OUTSIDE_DRIVER); null: automatic. The dossier follows it, and the
+   * answer's own driver never moves the topic while it stands.
+   */
+  driverPick: string | null;
   /** Areas other topics use, to reuse. */
   areas: AreaChoice[];
   /** The topic's area now, null before the first update. */

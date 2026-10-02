@@ -107,6 +107,12 @@ export interface Actions {
   dismissNotice(): void;
   /** A full sync runs: this window's "Sync now", or one the engine started (start sync elsewhere, the hourly auto sync). */
   syncing: boolean;
+  /**
+   * Counts the user's explicit topic moves (driver picks). The sidebar holds
+   * the open topic's row while a tile stays selected; a move re-takes that
+   * place, so the picked topic goes to its new section at once.
+   */
+  topicMoves: number;
   lastSync: SyncReport | null;
   /** Mark-reads still inside their undo window, as far as this window knows. */
   pendingMarkReads: number;
@@ -200,6 +206,8 @@ export interface Actions {
   markTopicSeen(topicId: string): Promise<void>;
   /** "Archive now" on a topic with nothing left. Local, not a GitHub write. */
   archiveTopic(topicId: string): Promise<void>;
+  /** The header's driver menu: a choice's value, null for Reset to automatic. Local, not a GitHub write. */
+  setTopicDriver(topicId: string, driver: string | null): Promise<void>;
   /** Returns the agent's draft, or null when drafting failed. */
   draftAsk(prKey: PrKey, person: string, intent: string): Promise<string | null>;
   /** Returns true when the comment went out. */
@@ -251,6 +259,7 @@ export function ActionsProvider(props: { children: ReactNode }) {
   const [busy, setBusy] = useState<string[]>([]);
   const [pendingUndos, setPendingUndos] = useState<PendingUndo[]>([]);
   const [syncing, setSyncing] = useState(false);
+  const [topicMoves, setTopicMoves] = useState(0);
   const [lastSync, setLastSync] = useState<SyncReport | null>(null);
   // Before this window's first sync: the one the engine stored, e.g. a start sync that failed.
   const storedLastSync = useLastSyncReport().data ?? null;
@@ -527,6 +536,22 @@ export function ActionsProvider(props: { children: ReactNode }) {
     }
   }
 
+  async function setTopicDriver(topicId: string, driver: string | null): Promise<void> {
+    try {
+      const path = `/api/topics/${encodeURIComponent(topicId)}/driver`;
+      const result = await withBusy(`topicDriver:${topicId}`, () => request<ActionResult>('POST', path, { driver }));
+      // The topic moving in the sidebar is the confirmation; only a refusal says something.
+      await refreshAll();
+      if (result.ok) {
+        setTopicMoves((count) => count + 1);
+      } else {
+        show('error', result.message);
+      }
+    } catch (error) {
+      show('error', `Could not set the driver: ${errorText(error)}`);
+    }
+  }
+
   async function markOpenedRead(prKey: PrKey): Promise<OpenedReadResult | null> {
     if (writeBlockedReason('openedRead', writes) !== null) {
       return null;
@@ -740,6 +765,7 @@ export function ActionsProvider(props: { children: ReactNode }) {
     notice,
     dismissNotice: () => setNotice(null),
     syncing: syncing || backgroundSync,
+    topicMoves,
     // A background sync after this window's last "Sync now" is the newer one.
     lastSync: newerReport(lastSync, storedLastSync),
     // Memory corrections carry undo tokens too, but only mark-reads wait to reach GitHub.
@@ -838,6 +864,7 @@ export function ActionsProvider(props: { children: ReactNode }) {
     hideMcpConnect: () => run('mcp:not-now', null, () => request('POST', '/api/mcp-connection/not-now')),
     markTopicSeen,
     archiveTopic,
+    setTopicDriver,
     markOpenedRead,
     refreshGlanceOnLook,
     draftAsk,

@@ -10,6 +10,7 @@ import {
   type SetGroupingInput,
 } from '@postpile/agent';
 import {
+  driverLogin,
   GLANCE_BATCH_SIZE,
   isEmptyDelta,
   joinedMembers,
@@ -199,11 +200,13 @@ export class DossierUpdater {
     // No stored hash yet (a database from before it existed) counts as unchanged, so an upgrade costs nothing.
     const storedContextHash = store.meta.get(contextHashKey(topic.id));
     const contextChanged = storedContextHash !== null && storedContextHash !== dossierContextHash(context);
+    const driverPick = store.driverPicks.get(topic.id);
+    // The relation says why the topic reached the user, so it follows the automatic driver, never the pick.
     const signals = relationSignals({
       viewer: this.deps.viewer,
       prs: [...prs.values()],
       threads: [...store.notifications.getByPrKeys(memberKeys).values()],
-      driver: topic.driver,
+      driver: driverLogin(topic.driver),
     });
     // The rules now decide a relation the dossier does not hold, with no new event to trigger an update: an
     // agent PR that became the viewer's through its assignee (2026-09-30). Versions without a relation stay as they are.
@@ -222,6 +225,7 @@ export class DossierUpdater {
       staleFacts,
       chatTurns: store.chat.listUserForTopicSince(topic.id, previous?.createdAt ?? '', CHAT_TURNS_IN_DOSSIER_PROMPT),
       relationSignals: signals,
+      driverPick,
       areas: this.areasInUse(topic.id),
       currentArea: topic.area,
       viewer: this.deps.viewer,

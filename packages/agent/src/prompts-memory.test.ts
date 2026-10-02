@@ -46,6 +46,7 @@ function dossierInput(overrides: Partial<DossierUpdateInput> = {}): DossierUpdat
     staleFacts: [makeFact({ id: 'fact-2', predicate: 'reviews', text: 'Bob reviews #1', staleReason: 'person_not_involved' })],
     chatTurns: [],
     relationSignals: { relation: null, ownerTeam: null, whyYou: 'team-platform review requested', notes: ['review requested from the user team'] },
+    driverPick: null,
     areas: [{ name: 'CI', topics: 3 }],
     currentArea: null,
     viewer,

@@ -1,5 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react';
 import type { TopicListItem, TopicPerson, TopicSection, ViewerView } from '@postpile/core';
+import { useActions } from '../api/actions.tsx';
 import { useTools } from '../api/tools.ts';
 import { useFinishedTopics } from '../api/topics.ts';
 import { statusLabel } from '../lib/memory.ts';
@@ -425,9 +426,12 @@ export function TopicSidebar(props: TopicSidebarProps) {
   const searching = filter !== null;
   const narrowed = searching || props.queueFilter !== null;
   // The open topic keeps its row while a tile in it stays selected ("Marked when you move on"); when it moves, rows slide.
+  // A driver pick moves it on purpose: a new hold key takes its new place.
   const navRef = useRef<HTMLElement>(null);
   useFlip(navRef, { landed: false });
-  const buckets = useHeldPlace(props.selectedTileId, props.activeTopicId, sidebarBuckets(props.shown), topicRowId);
+  const { topicMoves } = useActions();
+  const holdKey = props.selectedTileId === null ? null : `${props.selectedTileId}#${topicMoves}`;
+  const buckets = useHeldPlace(holdKey, props.activeTopicId, sidebarBuckets(props.shown), topicRowId);
   const otherWork = bucketItems(buckets, 'other_work');
   const otherTopics = otherTopicsGroups(bucketItems(buckets, 'other_topics'));
   // `forcedOpen`: while the search filters, no match hides in a fold.
