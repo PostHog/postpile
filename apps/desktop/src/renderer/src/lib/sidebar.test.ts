@@ -30,7 +30,7 @@ function item(id: string, extra: Extra = {}): TopicListItem {
     openTiles: 0,
     totalTiles: 1,
     yourMoves: Array.from({ length: extra.moves ?? 0 }, () => ({ move: 'review' as const, text: 'Review' })),
-    unseenMergeTiles: 0,
+    unseenMergeTiles: 0, quiet: false,
     queues: { tiers: { needs_reply: 0, changes_requested: 0, mine: 0, team: 0, to_review: 0, team_mentioned: 0, rest: 1 }, byYou: extra.byYou ?? 0, byTeam: 0, changesAddressed: 0 },
     section: 'other_work',
     people: [],

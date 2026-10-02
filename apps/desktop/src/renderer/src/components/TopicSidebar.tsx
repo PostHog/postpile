@@ -59,6 +59,9 @@ function UnreadBubble(props: { item: TopicListItem }) {
   );
 }
 
+/** Quiet rows (`data-quiet` on the row button): the faces and the PR state icon step back. */
+const QUIET_ICONS = 'group-data-quiet:opacity-45';
+
 /** The row's background decides the face rings: they cut the overlaps in the row's own color. */
 type RowTone = 'active' | 'unread' | 'read';
 
@@ -78,7 +81,7 @@ function FaceStack(props: { people: TopicPerson[]; tone: RowTone }) {
   const ring = FACE_RINGS[props.tone];
   const pill = teamPill(props.people);
   return (
-    <span className="flex shrink-0 items-center">
+    <span className={`flex shrink-0 items-center ${QUIET_ICONS}`}>
       {pill.ours.length > 0 && (
         <span title={pill.title} className="flex h-[22px] items-center rounded-full bg-sea-soft pr-0.5 pl-1.5 text-sea-ink inset-ring inset-ring-sea-ring">
           <PeopleIcon size={11} />
@@ -148,7 +151,7 @@ function PrStateMark(props: { item: TopicListItem }) {
   }
   // A 16px box, as wide as the smallest unread bubble above it, so the icon ends on the bubble's right edge.
   return (
-    <span className="flex min-w-4 shrink-0 items-center justify-end">
+    <span className={`flex min-w-4 shrink-0 items-center justify-end ${QUIET_ICONS}`}>
       <PrStateIcon state={prState} size={11} title={stateMix(prStateCounts)} />
     </span>
   );
@@ -159,8 +162,10 @@ function PrStateMark(props: { item: TopicListItem }) {
  * the your-move ("Reply +2") and "merged without you" chips at its end, and
  * the "not sorted yet" mark when asked for.
  */
-function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () => void; flipGroup: string; notSorted?: boolean }) {
+function TopicItem(props: { item: TopicListItem; active: boolean; searching: boolean; onSelect: () => void; flipGroup: string; notSorted?: boolean }) {
   const { item } = props;
+  // Quiet (core says nothing waits on you): dimmed, unless it is the selected row or a search is filtering.
+  const dim = item.quiet && !props.active && !props.searching;
   // Active: the white lift of the selected PR row. Unread: bold ink name, the bubble and a warm row with a faint honey ring. Read: regular, quieter.
   const unread = unreadLook(item) !== null;
   let tone: RowTone = unread ? 'unread' : 'read';
@@ -168,6 +173,9 @@ function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () =
     tone = 'active';
   }
   let name = unread ? 'font-semibold text-ink' : 'font-normal text-ink-read';
+  if (dim) {
+    name = 'font-normal text-faint group-hover:text-ink-read';
+  }
   if (props.active && !unread) {
     name = 'font-[550] text-ink';
   }
@@ -183,7 +191,8 @@ function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () =
       data-flip-group={props.flipGroup}
       onClick={props.onSelect}
       aria-current={props.active ? 'true' : undefined}
-      className={`flex min-w-0 flex-col gap-[3px] rounded-row px-2 pt-1.5 pb-[7px] text-left ${rows[tone]}`}
+      data-quiet={dim ? '' : undefined}
+      className={`group flex min-w-0 flex-col gap-[3px] rounded-row px-2 pt-1.5 pb-[7px] text-left ${rows[tone]}`}
     >
       <span className="flex w-full min-w-0 items-center">
         <LeadSlot>
@@ -200,7 +209,7 @@ function TopicItem(props: { item: TopicListItem; active: boolean; onSelect: () =
       <span className="flex w-full min-w-0 items-center">
         <LeadSlot />
         <span className="flex min-w-0 flex-1 items-center gap-1.5">
-          <span title={topicSnippet(item)} className="min-w-0 flex-1 truncate text-[11px] leading-[1.4] text-muted">
+          <span title={topicSnippet(item)} className={`min-w-0 flex-1 truncate text-[11px] leading-[1.4] ${dim ? 'text-faint opacity-80' : 'text-muted'}`}>
             {topicSnippet(item)}
           </span>
           <YourMoveChip moves={item.yourMoves} />
@@ -443,6 +452,7 @@ export function TopicSidebar(props: TopicSidebarProps) {
       item={item}
       flipGroup={group}
       notSorted={notSorted}
+      searching={searching}
       active={item.topic.id === props.activeTopicId}
       onSelect={() => props.onSelect(item.topic.id)}
     />

@@ -107,6 +107,8 @@ export interface TopicListItem {
   unseenMergeTiles: number;
   /** PRs per tier and open PRs by author, over the PRs in the topic's tiles. */
   queues: TopicQueues;
+  /** Nothing waits on the user here (`topicQuiet`): the sidebar dims the row. */
+  quiet: boolean;
   /** The sidebar section it sits in (`topicSection`: asks, then who drives it, then the owner team). */
   section: TopicSection;
   /**

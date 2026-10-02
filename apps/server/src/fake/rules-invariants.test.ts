@@ -30,6 +30,14 @@ function expectOnlyOpen(pane: PaneOffers): void {
   expect(pane).toMatchObject({ lead: 'open_on_github', open: true, approve: false, ask: false, markLabel: null, snooze: false, removeTeams: [] });
 }
 
+describe('quiet rows on the sample board', () => {
+  it('dims some rows and not others', async () => {
+    const topics = await new FakeEngine({ now: () => NOW }).listTopics();
+    expect(topics.some((item) => item.quiet)).toBe(true);
+    expect(topics.some((item) => !item.quiet)).toBe(true);
+  });
+});
+
 describe('rules agree on the sample boards', () => {
   // A done PR on a live tile is not in the sample; packages/core/src/rules-invariants.test.ts covers it.
   it('has done tiles, sets and your moves to check', async () => {

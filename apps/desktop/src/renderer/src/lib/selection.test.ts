@@ -20,7 +20,7 @@ function item(id: string, mine: number): TopicListItem {
     urgentUnreadTiles: 0,
     openTiles: 0,
     totalTiles: 1,
-    yourMoves: [], unseenMergeTiles: 0,
+    yourMoves: [], unseenMergeTiles: 0, quiet: false,
     queues: { tiers: { needs_reply: 0, changes_requested: 0, mine, team: 0, to_review: 0, team_mentioned: 0, rest: 0 }, byYou: mine, byTeam: 0, changesAddressed: 0 },
     section: mine > 0 ? 'you_drive' : 'other_topics',
     people: [],

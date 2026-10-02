@@ -54,6 +54,11 @@ export const TOPIC_SECTION_ORDER: TopicSectionOrder = [
 /** The PR tiers that ask something of the viewer, most urgent first. `mine` and `team` say whose PR it is, not what it asks. */
 const ASK_TIERS = ['needs_reply', 'changes_requested', 'to_review', 'team_mentioned'] as const;
 
+/** The section is one of the asks (the tiers share their names with their sections). */
+function isAskSection(section: TopicSection): section is (typeof ASK_TIERS)[number] {
+  return (ASK_TIERS as readonly TopicSection[]).includes(section);
+}
+
 /** The most urgent ask a PR of the topic holds, null when none does. */
 function openAsk(queues: Pick<TopicQueues, 'tiers'>): TopicSection | null {
   return ASK_TIERS.find((tier) => queues.tiers[tier] > 0) ?? null;
@@ -136,6 +141,29 @@ export function topicSection(input: SectionInput): TopicSection {
     return 'archive';
   }
   return openAsk(input.queues) ?? sectionBelowAsks(input);
+}
+
+/** What `topicQuiet` reads off a list item. */
+export interface QuietInput {
+  section: TopicSection;
+  unreadTiles: number;
+  /** The viewer's moves on live tiles (`TopicListItem.yourMoves.length`). */
+  moves: number;
+  unseenMergeTiles: number;
+}
+
+/**
+ * The sidebar row is dimmed because nothing waits on the viewer: no unread
+ * tile, no move of theirs (the "Merge, it is approved" move included, which
+ * never makes a topic urgent but still shows its chip), no merge without
+ * their review they have not seen, and the topic is not in an ask section.
+ * The Archive is never dimmed, it is its own context.
+ */
+export function topicQuiet(input: QuietInput): boolean {
+  if (input.section === 'archive' || isAskSection(input.section)) {
+    return false;
+  }
+  return input.unreadTiles === 0 && input.moves === 0 && input.unseenMergeTiles === 0;
 }
 
 /** What the read models know about a topic when they place it. */

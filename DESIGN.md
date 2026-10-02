@@ -3888,6 +3888,27 @@ sits under Your team owns. Real case: Egress, where the agent named
 pauldambra, who led one wave. Picked up at each topic's next dossier
 update; no one-time tidy. A manual pick beats it like any automatic driver.
 
+## Quiet rows (2026-10-02)
+
+Sidebar topic rows where nothing waits on the viewer are dimmed, so the rows
+that need something (unread, or a your-move chip like "Merge" or "Address
+changes") stand out. Like read and unread channels in Slack, one step
+further. Why: owner, looking at the new sections: "whew, everything looks
+dealt with". Read rows that still need the viewer should not look the same as
+rows that are done.
+
+**Rule** (`topicQuiet` in core `topic-sections.ts`, shipped as
+`TopicListItem.quiet`; the engine and FakeEngine fill it, the renderer only
+styles it): quiet when the topic has no unread tile, no your-move (the same
+`yourMoves` the chip shows, so "Merge, it is approved" counts although it
+never makes a topic urgent), no unseen merge without the viewer's review, and
+it sits in no ask section (Needs reply, Changes you requested, To review,
+Team mentioned). Archive rows are never quiet: the drawer is its own context.
+
+**Look.** Name and summary in the faint ink, faces and the PR state icon at
+45% opacity, hover brings the name back to the read ink. The selected row is
+never dimmed, and nothing is dimmed while the search filters.
+
 ## Tiles hold still (2026-10-01)
 
 On real data (three days, 415 tiles) 397 tiles held one PR, 15 were stacks
