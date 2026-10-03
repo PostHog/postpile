@@ -50,6 +50,7 @@ import {
   type FactView,
   type FinishedTopic,
   type CatchUpRunState,
+  type CleanupGlance,
   type GlanceGap,
   type GlanceRefreshBlock,
   type GlanceState,
@@ -204,6 +205,26 @@ export class ReadModels {
       }
     }
     return stale;
+  }
+
+  /**
+   * The stored glances of these PRs, each with whether it is stale or a
+   * catch-up rewrites it right now, for the inbox cleanup's "look safe"
+   * item. Reads only: it never starts or queues a glance.
+   */
+  glancesNow(keys: PrKey[]): Map<PrKey, CleanupGlance> {
+    const glances = this.store.glances.getMany(keys);
+    if (glances.size === 0) {
+      return new Map();
+    }
+    const board = this.board();
+    const stale = this.staleGlances(board, [...glances.keys()]);
+    const result = new Map<PrKey, CleanupGlance>();
+    for (const [key, glance] of glances) {
+      const writing = this.glanceStatus.catchUp(board.memberships.get(key)?.topicId ?? null, key) === 'running';
+      result.set(key, { verdict: glance.verdict, stale: stale.has(key), writing });
+    }
+    return result;
   }
 
   /** Why a PR without a glance has none, as the last sync recorded it. Null once a glance exists. */

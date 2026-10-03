@@ -115,6 +115,18 @@ describe('server routes over the fake engine', () => {
     expect((await app.request('/api/inbox-cleanup/mark-read', { method: 'POST' })).status).toBe(404);
   });
 
+  it('clears only the sample merged PRs that look safe from the sidebar item', async () => {
+    const app = appWithFake(new FakeEngine({ syncStepMs: 0, cleanupStepMs: 0 }));
+    const cleanup = async () => (await (await app.request('/api/inbox-cleanup')).json()) as InboxCleanupView;
+    await post(app, '/api/github-writes', { enabled: true });
+    const view = await cleanup();
+    expect(view.counts).toMatchObject({ mergedAll: 27, mergedSafe: 8 });
+
+    expect((await post<{ message: string }>(app, '/api/inbox-cleanup/clear-safe', { countedAt: view.countedAt })).json.message).toBe('Clearing 8 on GitHub in the background');
+    await vi.waitFor(async () => expect((await cleanup()).lastRun).toMatchObject({ marked: 8 }));
+    expect((await cleanup()).counts).toMatchObject({ mergedAll: 19, mergedSafe: 0 });
+  });
+
   it('lists repos, keeps the topics of the chosen repo, labels other repos and sets a repo quiet', async () => {
     const app = appWithFake();
     const repos = (await (await app.request('/api/repos')).json()) as RepoOverview;

@@ -25,6 +25,7 @@ import type {
   GitHubWritesChange,
   GitHubWritesStatus,
   CleanupRequest,
+  SafeCleanupRequest,
   InboxCleanupView,
   PendingWritesResult,
   InstructionsChatReply,
@@ -423,6 +424,7 @@ export class Engine implements EngineService {
         const viewer = loadViewer(store);
         return viewer === null ? new Set() : pendingGlanceKeys(store, Board.load(store, now().toISOString()), viewer, runDeps.contexts, deps.agent);
       },
+      glances: (keys) => this.reads.glancesNow(keys),
       pause: () => {
         const paceMs = deps.catchUpPaceMs ?? CATCH_UP_PACE_MS;
         return paceMs === 0 ? Promise.resolve() : new Promise((resolve) => timers.setTimeout(resolve, paceMs));
@@ -1085,6 +1087,10 @@ export class Engine implements EngineService {
       this.resumeUnlessRunning();
     }
     return result;
+  }
+
+  async clearSafeMerged(request: SafeCleanupRequest): Promise<ActionResult> {
+    return this.cleanup.clearSafe(request);
   }
 
   async startAsUsual(): Promise<ActionResult> {

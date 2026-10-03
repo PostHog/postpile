@@ -6,11 +6,15 @@ import {
   cleanupOptions,
   isUnseenMergeWithoutReview,
   planCleanup,
+  planPendingCleanup,
+  planThreadCleanup,
   prReadScope,
+  safeMergedIds,
   startCase,
   threadPrKey,
   type ActionResult,
   type CatchUpReason,
+  type CleanupGlance,
   type CleanupPlan,
   type CleanupProgress,
   type CleanupRequest,
@@ -18,9 +22,11 @@ import {
   type CleanupThread,
   type InboxCleanupView,
   type IsoTime,
+  type PendingCatchUp,
   type PendingThread,
   type PendingWrite,
   type PrKey,
+  type SafeCleanupRequest,
   type StartCase,
 } from '@postpile/core';
 import type { Store } from '@postpile/store';
@@ -70,6 +76,8 @@ export interface InboxCleanupDeps {
   asksOnStart: boolean;
   /** PRs the coming sync would glance (pendingGlanceKeys). */
   pendingGlances: () => Set<PrKey>;
+  /** The stored glances of these PRs, each with whether it is stale or being written. Reads only, never starts a glance. */
+  glances: (keys: PrKey[]) => Map<PrKey, CleanupGlance>;
   /** Waits between two per-thread mark-reads (CATCH_UP_PACE_MS in the app). */
   pause: () => Promise<void>;
   /** Ids of the threads GitHub's inbox lists unread right now (a plain read, nothing stored). */
@@ -125,7 +133,9 @@ export class InboxCleanup implements CatchUpGate {
     const keys = unread.flatMap((thread) => threadPrKey(thread) ?? []);
     const prs = store.prs.getMany(keys);
     const isMerged = (key: PrKey | null) => key !== null && prs.get(key)?.state === 'MERGED';
-    const events = store.events.listForPrs(keys.filter(isMerged));
+    const mergedKeys = keys.filter(isMerged);
+    const events = store.events.listForPrs(mergedKeys);
+    const glances = mergedKeys.length === 0 ? new Map<PrKey, CleanupGlance>() : this.deps.glances(mergedKeys);
     return unread.map((thread) => {
       const key = threadPrKey(thread);
       const merged = isMerged(key);
@@ -136,6 +146,7 @@ export class InboxCleanup implements CatchUpGate {
         merged,
         withoutReview: merged && key !== null && (events.get(key) ?? []).some(isUnseenMergeWithoutReview),
         glanced: key !== null && glanced.has(key),
+        glance: merged && key !== null ? (glances.get(key) ?? null) : null,
       };
     });
   }
@@ -201,35 +212,71 @@ export class InboxCleanup implements CatchUpGate {
     return ok('Starting as usual');
   }
 
+  /** Why a new cleanup cannot go now: one runs, or one already waits in the lock. Null when it can. */
+  private refusal(): string | null {
+    if (this.running) {
+      return 'A cleanup is already running';
+    }
+    if (!this.deps.writes.enabled() && this.deps.pendingWrites.hasCatchUp()) {
+      return CLEANUP_ALREADY_PENDING;
+    }
+    return null;
+  }
+
+  /** Never past the time the dialog (or the sidebar line) counted. */
+  private countedAt(requested: IsoTime): IsoTime {
+    const now = this.deps.now().toISOString();
+    return requested < now ? requested : now;
+  }
+
+  /** Locked, the plan waits as one pending write (`catchUp` is what Send plans again); otherwise its run starts in the background. */
+  private send(plan: CleanupPlan, catchUp: PendingCatchUp): ActionResult {
+    if (plan.clears === 0) {
+      return ok('Nothing to clear');
+    }
+    const batch = `cleanup:${this.deps.now().getTime()}`;
+    if (!this.deps.writes.enabled()) {
+      this.deps.pendingWrites.parkCatchUp(catchUp, this.pendingThreads(plan), batch);
+      return ok(`Pending: clears ${plan.clears} on GitHub once you unlock and send it from the lock`);
+    }
+    this.start(plan, 'cleanup', batch);
+    return ok(`Clearing ${plan.clears} on GitHub in the background`);
+  }
+
   /**
    * "Clear N": plans the calls over what is stored now, never past the time
    * the dialog counted. Locked, the picks wait as one pending write.
    * Otherwise the run starts in the background and this answers at once.
    */
   clear(request: CleanupRequest): ActionResult {
-    if (this.running) {
-      return failed('A cleanup is already running');
+    const refused = this.refusal();
+    if (refused !== null) {
+      return failed(refused);
     }
-    if (!this.deps.writes.enabled() && this.deps.pendingWrites.hasCatchUp()) {
-      return failed(CLEANUP_ALREADY_PENDING);
-    }
-    const now = this.deps.now().toISOString();
-    const at = request.countedAt < now ? request.countedAt : now;
+    const at = this.countedAt(request.countedAt);
     const threads = this.threads(new Set());
     const plan = planCleanup(threads, request, at);
     if (request.from === 'start') {
       this.answer(cleanupCounts(threads, at).mergedAll - plan.mergedClears);
     }
-    if (plan.clears === 0) {
-      return ok('Nothing to clear');
+    return this.send(plan, { merged: request.merged, older: request.older, countedAt: at });
+  }
+
+  /**
+   * The sidebar's "N of them look safe · Clear": only the merged PRs whose
+   * current glance says LOOKS_SAFE or NOT_YOURS, as an explicit thread list
+   * through the same plan, run and lock. Reads the glances that exist; never
+   * starts or queues one.
+   */
+  clearSafe(request: SafeCleanupRequest): ActionResult {
+    const refused = this.refusal();
+    if (refused !== null) {
+      return failed(refused);
     }
-    const batch = `cleanup:${this.deps.now().getTime()}`;
-    if (!this.deps.writes.enabled()) {
-      this.deps.pendingWrites.parkCatchUp({ merged: request.merged, older: request.older, countedAt: at }, this.pendingThreads(plan), batch);
-      return ok(`Pending: clears ${plan.clears} on GitHub once you unlock and send it from the lock`);
-    }
-    this.start(plan, 'cleanup', batch);
-    return ok(`Clearing ${plan.clears} on GitHub in the background`);
+    const at = this.countedAt(request.countedAt);
+    const threads = this.threads(new Set());
+    const ids = safeMergedIds(threads, at);
+    return this.send(planThreadCleanup(threads, ids, at), { merged: null, older: null, countedAt: at, threadIds: ids });
   }
 
   /** A parked cleanup sent from the lock: the same plan over what is stored now. Null when it started (or had nothing left), else why not. */
@@ -240,7 +287,7 @@ export class InboxCleanup implements CatchUpGate {
     if (this.running) {
       return 'another cleanup is running';
     }
-    const plan = planCleanup(this.threads(new Set()), write.catchUp, write.catchUp.countedAt);
+    const plan = planPendingCleanup(this.threads(new Set()), write.catchUp);
     if (plan.clears > 0) {
       this.start(plan, 'footer', write.batch);
     }

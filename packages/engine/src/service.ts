@@ -20,6 +20,7 @@ import type {
   GitHubWritesChange,
   GitHubWritesStatus,
   CleanupRequest,
+  SafeCleanupRequest,
   InboxCleanupView,
   PendingWritesResult,
   InstructionsChatReply,
@@ -258,6 +259,12 @@ export interface EngineService {
    * sync goes on once the run ended.
    */
   clearInbox(request: CleanupRequest): Promise<ActionResult>;
+  /**
+   * The sidebar's "N of them look safe · Clear": marks read only the unread
+   * merged PRs whose current glance says LOOKS_SAFE or NOT_YOURS, through
+   * the same run, writes door and lock as "Clear N". Never starts a glance.
+   */
+  clearSafeMerged(request: SafeCleanupRequest): Promise<ActionResult>;
   /** "Start as usual" (or Esc) on the start dialog: answers it and lets the held sync go on. */
   startAsUsual(): Promise<ActionResult>;
   /** Carries the active facts about the PR, verified at read time. */

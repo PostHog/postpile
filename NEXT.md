@@ -13,9 +13,10 @@ now".
   else, then one PATCH a second; one pending write while locked). On a
   first run or after 2+ days away with 20+ merged PRs the start sync holds
   after its fetch until the dialog is answered, so no agent work goes to
-  PRs that are over. Sidebar line "12 merged PRs · Clear" any day.
-  Follow-up: a second sidebar item for merged PRs whose glance after the
-  merge found nothing worth a look.
+  PRs that are over. Sidebar line "12 merged PRs · Clear" any day, with
+  "✨ 8 of them look safe · Clear" next to it: merged PRs whose current
+  glance says LOOKS_SAFE or NOT_YOURS, cleared right away through the same
+  run and lock, never starting a glance.
 - Lessons from your reviews (2026-10-02, DESIGN.md "Lessons from your
   reviews"): a change request on a PR the glance called safe (or low risk,
   or not yours) on the same commit is noted with structured evidence

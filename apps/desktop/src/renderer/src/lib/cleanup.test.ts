@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { CleanupOption, InboxCleanupView } from '@postpile/core';
-import { cleanupLine, dialogLead, mergedNote, savingCounts, timingText } from './cleanup.ts';
+import { cleanupLine, dialogLead, mergedNote, safeMergedText, savingCounts, timingText } from './cleanup.ts';
 
 const option: CleanupOption = { merged: 'all', older: null, clears: 46, bulkCalls: 1, threadCalls: 150, glancesSaved: 9 };
 
 const view: InboxCleanupView = {
   countedAt: '2026-09-28T12:00:00.000Z',
-  counts: { unread: 210, mergedQuiet7: 31, mergedQuiet14: 0, mergedAll: 46, mergedWithoutReview: 9, olderThan14: 18, olderThan30: 6 },
+  counts: { unread: 210, mergedQuiet7: 31, mergedQuiet14: 0, mergedAll: 46, mergedWithoutReview: 9, mergedSafe: 8, olderThan14: 18, olderThan30: 6 },
   glances: 40,
   options: [option],
   start: null,
@@ -21,6 +21,13 @@ describe('inbox cleanup words', () => {
     expect(cleanupLine(view)).toEqual({ kind: 'merged', text: '46 merged PRs' });
     expect(cleanupLine({ ...view, counts: { ...view.counts, mergedAll: 0 } })).toEqual({ kind: 'old', text: '18 old notifications' });
     expect(cleanupLine({ ...view, counts: { ...view.counts, mergedAll: 0, olderThan14: 0 } })).toBeNull();
+  });
+
+  it('adds the look-safe item only when the agent called some merged PRs fine and no run goes', () => {
+    expect(safeMergedText(view)).toBe('8 of them look safe');
+    expect(safeMergedText({ ...view, counts: { ...view.counts, mergedSafe: 1 } })).toBe('1 of them looks safe');
+    expect(safeMergedText({ ...view, counts: { ...view.counts, mergedSafe: 0 } })).toBeNull();
+    expect(safeMergedText({ ...view, running: { done: 2, total: 8, merged: true } })).toBeNull();
   });
 
   it('words the lead per case with the numbers apart', () => {

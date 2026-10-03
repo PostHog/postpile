@@ -4,9 +4,11 @@ import {
   cleanupOptions,
   cleanupPicksWords,
   planCleanup,
+  planPendingCleanup,
+  planThreadCleanup,
+  safeMergedIds,
   startCase,
   type ActionResult,
-  type CleanupPicks,
   type CleanupPlan,
   type CleanupProgress,
   type CleanupRequest,
@@ -14,7 +16,9 @@ import {
   type CleanupThread,
   type InboxCleanupView,
   type IsoTime,
+  type PendingCatchUp,
   type PrKey,
+  type SafeCleanupRequest,
 } from '@postpile/core';
 import type { FakeWrites } from './fake-writes.ts';
 
@@ -115,33 +119,61 @@ export class FakeCleanup {
     return ok('Starting as usual');
   }
 
-  clear(request: CleanupRequest, threads: CleanupThread[]): ActionResult {
+  /** Like the engine: one run at a time, and only one cleanup waits in the lock. */
+  private refusal(): ActionResult | null {
     if (this.running) {
       return { ok: false, message: 'A cleanup is already running', undoToken: null };
     }
     if (!this.deps.writes.isEnabled() && this.deps.writes.hasCatchUp()) {
       return { ok: false, message: CLEANUP_ALREADY_PENDING, undoToken: null };
     }
+    return null;
+  }
+
+  private countedAt(requested: IsoTime): IsoTime {
     const now = this.deps.now().toISOString();
-    const at = request.countedAt < now ? request.countedAt : now;
-    if (request.from === 'start') {
-      this.answered = true;
-    }
-    const plan = planCleanup(threads, request, at);
+    return requested < now ? requested : now;
+  }
+
+  /** Locked, one pending write; else the run starts. */
+  private send(plan: CleanupPlan, catchUp: PendingCatchUp): ActionResult {
     if (plan.clears === 0) {
       return ok('Nothing to clear');
     }
     if (!this.deps.writes.isEnabled()) {
-      this.deps.writes.parkCatchUp({ merged: request.merged, older: request.older, countedAt: at }, plan.selectedIds, `Inbox cleanup: ${cleanupPicksWords(request)}`);
+      this.deps.writes.parkCatchUp(catchUp, plan.selectedIds, `Inbox cleanup: ${cleanupPicksWords(catchUp)}`);
       return ok(`Pending: clears ${plan.clears} on GitHub once you unlock and send it from the lock`);
     }
     void this.run(plan, 'cleanup');
     return ok(`Clearing ${plan.clears} on GitHub in the background`);
   }
 
+  clear(request: CleanupRequest, threads: CleanupThread[]): ActionResult {
+    const refused = this.refusal();
+    if (refused !== null) {
+      return refused;
+    }
+    const at = this.countedAt(request.countedAt);
+    if (request.from === 'start') {
+      this.answered = true;
+    }
+    return this.send(planCleanup(threads, request, at), { merged: request.merged, older: request.older, countedAt: at });
+  }
+
+  /** The sidebar's "look safe" item: the explicit list of merged samples whose glance says LOOKS_SAFE or NOT_YOURS. */
+  clearSafe(request: SafeCleanupRequest, threads: CleanupThread[]): ActionResult {
+    const refused = this.refusal();
+    if (refused !== null) {
+      return refused;
+    }
+    const at = this.countedAt(request.countedAt);
+    const ids = safeMergedIds(threads, at);
+    return this.send(planThreadCleanup(threads, ids, at), { merged: null, older: null, countedAt: at, threadIds: ids });
+  }
+
   /** A parked cleanup sent from the lock. */
-  startFromPending(picks: CleanupPicks & { countedAt: IsoTime }, threads: CleanupThread[]): void {
-    const plan = planCleanup(threads, picks, picks.countedAt);
+  startFromPending(pending: PendingCatchUp, threads: CleanupThread[]): void {
+    const plan = planPendingCleanup(threads, pending);
     if (!this.running && plan.clears > 0) {
       void this.run(plan, 'footer');
     }

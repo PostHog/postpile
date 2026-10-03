@@ -1,4 +1,4 @@
-import { effectiveLoudness, type NotificationThread, type PrEvent } from '@postpile/core';
+import { effectiveLoudness, type NotificationThread, type PrEvent, type Verdict } from '@postpile/core';
 import { sampleQuietReadTimes } from './fake-quiet.ts';
 import { SAMPLE_REPO } from './sample-builders.ts';
 import type { SampleData } from './sample-data.ts';
@@ -37,6 +37,33 @@ const MERGED_TITLES = [
 /** A merged sample PR known only from its unread thread (FakeEngine counts it as merged). */
 export function isSampleMergedThread(threadId: string): boolean {
   return threadId.startsWith(MERGED_THREAD_PREFIX);
+}
+
+/**
+ * Glances after the merge on some thread-only merged samples (by thread
+ * number), so the sidebar's "8 of them look safe" item shows: seven
+ * LOOKS_SAFE and one NOT_YOURS. Two LOOK_CLOSER and the rest without a
+ * glance stay unread.
+ */
+const MERGED_VERDICTS = new Map<number, Verdict>([
+  [2, 'LOOKS_SAFE'],
+  [3, 'LOOKS_SAFE'],
+  [4, 'LOOK_CLOSER'],
+  [5, 'LOOKS_SAFE'],
+  [8, 'LOOKS_SAFE'],
+  [9, 'LOOKS_SAFE'],
+  [11, 'LOOK_CLOSER'],
+  [13, 'LOOKS_SAFE'],
+  [16, 'NOT_YOURS'],
+  [20, 'LOOKS_SAFE'],
+]);
+
+/** The current glance verdict of a thread-only merged sample, null without one. */
+export function sampleMergedVerdict(threadId: string): Verdict | null {
+  if (!isSampleMergedThread(threadId)) {
+    return null;
+  }
+  return MERGED_VERDICTS.get(Number(threadId.slice(MERGED_THREAD_PREFIX.length))) ?? null;
 }
 
 /** 24 unread threads on merged PRs, last activity 1 to 20 days ago, in two repos. */

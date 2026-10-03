@@ -6,7 +6,11 @@ import {
   cleanupOption,
   cleanupOptions,
   planCleanup,
+  planPendingCleanup,
+  planThreadCleanup,
+  safeMergedIds,
   startCase,
+  type CleanupGlance,
   type CleanupThread,
   type StartCaseInput,
 } from './inbox-cleanup.ts';
@@ -18,7 +22,7 @@ function daysAgo(days: number): string {
 }
 
 function thread(id: string, days: number, overrides: Partial<CleanupThread> = {}): CleanupThread {
-  return { id, repo: 'acme/app', updatedAt: daysAgo(days), merged: false, withoutReview: false, glanced: false, ...overrides };
+  return { id, repo: 'acme/app', updatedAt: daysAgo(days), merged: false, withoutReview: false, glanced: false, glance: null, ...overrides };
 }
 
 function merged(id: string, days: number, overrides: Partial<CleanupThread> = {}): CleanupThread {
@@ -41,6 +45,7 @@ describe('inbox cleanup counts', () => {
       mergedQuiet14: 1,
       mergedAll: 3,
       mergedWithoutReview: 1,
+      mergedSafe: 0,
       olderThan14: 2,
       olderThan30: 1,
     });
@@ -84,6 +89,41 @@ describe('inbox cleanup write plan', () => {
     const options = cleanupOptions(threads, NOW);
     expect(cleanupOption(options, { merged: null, older: 14 })).toMatchObject({ clears: 2, bulkCalls: 1, threadCalls: 0 });
     expect(cleanupOption(options, { merged: 'quiet7', older: null })).toMatchObject({ clears: 1, bulkCalls: 0, threadCalls: 1 });
+  });
+});
+
+describe('merged PRs that look safe', () => {
+  const current = (verdict: CleanupGlance['verdict']): CleanupGlance => ({ verdict, stale: false, writing: false });
+
+  it('takes only merged PRs whose current glance says LOOKS_SAFE or NOT_YOURS, and plans just those threads', () => {
+    const threads = [
+      merged('safe', 2, { glance: current('LOOKS_SAFE'), withoutReview: true }),
+      merged('not-yours', 3, { glance: current('NOT_YOURS') }),
+      merged('closer', 2, { glance: current('LOOK_CLOSER'), withoutReview: true }),
+      merged('stale', 2, { glance: { verdict: 'LOOKS_SAFE', stale: true, writing: false } }),
+      merged('writing', 2, { glance: { verdict: 'LOOKS_SAFE', stale: false, writing: true } }),
+      merged('no-glance', 2, { withoutReview: true }),
+      thread('open', 2, { glance: current('LOOKS_SAFE') }),
+      merged('web-safe', 4, { repo: 'acme/web', glance: current('LOOKS_SAFE') }),
+    ];
+
+    expect(cleanupCounts(threads, NOW).mergedSafe).toBe(3);
+    const ids = safeMergedIds(threads, NOW);
+    expect(ids).toEqual(['safe', 'not-yours', 'web-safe']);
+    // acme/web holds nothing else: one repo PUT covers exactly the selection there; acme/app keeps the others unread, so PATCHes.
+    expect(planThreadCleanup(threads, ids, NOW)).toMatchObject({
+      readBefore: null,
+      repos: [{ repo: 'acme/web', ids: ['web-safe'] }],
+      threadIds: ['not-yours', 'safe'],
+      clears: 3,
+    });
+  });
+
+  it('plans a parked thread list again over what is unread then, nothing with later activity', () => {
+    const later = new Date(new Date(NOW).getTime() + 60_000).toISOString();
+    const threads = [merged('a1', 3), { ...merged('a2', 0), updatedAt: later }, thread('a3', 1)];
+    const plan = planPendingCleanup(threads, { merged: null, older: null, countedAt: NOW, threadIds: ['a1', 'a2', 'gone'] });
+    expect(plan).toMatchObject({ selectedIds: ['a1'], threadIds: ['a1'], repos: [] });
   });
 });
 
