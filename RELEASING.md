@@ -1,6 +1,6 @@
 # Releasing
 
-How a PostPile release goes out: a `v*` tag builds the app on GitHub Actions, attaches the zip to a GitHub release, and renders the Homebrew cask into [PostHog/homebrew-tap](https://github.com/PostHog/homebrew-tap).
+How a PostPile release goes out: a `v*` tag builds the app on GitHub Actions, attaches the zip to a GitHub release, and renders the Homebrew cask into [PostHog/homebrew-tap](https://github.com/PostHog/homebrew-tap). Installed apps then update themselves from that release (see [Self-update](#self-update)).
 
 ## Repo setup
 
@@ -46,11 +46,11 @@ Done once, on 2026-09-28, when the repo went public. Kept here so a new repo or 
    If the Release workflow does not start (a tag ruleset bypass does not fire the push trigger), run it by hand: Actions › Release › Run workflow, with the tag. Pick the tag under "Use workflow from" as well: the `desktop-signing` and `homebrew-tap` environments only admit `v*` refs, and GitHub rejects a run from `main` there.
 
 6. **What the workflow does** (`.github/workflows/release.yml`):
-   - `build` on `macos-14` (arm64), in the `desktop-signing` environment: checks the tag equals `v` + `apps/desktop/package.json` version, installs with the frozen lockfile, typechecks, tests, builds the bundle, injects chunk ids and uploads the source maps to PostHog (when `POSTHOG_CLI_API_KEY` is there, see below), packages the app (Developer ID signed and notarized when the Apple secrets are there, else ad-hoc, see below), verifies the signature (`codesign --verify --deep --strict`), the bundle id (`com.posthog.postpile`) and the version in `Info.plist`, then creates the GitHub release with `PostPile-<version>-mac-arm64.zip` and `PostPile-<version>-mac-arm64.zip.sha256`. Versions with a `-` become pre-releases.
+   - `build` on `macos-14` (arm64), in the `desktop-signing` environment: checks the tag equals `v` + `apps/desktop/package.json` version, installs with the frozen lockfile, typechecks, tests, builds the bundle, injects chunk ids and uploads the source maps to PostHog (when `POSTHOG_CLI_API_KEY` is there, see below), packages the app (Developer ID signed and notarized when the Apple secrets are there, else ad-hoc, see below), verifies the signature (`codesign --verify --deep --strict`), the bundle id (`com.posthog.postpile`), the version in `Info.plist` and `app-update.yml` in the bundle, checks `latest-mac.yml` against the zip (signed builds), then creates the GitHub release with `PostPile-<version>-mac-arm64.zip` and `PostPile-<version>-mac-arm64.zip.sha256`, plus `latest-mac.yml` and `PostPile-<version>-mac-arm64.zip.blockmap` for a signed build. The release is a draft until every file is up. Versions with a `-` become pre-releases.
    - `publish-homebrew` on ubuntu, in the `homebrew-tap` environment: renders `homebrew/postpile.rb.tmpl` with the version, the sha256 and the right caveats (signed or ad-hoc), mints a tap token from the GitHub App, and commits `Casks/postpile.rb` to PostHog/homebrew-tap `main`.
 
 7. **Verify:**
-   - The GitHub release has the zip and the `.sha256`, with the changelog notes. It is marked pre-release only for a version with a `-` (like the old `0.1.0-alpha.0`).
+   - The GitHub release has the zip and the `.sha256` (and for a signed build `latest-mac.yml` and the `.blockmap`), with the changelog notes. It is marked pre-release only for a version with a `-` (like the old `0.1.0-alpha.0`).
    - `shasum -a 256 -c PostPile-<version>-mac-arm64.zip.sha256` passes on the downloaded zip.
    - PostHog/homebrew-tap has a commit "chore: update postpile cask to <version>" with the right version and sha256.
    - The build log says which way the app was signed: a "building an ad-hoc signed, not notarized release" warning, or a green "Verify signing and notarization" step.
@@ -91,6 +91,16 @@ How to get access: PostHog already has these for its desktop app, as `APPLE_*` o
 - Share the five org secrets above with this repo. Simple, but org secrets shared this way are readable by any workflow in the repo, not gated by the environment and its tag rule.
 - Or copy the values into the `desktop-signing` environment of PostHog/postpile (`gh secret set <name> -R PostHog/postpile --env desktop-signing`). Only `v*` tag runs can read them then; the copies have to be updated by hand when the certificate or password rotates.
 
+## Self-update
+
+How installed apps get a release (DESIGN.md "Self-update"): electron-updater in the app reads `latest-mac.yml` from the newest published release on github.com, downloads the zip it names, checks the zip's sha512 against the file, and Squirrel.Mac installs it when the user clicks "Restart to update" or quits.
+
+- `electron-builder.yml` has `publish: github` (PostHog/postpile). electron-builder writes `Contents/Resources/app-update.yml` (where to look) and, next to the zip, `latest-mac.yml` and the `.blockmap`. `--publish never` keeps it from uploading anything; the workflow attaches the files.
+- Only signed builds attach `latest-mac.yml`: Squirrel.Mac checks that the new app has the same Developer ID as the running one, so an ad-hoc release could never install. Without the file, installed apps show the brew command.
+- Don't edit a release's zip by hand after it is out: `latest-mac.yml` holds its sha512, and a changed zip fails every download.
+- To pull a bad release back from auto-update, mark it a draft or delete `latest-mac.yml` from it; apps then look at the release before it (or show the brew command), and never go back to an older version on their own.
+- To check a release by hand: on a Mac with the previous version installed from brew, PostPile › Check for Updates… says "Downloading PostPile <version>", and a minute later the pill says "Update ready". Restart, then About PostPile shows the new version. The log (`~/Library/Logs/PostPile/main.log`) has electron-updater's lines.
+
 ## Error tracking source maps
 
 Why: the app ships bundled JavaScript, so without source maps an error stack in PostHog Error Tracking points at `main/chunks/engine-from-env-<hash>.js:35040` instead of the TypeScript source. The upload also creates the PostHog release for the version, so issues can be marked resolved in a release (DESIGN.md "Usage analytics" › Errors).
@@ -120,3 +130,4 @@ One-time setup (the repo owner):
 - Releases are Developer ID signed and notarized since 0.2.0 (the first one, 2026-09-29). Without the Apple secrets the workflow falls back to ad-hoc: Gatekeeper then blocks the first open until the quarantine flag is cleared or the user clicks Open Anyway, and macOS forgets privacy grants on every update. See [Signing and notarization](#signing-and-notarization).
 - The bundle id changed from `com.postpile.app` to `com.posthog.postpile` in 0.1.0-alpha.0. macOS asks for notification permission again on the first launch of the new id. Data in `~/Library/Application Support/PostPile` is unaffected.
 - Local builds never publish: the desktop `dist` script passes `--publish never` to electron-builder.
+- Self-update starts with 0.16.0. Older builds can't update themselves; their users update once with `brew upgrade --cask postpile`.

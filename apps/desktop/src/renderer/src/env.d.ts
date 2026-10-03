@@ -14,5 +14,11 @@ interface Window {
     tileVisited?: (prKeys: string[]) => void;
     /** A click on a Mac notification: open this tile. Returns the unsubscribe. */
     onOpenPing?: (callback: (target: import('@postpile/core').PingTarget) => void) => () => void;
+    /** Where the app's own update download is (off in a dev run). */
+    installState?: () => Promise<import('@postpile/core').InstallState>;
+    /** Every change of the install state; returns the unsubscribe. */
+    onInstallState?: (callback: (state: import('@postpile/core').InstallState) => void) => () => void;
+    /** "Restart to update": main shuts down like Cmd+Q, then installs the staged update. */
+    restartToUpdate?: () => void;
   };
 }

@@ -5468,7 +5468,8 @@ topic names are never event props.
    now" on a topic with nothing left), `update_pill_clicked`
    (the title bar pill opened) / `update_later_clicked`, `update_bar_shown`
    (releases_behind capped at 10, hours_behind rounded; once per app run) /
-   `update_bar_later_clicked`,
+   `update_bar_later_clicked`, `update_restart_clicked` ("Restart to update"
+   in the pill's popover or the bar),
    `glance_retry_clicked` (Retry on a failed glance).
 4. *Agent trust*: `wrong_topic_marked` (`from` `suggestion` / `search` when a topic was picked in "Move to topic…"), `not_related_marked`,
    `recheck_requested`, `recheck_proposed` (outcome: the agent's answer),
@@ -6209,7 +6210,8 @@ core  <- store, github, agent  <- engine  <- server, cli
   appId `com.posthog.postpile`, ad-hoc signed locally (`identity: "-"`, no hardened runtime,
   no notarization; a broken signature makes macOS drop notifications; the release workflow
   overrides these to sign with a Developer ID, hardened runtime and notarization), icon
-  `build/icon.icns`, output `apps/desktop/dist/`. About 290 MB unpacked, 130 MB zipped
+  `build/icon.icns`, output `apps/desktop/dist/`, plus `latest-mac.yml` and the zip's
+  `.blockmap` for self-update ("Self-update"). About 290 MB unpacked, 130 MB zipped
   (Electron itself is most of it).
 - **apps/cli**: `sync`, `consolidate`, `topics`, `topic <id>` (with the dossier), `pr <owner/repo#n>`
   (with facts), plain text.
@@ -6447,3 +6449,56 @@ The reminder has two sizes, picked by core (`updateUrgency` in
 Why: the owner releases about twice a day, and "Later" used to hide a version
 for good, so the reminder went quiet while the user kept falling behind.
 While the user is behind, it never goes quiet for good.
+
+## Self-update (2026-10-03)
+
+The packaged app downloads new releases itself and installs them on a
+restart. The reminder above still decides when to show and how loud; the
+install state only changes what it offers.
+
+- **How**: electron-updater in the main process
+  (`apps/desktop/src/main/self-update.ts`), GitHub provider. It reads
+  `latest-mac.yml` from the newest published release, downloads the zip it
+  names (checked against its sha512) and hands it to Squirrel.Mac, which
+  checks the signature against the running app and stages it. Checks run on
+  the release check's clock (~30s after start, then every 6 hours), so both
+  find a release at about the same time.
+- **States** (core's `InstallState`): off, idle, checking, downloading,
+  ready, failed. "Ready" is Squirrel's own `update-downloaded`, not
+  electron-updater's earlier one, so a restart never waits on staging. Once
+  ready it stops checking; a newer release comes with the next check after
+  the restart.
+- **What the reminder offers** (core's `updateAction`): ready means
+  "Update ready · 0.6.0" on the pill and a primary "Restart to update"
+  (ink: an app action, not an approval) with "Or it installs the next time
+  PostPile quits". Checking or downloading means "Downloading the update…".
+  Everything else (no installer, failed, or the installer found nothing
+  while the release check did) means the brew command, as before.
+- **Restart**: the same flush-and-close as Cmd+Q (pending mark-reads are
+  sent, the database closed), then electron-updater's `quitAndInstall`.
+  When the app has not quit 60 seconds later (Squirrel failed), the current
+  version starts again, since the engine is already closed.
+- **Later**: unchanged (the reminder's snooze). A staged update installs on
+  any quit (`autoInstallOnAppQuit`), so Later never loses it.
+- **Check for Updates…** in the app menu runs both checks now and answers in
+  a dialog; a staged update gets "Restart Now".
+- **Off**: in a dev run (no bundle to replace), with `POSTPILE_AUTO_UPDATE=0`
+  (the reminder then offers the brew command) and with
+  `POSTPILE_UPDATE_CHECK=0` (no reminder at all). Sample data shows a staged
+  update; `POSTPILE_FAKE_INSTALL=downloading`, `failed` or `off` shows the
+  others, and its restart only relaunches.
+- **Releases**: only a Developer ID signed release carries `latest-mac.yml`
+  and the zip's `.blockmap`; Squirrel.Mac would refuse an ad-hoc one. The
+  release stays a draft until every file is up, so installed apps never see
+  a release without them.
+- **Homebrew**: the cask says `auto_updates true`. brew then leaves an app
+  that is already newer than the cask alone, and `brew upgrade --cask
+  postpile` still works. brew's recorded version lags behind after a self
+  update; nothing reads it. The `postpile-mcp` link points into the app
+  bundle, which Squirrel replaces in place, so it keeps working.
+
+Why: the owner releases about twice a day, and the brew command plus a quit
+and reopen was a chore every time. Rejected: update.electronjs.org (one more
+service; electron-builder already writes what electron-updater needs) and an
+S3 feed like PostHog's desktop app (the repo is public, so GitHub releases
+serve the files).

@@ -122,6 +122,8 @@ export const TELEMETRY_EVENTS = {
   // releases_behind is capped at 10 (the update check only sees the last 10); hours_behind is rounded.
   update_bar_shown: z.object({ releases_behind: count.max(10), hours_behind: count }).strict(),
   update_bar_later_clicked: NO_PROPS,
+  // "Restart to update" in the pill's popover or the bar: the staged update is installed now.
+  update_restart_clicked: NO_PROPS,
   glance_retry_clicked: NO_PROPS,
 
   // 4. Agent trust
@@ -209,6 +211,7 @@ export const RENDERER_TELEMETRY_EVENTS = [
   'update_later_clicked',
   'update_bar_shown',
   'update_bar_later_clicked',
+  'update_restart_clicked',
   'glance_retry_clicked',
 ] as const satisfies readonly TelemetryEventName[];
 

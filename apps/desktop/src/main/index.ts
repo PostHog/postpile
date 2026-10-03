@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, session, shell } from 'electron';
+import { app, autoUpdater as nativeAutoUpdater, BrowserWindow, dialog, ipcMain, Menu, nativeImage, session, shell } from 'electron';
+import electronUpdater from 'electron-updater';
 import { existsSync } from 'node:fs';
 import { arch, homedir, release } from 'node:os';
 import {
@@ -16,7 +17,7 @@ import {
   type Telemetry,
 } from '@postpile/engine';
 import type { MacNotification, McpLauncher } from '@postpile/core';
-import { appConfigFromEnv, engineFromEnv, isFake, pollSecondsFromEnv, startServer, updateSourceFromEnv, type RunningServer } from '@postpile/server';
+import { appConfigFromEnv, engineFromEnv, isFake, pollSecondsFromEnv, startServer, updateSourceFromEnv, type RunningServer, type UpdateSource } from '@postpile/server';
 import { externalLinkProblem, isAppPage } from './app-page.ts';
 import { ConsolidationSchedule } from './consolidation-schedule.ts';
 import { FileLog, logDirFromEnv } from './file-log.ts';
@@ -24,6 +25,7 @@ import { ActiveDayReporter } from './active-day.ts';
 import { BoardWatcher } from './board-watcher.ts';
 import { MacNotifier } from './mac-notifier.ts';
 import { OpenedPrs } from './opened-prs.ts';
+import { fakeInstallStatus, FakeSelfUpdate, menuCheckAnswer, SelfUpdateOff, selfUpdateMode, SelfUpdater, type SelfUpdate } from './self-update.ts';
 import { welcomeOnce, WELCOME_FLAG_FILE } from './welcome.ts';
 
 const REPO_URL = 'https://github.com/PostHog/postpile';
@@ -124,6 +126,10 @@ let server: RunningServer | null = null;
 let mainWindow: BrowserWindow | null = null;
 let boardWatcher: BoardWatcher | null = null;
 let consolidationSchedule: ConsolidationSchedule | null = null;
+// The release check behind the title bar reminder (also asked by "Check for Updates…").
+let updates: UpdateSource | null = null;
+// Downloads and installs releases; replaced in start() unless self-update is off.
+let selfUpdate: SelfUpdate = new SelfUpdateOff();
 // Set by Cmd+Q (before-quit). Until then, closing the window only hides it on macOS.
 let quitting = false;
 // PRs opened on github.com from the app; refreshed when the window gets focus back.
@@ -178,15 +184,111 @@ function refreshOnFocus(): void {
   engine?.refreshOnFocus(openedPrs.active(Date.now())).catch((error: unknown) => console.error('refresh on focus failed:', error));
 }
 
+async function shutdown(): Promise<void> {
+  try {
+    engine?.stopAgentRequests();
+    engine?.stopLivePoll();
+    engine?.stopAutoSync();
+    engine?.stopWorkContextSchedule();
+    consolidationSchedule?.stop();
+    selfUpdate.stop();
+    // Queued mark-reads are sent, not dropped: the user meant to clear them.
+    await engine?.flushPendingWrites();
+    await engine?.close();
+  } catch (error) {
+    console.error('shutdown:', error);
+  }
+  await server?.close();
+}
+
+/** The self-updater for this run (DESIGN.md "Self-update"): the real one only in the packaged app. */
+function createSelfUpdate(): SelfUpdate {
+  const mode = selfUpdateMode({ env: process.env, packaged: app.isPackaged, fake: isFake() });
+  console.log(`self-update: ${mode}`);
+  if (mode === 'real') {
+    return new SelfUpdater(electronUpdater.autoUpdater, nativeAutoUpdater);
+  }
+  if (mode === 'fake') {
+    return new FakeSelfUpdate(fakeInstallStatus(process.env.POSTPILE_FAKE_INSTALL), () => {
+      app.relaunch();
+      app.exit(0);
+    });
+  }
+  return new SelfUpdateOff();
+}
+
+// If the install has not quit the app by then (Squirrel.Mac failed), the old
+// version starts again: the engine is already closed, so staying open is no use.
+const INSTALL_FALLBACK_MS = 60_000;
+
 /**
- * The standard macOS menus (the app menu holds About PostPile), plus Help ›
- * Reveal Logs, which shows main.log in Finder, and links to the repo and its
- * issues. Kept close to Electron's default menu so the usual shortcuts (copy,
- * paste, reload, zoom) keep working.
+ * "Restart to update": the same flush-and-close as Cmd+Q, then Squirrel.Mac
+ * swaps the app bundle and starts the new version. `quitting` first, so the
+ * windows may close and before-quit does not shut down a second time.
+ */
+async function restartToUpdate(): Promise<void> {
+  if (quitting || selfUpdate.current().status !== 'ready') {
+    return;
+  }
+  quitting = true;
+  console.log(`restarting to install PostPile ${selfUpdate.current().version ?? '(sample)'}`);
+  await shutdown();
+  setTimeout(() => {
+    console.error('the update did not install, starting the current version again');
+    app.relaunch();
+    app.exit(0);
+  }, INSTALL_FALLBACK_MS).unref();
+  selfUpdate.install();
+}
+
+/** Tells the window the install state changed; the renderer also re-reads the release check then. */
+function sendInstallState(): void {
+  mainWindow?.webContents.send('postpile:install-state', selfUpdate.current());
+}
+
+/** PostPile › Check for Updates…: both checks now, then a dialog with what they found. */
+async function checkForUpdatesFromMenu(): Promise<void> {
+  if (!updates) {
+    return;
+  }
+  const [view, install] = await Promise.all([updates.check(), selfUpdate.check()]);
+  sendInstallState();
+  const answer = menuCheckAnswer(view, install);
+  const options = { type: 'info' as const, message: answer.message, detail: answer.detail };
+  if (!answer.restart) {
+    await dialog.showMessageBox(options);
+    return;
+  }
+  const { response } = await dialog.showMessageBox({ ...options, buttons: ['Restart Now', 'Later'], defaultId: 0, cancelId: 1 });
+  if (response === 0) {
+    await restartToUpdate();
+  }
+}
+
+/**
+ * The standard macOS menus (the app menu holds About PostPile and Check for
+ * Updates…), plus Help › Reveal Logs, which shows main.log in Finder, and
+ * links to the repo and its issues. Kept close to Electron's default menu so
+ * the usual shortcuts (copy, paste, reload, zoom) keep working.
  */
 function setAppMenu(): void {
   const menu = Menu.buildFromTemplate([
-    { role: 'appMenu' },
+    // Electron's own app menu, with Check for Updates… under About.
+    {
+      label: app.name,
+      submenu: [
+        { role: 'about' },
+        { label: 'Check for Updates…', click: () => void checkForUpdatesFromMenu() },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' },
+      ],
+    },
     { role: 'fileMenu' },
     { role: 'editMenu' },
     { role: 'viewMenu' },
@@ -366,11 +468,19 @@ async function start(): Promise<void> {
   }
   const config = appConfigFromEnv();
   // The title bar's update reminder asks GitHub for releases ~30s after start, then every 6 hours.
-  server = await startServer({ engine, port: 0, token, config, updates: updateSourceFromEnv(app.getVersion()), telemetry, onWrite: () => void boardWatcher?.refresh() });
+  updates = updateSourceFromEnv(app.getVersion());
+  server = await startServer({ engine, port: 0, token, config, updates, telemetry, onWrite: () => void boardWatcher?.refresh() });
   console.log(
     `server on ${server.url}, database ${config.databasePath ?? 'none (sample data)'}, sync call cap ${config.syncCallCap}, auto sync ${config.autoSyncMinutes > 0 ? `every ${config.autoSyncMinutes} min` : 'off'}`,
   );
   serveConnection(server.url, token);
+  // The self-updater checks on the release check's clock; the reminder asks
+  // for its state, hears every change and asks for the restart.
+  selfUpdate = createSelfUpdate();
+  selfUpdate.onChange(sendInstallState);
+  ipcMain.handle('postpile:install-state', () => selfUpdate.current());
+  ipcMain.on('postpile:restart-to-update', () => void restartToUpdate());
+  selfUpdate.start();
   // Before welcomeOnce below writes its flag file: whether this run is the very first one.
   const firstLaunch = !existsSync(join(app.getPath('userData'), WELCOME_FLAG_FILE));
   telemetry.capture('app_launched', { first_launch: firstLaunch });
@@ -453,22 +563,6 @@ async function start(): Promise<void> {
   const service = engine;
   consolidationSchedule = new ConsolidationSchedule((options) => service.consolidate(options), config.syncCallCap);
   consolidationSchedule.start();
-}
-
-async function shutdown(): Promise<void> {
-  try {
-    engine?.stopAgentRequests();
-    engine?.stopLivePoll();
-    engine?.stopAutoSync();
-    engine?.stopWorkContextSchedule();
-    consolidationSchedule?.stop();
-    // Queued mark-reads are sent, not dropped: the user meant to clear them.
-    await engine?.flushPendingWrites();
-    await engine?.close();
-  } catch (error) {
-    console.error('shutdown:', error);
-  }
-  await server?.close();
 }
 
 app.on('before-quit', (event) => {

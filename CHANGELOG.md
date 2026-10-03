@@ -2,6 +2,12 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## 0.16.0 (unreleased)
+
+### Added
+
+- PostPile updates itself. A new release downloads in the background, and the title bar says "Update ready" with a "Restart to update" button. Without a restart it installs the next time you quit. PostPile › Check for Updates… checks right away. `brew upgrade --cask postpile` still works, and stays the fallback when the download fails. Turn the download off with `POSTPILE_AUTO_UPDATE=0`. Builds before this one can't update themselves: update to it once with brew.
+
 ## 0.15.2 (2026-10-02)
 
 ### Changed

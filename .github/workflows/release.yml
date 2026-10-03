@@ -1,7 +1,8 @@
 # Release workflow
 #
 # Triggers:
-#   - Push of a v* tag (e.g. v0.1.0-alpha.0)  -> GitHub release with the zip + sha256, then the Homebrew cask
+#   - Push of a v* tag (e.g. v0.1.0-alpha.0)  -> GitHub release with the zip + sha256 (+ the self-update
+#     files latest-mac.yml and the zip's .blockmap for a signed build), then the Homebrew cask
 #   - Manual dispatch with an existing v* tag -> the same, from that tag
 #
 # The manual arm is a fallback: an org tag ruleset can let an admin push a tag
@@ -17,6 +18,12 @@
 # With them the app is signed, uses the hardened runtime and is notarized, like
 # PostHog/posthog's desktop-release.yml. Without the certificate the release
 # still goes out ad-hoc signed, with a warning. See RELEASING.md.
+#
+# Self-update (DESIGN.md "Self-update"): the app's electron-updater reads
+# latest-mac.yml from the newest GitHub release and downloads the zip it names.
+# Only a Developer ID signed build gets it: Squirrel.Mac refuses an update
+# whose signature does not match the running app, so an ad-hoc release leaves
+# it out and installed apps fall back to the brew command.
 #
 # Between the bundle build and packaging, posthog-cli injects chunk ids into
 # the bundle and uploads its source maps to PostHog Error Tracking, so error
@@ -226,6 +233,9 @@ jobs:
                   test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Contents/Info.plist")" = com.posthog.postpile
                   test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")" = "$VERSION"
                   test -f "apps/desktop/dist/PostPile-${VERSION}-mac-arm64.zip"
+                  # Where the app looks for updates, from electron-builder.yml's publish block.
+                  grep -q '^provider: github' "$APP/Contents/Resources/app-update.yml"
+                  grep -q '^repo: postpile' "$APP/Contents/Resources/app-update.yml"
 
             # What users get is the zip, so check the app inside it, not only the
             # one in dist/: Developer ID signature with the hardened runtime,
@@ -250,6 +260,23 @@ jobs:
                       xcrun stapler validate "$APP"
                   done
 
+            # latest-mac.yml must name this version and this zip, with the zip's
+            # sha512: electron-updater refuses a download that does not match it.
+            - name: Verify the self-update files
+              if: steps.signing.outputs.signed == 'true'
+              env:
+                  VERSION: ${{ steps.version.outputs.version }}
+              run: |
+                  set -euo pipefail
+                  cd apps/desktop/dist
+                  ZIP="PostPile-${VERSION}-mac-arm64.zip"
+                  cat latest-mac.yml
+                  test -f "${ZIP}.blockmap"
+                  grep -qx "version: ${VERSION}" latest-mac.yml
+                  grep -qx "path: ${ZIP}" latest-mac.yml
+                  SHA512="$(openssl dgst -sha512 -binary "$ZIP" | base64 | tr -d '\n')"
+                  grep -qx "sha512: ${SHA512}" latest-mac.yml
+
             - name: Checksum
               id: checksum
               env:
@@ -267,6 +294,7 @@ jobs:
               env:
                   GH_TOKEN: ${{ github.token }}
                   VERSION: ${{ steps.version.outputs.version }}
+                  SIGNED: ${{ steps.signing.outputs.signed }}
                   GIT_SHA: ${{ github.sha }}
               run: |
                   set -euo pipefail
@@ -284,11 +312,20 @@ jobs:
                       *) PRERELEASE=false ;;
                   esac
                   ZIP="apps/desktop/dist/PostPile-${VERSION}-mac-arm64.zip"
-                  gh release create "$TAG" "$ZIP" "${ZIP}.sha256" \
+                  ASSETS=("$ZIP" "${ZIP}.sha256")
+                  if [ "$SIGNED" = true ]; then
+                      ASSETS+=("apps/desktop/dist/latest-mac.yml" "${ZIP}.blockmap")
+                  fi
+                  # A draft until every file is up: installed apps look at the newest
+                  # published release, and one without latest-mac.yml or the zip
+                  # yet would fail their update check.
+                  gh release create "$TAG" "${ASSETS[@]}" \
                       --verify-tag \
+                      --draft \
                       --title "PostPile ${VERSION}" \
                       --notes-file /tmp/release-notes.md \
                       --prerelease="$PRERELEASE"
+                  gh release edit "$TAG" --draft=false
 
     publish-homebrew:
         needs: build

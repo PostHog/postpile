@@ -18,6 +18,9 @@ cask "postpile" do
   desc "Turns GitHub PR notifications into agent-maintained topics"
   homepage "https://github.com/PostHog/postpile"
 
+  # The app downloads and installs new releases itself (DESIGN.md "Self-update"),
+  # so brew leaves an app that is already newer than this cask alone.
+  auto_updates true
   depends_on arch: :arm64
   depends_on macos: :monterey
 
@@ -42,6 +45,7 @@ cask "postpile" do
 
     or try to open it once, then allow it in System Settings > Privacy &
     Security > Open Anyway (on older macOS: right-click the app > Open).
+    This build can't update itself: update with brew upgrade --cask postpile.
 
     ADHOC_CAVEAT_END
     PostPile needs the GitHub CLI and the Claude Code CLI, both installed
@@ -54,6 +58,7 @@ cask "postpile" do
 
       claude mcp add postpile -- postpile-mcp
 
-    Update later with: brew upgrade --cask postpile
+    PostPile updates itself: when a new release is downloaded, the title bar
+    offers a restart. brew upgrade --cask postpile works too.
   EOS
 end

@@ -16,6 +16,9 @@ export interface ReleaseInfo {
   draft: boolean;
 }
 
+/** The fallback when the app cannot update itself. The app is installed as a Homebrew cask. */
+export const UPGRADE_COMMAND = 'brew upgrade --cask postpile';
+
 /** How many releases the update check asks GitHub for. A full page may have older releases behind it. */
 export const RELEASES_PAGE_SIZE = 10;
 
@@ -218,4 +221,49 @@ export function laterUntil(view: UpdateView, now: number): number {
     return since + BAR_AFTER_MS;
   }
   return now + BAR_LATER_MS;
+}
+
+// Self-update: the desktop app downloads a release itself (electron-updater
+// in the main process, Squirrel.Mac underneath) and installs it on restart.
+// The release check above still decides when the reminder shows and how
+// loud it is; the install state only decides what it offers.
+
+/**
+ * Where the desktop app's own installer is.
+ * - off: not in this build (dev run, web page, POSTPILE_AUTO_UPDATE=0, check off)
+ * - idle: checked, nothing to download (or not checked yet)
+ * - checking, downloading: on its way
+ * - ready: downloaded and staged; a restart installs it, and so does a quit
+ * - failed: the last check or download failed (`error` says why)
+ */
+export type InstallStatus = 'off' | 'idle' | 'checking' | 'downloading' | 'ready' | 'failed';
+
+/** The main process sends this to the renderer whenever it changes. */
+export interface InstallState {
+  status: InstallStatus;
+  /** The version being downloaded or staged, without the "v"; null when none. */
+  version: string | null;
+  /** Why the last check or download failed; null otherwise. */
+  error: string | null;
+}
+
+/**
+ * What the update reminder offers: a restart (staged), a "downloading" note,
+ * or the brew command. The brew command is the fallback whenever the app
+ * cannot update itself: no installer (web, dev, off), a failed download, or
+ * an installer that found nothing while the release check did.
+ */
+export type UpdateAction = 'restart' | 'downloading' | 'command';
+
+export function updateAction(install: InstallState | null): UpdateAction {
+  if (!install) {
+    return 'command';
+  }
+  if (install.status === 'ready') {
+    return 'restart';
+  }
+  if (install.status === 'checking' || install.status === 'downloading') {
+    return 'downloading';
+  }
+  return 'command';
 }

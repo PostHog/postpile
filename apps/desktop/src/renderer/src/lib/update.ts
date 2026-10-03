@@ -1,6 +1,3 @@
-/** What the reminder tells the user to run. The app is installed as a Homebrew cask. */
-export const UPGRADE_COMMAND = 'brew upgrade --cask postpile';
-
 /** "Sep 29, 2026" in the user's time zone; '' when unknown. */
 export function releaseDate(iso: string | null): string {
   if (!iso) {

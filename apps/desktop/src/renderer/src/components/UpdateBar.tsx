@@ -1,9 +1,9 @@
 import { useEffect } from 'react';
 import { sendTelemetry } from '../api/telemetry.ts';
-import { behindSinceDate, releasesBehindText, UPGRADE_COMMAND } from '../lib/update.ts';
+import { behindSinceDate, releasesBehindText } from '../lib/update.ts';
 import { useUpdateReminder } from '../lib/use-update-reminder.ts';
 import { Button } from './Button.tsx';
-import { FixCommand } from './FixCommand.tsx';
+import { UpdateNextStep } from './UpdateNextStep.tsx';
 
 const RELEASES_CAP = 10;
 
@@ -13,10 +13,11 @@ let shownReported = false;
 /**
  * The update reminder after 24h behind: a full-width bar under the title bar.
  * Calm amber, not coral (coral means "new since you looked"). Core decides
- * when it shows (updateUrgency); "Later" drops it back to the pill for 24h.
+ * when it shows (updateUrgency) and what it offers (updateAction); "Later"
+ * drops it back to the pill for 24h.
  */
 export function UpdateBar() {
-  const { view, urgency, hoursBehind, later } = useUpdateReminder();
+  const { view, urgency, hoursBehind, action, later, restart } = useUpdateReminder();
   const latest = view?.latest ?? null;
   const visible = urgency === 'bar' && latest !== null;
 
@@ -40,10 +41,9 @@ export function UpdateBar() {
       <span className="size-1.5 shrink-0 rounded-full bg-amber" />
       <span>
         You&apos;re <span className="font-semibold">{releasesBehindText(latest.releasesBehind, latest.moreBehind)}</span> behind{since && ` (since ${since})`}. PostPile{' '}
-        <span className="font-mono text-[11px]">{latest.version}</span> is out.
+        <span className="font-mono text-[11px]">{latest.version}</span> {action === 'restart' ? 'is ready to install.' : 'is out.'}
       </span>
-      <FixCommand command={UPGRADE_COMMAND} label={null} />
-      <span>Then quit and reopen PostPile.</span>
+      <UpdateNextStep action={action} onRestart={restart} hintClass="" />
       <div className="ml-auto flex items-center gap-3">
         <a href={latest.url} target="_blank" rel="noreferrer" className="underline hover:text-ink">
           Release notes
