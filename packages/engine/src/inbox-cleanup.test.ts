@@ -1,10 +1,11 @@
-import { CATCH_UP_CONFIRM_TRIES, CLEANUP_ALREADY_PENDING, type NotificationThread, type Pr } from '@postpile/core';
+import { CATCH_UP_CONFIRM_TRIES, CLEANUP_ALREADY_PENDING, SAFE_CLEAR_WAITS_FOR_SYNC, type NotificationThread, type Pr, type Verdict } from '@postpile/core';
 import { makePr, makeThreadFor, makeTimelineItem, viewer } from '@postpile/core/fixtures';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Board } from './board.ts';
 import { glanceTargetKeys } from './glance-inputs.ts';
 import { makeHarness, NOW, type Harness, type HarnessOptions } from './testing/fakes.ts';
 import { reviewRequestedPr } from './testing/prs.ts';
+import { topicWithPrs } from './testing/topics.ts';
 
 // NOW is 2026-09-02T12:00Z.
 const DAY_MS = 24 * 3_600_000;
@@ -166,5 +167,66 @@ describe('inbox catch-up: clearing', () => {
     expect(sent).toMatchObject({ ok: true, done: 1 });
     expect(sent.status.pending).toEqual([]);
     expect(h.writer.calls).toEqual([`markRepoReadBefore acme/app ${view.countedAt}`]);
+  });
+});
+
+describe('inbox catch-up: merged PRs that look safe', () => {
+  /** The stored glance keeps its input hash (current) with this verdict; `stale` makes it read as made for an older input. */
+  function setVerdict(h: Harness, pr: Pr, verdict: Verdict, stale = false): void {
+    const glance = h.store.glances.get(pr.key);
+    expect(glance).not.toBeNull();
+    h.store.glances.put({ ...glance!, verdict, inputHash: stale ? 'an-older-input' : glance!.inputHash });
+  }
+
+  it('parks only merged PRs with a current LOOKS_SAFE or NOT_YOURS glance; Send PATCHes just those and sees their merges', async () => {
+    const safe = mergedWithoutReview(400, 'acme/app');
+    const closer = mergedWithoutReview(401, 'acme/app');
+    const notYours = mergedWithoutReview(402, 'acme/web');
+    const stale = mergedWithoutReview(403, 'acme/web');
+    const h = harnessWith([safe, closer, notYours, stale], { writesEnabled: false });
+    await h.engine.sync({ maxAgentCalls: 50 });
+    setVerdict(h, safe, 'LOOKS_SAFE');
+    setVerdict(h, closer, 'LOOK_CLOSER');
+    setVerdict(h, notYours, 'NOT_YOURS');
+    setVerdict(h, stale, 'LOOKS_SAFE', true);
+    const agentCalls = h.runner.requests.length;
+
+    const view = await h.engine.inboxCleanup();
+    expect(view.counts).toMatchObject({ mergedAll: 4, mergedSafe: 2 });
+    const parked = await h.engine.clearSafeMerged({ countedAt: view.countedAt });
+
+    expect(parked).toMatchObject({ ok: true, message: 'Pending: clears 2 on GitHub once you unlock and send it from the lock' });
+    expect((await h.engine.githubWrites()).pending).toEqual([
+      expect.objectContaining({ kind: 'catch_up', title: 'Inbox cleanup: merged PRs that look safe', threadCount: 2 }),
+    ]);
+    expect(await h.engine.clearSafeMerged({ countedAt: view.countedAt })).toMatchObject({ ok: false, message: CLEANUP_ALREADY_PENDING });
+
+    await h.engine.setGitHubWrites(true);
+    await h.engine.sendPendingWrites();
+    await h.engine.inboxCleanupSettled();
+
+    expect(h.writer.calls).toEqual(['markThreadRead thread-400', 'markThreadRead thread-402']);
+    const unread = h.store.notifications.list().filter((thread) => thread.unread).map((thread) => thread.id);
+    expect(unread.sort()).toEqual(['thread-401', 'thread-403']);
+    const mergeSeen = (pr: Pr) => h.store.events.listForPr(pr.key).find((event) => event.kind === 'merged_without_review')?.seenAt ?? null;
+    expect([mergeSeen(safe), mergeSeen(notYours), mergeSeen(closer)].map((seenAt) => seenAt !== null)).toEqual([true, true, false]);
+    // Counting and clearing read the glances there are; neither asks the agent for one.
+    expect(h.runner.requests.length).toBe(agentCalls);
+  });
+
+  it('refuses while a full sync runs, since its glance step may turn a LOOKS_SAFE into LOOK_CLOSER, and offers it again after', async () => {
+    const h = harnessWith([]);
+    topicWithPrs(h, 'depot', [reviewRequestedPr(1)]);
+    const release = h.agent.holdDossier('depot');
+
+    const syncing = h.engine.sync({ agentJobs: ['dossiers', 'glances'] });
+    await vi.waitFor(async () => expect((await h.engine.syncProgress())?.running).toContain('dossiers'));
+    const view = await h.engine.inboxCleanup();
+    expect(view.syncing).toBe(true);
+    expect(await h.engine.clearSafeMerged({ countedAt: view.countedAt })).toMatchObject({ ok: false, message: SAFE_CLEAR_WAITS_FOR_SYNC });
+
+    release();
+    await syncing;
+    expect((await h.engine.inboxCleanup()).syncing).toBe(false);
   });
 });

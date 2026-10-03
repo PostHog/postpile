@@ -318,7 +318,8 @@ export function createApp(
     return c.json(await engine.setGitHubWrites(body.enabled));
   });
   // Inbox catch-up: unread merged PRs and old notifications, whether the start dialog is due,
-  // "Clear N" (GitHub writes through the lock, one pending write while locked) and "Start as usual".
+  // "Clear N" (GitHub writes through the lock, one pending write while locked), the sidebar's
+  // "look safe" clear and "Start as usual".
   app.get('/api/inbox-cleanup', async (c) => c.json(await engine.inboxCleanup()));
   app.post('/api/inbox-cleanup/clear', async (c) => {
     const body = z
@@ -330,6 +331,11 @@ export function createApp(
       })
       .parse(await c.req.json());
     return c.json(await engine.clearInbox(body));
+  });
+  // The sidebar's "N of them look safe · Clear": only merged PRs whose current glance says LOOKS_SAFE or NOT_YOURS.
+  app.post('/api/inbox-cleanup/clear-safe', async (c) => {
+    const body = z.object({ countedAt: z.iso.datetime() }).parse(await c.req.json());
+    return c.json(await engine.clearSafeMerged(body));
   });
   app.post('/api/inbox-cleanup/start-as-usual', async (c) => c.json(await engine.startAsUsual()));
   // PostPile's MCP server in Claude Code: the cached `claude mcp get`, "Add to Claude Code"

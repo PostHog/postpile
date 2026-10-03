@@ -123,8 +123,9 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   Mark read button is disabled). Never show a locked mark-read as done. Everything is blocked
   until the writes state has loaded. Don't bypass the guard, and put a new
   GitHub-writing action on the `GithubWrite` list. The inbox cleanup
-  (`clearInbox`) is on it as `cleanup` and behaves like mark read: locked,
-  it becomes one pending write. `startAsUsual` is local (it only answers
+  (`clearInbox`, and `clearSafeMerged` for the sidebar's "look safe"
+  item) is on it as `cleanup` and behaves like mark read: locked, it
+  becomes one pending write. `startAsUsual` is local (it only answers
   the start dialog) and shows no toast.
 - "Add to Claude Code" (`connectMcp(from)`) changes Claude Code's config,
   never GitHub, so it is not on the `GithubWrite` list. Fire it only from a
@@ -363,7 +364,9 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   `ToolsNotice` (missing gh or claude, with `FixCommand`, shared with setup),
   `RepoScopeMenu` (title bar repo scope + "Let it go stale"),
   `InboxCleanupLine` (sidebar footer: "12 merged PRs · Clear", "Clearing
-  84 / 191" while a run goes; one flex row so a second item can join) +
+  84 / 191" while a run goes; next to merged PRs "✨ 8 of them look safe ·
+  Clear", `safeMergedText`, which calls `clearSafeMerged` right away, no
+  dialog, disabled while a cleanup waits in the lock) +
   `InboxStartDialog` (mounted once in App, opens while the server holds
   the start sync, `view.start`) + `InboxCleanupDialog` (both modes; picks
   set once from core `cleanupDialogSetup`; words in `lib/cleanup.ts`; Esc,

@@ -20,6 +20,8 @@ import type {
   FinishedTopic,
   GitHubWritesChange,
   CleanupRequest,
+  SafeCleanupRequest,
+  CleanupGlance,
   CleanupThread,
   InboxCleanupView,
   PendingWritesResult,
@@ -200,7 +202,7 @@ import { FakeWorkContext } from './fake-work-context.ts';
 import { FakeLivePoll } from './fake-live.ts';
 import { FakeMemory } from './fake-memory.ts';
 import { FakeCleanup } from './fake-cleanup.ts';
-import { isSampleMergedThread, sampleThreads } from './fake-notifications.ts';
+import { isSampleMergedThread, sampleMergedVerdict, sampleThreads } from './fake-notifications.ts';
 import { samplePingDecisions, sampleQuietReads } from './fake-quiet.ts';
 import { FakeWrites, type FakeLocalChange } from './fake-writes.ts';
 import { buildSampleData, type SampleData } from './sample-data.ts';
@@ -975,6 +977,16 @@ export class FakeEngine implements EngineService {
     );
   }
 
+  /** A merged sample PR's glance for the "look safe" item: a stored sample glance like the engine reads it, else the thread-only samples' verdicts. */
+  private cleanupGlanceOf(threadId: string, key: PrKey | null): CleanupGlance | null {
+    const glance = key === null ? undefined : this.data.glances.find((candidate) => candidate.prKey === key);
+    if (glance !== undefined && key !== null) {
+      return { verdict: glance.verdict, stale: this.isGlanceStale(key), writing: this.catchUp.stateOf(key) === 'running' };
+    }
+    const verdict = sampleMergedVerdict(threadId);
+    return verdict === null ? null : { verdict, stale: false, writing: false };
+  }
+
   /** The sample's unread threads as the catch-up sees them. Without gh nothing is known about the GitHub inbox. */
   private cleanupThreads(): CleanupThread[] {
     if (this.toolStatus.ghOff() !== null) {
@@ -994,8 +1006,14 @@ export class FakeEngine implements EngineService {
           merged,
           withoutReview: merged && key !== null && this.eventsOf(key).some(isUnseenMergeWithoutReview),
           glanced: key !== null && glanced.has(key),
+          glance: merged ? this.cleanupGlanceOf(thread.id, key) : null,
         };
       });
+  }
+
+  /** Like the engine: a fake sync runs and is not held for the start dialog, so the "look safe" item waits. */
+  private fullSyncRunning(): boolean {
+    return this.syncing !== null && !this.heldSync;
   }
 
   /** Like the engine: an answer (or the end of a run) lets the held fake sync go on. */
@@ -1008,7 +1026,7 @@ export class FakeEngine implements EngineService {
 
   async inboxCleanup(): Promise<InboxCleanupView> {
     this.writes.settle();
-    return this.cleanup.view(this.cleanupThreads(), this.glanceTargets().size, this.heldSync);
+    return this.cleanup.view(this.cleanupThreads(), this.glanceTargets().size, this.heldSync, this.fullSyncRunning());
   }
 
   async clearInbox(request: CleanupRequest): Promise<ActionResult> {
@@ -1018,6 +1036,11 @@ export class FakeEngine implements EngineService {
       this.resumeHeldSync();
     }
     return result;
+  }
+
+  async clearSafeMerged(request: SafeCleanupRequest): Promise<ActionResult> {
+    this.writes.settle();
+    return this.cleanup.clearSafe(request, this.cleanupThreads(), this.fullSyncRunning());
   }
 
   async startAsUsual(): Promise<ActionResult> {

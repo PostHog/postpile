@@ -27,13 +27,16 @@ export interface PendingThread {
  * mark_read: one click's threads. mark_all_read_before: the old inbox
  * cleanup's single PUT /notifications with last_read_at = `readBefore`
  * (none are made since the catch-up dialog; stored ones still send).
- * catch_up: the inbox cleanup dialog's picks, planned again when sent.
+ * catch_up: the inbox cleanup dialog's picks (or the sidebar's "look safe"
+ * threads), planned again when sent.
  */
 export type PendingWriteKind = 'mark_read' | 'mark_all_read_before' | 'catch_up';
 
 /** A cleanup waiting for the lock: the picks and when the dialog counted. Sending it runs the same plan. */
 export interface PendingCatchUp extends CleanupPicks {
   countedAt: IsoTime;
+  /** The sidebar's "look safe" item: exactly these threads, picks both null. Absent for the dialog's picks. */
+  threadIds?: string[];
 }
 
 /**

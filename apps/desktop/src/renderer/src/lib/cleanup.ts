@@ -4,6 +4,7 @@
 // core; this only words what the server sent.
 import {
   CATCH_UP_PACE_MS,
+  SAFE_CLEAR_WAITS_FOR_SYNC,
   type CleanupCounts,
   type CleanupDialogMode,
   type CleanupOption,
@@ -20,7 +21,7 @@ function plural(count: number, one: string, many: string): string {
 /**
  * The sidebar footer line: a running cleanup's progress, else the unread
  * merged PRs, else old notifications. Null when there is nothing to clear.
- * (A second item, merged PRs whose glance found nothing worth a look, may join later.)
+ * Next to merged PRs, `safeMergedText` may add a second item.
  */
 export type CleanupLine = { kind: 'running'; text: string } | { kind: 'merged'; text: string } | { kind: 'old'; text: string };
 
@@ -36,6 +37,18 @@ export function cleanupLine(view: InboxCleanupView): CleanupLine | null {
   }
   return null;
 }
+
+/** The line's second item, "8 of them look safe": merged PRs whose current glance says LOOKS_SAFE or NOT_YOURS. Null when none, or while a run goes. */
+export function safeMergedText(view: InboxCleanupView): string | null {
+  if (view.running || view.counts.mergedSafe === 0) {
+    return null;
+  }
+  return `${view.counts.mergedSafe} of them ${view.counts.mergedSafe === 1 ? 'looks' : 'look'} safe`;
+}
+
+/** The second item's tooltip: what it clears, and that it never starts a glance. */
+export const SAFE_MERGED_NOTE =
+  'Marks read on GitHub only the merged PRs whose glance after the merge says Looks safe or Not yours. Uses the glances already there and never starts one; the rest stay unread.';
 
 export function dialogTitle(mode: CleanupDialogMode): string {
   switch (mode.kind) {
@@ -138,3 +151,11 @@ export function doneText(run: CleanupRunResult): string {
 
 /** Only one cleanup waits in the lock: why Clear is off while one does. */
 export const CLEANUP_PENDING_NOTE = 'A cleanup already waits in the lock. Send or discard it there first.';
+
+/** Why the "look safe" item's Clear is off, null when it can go: a sync may rewrite glances, or a cleanup waits in the lock. */
+export function safeClearBlocked(view: InboxCleanupView): string | null {
+  if (view.syncing) {
+    return SAFE_CLEAR_WAITS_FOR_SYNC;
+  }
+  return view.pending ? CLEANUP_PENDING_NOTE : null;
+}

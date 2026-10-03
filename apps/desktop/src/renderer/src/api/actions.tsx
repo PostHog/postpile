@@ -10,6 +10,7 @@ import type {
   BatchApproveResult,
   ChatReply,
   CleanupRequest,
+  SafeCleanupRequest,
   FeedbackInput,
   GitHubWritesChange,
   GitHubWritesStatus,
@@ -76,6 +77,7 @@ const PROBLEM_NOTICE_MS = 12000;
 /** Busy keys of the inbox cleanup's actions, one each (see withBusy). */
 export const CLEANUP_BUSY = {
   clear: 'cleanup:clear',
+  clearSafe: 'cleanup:clear-safe',
   start: 'cleanup:start-as-usual',
 } as const;
 // Room for the engine to send or park a batch after its window ends.
@@ -206,6 +208,13 @@ export interface Actions {
    * pending write. Returns whether the server took it.
    */
   clearInbox(request: CleanupRequest): Promise<boolean>;
+  /**
+   * The sidebar's "N of them look safe · Clear": only the merged PRs whose
+   * current glance says LOOKS_SAFE or NOT_YOURS, right away (no dialog). The
+   * same GitHub write as clearInbox: background run, one pending write while
+   * locked. Returns whether the server took it.
+   */
+  clearSafeMerged(request: SafeCleanupRequest): Promise<boolean>;
   /** "Start as usual" (or Esc) on the start dialog: the held sync goes on. Local, no toast. */
   startAsUsual(): Promise<boolean>;
   /**
@@ -944,6 +953,7 @@ export function ActionsProvider(props: { children: ReactNode }) {
     sendTestNotification,
     // One busy key each: withBusy drops every copy of a key when one run ends.
     clearInbox: (cleanupRequest) => run(CLEANUP_BUSY.clear, 'cleanup', () => request('POST', '/api/inbox-cleanup/clear', cleanupRequest)),
+    clearSafeMerged: (safeRequest) => run(CLEANUP_BUSY.clearSafe, 'cleanup', () => request('POST', '/api/inbox-cleanup/clear-safe', safeRequest)),
     startAsUsual,
     connectMcp: (from) => run('mcp:connect', null, () => request('POST', '/api/mcp-connection', { from })),
     hideMcpConnect: () => run('mcp:not-now', null, () => request('POST', '/api/mcp-connection/not-now')),

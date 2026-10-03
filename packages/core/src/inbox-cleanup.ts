@@ -4,7 +4,8 @@
 // to clear both on GitHub, before the start sync spends agent work on PRs
 // that are over. Rules only, no IO; the engine and FakeEngine call the same
 // functions.
-import type { IsoTime } from './types.ts';
+import type { PendingCatchUp } from './github-writes.ts';
+import type { IsoTime, Verdict } from './types.ts';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -34,6 +35,9 @@ export const CATCH_UP_CONFIRM_EVERY_MS = 5000;
 /** ...at most this many times (about 90 seconds), then the run ends and says what GitHub is still working on. */
 export const CATCH_UP_CONFIRM_TRIES = 18;
 
+/** A full sync's dossier and glance steps may rewrite a LOOKS_SAFE glance to LOOK_CLOSER: the "look safe" item waits for it to end. */
+export const SAFE_CLEAR_WAITS_FOR_SYNC = 'Waits for the sync to finish: it may rewrite glances';
+
 /** Locked, only one cleanup waits in the lock: a second would fail on Send while the first runs. */
 export const CLEANUP_ALREADY_PENDING = 'A cleanup already waits in the lock: send or discard it there first';
 
@@ -41,6 +45,15 @@ export const CLEANUP_ALREADY_PENDING = 'A cleanup already waits in the lock: sen
 export interface CleanupPicks {
   merged: MergedPick | null;
   older: CleanupAge | null;
+}
+
+/** A PR's stored glance as the catch-up reads it. */
+export interface CleanupGlance {
+  verdict: Verdict;
+  /** Made for an older state of the PR, dossier or instructions. */
+  stale: boolean;
+  /** A catch-up run is rewriting it right now. */
+  writing: boolean;
 }
 
 /** An unread GitHub thread as the catch-up sees it. */
@@ -56,6 +69,8 @@ export interface CleanupThread {
   withoutReview: boolean;
   /** The coming sync would glance this PR. Clearing a merged one ends that; an open one is glanced anyway. */
   glanced: boolean;
+  /** A merged PR's stored glance; null without one (and for PRs that are not merged). Read only, never a reason to glance. */
+  glance: CleanupGlance | null;
 }
 
 export interface CleanupCounts {
@@ -66,6 +81,8 @@ export interface CleanupCounts {
   mergedAll: number;
   /** Merged PRs among mergedAll still holding an unseen merge without the user's review. */
   mergedWithoutReview: number;
+  /** Merged PRs among mergedAll whose current glance says LOOKS_SAFE or NOT_YOURS (`isSafeMerged`). */
+  mergedSafe: number;
   /** Unread threads that are not merged PRs, with no activity for 14 / 30 days. */
   olderThan14: number;
   olderThan30: number;
@@ -166,12 +183,19 @@ export interface InboxCleanupView {
   lastRun: CleanupRunResult | null;
   /** A cleanup waits in the writes lock. */
   pending: boolean;
+  /** A full sync runs (not one held for the start dialog): the "look safe" item waits (SAFE_CLEAR_WAITS_FOR_SYNC). */
+  syncing: boolean;
 }
 
 /** POST /api/inbox-cleanup/clear. */
 export interface CleanupRequest extends CleanupPicks {
   countedAt: IsoTime;
   from: 'start' | 'sidebar';
+}
+
+/** POST /api/inbox-cleanup/clear-safe: the sidebar's "N of them look safe · Clear". */
+export interface SafeCleanupRequest {
+  countedAt: IsoTime;
 }
 
 export function daysBefore(now: IsoTime, days: number): IsoTime {
@@ -196,6 +220,20 @@ function isMergedPicked(thread: CleanupThread, pick: MergedPick, at: IsoTime): b
   return thread.merged && (days === null || thread.updatedAt < daysBefore(at, days));
 }
 
+/**
+ * A merged PR the agent already called fine after the merge (DESIGN.md
+ * "Merged without your review" rule 4): its glance is current (not stale,
+ * not being rewritten) and says LOOKS_SAFE or NOT_YOURS. No glance, an old
+ * one or LOOK_CLOSER keeps it out: it stays unread for the user.
+ */
+export function isSafeMerged(thread: CleanupThread): boolean {
+  const glance = thread.glance;
+  if (!thread.merged || glance === null || glance.stale || glance.writing) {
+    return false;
+  }
+  return glance.verdict === 'LOOKS_SAFE' || glance.verdict === 'NOT_YOURS';
+}
+
 export function cleanupCounts(threads: CleanupThread[], at: IsoTime): CleanupCounts {
   const merged = threads.filter((thread) => thread.merged);
   const others = threads.filter((thread) => !thread.merged);
@@ -205,6 +243,7 @@ export function cleanupCounts(threads: CleanupThread[], at: IsoTime): CleanupCou
     mergedQuiet14: merged.filter((thread) => isMergedPicked(thread, 'quiet14', at)).length,
     mergedAll: merged.length,
     mergedWithoutReview: merged.filter((thread) => thread.withoutReview).length,
+    mergedSafe: merged.filter(isSafeMerged).length,
     olderThan14: others.filter((thread) => thread.updatedAt < daysBefore(at, 14)).length,
     olderThan30: others.filter((thread) => thread.updatedAt < daysBefore(at, 30)).length,
   };
@@ -245,13 +284,11 @@ function fullySelectedRepos(threads: CleanupThread[], selected: Set<string>, at:
 }
 
 /**
- * The write plan for a set of picks over the unread threads (DESIGN.md
- * "Inbox cleanup" › Writes): the older-than PUT first, then repo PUTs where
- * a repo holds nothing else, then one PATCH per remaining thread.
+ * The calls for a selection (DESIGN.md "Inbox cleanup" › Writes): the
+ * older-than PUT first (when `readBefore` is set), then repo PUTs where a
+ * repo holds nothing else, then one PATCH per remaining thread.
  */
-export function planCleanup(threads: CleanupThread[], picks: CleanupPicks, at: IsoTime): CleanupPlan {
-  const selected = selectedThreads(threads, picks, at);
-  const readBefore = picks.older === null ? null : daysBefore(at, picks.older);
+function planSelection(threads: CleanupThread[], selected: CleanupThread[], readBefore: IsoTime | null, at: IsoTime): CleanupPlan {
   const remaining = selected.filter((thread) => readBefore === null || thread.updatedAt >= readBefore);
   const wholeRepos = fullySelectedRepos(threads, new Set(selected.map((thread) => thread.id)), at);
   const repoNames = [...new Set(remaining.map((thread) => thread.repo))].filter((repo) => wholeRepos.has(repo)).sort();
@@ -270,6 +307,31 @@ export function planCleanup(threads: CleanupThread[], picks: CleanupPicks, at: I
     mergedClears: selected.filter((thread) => thread.merged).length,
     glancesSaved: selected.filter((thread) => thread.merged && thread.glanced).length,
   };
+}
+
+/** The write plan for a set of picks over the unread threads. */
+export function planCleanup(threads: CleanupThread[], picks: CleanupPicks, at: IsoTime): CleanupPlan {
+  const readBefore = picks.older === null ? null : daysBefore(at, picks.older);
+  return planSelection(threads, selectedThreads(threads, picks, at), readBefore, at);
+}
+
+/** The write plan for an explicit thread list: those still unread, nothing with activity after `at`. */
+export function planThreadCleanup(threads: CleanupThread[], ids: string[], at: IsoTime): CleanupPlan {
+  const wanted = new Set(ids);
+  return planSelection(threads, threads.filter((thread) => wanted.has(thread.id) && thread.updatedAt <= at), null, at);
+}
+
+/** What the sidebar's "look safe" item clears: unread merged PRs the agent already called fine (`isSafeMerged`), up to `at`. */
+export function safeMergedIds(threads: CleanupThread[], at: IsoTime): string[] {
+  return threads.filter((thread) => thread.updatedAt <= at && isSafeMerged(thread)).map((thread) => thread.id);
+}
+
+/** A parked cleanup sent from the lock: the same calls again over the threads stored now. */
+export function planPendingCleanup(threads: CleanupThread[], pending: PendingCatchUp): CleanupPlan {
+  if (pending.threadIds !== undefined) {
+    return planThreadCleanup(threads, pending.threadIds, pending.countedAt);
+  }
+  return planCleanup(threads, pending, pending.countedAt);
 }
 
 /** Every combination of picks, in a fixed order: merged off, quiet7, quiet14, all; within each older off, 14, 30. */
@@ -291,8 +353,11 @@ export function cleanupOptions(threads: CleanupThread[], at: IsoTime): CleanupOp
   return options;
 }
 
-/** "merged PRs and everything older than 14 days", for the lock's list and the log. */
-export function cleanupPicksWords(picks: CleanupPicks): string {
+/** "merged PRs and everything older than 14 days" (or "merged PRs that look safe"), for the lock's list and the log. */
+export function cleanupPicksWords(picks: CleanupPicks & { threadIds?: string[] }): string {
+  if (picks.threadIds !== undefined) {
+    return 'merged PRs that look safe';
+  }
   const merged = picks.merged === null ? null : picks.merged === 'all' ? 'merged PRs' : `merged PRs quiet ${mergedQuietDays(picks.merged)}+ days`;
   const older = picks.older === null ? null : `everything older than ${picks.older} days`;
   return [merged, older].filter((part) => part !== null).join(' and ');

@@ -3794,12 +3794,37 @@ notifications view (each thread's last action).
 
 **Sidebar line**, any day: "12 merged PRs · Clear" whenever a merged PR is
 unread, else "N old notifications · Clear" (older than 14 days). It opens
-the dialog in sidebar mode. A second item for merged PRs whose glance after
-the merge found nothing worth a look comes later; the line is one flex row
-so it can join.
+the dialog in sidebar mode.
+
+**"✨ 8 of them look safe · Clear"** (added 2026-10-03), a second item on
+the same line. Why: of the merged PRs, the user mostly cares about the
+ones merged without their review, and for many of those the glance after
+the merge ("Merged without your review" rule 4) already said there is
+nothing worth a look. The item counts unread merged PRs whose *current*
+glance (not stale, not being rewritten) says LOOKS_SAFE or NOT_YOURS
+(core `isSafeMerged`, `CleanupCounts.mergedSafe`); no glance or LOOK_CLOSER
+stays unread. It only reads glances that exist: counting or clearing never
+starts, queues or moves a glance, and it shows only when the count is
+above 0. Clear clears just those threads right away, no dialog: a narrow,
+explicit click, so it fits "Not marked read from a guess". It is the same
+run as the dialog's (`InboxCleanup.clearSafe`, `POST
+/api/inbox-cleanup/clear-safe`): an explicit thread list
+(`planThreadCleanup`: PATCH per thread, or a repo PUT where the selection
+is all a repo holds), the writes door, progress line, done toast and one
+`inbox_cleanup` log row; locked, one `catch_up` pending write carrying the
+thread ids (`PendingCatchUp.threadIds`), and refused while a cleanup runs
+or one already waits in the lock. Each PATCH reads the thread here like
+the dialog's, so the merge counts as seen and the tile goes done.
+While a full sync runs (not one held for the start dialog) the item's
+Clear is disabled ("Waits for the sync to finish") and the engine refuses
+it: the sync's dossier and glance steps can rewrite a LOOKS_SAFE glance to
+LOOK_CLOSER, and only catch-up runs show as "writing". The view
+(`InboxCleanupView.syncing`) is refetched when the sync ends, which
+recounts.
 
 - **Fake mode**: 24 unread threads on merged sample PRs that never become
-  tiles, plus three old ones; every fake start is a first run, so the start
+  tiles (eight with a glance that looks safe, two Look closer), plus three
+  old ones; every fake start is a first run, so the start
   dialog shows (`POSTPILE_FAKE_CATCH_UP=0` turns it off, the README
   screenshots do). A run flips the sample threads one call per step.
 - **History.** 2026-09-28: "mark everything older than 14 / 30 days read",

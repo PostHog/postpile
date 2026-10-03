@@ -63,6 +63,7 @@ function fakeEngine(overrides: Partial<EngineService>): EngineService {
     githubWrites: notImplemented,
     inboxCleanup: notImplemented,
     clearInbox: notImplemented,
+    clearSafeMerged: notImplemented,
     startAsUsual: notImplemented,
     setGitHubWrites: notImplemented,
     sendPendingWrites: notImplemented,
