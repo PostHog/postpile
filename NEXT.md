@@ -269,6 +269,15 @@ now".
   `POSTPILE_UPDATE_CHECK=0` turns it off; sample data shows a sample
   update unless `POSTPILE_FAKE_UPDATE=0`. Not tried against a real
   release yet (fake mode and unit tests only).
+- Self-update (2026-10-03, DESIGN.md "Self-update"): the packaged app
+  downloads a new release itself (electron-updater in main, GitHub
+  provider, `src/main/self-update.ts`) and the pill and bar offer "Restart
+  to update" once Squirrel.Mac staged it, "Downloading the update…" before
+  that, and the brew command when the app can't update itself. App menu ›
+  Check for Updates… runs both checks with a dialog. Signed releases carry
+  `latest-mac.yml` and the `.blockmap`; the cask says `auto_updates true`.
+  `POSTPILE_AUTO_UPDATE=0` turns only the download off;
+  `POSTPILE_FAKE_INSTALL` picks the sample state.
 - PR state icons, 3a design (2026-09-29, DESIGN.md "Tile faces"): PR rows,
   tile headers and the detail pane show the state as GitHub-style icons
   and words (open / draft / merged / closed / queued, needs review /
@@ -803,7 +812,10 @@ now".
 - Topics over the 40-entry timeline cap rely on `earlier` for older PRs;
   consolidation can only propose splits over timeline PRs.
 - The app bundle (`pnpm dist`) is ad-hoc signed (no Developer ID, not
-  notarized) and arm64 only; no auto-update. Release builds are signed
+  notarized) and arm64 only. Self-update (2026-10-03) was tried on sample
+  data only (the restart relaunches); a real download and install needs two
+  signed releases that carry `latest-mac.yml`, so the first real one is the
+  update from the first such release to the next. Release builds are signed
   with PostHog's Developer ID and notarized once the `desktop-signing`
   environment has the Apple secrets (access pending, see RELEASING.md). x64 would be one more arch in
   `electron-builder.yml` (another Electron download, not tried). The
@@ -1112,6 +1124,11 @@ the app meanwhile.
 
 ## Decided
 
+- **Self-update** (2026-10-03, DESIGN.md "Self-update"): the app downloads
+  releases itself (electron-updater, GitHub provider) and the reminder
+  offers "Restart to update"; the brew command stays as the fallback. The
+  cask says `auto_updates true`. Rejected: update.electronjs.org and an S3
+  feed.
 - **Repo on the owner line, loud narrowed menu** (2026-10-02, DESIGN.md
   "Repo scope and quiet repos"): the topic's main repo is plain mono text
   with a book glyph on the "Owned by" line, honey "mostly in X" when the

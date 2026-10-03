@@ -14,6 +14,8 @@ const TIMEOUT_MS = 10_000;
 /** What GET /api/update serves. The server starts it with itself and stops it on close. */
 export interface UpdateSource {
   status(): UpdateView;
+  /** Checks now (the app menu's "Check for Updates…"); never throws. */
+  check(): Promise<UpdateView>;
   start(): void;
   stop(): void;
 }
@@ -47,6 +49,10 @@ export class UpdatesOff implements UpdateSource {
 
   status(): UpdateView {
     return { current: this.current, latest: null, checkedAt: null, error: null };
+  }
+
+  check(): Promise<UpdateView> {
+    return Promise.resolve(this.status());
   }
 
   start(): void {}

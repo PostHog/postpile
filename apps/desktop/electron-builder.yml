@@ -30,6 +30,14 @@ files:
   # workflow, never shipped inside the app.
   - "!**/*.map"
 asar: true
+# Self-update (DESIGN.md "Self-update"): electron-builder writes where to look
+# into Contents/Resources/app-update.yml, and writes latest-mac.yml (version,
+# zip name, sha512) and a .blockmap next to the zip. It never uploads them
+# (--publish never): the release workflow attaches them to the GitHub release.
+publish:
+  provider: github
+  owner: PostHog
+  repo: postpile
 # The UI is English only. Electron ships Chromium's strings for every locale
 # (an .lproj folder each); only en stays. Side effect: Chromium's
 # locale is en-US, so the few dates and times formatted with the default

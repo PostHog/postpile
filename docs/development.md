@@ -96,6 +96,7 @@ Environment variables. The packaged app only sees them when you start its binary
 
 - `POSTPILE_FAKE=1`: sample data, no GitHub, no agent, no database (UI work)
 - `POSTPILE_FAKE_UPDATE=0`: with `POSTPILE_FAKE=1`, no sample update in the title bar (it shows one by default)
+- `POSTPILE_FAKE_INSTALL`: with `POSTPILE_FAKE=1`, the sample self-update state: `ready` (default, "Restart to update", which only relaunches), `downloading`, `failed` or `off` (the brew command)
 - `POSTPILE_FAKE_TIDY=1`: with `POSTPILE_FAKE=1`, the first sync runs a sample topic tidy, so the "Tidying up your topics and tiles" overlay shows for a few seconds
 - `POSTPILE_FAKE_MISSING`: with `POSTPILE_FAKE=1`, simulates missing tools for UI checks (comma separated: `gh`, `gh-auth`, `gh-token`, `gh-offline`, `claude`, `claude-auth`, `claude-limit`)
 - `POSTPILE_FAKE_QUOTA`: with `POSTPILE_FAKE=1`, `low` or `critical` simulates a GitHub quota that is low or nearly used
@@ -106,7 +107,8 @@ Environment variables. The packaged app only sees them when you start its binary
 - `POSTPILE_AUTO_SYNC_MINUTES`: minutes between background full syncs in the desktop app, default 60 (0 turns it off; the default is off when `POSTPILE_SYNC_ON_START=0`)
 - `POSTPILE_CATCHUP_CAP`: agent calls per rolling 24h for glance catch-up after the poll, default 300 (0 turns catch-up off; the default is 0 when `POSTPILE_MAX_AGENT_CALLS=0`)
 - `POSTPILE_MAC_NOTIFICATIONS=0`: no Mac notifications
-- `POSTPILE_UPDATE_CHECK=0`: no update check (the title bar reminder asks `api.github.com` for releases ~30s after start, then every 6 hours)
+- `POSTPILE_UPDATE_CHECK=0`: no update check (the title bar reminder asks `api.github.com` for releases ~30s after start, then every 6 hours) and no self-update
+- `POSTPILE_AUTO_UPDATE=0`: no self-update download in the packaged app; the reminder offers the brew command instead (a dev run never updates itself)
 - `POSTPILE_TELEMETRY=0` or `DO_NOT_TRACK=1`: no usage analytics (also off by default under `POSTPILE_PROFILE=dev`, `POSTPILE_FAKE=1` and in tests). `POSTPILE_TELEMETRY=1` forces it on, including in dev, for checking the pipeline by hand — never in tests. See README › Privacy and DESIGN.md › Usage analytics.
 - `POSTPILE_MODEL`, `POSTPILE_GLANCE_MODEL` (default `claude-sonnet-5-5`), `POSTPILE_SWEEP_MODEL`, `POSTPILE_SETUP_MODEL` (default `opus`), `POSTPILE_AGENT_CONCURRENCY` (claude processes at once, default 8): agent knobs
 - `POSTPILE_TOPIC_DIGEST=1`: one agent call per topic for the dossier and its first glances (`topic_digest`), instead of separate dossier and glance calls. Off by default while it is compared (DESIGN.md › One call per topic)

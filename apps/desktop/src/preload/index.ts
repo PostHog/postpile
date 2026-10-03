@@ -1,10 +1,11 @@
-// Runs sandboxed before the renderer. It hands over where the API lives, the app version, two
-// listeners (trackpad swipes, clicks on Mac notifications) and two calls (the
-// test notification, the tile the user visited), nothing else: no node access, no other ipc. The API URL
+// Runs sandboxed before the renderer. It hands over where the API lives, the app version, three
+// listeners (trackpad swipes, clicks on Mac notifications, the update install state) and four calls (the
+// test notification, the tile the user visited, the install state, the restart to update), nothing else:
+// no node access, no other ipc. The API URL
 // and token come from the main process over one sync ipc call (it answers
 // only the app's own page); the version comes as a command line argument.
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
-import type { PingTarget } from '@postpile/core';
+import type { InstallState, PingTarget } from '@postpile/core';
 
 function argValue(name: string): string {
   const prefix = `--${name}=`;
@@ -42,5 +43,21 @@ contextBridge.exposeInMainWorld('postpile', {
     return () => {
       ipcRenderer.removeListener('postpile:open-ping', listener);
     };
+  },
+  /** Where the app's own update download is. */
+  installState(): Promise<InstallState> {
+    return ipcRenderer.invoke('postpile:install-state') as Promise<InstallState>;
+  },
+  /** Calls back on every change of the install state; returns the unsubscribe. */
+  onInstallState(callback: (state: InstallState) => void): () => void {
+    const listener = (_event: IpcRendererEvent, state: InstallState) => callback(state);
+    ipcRenderer.on('postpile:install-state', listener);
+    return () => {
+      ipcRenderer.removeListener('postpile:install-state', listener);
+    };
+  },
+  /** Installs the staged update: main shuts down like Cmd+Q first. */
+  restartToUpdate(): void {
+    ipcRenderer.send('postpile:restart-to-update');
   },
 });

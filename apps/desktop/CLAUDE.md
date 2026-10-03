@@ -63,8 +63,11 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   `useActions().checkTools`),
   `update.ts` (`useUpdate`: the server's last update check, every minute;
   `lib/use-update-reminder.ts`: `useUpdateReminder` asks core's `updateUrgency`
-  for none / pill / bar; "Later" is one shared snooze timestamp in
-  localStorage, read by `UpdatePill` and `UpdateBar`),
+  for none / pill / bar and core's `updateAction` for restart / downloading /
+  command, from the main process's install state (preload `installState` and
+  `onInstallState`; every change also refetches the update check; null on a
+  plain web page, which means the brew command); "Later" is one shared snooze
+  timestamp in localStorage, read by `UpdatePill` and `UpdateBar`),
   `mcp.ts` (`useMcpConnection`: is PostPile's MCP server in Claude Code,
   refetched on window focus; the server runs `claude mcp get` at most every
   5 minutes),
@@ -361,7 +364,9 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   `InboxCleanup` (sidebar footer line or middle-column banner, as the
   server's `look` says) + `InboxCleanupDialog`,
   `UpdatePill` (title bar update reminder, self-contained so it can move;
-  neutral, never coral; under 24h behind) + `UpdateBar` (full-width bar under
+  neutral, never coral; under 24h behind; "Update ready" once staged) +
+  `UpdateNextStep` (the offer both share: ink "Restart to update", the
+  download note, or the brew command `FixCommand`) + `UpdateBar` (full-width bar under
   the title bar from 24h behind, amber `--amber-*` tokens, never coral; mounted
   in `App.tsx`; Later drops back to the pill for 24h; `update_bar_shown` once per run),
   `McpFooterItem` ("agents: not connected" in the footer, only while

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compareVersions, hoursBehind, isVersion, laterUntil, pickUpdate, updateUrgency, type ReleaseInfo, type UpdateView } from './index.ts';
+import { compareVersions, hoursBehind, isVersion, laterUntil, pickUpdate, updateAction, updateUrgency, type InstallState, type InstallStatus, type ReleaseInfo, type UpdateView } from './index.ts';
 
 function release(tag: string, overrides: Partial<ReleaseInfo> = {}): ReleaseInfo {
   return {
@@ -136,5 +136,28 @@ describe('updateUrgency', () => {
     expect(until).toBe(now + 24 * hour);
     expect(updateUrgency(view, now + hour, until)).toBe('pill');
     expect(updateUrgency(view, until, until)).toBe('bar');
+  });
+});
+
+describe('updateAction', () => {
+  function install(status: InstallStatus): InstallState {
+    return { status, version: status === 'idle' || status === 'off' ? null : '0.6.0', error: status === 'failed' ? 'offline' : null };
+  }
+
+  it('offers a restart once the update is staged', () => {
+    expect(updateAction(install('ready'))).toBe('restart');
+  });
+
+  it('says it is downloading while the installer checks or downloads', () => {
+    expect(updateAction(install('checking'))).toBe('downloading');
+    expect(updateAction(install('downloading'))).toBe('downloading');
+  });
+
+  it('falls back to the brew command when the app cannot update itself', () => {
+    expect(updateAction(null)).toBe('command');
+    expect(updateAction(install('off'))).toBe('command');
+    expect(updateAction(install('failed'))).toBe('command');
+    // The release check found a newer release, but the installer did not.
+    expect(updateAction(install('idle'))).toBe('command');
   });
 });

@@ -46,6 +46,10 @@ export class FakeUpdates implements UpdateSource {
     return this.view;
   }
 
+  check(): Promise<UpdateView> {
+    return Promise.resolve(this.view);
+  }
+
   start(): void {}
 
   stop(): void {}
