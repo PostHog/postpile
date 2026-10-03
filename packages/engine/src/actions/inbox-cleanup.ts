@@ -135,7 +135,7 @@ export class InboxCleanup implements CatchUpGate {
     const isMerged = (key: PrKey | null) => key !== null && prs.get(key)?.state === 'MERGED';
     const mergedKeys = keys.filter(isMerged);
     const events = store.events.listForPrs(mergedKeys);
-    const glances = mergedKeys.length === 0 ? new Map<PrKey, CleanupGlance>() : this.deps.glances(mergedKeys);
+    const glances = this.deps.glances(mergedKeys);
     return unread.map((thread) => {
       const key = threadPrKey(thread);
       const merged = isMerged(key);

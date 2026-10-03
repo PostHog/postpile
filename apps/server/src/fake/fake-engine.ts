@@ -980,7 +980,7 @@ export class FakeEngine implements EngineService {
   /** A merged sample PR's glance for the "look safe" item: a stored sample glance like the engine reads it, else the thread-only samples' verdicts. */
   private cleanupGlanceOf(threadId: string, key: PrKey | null): CleanupGlance | null {
     const glance = key === null ? undefined : this.data.glances.find((candidate) => candidate.prKey === key);
-    if (glance && key !== null) {
+    if (glance !== undefined && key !== null) {
       return { verdict: glance.verdict, stale: this.isGlanceStale(key), writing: this.catchUp.stateOf(key) === 'running' };
     }
     const verdict = sampleMergedVerdict(threadId);
