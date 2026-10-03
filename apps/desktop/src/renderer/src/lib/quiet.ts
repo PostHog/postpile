@@ -22,7 +22,6 @@ const REASON_TEXT: Record<Exclude<QuietReason, 'bots' | 'judged' | 'request_gone
   reviewed: 'you reviewed after it',
   replied: 'you replied after it',
   opened: 'opened in PostPile',
-  not_pr: 'not a pull request',
 };
 
 /** "only trunk-io, CI", "nothing for you from lyra, CI", "request gone, nothing for you from alice, CI", "you approved after it", "opened in PostPile". */

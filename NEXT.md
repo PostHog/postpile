@@ -1319,11 +1319,13 @@ the app meanwhile.
   other human events, automation), newest within a class, never by recency
   alone. Bot events get no NEW badge unless loud. HTML comments are stripped
   from summaries.
-- **GitHub unread is PostPile unread** (2026-09-30): every notification
+- **GitHub unread is PostPile unread** (2026-09-30): every PR notification
   unread on GitHub is either cleared by PostPile because it is obviously
   clearable (bots only, you acted after it, or everything since you last
-  looked is bots or people the events agent judged as not needing you;
-  releases and issues always) or shows unread in PostPile. A tile is unread
+  looked is bots or people the events agent judged as not needing you) or
+  shows unread in PostPile. Other notifications (releases, issues, security
+  alerts) stay on GitHub untouched, unless the user clears them in the
+  catch-up dialog (2026-10-03). A tile is unread
   while a thread of it is unread, done or not; snooze stays; loudness keeps
   pings, coral and urgency. Asks never clear by themselves. A finished topic
   never holds an unread thread. "Start fresh here" is gone. Also unread:

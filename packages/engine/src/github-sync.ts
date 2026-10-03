@@ -160,6 +160,11 @@ export class GitHubSync {
     return this.storedThreads;
   }
 
+  /** Unread PR threads in the store. Other notifications are not counted. */
+  private unreadPrThreadCount(): number {
+    return this.threads().filter((t) => t.unread && threadPrKey(t) !== null).length;
+  }
+
   /** Starts a run (sync or poll): fresh thread snapshot, nothing reconciled yet. */
   private beginRun(): void {
     this.readOnGitHub = new Set();
@@ -285,7 +290,7 @@ export class GitHubSync {
     const listed = origin === 'sync' ? await this.readThreads(startedAt) : await this.watchThreads();
     const readList = listed === null && looked.length === 0 ? null : [...(listed ?? []), ...looked];
     if (inbox === null && readList === null) {
-      const threads = this.threads().filter((t) => t.unread).length;
+      const threads = this.unreadPrThreadCount();
       return { notModified: true, changed: false, threads, pollIntervalSeconds };
     }
     const inboxIds = new Set((inbox ?? []).map((t) => t.id));
@@ -331,7 +336,7 @@ export class GitHubSync {
       const changed = new Set([...readById.keys(), ...inboxIds, ...readElsewhere.map((thread) => thread.id)]);
       this.reconcileReadTimes(changed);
     });
-    const threads = inbox?.length ?? this.threads().filter((t) => t.unread).length;
+    const threads = inbox?.filter((t) => threadPrKey(t) !== null).length ?? this.unreadPrThreadCount();
     return { notModified: result.notModified, changed: true, threads, pollIntervalSeconds };
   }
 

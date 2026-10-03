@@ -14,6 +14,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 ### Changed
 
 - The old cleanup ("mark everything older than 14 / 30 days read", its banner and "Not now") is part of the new dialog.
+- PostPile leaves notifications that are not PRs (releases, issues, discussions, security alerts) unread on GitHub. It used to mark them read on every sync. Only the catch-up dialog clears them now, when you ask.
 
 ## 0.15.2 (2026-10-02)
 

@@ -10,7 +10,6 @@ import {
   clickedReadCheck,
   clickedReadDetail,
   clickedReadNotice,
-  isClearableNonPr,
   isNewYourMove,
   judgedReadCheck,
   judgedReadDetail,
@@ -344,15 +343,6 @@ describe('judgedReadCheck', () => {
     const asked = makePr({ number: 7, author: 'alice', reviewerUsers: [viewer.login], timeline: [request] });
     expect(judgedReadCheck(judged({ pr: asked })).kind).toBe('mark');
     expect(judgedReadCheck(judged({ events: [humanComment(5)] }))).toEqual({ kind: 'skip', why: 'nothing_known' });
-  });
-});
-
-describe('isClearableNonPr', () => {
-  it('clears unread releases and issues right away, never PRs or read threads', () => {
-    const release = { ...makeThreadFor(pr, { updatedAt: at(10) }), subjectType: 'Release', number: null };
-    expect(isClearableNonPr(release)).toBe(true);
-    expect(isClearableNonPr({ ...release, unread: false })).toBe(false);
-    expect(isClearableNonPr(makeThreadFor(pr, { updatedAt: at(10) }))).toBe(false);
   });
 });
 

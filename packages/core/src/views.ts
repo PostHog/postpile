@@ -523,6 +523,7 @@ export interface SyncReport {
   finishedAt: IsoTime;
   /** True when the notifications request came back 304. */
   notificationsNotModified: boolean;
+  /** Unread PR threads in the inbox. Other notifications are not counted. */
   threads: number;
   prsFetched: number;
   /** Unread PR threads still waiting to be enriched because of maxPrs. */
