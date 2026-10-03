@@ -12,7 +12,7 @@ import {
   type SyncReport,
   type Viewer,
 } from '@postpile/core';
-import { noteSyncStart } from './actions/inbox-cleanup.ts';
+import type { CatchUpGate } from './actions/inbox-cleanup.ts';
 import { AgentBudget } from './budget.ts';
 import { retireFinishedTopics } from './consolidation/retire.ts';
 import { withdrawStaleProposals } from './consolidation/withdraw.ts';
@@ -75,6 +75,29 @@ export interface DigestStoredOptions {
 /** The part of a fetch the digest reads. */
 type FetchedForDigest = Pick<GitHubSyncResult, 'viewer' | 'fetchedPrKeys' | 'newEventIds' | 'readOnGitHub'>;
 
+/** A sync the inbox catch-up held after its fetch: what it fetched, and how it was asked to run. */
+interface HeldSync {
+  fetched: FetchedForDigest;
+  options: SyncOptions;
+}
+
+function union<T>(a: T[], b: T[]): T[] {
+  return [...new Set([...a, ...b])];
+}
+
+/** What a held sync fetched counts for the sync that resumes it: its PRs fetched, its events new. */
+function withHeld(fetched: FetchedForDigest, held: HeldSync | null): FetchedForDigest {
+  if (held === null) {
+    return fetched;
+  }
+  return {
+    viewer: fetched.viewer,
+    fetchedPrKeys: union(held.fetched.fetchedPrKeys, fetched.fetchedPrKeys),
+    newEventIds: union(held.fetched.newEventIds, fetched.newEventIds),
+    readOnGitHub: union(held.fetched.readOnGitHub, fetched.readOnGitHub),
+  };
+}
+
 /** What progress() reads while a sync runs. */
 interface LiveSync {
   startedAt: string;
@@ -87,10 +110,14 @@ interface LiveSync {
  * One sync: fetch -> verify facts -> agent digest -> mark threads read that
  * are obviously clearable ("Handled quietly") -> retire finished topics ->
  * bring back retired topics with an unread thread.
- * Tiles are derived on read.
+ * Tiles are derived on read. When the inbox catch-up's start dialog is due,
+ * the sync stops after the fetch and the rest waits for its answer: the next
+ * sync (which the answer starts) fetches again and digests both fetches.
  */
 export class SyncRun {
   private live: LiveSync | null = null;
+  /** Set while the inbox catch-up holds the last sync after its fetch (DESIGN.md "Inbox cleanup" › Before agent work). */
+  private held: HeldSync | null = null;
   /** The first sync in this process is "start" (the app's own auto-sync); every later one is "manual" ("Sync now"). */
   private syncedOnceInProcess = false;
 
@@ -100,6 +127,7 @@ export class SyncRun {
     private readonly markReadQueue: MarkReadQueue,
     private readonly quota: GitHubQuota,
     private readonly quietReads: QuietReads,
+    private readonly catchUpGate: CatchUpGate,
     private readonly log: (line: string) => void = (line) => console.log(line),
     /** Told after each sync that ran to the end, next to sync_completed (not for a crashed or blocked one). */
     private readonly onCompleted: () => void = () => {},
@@ -259,16 +287,28 @@ export class SyncRun {
     };
   }
 
+  /** A sync waits for the inbox catch-up's answer: no agent work, no poll, until it resumes. */
+  holding(): boolean {
+    return this.held !== null;
+  }
+
+  /** How the held sync was asked to run, for the one that resumes it. */
+  heldOptions(): SyncOptions | null {
+    return this.held?.options ?? null;
+  }
+
   async run(options: SyncOptions): Promise<SyncReport> {
     const { store, now, callLog } = this.deps;
     const startedAt = now().toISOString();
     const errors: string[] = [];
     // Set when the sync threw halfway; telemetry reports it as sync_failed.
     let crashed = false;
+    // Set when the inbox catch-up held it after the fetch.
+    let held = false;
     const tally: DigestTally = { dossiersUpdated: 0, facts: emptyFactCounts() };
     const report = emptyReport(startedAt, tally, errors);
     report.agentCallStats = callLog.begin(`sync:${startedAt}`);
-    noteSyncStart(store, startedAt);
+    this.catchUpGate.noteStart(startedAt);
     this.log(`sync: started (max agent calls ${options.maxAgentCalls ?? 'unlimited'})`);
     // Only the hourly auto sync waits for a low quota; a sync the user or the app start asked for runs anyway.
     if (!this.quota.allowsBackground()) {
@@ -295,17 +335,17 @@ export class SyncRun {
       if (!firstLook) {
         this.deps.pingDecider?.keepSyncedNews(fetched.fetchedPrKeys, fetched.newEventIds);
       }
-
-      await this.digest(fetched, options.agentJobs, { phases, budget, tally, errors, report, tidyTried });
-      // Before the retire step: what PostPile clears by itself no longer holds a finished topic.
-      await this.handleQuietly(errors);
-      // Last, so the new events, what was read on GitHub and the quiet reads all count.
-      report.topicsRetired = retireFinishedTopics(store, now().toISOString());
-      // A finished topic never holds a thread unread on GitHub.
-      // After the quiet reads, from the unread state they left: a failed or capped write brings the topic back.
-      reviveUnreadTopics(store, now().toISOString(), false);
-      // Cheap, no agent call: catches proposals about topics that left the sidebar by any path.
-      withdrawStaleProposals(store, now().toISOString());
+      // The start dialog is due: the agent work waits for its answer, which resumes the sync (fetching
+      // again is cheap: unchanged PRs are skipped, and the bulk mark-reads show up in the inbox).
+      const forDigest = withHeld(fetched, this.held);
+      held = this.catchUpGate.holds();
+      this.held = held ? { fetched: forDigest, options } : null;
+      if (held) {
+        report.heldForCatchUp = true;
+        this.log('sync: held after the fetch until the inbox catch-up dialog is answered');
+      } else {
+        await this.afterFetch(forDigest, options, { phases, budget, tally, errors, report, tidyTried });
+      }
     } catch (error) {
       crashed = true;
       errors.push(`sync: ${errorText(error)}`);
@@ -315,6 +355,36 @@ export class SyncRun {
       callLog.end();
       this.live = null;
     }
+    return this.finishRun(report, phases, tally, options, crashed, held);
+  }
+
+  /** Everything after the fetch: the agent digest, the quiet reads, then the retire steps. */
+  private async afterFetch(
+    fetched: FetchedForDigest,
+    options: SyncOptions,
+    run: { phases: PhaseClock; budget: AgentBudget; tally: DigestTally; errors: string[]; report: SyncReport; tidyTried: boolean },
+  ): Promise<void> {
+    const { store, now } = this.deps;
+    await this.digest(fetched, options.agentJobs, run);
+    // Before the retire step: what PostPile clears by itself no longer holds a finished topic.
+    await this.handleQuietly(run.errors);
+    // Last, so the new events, what was read on GitHub and the quiet reads all count.
+    run.report.topicsRetired = retireFinishedTopics(store, now().toISOString());
+    // A finished topic never holds a thread unread on GitHub.
+    // After the quiet reads, from the unread state they left: a failed or capped write brings the topic back.
+    reviveUnreadTopics(store, now().toISOString(), false);
+    // Cheap, no agent call: catches proposals about topics that left the sidebar by any path.
+    withdrawStaleProposals(store, now().toISOString());
+  }
+
+  /**
+   * The report's totals, the log lines, the stored report and telemetry. A
+   * held sync sends no telemetry: the sync that resumes it is the one that
+   * completes (and counts as the start sync).
+   */
+  private finishRun(report: SyncReport, phases: PhaseClock, tally: DigestTally, options: SyncOptions, crashed: boolean, held: boolean): SyncReport {
+    const { store, now } = this.deps;
+    const { errors } = report;
     // Mark-reads run in the background; the sync report is where the user hears about them.
     errors.push(...this.markReadQueue.takeNotes());
     this.foldAgentOffErrors(report);
@@ -330,7 +400,9 @@ export class SyncRun {
     } catch (error) {
       this.log(`sync: could not store the report: ${errorText(error)}`);
     }
-    this.reportTelemetry(report, options.auto === true, crashed, this.quota.runStats());
+    if (!held) {
+      this.reportTelemetry(report, options.auto === true, crashed, this.quota.runStats());
+    }
     return report;
   }
 

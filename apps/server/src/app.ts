@@ -317,14 +317,21 @@ export function createApp(
     const body = z.object({ enabled: z.boolean() }).parse(await c.req.json());
     return c.json(await engine.setGitHubWrites(body.enabled));
   });
-  // Inbox cleanup: old unread threads, "mark everything older than N days read" (a GitHub
-  // write through the lock, pending while locked) and "Not now".
+  // Inbox catch-up: unread merged PRs and old notifications, whether the start dialog is due,
+  // "Clear N" (GitHub writes through the lock, one pending write while locked) and "Start as usual".
   app.get('/api/inbox-cleanup', async (c) => c.json(await engine.inboxCleanup()));
-  app.post('/api/inbox-cleanup/mark-read', async (c) => {
-    const body = z.object({ olderThanDays: z.union([z.literal(14), z.literal(30)]) }).parse(await c.req.json());
-    return c.json(await engine.cleanUpInbox(body.olderThanDays));
+  app.post('/api/inbox-cleanup/clear', async (c) => {
+    const body = z
+      .object({
+        merged: z.enum(['quiet7', 'quiet14', 'all']).nullable(),
+        older: z.union([z.literal(14), z.literal(30)]).nullable(),
+        countedAt: z.iso.datetime(),
+        from: z.enum(['start', 'sidebar']),
+      })
+      .parse(await c.req.json());
+    return c.json(await engine.clearInbox(body));
   });
-  app.post('/api/inbox-cleanup/not-now', async (c) => c.json(await engine.hideInboxCleanup()));
+  app.post('/api/inbox-cleanup/start-as-usual', async (c) => c.json(await engine.startAsUsual()));
   // PostPile's MCP server in Claude Code: the cached `claude mcp get`, "Add to Claude Code"
   // (runs `claude mcp add` in the installed app only; local, never GitHub) and the footer's "Not now".
   app.get('/api/mcp-connection', async (c) => c.json(await engine.mcpConnection()));

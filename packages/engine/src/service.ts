@@ -19,7 +19,7 @@ import type {
   FinishedTopic,
   GitHubWritesChange,
   GitHubWritesStatus,
-  CleanupAge,
+  CleanupRequest,
   InboxCleanupView,
   PendingWritesResult,
   InstructionsChatReply,
@@ -244,17 +244,22 @@ export interface EngineService {
   sendPendingWrites(): Promise<PendingWritesResult>;
   /** "Discard": drops the pending writes. Nothing changes in the app, the tiles stay unread like on GitHub. */
   discardPendingWrites(): Promise<PendingWritesResult>;
-  /** Old unread GitHub threads (14 / 30 days) and how to show the cleanup. */
+  /**
+   * The inbox catch-up: unread merged PRs and old notifications, every
+   * combination of picks with what it clears, whether the start dialog is
+   * due (a start sync waits for it), and a run in progress.
+   */
   inboxCleanup(): Promise<InboxCleanupView>;
   /**
-   * "Mark everything older than N days read on GitHub": one PUT
-   * /notifications through the writes door, logged as mark_all_read_before
-   * (origin cleanup). Locked, it becomes one pending write. The inbox is
-   * read again afterwards; GitHub may finish it in the background.
+   * "Clear N": marks the picks read on GitHub in the background through the
+   * writes door (one PUT for everything older, one per repo it covers whole,
+   * then one PATCH per thread, about one a second). Locked, it becomes one
+   * pending write. From the start dialog it also answers it, and a held
+   * sync goes on once the run ended.
    */
-  cleanUpInbox(age: CleanupAge): Promise<ActionResult>;
-  /** "Not now": hides the cleanup line and banner for CLEANUP_SNOOZE_DAYS. */
-  hideInboxCleanup(): Promise<ActionResult>;
+  clearInbox(request: CleanupRequest): Promise<ActionResult>;
+  /** "Start as usual" (or Esc) on the start dialog: answers it and lets the held sync go on. */
+  startAsUsual(): Promise<ActionResult>;
   /** Carries the active facts about the PR, verified at read time. */
   getPr(prKey: PrKey): Promise<PrDetail | null>;
   /** "Who is doing what" and "what changed since T", straight from the fact table. No agent call. */

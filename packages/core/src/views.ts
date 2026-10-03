@@ -553,6 +553,12 @@ export interface SyncReport {
    * line per skipped call.
    */
   agentOff?: string | null;
+  /**
+   * Set when the sync stopped after its fetch because the inbox catch-up's
+   * start dialog is due (DESIGN.md "Inbox cleanup"): no agent work ran; the
+   * answer starts the sync that does it.
+   */
+  heldForCatchUp?: boolean;
 }
 
 export interface ActionResult {

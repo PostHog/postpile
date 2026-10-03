@@ -9,10 +9,11 @@ const TONES: Record<NoticeTone, string> = {
 
 /**
  * The latest action result above the footer, with Undo while a mark-read can
- * still be taken back, and "Snooze until next push" after a mark-read that
- * left the tile your move.
+ * still be taken back, "Snooze until next push" after a mark-read that
+ * left the tile your move, and "Show" after an inbox cleanup ran (the
+ * notifications view lists what each thread's last action was).
  */
-export function Toast() {
+export function Toast(props: { onShowActionLog: () => void }) {
   const actions = useActions();
   const notice = actions.notice;
   if (!notice) {
@@ -41,6 +42,18 @@ export function Toast() {
           onClick={() => void actions.snooze(snoozeTileId, { kind: 'new_push' })}
         >
           Snooze until next push
+        </button>
+      )}
+      {notice.showActionLog && (
+        <button
+          type="button"
+          className="font-semibold underline-offset-2 hover:underline"
+          onClick={() => {
+            props.onShowActionLog();
+            actions.dismissNotice();
+          }}
+        >
+          Show
         </button>
       )}
       <button type="button" aria-label="Dismiss" className="opacity-60 hover:opacity-100" onClick={actions.dismissNotice}>

@@ -1,158 +1,170 @@
-import { makePr, makeThreadFor } from '@postpile/core/fixtures';
+import { CATCH_UP_CONFIRM_TRIES, CLEANUP_ALREADY_PENDING, type NotificationThread, type Pr } from '@postpile/core';
+import { makePr, makeThreadFor, makeTimelineItem, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
-import { makeHarness, NOW, type Harness } from './testing/fakes.ts';
+import { Board } from './board.ts';
+import { glanceTargetKeys } from './glance-inputs.ts';
+import { makeHarness, NOW, type Harness, type HarnessOptions } from './testing/fakes.ts';
 import { reviewRequestedPr } from './testing/prs.ts';
-import { topicWithPrs } from './testing/topics.ts';
 
 // NOW is 2026-09-02T12:00Z.
-const OLD_20 = '2026-08-13T12:00:00.000Z';
-const OLD_40 = '2026-07-24T12:00:00.000Z';
-const CUTOFF_14 = '2026-08-19T12:00:00.000Z';
+const DAY_MS = 24 * 3_600_000;
 
-/**
- * An unread PR thread older than the sync looks at (30 days): never fetched,
- * never cleared by PostPile. Releases and issues would be (they are marked
- * read on GitHub by the sync since 2026-09-30), so the old threads here are PRs.
- */
-function oldPrThread(number: number, updatedAt: string) {
-  return makeThreadFor(makePr({ number }), { updatedAt });
+function daysAgo(days: number): string {
+  return new Date(NOW.getTime() - days * DAY_MS).toISOString();
 }
 
-/** One fresh unread PR thread, an old review request (20 days) and an old PR thread never fetched (40 days), all unread. */
-async function withOldThreads(options: { writesEnabled?: boolean } = {}): Promise<Harness> {
-  const h = makeHarness(options);
-  const pr = reviewRequestedPr(1);
-  h.reader.addPr(pr, makeThreadFor(pr));
-  const old = reviewRequestedPr(20);
-  h.reader.addPr(old, makeThreadFor(old, { updatedAt: OLD_20 }));
-  h.reader.threads = [...h.reader.threads, oldPrThread(40, OLD_40)];
-  await h.engine.sync({ maxAgentCalls: 0 });
+/** A merged PR the viewer was never asked on. */
+function mergedPr(number: number, days: number, repo = 'acme/app'): Pr {
+  return makePr({ number, repo, state: 'MERGED', mergedAt: daysAgo(days), mergedBy: 'alice', updatedAt: daysAgo(days) });
+}
+
+/** Merged while the viewer's review was asked: a merge without your review, glanced after the fact. */
+function mergedWithoutReview(number: number, repo: string): Pr {
+  return makePr({
+    number,
+    repo,
+    state: 'MERGED',
+    mergedAt: daysAgo(1),
+    mergedBy: 'alice',
+    reviewerUsers: [viewer.login],
+    timeline: [
+      makeTimelineItem({ id: `ask-${number}`, kind: 'review_requested', actor: 'alice', subject: viewer.login, at: daysAgo(3) }),
+      makeTimelineItem({ id: `merge-${number}`, kind: 'merged', actor: 'alice', subject: null, at: daysAgo(1) }),
+    ],
+    updatedAt: daysAgo(1),
+  });
+}
+
+/** 21 merged PRs in acme/app, nothing else there. */
+function mergedPile(): Pr[] {
+  return Array.from({ length: 21 }, (_, index) => mergedPr(index + 1, 1 + (index % 3)));
+}
+
+function harnessWith(prs: Pr[], options: HarnessOptions = {}): Harness {
+  const h = makeHarness({ catchUpGate: true, ...options });
+  for (const pr of prs) {
+    h.reader.addPr(pr, makeThreadFor(pr));
+  }
   return h;
 }
 
-function logRows(h: Harness) {
-  return h.store.actionLog.listRecent(20).toReversed().map((row) => [row.action, row.origin, row.outcome]);
+/** What GitHub lists after the cleanup's calls: only `unread` stays in the inbox. */
+function githubAfterCleanup(h: Harness, unread: NotificationThread[]): void {
+  h.reader.threads = unread;
+  h.reader.etag = 'etag-after-cleanup';
 }
 
-describe('inbox cleanup', () => {
-  it('counts old unread threads and shows a banner on the first run', async () => {
-    const h = await withOldThreads();
-    expect(await h.engine.inboxCleanup()).toEqual({
-      unreadOlderThan14: 2,
-      unreadOlderThan30: 1,
-      look: 'banner',
-      hiddenUntil: null,
-      pendingCutoff: null,
+describe('inbox catch-up: the sync gate', () => {
+  it('holds the first sync after the fetch while the start dialog is due; Start as usual lets it go on', async () => {
+    const open = reviewRequestedPr(100, { repo: 'acme/web' });
+    const h = harnessWith([...mergedPile(), open]);
+
+    const held = await h.engine.sync();
+
+    expect(held.heldForCatchUp).toBe(true);
+    expect(held.prsFetched).toBeGreaterThan(0);
+    expect(h.runner.requests).toEqual([]);
+    expect(await h.engine.pollOnce()).toEqual({ kind: 'blocked', reason: 'waiting for the inbox catch-up answer' });
+    expect(await h.engine.inboxCleanup()).toMatchObject({
+      start: { kind: 'first_run', load: 'light' },
+      counts: { unread: 22, mergedAll: 21, mergedQuiet7: 0 },
     });
+
+    await h.engine.startAsUsual();
+    const resumed = await h.engine.sync();
+
+    expect(resumed.heldForCatchUp).toBeUndefined();
+    expect(h.runner.requests.length).toBeGreaterThan(0);
+    expect((await h.engine.inboxCleanup()).start).toBeNull();
+    // Answered: the next start does not ask again.
+    expect((await h.engine.sync()).heldForCatchUp).toBeUndefined();
   });
 
-  it('turns quiet after a normal sync gap once the dialog was answered, and prominent again after 5 days', async () => {
-    let clock = NOW;
-    const h = makeHarness({ now: () => clock });
-    h.reader.threads = [oldPrThread(40, OLD_40)];
+  it('never holds without a window to ask in (the CLI), and below 20 merged PRs', async () => {
+    const cli = harnessWith(mergedPile(), { catchUpGate: false });
+    expect((await cli.engine.sync({ maxAgentCalls: 0 })).heldForCatchUp).toBeUndefined();
+
+    const few = harnessWith(mergedPile().slice(0, 19));
+    expect((await few.engine.sync({ maxAgentCalls: 0 })).heldForCatchUp).toBeUndefined();
+  });
+});
+
+describe('inbox catch-up: clearing', () => {
+  it('sends one PUT for everything older, a repo PUT and a PATCH, reads the PATCHed thread here, then resumes the sync', async () => {
+    const skipped = mergedWithoutReview(200, 'acme/web');
+    const open = reviewRequestedPr(201, { repo: 'acme/web' });
+    const h = harnessWith([...mergedPile(), skipped, open]);
+    // An old thread on a PR the sync never fetches.
+    const old = makeThreadFor(makePr({ number: 300, repo: 'acme/docs' }), { updatedAt: daysAgo(40) });
+    h.reader.threads = [...h.reader.threads, old];
     await h.engine.sync({ maxAgentCalls: 0 });
-    // Any choice in the dialog answers the banner; one that leaves the old thread unread keeps the count.
-    await h.engine.cleanUpInbox(30);
-    h.reader.threads = [oldPrThread(40, OLD_40)];
-    clock = new Date('2026-09-03T12:00:00.000Z');
-    await h.engine.sync({ maxAgentCalls: 0 });
-    expect((await h.engine.inboxCleanup()).look).toBe('line');
-    clock = new Date('2026-09-09T12:00:00.000Z');
-    await h.engine.sync({ maxAgentCalls: 0 });
-    expect((await h.engine.inboxCleanup()).look).toBe('banner');
+    expect(glanceTargetKeys(Board.load(h.store, NOW.toISOString())).has(skipped.key)).toBe(true);
+
+    const view = await h.engine.inboxCleanup();
+    expect(view.counts).toMatchObject({ mergedAll: 22, mergedWithoutReview: 1, olderThan30: 1 });
+    expect(view.glances).toBe(2);
+    expect(view.options.find((option) => option.merged === 'all' && option.older === 30)).toMatchObject({ clears: 23, bulkCalls: 2, threadCalls: 1, glancesSaved: 1 });
+
+    githubAfterCleanup(h, [makeThreadFor(open)]);
+    const result = await h.engine.clearInbox({ merged: 'all', older: 30, countedAt: view.countedAt, from: 'start' });
+    await h.engine.inboxCleanupSettled();
+    const resumed = await h.engine.sync({ maxAgentCalls: 0 });
+
+    expect(result).toMatchObject({ ok: true, message: 'Clearing 23 on GitHub in the background' });
+    expect(h.writer.calls).toEqual([`markAllReadBefore ${daysAgo(30)}`, `markRepoReadBefore acme/app ${NOW.toISOString()}`, 'markThreadRead thread-200']);
+    expect(h.store.notifications.get('thread-200')).toMatchObject({ unread: false, lastReadAt: skipped.updatedAt });
+    // The merge without your review was seen through the read: the glance step leaves the PR alone now.
+    expect(h.store.events.listForPr(skipped.key).find((event) => event.kind === 'merged_without_review')?.seenAt).not.toBeNull();
+    const targets = glanceTargetKeys(Board.load(h.store, NOW.toISOString()));
+    expect([targets.has(skipped.key), targets.has(open.key)]).toEqual([false, true]);
+    expect(resumed.heldForCatchUp).toBeUndefined();
+    expect(h.store.notifications.list().filter((thread) => thread.unread).map((thread) => thread.id)).toEqual(['thread-201']);
+    expect(h.store.actionLog.listRecent(50).find((row) => row.action === 'inbox_cleanup')).toMatchObject({ origin: 'cleanup', outcome: 'github', detail: 'marked 23 read on GitHub' });
+    expect(h.telemetry.events).toContainEqual({ event: 'marked_read', props: { count: 23, origin: 'cleanup' } });
+    expect((await h.engine.inboxCleanup()).lastRun).toMatchObject({ marked: 23, failed: 0 });
   });
 
-  it('marks everything older than 14 days read with one PUT, logged, then reads the inbox again', async () => {
-    const h = await withOldThreads();
+  it('counts bulk-covered threads only once the inbox shows them read, and says what GitHub is still working on', async () => {
+    const h = harnessWith(mergedPile());
+    await h.engine.sync({ maxAgentCalls: 0 });
+    const view = await h.engine.inboxCleanup();
     const callsBefore = h.reader.notificationCalls;
 
-    const result = await h.engine.cleanUpInbox(14);
+    // GitHub took the repo PUT with 202 and never finished it while the run waited.
+    await h.engine.clearInbox({ merged: 'all', older: null, countedAt: view.countedAt, from: 'start' });
+    await h.engine.inboxCleanupSettled();
 
-    expect(result.ok).toBe(true);
-    expect(h.writer.calls).toEqual([`markAllReadBefore ${CUTOFF_14}`]);
-    expect(logRows(h)).toEqual([['mark_all_read_before', 'cleanup', 'github']]);
-    expect(h.store.actionLog.listRecent(1)[0]?.detail).toBe(`last_read_at=${CUTOFF_14}`);
-    expect(h.reader.notificationCalls).toBe(callsBefore + 1);
-    expect((await h.engine.inboxCleanup()).look).toBe('line');
+    expect(h.writer.calls).toEqual([`markRepoReadBefore acme/app ${view.countedAt}`]);
+    expect(h.reader.notificationCalls - callsBefore).toBeGreaterThanOrEqual(CATCH_UP_CONFIRM_TRIES);
+    expect((await h.engine.inboxCleanup()).lastRun).toMatchObject({ marked: 0, stillOnGitHub: 21 });
+    expect(h.store.actionLog.listRecent(50).find((row) => row.action === 'inbox_cleanup')?.detail).toBe('marked 0 read on GitHub; GitHub is still working on 21');
   });
 
-  it('becomes one pending write while locked, shown in the lock, and goes out on send', async () => {
-    const h = await withOldThreads({ writesEnabled: false });
+  it('parks one pending write while locked and lets the held sync go on; Send runs the same plan', async () => {
+    const h = harnessWith(mergedPile(), { writesEnabled: false });
+    await h.engine.sync({ maxAgentCalls: 0 });
+    const view = await h.engine.inboxCleanup();
 
-    const result = await h.engine.cleanUpInbox(14);
+    const result = await h.engine.clearInbox({ merged: 'all', older: null, countedAt: view.countedAt, from: 'start' });
+    const resumed = await h.engine.sync({ maxAgentCalls: 0 });
 
-    expect(result).toMatchObject({ ok: true, message: expect.stringMatching(/^Pending/) });
+    expect(result).toMatchObject({ ok: true, message: 'Pending: clears 21 on GitHub once you unlock and send it from the lock' });
+    expect(resumed.heldForCatchUp).toBeUndefined();
     expect(h.writer.calls).toEqual([]);
-    const status = await h.engine.githubWrites();
-    expect(status.pending).toEqual([
-      expect.objectContaining({ kind: 'mark_all_read_before', origin: 'cleanup', threadCount: 2, title: 'Cleanup: mark everything before 2026-08-19 read' }),
+    expect((await h.engine.githubWrites()).pending).toEqual([
+      expect.objectContaining({ kind: 'catch_up', origin: 'cleanup', title: 'Inbox cleanup: merged PRs', threadCount: 21 }),
     ]);
-    expect((await h.engine.inboxCleanup()).pendingCutoff).toBe(CUTOFF_14);
+    expect((await h.engine.inboxCleanup()).pending).toBe(true);
+    // Only one cleanup waits in the lock.
+    expect(await h.engine.clearInbox({ merged: 'all', older: null, countedAt: view.countedAt, from: 'sidebar' })).toMatchObject({ ok: false, message: CLEANUP_ALREADY_PENDING });
+    expect((await h.engine.githubWrites()).pending).toHaveLength(1);
 
     await h.engine.setGitHubWrites(true);
     const sent = await h.engine.sendPendingWrites();
+    await h.engine.inboxCleanupSettled();
 
-    expect(sent).toMatchObject({ ok: true, done: 1, failed: 0 });
+    expect(sent).toMatchObject({ ok: true, done: 1 });
     expect(sent.status.pending).toEqual([]);
-    expect(h.writer.calls).toEqual([`markAllReadBefore ${CUTOFF_14}`]);
-    expect(logRows(h)).toEqual([
-      ['mark_all_read_before', 'cleanup', 'pending'],
-      ['writes_on', 'footer', 'local'],
-      ['mark_all_read_before', 'footer', 'github'],
-    ]);
-  });
-
-  it('keeps a pending cleanup when the lock closes while pending writes are sent', async () => {
-    const h = await withOldThreads({ writesEnabled: false });
-    const pr = reviewRequestedPr(1);
-    await h.engine.markRead(`pr:${pr.key}`);
-    await h.engine.flushPendingWrites();
-    await h.engine.cleanUpInbox(14);
-    await h.engine.setGitHubWrites(true);
-    // The lock closes right after the first pending write reached GitHub.
-    const markThreadRead = h.writer.markThreadRead.bind(h.writer);
-    h.writer.markThreadRead = async (threadId) => {
-      await markThreadRead(threadId);
-      await h.engine.setGitHubWrites(false);
-    };
-
-    const sent = await h.engine.sendPendingWrites();
-
-    expect(sent).toMatchObject({ ok: false, done: 1, failed: 1 });
-    expect(sent.message).toContain("GitHub didn't take it: GitHub writes are off; still pending");
-    expect(h.writer.calls).toEqual([`markThreadRead ${makeThreadFor(pr).id}`]);
-    expect(sent.status.pending).toEqual([expect.objectContaining({ kind: 'mark_all_read_before', error: 'GitHub writes are off' })]);
-    expect((await h.engine.inboxCleanup()).pendingCutoff).toBe(CUTOFF_14);
-  });
-
-  it('discards a pending cleanup without writing anything', async () => {
-    const h = await withOldThreads({ writesEnabled: false });
-    await h.engine.cleanUpInbox(30);
-    await h.engine.discardPendingWrites();
-    expect(h.writer.calls).toEqual([]);
-    expect(logRows(h).at(-1)).toEqual(['mark_all_read_before', 'footer', 'discarded']);
-  });
-
-  it('hides nothing behind a start-fresh baseline stored before 2026-09-30', async () => {
-    const h = makeHarness({ now: () => NOW });
-    const pr = reviewRequestedPr(1);
-    topicWithPrs(h, 't', [pr]);
-    h.reader.threads = [...h.reader.threads, oldPrThread(40, OLD_40)];
-    h.store.meta.set('start_fresh_baseline', NOW.toISOString());
-    await h.engine.sync({ maxAgentCalls: 0 });
-    expect((await h.engine.getTopic('t'))?.tiles[0]?.state.kind).toBe('unread');
-    expect((await h.engine.listTopics())[0]).toMatchObject({ unreadTiles: 1 });
-    expect((await h.engine.inboxCleanup()).unreadOlderThan14).toBe(1);
-  });
-
-  it('hides the cleanup for 7 days on "Not now"', async () => {
-    let clock = NOW;
-    const h = makeHarness({ now: () => clock });
-    h.reader.threads = [oldPrThread(40, OLD_40)];
-    await h.engine.sync({ maxAgentCalls: 0 });
-    await h.engine.hideInboxCleanup();
-    expect(await h.engine.inboxCleanup()).toMatchObject({ look: 'none', hiddenUntil: '2026-09-09T12:00:00.000Z' });
-    clock = new Date('2026-09-10T12:00:00.000Z');
-    expect((await h.engine.inboxCleanup()).look).toBe('line');
+    expect(h.writer.calls).toEqual([`markRepoReadBefore acme/app ${view.countedAt}`]);
   });
 });

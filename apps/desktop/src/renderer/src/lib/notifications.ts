@@ -190,7 +190,10 @@ function entryText(last: ActionLogEntry, decidedBy: ActionLogEntry | null): { te
     case 'mark_read':
       return markReadText(last, decidedBy);
     case 'mark_all_read_before':
-      return writeText('inbox cleanup (everything older marked read)', last);
+      return writeText('inbox cleanup (everything older, or a whole repo, marked read)', last);
+    case 'inbox_cleanup':
+      // Logged without a thread or PR (one row per cleanup run), so a debug row never shows it; here for completeness.
+      return writeText('inbox cleanup', last);
     case 'undo_mark_read':
       return { text: `mark-read undone by ${WHO[last.origin]}`, tone: 'local' };
     case 'bring_back':

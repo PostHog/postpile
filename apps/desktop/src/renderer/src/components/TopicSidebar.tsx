@@ -30,7 +30,7 @@ import { Avatar } from './Avatar.tsx';
 import { BellIcon, CheckIcon, ChevronIcon, InboxIcon, InstructionsIcon, PeopleIcon, PrStateIcon } from './icons.tsx';
 import { QueueFilters } from './QueueFilters.tsx';
 import { YourMoveChip } from './YourMoveChip.tsx';
-import { InboxCleanup } from './InboxCleanup.tsx';
+import { InboxCleanupLine } from './InboxCleanupLine.tsx';
 
 /**
  * The "what's going on" snippet under the name: the dossier summary, else its
@@ -602,7 +602,7 @@ export function TopicSidebar(props: TopicSidebarProps) {
       */}
       <div aria-hidden="true" className="pointer-events-none sticky bottom-0 -ml-2.5 mt-auto -mb-[70px] h-14 shrink-0 bg-linear-to-b from-transparent to-sidebar" />
       <div className="relative z-[1] flex flex-col gap-0.5 border-t border-hairline-strong pt-2.5">
-        <InboxCleanup place="line" />
+        <InboxCleanupLine />
         <button
           type="button"
           onClick={props.onOpenInstructions}

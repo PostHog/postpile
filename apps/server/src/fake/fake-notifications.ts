@@ -16,6 +16,44 @@ function hasUnseenActivity(events: PrEvent[], prKey: string, readAt: string | nu
   return events.some((event) => event.prKey === prKey && event.seenAt === null && effectiveLoudness(event) !== 'muted' && (readAt === null || event.at > readAt));
 }
 
+const MERGED_THREAD_PREFIX = 'sample-thread-merged-';
+
+/** Titles of the merged sample PRs that only sit unread in the inbox (no tile), so the catch-up dialog has a pile. */
+const MERGED_TITLES = [
+  'Bump the lint config to the new preset',
+  'Retry flaky upload step once',
+  'Drop the unused metrics exporter',
+  'Pin the base image digest',
+  'Rename the staging deploy job',
+  'Cache the docs build',
+  'Tidy the release notes template',
+  'Move test fixtures next to the tests',
+  'Raise the e2e timeout on slow runners',
+  'Remove the old feature switch',
+  'Split the settings page into tabs',
+  'Log the queue depth every minute',
+];
+
+/** A merged sample PR known only from its unread thread (FakeEngine counts it as merged). */
+export function isSampleMergedThread(threadId: string): boolean {
+  return threadId.startsWith(MERGED_THREAD_PREFIX);
+}
+
+/** 24 unread threads on merged PRs, last activity 1 to 20 days ago, in two repos. */
+function mergedThreads(now: Date): NotificationThread[] {
+  return Array.from({ length: 24 }, (_, index): NotificationThread => ({
+    id: `${MERGED_THREAD_PREFIX}${index + 1}`,
+    reason: index % 4 === 0 ? 'review_requested' : 'subscribed',
+    unread: true,
+    updatedAt: hoursBefore(now, 20 + index * 20),
+    lastReadAt: null,
+    subjectType: 'PullRequest',
+    repo: index % 3 === 0 ? 'acme/web-sdk' : SAMPLE_REPO,
+    number: 1100 + index,
+    title: MERGED_TITLES[index % MERGED_TITLES.length] ?? 'Merged change',
+  }));
+}
+
 /**
  * Sample notification threads for the tiles and the debug view: one per
  * pinged sample PR (reason from its provenance, unread while it has unseen
@@ -47,7 +85,9 @@ export function sampleThreads(data: SampleData, now: Date): NotificationThread[]
     }
   }
   const extras: NotificationThread[] = [
-    // Old unread PR threads the sync never fetches, so the inbox cleanup line and dialog show in fake mode.
+    // Merged PRs nobody caught up on: the inbox catch-up dialog shows on every fake start.
+    ...mergedThreads(now),
+    // Old unread PR threads the sync never fetches, so the "everything else" row has something.
     ...[16, 22, 45].map((days, index): NotificationThread => ({
       id: `sample-thread-old-${days}`,
       reason: index === 1 ? 'mention' : 'subscribed',

@@ -19,9 +19,9 @@ export type ThreadOutcome =
 export type PendingWriteCause =
   /** The user sent a mark_read: one outcome per thread, in the write's thread order. */
   | { kind: 'sent'; outcomes: ThreadOutcome[] }
-  /** GitHub took the cleanup's single PUT. */
+  /** GitHub took the old cleanup's single PUT, or a catch-up's run started in the background. */
   | { kind: 'cleanup_sent' }
-  /** The cleanup's PUT failed, or the lock closed mid-send. */
+  /** The cleanup's PUT failed, or the lock closed mid-send (or before a catch-up could start). */
   | { kind: 'cleanup_not_taken'; error: string }
   /** The sync or the poll saw these threads leave the inbox (read on github.com or another client). */
   | { kind: 'read_elsewhere'; threadIds: ReadonlySet<string> }
@@ -117,6 +117,11 @@ function afterReadElsewhere(write: PendingWrite, threadIds: ReadonlySet<string>)
   return finished(write, effects);
 }
 
+/** The old cleanup's PUT and the catch-up: no thread list to send, one write as a whole. */
+function isCleanup(write: PendingWrite): boolean {
+  return write.kind === 'mark_all_read_before' || write.kind === 'catch_up';
+}
+
 /**
  * The one place a pending write changes. A cleanup only knows sent, not
  * taken (it stays pending, also when the lock closes during Send) and
@@ -127,9 +132,9 @@ export function pendingWriteStep(write: PendingWrite, cause: PendingWriteCause):
     case 'discarded':
       return { next: { kind: 'gone' }, effects: [{ kind: 'log_discarded' }] };
     case 'cleanup_sent':
-      return write.kind === 'mark_all_read_before' ? { next: { kind: 'gone' }, effects: [] } : NO_STEP;
+      return isCleanup(write) ? { next: { kind: 'gone' }, effects: [] } : NO_STEP;
     case 'cleanup_not_taken':
-      if (write.kind !== 'mark_all_read_before') {
+      if (!isCleanup(write)) {
         return NO_STEP;
       }
       return { next: { kind: 'kept', threads: [], error: cause.error }, effects: [{ kind: 'still_pending', error: cause.error }] };

@@ -19,6 +19,7 @@ import type {
   FinishedTopic,
   RepoOverview,
   SearchResult,
+  SyncReport,
   TeamRolesView,
   TopicDetail,
   TopicListItem,
@@ -90,23 +91,28 @@ describe('server routes over the fake engine', () => {
     expect((await post<GlanceLookResult>(app, `${path}/glance/look`)).json).toEqual({ outcome: 'current' });
   });
 
-  it('shows the inbox cleanup on sample data and parks it while locked', async () => {
-    const app = appWithFake();
-    const view = (await (await app.request('/api/inbox-cleanup')).json()) as InboxCleanupView;
-    expect(view).toMatchObject({ unreadOlderThan14: 3, unreadOlderThan30: 1, look: 'banner', pendingCutoff: null });
+  it('holds the sample start sync for the inbox catch-up, parks a clear while locked and runs it from the lock', async () => {
+    const app = appWithFake(new FakeEngine({ syncStepMs: 0, cleanupStepMs: 0, catchUpGate: true }));
+    const cleanup = async () => (await (await app.request('/api/inbox-cleanup')).json()) as InboxCleanupView;
 
-    const parked = await post<{ ok: boolean; message: string }>(app, '/api/inbox-cleanup/mark-read', { olderThanDays: 14 });
-    expect(parked.json.message).toMatch(/^Pending/);
+    expect((await post<SyncReport>(app, '/api/sync')).json.heldForCatchUp).toBe(true);
+    const view = await cleanup();
+    // 24 merged PRs only in the inbox, plus the merged sample tiles still unread.
+    expect(view).toMatchObject({ start: { kind: 'first_run' }, counts: { mergedAll: 27 }, pending: false });
+
+    const parked = await post<{ ok: boolean; message: string }>(app, '/api/inbox-cleanup/clear', { merged: 'all', older: null, countedAt: view.countedAt, from: 'start' });
+    expect(parked.json.message).toMatch(/^Pending: clears 27/);
     const writes = (await (await app.request('/api/github-writes')).json()) as GitHubWritesStatus;
-    expect(writes.pending).toEqual([expect.objectContaining({ kind: 'mark_all_read_before', origin: 'cleanup', threadCount: 3 })]);
-    expect(((await (await app.request('/api/inbox-cleanup')).json()) as InboxCleanupView).look).toBe('line');
+    expect(writes.pending).toEqual([expect.objectContaining({ kind: 'catch_up', origin: 'cleanup', threadCount: 27 })]);
+    expect((await cleanup()).start).toBeNull();
 
     await post(app, '/api/github-writes', { enabled: true });
     await post(app, '/api/github-writes/pending/send');
-    expect(((await (await app.request('/api/inbox-cleanup')).json()) as InboxCleanupView).unreadOlderThan14).toBe(0);
+    await vi.waitFor(async () => expect((await cleanup()).lastRun).toMatchObject({ marked: 27 }));
+    expect((await cleanup()).counts.mergedAll).toBe(0);
 
-    expect((await post(app, '/api/inbox-cleanup/mark-read', { olderThanDays: 7 })).status).toBe(400);
-    expect((await app.request('/api/inbox-cleanup/start-fresh', { method: 'POST' })).status).toBe(404);
+    expect((await post(app, '/api/inbox-cleanup/clear', { merged: 'quiet3', older: null, countedAt: view.countedAt, from: 'start' })).status).toBe(400);
+    expect((await app.request('/api/inbox-cleanup/mark-read', { method: 'POST' })).status).toBe(404);
   });
 
   it('lists repos, keeps the topics of the chosen repo, labels other repos and sets a repo quiet', async () => {

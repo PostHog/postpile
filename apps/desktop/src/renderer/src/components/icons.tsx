@@ -205,6 +205,29 @@ export function InboxIcon() {
   );
 }
 
+/** A merge (two branches joining): merged PRs in the inbox cleanup. */
+export function MergeIcon(props: IconProps) {
+  const size = props.size ?? 14;
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className={props.className} aria-hidden="true">
+      <circle cx="4.5" cy="3.5" r="1.7" />
+      <circle cx="4.5" cy="12.5" r="1.7" />
+      <circle cx="11.5" cy="8.5" r="1.7" />
+      <path d="M4.5 5.2v5.6M4.5 5.6c.4 2 2.2 2.9 5.3 2.9" />
+    </svg>
+  );
+}
+
+/** A trash can: the inbox cleanup's Clear button and progress. */
+export function TrashIcon(props: IconProps) {
+  const size = props.size ?? 13;
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={props.className} aria-hidden="true">
+      <path d="M2.5 4.5h11M6 4.5V3h4v1.5M4 4.5l.7 8.6a1 1 0 0 0 1 .9h4.6a1 1 0 0 0 1-.9l.7-8.6M6.8 7v4.5M9.2 7v4.5" />
+    </svg>
+  );
+}
+
 export function BellIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">

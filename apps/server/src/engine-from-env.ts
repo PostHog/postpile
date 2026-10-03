@@ -47,7 +47,8 @@ export interface EngineFromEnvOptions {
  * and the setup flow showing. POSTPILE_FAKE_MISSING simulates missing tools
  * (comma separated: gh, gh-auth, gh-token, gh-offline, claude, claude-auth,
  * claude-limit). POSTPILE_FAKE_QUOTA=low or critical simulates a GitHub
- * quota that is low or nearly used. Otherwise throws DataDirLockedError while
+ * quota that is low or nearly used. POSTPILE_FAKE_CATCH_UP=0 starts without
+ * the inbox catch-up dialog (it shows on every fake start otherwise). Otherwise throws DataDirLockedError while
  * another process holds the database.
  */
 export function engineFromEnv(options: EngineFromEnvOptions = {}): EngineService {
@@ -57,6 +58,7 @@ export function engineFromEnv(options: EngineFromEnvOptions = {}): EngineService
       missingTools: fakeToolProblems(process.env.POSTPILE_FAKE_MISSING),
       quota: fakeQuotaLevel(process.env.POSTPILE_FAKE_QUOTA),
       tidyOnFirstSync: process.env.POSTPILE_FAKE_TIDY === '1',
+      catchUpGate: process.env.POSTPILE_FAKE_CATCH_UP !== '0',
     });
   }
   if (options.migrateLegacy ?? true) {

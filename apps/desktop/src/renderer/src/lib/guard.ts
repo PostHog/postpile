@@ -15,7 +15,7 @@ const WHAT: Record<GithubWrite, string> = {
 };
 
 /**
- * Mark-reads (and the inbox cleanup, one mark-read of everything older) still run with GitHub writes locked: they change nothing in the
+ * Mark-reads (and the inbox cleanup, one pending write for all it clears) still run with GitHub writes locked: they change nothing in the
  * app and wait as pending writes until the user unlocks and sends them (or
  * discards them). Approve, comment review and comment have no pending queue, so they are
  * blocked while the lock is closed. So is the mark-read on opening a PR:

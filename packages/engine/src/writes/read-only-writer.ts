@@ -19,6 +19,10 @@ export class ReadOnlyWriter implements GitHubWriter {
     return this.refuse(`mark everything before ${lastReadAt} read`);
   }
 
+  markRepoReadBefore(repo: string, lastReadAt: string): Promise<void> {
+    return this.refuse(`mark everything in ${repo} before ${lastReadAt} read`);
+  }
+
   approvePr(ref: PrRef): Promise<void> {
     return this.refuse(`approve ${ref.repo}#${ref.number}`);
   }

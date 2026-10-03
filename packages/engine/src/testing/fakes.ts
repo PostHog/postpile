@@ -301,6 +301,10 @@ export class FakeWriter implements GitHubWriter {
     this.calls.push(`markAllReadBefore ${lastReadAt}`);
   }
 
+  async markRepoReadBefore(repo: string, lastReadAt: string): Promise<void> {
+    this.calls.push(`markRepoReadBefore ${repo} ${lastReadAt}`);
+  }
+
   async approvePr(ref: PrRef, body: string, commitOid: string): Promise<void> {
     if (this.failingApprovals.has(`${ref.repo}#${ref.number}`)) {
       throw new Error('GitHub timed out');
@@ -459,6 +463,8 @@ export interface HarnessOptions {
   mcpLauncher?: McpLauncher;
   /** Where agent requests arrive; none by default, so startAgentRequests does nothing. */
   agentRequestsFolder?: string;
+  /** Hold a start sync for the inbox catch-up dialog, as the app does. Off by default, like the CLI. */
+  catchUpGate?: boolean;
 }
 
 export function makeHarness(options: HarnessOptions = {}): Harness {
@@ -524,6 +530,8 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
     telemetry,
     quota,
     agentRequestsFolder: options.agentRequestsFolder ?? null,
+    catchUpGate: options.catchUpGate ?? false,
+    catchUpPaceMs: 0,
   });
   return { engine, store, reader, writer, writes, runner, agent, timers, commands, tools, telemetry, quota };
 }

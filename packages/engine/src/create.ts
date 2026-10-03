@@ -167,6 +167,8 @@ export function wireEngine(options: CreateEngineOptions = {}): Engine {
     quota,
     // Only the lock holder answers agent requests; read-only access never does.
     agentRequestsFolder: lock ? join(dirname(paths.databaseFile), AGENT_REQUESTS_FOLDER) : null,
+    // The app's start sync asks the inbox catch-up dialog first; the CLI has no window to ask in.
+    catchUpGate: lock !== null && (options.lockKind ?? 'server') !== 'cli',
   });
 }
 

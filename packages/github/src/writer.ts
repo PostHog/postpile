@@ -14,6 +14,8 @@ export interface GitHubWriter {
    * `lastReadAt` read, in one call. GitHub may do it asynchronously (202).
    */
   markAllReadBefore(lastReadAt: IsoTime): Promise<void>;
+  /** PUT /repos/{repo}/notifications: the same for one repo (`repo` is owner/name). */
+  markRepoReadBefore(repo: string, lastReadAt: IsoTime): Promise<void>;
   /** Approves exactly `commitOid`, the head the user looked at, not whatever the head is now. */
   approvePr(ref: PrRef, body: string, commitOid: string): Promise<void>;
   /** A review with event COMMENT on exactly `commitOid`: a review without an approval. `body` is required. */
