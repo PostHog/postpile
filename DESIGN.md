@@ -6473,11 +6473,14 @@ install state only changes what it offers.
   (ink: an app action, not an approval) with "Or it installs the next time
   PostPile quits". Checking or downloading means "Downloading the update…".
   Everything else (no installer, failed, or the installer found nothing
-  while the release check did) means the brew command, as before.
+  while the release check did) means the brew command, as before. Once
+  staged, the pill and bar name the staged version, not a newer release
+  that came out since: that is what the restart installs.
 - **Restart**: the same flush-and-close as Cmd+Q (pending mark-reads are
-  sent, the database closed), then electron-updater's `quitAndInstall`.
-  When the app has not quit 60 seconds later (Squirrel failed), the current
-  version starts again, since the engine is already closed.
+  sent, the database closed; it runs once, so a Cmd+Q meanwhile waits for
+  it), then electron-updater's `quitAndInstall`. When the app has not quit
+  60 seconds after the click (a stuck flush, or Squirrel failed), the
+  current version starts again, since the engine is stopped by then.
 - **Later**: unchanged (the reminder's snooze). A staged update installs on
   any quit (`autoInstallOnAppQuit`), so Later never loses it.
 - **Check for Updates…** in the app menu runs both checks now and answers in

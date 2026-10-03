@@ -130,8 +130,11 @@ let consolidationSchedule: ConsolidationSchedule | null = null;
 let updates: UpdateSource | null = null;
 // Downloads and installs releases; replaced in start() unless self-update is off.
 let selfUpdate: SelfUpdate = new SelfUpdateOff();
-// Set by Cmd+Q (before-quit). Until then, closing the window only hides it on macOS.
+// Set by Cmd+Q (before-quit) or "Restart to update". Until then, closing the window only hides it on macOS.
 let quitting = false;
+// The shutdown runs once, whether Cmd+Q or the restart started it; once done, a quit goes straight through.
+let shutdownPromise: Promise<void> | null = null;
+let shutdownDone = false;
 // PRs opened on github.com from the app; refreshed when the window gets focus back.
 const openedPrs = new OpenedPrs();
 
@@ -201,6 +204,13 @@ async function shutdown(): Promise<void> {
   await server?.close();
 }
 
+function shutdownOnce(): Promise<void> {
+  shutdownPromise ??= shutdown().finally(() => {
+    shutdownDone = true;
+  });
+  return shutdownPromise;
+}
+
 /** The self-updater for this run (DESIGN.md "Self-update"): the real one only in the packaged app. */
 function createSelfUpdate(): SelfUpdate {
   const mode = selfUpdateMode({ env: process.env, packaged: app.isPackaged, fake: isFake() });
@@ -217,8 +227,9 @@ function createSelfUpdate(): SelfUpdate {
   return new SelfUpdateOff();
 }
 
-// If the install has not quit the app by then (Squirrel.Mac failed), the old
-// version starts again: the engine is already closed, so staying open is no use.
+// If the restart has not quit the app by then (a stuck flush, or Squirrel.Mac
+// failed), the current version starts again: the engine is stopped or closed
+// by then, so staying open is no use. Counted from the click, shutdown included.
 const INSTALL_FALLBACK_MS = 60_000;
 
 /**
@@ -232,12 +243,12 @@ async function restartToUpdate(): Promise<void> {
   }
   quitting = true;
   console.log(`restarting to install PostPile ${selfUpdate.current().version ?? '(sample)'}`);
-  await shutdown();
   setTimeout(() => {
     console.error('the update did not install, starting the current version again');
     app.relaunch();
     app.exit(0);
   }, INSTALL_FALLBACK_MS).unref();
+  await shutdownOnce();
   selfUpdate.install();
 }
 
@@ -377,6 +388,11 @@ async function openWindow(): Promise<BrowserWindow> {
     },
   });
   window.once('ready-to-show', () => window.show());
+  // Only "Restart to update" really closes it (Cmd+Q exits without closing):
+  // a failed install must not leave showWindow() a destroyed window.
+  window.on('closed', () => {
+    mainWindow = null;
+  });
   window.on('focus', refreshOnFocus);
   window.on('focus', reportWindowFocused);
   // Links (e.g. "GitHub") open in the browser; the app window never navigates away.
@@ -566,15 +582,19 @@ async function start(): Promise<void> {
 }
 
 app.on('before-quit', (event) => {
-  if (quitting) {
+  // After a finished shutdown (the restart to update hands over to Squirrel.Mac) the quit goes through.
+  if (shutdownDone) {
     return;
   }
-  quitting = true;
-  console.log('quitting: flushing pending writes and closing the database');
   event.preventDefault();
+  if (!quitting) {
+    quitting = true;
+    console.log('quitting: flushing pending writes and closing the database');
+  }
   // Everything is flushed and closed by now, so exit directly. A second
   // app.quit() here never reached will-quit when the quit came from SIGTERM.
-  void shutdown().finally(() => app.exit(0));
+  // A Cmd+Q during the restart's shutdown waits for it the same way.
+  void shutdownOnce().finally(() => app.exit(0));
 });
 
 // kill <pid> (SIGTERM) or Ctrl+C in a terminal: the same flush-and-quit as Cmd+Q.

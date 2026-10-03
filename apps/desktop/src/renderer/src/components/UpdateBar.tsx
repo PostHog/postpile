@@ -17,7 +17,7 @@ let shownReported = false;
  * drops it back to the pill for 24h.
  */
 export function UpdateBar() {
-  const { view, urgency, hoursBehind, action, later, restart } = useUpdateReminder();
+  const { view, urgency, hoursBehind, action, version, later, restart } = useUpdateReminder();
   const latest = view?.latest ?? null;
   const visible = urgency === 'bar' && latest !== null;
 
@@ -41,7 +41,7 @@ export function UpdateBar() {
       <span className="size-1.5 shrink-0 rounded-full bg-amber" />
       <span>
         You&apos;re <span className="font-semibold">{releasesBehindText(latest.releasesBehind, latest.moreBehind)}</span> behind{since && ` (since ${since})`}. PostPile{' '}
-        <span className="font-mono text-[11px]">{latest.version}</span> {action === 'restart' ? 'is ready to install.' : 'is out.'}
+        <span className="font-mono text-[11px]">{version ?? latest.version}</span> {action === 'restart' ? 'is ready to install.' : 'is out.'}
       </span>
       <UpdateNextStep action={action} onRestart={restart} hintClass="" />
       <div className="ml-auto flex items-center gap-3">

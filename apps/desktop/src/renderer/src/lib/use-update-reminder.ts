@@ -80,6 +80,12 @@ export interface UpdateReminder {
   hoursBehind: number | null;
   /** Core's answer: offer a restart, say it is downloading, or show the brew command. */
   action: UpdateAction;
+  /**
+   * The version to name: the staged one once a restart is offered (a newer
+   * release may be out by then, and the restart installs the staged one),
+   * else the newest release. Null when there is nothing to update.
+   */
+  version: string | null;
   /** "Later": quiet until the time core picks. */
   later: () => void;
   /** "Restart to update": main installs the staged update. */
@@ -92,11 +98,14 @@ export function useUpdateReminder(): UpdateReminder {
   const install = useInstallState();
   const snoozed = useSyncExternalStore(subscribe, getSnooze);
   const now = useNow().getTime();
+  const action = updateAction(install);
+  const latestVersion = view?.latest?.version ?? null;
   return {
     view,
     urgency: view ? updateUrgency(view, now, snoozed) : 'none',
     hoursBehind: view ? hoursBehind(view, now) : null,
-    action: updateAction(install),
+    action,
+    version: action === 'restart' ? (install?.version ?? latestVersion) : latestVersion,
     later: () => {
       if (view) {
         snoozeUntil(laterUntil(view, Date.now()));

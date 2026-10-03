@@ -10,12 +10,13 @@ class StubUpdater extends EventEmitter {
   checks = 0;
   installs = 0;
   check: (stub: StubUpdater) => void = () => {};
+  download: Promise<unknown> | null = null;
 
-  checkForUpdates(): Promise<unknown> {
+  checkForUpdates(): Promise<{ downloadPromise?: Promise<unknown> | null } | null> {
     this.checks += 1;
     this.emit('checking-for-update');
     this.check(this);
-    return Promise.resolve(null);
+    return Promise.resolve({ downloadPromise: this.download });
   }
 
   quitAndInstall(): void {
@@ -87,6 +88,35 @@ describe('SelfUpdater', () => {
     const { updater, selfUpdate } = setup();
     updater.checkForUpdates = () => Promise.reject(new Error('no app-update.yml'));
     expect(await selfUpdate.check()).toEqual({ status: 'failed', version: null, error: 'no app-update.yml' });
+  });
+
+  it('logs a failed check once when electron-updater both emits and rejects', async () => {
+    const { updater, selfUpdate, logged } = setup();
+    updater.checkForUpdates = () => {
+      updater.emit('error', new Error('GitHub answered 404'));
+      return Promise.reject(new Error('GitHub answered 404'));
+    };
+    await selfUpdate.check();
+    expect(logged).toEqual(['self-update failed: GitHub answered 404']);
+  });
+
+  it('catches a failed download, which electron-updater never awaits', async () => {
+    const { updater, selfUpdate } = setup();
+    let reject: (error: Error) => void = () => {};
+    updater.download = new Promise((_resolve, rejectDownload) => {
+      reject = rejectDownload;
+    });
+    updater.check = (stub) => stub.emit('update-available', { version: '0.6.0' });
+    await selfUpdate.check();
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on('unhandledRejection', onUnhandled);
+    updater.emit('error', new Error('signature mismatch'));
+    reject(new Error('signature mismatch'));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    process.off('unhandledRejection', onUnhandled);
+    expect(unhandled).toEqual([]);
+    expect(selfUpdate.current()).toEqual({ status: 'failed', version: '0.6.0', error: 'signature mismatch' });
   });
 
   it('stops checking once staged, and late events never take the restart back', async () => {

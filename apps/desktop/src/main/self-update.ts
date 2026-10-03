@@ -47,7 +47,8 @@ export interface Updater {
   on(event: 'checking-for-update' | 'update-not-available', listener: () => void): unknown;
   on(event: 'update-available', listener: (info: { version: string }) => void): unknown;
   on(event: 'error', listener: (error: Error) => void): unknown;
-  checkForUpdates(): Promise<unknown>;
+  /** With autoDownload, the answer carries the download, which electron-updater never awaits itself. */
+  checkForUpdates(): Promise<{ downloadPromise?: Promise<unknown> | null } | null>;
   quitAndInstall(): void;
 }
 
@@ -212,9 +213,15 @@ export class SelfUpdater implements SelfUpdate {
       return this.current();
     }
     try {
-      await this.updater.checkForUpdates();
+      const result = await this.updater.checkForUpdates();
+      // The download runs on after the check. A failed one already came as an
+      // "error" event; without this catch it would also be an unhandled rejection.
+      result?.downloadPromise?.catch(() => {});
     } catch (error) {
-      this.fail(error);
+      // A failed check usually came as an "error" event first; log it once.
+      if (this.current().status !== 'failed') {
+        this.fail(error);
+      }
     }
     return this.current();
   }

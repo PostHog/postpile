@@ -7,12 +7,13 @@ import { useDismiss } from '../lib/use-dismiss.ts';
 import { Button } from './Button.tsx';
 import { UpdateNextStep } from './UpdateNextStep.tsx';
 
-function UpdatePopover(props: { update: AvailableUpdate; current: string; action: UpdateAction; onRestart: () => void; onLater: () => void }) {
-  const date = releaseDate(props.update.publishedAt);
+function UpdatePopover(props: { update: AvailableUpdate; version: string; current: string; action: UpdateAction; onRestart: () => void; onLater: () => void }) {
+  // The release date belongs to the newest release; a staged older one has none here.
+  const date = props.version === props.update.version ? releaseDate(props.update.publishedAt) : '';
   return (
     <div role="dialog" aria-label={props.action === 'restart' ? 'Update ready' : 'Update available'} className="absolute top-full right-0 z-30 mt-1 flex w-80 flex-col gap-2.5 rounded-row bg-surface p-3 shadow-menu">
       <div className="flex flex-col gap-0.5">
-        <span className="text-[12.5px] font-semibold text-ink">PostPile {props.update.version}</span>
+        <span className="text-[12.5px] font-semibold text-ink">PostPile {props.version}</span>
         {date && <span className="text-[11px] text-muted">Released {date}</span>}
         <span className="text-[11px] text-muted">
           You have <span className="font-mono">{props.current}</span>
@@ -44,14 +45,14 @@ function UpdatePopover(props: { update: AvailableUpdate; current: string; action
  * Self-contained so it can move when the title bar changes.
  */
 export function UpdatePill() {
-  const { view: update, urgency, action, later, restart } = useUpdateReminder();
+  const { view: update, urgency, action, version, later, restart } = useUpdateReminder();
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpen(false), []);
   useDismiss(open, close, root);
 
   const latest = update?.latest ?? null;
-  if (!update || !latest || urgency !== 'pill') {
+  if (!update || !latest || !version || urgency !== 'pill') {
     return null;
   }
   function toggle() {
@@ -71,14 +72,14 @@ export function UpdatePill() {
         type="button"
         aria-expanded={open}
         aria-haspopup="dialog"
-        title={action === 'restart' ? `PostPile ${latest.version} is ready to install; you have ${update.current}` : `PostPile ${latest.version} is out; you have ${update.current}`}
+        title={action === 'restart' ? `PostPile ${version} is ready to install; you have ${update.current}` : `PostPile ${version} is out; you have ${update.current}`}
         onClick={toggle}
         className="flex h-[22px] items-center gap-1.5 rounded-full border border-frame bg-chip px-2 text-[11px] whitespace-nowrap text-ink-2 hover:bg-subtle hover:text-ink"
       >
         <span className="size-1.5 rounded-full bg-ink-2" />
-        {action === 'restart' ? 'Update ready' : 'Update available'} · <span className="font-mono text-[10.5px]">{latest.version}</span>
+        {action === 'restart' ? 'Update ready' : 'Update available'} · <span className="font-mono text-[10.5px]">{version}</span>
       </button>
-      {open && <UpdatePopover update={latest} current={update.current} action={action} onRestart={restart} onLater={snooze} />}
+      {open && <UpdatePopover update={latest} version={version} current={update.current} action={action} onRestart={restart} onLater={snooze} />}
     </div>
   );
 }
