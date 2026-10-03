@@ -427,9 +427,11 @@ the reasons and does not flip back:
 7. *Findable across topics.* The topic row in the sidebar shows a grey count,
    "2 merged without you", next to "1 your move" (`TopicListItem.unseenMergeTiles`).
    No coral, and the topic's group stays as it was.
-8. *Inbox cleanup unchanged.* "Mark everything older than 14 / 30 days read"
-   stays the user's explicit choice, and it includes these threads (idea from
-   2026-09-28: "when people come from vacation, I had 500").
+8. *Inbox cleanup includes them.* Clearing merged PRs (or everything older
+   than 14 / 30 days) in the inbox cleanup stays the user's explicit choice,
+   and it includes these threads; the dialog says how many ("Includes N
+   merged without your review"). Idea from 2026-09-28: "when people come
+   from vacation, I had 500".
 
 ## CI is not a signal
 
@@ -745,7 +747,9 @@ Same entry point (`sync()`), same "skip when the input hash matches" rule.
 Each numbered step is one `AgentJob` or a deterministic pass.
 
 1. **fetch** (no agent): notifications, PR snapshots, events with rule
-   loudness. Every derived event of a fetched PR goes to `event_log.append`
+   loudness. When the inbox catch-up's start dialog is due, the sync stops
+   here until it is answered ("Inbox cleanup" › Before agent work). Every
+   derived event of a fetched PR goes to `event_log.append`
    in time order; ids already logged are ignored, so events stored before
    the log existed are picked up on the PR's next fetch. Then the missing
    layers of tracked PRs' stacks are fetched by branch (see "Stack
@@ -3463,7 +3467,8 @@ before 2026-09-29), `detail` = the user in the detail pane (PR-scoped mark
 read, remove team request), `debug` = the notifications view, `queue` = the
 deferred queue when a batch's window ran out, `quit` = the flush on quit,
 `sync` / `poll` = a thread left the inbox, `footer` = the lock, also sending
-or discarding pending writes, `cleanup` = the inbox cleanup, `quiet` =
+or discarding pending writes, `cleanup` = the inbox cleanup (action
+`inbox_cleanup` for a run as a whole), `quiet` =
 PostPile itself after a full sync, see "Handled quietly", `agent` = an
 outside agent through the MCP server), `outcome` (`queued`, `pending`, `discarded`,
 `github`, `local`, `skipped`, `failed`, `observed`), `thread_id`,
@@ -3486,7 +3491,7 @@ are logged as `observed` with origin `sync` / `poll`. Every sync and poll
 that changes the threads also marks events older than their thread's
 `last_read_at` seen (event state, not logged) and may move a topic's seen
 cursor ("Reconciling with GitHub's read time"). Glances, consolidation, dossiers and ping decisions never mark
-anything read. There is no CLI write. The only "mark all read" is the inbox
+anything read. There is no CLI write. The only bulk mark-read is the inbox
 cleanup, a deliberate choice in its dialog ("Inbox cleanup"). The quiet
 reads ("Handled quietly") are the other writes PostPile makes by itself.
 
@@ -3578,8 +3583,8 @@ agent has not judged it yet, or a check blocked the clear) shows as unread but
 does not ping.
 
 **Start fresh.** The local-only "Start fresh here" hid things in PostPile that
-stayed unread on GitHub, the state this rule removes. The inbox cleanup keeps
-only "mark read on GitHub before <date>".
+stayed unread on GitHub, the state this rule removes. The inbox cleanup only
+marks read on GitHub.
 
 **First run.** The clear pass runs first; whatever is left shows as unread,
 finished topics included.
@@ -3658,44 +3663,139 @@ finished topics included.
 
 ## Inbox cleanup
 
-Old unread threads pile up on GitHub (a first run on a busy account, a
-vacation). Rules in core `inbox-cleanup.ts`, engine `InboxCleanup`
-(`actions/inbox-cleanup.ts`), `GET /api/inbox-cleanup`.
+Rewritten 2026-10-03 as the inbox catch-up dialog. Unread GitHub threads on
+merged PRs keep tiles from being done and topics from archiving, and after
+a vacation or on a first run the first sync spends agent work (topics,
+dossiers, glances, classification) on PRs that are over. The dialog offers
+to clear them on GitHub before that agent work runs, together with the
+older "everything older than N days" cleanup. Rules in core
+`inbox-cleanup.ts`, engine `InboxCleanup` (`actions/inbox-cleanup.ts`),
+`GET /api/inbox-cleanup`, `POST /api/inbox-cleanup/clear`,
+`POST /api/inbox-cleanup/start-as-usual`.
 
-- **Counts**: stored threads unread on GitHub with `updated_at` older than
-  14 and 30 days (`unreadOlderThan`).
-- **Where**: with a count > 0 the sidebar footer shows a quiet line "N
-  unread older than 14 days · Clean up". On the first run, or when a full
-  sync starts 5+ days after the previous one (meta `last_sync_started_at`;
-  an older store falls back to its newest PR fetch), the cleanup is
-  prominent (meta `inbox_cleanup_prominent`): a banner at the top of the
-  middle column instead of the line, until the user picks anything in the
-  dialog. The server sends `look` (`banner` / `line` / `none`).
-- **Dialog** (`InboxCleanupDialog`):
-  - "Mark everything older than 14 / 30 days read on GitHub": one
-    `PUT /notifications` with `last_read_at` = the cutoff
-    ([docs](https://docs.github.com/en/rest/activity/notifications#mark-notifications-as-read)),
-    through `GitHubWrites.markAllReadBefore`, logged `mark_all_read_before`
-    (origin `cleanup`). Locked, it becomes one pending write
-    (`pending_write.kind = 'mark_all_read_before'`, `read_before`,
-    migration 013), listed in the lock popover with the unread count it
-    covers; Send / Discard work like for mark-reads (origin `footer`).
-    GitHub may answer 202 and finish later, so the engine runs one poll
-    cycle right after; threads leaving the inbox then go through the normal
-    reconciliation (their read time from the read list or a thread lookup).
-    Nothing changes in the app before GitHub reports it.
-  - "Not now": hides line and banner for 7 days (meta
-    `inbox_cleanup_hidden_until`).
-- **Fake mode**: three old unread sample PR threads (16, 22, 45 days) that
-  never become tiles, the banner on every start, pending and send handled by
-  `FakeWrites`.
-- **Start fresh is gone** (2026-09-30, "GitHub unread is PostPile unread"):
-  "Leave GitHub alone, start fresh here" set a local baseline (meta
-  `start_fresh_baseline`) before which events read as seen, "since you last
-  looked" never started and threads left the counts. It hid things in
-  PostPile that stayed unread on GitHub, the third state the rule removes.
-  The dialog keeps only "mark read on GitHub before <date>" and Not now;
-  migration 021 deletes a stored baseline, so nothing it hid stays hidden.
+**Why keeping them is fine too.** A merged PR asks nothing of the user and
+never pings. PostPile shows what needs the user first; these stay unread
+until they get to them. Clearing is the user's explicit choice, never a
+rule ("Not marked read from a guess" still holds).
+
+**The two rows** (combinable, each with a checkbox):
+
+1. *Merged PRs*: `Quiet 7+ days | Quiet 14+ days | All`. Counts unread
+   threads whose PR PostPile fetched and knows is merged; a merged PR it
+   never fetched (PR cap) is not counted. Quiet means the thread's last
+   activity (`updatedAt`), not the merge date. A 7 / 14 option is disabled
+   when it holds nothing or equals All. All includes merges without your
+   review ("Includes N merged without your review").
+2. *Everything else, no activity for* `14 days | 30 days`: unread threads
+   that are not merged PRs, older than the cutoff.
+
+The Clear button counts what the plan marks read: the picked merged PRs
+plus every thread older than the cutoff (the PUT reads old merged threads
+too, also with the merged row off).
+
+**Cases** (constants and `startCase` in core). Load = unread threads.
+
+| Case | Start dialog | Preselect | Main button |
+|---|---|---|---|
+| any start, < 20 unread merged PRs (`CATCH_UP_MERGED_THRESHOLD`) | no, sidebar line only | – | – |
+| back after 2–4 days (`CATCH_UP_BACK_DAYS`) | "Welcome back", "Since Friday, …" (weekday of the last sync) | merged quiet 7+ (else the smallest enabled option), older off | Start as usual |
+| back after 5+ days (`CLEANUP_GAP_DAYS`) | "Welcome back", "You were away 12 days. …" | merged all + older 14 | Clear |
+| first run, light (< 50) | "Before the first sync" | merged quiet 14+, older off | Start as usual |
+| first run, busy (50–300) | same | merged all, older off | Clear |
+| first run, full (> 300) | same, Clear tagged Recommended | merged all + older 30 | Clear |
+| from the sidebar, any day | "Clean up your inbox" | merged all + older 14 | Clear (Cancel instead of Start as usual) |
+
+A row with nothing in it starts unticked. The saving line ("Clearing first
+means the agent reads N PRs instead of M") shows for vacation, busy and
+full: M = PRs the coming sync would glance (the glance writer's own check,
+`pendingGlanceKeys`), N = M minus the merged ones the picks clear. Open PRs
+keep their glance whether their thread is read or not, so only merged ones
+count; with no saving the line is left out.
+
+**The answer.** "Start as usual", Esc and a click outside record it (meta
+`catch_up_answered_merged` = unread merged PRs left); so does Clear from the
+start dialog. A short absence asks again only once 20 more merged PRs piled
+up; a 5+ day gap or a first run asks anyway. Why the dialog may be due is
+noted at each sync start (meta `catch_up_reason`: first run, or away since
+the last sync) and kept until answered or until a sync found it not due, so
+an app quit before the answer asks again on the next start. The old "Not
+now: hidden 7 days" and the 14 / 30-days banner are gone.
+
+**Before agent work.** The count needs PR states, so the fetch runs first.
+When the start dialog is due, the sync stops right after the fetch
+(`SyncReport.heldForCatchUp`, `SyncRun.holding`): no digest, quiet reads or
+retire steps, no telemetry. While it holds, the live poll is blocked (it
+would assign topics and start catch-ups). The answer starts the sync again
+(`resumeHeldSync`, with the held sync's options): it fetches again, which
+is cheap (unchanged PRs are skipped) and picks up what the cleanup's bulk
+calls read, and digests both fetches (fetched PRs, new events and GitHub
+read times of the held one count too). Clear resumes it once the run
+ended; locked, nothing to clear, or Start as usual resume it at once. Only
+an app with a window holds (`EngineDeps.catchUpGate`, set by createEngine
+except for the CLI); a CLI sync never waits. The one-time topic tidy still
+runs before the fetch: it reads stored topics only and costs the same
+either way.
+
+**Writes** (`planCleanup`, no batch endpoint exists; GitHub GraphQL has no
+notification mutations):
+
+1. Older row picked: one `PUT /notifications` with `last_read_at` = the
+   cutoff (`GitHubWrites.markAllReadBefore`). Merged threads that old are
+   covered by it.
+2. Remaining merged threads, per repo: when every unread thread of the repo
+   (up to the time the dialog counted) is selected, one `PUT
+   /repos/{owner}/{repo}/notifications` with `last_read_at` = that time,
+   never later, so activity after the count stays unread
+   (`markRepoReadBefore`, logged as `mark_all_read_before` with the repo in
+   the detail).
+3. The rest: `PATCH /notifications/threads/{id}` one after another, about one
+   a second (`CATCH_UP_PACE_MS`, GitHub's guidance for writes). No re-read
+   before the PATCH: the user picked these.
+
+The run goes in the background and the request answers at once. Each PATCH
+reads the thread here like a read on GitHub (thread read up to its
+`updated_at`, its events before that seen, `readLocally` with
+`read_on_github`, then `advanceSeenFromGitHub`), so tiles go done and
+topics can retire. The PUTs show up with the next inbox read (the resumed
+sync, else one poll cycle), like the old cleanup: GitHub may answer 202 and
+finish later. A failed call is logged and the run goes on; writes turned
+off mid-run stop it. One `inbox_cleanup` action-log row per run sums it up
+("marked 191 read on GitHub, 2 failed"), next to the rows of each call
+(origin `cleanup`, one batch id). Telemetry: `marked_read` with origin
+`cleanup` and the count.
+
+Locked, the whole cleanup parks as one pending write (`pending_write.kind
+= 'catch_up'`, picks and count time in `catch_up`, migration 026, the
+covered threads for the count in the lock). Sending it from the lock plans
+the same calls again over what is stored then and starts the run. Stored
+`mark_all_read_before` rows from the old dialog still send.
+
+**Glance targets after a clear** (checked 2026-10-03, no change needed): a
+merged PR is a glance target only while its merge without your review is
+unseen (`wantsGlance`). The PATCH mirror marks that event seen through the
+read, so a cleared merged PR is not glanced; the bulk calls do the same
+through the next inbox read.
+
+**Progress and done.** Status footer: "Clearing merged PRs" (or "Clearing
+old notifications"), a bar and "84 / 191"; the sidebar line reads
+"Clearing 84 / 191". The view is polled every second while it runs. Done
+toast: "✓ Marked 191 read on GitHub" with "Show", which opens the
+notifications view (each thread's last action).
+
+**Sidebar line**, any day: "12 merged PRs · Clear" whenever a merged PR is
+unread, else "N old notifications · Clear" (older than 14 days). It opens
+the dialog in sidebar mode. A second item for merged PRs whose glance after
+the merge found nothing worth a look comes later; the line is one flex row
+so it can join.
+
+- **Fake mode**: 24 unread threads on merged sample PRs that never become
+  tiles, plus three old ones; every fake start is a first run, so the start
+  dialog shows (`POSTPILE_FAKE_CATCH_UP=0` turns it off, the README
+  screenshots do). A run flips the sample threads one call per step.
+- **History.** 2026-09-28: "mark everything older than 14 / 30 days read",
+  a banner after a 5+ day gap, "Not now" for a week. 2026-09-30: "Start
+  fresh here" removed ("GitHub unread is PostPile unread"; migration 021).
+  2026-10-03: this dialog.
 
 ## Groups inside a topic (2026-09-30)
 
@@ -6234,9 +6334,9 @@ preflight and does not know the token, so CORS stays open.
 | `POST /api/sync` | `sync()` |
 | `GET /api/topics` | `listTopics()` |
 | `GET /api/topics/:id` | `getTopic()` |
-| `GET /api/inbox-cleanup` | `inboxCleanup()` (old unread counts, look, pending cutoff) |
-| `POST /api/inbox-cleanup/mark-read` `{olderThanDays: 14\|30}` | `cleanUpInbox()` (GitHub write, pending while locked) |
-| `POST /api/inbox-cleanup/not-now` | `hideInboxCleanup()` (7 days) |
+| `GET /api/inbox-cleanup` | `inboxCleanup()` (merged and old unread counts, every pick with what it clears, the start case, a run's progress) |
+| `POST /api/inbox-cleanup/clear` `{merged, older, countedAt, from}` | `clearInbox()` (GitHub writes in the background, one pending write while locked) |
+| `POST /api/inbox-cleanup/start-as-usual` | `startAsUsual()` (answers the start dialog, the held sync goes on) |
 | `GET /api/mcp-connection` | `mcpConnection()` (cached `claude mcp get postpile`, commands, "Not now") |
 | `POST /api/mcp-connection` `{from: footer\|setup}` | `connectMcp()` (`claude mcp add`, installed app only) |
 | `POST /api/mcp-connection/not-now` | `hideMcpConnect()` |

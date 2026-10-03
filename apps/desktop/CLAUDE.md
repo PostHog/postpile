@@ -45,7 +45,8 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   (`useDebugNotifications`, the notifications debug pane), `quiet.ts`
   (`useHandledQuietly`, the "Handled quietly" list), `writes.ts`
   (`useGitHubWrites`, the footer lock), `repos.ts` (`useRepos`, the
-  title bar repo menu), `cleanup.ts` (`useInboxCleanup`), `live.ts`
+  title bar repo menu), `cleanup.ts` (`useInboxCleanup`, polled every
+  second while a cleanup runs), `live.ts`
   (`useLivePoll`: the fast poll status every 5s; called once in App, it
   refetches everything else when a poll cycle stored news, a glance
   catch-up run moved (`catchUpChanges`) or a sync started or ended;
@@ -122,9 +123,9 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   Mark read button is disabled). Never show a locked mark-read as done. Everything is blocked
   until the writes state has loaded. Don't bypass the guard, and put a new
   GitHub-writing action on the `GithubWrite` list. The inbox cleanup
-  (`cleanUpInbox`, "mark everything older than N days read") is on it as
-  `cleanup` and behaves like mark read: locked, it becomes one pending
-  write. "Not now" is local.
+  (`clearInbox`) is on it as `cleanup` and behaves like mark read: locked,
+  it becomes one pending write. `startAsUsual` is local (it only answers
+  the start dialog) and shows no toast.
 - "Add to Claude Code" (`connectMcp(from)`) changes Claude Code's config,
   never GitHub, so it is not on the `GithubWrite` list. Fire it only from a
   click, never from an effect or along with Accept: the app never installs
@@ -361,8 +362,15 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   `StatusFooter` (+ `WritesLock`), `Toast`, `SearchField` (title bar filter),
   `ToolsNotice` (missing gh or claude, with `FixCommand`, shared with setup),
   `RepoScopeMenu` (title bar repo scope + "Let it go stale"),
-  `InboxCleanup` (sidebar footer line or middle-column banner, as the
-  server's `look` says) + `InboxCleanupDialog`,
+  `InboxCleanupLine` (sidebar footer: "12 merged PRs · Clear", "Clearing
+  84 / 191" while a run goes; one flex row so a second item can join) +
+  `InboxStartDialog` (mounted once in App, opens while the server holds
+  the start sync, `view.start`) + `InboxCleanupDialog` (both modes; picks
+  set once from core `cleanupDialogSetup`; words in `lib/cleanup.ts`; Esc,
+  Enter and a click outside follow the case; the illustration bobs only
+  under `motion-safe:`). The footer shows the run's progress, and the
+  done toast's "Show" opens the notifications view (`Toast` prop
+  `onShowActionLog`),
   `UpdatePill` (title bar update reminder, self-contained so it can move;
   neutral, never coral; under 24h behind; "Update ready" once staged) +
   `UpdateNextStep` (the offer both share: ink "Restart to update", the
