@@ -3756,17 +3756,27 @@ The run goes in the background and the request answers at once. Each PATCH
 reads the thread here like a read on GitHub (thread read up to its
 `updated_at`, its events before that seen, `readLocally` with
 `read_on_github`, then `advanceSeenFromGitHub`), so tiles go done and
-topics can retire. The PUTs show up with the next inbox read (the resumed
-sync, else one poll cycle), like the old cleanup: GitHub may answer 202 and
-finish later. A failed call is logged and the run goes on; writes turned
-off mid-run stop it. One `inbox_cleanup` action-log row per run sums it up
-("marked 191 read on GitHub, 2 failed"), next to the rows of each call
+topics can retire. GitHub may answer a PUT with 202 and finish it later,
+so after the calls the run reads the inbox again every 5 seconds
+(`CATCH_UP_CONFIRM_EVERY_MS`, a plain read, nothing stored) until the
+threads the PUTs covered left it, at most 18 times (about 90 seconds,
+`CATCH_UP_CONFIRM_TRIES`). Only those count as marked, and a held sync
+keeps waiting meanwhile, so its fetch sees them read instead of spending
+agent work on them. Still unread at the end: the run ends anyway and says
+so ("Marked 170 read on GitHub; GitHub is still working on 21"). The PUTs
+then show up here with the next inbox read (the resumed sync, else one poll
+cycle). A failed call is logged and the run goes on; writes turned off
+mid-run stop it. One `inbox_cleanup` action-log row per run sums it up
+("marked 191 read on GitHub; 2 failed"), next to the rows of each call
 (origin `cleanup`, one batch id). Telemetry: `marked_read` with origin
-`cleanup` and the count.
+`cleanup` and the confirmed count.
 
 Locked, the whole cleanup parks as one pending write (`pending_write.kind
 = 'catch_up'`, picks and count time in `catch_up`, migration 026, the
-covered threads for the count in the lock). Sending it from the lock plans
+covered threads for the count in the lock). Only one waits at a time: a
+second Clear is refused (it would fail on Send while the first runs), and
+the dialog and the sidebar line disable Clear with "A cleanup already
+waits in the lock". Sending it from the lock plans
 the same calls again over what is stored then and starts the run. Stored
 `mark_all_read_before` rows from the old dialog still send.
 

@@ -86,6 +86,7 @@ import {
   agentApproveSkip,
   agentMarkReadRefusal,
   approvalsSummary,
+  CATCH_UP_CONFIRM_EVERY_MS,
   CATCH_UP_PACE_MS,
   driverKind,
   emptyAgentCallStats,
@@ -425,6 +426,14 @@ export class Engine implements EngineService {
       pause: () => {
         const paceMs = deps.catchUpPaceMs ?? CATCH_UP_PACE_MS;
         return paceMs === 0 ? Promise.resolve() : new Promise((resolve) => timers.setTimeout(resolve, paceMs));
+      },
+      unreadOnGitHub: async () => {
+        const inbox = await deps.reader.listNotifications({ etag: null, lastModified: null });
+        return new Set(inbox.notModified ? [] : inbox.threads.map((thread) => thread.id));
+      },
+      waitForGitHub: () => {
+        const waitMs = deps.catchUpPaceMs === 0 ? 0 : CATCH_UP_CONFIRM_EVERY_MS;
+        return waitMs === 0 ? Promise.resolve() : new Promise((resolve) => timers.setTimeout(resolve, waitMs));
       },
       afterRun: () => this.afterCleanupRun(),
       telemetry: this.telemetry,
@@ -1071,7 +1080,10 @@ export class Engine implements EngineService {
 
   async clearInbox(request: CleanupRequest): Promise<ActionResult> {
     const result = this.cleanup.clear(request);
-    this.resumeUnlessRunning();
+    // A refused clear leaves the start dialog open and unanswered: the held sync keeps waiting.
+    if (result.ok) {
+      this.resumeUnlessRunning();
+    }
     return result;
   }
 

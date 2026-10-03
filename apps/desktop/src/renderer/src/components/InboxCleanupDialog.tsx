@@ -12,6 +12,7 @@ import {
 } from '@postpile/core';
 import { CLEANUP_BUSY, useActions } from '../api/actions.tsx';
 import {
+  CLEANUP_PENDING_NOTE,
   dialogLead,
   dialogTitle,
   MERGED_PICK_LABELS,
@@ -132,7 +133,7 @@ export function InboxCleanupDialog(props: { mode: CleanupDialogMode; view: Inbox
   const mainIsClear = sidebar || setup.main === 'clear';
 
   async function clear() {
-    if (clears > 0 && (await actions.clearInbox({ ...picks, countedAt: view.countedAt, from: sidebar ? 'sidebar' : 'start' }))) {
+    if (clears > 0 && !view.pending && (await actions.clearInbox({ ...picks, countedAt: view.countedAt, from: sidebar ? 'sidebar' : 'start' }))) {
       onClose();
     }
   }
@@ -162,7 +163,13 @@ export function InboxCleanupDialog(props: { mode: CleanupDialogMode; view: Inbox
   });
 
   const clearButton = (
-    <Button variant={mainIsClear ? 'primary' : 'secondary'} size="md" disabled={busy || clears === 0} title={actions.blockedReason('cleanup') ?? undefined} onClick={() => void clear()}>
+    <Button
+      variant={mainIsClear ? 'primary' : 'secondary'}
+      size="md"
+      disabled={busy || clears === 0 || view.pending}
+      title={view.pending ? CLEANUP_PENDING_NOTE : (actions.blockedReason('cleanup') ?? undefined)}
+      onClick={() => void clear()}
+    >
       <TrashIcon />
       {locked ? 'Add pending write' : `Clear ${clears}`}
       {setup.recommended && <span className="rounded-full bg-safe-soft px-1.5 text-[10px] leading-[17px] font-semibold text-safe">Recommended</span>}
@@ -212,7 +219,7 @@ export function InboxCleanupDialog(props: { mode: CleanupDialogMode; view: Inbox
             </span>
           </p>
         )}
-        {view.pending && <p className="rounded-row bg-subtle px-3 py-2 text-[11.5px] text-ink-2">A cleanup already waits in the lock.</p>}
+        {view.pending && <p className="rounded-row bg-subtle px-3 py-2 text-[11.5px] text-ink-2">{CLEANUP_PENDING_NOTE}</p>}
         <div className="flex flex-col gap-1.5">
           <PickRow on={mergedOn} onToggle={setMergedOn} icon={<MergeIcon className="text-merged" />} label="Merged PRs" count={mergedCount(mergedPick, view.counts)}>
             <Segmented

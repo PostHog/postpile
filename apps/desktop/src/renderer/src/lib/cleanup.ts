@@ -131,6 +131,10 @@ export function progressLabel(progress: CleanupProgress): string {
 }
 
 export function doneText(run: CleanupRunResult): string {
-  const failed = run.failed > 0 ? `, ${run.failed} failed` : '';
-  return `Marked ${run.marked} read on GitHub${failed}`;
+  const working = run.stillOnGitHub > 0 ? `; GitHub is still working on ${run.stillOnGitHub}` : '';
+  const failed = run.failed > 0 ? `; ${run.failed} failed` : '';
+  return `Marked ${run.marked} read on GitHub${working}${failed}`;
 }
+
+/** Only one cleanup waits in the lock: why Clear is off while one does. */
+export const CLEANUP_PENDING_NOTE = 'A cleanup already waits in the lock. Send or discard it there first.';

@@ -1,4 +1,4 @@
-import type { NotificationThread, Pr } from '@postpile/core';
+import { CATCH_UP_CONFIRM_TRIES, CLEANUP_ALREADY_PENDING, type NotificationThread, type Pr } from '@postpile/core';
 import { makePr, makeThreadFor, makeTimelineItem, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { Board } from './board.ts';
@@ -124,6 +124,22 @@ describe('inbox catch-up: clearing', () => {
     expect((await h.engine.inboxCleanup()).lastRun).toMatchObject({ marked: 23, failed: 0 });
   });
 
+  it('counts bulk-covered threads only once the inbox shows them read, and says what GitHub is still working on', async () => {
+    const h = harnessWith(mergedPile());
+    await h.engine.sync({ maxAgentCalls: 0 });
+    const view = await h.engine.inboxCleanup();
+    const callsBefore = h.reader.notificationCalls;
+
+    // GitHub took the repo PUT with 202 and never finished it while the run waited.
+    await h.engine.clearInbox({ merged: 'all', older: null, countedAt: view.countedAt, from: 'start' });
+    await h.engine.inboxCleanupSettled();
+
+    expect(h.writer.calls).toEqual([`markRepoReadBefore acme/app ${view.countedAt}`]);
+    expect(h.reader.notificationCalls - callsBefore).toBeGreaterThanOrEqual(CATCH_UP_CONFIRM_TRIES);
+    expect((await h.engine.inboxCleanup()).lastRun).toMatchObject({ marked: 0, stillOnGitHub: 21 });
+    expect(h.store.actionLog.listRecent(50).find((row) => row.action === 'inbox_cleanup')?.detail).toBe('marked 0 read on GitHub; GitHub is still working on 21');
+  });
+
   it('parks one pending write while locked and lets the held sync go on; Send runs the same plan', async () => {
     const h = harnessWith(mergedPile(), { writesEnabled: false });
     await h.engine.sync({ maxAgentCalls: 0 });
@@ -139,6 +155,9 @@ describe('inbox catch-up: clearing', () => {
       expect.objectContaining({ kind: 'catch_up', origin: 'cleanup', title: 'Inbox cleanup: merged PRs', threadCount: 21 }),
     ]);
     expect((await h.engine.inboxCleanup()).pending).toBe(true);
+    // Only one cleanup waits in the lock.
+    expect(await h.engine.clearInbox({ merged: 'all', older: null, countedAt: view.countedAt, from: 'sidebar' })).toMatchObject({ ok: false, message: CLEANUP_ALREADY_PENDING });
+    expect((await h.engine.githubWrites()).pending).toHaveLength(1);
 
     await h.engine.setGitHubWrites(true);
     const sent = await h.engine.sendPendingWrites();

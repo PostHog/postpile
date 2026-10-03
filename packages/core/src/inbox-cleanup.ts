@@ -29,6 +29,13 @@ export const CATCH_UP_BACK_DAYS = 2;
 export const CLEANUP_GAP_DAYS = 5;
 /** Pause between two per-thread mark-reads: GitHub asks for about one write per second. */
 export const CATCH_UP_PACE_MS = 1000;
+/** The bulk PUTs may answer 202 and finish later: the inbox is read again this often until they show... */
+export const CATCH_UP_CONFIRM_EVERY_MS = 5000;
+/** ...at most this many times (about 90 seconds), then the run ends and says what GitHub is still working on. */
+export const CATCH_UP_CONFIRM_TRIES = 18;
+
+/** Locked, only one cleanup waits in the lock: a second would fail on Send while the first runs. */
+export const CLEANUP_ALREADY_PENDING = 'A cleanup already waits in the lock: send or discard it there first';
 
 /** What the dialog's two rows ask for; null leaves a row out. */
 export interface CleanupPicks {
@@ -76,8 +83,9 @@ export interface CleanupPlan {
   at: IsoTime;
   readBefore: IsoTime | null;
   /** Selected threads the older-than PUT covers. */
-  readBeforeCovers: number;
-  repos: { repo: string; covers: number }[];
+  readBeforeIds: string[];
+  /** Each repo-wide PUT with the selected threads it covers. */
+  repos: { repo: string; ids: string[] }[];
   threadIds: string[];
   /** Every thread the plan marks read on GitHub. */
   selectedIds: string[];
@@ -135,8 +143,11 @@ export interface CleanupProgress {
 /** The last run that ended, for the done toast. */
 export interface CleanupRunResult {
   id: string;
+  /** Threads GitHub shows read: PATCHed ones, and bulk-covered ones once the inbox showed them read. */
   marked: number;
   failed: number;
+  /** Threads a bulk PUT covered that GitHub still listed unread when the run stopped waiting (it may answer 202 and finish later). */
+  stillOnGitHub: number;
   at: IsoTime;
 }
 
@@ -251,8 +262,8 @@ export function planCleanup(threads: CleanupThread[], picks: CleanupPicks, at: I
   return {
     at,
     readBefore,
-    readBeforeCovers: selected.length - remaining.length,
-    repos: repoNames.map((repo) => ({ repo, covers: remaining.filter((thread) => thread.repo === repo).length })),
+    readBeforeIds: selected.filter((thread) => !remaining.includes(thread)).map((thread) => thread.id),
+    repos: repoNames.map((repo) => ({ repo, ids: remaining.filter((thread) => thread.repo === repo).map((thread) => thread.id) })),
     threadIds,
     selectedIds: selected.map((thread) => thread.id),
     clears: selected.length,

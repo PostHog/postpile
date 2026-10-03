@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useInboxCleanup } from '../api/cleanup.ts';
-import { cleanupLine } from '../lib/cleanup.ts';
+import { CLEANUP_PENDING_NOTE, cleanupLine } from '../lib/cleanup.ts';
 import { InboxCleanupDialog } from './InboxCleanupDialog.tsx';
 import { MergeIcon, TrashIcon } from './icons.tsx';
 
@@ -24,7 +24,13 @@ export function InboxCleanupLine() {
         {line.kind === 'running' && <TrashIcon size={12} className="shrink-0 text-muted" />}
         <span className={`truncate ${line.kind === 'running' ? 'font-mono tabular-nums' : ''}`}>{line.text}</span>
         {line.kind !== 'running' && (
-          <button type="button" onClick={() => setOpen(true)} className="shrink-0 text-muted hover:text-ink hover:underline">
+          <button
+            type="button"
+            disabled={view.pending}
+            title={view.pending ? CLEANUP_PENDING_NOTE : undefined}
+            onClick={() => setOpen(true)}
+            className="shrink-0 text-muted hover:text-ink hover:underline disabled:opacity-50 disabled:hover:text-muted disabled:hover:no-underline"
+          >
             Clear
           </button>
         )}

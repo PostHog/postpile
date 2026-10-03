@@ -63,8 +63,8 @@ describe('inbox cleanup write plan', () => {
     const plan = planCleanup(threads, { merged: 'all', older: 30 }, NOW);
     expect(plan).toMatchObject({
       readBefore: daysAgo(30),
-      readBeforeCovers: 2,
-      repos: [{ repo: 'acme/app', covers: 2 }],
+      readBeforeIds: ['a3', 'w3'],
+      repos: [{ repo: 'acme/app', ids: ['a1', 'a2'] }],
       threadIds: ['w1'],
       clears: 5,
       mergedClears: 4,
@@ -76,7 +76,7 @@ describe('inbox cleanup write plan', () => {
     const later = new Date(new Date(NOW).getTime() + 60_000).toISOString();
     const threads = [merged('a1', 3), merged('a2', 4), { ...merged('a3', 0), updatedAt: later }];
     const plan = planCleanup(threads, { merged: 'all', older: null }, NOW);
-    expect(plan).toMatchObject({ readBefore: null, repos: [{ repo: 'acme/app', covers: 2 }], threadIds: [], clears: 2 });
+    expect(plan).toMatchObject({ readBefore: null, repos: [{ repo: 'acme/app', ids: ['a1', 'a2'] }], threadIds: [], clears: 2 });
   });
 
   it('counts the merged threads the older-than PUT reads even when the merged row is off', () => {

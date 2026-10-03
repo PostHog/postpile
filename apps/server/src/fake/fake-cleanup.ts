@@ -1,4 +1,5 @@
 import {
+  CLEANUP_ALREADY_PENDING,
   cleanupCounts,
   cleanupOptions,
   cleanupPicksWords,
@@ -31,16 +32,12 @@ function ok(message: string): ActionResult {
 }
 
 /** The plan's calls in order, each with the sample threads it covers. */
-function callsOf(plan: CleanupPlan, threads: CleanupThread[], prKeyOf: (threadId: string) => PrKey | null): FakeCall[] {
-  const selected = threads.filter((thread) => plan.selectedIds.includes(thread.id));
+function callsOf(plan: CleanupPlan, prKeyOf: (threadId: string) => PrKey | null): FakeCall[] {
   const calls: FakeCall[] = [];
-  const readBefore = plan.readBefore;
-  if (readBefore !== null) {
-    const ids = selected.filter((thread) => thread.updatedAt < readBefore).map((thread) => thread.id);
-    calls.push({ threadIds: ids, action: 'mark_all_read_before', threadId: null, prKey: null, detail: `last_read_at=${readBefore}` });
+  if (plan.readBefore !== null) {
+    calls.push({ threadIds: plan.readBeforeIds, action: 'mark_all_read_before', threadId: null, prKey: null, detail: `last_read_at=${plan.readBefore}` });
   }
-  for (const { repo } of plan.repos) {
-    const ids = selected.filter((thread) => thread.repo === repo && (readBefore === null || thread.updatedAt >= readBefore)).map((thread) => thread.id);
+  for (const { repo, ids } of plan.repos) {
     calls.push({ threadIds: ids, action: 'mark_all_read_before', threadId: null, prKey: null, detail: `repo=${repo} last_read_at=${plan.at}` });
   }
   for (const id of plan.threadIds) {
@@ -122,6 +119,9 @@ export class FakeCleanup {
     if (this.running) {
       return { ok: false, message: 'A cleanup is already running', undoToken: null };
     }
+    if (!this.deps.writes.isEnabled() && this.deps.writes.hasCatchUp()) {
+      return { ok: false, message: CLEANUP_ALREADY_PENDING, undoToken: null };
+    }
     const now = this.deps.now().toISOString();
     const at = request.countedAt < now ? request.countedAt : now;
     if (request.from === 'start') {
@@ -135,7 +135,7 @@ export class FakeCleanup {
       this.deps.writes.parkCatchUp({ merged: request.merged, older: request.older, countedAt: at }, plan.selectedIds, `Inbox cleanup: ${cleanupPicksWords(request)}`);
       return ok(`Pending: clears ${plan.clears} on GitHub once you unlock and send it from the lock`);
     }
-    void this.run(plan, threads, 'cleanup');
+    void this.run(plan, 'cleanup');
     return ok(`Clearing ${plan.clears} on GitHub in the background`);
   }
 
@@ -143,16 +143,16 @@ export class FakeCleanup {
   startFromPending(picks: CleanupPicks & { countedAt: IsoTime }, threads: CleanupThread[]): void {
     const plan = planCleanup(threads, picks, picks.countedAt);
     if (!this.running && plan.clears > 0) {
-      void this.run(plan, threads, 'footer');
+      void this.run(plan, 'footer');
     }
   }
 
-  private async run(plan: CleanupPlan, threads: CleanupThread[], origin: 'cleanup' | 'footer'): Promise<void> {
+  private async run(plan: CleanupPlan, origin: 'cleanup' | 'footer'): Promise<void> {
     this.running = true;
     this.progress = { done: 0, total: plan.clears, merged: plan.mergedClears > 0 };
     const batch = `cleanup:${this.deps.now().getTime()}`;
     let marked = 0;
-    for (const call of callsOf(plan, threads, this.deps.prKeyOf)) {
+    for (const call of callsOf(plan, this.deps.prKeyOf)) {
       await new Promise((resolve) => setTimeout(resolve, this.deps.stepMs));
       this.deps.writes.cleanupCall(call.threadIds, { action: call.action, origin, batch, threadId: call.threadId, prKey: call.prKey, detail: call.detail });
       marked += call.threadIds.length;
@@ -160,7 +160,7 @@ export class FakeCleanup {
       this.changes += 1;
     }
     this.deps.writes.record({ action: 'inbox_cleanup', origin, outcome: 'github', batch, detail: `marked ${marked} read on GitHub` });
-    this.lastRun = { id: batch, marked, failed: 0, at: this.deps.now().toISOString() };
+    this.lastRun = { id: batch, marked, failed: 0, stillOnGitHub: 0, at: this.deps.now().toISOString() };
     this.progress = null;
     this.running = false;
     this.deps.afterRun();

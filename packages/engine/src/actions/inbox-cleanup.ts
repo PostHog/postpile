@@ -1,5 +1,7 @@
 import {
+  CATCH_UP_CONFIRM_TRIES,
   catchUpReason,
+  CLEANUP_ALREADY_PENDING,
   cleanupCounts,
   cleanupOptions,
   isUnseenMergeWithoutReview,
@@ -70,6 +72,10 @@ export interface InboxCleanupDeps {
   pendingGlances: () => Set<PrKey>;
   /** Waits between two per-thread mark-reads (CATCH_UP_PACE_MS in the app). */
   pause: () => Promise<void>;
+  /** Ids of the threads GitHub's inbox lists unread right now (a plain read, nothing stored). */
+  unreadOnGitHub: () => Promise<Set<string>>;
+  /** Waits between two of those reads while a bulk PUT finishes (CATCH_UP_CONFIRM_EVERY_MS in the app). */
+  waitForGitHub: () => Promise<void>;
   /** A run ended: the engine resumes a held sync, or reads the inbox again so the bulk calls show. */
   afterRun: () => void;
   telemetry: Telemetry;
@@ -90,7 +96,9 @@ function mirrorRead(store: Store, thread: { id: string; updatedAt: IsoTime }, pr
  * due, and clears the picks on GitHub in the background through the writes
  * door (locked, they wait as one pending write). Each per-thread mark-read
  * also reads the thread here, so tiles go done and topics can retire; the
- * bulk PUTs show up through the next inbox read.
+ * bulk PUTs may finish later on GitHub (202), so the run waits, bounded,
+ * until the inbox shows their threads read, and they show up here through
+ * the next inbox read.
  */
 export class InboxCleanup implements CatchUpGate {
   private running: Promise<void> | null = null;
@@ -202,6 +210,9 @@ export class InboxCleanup implements CatchUpGate {
     if (this.running) {
       return failed('A cleanup is already running');
     }
+    if (!this.deps.writes.enabled() && this.deps.pendingWrites.hasCatchUp()) {
+      return failed(CLEANUP_ALREADY_PENDING);
+    }
     const now = this.deps.now().toISOString();
     const at = request.countedAt < now ? request.countedAt : now;
     const threads = this.threads(new Set());
@@ -267,36 +278,66 @@ export class InboxCleanup implements CatchUpGate {
   }
 
   /**
+   * GitHub may take a bulk PUT with 202 and finish it later. Reads the inbox
+   * until the threads it covered left it, at most CATCH_UP_CONFIRM_TRIES
+   * times; the held sync waits for this, so its fetch sees them read.
+   * Returns how many GitHub still lists unread.
+   */
+  private async confirmBulk(ids: string[]): Promise<number> {
+    let waiting = ids;
+    for (let attempt = 0; attempt < CATCH_UP_CONFIRM_TRIES && waiting.length > 0; attempt++) {
+      if (attempt > 0) {
+        await this.deps.waitForGitHub();
+      }
+      let unread: Set<string>;
+      try {
+        unread = await this.deps.unreadOnGitHub();
+      } catch (error) {
+        this.deps.log(`inbox cleanup: could not read the inbox to check the bulk calls: ${errorText(error)}`);
+        continue;
+      }
+      const left = waiting.filter((id) => unread.has(id));
+      if (left.length < waiting.length) {
+        this.advance(waiting.length - left.length);
+      }
+      waiting = left;
+    }
+    return waiting.length;
+  }
+
+  /**
    * The calls one after another: the older-than PUT, the repo PUTs, then a
    * PATCH per thread with a pause between them. No re-read before a PATCH:
    * the user picked these. A failed call is logged (GitHubWrites) and the
-   * run goes on; writes turned off mid-run stop it.
+   * run goes on; writes turned off mid-run stop it. Threads a bulk PUT
+   * covered count as marked only once the inbox shows them read.
    */
   private async run(plan: CleanupPlan, origin: 'cleanup' | 'footer', batch: string): Promise<void> {
     const { store, writes } = this.deps;
     const context = { origin, batch };
-    let marked = 0;
+    let patched = 0;
     let failedCount = 0;
     let stopped = false;
-    const bulk: { covers: number; send: () => Promise<'sent' | 'off'> }[] = [];
+    const bulk: { ids: string[]; send: () => Promise<'sent' | 'off'> }[] = [];
     const readBefore = plan.readBefore;
     if (readBefore !== null) {
-      bulk.push({ covers: plan.readBeforeCovers, send: () => writes.markAllReadBefore(readBefore, context) });
+      bulk.push({ ids: plan.readBeforeIds, send: () => writes.markAllReadBefore(readBefore, context) });
     }
-    for (const { repo, covers } of plan.repos) {
-      bulk.push({ covers, send: () => writes.markRepoReadBefore(repo, plan.at, context) });
+    for (const { repo, ids } of plan.repos) {
+      bulk.push({ ids, send: () => writes.markRepoReadBefore(repo, plan.at, context) });
     }
+    const sentInBulk: string[] = [];
     for (const call of bulk) {
       try {
         if ((await call.send()) === 'off') {
           stopped = true;
           break;
         }
-        marked += call.covers;
+        sentInBulk.push(...call.ids);
       } catch {
-        failedCount += call.covers;
+        failedCount += call.ids.length;
+        this.advance(call.ids.length);
       }
-      this.advance(call.covers);
     }
     const threads = new Map(store.notifications.list().map((thread) => [thread.id, thread]));
     const markedKeys: PrKey[] = [];
@@ -314,7 +355,7 @@ export class InboxCleanup implements CatchUpGate {
           stopped = true;
           break;
         }
-        marked += 1;
+        patched += 1;
         if (thread) {
           mirrorRead(store, thread, prKey);
           if (prKey !== null) {
@@ -327,24 +368,28 @@ export class InboxCleanup implements CatchUpGate {
       this.advance(1);
     }
     advanceSeenFromGitHub(store, markedKeys, this.deps.now().toISOString());
-    this.finish({ batch, origin, marked, failed: failedCount, stopped });
+    const stillOnGitHub = sentInBulk.length === 0 ? 0 : await this.confirmBulk(sentInBulk);
+    this.finish({ batch, origin, marked: patched + sentInBulk.length - stillOnGitHub, failed: failedCount, stillOnGitHub, stopped });
   }
 
-  private finish(run: { batch: string; origin: 'cleanup' | 'footer'; marked: number; failed: number; stopped: boolean }): void {
+  private finish(run: { batch: string; origin: 'cleanup' | 'footer'; marked: number; failed: number; stillOnGitHub: number; stopped: boolean }): void {
     const parts = [`marked ${run.marked} read on GitHub`];
+    if (run.stillOnGitHub > 0) {
+      parts.push(`GitHub is still working on ${run.stillOnGitHub}`);
+    }
     if (run.failed > 0) {
       parts.push(`${run.failed} failed`);
     }
     if (run.stopped) {
       parts.push('stopped: GitHub writes went off');
     }
-    const detail = parts.join(', ');
+    const detail = parts.join('; ');
     const outcome = run.marked === 0 && (run.failed > 0 || run.stopped) ? 'failed' : 'github';
     this.deps.writes.log.record({ action: 'inbox_cleanup', origin: run.origin, outcome, batch: run.batch, detail });
     this.deps.log(`inbox cleanup: ${detail}`);
     if (run.marked > 0) {
       this.deps.telemetry.capture('marked_read', { count: run.marked, origin: 'cleanup' });
     }
-    this.lastRun = { id: run.batch, marked: run.marked, failed: run.failed, at: this.deps.now().toISOString() };
+    this.lastRun = { id: run.batch, marked: run.marked, failed: run.failed, stillOnGitHub: run.stillOnGitHub, at: this.deps.now().toISOString() };
   }
 }
