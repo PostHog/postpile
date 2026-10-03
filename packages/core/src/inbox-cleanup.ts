@@ -167,11 +167,6 @@ export function daysBefore(now: IsoTime, days: number): IsoTime {
   return new Date(new Date(now).getTime() - days * DAY_MS).toISOString();
 }
 
-/** The last_read_at a "no activity for N days" pick sends. */
-export function cleanupCutoff(now: IsoTime, age: CleanupAge): IsoTime {
-  return daysBefore(now, age);
-}
-
 /** Unread threads with no activity since `cutoff`. */
 export function unreadOlderThan(threads: { unread: boolean; updatedAt: IsoTime }[], cutoff: IsoTime): number {
   return threads.filter((thread) => thread.unread && thread.updatedAt < cutoff).length;
@@ -199,8 +194,8 @@ export function cleanupCounts(threads: CleanupThread[], at: IsoTime): CleanupCou
     mergedQuiet14: merged.filter((thread) => isMergedPicked(thread, 'quiet14', at)).length,
     mergedAll: merged.length,
     mergedWithoutReview: merged.filter((thread) => thread.withoutReview).length,
-    olderThan14: others.filter((thread) => thread.updatedAt < cleanupCutoff(at, 14)).length,
-    olderThan30: others.filter((thread) => thread.updatedAt < cleanupCutoff(at, 30)).length,
+    olderThan14: others.filter((thread) => thread.updatedAt < daysBefore(at, 14)).length,
+    olderThan30: others.filter((thread) => thread.updatedAt < daysBefore(at, 30)).length,
   };
 }
 
@@ -211,7 +206,7 @@ export function cleanupCounts(threads: CleanupThread[], at: IsoTime): CleanupCou
  * count. Nothing with activity after `at`.
  */
 function selectedThreads(threads: CleanupThread[], picks: CleanupPicks, at: IsoTime): CleanupThread[] {
-  const readBefore = picks.older === null ? null : cleanupCutoff(at, picks.older);
+  const readBefore = picks.older === null ? null : daysBefore(at, picks.older);
   return threads.filter((thread) => {
     if (thread.updatedAt > at) {
       return false;
@@ -245,7 +240,7 @@ function fullySelectedRepos(threads: CleanupThread[], selected: Set<string>, at:
  */
 export function planCleanup(threads: CleanupThread[], picks: CleanupPicks, at: IsoTime): CleanupPlan {
   const selected = selectedThreads(threads, picks, at);
-  const readBefore = picks.older === null ? null : cleanupCutoff(at, picks.older);
+  const readBefore = picks.older === null ? null : daysBefore(at, picks.older);
   const remaining = selected.filter((thread) => readBefore === null || thread.updatedAt >= readBefore);
   const wholeRepos = fullySelectedRepos(threads, new Set(selected.map((thread) => thread.id)), at);
   const repoNames = [...new Set(remaining.map((thread) => thread.repo))].filter((repo) => wholeRepos.has(repo)).sort();

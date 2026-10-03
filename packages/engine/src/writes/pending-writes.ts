@@ -92,25 +92,6 @@ export class PendingWrites {
   }
 
   /**
-   * The inbox cleanup while locked: one pending "mark everything before
-   * `readBefore` read on GitHub". Nothing changes in the app until it is sent.
-   */
-  parkCleanup(readBefore: IsoTime, batch: string): void {
-    this.store.pendingWrites.add({
-      kind: 'mark_all_read_before',
-      readBefore,
-      createdAt: this.now().toISOString(),
-      origin: 'cleanup',
-      tileId: null,
-      batch,
-      prKeys: [],
-      handleKeys: [],
-      threads: [],
-    });
-    this.writes.log.record({ action: 'mark_all_read_before', origin: 'cleanup', outcome: 'pending', batch, detail: `last_read_at=${readBefore}: ${CLEANUP_PENDING_DETAIL}` });
-  }
-
-  /**
    * The inbox cleanup dialog while locked: one pending write with its picks
    * and the time it counted. `threads` are what it covered then, for the
    * count in the lock. Nothing changes in the app until it is sent.

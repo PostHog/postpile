@@ -1071,19 +1071,21 @@ export class Engine implements EngineService {
 
   async clearInbox(request: CleanupRequest): Promise<ActionResult> {
     const result = this.cleanup.clear(request);
-    // Locked, nothing to clear or refused: no run to wait for, so a held sync goes on now.
-    if (!this.cleanup.isRunning()) {
-      this.resumeHeldSync();
-    }
+    this.resumeUnlessRunning();
     return result;
   }
 
   async startAsUsual(): Promise<ActionResult> {
     const result = this.cleanup.startAsUsual();
+    this.resumeUnlessRunning();
+    return result;
+  }
+
+  /** Locked, nothing to clear or refused: no run to wait for, so a held sync goes on now. */
+  private resumeUnlessRunning(): void {
     if (!this.cleanup.isRunning()) {
       this.resumeHeldSync();
     }
-    return result;
   }
 
   /** For tests: settles when the inbox cleanup's background run did. */

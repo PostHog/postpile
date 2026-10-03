@@ -43,8 +43,7 @@ const ANSWERED_KEY = 'catch_up_answered_merged';
  * store from before last_sync_started_at existed uses its newest PR fetch.
  */
 export function noteSyncStart(store: Store, at: IsoTime): void {
-  const fetched = [...store.prs.fetchedAtByKey().values()].sort().at(-1) ?? null;
-  const previous = store.meta.get(LAST_SYNC_KEY) ?? fetched;
+  const previous = store.meta.get(LAST_SYNC_KEY) ?? [...store.prs.fetchedAtByKey().values()].sort().at(-1) ?? null;
   const reason = catchUpReason(previous, at);
   if (reason !== null && store.meta.get(REASON_KEY) === null) {
     store.meta.set(REASON_KEY, JSON.stringify(reason));
@@ -147,7 +146,7 @@ export class InboxCleanup implements CatchUpGate {
 
   holds(): boolean {
     const at = this.deps.now().toISOString();
-    if (this.deps.asksOnStart && this.startCaseFor(this.threads(new Set()), at) !== null) {
+    if (this.deps.asksOnStart && this.reason() !== null && this.startCaseFor(this.threads(new Set()), at) !== null) {
       return true;
     }
     // Not due (or nobody to ask): the sync runs through, and this start's question is settled.
