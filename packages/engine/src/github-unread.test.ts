@@ -117,7 +117,7 @@ describe('GitHub unread is PostPile unread', () => {
     expect((await tileOf(h, 'decide'))?.state).toMatchObject({ kind: 'unread', loud: true });
   });
 
-  it('marks a release notification read on GitHub by itself and shows nothing for it', async () => {
+  it('leaves a non-PR notification unread on GitHub and shows nothing for it (2026-10-03)', async () => {
     const h = makeHarness();
     const release: NotificationThread = {
       id: 'thread-release',
@@ -134,21 +134,11 @@ describe('GitHub unread is PostPile unread', () => {
 
     await h.engine.sync({ maxAgentCalls: 0 });
 
-    expect(markReadCalls(h)).toEqual(['markThreadRead thread-release']);
-    expect(h.store.actionLog.listRecent(1)[0]).toMatchObject({ origin: 'quiet', outcome: 'github', prKey: null, threadId: 'thread-release', detail: 'not a pull request' });
-    expect(h.store.notifications.get('thread-release')?.unread).toBe(false);
+    expect(h.writer.calls).toEqual([]);
+    expect(h.store.actionLog.listRecent(1)).toEqual([]);
+    expect(h.store.notifications.get('thread-release')?.unread).toBe(true);
     expect(await h.engine.handledQuietly()).toEqual([]);
     expect(await h.engine.listTopics()).toEqual([]);
-  });
-
-  it('leaves a release unread while GitHub writes are locked', async () => {
-    const h = makeHarness({ writesEnabled: false });
-    h.reader.threads = [{ ...makeThreadFor(makePr({ number: 90 }), { updatedAt: at(10) }), subjectType: 'Issue' }];
-
-    await h.engine.sync({ maxAgentCalls: 0 });
-
-    expect(h.writer.calls).toEqual([]);
-    expect(h.store.pendingWrites.list()).toEqual([]);
   });
 
   it('shows a done PR unread again when a person flags its thread, until it is read', async () => {

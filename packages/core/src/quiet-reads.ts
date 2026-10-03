@@ -167,9 +167,8 @@ export function quietReadCheck(input: QuietReadInput): QuietReadCheck {
  * - judged: since the user last looked only automation and people's activity the events agent judged as not needing them
  * - request_gone: a never-opened review request that no longer stands, and since it only automation and judged activity
  * - opened: the user opened the PR in PostPile while nothing was asked of them
- * - not_pr: a notification that is not a PR (a release, an issue)
  */
-export type QuietReason = 'bots' | TouchReason | 'judged' | 'request_gone' | 'opened' | 'not_pr';
+export type QuietReason = 'bots' | TouchReason | 'judged' | 'request_gone' | 'opened';
 
 /** The "you acted after it" reasons, by the user's newest review or comment. */
 export type TouchReason = 'approved' | 'changes_requested' | 'reviewed' | 'replied';
@@ -617,17 +616,6 @@ export function clickedReadNotice(check: ClickedReadCheck): string {
   return 'New activity on GitHub since you looked: still unread';
 }
 
-/**
- * A notification that is not a PR (a release, an issue, a discussion):
- * PostPile shows none of them, so it marks them read on GitHub by itself
- * (DESIGN.md "GitHub unread is PostPile unread": "People who use PostPile
- * expect PostPile to clear all of this"). Nothing else is checked: nothing
- * in the app could show it.
- */
-export function isClearableNonPr(thread: NotificationThread): boolean {
-  return thread.unread && thread.subjectType !== 'PullRequest';
-}
-
 /** One tile that holds the opened PR, as far as the "opened in PostPile" rule cares. */
 export interface OpenedTile {
   snoozed: boolean;
@@ -726,7 +714,6 @@ const QUIET_REASON_DETAILS: Record<Exclude<QuietReason, NamedReason>, string> = 
   reviewed: 'you reviewed after it',
   replied: 'you replied after it',
   opened: 'opened in PostPile',
-  not_pr: 'not a pull request',
 };
 
 function namesAfter(detail: string, prefix: string): string[] {

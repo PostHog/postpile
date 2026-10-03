@@ -3530,8 +3530,9 @@ clearable, or they should still be unread in PostPile." A Codex (gpt-6-astra)
 review of the 155 agreed: unread has to be a fact about the GitHub thread, not
 about loudness.
 
-**The rule.** Every notification that is unread on GitHub ends one of two
-ways, and there is no third:
+**The rule.** Every PR notification that is unread on GitHub ends one of two
+ways, and there is no third (other notifications are not part of it, see
+"Notifications that are not PRs" below):
 
 1. PostPile clears it by itself (marks it read on GitHub), because it is
    obviously clearable (below), or
@@ -3572,10 +3573,19 @@ the thread before the write, and an action-log entry ("Handled quietly").
 The 10-minute grace after the newest activity was removed 2026-10-02
 ("Handled quietly" rule 5).
 
-**Notifications that are not PRs** (releases, issues): PostPile marks them read
-on GitHub by itself for now. Julian: "People who use PostPile (for example, to
-catch up after vacation or never having used the GitHub inbox) expect PostPile
-to clear all of this." Showing them is decided later.
+**Notifications that are not PRs** (releases, issues, discussions, security
+alerts, CI runs, invitations): PostPile leaves them alone. They stay unread on
+GitHub, show nowhere in PostPile (no tile, no count, no badge) and are never
+marked read by the quiet reads. The only way PostPile clears one is the
+explicit inbox catch-up dialog, row "Everything else, no activity for 14 / 30
+days", which the user picks. The notifications debug view still lists them.
+
+History: on 2026-09-30 the owner decided "PostPile clears all of this" and the
+quiet reads marked every unread non-PR thread read on each sync and poll. On
+2026-10-03 that was reversed: PostPile should not become an issue and
+discussion sifter, and security alerts were being cleared silently. Topics for
+releases, security alerts or issues were considered and parked; if they are
+ever added, a tile alone (no right pane) is enough.
 
 **Loudness keeps its job.** Pings, the coral "new since you looked", urgency
 and sections stay tied to loud news. An unread tile with only quiet news (the
@@ -3625,10 +3635,8 @@ finished topics included.
   newest unread thread first). One it leaves out of its answer gets a quiet
   override "nothing here needs you"; one it raises goes through the raised
   ping path. The budget caps the calls as before.
-- Releases and issues: `isClearableNonPr` (unread; past the grace until
-  2026-10-02), marked
-  by `QuietReads` with detail "not a pull request", in the action log and
-  the debug view, not under Handled quietly.
+- Releases and issues: cleared by `isClearableNonPr` until 2026-10-03, now
+  left alone (see "Notifications that are not PRs").
 - Retire gate needs every thread read; `reviveUnreadTopics` runs after the
   retire step of the full sync and in every poll that moved the inbox. The
   full sync reads the unread state its quiet reads left, so a failed or
@@ -4573,7 +4581,10 @@ because of bots (trunk-io, github-actions, review bots like codex or
 coderabbit, deploy bots, CI). PostPile marks it read on GitHub by itself.
 Real data on the day: 36 of 165 unread PR threads were bot-only since their
 last read. Rules only, no agent: core `quietReadCheck` (`quiet-reads.ts`),
-engine `QuietReads` (`writes/quiet-reads.ts`).
+engine `QuietReads` (`writes/quiet-reads.ts`). It only ever touches PR
+threads: other notifications (releases, issues, discussions, security alerts)
+stay unread on GitHub (2026-10-03; 2026-09-30 to 2026-10-02 it cleared them
+too).
 
 **The rules**, all of them must hold:
 
@@ -4632,7 +4643,7 @@ engine `QuietReads` (`writes/quiet-reads.ts`).
    quiet read at 06:19, trunk-io edited its merge queue comment at 06:22
    (an @mention, so GitHub notified again), and the thread stayed unread
    until the owner opened it at 06:25. The same goes for the grace of the
-   acted-after rule, the judged rule and notifications that are not PRs.
+   acted-after rule, and the judged rule.
    The number stays so references to the other rules hold.
 6. *Lock open.* Only while GitHub writes are unlocked. Locked, nothing
    happens and nothing piles up as a pending write.
