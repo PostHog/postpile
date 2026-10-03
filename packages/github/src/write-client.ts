@@ -29,6 +29,14 @@ export class GitHubWriteClient implements GitHubWriter {
   }
 
   /**
+   * https://docs.github.com/en/rest/activity/notifications#mark-repository-notifications-as-read
+   * The same for one repo: threads updated after `lastReadAt` stay unread. 205 or 202.
+   */
+  async markRepoReadBefore(repo: string, lastReadAt: IsoTime): Promise<void> {
+    await this.http.requestOk('PUT', `repos/${repo}/notifications`, { body: { last_read_at: lastReadAt } });
+  }
+
+  /**
    * https://docs.github.com/en/rest/pulls/reviews#create-a-review-for-a-pull-request
    * Visible to everyone on the PR; only a dismissal walks it back.
    * commit_id pins the review to the commit the user saw. Without it GitHub

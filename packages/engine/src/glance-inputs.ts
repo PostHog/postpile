@@ -130,3 +130,16 @@ export class GlanceInputs {
     return agent.glanceItemInputHash(this.batchInput(target.topicId, [target.item], 1), target.item);
   }
 }
+
+/**
+ * PRs the next glance job would call the agent for: targets whose stored
+ * glance is missing or no longer matches its input (the glance writer's own
+ * check, with the dossier as it is now). The inbox catch-up's saving line
+ * counts them.
+ */
+export function pendingGlanceKeys(store: Store, board: Board, viewer: Viewer, contexts: PromptContextSource, agent: AgentService): Set<PrKey> {
+  const inputs = new GlanceInputs(store, board, viewer, contexts);
+  const targets = inputs.targets();
+  const stored = store.glances.getMany(targets.map((target) => target.item.pr.key));
+  return new Set(targets.filter((target) => stored.get(target.item.pr.key)?.inputHash !== inputs.itemHash(agent, target)).map((target) => target.item.pr.key));
+}

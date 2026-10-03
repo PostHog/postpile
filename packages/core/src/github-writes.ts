@@ -1,6 +1,7 @@
 // The runtime switch for GitHub writes and the log of every action that
 // could reach GitHub (plus local mark-reads).
 
+import type { CleanupPicks } from './inbox-cleanup.ts';
 import type { IsoTime, PrKey } from './types.ts';
 
 /**
@@ -23,10 +24,17 @@ export interface PendingThread {
 }
 
 /**
- * mark_read: one click's threads. mark_all_read_before: the inbox cleanup's
- * single PUT /notifications with last_read_at = `readBefore`.
+ * mark_read: one click's threads. mark_all_read_before: the old inbox
+ * cleanup's single PUT /notifications with last_read_at = `readBefore`
+ * (none are made since the catch-up dialog; stored ones still send).
+ * catch_up: the inbox cleanup dialog's picks, planned again when sent.
  */
-export type PendingWriteKind = 'mark_read' | 'mark_all_read_before';
+export type PendingWriteKind = 'mark_read' | 'mark_all_read_before' | 'catch_up';
+
+/** A cleanup waiting for the lock: the picks and when the dialog counted. Sending it runs the same plan. */
+export interface PendingCatchUp extends CleanupPicks {
+  countedAt: IsoTime;
+}
 
 /**
  * A mark-read made while GitHub writes were locked. Nothing changed in the
@@ -45,10 +53,12 @@ export interface PendingWrite {
   prKeys: PrKey[];
   /** PRs that also count as handled then (pinged members). */
   handleKeys: PrKey[];
-  /** Threads still to mark read on GitHub. Empty for mark_all_read_before. */
+  /** Threads still to mark read on GitHub. Empty for mark_all_read_before; for catch_up the threads it covered when parked. */
   threads: PendingThread[];
   /** mark_all_read_before: the cutoff sent as last_read_at. Null for mark_read. */
   readBefore: IsoTime | null;
+  /** catch_up: what to plan when it is sent. Null otherwise. */
+  catchUp: PendingCatchUp | null;
   /** The last send's error, null before any try. */
   error: string | null;
   triedAt: IsoTime | null;
@@ -64,7 +74,7 @@ export interface PendingWriteView {
   title: string;
   prKeys: PrKey[];
   tileId: string | null;
-  /** For mark_all_read_before: stored unread threads older than the cutoff, as far as the app knows. */
+  /** For mark_all_read_before: stored unread threads older than the cutoff, as far as the app knows; for catch_up: the threads it covered when parked. */
   threadCount: number;
   error: string | null;
 }
@@ -97,7 +107,10 @@ export interface GitHubWritesChange {
  * What was done. `undo_mark_read` is the 6s undo, `writes_on` / `writes_off`
  * the lock. `bring_back` is gone (GitHub has no mark-unread, so it only split
  * the state); old rows may still carry it.
- * `mark_all_read_before` is the inbox cleanup (PUT /notifications).
+ * `mark_all_read_before` is a PUT /notifications (everything before a time)
+ * or PUT /repos/{repo}/notifications (detail names the repo).
+ * `inbox_cleanup` is one catch-up run as a whole (pending, discarded, or
+ * the summary when it ended); its calls are logged on their own.
  * `agent_refresh` is an outside agent's refresh_from_github: a GitHub read,
  * logged with no thread or PR (the detail lists the PRs) so it never shows
  * as a thread's last action.
@@ -109,6 +122,7 @@ export interface GitHubWritesChange {
 export type LoggedAction =
   | 'mark_read'
   | 'mark_all_read_before'
+  | 'inbox_cleanup'
   | 'undo_mark_read'
   | 'approve'
   | 'comment'
@@ -130,7 +144,7 @@ export type LoggedAction =
  * - sync / poll: the full sync or the live poll saw a thread leave the inbox
  *   (read on github.com or another client) and mirrored it locally
  * - footer: the lock in the status footer (also sending or discarding pending writes)
- * - cleanup: the inbox cleanup dialog ("mark everything older than N days read")
+ * - cleanup: the inbox cleanup dialog (merged PRs, everything older than N days)
  * - quiet: PostPile itself, after a full sync: a thread the user had read
  *   turned unread only because of bots ("Handled quietly")
  * - agent: an outside agent through the MCP server (refresh_from_github); a GitHub read, never a write

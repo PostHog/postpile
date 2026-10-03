@@ -9,6 +9,7 @@ import {
   type IsoTime,
   type NewActionLogEntry,
   type NotificationThread,
+  type PendingCatchUp,
   type PendingWrite,
   type PendingWriteView,
   type PendingWritesResult,
@@ -21,6 +22,8 @@ const SAMPLE_DETAIL = 'sample data: nothing left the process';
 const QUEUED_LOCKED_DETAIL = 'GitHub writes are locked: becomes a pending write after the undo window';
 const PENDING_DETAIL = 'GitHub writes are locked: waits until you unlock and send it';
 const DISCARDED_DETAIL = 'discarded while locked: stays unread, like on GitHub';
+const CLEANUP_PENDING_DETAIL = 'GitHub writes are locked: the cleanup waits until you unlock and send it';
+const CLEANUP_DISCARDED_DETAIL = 'cleanup discarded while locked: GitHub keeps them unread';
 
 /** What a click changed in the sample right away (only while writes are on, or with nothing unread on GitHub). */
 export interface FakeLocalChange {
@@ -42,13 +45,20 @@ export interface FakeBatch {
   queuedAt: number;
 }
 
+/** The inbox cleanup parked while locked: its picks, and the threads it covered then (for the count). */
+interface FakeCatchUp {
+  picks: PendingCatchUp;
+  threadIds: string[];
+  title: string;
+}
+
 interface FakePending {
   id: number;
   createdAt: IsoTime;
   /** A mark-read click. Null for a cleanup. */
   batch: FakeBatch | null;
-  /** The inbox cleanup's cutoff. Null for a mark-read. */
-  readBefore: IsoTime | null;
+  /** The inbox cleanup. Null for a mark-read. */
+  catchUp: FakeCatchUp | null;
 }
 
 /** What FakeWrites needs from FakeEngine's sample data. */
@@ -59,8 +69,8 @@ export interface FakeSample {
   readHere(scope: ReadScope, clickedAt: IsoTime): void;
   /** Tile or PR title for the footer's pending list. */
   title(prKeys: PrKey[], threadId: string | null): string;
-  /** Ids of sample threads unread "on GitHub" with no activity since `cutoff`. */
-  unreadBefore(cutoff: IsoTime): string[];
+  /** A parked inbox cleanup was sent from the lock: run its plan like the dialog would have. */
+  startCatchUp(picks: PendingCatchUp): void;
 }
 
 type LogInput = Pick<NewActionLogEntry, 'action' | 'origin' | 'outcome'> & Partial<NewActionLogEntry>;
@@ -90,16 +100,15 @@ export class FakeWrites {
   private pendingViews(): PendingWriteView[] {
     return this.pending.map((write): PendingWriteView => {
       if (write.batch === null) {
-        const cutoff = write.readBefore ?? '';
         return {
           id: write.id,
-          kind: 'mark_all_read_before',
+          kind: 'catch_up',
           createdAt: write.createdAt,
           origin: 'cleanup',
-          title: `Cleanup: mark everything before ${cutoff.slice(0, 10)} read`,
+          title: write.catchUp?.title ?? 'Inbox cleanup',
           prKeys: [],
           tileId: null,
-          threadCount: this.sample.unreadBefore(cutoff).length,
+          threadCount: write.catchUp?.threadIds.length ?? 0,
           error: null,
         };
       }
@@ -117,33 +126,27 @@ export class FakeWrites {
     });
   }
 
-  /** The cleanup's cutoff while one waits for the lock. */
-  pendingCleanupCutoff(): IsoTime | null {
-    return this.pending.filter((write) => write.batch === null).at(-1)?.readBefore ?? null;
+  /** An inbox cleanup waits for the lock. */
+  hasCatchUp(): boolean {
+    return this.pending.some((write) => write.catchUp !== null);
+  }
+
+  /** The inbox cleanup while locked: one pending write, nothing changes in the sample until it is sent. */
+  parkCatchUp(picks: PendingCatchUp, threadIds: string[], title: string): void {
+    this.pending.push({ id: this.nextId, createdAt: this.now().toISOString(), batch: null, catchUp: { picks, threadIds, title } });
+    this.nextId += 1;
+    this.record({ action: 'inbox_cleanup', origin: 'cleanup', outcome: 'pending', detail: `${title}: ${CLEANUP_PENDING_DETAIL}` });
   }
 
   /**
-   * "Mark everything before `cutoff` read on GitHub": flips the sample
-   * threads right away while unlocked, else one pending write. Returns
-   * whether it went out.
+   * One call of a cleanup run "reached GitHub": the sample threads it covers
+   * turn read there. `call` is the log row the engine writes for it.
    */
-  cleanup(cutoff: IsoTime): boolean {
-    const detail = `last_read_at=${cutoff}`;
-    if (!this.enabled) {
-      this.pending.push({ id: this.nextId, createdAt: this.now().toISOString(), batch: null, readBefore: cutoff });
-      this.nextId += 1;
-      this.record({ action: 'mark_all_read_before', origin: 'cleanup', outcome: 'pending', detail: `${detail}: ${PENDING_DETAIL}` });
-      return false;
-    }
-    this.markBefore(cutoff, 'cleanup');
-    return true;
-  }
-
-  private markBefore(cutoff: IsoTime, origin: 'cleanup' | 'footer'): void {
-    for (const threadId of this.sample.unreadBefore(cutoff)) {
+  cleanupCall(threadIds: string[], call: Pick<NewActionLogEntry, 'action' | 'origin'> & Partial<NewActionLogEntry>): void {
+    for (const threadId of threadIds) {
       this.githubUnread.set(threadId, false);
     }
-    this.record({ action: 'mark_all_read_before', origin, outcome: 'github', detail: `last_read_at=${cutoff}: ${SAMPLE_DETAIL}` });
+    this.record({ ...call, outcome: 'github', detail: call.detail ? `${call.detail}: ${SAMPLE_DETAIL}` : SAMPLE_DETAIL });
   }
 
   status(): GitHubWritesStatus {
@@ -231,7 +234,7 @@ export class FakeWrites {
 
   private park(batch: FakeBatch): void {
     this.sample.revert(batch.local);
-    this.pending.push({ id: this.nextId, createdAt: this.now().toISOString(), batch, readBefore: null });
+    this.pending.push({ id: this.nextId, createdAt: this.now().toISOString(), batch, catchUp: null });
     this.nextId += 1;
     for (const thread of batch.threads) {
       this.record({
@@ -320,6 +323,7 @@ export class FakeWrites {
       readBefore: null,
       error: null,
       triedAt: null,
+      catchUp: null,
     };
     const step = pendingWriteStep(write, { kind: 'sent', outcomes: write.threads.map(() => ({ kind: 'sent' as const })) });
     for (const effect of step.effects) {
@@ -340,7 +344,9 @@ export class FakeWrites {
     }
     for (const write of writes) {
       if (write.batch === null) {
-        this.markBefore(write.readBefore ?? '', 'footer');
+        if (write.catchUp) {
+          this.sample.startCatchUp(write.catchUp.picks);
+        }
         continue;
       }
       this.markThreads(write.batch, 'footer');
@@ -354,7 +360,7 @@ export class FakeWrites {
     const writes = this.pending.splice(0);
     for (const write of writes) {
       if (write.batch === null) {
-        this.record({ action: 'mark_all_read_before', origin: 'footer', outcome: 'discarded', detail: `last_read_at=${write.readBefore ?? ''}: ${DISCARDED_DETAIL}` });
+        this.record({ action: 'inbox_cleanup', origin: 'footer', outcome: 'discarded', detail: `${write.catchUp?.title ?? 'Inbox cleanup'}: ${CLEANUP_DISCARDED_DETAIL}` });
         continue;
       }
       for (const thread of write.batch.threads) {

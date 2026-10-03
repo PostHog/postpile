@@ -19,7 +19,8 @@ import type {
   FeedbackKind,
   FinishedTopic,
   GitHubWritesChange,
-  CleanupAge,
+  CleanupRequest,
+  CleanupThread,
   InboxCleanupView,
   PendingWritesResult,
   GitHubWritesStatus,
@@ -114,11 +115,8 @@ import {
   eventView,
   compareInSection,
   actionTrail,
-  cleanupCutoff,
-  cleanupLook,
-  CLEANUP_SNOOZE_DAYS,
+  isUnseenMergeWithoutReview,
   DEFAULT_REPO_SETTINGS,
-  unreadOlderThan,
   isPrInQuietRepo,
   isQuietTile,
   isTopicInScope,
@@ -201,7 +199,8 @@ import { FakeTools, type FakeToolProblem } from './fake-tools.ts';
 import { FakeWorkContext } from './fake-work-context.ts';
 import { FakeLivePoll } from './fake-live.ts';
 import { FakeMemory } from './fake-memory.ts';
-import { sampleThreads } from './fake-notifications.ts';
+import { FakeCleanup } from './fake-cleanup.ts';
+import { isSampleMergedThread, sampleThreads } from './fake-notifications.ts';
 import { samplePingDecisions, sampleQuietReads } from './fake-quiet.ts';
 import { FakeWrites, type FakeLocalChange } from './fake-writes.ts';
 import { buildSampleData, type SampleData } from './sample-data.ts';
@@ -230,6 +229,10 @@ export interface FakeEngineOptions {
   missingTools?: FakeToolProblem[];
   /** How long each step of the sample glance catch-up (queued, then writing) takes. Tests pass 0. */
   catchUpStepMs?: number;
+  /** How long each call of a sample inbox cleanup takes, so its progress can be watched. Tests pass 0. */
+  cleanupStepMs?: number;
+  /** Hold the fake sync for the inbox catch-up dialog, as the app does (engineFromEnv). Off by default, like the engine. */
+  catchUpGate?: boolean;
   /** POSTPILE_FAKE_QUOTA: a GitHub quota that is low or nearly used (see fake-quota.ts). */
   quota?: FakeQuotaLevel | null;
   /** POSTPILE_FAKE_TIDY=1: the first sync runs the one-time topic tidy, so the overlay shows. */
@@ -350,9 +353,11 @@ export class FakeEngine implements EngineService {
   private recheckCount = 0;
   // The repo menu's choices; in memory like the lock, gone on restart.
   private repoSettings: RepoSettings = DEFAULT_REPO_SETTINGS;
-  // Inbox cleanup, in memory: every fake start counts as a first run, so the banner shows.
-  private cleanupProminent = true;
-  private cleanupHiddenUntil: string | null = null;
+  // Inbox catch-up, in memory: every fake start counts as a first run, so the start dialog shows.
+  private readonly cleanup: FakeCleanup;
+  /** The fake sync stopped after its fetch step until the start dialog is answered. */
+  private heldSync = false;
+  private readonly catchUpGate: boolean;
   // Starts above the ids of the seeded feedback.
   private nextId = 100;
   /** When each sample PR was last "fetched": a few minutes before start, moved by a fake agent refresh. */
@@ -365,6 +370,7 @@ export class FakeEngine implements EngineService {
     this.recheckDelayMs = options.recheckDelayMs ?? 1500;
     this.syncStepMs = options.syncStepMs ?? 800;
     this.tidyPending = options.tidyOnFirstSync ?? false;
+    this.catchUpGate = options.catchUpGate ?? false;
     this.data = buildSampleData(this.now());
     const catchUpStepMs = options.catchUpStepMs ?? 4000;
     this.catchUp = new FakeCatchUp(this.data, this.now, { queuedMs: catchUpStepMs, writingMs: catchUpStepMs * 1.5 });
@@ -397,7 +403,17 @@ export class FakeEngine implements EngineService {
       revert: (local) => this.revertLocal(local.eventIds, local.handledPrKeys),
       readHere: (scope, clickedAt) => this.readSample(scope, { kind: 'pending_completion', clickedAt }),
       title: (prKeys, threadId) => this.pendingTitle(prKeys, threadId),
-      unreadBefore: (cutoff) => this.threadsOnGitHub().filter((thread) => thread.unread && thread.updatedAt < cutoff).map((thread) => thread.id),
+      startCatchUp: (picks) => this.cleanup.startFromPending(picks, this.cleanupThreads()),
+    });
+    this.cleanup = new FakeCleanup({
+      now: this.now,
+      writes: this.writes,
+      prKeyOf: (threadId) => {
+        const thread = this.threadsOnGitHub().find((candidate) => candidate.id === threadId);
+        return thread ? threadPrKey(thread) : null;
+      },
+      afterRun: () => this.resumeHeldSync(),
+      stepMs: options.cleanupStepMs ?? 150,
     });
     // "Handled quietly" samples, logged like the real sync's quiet mark-reads.
     for (const entry of sampleQuietReads(this.now())) {
@@ -740,12 +756,11 @@ export class FakeEngine implements EngineService {
     return this.progress ? { ...this.progress, running: [...this.progress.running] } : null;
   }
 
-  /** Like the engine: without gh the sync is skipped with the reason and nothing is stored. */
-  private blockedSync(reason: string): SyncReport {
-    const at = this.timestamp();
+  /** A sync report with nothing fetched and no agent work. */
+  private emptySyncReport(startedAt: string): SyncReport {
     return {
-      startedAt: at,
-      finishedAt: at,
+      startedAt,
+      finishedAt: this.timestamp(),
       notificationsNotModified: false,
       threads: 0,
       prsFetched: 0,
@@ -758,8 +773,12 @@ export class FakeEngine implements EngineService {
       dossiersUpdated: 0,
       facts: { added: 0, updated: 0, invalidated: 0, confirmed: 0, stale: 0 },
       errors: [],
-      blockedBy: reason,
     };
+  }
+
+  /** Like the engine: without gh the sync is skipped with the reason and nothing is stored. */
+  private blockedSync(reason: string): SyncReport {
+    return { ...this.emptySyncReport(this.timestamp()), blockedBy: reason };
   }
 
   /** Like the engine: a sync while one runs joins it. */
@@ -797,7 +816,14 @@ export class FakeEngine implements EngineService {
       progress.agentCallsPlanned += step.plan;
       await new Promise((resolve) => setTimeout(resolve, this.syncStepMs));
       progress.agentCallsDone += step.done;
+      // Like the engine: after the fetch the start dialog may hold the agent work until it is answered.
+      if (step.running.includes('fetch') && this.catchUpGate && this.cleanup.holds(this.cleanupThreads())) {
+        this.heldSync = true;
+        this.lastSync = { ...this.emptySyncReport(startedAt), heldForCatchUp: true };
+        return this.lastSync;
+      }
     }
+    this.heldSync = false;
     this.lastSync = {
       startedAt,
       finishedAt: this.timestamp(),
@@ -938,35 +964,66 @@ export class FakeEngine implements EngineService {
     return this.listRepos();
   }
 
+  /** Sample PRs the coming sync would glance: open ones in tiles, and merged ones with an unseen merge without your review. */
+  private glanceTargets(): Set<PrKey> {
+    const keys = new Set(this.data.tiles.flatMap((tile) => tile.members.filter((member) => isTracked(member.provenance)).map((member) => member.prKey)));
+    return new Set(
+      this.data.prs
+        .filter((pr) => keys.has(pr.key))
+        .filter((pr) => pr.state === 'OPEN' || (pr.state === 'MERGED' && this.eventsOf(pr.key).some(isUnseenMergeWithoutReview)))
+        .map((pr) => pr.key),
+    );
+  }
+
+  /** The sample's unread threads as the catch-up sees them. Without gh nothing is known about the GitHub inbox. */
+  private cleanupThreads(): CleanupThread[] {
+    if (this.toolStatus.ghOff() !== null) {
+      return [];
+    }
+    const glanced = this.glanceTargets();
+    return this.threadsOnGitHub()
+      .filter((thread) => thread.unread)
+      .map((thread) => {
+        const key = threadPrKey(thread);
+        const pr = key === null ? undefined : this.data.prs.find((candidate) => candidate.key === key);
+        const merged = pr?.state === 'MERGED' || isSampleMergedThread(thread.id);
+        return {
+          id: thread.id,
+          repo: thread.repo,
+          updatedAt: thread.updatedAt,
+          merged,
+          withoutReview: merged && key !== null && this.eventsOf(key).some(isUnseenMergeWithoutReview),
+          glanced: key !== null && glanced.has(key),
+        };
+      });
+  }
+
+  /** Like the engine: an answer (or the end of a run) lets the held fake sync go on. */
+  private resumeHeldSync(): void {
+    if (this.heldSync) {
+      this.heldSync = false;
+      void this.sync();
+    }
+  }
+
   async inboxCleanup(): Promise<InboxCleanupView> {
     this.writes.settle();
-    const now = this.timestamp();
-    const threads = this.threadsOnGitHub();
-    const unreadOlderThan14 = unreadOlderThan(threads, cleanupCutoff(now, 14));
-    const hiddenUntil = this.cleanupHiddenUntil !== null && this.cleanupHiddenUntil > now ? this.cleanupHiddenUntil : null;
-    // Without gh nothing is known about the GitHub inbox.
-    const look = this.toolStatus.ghOff() !== null ? 'none' : cleanupLook({ unreadOlderThan14, prominent: this.cleanupProminent, hiddenUntil }, now);
-    return {
-      unreadOlderThan14,
-      unreadOlderThan30: unreadOlderThan(threads, cleanupCutoff(now, 30)),
-      look,
-      hiddenUntil,
-      pendingCutoff: this.writes.pendingCleanupCutoff(),
-    };
+    return this.cleanup.view(this.cleanupThreads(), this.glanceTargets().size, this.heldSync);
   }
 
-  async cleanUpInbox(age: CleanupAge): Promise<ActionResult> {
-    this.cleanupProminent = false;
-    if (!this.writes.cleanup(cleanupCutoff(this.timestamp(), age))) {
-      return ok(`Pending: marks everything older than ${age} days read once you unlock and send it from the lock`);
+  async clearInbox(request: CleanupRequest): Promise<ActionResult> {
+    this.writes.settle();
+    const result = this.cleanup.clear(request, this.cleanupThreads());
+    if (!this.cleanup.isRunning()) {
+      this.resumeHeldSync();
     }
-    return ok(`fake: marked the sample threads older than ${age} days read, nothing sent to GitHub`);
+    return result;
   }
 
-  async hideInboxCleanup(): Promise<ActionResult> {
-    this.cleanupProminent = false;
-    this.cleanupHiddenUntil = new Date(this.now().getTime() + CLEANUP_SNOOZE_DAYS * 24 * 3_600_000).toISOString();
-    return ok(`Hidden for ${CLEANUP_SNOOZE_DAYS} days`);
+  async startAsUsual(): Promise<ActionResult> {
+    const result = this.cleanup.startAsUsual();
+    this.resumeHeldSync();
+    return result;
   }
 
   /** The Archive's sample topics that still take new PRs, newest first, like the engine. Samples keep no join times. */
@@ -1948,6 +2005,7 @@ export class FakeEngine implements EngineService {
     const poll = this.livePoller?.currentStatus() ?? OFF_POLL_STATUS;
     return {
       ...poll,
+      changeCount: poll.changeCount + this.cleanup.changeCount(),
       syncRunning: this.syncing !== null,
       nextAutoSyncAt: this.autoSync?.nextSyncAt() ?? null,
       catchUpChanges: this.catchUp.changes(),

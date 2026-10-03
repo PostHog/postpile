@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { ActionOrigin, PendingThread, PendingWrite, PendingWriteKind, PrKey } from '@postpile/core';
+import type { ActionOrigin, PendingCatchUp, PendingThread, PendingWrite, PendingWriteKind, PrKey } from '@postpile/core';
 import { all, insertReturningId, run } from '../sql.ts';
 
 interface PendingWriteRow {
@@ -15,6 +15,7 @@ interface PendingWriteRow {
   threads: string;
   error: string | null;
   tried_at: string | null;
+  catch_up: string | null;
 }
 
 function toPendingWrite(row: PendingWriteRow): PendingWrite {
@@ -31,10 +32,12 @@ function toPendingWrite(row: PendingWriteRow): PendingWrite {
     threads: JSON.parse(row.threads) as PendingThread[],
     error: row.error,
     triedAt: row.tried_at,
+    catchUp: row.catch_up === null ? null : (JSON.parse(row.catch_up) as PendingCatchUp),
   };
 }
 
-export type NewPendingWrite = Omit<PendingWrite, 'id' | 'error' | 'triedAt'>;
+/** `catchUp` only for a catch_up write. */
+export type NewPendingWrite = Omit<PendingWrite, 'id' | 'error' | 'triedAt' | 'catchUp'> & { catchUp?: PendingCatchUp | null };
 
 /** Mark-reads waiting for the writes lock, one row per click (or per cleanup). */
 export class PendingWriteRepo {
@@ -43,8 +46,8 @@ export class PendingWriteRepo {
   add(write: NewPendingWrite): number {
     return insertReturningId(
       this.db,
-      `INSERT INTO pending_write (kind, read_before, created_at, origin, tile_id, batch, pr_keys, handle_keys, threads)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO pending_write (kind, read_before, created_at, origin, tile_id, batch, pr_keys, handle_keys, threads, catch_up)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       write.kind,
       write.readBefore,
       write.createdAt,
@@ -54,6 +57,7 @@ export class PendingWriteRepo {
       JSON.stringify(write.prKeys),
       JSON.stringify(write.handleKeys),
       JSON.stringify(write.threads),
+      write.catchUp ? JSON.stringify(write.catchUp) : null,
     );
   }
 

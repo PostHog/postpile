@@ -1,105 +1,351 @@
 import {
-  cleanupCutoff,
-  cleanupLook,
-  CLEANUP_SNOOZE_DAYS,
-  isLongSyncGap,
-  unreadOlderThan,
+  catchUpReason,
+  cleanupCounts,
+  cleanupOptions,
+  isUnseenMergeWithoutReview,
+  planCleanup,
+  prReadScope,
+  startCase,
+  threadPrKey,
   type ActionResult,
-  type CleanupAge,
+  type CatchUpReason,
+  type CleanupPlan,
+  type CleanupProgress,
+  type CleanupRequest,
+  type CleanupRunResult,
+  type CleanupThread,
   type InboxCleanupView,
   type IsoTime,
+  type PendingThread,
+  type PendingWrite,
+  type PrKey,
+  type StartCase,
 } from '@postpile/core';
 import type { Store } from '@postpile/store';
 import { errorText } from '../errors.ts';
+import { advanceSeenFromGitHub } from '../memory/seen-from-github.ts';
+import type { Telemetry } from '../telemetry/telemetry.ts';
 import type { GitHubWrites } from '../writes/github-writes.ts';
 import type { PendingWrites } from '../writes/pending-writes.ts';
+import { readLocally } from './local-change.ts';
 import { failed, ok } from './results.ts';
 
 const LAST_SYNC_KEY = 'last_sync_started_at';
-const PROMINENT_KEY = 'inbox_cleanup_prominent';
-const HIDDEN_UNTIL_KEY = 'inbox_cleanup_hidden_until';
+/** Why the start dialog may be due (CatchUpReason JSON), from the sync start until it is answered or not needed. */
+const REASON_KEY = 'catch_up_reason';
+/** Unread merged PRs left after the last answer to the start dialog. */
+const ANSWERED_KEY = 'catch_up_answered_merged';
 
 /**
- * Called at the start of every full sync. The first sync on a store, or one
- * after CLEANUP_GAP_DAYS without a sync (vacation), makes the cleanup
- * prominent until the user picks something in the dialog. A store from
- * before this has no stored sync time; its newest PR fetch stands in.
+ * Called at the start of every full sync. A first run, or the first sync
+ * after CATCH_UP_BACK_DAYS or more, notes why the start dialog may be due.
+ * A reason still waiting for an answer (the app quit before it) stays. A
+ * store from before last_sync_started_at existed uses its newest PR fetch.
  */
 export function noteSyncStart(store: Store, at: IsoTime): void {
   const fetched = [...store.prs.fetchedAtByKey().values()].sort().at(-1) ?? null;
   const previous = store.meta.get(LAST_SYNC_KEY) ?? fetched;
-  if (isLongSyncGap(previous, at)) {
-    store.meta.set(PROMINENT_KEY, '1');
+  const reason = catchUpReason(previous, at);
+  if (reason !== null && store.meta.get(REASON_KEY) === null) {
+    store.meta.set(REASON_KEY, JSON.stringify(reason));
   }
   store.meta.set(LAST_SYNC_KEY, at);
 }
 
-/**
- * The inbox cleanup dialog: count old unread threads, mark them read on
- * GitHub in one call (through the writes door, so the lock turns it into a
- * pending write), or hide it for a week. The local-only "start fresh" is
- * gone (DESIGN.md "GitHub unread is PostPile unread"); migration 021 drops a
- * stored baseline.
- */
-export class InboxCleanup {
-  constructor(
-    private readonly store: Store,
-    private readonly writes: GitHubWrites,
-    private readonly pendingWrites: PendingWrites,
-    private readonly now: () => Date,
-    /** Reads the inbox again after the PUT, so reconciliation makes the tiles follow. */
-    private readonly reread: () => Promise<void>,
-  ) {}
+/** The inbox catch-up's say over a full sync (DESIGN.md "Inbox cleanup" › Before agent work). */
+export interface CatchUpGate {
+  /** At every sync start. */
+  noteStart(at: IsoTime): void;
+  /** After the fetch: true while the start dialog is due, so the sync's agent work waits for its answer. */
+  holds(): boolean;
+}
 
-  view(): InboxCleanupView {
-    const now = this.now().toISOString();
-    const threads = this.store.notifications.list();
-    const unreadOlderThan14 = unreadOlderThan(threads, cleanupCutoff(now, 14));
-    const hiddenUntil = this.store.meta.get(HIDDEN_UNTIL_KEY);
-    const prominent = this.store.meta.get(PROMINENT_KEY) !== null;
+export interface InboxCleanupDeps {
+  store: Store;
+  writes: GitHubWrites;
+  pendingWrites: PendingWrites;
+  now: () => Date;
+  /** Only an app with a window asks before agent work; the CLI's syncs never hold. */
+  asksOnStart: boolean;
+  /** PRs the coming sync would glance (pendingGlanceKeys). */
+  pendingGlances: () => Set<PrKey>;
+  /** Waits between two per-thread mark-reads (CATCH_UP_PACE_MS in the app). */
+  pause: () => Promise<void>;
+  /** A run ended: the engine resumes a held sync, or reads the inbox again so the bulk calls show. */
+  afterRun: () => void;
+  telemetry: Telemetry;
+  log: (line: string) => void;
+}
+
+/** A thread's PR events up to its last activity seen, like a read on GitHub; the thread read here. */
+function mirrorRead(store: Store, thread: { id: string; updatedAt: IsoTime }, prKey: PrKey | null): void {
+  store.notifications.markRead(thread.id, thread.updatedAt);
+  if (prKey !== null) {
+    readLocally(store, prReadScope(prKey, false), { kind: 'read_on_github', readAt: thread.updatedAt }, thread.updatedAt);
+  }
+}
+
+/**
+ * The inbox catch-up dialog (DESIGN.md "Inbox cleanup"): counts unread
+ * threads on merged PRs and old ones, decides whether the start dialog is
+ * due, and clears the picks on GitHub in the background through the writes
+ * door (locked, they wait as one pending write). Each per-thread mark-read
+ * also reads the thread here, so tiles go done and topics can retire; the
+ * bulk PUTs show up through the next inbox read.
+ */
+export class InboxCleanup implements CatchUpGate {
+  private running: Promise<void> | null = null;
+  private progress: CleanupProgress | null = null;
+  private lastRun: CleanupRunResult | null = null;
+  /** Calls that landed; counted into the live status' changeCount so tiles follow the run. */
+  private changes = 0;
+
+  constructor(private readonly deps: InboxCleanupDeps) {}
+
+  noteStart(at: IsoTime): void {
+    noteSyncStart(this.deps.store, at);
+  }
+
+  private reason(): CatchUpReason | null {
+    const stored = this.deps.store.meta.get(REASON_KEY);
+    return stored === null ? null : (JSON.parse(stored) as CatchUpReason);
+  }
+
+  /** Every unread thread, with what PostPile knows about its PR. */
+  private threads(glanced: Set<PrKey>): CleanupThread[] {
+    const { store } = this.deps;
+    const unread = store.notifications.list().filter((thread) => thread.unread);
+    const keys = unread.flatMap((thread) => threadPrKey(thread) ?? []);
+    const prs = store.prs.getMany(keys);
+    const isMerged = (key: PrKey | null) => key !== null && prs.get(key)?.state === 'MERGED';
+    const events = store.events.listForPrs(keys.filter(isMerged));
+    return unread.map((thread) => {
+      const key = threadPrKey(thread);
+      const merged = isMerged(key);
+      return {
+        id: thread.id,
+        repo: thread.repo,
+        updatedAt: thread.updatedAt,
+        merged,
+        withoutReview: merged && key !== null && (events.get(key) ?? []).some(isUnseenMergeWithoutReview),
+        glanced: key !== null && glanced.has(key),
+      };
+    });
+  }
+
+  private startCaseFor(threads: CleanupThread[], at: IsoTime): StartCase | null {
+    const counts = cleanupCounts(threads, at);
+    const answered = this.deps.store.meta.get(ANSWERED_KEY);
+    return startCase({
+      reason: this.reason(),
+      now: at,
+      unread: counts.unread,
+      mergedUnread: counts.mergedAll,
+      answeredMerged: answered === null ? null : Number(answered),
+    });
+  }
+
+  holds(): boolean {
+    const at = this.deps.now().toISOString();
+    if (this.deps.asksOnStart && this.startCaseFor(this.threads(new Set()), at) !== null) {
+      return true;
+    }
+    // Not due (or nobody to ask): the sync runs through, and this start's question is settled.
+    this.deps.store.meta.delete(REASON_KEY);
+    return false;
+  }
+
+  /** `held`: a sync waits for the start dialog. The glance count (saving line) is only worked out then. */
+  view(held: boolean): InboxCleanupView {
+    const at = this.deps.now().toISOString();
+    const glanced = held ? this.deps.pendingGlances() : new Set<PrKey>();
+    const threads = this.threads(glanced);
     return {
-      unreadOlderThan14,
-      unreadOlderThan30: unreadOlderThan(threads, cleanupCutoff(now, 30)),
-      look: cleanupLook({ unreadOlderThan14, prominent, hiddenUntil }, now),
-      hiddenUntil: hiddenUntil !== null && hiddenUntil > now ? hiddenUntil : null,
-      pendingCutoff: this.pendingWrites.pendingCleanupCutoff(),
+      countedAt: at,
+      counts: cleanupCounts(threads, at),
+      glances: glanced.size,
+      options: cleanupOptions(threads, at),
+      start: held ? this.startCaseFor(threads, at) : null,
+      running: this.progress ? { ...this.progress } : null,
+      lastRun: this.lastRun,
+      pending: this.deps.pendingWrites.hasCatchUp(),
     };
   }
 
-  /** Any choice in the dialog answers the prominent banner. */
-  private answered(): void {
-    this.store.meta.delete(PROMINENT_KEY);
+  isRunning(): boolean {
+    return this.running !== null;
+  }
+
+  /** For tests: settles when the background run did. */
+  settled(): Promise<void> {
+    return this.running ?? Promise.resolve();
+  }
+
+  /** The start dialog is answered: it comes back once CATCH_UP_MERGED_THRESHOLD more merged PRs pile up, or at the next long gap. */
+  private answer(mergedLeft: number): void {
+    this.deps.store.meta.set(ANSWERED_KEY, String(mergedLeft));
+    this.deps.store.meta.delete(REASON_KEY);
+  }
+
+  /** "Start as usual" (or Esc) on the start dialog. */
+  startAsUsual(): ActionResult {
+    const at = this.deps.now().toISOString();
+    this.answer(cleanupCounts(this.threads(new Set()), at).mergedAll);
+    return ok('Starting as usual');
   }
 
   /**
-   * "Mark everything older than N days read on GitHub": one PUT
-   * /notifications with last_read_at = the cutoff. Locked, it becomes one
-   * pending write. GitHub may finish it in the background (202), so the
-   * inbox is read again right away and the live poll and the next sync pick
-   * up the rest.
+   * "Clear N": plans the calls over what is stored now, never past the time
+   * the dialog counted. Locked, the picks wait as one pending write.
+   * Otherwise the run starts in the background and this answers at once.
    */
-  async markReadBefore(age: CleanupAge): Promise<ActionResult> {
-    const cutoff = cleanupCutoff(this.now().toISOString(), age);
-    const batch = `cleanup:${this.now().getTime()}`;
-    this.answered();
-    if (!this.writes.enabled()) {
-      this.pendingWrites.parkCleanup(cutoff, batch);
-      return ok(`Pending: marks everything older than ${age} days read once you unlock and send it from the lock`);
+  clear(request: CleanupRequest): ActionResult {
+    if (this.running) {
+      return failed('A cleanup is already running');
     }
-    try {
-      await this.writes.markAllReadBefore(cutoff, { origin: 'cleanup', batch });
-    } catch (error) {
-      return failed(`GitHub didn't take the cleanup: ${errorText(error)}`);
+    const now = this.deps.now().toISOString();
+    const at = request.countedAt < now ? request.countedAt : now;
+    const threads = this.threads(new Set());
+    const plan = planCleanup(threads, request, at);
+    if (request.from === 'start') {
+      this.answer(cleanupCounts(threads, at).mergedAll - plan.mergedClears);
     }
-    await this.reread().catch(() => {});
-    return ok(`Asked GitHub to mark everything older than ${age} days read. It can take a moment; the tiles follow on the next poll.`);
+    if (plan.clears === 0) {
+      return ok('Nothing to clear');
+    }
+    const batch = `cleanup:${this.deps.now().getTime()}`;
+    if (!this.deps.writes.enabled()) {
+      this.deps.pendingWrites.parkCatchUp({ merged: request.merged, older: request.older, countedAt: at }, this.pendingThreads(plan), batch);
+      return ok(`Pending: clears ${plan.clears} on GitHub once you unlock and send it from the lock`);
+    }
+    this.start(plan, 'cleanup', batch);
+    return ok(`Clearing ${plan.clears} on GitHub in the background`);
   }
 
-  /** "Not now": hides the line and the banner for a week. */
-  hide(): ActionResult {
-    this.answered();
-    const until = new Date(this.now().getTime() + CLEANUP_SNOOZE_DAYS * 24 * 60 * 60 * 1000);
-    this.store.meta.set(HIDDEN_UNTIL_KEY, until.toISOString());
-    return ok(`Hidden for ${CLEANUP_SNOOZE_DAYS} days`);
+  /** A parked cleanup sent from the lock: the same plan over what is stored now. Null when it started (or had nothing left), else why not. */
+  startFromPending(write: PendingWrite): string | null {
+    if (write.catchUp === null) {
+      return 'not a cleanup';
+    }
+    if (this.running) {
+      return 'another cleanup is running';
+    }
+    const plan = planCleanup(this.threads(new Set()), write.catchUp, write.catchUp.countedAt);
+    if (plan.clears > 0) {
+      this.start(plan, 'footer', write.batch);
+    }
+    return null;
+  }
+
+  private pendingThreads(plan: CleanupPlan): PendingThread[] {
+    const selected = new Set(plan.selectedIds);
+    return this.deps.store.notifications
+      .list()
+      .filter((thread) => selected.has(thread.id))
+      .map((thread) => ({ id: thread.id, updatedAt: thread.updatedAt, prKey: threadPrKey(thread) }));
+  }
+
+  private start(plan: CleanupPlan, origin: 'cleanup' | 'footer', batch: string): void {
+    this.progress = { done: 0, total: plan.clears, merged: plan.mergedClears > 0 };
+    this.running = this.run(plan, origin, batch)
+      .catch((error: unknown) => this.deps.log(`inbox cleanup: failed: ${errorText(error)}`))
+      .finally(() => {
+        this.running = null;
+        this.progress = null;
+        this.deps.afterRun();
+      });
+  }
+
+  private advance(count: number): void {
+    this.changes += 1;
+    if (this.progress) {
+      this.progress.done += count;
+    }
+  }
+
+  changeCount(): number {
+    return this.changes;
+  }
+
+  /**
+   * The calls one after another: the older-than PUT, the repo PUTs, then a
+   * PATCH per thread with a pause between them. No re-read before a PATCH:
+   * the user picked these. A failed call is logged (GitHubWrites) and the
+   * run goes on; writes turned off mid-run stop it.
+   */
+  private async run(plan: CleanupPlan, origin: 'cleanup' | 'footer', batch: string): Promise<void> {
+    const { store, writes } = this.deps;
+    const context = { origin, batch };
+    let marked = 0;
+    let failedCount = 0;
+    let stopped = false;
+    const bulk: { covers: number; send: () => Promise<'sent' | 'off'> }[] = [];
+    const readBefore = plan.readBefore;
+    if (readBefore !== null) {
+      bulk.push({ covers: plan.readBeforeCovers, send: () => writes.markAllReadBefore(readBefore, context) });
+    }
+    for (const { repo, covers } of plan.repos) {
+      bulk.push({ covers, send: () => writes.markRepoReadBefore(repo, plan.at, context) });
+    }
+    for (const call of bulk) {
+      try {
+        if ((await call.send()) === 'off') {
+          stopped = true;
+          break;
+        }
+        marked += call.covers;
+      } catch {
+        failedCount += call.covers;
+      }
+      this.advance(call.covers);
+    }
+    const threads = new Map(store.notifications.list().map((thread) => [thread.id, thread]));
+    const markedKeys: PrKey[] = [];
+    for (const [index, threadId] of plan.threadIds.entries()) {
+      if (stopped) {
+        break;
+      }
+      if (index > 0 || bulk.length > 0) {
+        await this.deps.pause();
+      }
+      const thread = threads.get(threadId);
+      const prKey = thread ? threadPrKey(thread) : null;
+      try {
+        if ((await writes.markThreadRead(threadId, { ...context, prKey })) === 'off') {
+          stopped = true;
+          break;
+        }
+        marked += 1;
+        if (thread) {
+          mirrorRead(store, thread, prKey);
+          if (prKey !== null) {
+            markedKeys.push(prKey);
+          }
+        }
+      } catch {
+        failedCount += 1;
+      }
+      this.advance(1);
+    }
+    advanceSeenFromGitHub(store, markedKeys, this.deps.now().toISOString());
+    this.finish({ batch, origin, marked, failed: failedCount, stopped });
+  }
+
+  private finish(run: { batch: string; origin: 'cleanup' | 'footer'; marked: number; failed: number; stopped: boolean }): void {
+    const parts = [`marked ${run.marked} read on GitHub`];
+    if (run.failed > 0) {
+      parts.push(`${run.failed} failed`);
+    }
+    if (run.stopped) {
+      parts.push('stopped: GitHub writes went off');
+    }
+    const detail = parts.join(', ');
+    const outcome = run.marked === 0 && (run.failed > 0 || run.stopped) ? 'failed' : 'github';
+    this.deps.writes.log.record({ action: 'inbox_cleanup', origin: run.origin, outcome, batch: run.batch, detail });
+    this.deps.log(`inbox cleanup: ${detail}`);
+    if (run.marked > 0) {
+      this.deps.telemetry.capture('marked_read', { count: run.marked, origin: 'cleanup' });
+    }
+    this.lastRun = { id: run.batch, marked: run.marked, failed: run.failed, at: this.deps.now().toISOString() };
   }
 }

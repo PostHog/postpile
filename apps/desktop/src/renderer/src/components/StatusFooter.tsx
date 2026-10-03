@@ -1,9 +1,11 @@
 import type { ReactNode } from 'react';
 import type { LivePollStatus, TopicDetail, TopicListItem } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
+import { useInboxCleanup } from '../api/cleanup.ts';
 import { useMcpConnection } from '../api/mcp.ts';
 import { useTools } from '../api/tools.ts';
 import { callStatsWords } from '../lib/agent-stats.ts';
+import { progressLabel } from '../lib/cleanup.ts';
 import { liveLabel, quotaLabel } from '../lib/live.ts';
 import { mcpFooterShows } from '../lib/mcp.ts';
 import { syncReportDetail } from '../lib/sync-report.ts';
@@ -29,7 +31,7 @@ function withDividers(items: ReactNode[]): ReactNode[] {
   return shown.flatMap((item, index) => (index === 0 ? [item] : [<Divider key={`divider-${index}`} />, item]));
 }
 
-/** 26px strip: unread count, PR counts for the open topic, the GitHub writes lock, live poll, the GitHub quota while low, what gh or claude leave off, agent calls of the last sync, the MCP offer while not connected, mark-read queue, app version. */
+/** 26px strip: unread count, PR counts for the open topic, the GitHub writes lock, an inbox cleanup while it runs, live poll, the GitHub quota while low, what gh or claude leave off, agent calls of the last sync, the MCP offer while not connected, mark-read queue, app version. */
 export function StatusFooter(props: { topics: TopicListItem[]; detail: TopicDetail | undefined; live: LivePollStatus | undefined }) {
   const actions = useActions();
   const now = useNow(1000);
@@ -42,6 +44,7 @@ export function StatusFooter(props: { topics: TopicListItem[]; detail: TopicDeta
   const lastSync = actions.lastSync;
   const mcp = useMcpConnection().data;
   const mcpShows = mcp !== undefined && mcpFooterShows(mcp);
+  const cleanup = useInboxCleanup().data?.running ?? null;
   const left = withDividers([
     <span key="unread" className="flex items-center gap-1.5">
       <span className={`size-1.5 rounded-full ${unread > 0 ? 'bg-unread ring-2 ring-unread/16' : 'bg-dot-quiet'}`} />
@@ -63,6 +66,17 @@ export function StatusFooter(props: { topics: TopicListItem[]; detail: TopicDeta
       </span>
     ),
     <WritesLock key="lock" />,
+    cleanup && (
+      <span key="cleanup" className="flex items-center gap-2" title="The inbox cleanup runs in the background; you can keep working">
+        {progressLabel(cleanup)}
+        <span aria-hidden="true" className="h-1 w-16 overflow-hidden rounded-full bg-hairline">
+          <span className="block h-full rounded-full bg-merged" style={{ width: `${cleanup.total === 0 ? 0 : Math.round((cleanup.done / cleanup.total) * 100)}%` }} />
+        </span>
+        <span>
+          <Num>{cleanup.done}</Num> / {cleanup.total}
+        </span>
+      </span>
+    ),
     <button
       key="ping"
       type="button"

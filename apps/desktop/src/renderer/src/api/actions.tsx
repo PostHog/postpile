@@ -9,7 +9,7 @@ import type {
   AppConfig,
   BatchApproveResult,
   ChatReply,
-  CleanupAge,
+  CleanupRequest,
   FeedbackInput,
   GitHubWritesChange,
   GitHubWritesStatus,
@@ -59,6 +59,8 @@ import { approvedDetail, markedReadPr, markedReadTile, snoozedTile, withApproved
 import { newerReport } from '../lib/sync-report.ts';
 import { teamRoleNotice } from '../lib/team-roles.ts';
 import { UNDO_WINDOW_MS } from '../lib/undo-window.ts';
+import { doneText } from '../lib/cleanup.ts';
+import { useInboxCleanup } from './cleanup.ts';
 import { useLiveStatus } from './live.ts';
 import { useAppConfig } from './config.ts';
 import { useLastSyncReport } from './sync.ts';
@@ -73,8 +75,8 @@ const MEMORY_UNDO_PREFIX = 'memory:';
 const PROBLEM_NOTICE_MS = 12000;
 /** Busy keys of the inbox cleanup's actions, one each (see withBusy). */
 export const CLEANUP_BUSY = {
-  markRead: 'cleanup:mark-read',
-  notNow: 'cleanup:not-now',
+  clear: 'cleanup:clear',
+  start: 'cleanup:start-as-usual',
 } as const;
 // Room for the engine to send or park a batch after its window ends.
 const UNDO_SETTLE_MS = 400;
@@ -88,6 +90,8 @@ export interface Notice {
   undoToken: string | null;
   /** The toast offers "Snooze" for this tile: a mark-read left it your move. */
   snoozeTileId: string | null;
+  /** The toast offers "Show": the notifications view, where each thread's last action is listed (the inbox cleanup's done toast). */
+  showActionLog?: boolean;
 }
 
 /** Reshapes the notice of a successful or failed action, e.g. the mark-read that leaves a tile your move. */
@@ -197,12 +201,13 @@ export interface Actions {
   /** "Make routing only" / "Make home team" on one of your teams. Local and sticky, not a GitHub write. */
   setTeamRole(team: TeamRoleView, role: TeamRole): Promise<void>;
   /**
-   * "Mark everything older than N days read on GitHub". A GitHub write: with
-   * the lock closed it becomes one pending write. Returns whether it went through.
+   * "Clear N" in the inbox cleanup dialog. A GitHub write: it runs in the
+   * background on the server, and with the lock closed it becomes one
+   * pending write. Returns whether the server took it.
    */
-  cleanUpInbox(age: CleanupAge): Promise<boolean>;
-  /** "Not now": hides the cleanup for a week. Local. */
-  hideInboxCleanup(): Promise<boolean>;
+  clearInbox(request: CleanupRequest): Promise<boolean>;
+  /** "Start as usual" (or Esc) on the start dialog: the held sync goes on. Local, no toast. */
+  startAsUsual(): Promise<boolean>;
   /**
    * "Add to Claude Code": the server runs `claude mcp add` (installed app
    * only). Local, not a GitHub write; fire it only from a click. Returns
@@ -299,6 +304,10 @@ export function ActionsProvider(props: { children: ReactNode }) {
   const keptUnread = live?.keptUnread ?? null;
   // The newest kept-unread notice this window has seen; undefined until the live status first loads.
   const seenKeptUnread = useRef<number | null | undefined>(undefined);
+  const cleanup = useInboxCleanup().data;
+  const cleanupRun = cleanup?.lastRun ?? null;
+  // The newest inbox cleanup run this window has seen end; undefined until the view first loads.
+  const seenCleanupRun = useRef<string | null | undefined>(undefined);
 
   // Notices fade on their own; problems stay a little longer.
   useEffect(() => {
@@ -321,6 +330,19 @@ export function ActionsProvider(props: { children: ReactNode }) {
     seenKeptUnread.current = keptUnread?.id ?? null;
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- show is new every render; only a new notice matters
   }, [liveLoaded, keptUnread?.id]);
+
+  // An inbox cleanup ran to its end in the background: the done toast, with "Show". One that ended before this window opened is not shown.
+  useEffect(() => {
+    if (cleanup === undefined) {
+      return;
+    }
+    if (seenCleanupRun.current !== undefined && cleanupRun !== null && cleanupRun.id !== seenCleanupRun.current) {
+      setNotice({ id: Date.now(), tone: cleanupRun.marked > 0 ? 'ok' : 'error', message: `✓ ${doneText(cleanupRun)}`, undoToken: null, snoozeTileId: null, showActionLog: true });
+      void refreshAll();
+    }
+    seenCleanupRun.current = cleanupRun?.id ?? null;
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- refreshAll is new every render; only a new run matters
+  }, [cleanup === undefined, cleanupRun?.id]);
 
   // Drop undo entries once the engine has sent them to GitHub (or, while
   // locked, turned them into pending writes), then refetch so tiles and the
@@ -549,6 +571,18 @@ export function ActionsProvider(props: { children: ReactNode }) {
       await queryClient.invalidateQueries({ queryKey: queryKeys.topic(topicId) });
     } catch (error) {
       show('error', `Could not mark the topic seen: ${errorText(error)}`);
+    }
+  }
+
+  /** No toast: the dialog closes and the held sync shows in the title bar. */
+  async function startAsUsual(): Promise<boolean> {
+    try {
+      const result = await withBusy(CLEANUP_BUSY.start, () => request<ActionResult>('POST', '/api/inbox-cleanup/start-as-usual'));
+      await refreshAll();
+      return result.ok;
+    } catch (error) {
+      show('error', errorText(error));
+      return false;
     }
   }
 
@@ -909,8 +943,8 @@ export function ActionsProvider(props: { children: ReactNode }) {
     setTeamRole,
     sendTestNotification,
     // One busy key each: withBusy drops every copy of a key when one run ends.
-    cleanUpInbox: (age) => run(CLEANUP_BUSY.markRead, 'cleanup', () => request('POST', '/api/inbox-cleanup/mark-read', { olderThanDays: age })),
-    hideInboxCleanup: () => run(CLEANUP_BUSY.notNow, null, () => request('POST', '/api/inbox-cleanup/not-now')),
+    clearInbox: (cleanupRequest) => run(CLEANUP_BUSY.clear, 'cleanup', () => request('POST', '/api/inbox-cleanup/clear', cleanupRequest)),
+    startAsUsual,
     connectMcp: (from) => run('mcp:connect', null, () => request('POST', '/api/mcp-connection', { from })),
     hideMcpConnect: () => run('mcp:not-now', null, () => request('POST', '/api/mcp-connection/not-now')),
     markTopicSeen,

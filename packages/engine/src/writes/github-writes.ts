@@ -91,6 +91,12 @@ export class GitHubWrites {
     return this.send('mark_all_read_before', { detail, ...context }, () => this.writeSwitch.writer().markAllReadBefore(lastReadAt), (reason) => `${detail}: ${reason}`);
   }
 
+  /** The inbox cleanup for a repo it covers whole: one PUT /repos/{repo}/notifications with last_read_at. */
+  markRepoReadBefore(repo: string, lastReadAt: IsoTime, context: WriteContext): Promise<WriteResult> {
+    const detail = `repo=${repo} last_read_at=${lastReadAt}`;
+    return this.send('mark_all_read_before', { detail, ...context }, () => this.writeSwitch.writer().markRepoReadBefore(repo, lastReadAt), (reason) => `${detail}: ${reason}`);
+  }
+
   approvePr(ref: PrRef, body: string, commitOid: string, context: WriteContext): Promise<WriteResult> {
     return this.send('approve', context, () => this.writeSwitch.writer().approvePr(ref, body, commitOid));
   }

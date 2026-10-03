@@ -11,7 +11,7 @@ import { useTools } from './api/tools.ts';
 import { useFinishedTopics, useTopic, useTopics } from './api/topics.ts';
 import { useViewer } from './api/viewer.ts';
 import { DetailPane } from './components/DetailPane.tsx';
-import { InboxCleanup } from './components/InboxCleanup.tsx';
+import { InboxStartDialog } from './components/InboxStartDialog.tsx';
 import { InboxPane } from './components/InboxPane.tsx';
 import { InstructionsPane } from './components/InstructionsPane.tsx';
 import { NotificationsPane } from './components/NotificationsPane.tsx';
@@ -277,7 +277,6 @@ export function App() {
   } else if (!topics.isPending && items.length === 0 && finishedId === null) {
     main = (
       <MainPane>
-        <InboxCleanup place="banner" />
         <p className="m-auto max-w-sm text-center text-xs leading-relaxed text-muted">
           {actions.syncing ? 'Syncing your GitHub notifications…' : 'No topics yet. Sync pulls in your GitHub notifications and sorts them into topics.'}
         </p>
@@ -293,7 +292,6 @@ export function App() {
     main = (
       <MainPane>
         <ToolsNotice place="banner" />
-        <InboxCleanup place="banner" />
         <TopicHeader detail={topic.data} topics={items} />
         <TileGrid
           detail={topic.data}
@@ -427,7 +425,8 @@ export function App() {
             {!showSetup && !wideList && <PaneDivider label="Resize the tile column" left={`calc(${columns.sidebar} + ${columns.tiles})`} {...dividerProps('tiles')} />}
           </div>
           <StatusFooter topics={items} detail={topic.data} live={live.data} />
-          <Toast />
+          <Toast onShowActionLog={() => go({ ...shown, pane: 'notifications' })} />
+          <InboxStartDialog />
           <TidyOverlay />
         </div>
       </OpenedReadContext>

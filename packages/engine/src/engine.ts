@@ -24,7 +24,7 @@ import type {
   FinishedTopic,
   GitHubWritesChange,
   GitHubWritesStatus,
-  CleanupAge,
+  CleanupRequest,
   InboxCleanupView,
   PendingWritesResult,
   InstructionsChatReply,
@@ -86,6 +86,7 @@ import {
   agentApproveSkip,
   agentMarkReadRefusal,
   approvalsSummary,
+  CATCH_UP_PACE_MS,
   driverKind,
   emptyAgentCallStats,
   normalizeRepoScope,
@@ -125,6 +126,7 @@ import { OpenedReads } from './actions/opened-reads.ts';
 import type { AgentCallLog } from './agent-call-log.ts';
 import { AutoSyncSchedule } from './auto-sync.ts';
 import { Board } from './board.ts';
+import { pendingGlanceKeys } from './glance-inputs.ts';
 import { RetireGate } from './consolidation/retire-gate.ts';
 import { changeTopicStatus } from './topic-status.ts';
 import { CatchUpCap } from './catch-up/catch-up-cap.ts';
@@ -244,6 +246,14 @@ export interface EngineDeps {
   quota?: GitHubQuota;
   /** `<data folder>/agent-requests`, where MCP processes leave requests for the app. Missing: agent requests stay off. */
   agentRequestsFolder?: string | null;
+  /**
+   * Hold a start sync's agent work until the inbox catch-up dialog is
+   * answered (DESIGN.md "Inbox cleanup"). Only for an app with a window:
+   * createEngine sets it except for the CLI. Missing: off.
+   */
+  catchUpGate?: boolean;
+  /** Pause between the catch-up's per-thread mark-reads. Missing: CATCH_UP_PACE_MS; tests pass 0. */
+  catchUpPaceMs?: number;
 }
 
 /**
@@ -402,7 +412,25 @@ export class Engine implements EngineService {
     this.clickedReadRetry = new ClickedReadRetry(store, deps.reader, deps.writes, (key) => this.refreshForRetry(key), this.heldThreads);
     deps.markReadQueue.retryWith(this.clickedReadRetry);
     this.quietReads = new QuietReads(store, deps.reader, deps.writes, now, deps.syncLog ?? ((line) => console.log(line)));
-    this.syncRun = new SyncRun(runDeps, github, deps.markReadQueue, this.quota, this.quietReads, deps.syncLog, () => this.syncCompletedListener?.());
+    this.cleanup = new InboxCleanup({
+      store,
+      writes: deps.writes,
+      pendingWrites: deps.pendingWrites,
+      now,
+      asksOnStart: deps.catchUpGate ?? false,
+      pendingGlances: () => {
+        const viewer = loadViewer(store);
+        return viewer === null ? new Set() : pendingGlanceKeys(store, Board.load(store, now().toISOString()), viewer, runDeps.contexts, deps.agent);
+      },
+      pause: () => {
+        const paceMs = deps.catchUpPaceMs ?? CATCH_UP_PACE_MS;
+        return paceMs === 0 ? Promise.resolve() : new Promise((resolve) => timers.setTimeout(resolve, paceMs));
+      },
+      afterRun: () => this.afterCleanupRun(),
+      telemetry: this.telemetry,
+      log: deps.syncLog ?? ((line) => console.log(line)),
+    });
+    this.syncRun = new SyncRun(runDeps, github, deps.markReadQueue, this.quota, this.quietReads, this.cleanup, deps.syncLog, () => this.syncCompletedListener?.());
     this.consolidationRun = new ConsolidationRun(runDeps);
     const lineLog = deps.syncLog ?? ((line: string) => console.log(line));
     this.catchUpCap = new CatchUpCap(deps.catchUpCallsPerDay ?? 0, now);
@@ -415,7 +443,6 @@ export class Engine implements EngineService {
       lineLog,
     );
     this.pollRun = new PollRun(runDeps, github, decider, this.quietReads, (topicIds) => this.requestCatchUps(topicIds), () => deps.writes.enabled());
-    this.cleanup = new InboxCleanup(store, deps.writes, deps.pendingWrites, now, () => this.rereadInbox());
     this.teamMembers = new TeamMembers(store, deps.reader, now);
     this.teamRoles = new TeamRoleKeeper(store, deps.reader, now, this.quota, deps.syncLog ?? ((line) => console.log(line)));
     const setupSweep = new SetupSweep({
@@ -702,6 +729,10 @@ export class Engine implements EngineService {
     if (this.consolidating) {
       return Promise.resolve({ kind: 'blocked', reason: 'consolidation running' });
     }
+    // The start sync waits for the inbox catch-up's answer: no topic calls or catch-ups before it (the answer resumes the sync).
+    if (this.syncRun.holding()) {
+      return Promise.resolve({ kind: 'blocked', reason: 'waiting for the inbox catch-up answer' });
+    }
     // First-run setup is open: no fetch, topic calls, catch-ups or Mac pings before the user has
     // instructions (or skips). Accept's sync, and the start sync after a skip, take over from there.
     if (this.setup.status().needed) {
@@ -875,7 +906,7 @@ export class Engine implements EngineService {
     const poll = this.livePoller?.currentStatus() ?? OFF_POLL_STATUS;
     return {
       ...poll,
-      changeCount: poll.changeCount + this.writeRefreshesDone + this.deps.markReadQueue.mirrored() + this.syncsDone + this.clickedReadRetry.decided(),
+      changeCount: poll.changeCount + this.writeRefreshesDone + this.deps.markReadQueue.mirrored() + this.syncsDone + this.clickedReadRetry.decided() + this.cleanup.changeCount(),
       syncRunning: this.syncing !== null,
       nextAutoSyncAt: this.autoSync?.nextSyncAt() ?? null,
       catchUpChanges: this.catchUps.changes(),
@@ -1005,7 +1036,7 @@ export class Engine implements EngineService {
 
   async sendPendingWrites(): Promise<PendingWritesResult> {
     const hadCleanup = this.deps.pendingWrites.pendingCleanupCutoff() !== null;
-    const result = await this.deps.pendingWrites.send(this.deps.markReadQueue, () => this.writesStatus());
+    const result = await this.deps.pendingWrites.send(this.deps.markReadQueue, (write) => this.cleanup.startFromPending(write), () => this.writesStatus());
     if (hadCleanup && this.deps.pendingWrites.pendingCleanupCutoff() === null) {
       await this.rereadInbox().catch(() => {});
       return { ...result, status: this.writesStatus() };
@@ -1014,15 +1045,50 @@ export class Engine implements EngineService {
   }
 
   async inboxCleanup(): Promise<InboxCleanupView> {
-    return this.cleanup.view();
+    return this.cleanup.view(this.syncRun.holding());
   }
 
-  cleanUpInbox(age: CleanupAge): Promise<ActionResult> {
-    return this.cleanup.markReadBefore(age);
+  /**
+   * A sync held for the start dialog goes on: the sync that resumes it
+   * fetches again (cheap) and runs the agent work over both fetches. A sync
+   * already running is joined instead; it asks the gate again itself.
+   */
+  private resumeHeldSync(): void {
+    const options = this.syncRun.heldOptions();
+    if (options !== null) {
+      void this.sync(options).catch(() => {});
+    }
   }
 
-  async hideInboxCleanup(): Promise<ActionResult> {
-    return this.cleanup.hide();
+  /** After a cleanup run ended: a held sync resumes (it reads the inbox too), else one poll cycle shows the bulk calls. */
+  private afterCleanupRun(): void {
+    if (this.syncRun.holding()) {
+      this.resumeHeldSync();
+      return;
+    }
+    void this.rereadInbox().catch(() => {});
+  }
+
+  async clearInbox(request: CleanupRequest): Promise<ActionResult> {
+    const result = this.cleanup.clear(request);
+    // Locked, nothing to clear or refused: no run to wait for, so a held sync goes on now.
+    if (!this.cleanup.isRunning()) {
+      this.resumeHeldSync();
+    }
+    return result;
+  }
+
+  async startAsUsual(): Promise<ActionResult> {
+    const result = this.cleanup.startAsUsual();
+    if (!this.cleanup.isRunning()) {
+      this.resumeHeldSync();
+    }
+    return result;
+  }
+
+  /** For tests: settles when the inbox cleanup's background run did. */
+  inboxCleanupSettled(): Promise<void> {
+    return this.cleanup.settled();
   }
 
   async discardPendingWrites(): Promise<PendingWritesResult> {

@@ -1,9 +1,12 @@
 import {
+  cleanupPicksWords,
   pendingWriteStep,
   PENDING_WRITES_OFF,
   unreadOlderThan,
   type GitHubWritesStatus,
   type IsoTime,
+  type PendingCatchUp,
+  type PendingThread,
   type PendingWrite,
   type PendingWriteCause,
   type PendingWriteView,
@@ -22,6 +25,13 @@ export const DISCARDED_DETAIL = 'discarded while locked: stays unread, like on G
 export const CLEANUP_PENDING_DETAIL = 'GitHub writes are locked: the cleanup waits until you unlock and send it';
 export const CLEANUP_DISCARDED_DETAIL = 'cleanup discarded while locked: GitHub keeps them unread';
 export const OBSERVED_PENDING_DETAIL = 'left the inbox: read on github.com or another client; pending mark-read cleared';
+
+/**
+ * Starts a parked catch-up's run in the background (InboxCleanup), with the
+ * same plan as the dialog would have sent. Null when it started (or had
+ * nothing left), else why not: the write then stays pending with that.
+ */
+export type CatchUpStarter = (write: PendingWrite) => string | null;
 
 /**
  * Mark-reads made while GitHub writes are locked. GitHub is the source of
@@ -100,8 +110,34 @@ export class PendingWrites {
     this.writes.log.record({ action: 'mark_all_read_before', origin: 'cleanup', outcome: 'pending', batch, detail: `last_read_at=${readBefore}: ${CLEANUP_PENDING_DETAIL}` });
   }
 
+  /**
+   * The inbox cleanup dialog while locked: one pending write with its picks
+   * and the time it counted. `threads` are what it covered then, for the
+   * count in the lock. Nothing changes in the app until it is sent.
+   */
+  parkCatchUp(catchUp: PendingCatchUp, threads: PendingThread[], batch: string): void {
+    this.store.pendingWrites.add({
+      kind: 'catch_up',
+      readBefore: null,
+      createdAt: this.now().toISOString(),
+      origin: 'cleanup',
+      tileId: null,
+      batch,
+      prKeys: [],
+      handleKeys: [],
+      threads,
+      catchUp,
+    });
+    this.writes.log.record({ action: 'inbox_cleanup', origin: 'cleanup', outcome: 'pending', batch, detail: `${cleanupPicksWords(catchUp)}: ${CLEANUP_PENDING_DETAIL}` });
+  }
+
   list(): PendingWrite[] {
     return this.store.pendingWrites.list();
+  }
+
+  /** A catch-up waits for the lock. */
+  hasCatchUp(): boolean {
+    return this.list().some((write) => write.kind === 'catch_up');
   }
 
   /** The cutoff of a cleanup waiting for the lock, the newest if several. */
@@ -112,6 +148,9 @@ export class PendingWrites {
   private title(write: PendingWrite): string {
     if (write.kind === 'mark_all_read_before') {
       return `Cleanup: mark everything before ${(write.readBefore ?? '').slice(0, 10)} read`;
+    }
+    if (write.catchUp !== null) {
+      return `Inbox cleanup: ${cleanupPicksWords(write.catchUp)}`;
     }
     const firstKey = write.prKeys[0] ?? write.threads[0]?.prKey ?? null;
     const pr = firstKey === null ? null : this.store.prs.get(firstKey);
@@ -158,6 +197,16 @@ export class PendingWrites {
         batch: write.batch,
         detail: `last_read_at=${write.readBefore ?? ''}: ${CLEANUP_DISCARDED_DETAIL}`,
       });
+    }
+    if (write.catchUp !== null) {
+      this.writes.log.record({
+        action: 'inbox_cleanup',
+        origin: 'footer',
+        outcome: 'discarded',
+        batch: write.batch,
+        detail: `${cleanupPicksWords(write.catchUp)}: ${CLEANUP_DISCARDED_DETAIL}`,
+      });
+      return;
     }
     for (const thread of write.threads) {
       this.writes.log.record({
@@ -243,14 +292,29 @@ export class PendingWrites {
   }
 
   /**
+   * A catch-up hands its plan to the background run; the write is done once
+   * that started (the run logs and mirrors each call itself).
+   */
+  private sendCatchUp(write: PendingWrite, startCatchUp: CatchUpStarter, notTaken: string[]): boolean {
+    const notStarted = this.writes.enabled() ? startCatchUp(write) : PENDING_WRITES_OFF;
+    if (notStarted !== null) {
+      return this.apply(write, { kind: 'cleanup_not_taken', error: notStarted }, 'footer', notTaken);
+    }
+    return this.apply(write, { kind: 'cleanup_sent' }, 'footer', notTaken);
+  }
+
+  /**
    * Sends one pending write. Returns true when it is done: every thread
    * reached GitHub, was already read, or was left unread on purpose (activity
    * after the last sync, its reason goes to `notTaken`). Threads that failed
    * stay, with the error.
    */
-  private async sendOne(write: PendingWrite, queue: MarkReadQueue, notTaken: string[]): Promise<boolean> {
+  private async sendOne(write: PendingWrite, queue: MarkReadQueue, startCatchUp: CatchUpStarter, notTaken: string[]): Promise<boolean> {
     if (write.kind === 'mark_all_read_before') {
       return this.sendCleanup(write, notTaken);
+    }
+    if (write.kind === 'catch_up') {
+      return this.sendCatchUp(write, startCatchUp, notTaken);
     }
     const outcomes = await queue.markThreads(write.threads, { origin: 'footer', tileId: write.tileId, batchId: write.batch });
     return this.apply(write, { kind: 'sent', outcomes }, 'footer', notTaken);
@@ -266,7 +330,7 @@ export class PendingWrites {
   observeRead(threadIds: ReadonlySet<string>, origin: 'sync' | 'poll'): Set<string> {
     const cleared = new Set<string>();
     for (const write of this.list()) {
-      if (write.kind === 'mark_all_read_before') {
+      if (write.kind !== 'mark_read') {
         continue;
       }
       for (const thread of write.threads.filter((candidate) => threadIds.has(candidate.id))) {
@@ -277,7 +341,7 @@ export class PendingWrites {
     return cleared;
   }
 
-  private async sendAll(queue: MarkReadQueue, status: () => GitHubWritesStatus): Promise<PendingWritesResult> {
+  private async sendAll(queue: MarkReadQueue, startCatchUp: CatchUpStarter, status: () => GitHubWritesStatus): Promise<PendingWritesResult> {
     const writes = this.list();
     if (!this.writes.enabled()) {
       const reason = this.writes.status().forcedOffReason ?? 'Unlock GitHub writes first.';
@@ -286,7 +350,7 @@ export class PendingWrites {
     let done = 0;
     const notTaken: string[] = [];
     for (const write of writes) {
-      if (await this.sendOne(write, queue, notTaken)) {
+      if (await this.sendOne(write, queue, startCatchUp, notTaken)) {
         done += 1;
       }
     }
@@ -298,9 +362,9 @@ export class PendingWrites {
   }
 
   /** "Send N to GitHub". Refused while writes are off (the lock, or POSTPILE_READ_ONLY=1). A send while one runs joins it. */
-  send(queue: MarkReadQueue, status: () => GitHubWritesStatus): Promise<PendingWritesResult> {
+  send(queue: MarkReadQueue, startCatchUp: CatchUpStarter, status: () => GitHubWritesStatus): Promise<PendingWritesResult> {
     if (!this.sending) {
-      this.sending = this.sendAll(queue, status).finally(() => {
+      this.sending = this.sendAll(queue, startCatchUp, status).finally(() => {
         this.sending = null;
       });
     }

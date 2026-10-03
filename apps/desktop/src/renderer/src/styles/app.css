@@ -191,6 +191,31 @@
   /* Fonts: font-sans is the default, font-mono for numbers, ids, ages */
   --font-sans: var(--type-ui);
   --font-mono: var(--type-mono);
+
+  /* The inbox cleanup's illustration: the two cards bob, the trash lid tips. Use with motion-safe:. */
+  --animate-cleanup-bob: cleanup-bob 3.2s ease-in-out infinite;
+  --animate-cleanup-lid: cleanup-lid 3.2s ease-in-out infinite;
+
+  @keyframes cleanup-bob {
+    0%,
+    100% {
+      translate: 0 0;
+    }
+    50% {
+      translate: 0 -2.5px;
+    }
+  }
+
+  @keyframes cleanup-lid {
+    0%,
+    70%,
+    100% {
+      rotate: 0deg;
+    }
+    80% {
+      rotate: -14deg;
+    }
+  }
 }
 
 html,

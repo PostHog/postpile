@@ -105,7 +105,7 @@ function startApi(port: number): ChildProcess {
     cwd: ROOT,
     detached: true,
     stdio: 'ignore',
-    env: { ...process.env, POSTPILE_FAKE: '1', POSTPILE_FAKE_UPDATE: '0', POSTPILE_TOKEN: TOKEN, PORT: String(port) },
+    env: { ...process.env, POSTPILE_FAKE: '1', POSTPILE_FAKE_UPDATE: '0', POSTPILE_FAKE_CATCH_UP: '0', POSTPILE_TOKEN: TOKEN, PORT: String(port) },
   });
 }
 
