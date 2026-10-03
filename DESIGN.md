@@ -3815,6 +3815,12 @@ is all a repo holds), the writes door, progress line, done toast and one
 thread ids (`PendingCatchUp.threadIds`), and refused while a cleanup runs
 or one already waits in the lock. Each PATCH reads the thread here like
 the dialog's, so the merge counts as seen and the tile goes done.
+While a full sync runs (not one held for the start dialog) the item's
+Clear is disabled ("Waits for the sync to finish") and the engine refuses
+it: the sync's dossier and glance steps can rewrite a LOOKS_SAFE glance to
+LOOK_CLOSER, and only catch-up runs show as "writing". The view
+(`InboxCleanupView.syncing`) is refetched when the sync ends, which
+recounts.
 
 - **Fake mode**: 24 unread threads on merged sample PRs that never become
   tiles (eight with a glance that looks safe, two Look closer), plus three

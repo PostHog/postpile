@@ -2,6 +2,7 @@ import {
   CATCH_UP_CONFIRM_TRIES,
   catchUpReason,
   CLEANUP_ALREADY_PENDING,
+  SAFE_CLEAR_WAITS_FOR_SYNC,
   cleanupCounts,
   cleanupOptions,
   isUnseenMergeWithoutReview,
@@ -78,6 +79,8 @@ export interface InboxCleanupDeps {
   pendingGlances: () => Set<PrKey>;
   /** The stored glances of these PRs, each with whether it is stale or being written. Reads only, never starts a glance. */
   glances: (keys: PrKey[]) => Map<PrKey, CleanupGlance>;
+  /** A full sync runs its fetch or agent steps (not held): its dossier and glance steps may rewrite a glance. */
+  syncRunning: () => boolean;
   /** Waits between two per-thread mark-reads (CATCH_UP_PACE_MS in the app). */
   pause: () => Promise<void>;
   /** Ids of the threads GitHub's inbox lists unread right now (a plain read, nothing stored). */
@@ -187,6 +190,7 @@ export class InboxCleanup implements CatchUpGate {
       running: this.progress ? { ...this.progress } : null,
       lastRun: this.lastRun,
       pending: this.deps.pendingWrites.hasCatchUp(),
+      syncing: this.deps.syncRunning(),
     };
   }
 
@@ -266,9 +270,13 @@ export class InboxCleanup implements CatchUpGate {
    * The sidebar's "N of them look safe · Clear": only the merged PRs whose
    * current glance says LOOKS_SAFE or NOT_YOURS, as an explicit thread list
    * through the same plan, run and lock. Reads the glances that exist; never
-   * starts or queues one.
+   * starts or queues one. Refused while a full sync runs: a glance read as
+   * LOOKS_SAFE now may be LOOK_CLOSER once its glance step wrote.
    */
   clearSafe(request: SafeCleanupRequest): ActionResult {
+    if (this.deps.syncRunning()) {
+      return failed(SAFE_CLEAR_WAITS_FOR_SYNC);
+    }
     const refused = this.refusal();
     if (refused !== null) {
       return failed(refused);

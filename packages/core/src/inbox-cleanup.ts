@@ -35,6 +35,9 @@ export const CATCH_UP_CONFIRM_EVERY_MS = 5000;
 /** ...at most this many times (about 90 seconds), then the run ends and says what GitHub is still working on. */
 export const CATCH_UP_CONFIRM_TRIES = 18;
 
+/** A full sync's dossier and glance steps may rewrite a LOOKS_SAFE glance to LOOK_CLOSER: the "look safe" item waits for it to end. */
+export const SAFE_CLEAR_WAITS_FOR_SYNC = 'Waits for the sync to finish: it may rewrite glances';
+
 /** Locked, only one cleanup waits in the lock: a second would fail on Send while the first runs. */
 export const CLEANUP_ALREADY_PENDING = 'A cleanup already waits in the lock: send or discard it there first';
 
@@ -180,6 +183,8 @@ export interface InboxCleanupView {
   lastRun: CleanupRunResult | null;
   /** A cleanup waits in the writes lock. */
   pending: boolean;
+  /** A full sync runs (not one held for the start dialog): the "look safe" item waits (SAFE_CLEAR_WAITS_FOR_SYNC). */
+  syncing: boolean;
 }
 
 /** POST /api/inbox-cleanup/clear. */

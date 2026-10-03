@@ -1,5 +1,6 @@
 import {
   CLEANUP_ALREADY_PENDING,
+  SAFE_CLEAR_WAITS_FOR_SYNC,
   cleanupCounts,
   cleanupOptions,
   cleanupPicksWords,
@@ -91,7 +92,7 @@ export class FakeCleanup {
     return this.startCaseFor(threads, this.deps.now().toISOString()) !== null;
   }
 
-  view(threads: CleanupThread[], glances: number, held: boolean): InboxCleanupView {
+  view(threads: CleanupThread[], glances: number, held: boolean, syncing: boolean): InboxCleanupView {
     const at = this.deps.now().toISOString();
     return {
       countedAt: at,
@@ -102,6 +103,7 @@ export class FakeCleanup {
       running: this.progress ? { ...this.progress } : null,
       lastRun: this.lastRun,
       pending: this.deps.writes.hasCatchUp(),
+      syncing,
     };
   }
 
@@ -161,7 +163,10 @@ export class FakeCleanup {
   }
 
   /** The sidebar's "look safe" item: the explicit list of merged samples whose glance says LOOKS_SAFE or NOT_YOURS. */
-  clearSafe(request: SafeCleanupRequest, threads: CleanupThread[]): ActionResult {
+  clearSafe(request: SafeCleanupRequest, threads: CleanupThread[], syncing: boolean): ActionResult {
+    if (syncing) {
+      return { ok: false, message: SAFE_CLEAR_WAITS_FOR_SYNC, undoToken: null };
+    }
     const refused = this.refusal();
     if (refused !== null) {
       return refused;

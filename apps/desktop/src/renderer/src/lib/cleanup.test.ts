@@ -13,6 +13,7 @@ const view: InboxCleanupView = {
   running: null,
   lastRun: null,
   pending: false,
+  syncing: false,
 };
 
 describe('inbox cleanup words', () => {

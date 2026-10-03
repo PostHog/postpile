@@ -1011,6 +1011,11 @@ export class FakeEngine implements EngineService {
       });
   }
 
+  /** Like the engine: a fake sync runs and is not held for the start dialog, so the "look safe" item waits. */
+  private fullSyncRunning(): boolean {
+    return this.syncing !== null && !this.heldSync;
+  }
+
   /** Like the engine: an answer (or the end of a run) lets the held fake sync go on. */
   private resumeHeldSync(): void {
     if (this.heldSync) {
@@ -1021,7 +1026,7 @@ export class FakeEngine implements EngineService {
 
   async inboxCleanup(): Promise<InboxCleanupView> {
     this.writes.settle();
-    return this.cleanup.view(this.cleanupThreads(), this.glanceTargets().size, this.heldSync);
+    return this.cleanup.view(this.cleanupThreads(), this.glanceTargets().size, this.heldSync, this.fullSyncRunning());
   }
 
   async clearInbox(request: CleanupRequest): Promise<ActionResult> {
@@ -1035,7 +1040,7 @@ export class FakeEngine implements EngineService {
 
   async clearSafeMerged(request: SafeCleanupRequest): Promise<ActionResult> {
     this.writes.settle();
-    return this.cleanup.clearSafe(request, this.cleanupThreads());
+    return this.cleanup.clearSafe(request, this.cleanupThreads(), this.fullSyncRunning());
   }
 
   async startAsUsual(): Promise<ActionResult> {

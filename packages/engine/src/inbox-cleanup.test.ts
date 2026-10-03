@@ -1,10 +1,11 @@
-import { CATCH_UP_CONFIRM_TRIES, CLEANUP_ALREADY_PENDING, type NotificationThread, type Pr, type Verdict } from '@postpile/core';
+import { CATCH_UP_CONFIRM_TRIES, CLEANUP_ALREADY_PENDING, SAFE_CLEAR_WAITS_FOR_SYNC, type NotificationThread, type Pr, type Verdict } from '@postpile/core';
 import { makePr, makeThreadFor, makeTimelineItem, viewer } from '@postpile/core/fixtures';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Board } from './board.ts';
 import { glanceTargetKeys } from './glance-inputs.ts';
 import { makeHarness, NOW, type Harness, type HarnessOptions } from './testing/fakes.ts';
 import { reviewRequestedPr } from './testing/prs.ts';
+import { topicWithPrs } from './testing/topics.ts';
 
 // NOW is 2026-09-02T12:00Z.
 const DAY_MS = 24 * 3_600_000;
@@ -211,5 +212,21 @@ describe('inbox catch-up: merged PRs that look safe', () => {
     expect([mergeSeen(safe), mergeSeen(notYours), mergeSeen(closer)].map((seenAt) => seenAt !== null)).toEqual([true, true, false]);
     // Counting and clearing read the glances there are; neither asks the agent for one.
     expect(h.runner.requests.length).toBe(agentCalls);
+  });
+
+  it('refuses while a full sync runs, since its glance step may turn a LOOKS_SAFE into LOOK_CLOSER, and offers it again after', async () => {
+    const h = harnessWith([]);
+    topicWithPrs(h, 'depot', [reviewRequestedPr(1)]);
+    const release = h.agent.holdDossier('depot');
+
+    const syncing = h.engine.sync({ agentJobs: ['dossiers', 'glances'] });
+    await vi.waitFor(async () => expect((await h.engine.syncProgress())?.running).toContain('dossiers'));
+    const view = await h.engine.inboxCleanup();
+    expect(view.syncing).toBe(true);
+    expect(await h.engine.clearSafeMerged({ countedAt: view.countedAt })).toMatchObject({ ok: false, message: SAFE_CLEAR_WAITS_FOR_SYNC });
+
+    release();
+    await syncing;
+    expect((await h.engine.inboxCleanup()).syncing).toBe(false);
   });
 });

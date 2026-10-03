@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { CLEANUP_BUSY, useActions } from '../api/actions.tsx';
 import { useInboxCleanup } from '../api/cleanup.ts';
-import { CLEANUP_PENDING_NOTE, SAFE_MERGED_NOTE, cleanupLine, safeMergedText } from '../lib/cleanup.ts';
+import { CLEANUP_PENDING_NOTE, SAFE_MERGED_NOTE, cleanupLine, safeClearBlocked, safeMergedText } from '../lib/cleanup.ts';
 import { InboxCleanupDialog } from './InboxCleanupDialog.tsx';
 import { MergeIcon, TrashIcon } from './icons.tsx';
 
@@ -22,6 +22,7 @@ export function InboxCleanupLine() {
   }
   const safe = line.kind === 'merged' ? safeMergedText(view) : null;
   const clearingSafe = actions.isBusy(CLEANUP_BUSY.clearSafe);
+  const safeBlocked = safeClearBlocked(view);
   return (
     <>
       <p className="flex flex-wrap items-center gap-1.5 px-2.5 py-1 text-[11px] text-hint">
@@ -50,8 +51,8 @@ export function InboxCleanupLine() {
             </span>
             <button
               type="button"
-              disabled={view.pending || clearingSafe}
-              title={view.pending ? CLEANUP_PENDING_NOTE : SAFE_MERGED_NOTE}
+              disabled={safeBlocked !== null || clearingSafe}
+              title={safeBlocked ?? SAFE_MERGED_NOTE}
               onClick={() => void actions.clearSafeMerged({ countedAt: view.countedAt })}
               className="shrink-0 text-muted hover:text-ink hover:underline disabled:opacity-50 disabled:hover:text-muted disabled:hover:no-underline"
             >

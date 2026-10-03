@@ -425,6 +425,7 @@ export class Engine implements EngineService {
         return viewer === null ? new Set() : pendingGlanceKeys(store, Board.load(store, now().toISOString()), viewer, runDeps.contexts, deps.agent);
       },
       glances: (keys) => this.reads.glancesNow(keys),
+      syncRunning: () => this.syncRun.progress() !== null,
       pause: () => {
         const paceMs = deps.catchUpPaceMs ?? CATCH_UP_PACE_MS;
         return paceMs === 0 ? Promise.resolve() : new Promise((resolve) => timers.setTimeout(resolve, paceMs));

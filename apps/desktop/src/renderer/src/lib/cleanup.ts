@@ -4,6 +4,7 @@
 // core; this only words what the server sent.
 import {
   CATCH_UP_PACE_MS,
+  SAFE_CLEAR_WAITS_FOR_SYNC,
   type CleanupCounts,
   type CleanupDialogMode,
   type CleanupOption,
@@ -150,3 +151,11 @@ export function doneText(run: CleanupRunResult): string {
 
 /** Only one cleanup waits in the lock: why Clear is off while one does. */
 export const CLEANUP_PENDING_NOTE = 'A cleanup already waits in the lock. Send or discard it there first.';
+
+/** Why the "look safe" item's Clear is off, null when it can go: a sync may rewrite glances, or a cleanup waits in the lock. */
+export function safeClearBlocked(view: InboxCleanupView): string | null {
+  if (view.syncing) {
+    return SAFE_CLEAR_WAITS_FOR_SYNC;
+  }
+  return view.pending ? CLEANUP_PENDING_NOTE : null;
+}
