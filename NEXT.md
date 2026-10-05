@@ -18,10 +18,17 @@ now".
   (short rows beside each snapshot) and a partial index for events aimed at
   the user. `GET /api/busy-inbox` carries the numbers for a busy inbox card
   (UI to follow; `POSTPILE_FAKE_BUSY=1` in fake mode), and
-  `board_trimmed` goes out at most hourly while busy. On a 14x copy a load
-  went from 1.1 s to 0.3 s and the heap from 1.9 GB to 0.35 GB; on a
-  normal copy only the sidebar's counts of old settled tiles changed.
-  Not tried by hand: the app on a real heavy database.
+  `board_trimmed` goes out at most hourly while busy. Work follows the
+  same slice: a sync fetches threads older than a week only when unread
+  and aimed at the user or on their own open PR, nothing for others while
+  busy, and the 2-minute backlog drain stops once the board is full; topic
+  assignment, event classification, dossiers, sets and consolidation skip
+  cold PRs and topics that went cold (`work_shed` counts what was left
+  alone, hourly). On a 14x copy a load went from 1.1 s to 0.3 s and the
+  heap from 1.9 GB to 0.35 GB, and a start without snapshots plans 1,233
+  PRs instead of 9,660; on a normal copy only the sidebar's counts of old
+  settled tiles changed. Not tried by hand: the app on a real heavy
+  database.
 - Calm wake and crash signals (2026-10-05, DESIGN.md "Memory on big
   boards"): after a wake the renderer no longer refetches every query
   (`refetchOnReconnect: false`; `networkMode: 'always'`, so no network

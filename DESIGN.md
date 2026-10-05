@@ -304,20 +304,9 @@ comparing against the PR would refetch everything). `SyncOptions` exist for
 cheap runs: `maxPrs` (newest first, the rest follow on later syncs even after a
 304), `maxAgentCalls`, `agentJobs`.
 
-**Big inboxes** (2026-09-29, core `selectSyncThreads`): every notification
-is stored, but only threads updated in the last 30 days
-(`SYNC_MAX_AGE_DAYS`) are ever fetched and digested, and one full sync takes
-at most 60 PRs (`SYNC_MAX_PRS`, the engine's default `maxPrs`), unread
-first, newest first. A thread older than that comes back in when it moves
-again; the user's own PRs, review requests and recent merges still arrive as
-found PRs. When a sync stops at the cap, the next background sync runs 2
-minutes later instead of an hour (`BACKLOG_SYNC_MINUTES`), so a backlog
-(two weeks away, ~400 notifications) drains in batches while the newest 60
-already show. Before, a year of unread notifications kept the first sync
-running for 20+ minutes.
-
-**Memory on big boards**: the board holds the hot set only, see "Big
-inboxes: what PostPile loads and works on" (2026-10-05).
+**Big inboxes**: what a sync fetches, what the board holds and what the
+agent works on follow one rule, the hot set; see "Big inboxes: what
+PostPile loads and works on" (2026-09-29, reworked 2026-10-05).
 
 **Reconciling with GitHub's read time.** Every event on a thread from before
 that thread's `last_read_at` counts as seen, stamped with that time, whenever
@@ -399,7 +388,8 @@ updates an hour) a board that read all of it ran the main process out of
 memory. The owner's rule: PostPile only ever works with a recent, fresh
 slice and ignores older stuff, stays safe and fast however big the inbox
 is, and never asks the user to clean up for it. The slice is the hot set;
-it is the one rule for what PostPile loads into the board.
+it is the one rule for what PostPile loads into the board, what a sync
+fetches and what the agent works on.
 
 **The hot set** (core `hot-board.ts`, `selectHotBoard`). A stored PR is
 hot when any of these holds:
@@ -483,6 +473,37 @@ whose PRs all went cold leaves the sidebar (it has no hot tile), and the
 next full sync moves it to the Archive when it passes the gate, where it
 opens whole. A topic cut by the cap with open PRs stays active and comes
 back with its next news.
+
+**What a sync fetches** (core `selectSyncThreads`, then `hotSyncThreads`;
+2026-09-29, the hot slice since 2026-10-05). Every notification is stored,
+but only threads updated in the last 30 days (`SYNC_MAX_AGE_DAYS`) with
+activity after their PR's last fetch are candidates. Of those, a thread
+older than SETTLED_DAYS is fetched only when it is unread and aimed at the
+user (tier you), or it is their own open PR; while the inbox is busy only
+what would make the board (`wouldKeep`: tiers you and team, and past a
+full cap only what ranks before the weakest unit kept). A PR not stored
+yet is known from its thread alone (`threadOnlyFacts`): a review request
+on it counts as aimed at the user until the fetch says whose it was. The
+order is the board's: tier, unread first, newest first. One full sync
+takes at most 60 PRs (`SYNC_MAX_PRS`); when it stops at that cap the next
+background sync runs 2 minutes later (`BACKLOG_SYNC_MINUTES`), unless the
+board is full (`isBoardFull`), where more would only be cut. The poll
+picks the same way. The freshness check and the stack walk look at PRs on
+the hot board only. Found PRs (the user's own open PRs, review requests,
+recent merges) still come in every full sync. Before 2026-09-29 a year of
+unread notifications kept the first sync running for 20+ minutes; on the
+heavy copy a start without stored snapshots planned 9,660 PRs (161 syncs)
+under the 30-day rule and plans 1,233 (21 syncs) now.
+
+**Agent work** goes to the hot board only. Topic assignment places hot PRs
+(a cold unsorted PR waits until it turns hot); events are classified for
+hot PRs; glances, catch-ups and ping decisions already read the hot Board;
+dossier updates, set grouping and consolidation leave out a topic whose
+stored PRs all went cold (`Board.wentCold`), even after an instructions
+change. A topic with a hot PR is worked on as before, with its whole
+history. When a cold PR turns hot it gets its work then. While busy,
+syncs and polls log what they left alone, and `work_shed { skipped_prs }`
+counts it at most once an hour.
 
 **What changes on screen.** The sidebar counts hot tiles only. On a copy
 of a normal database (809 PRs, 438 hot): the same 61 topics in the same
@@ -6214,7 +6235,12 @@ topic names are never event props.
    (enabled: the footer lock opened or closed, 2026-10-05; with writes
    locked PostPile cannot mark anything read, so a heavy inbox only grows),
    `catch_up_ran` (topics, always 1; agent_calls, duration_ms, ok: one glance
-   catch-up run after the poll), `sync_failed` (error_kind, currently only
+   catch-up run after the poll), `board_trimmed` (kept, dropped: the board
+   cap cut the hot set, the inbox is busy; at most hourly, since 0.18.0),
+   `work_shed` (skipped_prs: PRs with news that syncs and polls left alone
+   in the last hour because they are outside the hot slice; at most hourly,
+   since 0.18.0, see "Big inboxes: what PostPile loads and works on"),
+   `sync_failed` (error_kind, currently only
    `gh_unavailable`: a blocked sync never runs), `rate_limited` (source
    `graphql`/`rest`, read from the error text — GitHub's GraphQL and REST
    rate-limit errors are shaped differently at the point `packages/github`
