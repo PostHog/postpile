@@ -46,7 +46,9 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   (`useHandledQuietly`, the "Handled quietly" list), `writes.ts`
   (`useGitHubWrites`, the footer lock), `repos.ts` (`useRepos`, the
   title bar repo menu), `cleanup.ts` (`useInboxCleanup`, polled every
-  second while a cleanup runs), `live.ts`
+  second while a cleanup runs), `busy-inbox.ts` (`useBusyInbox`, the
+  busy inbox card's numbers; no timer, the live poll and actions refetch
+  it), `live.ts`
   (`useLivePoll`: the fast poll status every 5s; called once in App, it
   refetches everything else when a poll cycle stored news, a glance
   catch-up run moved (`catchUpChanges`) or a sync started or ended;
@@ -147,7 +149,8 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   click, never from an effect or along with Accept: the app never installs
   the MCP server by itself. `hideMcpConnect` is the footer's "Not now".
 - **The lock** (`WritesLock` in the footer): locked = read-only. Opening it
-  asks in a small popover ("Mark-read and approvals will reach GitHub")
+  (from the lock, or the busy inbox card's "Unlock writes", which sets the
+  popover state `App` holds) asks in a small popover ("Mark-read and approvals will reach GitHub")
   that also lists the pending writes (`lib/pending.ts`) with "Send N to
   GitHub" / "Discard" / "Cancel" and "Discard pending, stay locked"; the
   count badge sits on the lock. Closing it is instant unless something is
@@ -410,6 +413,16 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   under `motion-safe:`). The footer shows the run's progress, and the
   done toast's "Show" opens the notifications view (`Toast` prop
   `onShowActionLog`),
+  `BusyInboxCard` (sidebar, after Inbox and right above the topics, only
+  while `BusyInboxView.busy`: the aching robot `BusyInboxArt` on the
+  `busy-*` keyframes, only under `motion-safe:`; calm `amber-*` tokens,
+  never coral or honey, the sweat drop `--drop` the one blue; words and
+  per-tier counts in `lib/busy-inbox.ts`. Clean up opens
+  `InboxCleanupDialog` in sidebar mode, Unlock writes (only while
+  `writesLocked`) opens the footer lock's popover: `WritesLock`'s open
+  state lives in `App` for that. Why? folds out inline. It folds to one
+  line for the session, sessionStorage `postpile.busyInbox.folded`; wiring
+  test in `BusyInboxCard.test.tsx`),
   `UpdatePill` (title bar update reminder, self-contained so it can move;
   neutral, never coral; under 24h behind; "Update ready" once staged) +
   `UpdateNextStep` (the offer both share: ink "Restart to update", the

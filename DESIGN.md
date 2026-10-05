@@ -556,7 +556,7 @@ ago), 10 lose a face; every opened topic, active or in the Archive, is the
 same; search finds the same tiles and PRs; the repo menu drops 2 repos that
 only had old settled PRs.
 
-**Busy inbox** (UI to follow). `GET /api/busy-inbox` (`busyInbox`,
+**Busy inbox** (the sidebar card below). `GET /api/busy-inbox` (`busyInbox`,
 `BusyInboxView`): `busy` (the cap cut the hot set on the last load),
 `inboxPrs` (PRs that would be hot without the cap), `keptPrs`, `quietPrs`
 (the difference: not loaded, fetched or worked on), `keptYou`,
@@ -567,6 +567,25 @@ things read). It reuses what the last load picked. `POSTPILE_FAKE_BUSY=1`
 makes the fake inbox busy with invented numbers. While busy, the engine
 logs a line and sends `board_trimmed { kept, dropped }` at most once an
 hour.
+
+**The busy inbox card** (2026-10-05, design "C, the robot"). While `busy`,
+a card sits at the top of the sidebar, right after Inbox and above the
+topics: that is where a busy inbox shows, as topics that are not there.
+"Busy inbox", then "Focusing on what is aimed at you. 4,640 quiet PRs wait
+for news." and what is kept per tier ("Kept 940 for you · 560 for your
+team · 0 for others"). Three text links: Clean up opens the inbox cleanup
+dialog (sidebar mode), Unlock writes (only while `writesLocked`) opens the
+footer lock's popover, the one way to allow GitHub writes, and Why? folds
+out what PostPile does now: it keeps your PRs and what is aimed at you,
+then your team's; other people's PRs wait with no fetching and no agent
+work; nothing is deleted; it goes away by itself once the inbox is back
+under the cap. The tone is calm: PostPile is focusing, nothing broke. Calm
+app-health amber, never coral (new since you looked) or honey (aimed at
+you). The aching robot (the agent, squinting, a warning light on its
+antenna, a sweat drop, the card's only blue) shakes its head now and then,
+only without Reduce Motion. The card folds to one line ("Busy inbox ·
+4,640 quiet PRs", the robot still) for the window's session, never across
+launches. No timer of its own: it refetches with the topics.
 
 **Numbers** (14x copy of a normal database, 11k PRs; Node, 4 GB heap):
 

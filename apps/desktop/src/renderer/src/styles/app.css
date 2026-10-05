@@ -328,6 +328,68 @@
       opacity: 0;
     }
   }
+
+  /* The busy inbox card's aching robot (BusyInboxArt). Use with motion-safe:; under Reduce Motion it rests:
+     upright, light on, the drop at its start. */
+  --animate-busy-shake: busy-shake 2.6s ease-in-out infinite;
+  --animate-busy-blink: busy-blink 1.2s steps(1) infinite;
+  --animate-busy-drip: busy-drip 1.6s ease-in infinite;
+
+  /* The robot stands still most of the loop, then shakes its head once. */
+  @keyframes busy-shake {
+    0%,
+    62%,
+    100% {
+      rotate: 0deg;
+    }
+    66% {
+      rotate: -2.5deg;
+    }
+    70% {
+      rotate: 2.5deg;
+    }
+    74% {
+      rotate: -1.5deg;
+    }
+    78% {
+      rotate: 1deg;
+    }
+    82% {
+      rotate: 0deg;
+    }
+  }
+
+  /* The warning light on its antenna dims for a moment. */
+  @keyframes busy-blink {
+    0%,
+    45%,
+    100% {
+      opacity: 1;
+    }
+    50%,
+    60% {
+      opacity: 0.25;
+    }
+  }
+
+  /* The sweat drop runs down and fades. */
+  @keyframes busy-drip {
+    0% {
+      translate: 0 -2px;
+      opacity: 0;
+    }
+    15% {
+      opacity: 1;
+    }
+    75% {
+      translate: 0 9px;
+      opacity: 1;
+    }
+    100% {
+      translate: 0 13px;
+      opacity: 0;
+    }
+  }
 }
 
 html,
