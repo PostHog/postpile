@@ -133,7 +133,8 @@ import { RetireGate } from './consolidation/retire-gate.ts';
 import { changeTopicStatus } from './topic-status.ts';
 import { CatchUpCap } from './catch-up/catch-up-cap.ts';
 import { CatchUpQueue } from './catch-up/catch-up-queue.ts';
-import { TopicCatchUp } from './catch-up/topic-catch-up.ts';
+import { QuietCatchUps } from './catch-up/quiet-catch-ups.ts';
+import { TopicCatchUp, type CatchUpTopics } from './catch-up/topic-catch-up.ts';
 import { glanceGapKey } from './digest/glance-batches.ts';
 import { ConsolidationRun } from './consolidation/consolidation-run.ts';
 import { errorText } from './errors.ts';
@@ -312,6 +313,7 @@ export class Engine implements EngineService {
   private autoSync: AutoSyncSchedule | null = null;
   private readonly catchUpCap: CatchUpCap;
   private readonly catchUps: CatchUpQueue;
+  private readonly quietCatchUps: QuietCatchUps;
   private readonly topicCatchUp: TopicCatchUp;
   /** Stale glances looked at while a full sync or consolidation ran; asked again when it ends. */
   private readonly deferredLooks = new Set<PrKey>();
@@ -454,7 +456,8 @@ export class Engine implements EngineService {
       () => !this.syncing && !this.consolidating && agentOff() === null,
       lineLog,
     );
-    this.pollRun = new PollRun(runDeps, github, decider, this.quietReads, (topicIds) => this.requestCatchUps(topicIds), () => deps.writes.enabled());
+    this.quietCatchUps = new QuietCatchUps(now);
+    this.pollRun = new PollRun(runDeps, github, decider, this.quietReads, (topics) => this.requestCatchUps(topics), () => deps.writes.enabled());
     this.teamMembers = new TeamMembers(store, deps.reader, now);
     this.teamRoles = new TeamRoleKeeper(store, deps.reader, now, this.quota, deps.syncLog ?? ((line) => console.log(line)));
     const setupSweep = new SetupSweep({
@@ -576,14 +579,30 @@ export class Engine implements EngineService {
     await this.refreshAfterWrite(key);
   }
 
-  /** Topics the poll brought news for: one catch-up run each, coalesced by the queue. Off with a cap of 0. */
-  private requestCatchUps(topicIds: (string | null)[]): void {
+  /** One catch-up run for each topic, coalesced by the queue; the quiet wait counts from here. */
+  private startCatchUps(topicIds: (string | null)[]): void {
+    for (const topicId of topicIds) {
+      this.catchUps.request(topicId);
+      this.quietCatchUps.noteRun(topicId);
+    }
+  }
+
+  /** Topics the poll brought news for: loud ones run now, quiet ones once their wait is over. Off with a cap of 0. */
+  private requestCatchUps(topics: CatchUpTopics): void {
     if (this.catchUpCap.perDay === 0) {
       return;
     }
-    for (const topicId of topicIds) {
-      this.catchUps.request(topicId);
+    this.startCatchUps(topics.now);
+    this.quietCatchUps.add(topics.quiet);
+    this.startCatchUps(this.quietCatchUps.due());
+  }
+
+  /** Every poll cycle, news or not: quiet topics whose wait ended. Not while a sync or consolidation runs (the queue skips them). */
+  private startDueQuietCatchUps(): void {
+    if (this.catchUpCap.perDay === 0 || this.syncing || this.consolidating) {
+      return;
     }
+    this.startCatchUps(this.quietCatchUps.due());
   }
 
   /** The poll hit GitHub's rate limit: the same event a sync sends, marked as the poll's. Never throws. */
@@ -683,8 +702,9 @@ export class Engine implements EngineService {
 
   sync(options: SyncOptions = {}): Promise<SyncReport> {
     if (!this.syncing) {
-      // The sync digests every topic: queued catch-up follow-ups are dropped, running ones waited for.
+      // The sync digests every topic: queued catch-up follow-ups and waiting quiet news are dropped, running ones waited for.
       this.catchUps.dropQueued();
+      this.quietCatchUps.clear();
       const before = Engine.settled([this.consolidating, this.polling, this.catchUps.settled()]);
       // PRs left over by the PR cap bring the next background sync forward.
       let backlog = false;
@@ -763,6 +783,7 @@ export class Engine implements EngineService {
         .run(focus)
         .then((cycle) => {
           this.summarizePings();
+          this.startDueQuietCatchUps();
           return cycle;
         })
         .catch((error: unknown) => {

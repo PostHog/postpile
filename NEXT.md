@@ -1139,7 +1139,8 @@ the app meanwhile.
   catch-up"): the poll's per-topic catch-up fires on any event that starts
   a dossier update (`isMemoryTrigger`), not only loud ones, so a person's
   push, comment or merge on a PR not aimed at the user and a bot pushing or
-  approving no longer wait for the hourly sync. Bot comments still ride
+  approving no longer wait for the hourly sync (loud news at once, other
+  triggers at most once per topic per 15 minutes). Bot comments still ride
   along; CI and bot edits stay noise. `POSTPILE_CATCHUP_CAP` default
   300 -> 600 for the extra runs. Ships in 0.17.0. The sync progress leads with what GitHub
   brought ("nothing new on GitHub · agent calls 12/19"). Rejected: a

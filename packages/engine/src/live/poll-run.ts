@@ -1,7 +1,7 @@
 import { splitAgentOffErrors, type AgentCallStats, type PrKey, type Viewer } from '@postpile/core';
 import { Board } from '../board.ts';
 import { AgentBudget } from '../budget.ts';
-import { topicsToCatchUp } from '../catch-up/topic-catch-up.ts';
+import { topicsToCatchUp, type CatchUpTopics } from '../catch-up/topic-catch-up.ts';
 import { reviveRetiredTopics, reviveUnreadTopics } from '../consolidation/revive.ts';
 import { TopicAssigner } from '../digest/topic-assignment.ts';
 import { errorText } from '../errors.ts';
@@ -23,9 +23,10 @@ export const POLL_TOPIC_CALLS = 1;
 /**
  * One cycle of the fast poll: conditional inbox and read-threads reads, a
  * freshness check once a minute; on a change, fetch the PRs that moved, log their events with rule loudness, give new PRs
- * a topic, and decide pings. The topics whose PRs brought loud news or have
- * no glance yet go to onCatchUp, which runs their dossier and glances right
- * away (TopicCatchUp) instead of waiting for the next full sync. Sets and
+ * a topic, and decide pings. The topics whose PRs brought news that starts
+ * a dossier update or have no glance yet go to onCatchUp, which runs their
+ * dossier and glances (TopicCatchUp) instead of waiting for the next full
+ * sync: loud news right away, the rest spaced out per topic. Sets and
  * stack layers stay with the full sync. A cycle that stored a change ends
  * with the quiet reads ("Handled quietly"), the only GitHub writes it makes.
  */
@@ -35,7 +36,7 @@ export class PollRun {
     private readonly github: GitHubSync,
     private readonly decider: PingDecider,
     private readonly quietReads: QuietReads,
-    private readonly onCatchUp: (topicIds: (string | null)[]) => void = () => {},
+    private readonly onCatchUp: (topics: CatchUpTopics) => void = () => {},
     /** GitHub writes are on: a thread the quiet reads clear by rule brings no finished topic back. */
     private readonly writesOn: () => boolean = () => false,
   ) {}
@@ -46,7 +47,7 @@ export class PollRun {
     const board = Board.load(store, now().toISOString());
     const glances = store.glances.getMany(fetchedPrKeys);
     const topics = topicsToCatchUp(board, fetchedPrKeys, newEventIds, (key) => glances.has(key));
-    if (topics.length > 0) {
+    if (topics.now.length > 0 || topics.quiet.length > 0) {
       this.onCatchUp(topics);
     }
   }

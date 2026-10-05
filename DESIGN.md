@@ -5180,8 +5180,15 @@ approval or merge on a PR not aimed at the user, and a bot changing the PR
 itself. Before, those waited for the hourly sync and their glances read
 "out of date" while browsing, and every full sync spent its calls on that
 backlog. Bot comments still wait for the next real update and noise (CI,
-bot edits, deploys) never counts. The topic is the PR's membership;
-Unsorted (null) counts as one topic.
+bot edits, deploys) never counts. Loud news and a missing glance run right
+away; other triggers run a topic at most once per 15 minutes
+(`QuietCatchUps`, `QUIET_CATCH_UP_MINUTES`): the first at once, the rest
+wait and one run covers them. Every poll cycle, news or not, starts the
+topics whose wait ended; a full sync clears the waiting list. Telemetry
+(2026-10-05) showed why: three heavy installs already used the whole daily
+cap with loud news alone, and an agent pushing 27 times an hour into one
+topic would otherwise start a run per push. The topic is the PR's
+membership; Unsorted (null) counts as one topic.
 
 **Run** (`TopicCatchUp`, one topic): the full sync's digest jobs, scoped by
 `TopicScope`, in the same budget order: the topic's dossier update from the
