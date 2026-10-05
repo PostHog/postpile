@@ -2,12 +2,17 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
-## 0.16.1 (unreleased)
+## 0.17.0 (unreleased)
 
 ### Changed
 
 - Assessments and topic summaries catch up within a minute or so on all activity that changes a PR, not only on what is aimed at you: a teammate's push, comment, approval or merge, or a bot pushing or approving. Before, those waited for the hourly sync, so assessments read "out of date" while you browsed, and "Sync now" found a backlog even when nothing was new. Bot comments, CI and deploy notes still wait. The daily catch-up limit (`POSTPILE_CATCHUP_CAP`) is now 600 agent calls, up from 300.
 - While a sync runs, the title bar says what GitHub brought first, like "syncing · nothing new on GitHub · agent calls 12/19 · 1m", and the tooltip lists what the agent calls went to.
+
+## 0.16.1 (unreleased)
+
+### Changed
+
 - The title bar says "up to date" while PostPile keeps checking GitHub every minute, instead of "synced 40m ago", which counted from the last hourly full sync. It says "updates paused" while the checks back off or wait, and shows an age only when they fell behind ("checked 5m ago", amber) or the live poll is off. The full sync's details are in the tooltip; the footer says "last full sync".
 
 ## 0.16.0 (2026-10-03)

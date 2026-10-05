@@ -1141,7 +1141,7 @@ the app meanwhile.
   push, comment or merge on a PR not aimed at the user and a bot pushing or
   approving no longer wait for the hourly sync. Bot comments still ride
   along; CI and bot edits stay noise. `POSTPILE_CATCHUP_CAP` default
-  300 -> 600 for the extra runs. The sync progress leads with what GitHub
+  300 -> 600 for the extra runs. Ships in 0.17.0. The sync progress leads with what GitHub
   brought ("nothing new on GitHub · agent calls 12/19"). Rejected: a
   timed trickle of all quiet news (same work, less batching), and skipping
   bot-only dossier updates (bot comments already never start one).
