@@ -21,11 +21,13 @@ const linkButton = 'text-[11.5px] font-semibold text-accent hover:underline disa
 const bubble = 'max-w-[85%] rounded-row px-3 py-2 text-[12.5px] leading-normal whitespace-pre-wrap select-text';
 
 /**
- * The lasting point and the instructions diff waiting for the user's pick,
- * per topic, for as long as the app runs. The pane closes on Back or any
- * pick, also while an answer or a proposal is still coming; they are then
- * here when the topic's pane opens again.
+ * What the pane holds that is not stored anywhere yet, per topic, for as
+ * long as the app runs: the unsent text (also a message whose turn failed),
+ * the lasting point and the instructions diff waiting for the user's pick.
+ * The pane closes on Back or any pick, also while an answer or a proposal is
+ * still coming; all of it is here when the topic's pane opens again.
  */
+const waitingDrafts = new Map<string, string>();
 const waitingPoints = new Map<string, LastingPointProposal>();
 const waitingInstructions = new Map<string, InstructionsProposal>();
 
@@ -49,15 +51,17 @@ function keepFor<T>(kept: Map<string, T>, topicId: string, value: T | null): voi
  * A sent message shows right away with a "Thinking…" bubble under it (an
  * answer takes a few seconds), and the list keeps the newest message in
  * view. When the call fails, the bubble goes and the text is back in the
- * input; the engine stores nothing for a failed turn. A lasting point and
- * its instructions diff outlive the pane (`waitingPoints`,
- * `waitingInstructions`): leaving them alone still means just this once, but
- * leaving the pane does not throw them away.
+ * input; the engine stores nothing for a failed turn. The unsent text, a
+ * lasting point and its instructions diff outlive the pane (`waitingDrafts`,
+ * `waitingPoints`, `waitingInstructions`): leaving a point alone still means
+ * just this once, but leaving the pane does not throw anything away. A new
+ * turn replaces the point and the diff only once it is in.
  */
 export function AgentPane(props: AgentPaneProps) {
   const actions = useActions();
   const chat = useTopicChat(props.topicId);
-  const [draft, setDraft] = useState(props.draft);
+  // "Tell the agent" opens with its own start ("About #1907: "); the header's button brings back what was left unsent.
+  const [draft, setShownDraft] = useState(() => (props.draft !== '' ? props.draft : (waitingDrafts.get(props.topicId) ?? '')));
   const [point, setShownPoint] = useState<LastingPointProposal | null>(() => waitingPoints.get(props.topicId) ?? null);
   const [instructions, setShownInstructions] = useState<InstructionsProposal | null>(() => waitingInstructions.get(props.topicId) ?? null);
   /** The message on its way, with how many messages the chat had when it was sent. */
@@ -75,6 +79,12 @@ export function AgentPane(props: AgentPaneProps) {
       element.scrollTop = element.scrollHeight;
     }
   }, [messageCount, waiting, point, instructions]);
+
+  /** Shows the text and keeps it for the next time the pane opens. */
+  function setDraft(next: string) {
+    keepFor(waitingDrafts, props.topicId, next === '' ? null : next);
+    setShownDraft(next);
+  }
 
   /** Shows the point and keeps it for the next time the pane opens; null drops it. */
   function setPoint(next: LastingPointProposal | null) {
@@ -95,12 +105,11 @@ export function AgentPane(props: AgentPaneProps) {
     }
     setPending({ text, count: messageCount });
     setDraft('');
-    setPoint(null);
-    setInstructions(null);
     const reply = await actions.topicChat(props.topicId, text);
     setPending(null);
     if (reply) {
       setPoint(reply.lastingPoint);
+      setInstructions(null);
     } else {
       setDraft(text);
     }

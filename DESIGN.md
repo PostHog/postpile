@@ -2366,10 +2366,11 @@ returns to the PR; any pick (tile, PR, topic) does too. A lasting point is
 one line: "Remember "..."? For this topic · For all topics"; leaving it
 alone means just this once (nothing logged). All topics still shows the
 instructions diff first. The tile chat is gone from the renderer. The
-point waiting for a pick, and the instructions diff waiting for Accept or
-Reject, are kept per topic while the app runs, so leaving the pane (also
-while the answer is still coming) and coming back shows them again; a new
-message replaces them.
+point waiting for a pick, the instructions diff waiting for Accept or
+Reject and the unsent text (also a message whose turn failed) are kept per
+topic while the app runs, so leaving the pane (also while the answer is
+still coming) and coming back shows them again. A new turn replaces the
+point and the diff only once it is in.
 
 Sending: the message shows right away as the user's bubble with a
 "Thinking…" bubble under it, and the input empties; the list keeps the
