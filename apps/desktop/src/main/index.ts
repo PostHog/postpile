@@ -10,6 +10,7 @@ import {
   defaultPaths,
   launchToolPath,
   migrateLegacyData,
+  NewerDatabaseError,
   profileFromEnv,
   telemetryFromEnv,
   type EngineService,
@@ -490,6 +491,23 @@ async function start(): Promise<void> {
         detail: `Started ${holder.startedAt}.\n${holder.databaseFile}\n\nQuit that one first, or wait until it is done.`,
         buttons: ['Quit'],
       });
+      app.exit(1);
+      return;
+    }
+    // A database from a newer PostPile (someone went back to an older build):
+    // never migrated down, its file and WAL never changed. Updating is the only way on.
+    if (error instanceof NewerDatabaseError) {
+      const { response } = await dialog.showMessageBox({
+        type: 'warning',
+        message: 'This database was written by a newer PostPile',
+        detail: `Update PostPile to open it. Its data was not changed.\n\nThis PostPile is ${app.getVersion()}. The database has schema version ${error.version}, this version knows up to ${error.knownVersion}.\n${error.path}`,
+        buttons: ['Quit', 'Get the Latest Version'],
+        defaultId: 1,
+        cancelId: 0,
+      });
+      if (response === 1) {
+        await shell.openExternal(`${REPO_URL}/releases/latest`);
+      }
       app.exit(1);
       return;
     }

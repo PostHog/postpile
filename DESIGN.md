@@ -7247,6 +7247,26 @@ preflight and does not know the token, so CORS stays open.
   read commands take `--read-only` (no lock, no GitHub writes); sync, poll, sweep and
   consolidate refuse it. The desktop app also asks `app.requestSingleInstanceLock()`, so a
   second launch of the same app (same userData) only focuses the first window.
+- **A database from a newer PostPile** (2026-10-05, since 0.20.0): `openDatabase` reads the
+  schema version (`MAX(version)` of `schema_migrations`) through a read-only connection of
+  its own before it opens the file for writing, and refuses a version above this build's
+  newest migration with `NewerDatabaseError`. It never migrates down, and the database file
+  and its WAL are never changed: no WAL pragma, no migrations, and no checkpoint (closing
+  the last read-write connection would copy a WAL the newer build left behind into the file;
+  Codex review on #121). The read-only reader may still create or rebuild the `-shm`
+  sidecar (SQLite's shared-memory index, no data), and in a folder it cannot write, with
+  the sidecars missing, it fails with SQLite's error before it learns the version
+  (https://sqlite.org/wal.html#read_only_databases; checked with Codex GPT-6.1).
+  The desktop app shows "This database was written by a newer PostPile" with Quit and a
+  link to the latest release; the CLI and the server exit with the message. Read-only opens
+  (CLI `--read-only`, MCP) refuse any other version anyway, a newer one with the same error.
+  Self-update only moves forward, so this hits a hand-installed older build.
+  Limits: builds up to 0.19.0 have no guard and still open a newer database, so the
+  protection starts with the first guarded release. And it only sees schema versions: any
+  later step that older builds must not run against (stripping fields from the stored
+  snapshot json, retiring `pr_snapshot`) ships with its own numbered migration, even when
+  the migration itself only adds a column or nothing at all, so the guarded builds refuse
+  that database instead of misreading it or querying a dropped table.
 
 - No GitHub write calls in tests or smoke runs. Tests use fakes; `GitHubWriteClient` is only
   constructed by `createEngine`, and not at all with `POSTPILE_READ_ONLY=1`. A fresh
