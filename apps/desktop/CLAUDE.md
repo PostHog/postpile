@@ -55,7 +55,8 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   (`useLastSyncReport`, the stored last sync, which `useActions().lastSync`
   falls back to before this window's first sync; `useSyncProgress`, polled
   every second only while a sync runs, for the title bar's
-  `syncing · agent 34/82 · 2m`, text from `lib/sync-progress.ts`),
+  `syncing · nothing new on GitHub · agent calls 34/82 · 2m`, text from
+  `lib/sync-progress.ts`),
   `setup.ts` (`useSetupStatus`, `useSetupChecks` (runs gh and claude on
   the server, so only enabled on the checks screen; "Check again" is its
   refetch), `useSetupSweep`, polled every second while the job runs),

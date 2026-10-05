@@ -204,7 +204,7 @@ now".
   reconcile), coalesced per topic by `CatchUpQueue` (one running, one
   queued follow-up), never beside a full sync or consolidation. Per-run cap
   from the topic size plus a daily cap (`POSTPILE_CATCHUP_CAP`, default
-  300, in memory). Catch-up calls land in their own run
+  600, in memory). Catch-up calls land in their own run
   (`catchup:<topic>:<time>`, AsyncLocalStorage in `AgentCallLog`). A full
   sync runs every 60 minutes in the background (`AutoSyncSchedule` in the
   engine, `POSTPILE_AUTO_SYNC_MINUTES`, counted from the end of the last
@@ -947,8 +947,8 @@ the app meanwhile.
 - Per-phase timings (`phaseMs`) in the last sync report, the `sync: done`
   log line and the sync tooltip, so the next slow sync says where the time
   went.
-- Live progress in the title bar while syncing: `syncing · agent 34/82 ·
-  2m` from `GET /api/sync/progress`. The total is what the sync planned so
+- Live progress in the title bar while syncing: `syncing · nothing new on
+  GitHub · agent calls 34/82 · 2m` from `GET /api/sync/progress`. The total is what the sync planned so
   far and grows (glances are planned as dossiers land).
 - Glance "missing or invalid in the answer" (two real PRs, one of them
   acme/app#1812): replaying acme/app#1812 alone against Sonnet gave a
@@ -1135,6 +1135,16 @@ the app meanwhile.
 
 ## Decided
 
+- **Catch-up on every memory trigger** (2026-10-05, DESIGN.md "Glance
+  catch-up"): the poll's per-topic catch-up fires on any event that starts
+  a dossier update (`isMemoryTrigger`), not only loud ones, so a person's
+  push, comment or merge on a PR not aimed at the user and a bot pushing or
+  approving no longer wait for the hourly sync. Bot comments still ride
+  along; CI and bot edits stay noise. `POSTPILE_CATCHUP_CAP` default
+  300 -> 600 for the extra runs. The sync progress leads with what GitHub
+  brought ("nothing new on GitHub · agent calls 12/19"). Rejected: a
+  timed trickle of all quiet news (same work, less batching), and skipping
+  bot-only dossier updates (bot comments already never start one).
 - **Title bar says "up to date"** (2026-10-05, DESIGN.md "Auto sync"): the
   live poll checks GitHub every minute, so "synced 40m ago" (the last full
   sync) suggested stale data that wasn't. The title bar reads the poll:

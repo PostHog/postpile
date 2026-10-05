@@ -1267,8 +1267,13 @@ topics already retired. The bar, deterministic where it can be
   so far). Planned grows mid-run, since glances are planned only once their
   topic's dossier landed; every granted call is a real call, so done reaches
   planned at the end. The title bar polls it every second while this window
-  waits on a sync and shows `syncing · agent 34/82 · 2m` (`fetching GitHub`
-  before any call is planned; tooltip lists the running phases). FakeEngine
+  waits on a sync and shows `syncing · nothing new on GitHub · agent calls
+  34/82 · 2m` (`fetching GitHub` before any call is planned; tooltip lists
+  the running phases and the calls per kind). What GitHub brought comes
+  first (`SyncProgress.fromGitHub`, set once the fetch ends, 2026-10-05):
+  agent work after "nothing new" reads as digesting what the poll already
+  stored, not as the app having fallen behind. A bare growing "agent
+  10/15/17" read as many agents working on news nobody could see. FakeEngine
   walks five canned steps (`syncStepMs`, 800 ms each) so the fake UI shows it.
 - A failed PR batch in the full sync (GitHub's "Something went wrong"
   timeout on a heavy aliased query, a 502, a secondary rate limit) no longer
@@ -5169,8 +5174,14 @@ topic; only Retry on a glance that failed. Before this, a new PR showed
 and the ping decisions, never on the first look at an empty store, not while
 the agent is off): a fetched PR with a new event whose effective loudness is
 loud, or a PR that should have a glance (open, pinged or found, in a tile)
-and has none. Quiet news (bot comments, CI) waits for the full sync. The
-topic is the PR's membership; Unsorted (null) counts as one topic.
+and has none. Since 2026-10-05 any memory trigger counts, not only loud
+events (`isMemoryTrigger`, "Event roles"): a person's push, comment,
+approval or merge on a PR not aimed at the user, and a bot changing the PR
+itself. Before, those waited for the hourly sync and their glances read
+"out of date" while browsing, and every full sync spent its calls on that
+backlog. Bot comments still wait for the next real update and noise (CI,
+bot edits, deploys) never counts. The topic is the PR's membership;
+Unsorted (null) counts as one topic.
 
 **Run** (`TopicCatchUp`, one topic): the full sync's digest jobs, scoped by
 `TopicScope`, in the same budget order: the topic's dossier update from the
@@ -5202,7 +5213,8 @@ like it waits for a poll cycle; consolidation waits for them too.
 **Caps**: per run `3 + 2 * ceil(glance targets in the topic / 18)` (dossier,
 events, reconcile, each glance batch with its retry). On top, a daily cap
 over all runs, a rolling 24h window in memory (`CatchUpCap`,
-`POSTPILE_CATCHUP_CAP`, default 300; a dev session with
+`POSTPILE_CATCHUP_CAP`, default 600, 300 before catch-up took quiet news
+(2026-10-05); a dev session with
 `POSTPILE_MAX_AGENT_CALLS=0` defaults to 0). 0 turns catch-up off. The
 daily cap is asked only after the run's cap said yes (`AgentBudget` with a
 `CallAllowance`). A glance it refuses gets the gap `daily_cap`; a dossier it
@@ -5256,9 +5268,12 @@ status, and marks the second one failed so Retry can be tried.
 ## Glance refresh on look
 
 Decided 2026-10-01: a stale glance is rewritten when the user looks at the
-PR. Quiet news (an author push, bot comments, CI) does not trigger a
-catch-up, so a stale glance waited up to an hour for the full sync, also
-while the user was looking at that very PR. Owner: the hourly sync is too
+PR. Quiet news (an author push, bot comments, CI) did not trigger a
+catch-up then, so a stale glance waited up to an hour for the full sync, also
+while the user was looking at that very PR. Since 2026-10-05 an author push
+and other memory triggers do ("Glance catch-up"); the look refresh stays
+for what is left, like a glance that went stale while the daily cap was
+spent. Owner: the hourly sync is too
 slow when they are looking at the PR. The cost stays low because only
 opened PRs with a stale glance refresh. Automatic, not a button: "No
 manual refresh per PR or topic" (2026-09-29) still holds.
@@ -5336,7 +5351,7 @@ app's sync call cap (`startAutoSync`). The interval counts from the end of
 the last sync, whoever started it (`reschedule` on every sync end), so a
 "Sync now" pushes it out; at the due time a running sync means skip. The
 renderer sees it through `LivePollStatus.syncRunning` (the title bar shows
-`syncing · agent 34/82` like for "Sync now", `useActions().syncing` covers
+`syncing · … · agent calls 34/82` like for "Sync now", `useActions().syncing` covers
 both) and `nextAutoSyncAt` ("next full sync in N min"). The last sync shown
 is the newer of this window's and the stored report. Between syncs the title bar
 reads the live poll, not the report (2026-10-05): "up to date" while the
@@ -6471,7 +6486,7 @@ preflight and does not know the token, so CORS stays open.
   writes are still off until the lock is opened. `POSTPILE_POLL_SECONDS`
   (default 60, 0 off, never faster than GitHub's X-Poll-Interval), `POSTPILE_PING_CAP` (default 200 per 24h) and
   `POSTPILE_MAC_NOTIFICATIONS=0` tune the live poll. `POSTPILE_CATCHUP_CAP` (default
-  300 per 24h, 0 off) caps glance catch-up, `POSTPILE_AUTO_SYNC_MINUTES` (default 60,
+  600 per 24h, 0 off) caps glance catch-up, `POSTPILE_AUTO_SYNC_MINUTES` (default 60,
   0 off) the background sync.
 - **Test builders** live at `@postpile/core/fixtures` (incl. `FakeTimers`); engine tests use
   fake reader/writer and the agent's `FakeRunner`.
