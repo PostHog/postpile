@@ -53,6 +53,9 @@ export function toEvent(row: EventRow): PrEvent {
 /** Events PostPile makes itself, never derived from a GitHub snapshot: a snapshot store keeps them. */
 export const APP_EVENT_KINDS: readonly EventKind[] = ['look_closer'];
 
+/** Ids per query in `storedIds`: a cleanup's batch can hold thousands. */
+const STORED_IDS_CHUNK = 500;
+
 /**
  * The two kinds a machine comment's event takes, by whether the kept part
  * of its body says "deploy" (core `commentEvent`). Its id changes with the
@@ -231,6 +234,18 @@ export class EventRepo {
        WHERE kind IN ('mention', 'reply_to_user', 'question_to_user') OR rule_reason = 'addressed your changes'`,
     );
     return new Set(rows.map((row) => row.pr_key));
+  }
+
+  /** Which of these ids are stored now. */
+  storedIds(ids: string[]): Set<string> {
+    const stored = new Set<string>();
+    for (let start = 0; start < ids.length; start += STORED_IDS_CHUNK) {
+      const chunk = ids.slice(start, start + STORED_IDS_CHUNK);
+      for (const row of all<{ id: string }>(this.db, `SELECT id FROM pr_event WHERE id IN (${placeholders(chunk.length)})`, ...chunk)) {
+        stored.add(row.id);
+      }
+    }
+    return stored;
   }
 
   /** Leaves events that were already seen alone, so the first seen time sticks. */

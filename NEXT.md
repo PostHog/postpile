@@ -53,8 +53,10 @@ now".
   what is stored once (desktop app, `startBotBodyTrim`): 30 s after start,
   never during a sync, poll, consolidation or catch-up, ~30 ms steps 20 ms
   apart, resumable, events left alone. Migration 029 adds
-  `pr.snapshot_revision`, moved by every snapshot write, which the parse
-  caches compare instead of fetched_at. The DB opens with
+  `pr.snapshot_revision`, a new value from a store-wide counter on every
+  snapshot write, which the parse caches compare instead of fetched_at.
+  Mark read's Undo, failed send and parking find a renamed event by its
+  other kind. The DB opens with
   `journal_size_limit` 64 MB and the job empties the WAL at the end without
   waiting. Measured on copies: JSON 66 → 51 MB (normal) and 925 → 712 MB
   (heavy, 14x); the job took 0.6 s and 9 s (140 steps, longest 48 ms,

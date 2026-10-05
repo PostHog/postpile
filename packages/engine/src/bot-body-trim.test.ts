@@ -2,12 +2,12 @@
 // the one-time job cuts what is stored, in small steps, and a deploy event
 // that a cut body no longer explains keeps its state wherever its PR's
 // events are derived again.
-import { eventId, trimBotBodies, trimBotBody, type Pr } from '@postpile/core';
-import { at, FakeTimers, makeComment, makeEvent, makePr, makeReview, makeThread, makeThreadFor } from '@postpile/core/fixtures';
+import { deriveEvents, eventId, trimBotBodies, trimBotBody, UNDO_WINDOW_MS, type Pr } from '@postpile/core';
+import { at, FakeTimers, makeComment, makeEvent, makePr, makeReview, makeThread, makeThreadFor, viewer } from '@postpile/core/fixtures';
 import { Store } from '@postpile/store';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { BOT_BODY_TRIM_AFTER_KEY, BOT_BODY_TRIM_DONE_KEY, BotBodyTrim } from './bot-body-trim.ts';
-import { makeHarness, NOW } from './testing/fakes.ts';
+import { makeHarness, NOW, type Harness } from './testing/fakes.ts';
 
 const BOT = 'github-actions[bot]';
 
@@ -212,5 +212,59 @@ describe('Engine.startBotBodyTrim', () => {
     expect(h.store.meta.get(BOT_BODY_TRIM_DONE_KEY)).not.toBeNull();
     expect(h.store.prs.get('acme/app#2')!.comments[0]!.body).toBe(CUT);
     await h.engine.close();
+  });
+});
+
+describe('Mark read put back across a rename', () => {
+  // The click captures the deploy event's id; a fetch inside the undo window
+  // renames it to bot_comment. Whatever puts the click back must still find it.
+  const deployPr = makePr({ number: 5, comments: [makeComment({ id: 'c5', author: BOT, body: 'Preview deployed', createdAt: at(1) })], updatedAt: at(2) });
+  const tileId = `pr:${deployPr.key}`;
+  const thread = makeThreadFor(deployPr, { updatedAt: at(2) });
+
+  async function clickedThenRenamed(): Promise<{ h: Harness; undoToken: string | null }> {
+    const h = makeHarness();
+    h.reader.addPr(deployPr, thread);
+    await h.engine.sync({ maxAgentCalls: 0 });
+    expect(h.store.events.listForPr(deployPr.key)).toMatchObject([{ kind: 'deploy', seenAt: null }]);
+    const { undoToken } = await h.engine.markRead(tileId);
+    expect(h.store.events.listForPr(deployPr.key)[0]!.seenAt).not.toBeNull();
+    // The bot edits its comment so it no longer says deploy, and a fetch stores it.
+    const edited = { ...deployPr, comments: [{ ...deployPr.comments[0]!, body: 'Build finished' }] };
+    h.store.prs.upsert(edited, at(3));
+    h.store.events.upsertDerived(edited.key, deriveEvents(edited, viewer, null));
+    expect(h.store.events.listForPr(deployPr.key)).toMatchObject([{ kind: 'bot_comment' }]);
+    return { h, undoToken };
+  }
+
+  function settle(): Promise<void> {
+    return new Promise((resolve) => setImmediate(resolve));
+  }
+
+  function state(h: Harness) {
+    return { threadUnread: h.store.notifications.get(thread.id)?.unread, seenAt: h.store.events.listForPr(deployPr.key)[0]!.seenAt };
+  }
+
+  it('Undo turns the renamed event unseen again', async () => {
+    const { h, undoToken } = await clickedThenRenamed();
+    await h.engine.undo(undoToken);
+    expect(state(h)).toEqual({ threadUnread: true, seenAt: null });
+  });
+
+  it('a send GitHub did not take turns the renamed event unseen again', async () => {
+    const { h } = await clickedThenRenamed();
+    h.writer.failingThreads.add(thread.id);
+    h.timers.advance(UNDO_WINDOW_MS);
+    await settle();
+    expect(state(h)).toEqual({ threadUnread: true, seenAt: null });
+  });
+
+  it('parking the click when writes were locked turns the renamed event unseen again', async () => {
+    const { h } = await clickedThenRenamed();
+    await h.engine.setGitHubWrites(false);
+    h.timers.advance(UNDO_WINDOW_MS);
+    await settle();
+    expect(h.store.pendingWrites.list()).toHaveLength(1);
+    expect(state(h)).toEqual({ threadUnread: true, seenAt: null });
   });
 });

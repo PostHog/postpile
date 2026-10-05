@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BOT_BODY_MAX, TRIMMED_MARKER, trimBotBodies, trimBotBody } from './bot-bodies.ts';
 import { isMachineComment } from './bots.ts';
-import { deriveEvents, editMentionOf } from './events.ts';
+import { deriveEvents, editMentionOf, machineCommentTwinId } from './events.ts';
 import { at, makeComment, makePr, makeReview, makeThread, viewer } from './fixtures.ts';
 import { mergeQueueState } from './merge-queue.ts';
 import type { Comment, Pr } from './types.ts';
@@ -186,5 +186,15 @@ describe('the rules read a cut snapshot like the stored one', () => {
     expect(kindOf(TRIMMED_MARKER, BOT)).toBe('bot_comment');
     expect(isMachineComment({ author: 'alice', body: TRIMMED_MARKER })).toBe(false);
     expect(kindOf(`hello${TRIMMED_MARKER}`, 'alice')).toBe('comment');
+  });
+});
+
+describe('machineCommentTwinId', () => {
+  it('gives a machine comment event id under its other kind, and nothing for other events', () => {
+    expect(machineCommentTwinId('acme/app#1:deploy:IC_1')).toBe('acme/app#1:bot_comment:IC_1');
+    expect(machineCommentTwinId('acme/app#1:bot_comment:IC_1')).toBe('acme/app#1:deploy:IC_1');
+    expect(machineCommentTwinId('acme/app#1:comment:IC_1')).toBeNull();
+    expect(machineCommentTwinId('acme/app#1:comment_edited:IC_1@2026-09-01T10:00:00.000Z')).toBeNull();
+    expect(machineCommentTwinId('not-an-event-id')).toBeNull();
   });
 });

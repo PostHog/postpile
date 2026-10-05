@@ -6,6 +6,9 @@ import { all, each, one, placeholders, run } from '../sql.ts';
 /** PR rows read and parsed per query (~80 KB of json each on a busy install). */
 const PARSE_CHUNK = 200;
 
+/** The meta key of the last snapshot revision handed out (migration 029). */
+const SNAPSHOT_REVISION_KEY = 'snapshot_revision';
+
 interface ParsedPr {
   revision: number;
   pr: Pr;
@@ -161,17 +164,35 @@ export class PrRepo {
   }
 
   /**
+   * The next snapshot revision, from one counter for the whole store that
+   * only goes up: a revision is never handed out twice, not even to a PR
+   * deleted and stored again, so a cache never takes another snapshot for
+   * the one it holds.
+   */
+  private nextRevision(): number {
+    const row = one<{ value: string }>(
+      this.db,
+      `INSERT INTO meta (key, value) VALUES (?, '1')
+       ON CONFLICT (key) DO UPDATE SET value = CAST(value AS INTEGER) + 1
+       RETURNING value`,
+      SNAPSHOT_REVISION_KEY,
+    );
+    return Number(row?.value);
+  }
+
+  /**
    * Header first, then snapshot, in one transaction: never one without the
-   * other. Every write moves the header's snapshot_revision, so parse
+   * other. Every write gives the header a new snapshot_revision, so parse
    * caches in this and other processes read the snapshot again.
    */
   upsert(pr: Pr, fetchedAt: string): void {
     inTransaction(this.db, () => {
+      const revision = this.nextRevision();
       run(
         this.db,
         `INSERT INTO pr (key, repo, number, state, is_draft, title, author, assignees, reviewer_users, reviewer_teams,
            base_ref, head_ref, head_oid, previous_base_refs, cross_repository, created_at, updated_at, merged_at, fetched_at, snapshot_revision)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (key) DO UPDATE SET
            repo = excluded.repo, number = excluded.number, state = excluded.state, is_draft = excluded.is_draft,
            title = excluded.title, author = excluded.author, assignees = excluded.assignees,
@@ -179,7 +200,7 @@ export class PrRepo {
            base_ref = excluded.base_ref, head_ref = excluded.head_ref, head_oid = excluded.head_oid,
            previous_base_refs = excluded.previous_base_refs, cross_repository = excluded.cross_repository,
            created_at = excluded.created_at, updated_at = excluded.updated_at, merged_at = excluded.merged_at,
-           fetched_at = excluded.fetched_at, snapshot_revision = pr.snapshot_revision + 1`,
+           fetched_at = excluded.fetched_at, snapshot_revision = excluded.snapshot_revision`,
         pr.key,
         pr.ref.repo,
         pr.ref.number,
@@ -199,6 +220,7 @@ export class PrRepo {
         pr.updatedAt,
         pr.mergedAt,
         fetchedAt,
+        revision,
       );
       // The snapshot's own short columns are legacy: written for NOT NULL, never read.
       run(

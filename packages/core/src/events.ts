@@ -445,6 +445,24 @@ export function editEventId(prKey: string, commentId: string, editedAt: IsoTime)
 }
 
 /**
+ * A machine comment's event id under its other kind: deploy and
+ * bot_comment of one comment are one event, renamed when the kept part of
+ * its body starts or stops saying "deploy" (store `EventRepo.upsertDerived`).
+ * Null for any other id. A PR key ("owner/repo#1") holds no colon, so the
+ * kind is what sits between the first two.
+ */
+export function machineCommentTwinId(id: string): string | null {
+  const kindStart = id.indexOf(':') + 1;
+  const kindEnd = id.indexOf(':', kindStart);
+  if (kindStart === 0 || kindEnd === -1) {
+    return null;
+  }
+  const kind = id.slice(kindStart, kindEnd);
+  const twin = kind === 'deploy' ? 'bot_comment' : kind === 'bot_comment' ? 'deploy' : null;
+  return twin === null ? null : `${id.slice(0, kindStart)}${twin}${id.slice(kindEnd)}`;
+}
+
+/**
  * Turns a PR snapshot into event lines: comments, reviews, commits, timeline
  * items and CI, each classified by ruleLoudness, oldest first. Returned events
  * have seenAt and override set to null; the store keeps those across syncs.

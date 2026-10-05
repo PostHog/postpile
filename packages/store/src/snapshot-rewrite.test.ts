@@ -139,6 +139,31 @@ describe('PrRepo: snapshot_revision', () => {
     expect(revision()).toBe(3);
   });
 
+  it('never hands a revision out twice, across PRs and after a delete', () => {
+    store.prs.upsert(makePr({ number: 1 }), at(1));
+    store.prs.upsert(makePr({ number: 2 }), at(1));
+    store.prs.delete(PR);
+    store.prs.upsert(makePr({ number: 1 }), at(1));
+    const revisions = store.db.prepare('SELECT key, snapshot_revision FROM pr ORDER BY key').all();
+    expect(revisions).toEqual([
+      { key: 'acme/app#1', snapshot_revision: 3 },
+      { key: 'acme/app#2', snapshot_revision: 2 },
+    ]);
+  });
+
+  it('lets another connection’s cache see a PR deleted and stored again with the same fetch time', () => {
+    const reader = Store.open(join(dir, 'db.sqlite'));
+    try {
+      store.prs.upsert(makePr({ body: 'first' }), at(1));
+      expect(reader.prs.keepParsed([PR]).get(PR)?.body).toBe('first');
+      store.prs.delete(PR);
+      store.prs.upsert(makePr({ body: 'replacement' }), at(1));
+      expect(reader.prs.keepParsed([PR]).get(PR)?.body).toBe('replacement');
+    } finally {
+      reader.close();
+    }
+  });
+
   it('lets another connection’s cache see a rewrite that keeps the fetch time', () => {
     const reader = Store.open(join(dir, 'db.sqlite'));
     try {

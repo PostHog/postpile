@@ -1,4 +1,4 @@
-import { NO_READ_CHANGE, planRead, type IsoTime, type PendingThread, type ReadCause, type ReadChange, type ReadPlan, type ReadScope } from '@postpile/core';
+import { machineCommentTwinId, NO_READ_CHANGE, planRead, type IsoTime, type PendingThread, type ReadCause, type ReadChange, type ReadPlan, type ReadScope } from '@postpile/core';
 import type { Store } from '@postpile/store';
 
 /** A thread a click marked read here before GitHub took it, with the read time it had, so it can be put back. */
@@ -63,10 +63,34 @@ export function readLocally(store: Store, scope: ReadScope, cause: ReadCause, at
   });
 }
 
+/**
+ * The ids a mark-read captured, as stored now. A fetch since the click may
+ * have renamed a machine comment's event between deploy and bot_comment
+ * (DESIGN.md "Bot bodies are cut when saved"): its captured id then stands
+ * for the renamed one. Ids of events that are gone are left out.
+ */
+function eventIdsNow(store: Store, ids: string[]): string[] {
+  const twins = new Map<string, string>();
+  for (const id of ids) {
+    const twin = machineCommentTwinId(id);
+    if (twin !== null) {
+      twins.set(id, twin);
+    }
+  }
+  const stored = store.events.storedIds([...ids, ...twins.values()]);
+  return ids.flatMap((id) => {
+    if (stored.has(id)) {
+      return [id];
+    }
+    const twin = twins.get(id);
+    return twin !== undefined && stored.has(twin) ? [twin] : [];
+  });
+}
+
 /** Puts back what a mark-read changed in the app: its events turn unseen, its PRs lose handled, its threads turn unread again. */
 export function putBackLocalChange(store: Store, change: LocalChange): void {
   store.transaction(() => {
-    store.events.clearSeen(change.eventIds);
+    store.events.clearSeen(eventIdsNow(store, change.eventIds));
     for (const key of change.handledKeys) {
       store.userPrStates.clearHandled(key);
     }
@@ -85,7 +109,7 @@ export function localChangeForThread(store: Store, change: LocalChange, thread: 
   const key = thread.prKey;
   const prEventIds = new Set(key === null ? [] : (store.events.listForPrs([key]).get(key) ?? []).map((event) => event.id));
   return {
-    eventIds: change.eventIds.filter((id) => prEventIds.has(id)),
+    eventIds: eventIdsNow(store, change.eventIds).filter((id) => prEventIds.has(id)),
     handledKeys: change.handledKeys.filter((candidate) => candidate === key),
     threads: change.threads.filter((read) => read.id === thread.id),
   };

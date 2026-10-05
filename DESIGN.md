@@ -2790,11 +2790,22 @@ open and never splits a character.
   `bot_body_trim_after`, done at `bot_body_trim_done`) and empties the WAL
   at the end without waiting for other connections. No VACUUM (7 s on a
   heavy copy): SQLite reuses the freed pages.
-- **Caches see a rewrite** (migration 029): `pr.snapshot_revision` moves on
-  every write of the PR's snapshot, in the same transaction, and the parse
-  caches compare it instead of `fetched_at`. A rewrite that keeps the fetch
-  time (this job) still reaches another process's cache, like the CLI's.
-  `fetched_at` keeps meaning when GitHub was asked.
+- **Caches see a rewrite** (migration 029): every write of a PR's snapshot
+  gives its header a new `pr.snapshot_revision`, in the same transaction,
+  and the parse caches compare it instead of `fetched_at`. The value comes
+  from one store-wide counter that only goes up (meta `snapshot_revision`),
+  so a PR deleted and stored again never gets a revision a cache holds. A
+  rewrite that keeps the fetch time (this job) still reaches another
+  process's cache, like the CLI's. `fetched_at` keeps meaning when GitHub
+  was asked. When the snapshot is normalized (NEXT.md), the revision stays
+  the generation of the assembled stored PR: any child-table write or
+  backfill that changes what readers assemble moves it in the same
+  transaction.
+- **Mark read put back**: a click captures event ids, and a fetch in the
+  undo window can rename a deploy event to bot_comment. Undo, a send GitHub
+  did not take and a parked batch look a captured machine comment id up
+  under its other kind when it is gone (`machineCommentTwinId`), so the
+  renamed event turns unseen again with its thread.
 
 ## Colour per meaning (2026-10-01)
 
