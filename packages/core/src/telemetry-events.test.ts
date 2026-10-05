@@ -40,6 +40,28 @@ describe('TELEMETRY_EVENTS', () => {
     expect(TELEMETRY_EVENTS.sync_completed.safeParse({ ...sync, gh_graphql_remaining_pct: 12.5 }).success).toBe(false);
   });
 
+  it('takes the heap in whole MB on sync_completed, optional so older events still validate', () => {
+    const sync = {
+      duration_ms: 1200,
+      prs_fetched: 3,
+      new_events: 2,
+      agent_calls: 1,
+      agent_failures: 0,
+      cost_usd: 0.02,
+      stopped_at_cap: false,
+      trigger: 'auto',
+      gh_requests: 14,
+    };
+    expect(TELEMETRY_EVENTS.sync_completed.safeParse({ ...sync, heap_used_mb: 1830, heap_limit_mb: 4144 }).success).toBe(true);
+    expect(TELEMETRY_EVENTS.sync_completed.safeParse({ ...sync, heap_used_mb: 1830.4 }).success).toBe(false);
+  });
+
+  it('knows a crash in the last run, with only whether the version changed', () => {
+    expect(TELEMETRY_EVENTS.app_crashed_last_run.safeParse({ version_changed: false }).success).toBe(true);
+    expect(TELEMETRY_EVENTS.app_crashed_last_run.safeParse({ version_changed: true, version: '0.17.0' }).success).toBe(false);
+    expect(RENDERER_TELEMETRY_EVENTS).not.toContain('app_crashed_last_run');
+  });
+
   it('knows github_quota_low and where a rate limit hit', () => {
     expect(TELEMETRY_EVENTS.github_quota_low.safeParse({ resource: 'graphql', level: 'critical' }).success).toBe(true);
     expect(TELEMETRY_EVENTS.github_quota_low.safeParse({ resource: 'search', level: 'low' }).success).toBe(false);

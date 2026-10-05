@@ -32,6 +32,7 @@ import { PhaseClock } from './phase-clock.ts';
 import type { RunDeps } from './run-deps.ts';
 import { runTelemetry } from './run-deps.ts';
 import { hasCompletedFirstSync, markFirstSyncCompleted } from './telemetry/first-sync.ts';
+import { heapUse } from './telemetry/heap.ts';
 import { loadViewer } from './viewer-meta.ts';
 import type { QuietReads } from './writes/quiet-reads.ts';
 
@@ -452,6 +453,8 @@ export class SyncRun {
         // Absent, not a made-up number, when no answer during the sync carried that limit.
         ...(quota.lowestPercent.core !== undefined ? { gh_core_remaining_pct: quota.lowestPercent.core } : {}),
         ...(quota.lowestPercent.graphql !== undefined ? { gh_graphql_remaining_pct: quota.lowestPercent.graphql } : {}),
+        // The process's V8 heap at the end of the sync: how close it runs to the limit.
+        ...heapUse(),
       });
       if (!hasCompletedFirstSync(this.deps.store)) {
         markFirstSyncCompleted(this.deps.store);

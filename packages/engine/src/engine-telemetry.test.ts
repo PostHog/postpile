@@ -42,6 +42,9 @@ describe('engine telemetry', () => {
     const names = h.telemetry.events.map((e) => e.event);
     expect(names).toContain('sync_completed');
     expect(names).toContain('first_sync_completed');
+    const props = h.telemetry.events.find((e) => e.event === 'sync_completed')?.props as Record<string, unknown>;
+    expect(props.heap_used_mb).toBeGreaterThan(0);
+    expect(props.heap_limit_mb).toBeGreaterThan(props.heap_used_mb as number);
 
     h.telemetry.events.length = 0;
     await h.engine.sync({ maxAgentCalls: 0 });

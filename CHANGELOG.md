@@ -18,6 +18,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 ### Fixed
 
 - PostPile could crash out of memory on a very busy inbox (thousands of tracked PRs), often a few minutes after the Mac woke from sleep. Views now share one loaded copy of your PRs instead of each reading its own, the big database reads stream instead of loading at once, and at most two topics catch up at the same time.
+- PostPile no longer does all its catching up at once when your Mac wakes from sleep. The window no longer reloads everything when the network comes back, and the hourly full sync waits a few minutes after a wake.
 
 ## 0.17.0 (2026-10-05)
 

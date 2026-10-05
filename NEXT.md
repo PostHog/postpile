@@ -6,6 +6,24 @@ now".
 
 ## Done
 
+- Calm wake and crash signals (2026-10-05, DESIGN.md "Memory on big
+  boards"): after a wake the renderer no longer refetches every query
+  (`refetchOnReconnect: false`; `networkMode: 'always'`, so no network
+  does not pause the local API either). On `powerMonitor` `suspend` the
+  auto sync's timer stops (`Engine.noteSuspend`), and on `resume` the next
+  auto sync waits at least 3 minutes (`Engine.noteWake`,
+  `AutoSyncSchedule.wake`, from the kept due time on the wall clock). A run that ends
+  without a clean quit leaves `running.json` in userData, and the next
+  start sends `app_crashed_last_run` (`version_changed`). `sync_completed`
+  gained `heap_used_mb` and `heap_limit_mb`. `crashReporter` keeps
+  minidumps locally (`uploadToServer: false`, Electron's default
+  `crashDumps`, `<userData>/Crashpad`). Checked in a fake-mode Electron
+  run: `resume` emitted through the main inspector held a due sync 3
+  minutes and kept a later one, a `suspend` held a due time that passed
+  until the `resume`, a brand-new data folder starts, `process.crash()`
+  left a dump and the marker and the next start logged it, SIGTERM and the
+  fake "Restart to update" stayed clean. Not tried: a real sleep and wake,
+  and whether a V8 out-of-memory abort leaves a dump.
 - Memory on big boards (2026-10-05, DESIGN.md "Memory on big boards"): a
   heavy install (about 5,000 tiles, 11k PRs, 485k events, on 0.16) crashed
   out of memory in the main process. Boards are now shared per data change
@@ -1181,6 +1199,31 @@ the app meanwhile.
 
 ## Later
 
+- Normalize the PR snapshot (after 0.18.0, in this order: first this, then
+  the `utilityProcess` move below). Each PR is stored as one JSON blob in
+  `pr.json` (~80 KB on average; on a normal install 95% of the comment text
+  is bot comments, 6.4 MB is check contexts the rules ignore, and 89% of
+  stored PRs are merged or closed), so every board build parses whole PRs
+  to read a few fields, and nothing inside can be queried or indexed.
+  Target: real columns on `pr` for what the rules read (author, draft,
+  review decision, merged time, head oid) and rows for comments, reviews,
+  threads and thread comments, commits, files and a slim check summary; bot
+  comment bodies trimmed at write time; the board loads only the columns
+  and rows it needs for hot PRs, the PR pane one PR in full; `pr_event`
+  derivation reads the rows. A multi-day refactor of the store and of every
+  place that builds a `Pr`, plus a data migration. Together with the
+  `utilityProcess` move it is the real fix for big inboxes.
+- Move the engine and the server out of Electron main into a
+  `utilityProcess` (after 0.18.0, in this order: after normalizing the PR
+  snapshot above; a bigger refactor). Electron runs V8
+  with pointer compression and one shared cage per process, so the ~4 GB
+  heap limit covers all isolates of a process together: worker threads
+  share it and would not help. A utility process has its own pid and heap,
+  talks over a MessagePort, and its crash or out-of-memory shows as
+  `child-process-gone` instead of taking the app down, so main can restart
+  it and stays responsive during big reads. Electron's guide suggests
+  workers first for a blocked main thread and a process as the last step;
+  here the memory cap is the reason for the process.
 - Replace FakeEngine with the real Engine over a seeded store. Not now
   (decided 2026-09-28): the shared core builders (`buildTileView`,
   `deriveTileState`, …) already keep the two in step.

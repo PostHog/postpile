@@ -11,6 +11,14 @@ export const DEFAULT_AUTO_SYNC_MINUTES = 60;
  */
 export const BACKLOG_SYNC_MINUTES = 2;
 
+/**
+ * Minutes a background sync waits at least after the Mac woke from sleep.
+ * Right after a wake the live poll, glance catch-ups and the window's
+ * refetches already run; the full sync, the heaviest thing PostPile does,
+ * comes after them (DESIGN.md "Memory on big boards").
+ */
+export const WAKE_SYNC_DELAY_MINUTES = 3;
+
 export interface AutoSyncOptions {
   /** 0 or less keeps it off. */
   minutes: number;
@@ -37,6 +45,8 @@ export class AutoSyncSchedule {
   private timer: unknown = null;
   private dueAt: number | null = null;
   private started = false;
+  /** Between suspend() and wake(): due times are kept, but no timer runs. */
+  private suspended = false;
 
   constructor(
     private readonly target: AutoSyncTarget,
@@ -59,6 +69,9 @@ export class AutoSyncSchedule {
   private scheduleIn(ms: number): void {
     this.clearTimer();
     this.dueAt = this.timers.now() + ms;
+    if (this.suspended) {
+      return;
+    }
     this.timer = this.timers.setTimeout(() => {
       this.timer = null;
       void this.fire();
@@ -98,6 +111,7 @@ export class AutoSyncSchedule {
 
   stop(): void {
     this.started = false;
+    this.suspended = false;
     this.clearTimer();
     this.dueAt = null;
   }
@@ -114,5 +128,40 @@ export class AutoSyncSchedule {
 
   nextSyncAt(): IsoTime | null {
     return this.dueAt === null ? null : new Date(this.dueAt).toISOString();
+  }
+
+  /**
+   * The Mac goes to sleep: the timer is cleared and the due time kept until
+   * wake(). Otherwise a due time that passes during sleep could fire right
+   * as the Mac wakes, before wake() is called, and start the full sync in
+   * the wake burst. A sync that ends meanwhile still sets the next due time.
+   */
+  suspend(): void {
+    if (!this.started) {
+      return;
+    }
+    this.suspended = true;
+    this.clearTimer();
+  }
+
+  /**
+   * The Mac woke from sleep. Whether a timer counted the sleep depends on
+   * the clock under it, so the next sync is set again from the kept due time
+   * on the wall clock, but never sooner than WAKE_SYNC_DELAY_MINUTES from
+   * now: an overdue sync waits those minutes instead of joining the wake
+   * burst. Also works without a suspend() first. Nothing while off, or when
+   * the auto sync itself runs and no suspend() came (its end sets the next one).
+   */
+  wake(): void {
+    if (!this.started || (!this.suspended && this.timer === null)) {
+      return;
+    }
+    this.suspended = false;
+    if (this.dueAt === null) {
+      return;
+    }
+    const minimumMs = WAKE_SYNC_DELAY_MINUTES * 60 * 1000;
+    this.scheduleIn(Math.max(minimumMs, this.dueAt - this.timers.now()));
+    this.log(`auto sync: woke from sleep, next one at ${this.nextSyncAt()}`);
   }
 }
