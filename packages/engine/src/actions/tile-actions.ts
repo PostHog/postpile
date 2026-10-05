@@ -11,12 +11,13 @@ export class TileActions {
     private readonly now: () => Date,
   ) {}
 
+  /** On the hot Board, or in a topic whose older PRs went cold (`Board.forTile`): the topic pane shows those tiles too. */
   private findTile(tileId: string): Tile | null {
-    return Board.load(this.store, this.now().toISOString()).findTile(tileId);
+    return Board.forTile(this.store, this.now().toISOString(), tileId).findTile(tileId);
   }
 
   private tileIdsHolding(key: PrKey): string[] {
-    const board = Board.load(this.store, this.now().toISOString());
+    const board = Board.forPr(this.store, this.now().toISOString(), key);
     return board
       .topics()
       .flatMap((topic) => board.tilesForTopic(topic.id))
@@ -42,10 +43,9 @@ export class TileActions {
    * brings every tile back. Unknown tile ids refuse the whole batch.
    */
   markTilesRead(tileIds: string[]): ActionResult {
-    const board = Board.load(this.store, this.now().toISOString());
     const tiles: Tile[] = [];
     for (const tileId of tileIds) {
-      const tile = board.findTile(tileId);
+      const tile = this.findTile(tileId);
       if (!tile) {
         return failed(`no tile ${tileId}`);
       }

@@ -73,7 +73,7 @@ export class ProposalActions {
     if (proposal.kind !== 'split') {
       return null;
     }
-    const board = Board.load(this.store, at);
+    const board = Board.forTopic(this.store, at, proposal.topicId ?? '');
     const gone = proposal.prKeys.filter((key) => board.topicIdOf(key) !== proposal.topicId);
     if (gone.length > 0) {
       return `${gone.join(', ')} left the topic since`;

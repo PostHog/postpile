@@ -6,6 +6,9 @@ import { deriveEvents, teamRolesDiffer, type IsoTime, type Viewer } from '@postp
 import type { Store } from '@postpile/store';
 import { loadViewer, saveViewer } from './viewer-meta.ts';
 
+/** Snapshots parsed at a time while deriving events again. */
+const REDERIVE_CHUNK = 200;
+
 /**
  * Derives every stored PR's events again from its stored snapshot, for
  * `viewer`. No GitHub read. `upsertDerived` keeps seen_at and every
@@ -14,14 +17,18 @@ import { loadViewer, saveViewer } from './viewer-meta.ts';
  * id that is new anyway goes to the event log like a fetch's.
  */
 export function rederiveStoredEvents(store: Store, viewer: Viewer, at: IsoTime): void {
+  const keys = store.prs.keys();
   store.transaction(() => {
-    for (const pr of store.prs.listAll()) {
-      const events = deriveEvents(pr, viewer, store.userPrStates.get(pr.key));
-      const created = store.events.upsertDerived(pr.key, events);
-      store.eventLog.append(
-        created.map((id) => ({ id, prKey: pr.key })),
-        at,
-      );
+    // A chunk of snapshots at a time: all of them at once is gigabytes on a heavy install.
+    for (let start = 0; start < keys.length; start += REDERIVE_CHUNK) {
+      for (const pr of store.prs.getMany(keys.slice(start, start + REDERIVE_CHUNK)).values()) {
+        const events = deriveEvents(pr, viewer, store.userPrStates.get(pr.key));
+        const created = store.events.upsertDerived(pr.key, events);
+        store.eventLog.append(
+          created.map((id) => ({ id, prKey: pr.key })),
+          at,
+        );
+      }
     }
   });
 }

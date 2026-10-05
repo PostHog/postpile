@@ -106,6 +106,16 @@ export class NotificationRepo {
     return result;
   }
 
+  /** PR threads with activity after `since`: how busy the inbox is right now. */
+  countPrThreadsUpdatedSince(since: string): number {
+    const row = one<{ n: number }>(
+      this.db,
+      "SELECT COUNT(*) AS n FROM notification_thread WHERE subject_type = 'PullRequest' AND updated_at > ?",
+      since,
+    );
+    return row?.n ?? 0;
+  }
+
   /** Local mirror of a mark-read that was actually sent to GitHub. */
   markRead(threadId: string, at: string): void {
     run(this.db, 'UPDATE notification_thread SET unread = 0, last_read_at = ? WHERE id = ?', at, threadId);

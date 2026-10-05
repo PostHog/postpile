@@ -83,6 +83,7 @@ import type {
   WorkContextView,
   WorkThreadForget,
   BoardShapeEvent,
+  BusyInboxView,
 } from '@postpile/core';
 import { arch, release } from 'node:os';
 import {
@@ -107,6 +108,7 @@ import {
 import { loadAppVersion, saveAppVersion } from './app-version-meta.ts';
 import type { AutoSyncOptions } from './auto-sync.ts';
 import { isPostHogMember } from '@postpile/core/telemetry-identity';
+import { BusyBoardReport } from './telemetry/busy-board.ts';
 import { PingSummary } from './telemetry/ping-summary.ts';
 import { NoopTelemetry, type Telemetry } from './telemetry/telemetry.ts';
 import { loadViewer } from './viewer-meta.ts';
@@ -133,13 +135,13 @@ import type { AgentCallLog } from './agent-call-log.ts';
 import { AutoSyncSchedule } from './auto-sync.ts';
 import { Board } from './board.ts';
 import { pendingGlanceKeys } from './glance-inputs.ts';
-import { RetireGate } from './consolidation/retire-gate.ts';
 import { changeTopicStatus } from './topic-status.ts';
 import { CatchUpCap } from './catch-up/catch-up-cap.ts';
 import { CatchUpQueue } from './catch-up/catch-up-queue.ts';
 import { QuietCatchUps } from './catch-up/quiet-catch-ups.ts';
 import { TopicCatchUp, type CatchUpTopics } from './catch-up/topic-catch-up.ts';
 import { glanceGapKey } from './digest/glance-batches.ts';
+import { topicRetireGate } from './consolidation/retire.ts';
 import { ConsolidationRun } from './consolidation/consolidation-run.ts';
 import { errorText } from './errors.ts';
 import { GitHubQuota } from './github-quota.ts';
@@ -326,6 +328,7 @@ export class Engine implements EngineService {
   private readonly quietReads: QuietReads;
   private readonly telemetry: Telemetry;
   private readonly pingSummary: PingSummary;
+  private readonly busyBoard: BusyBoardReport;
   private readonly pingDelivery: PingDelivery;
   /** The live poll's onNotify, while it runs. */
   private notifyMac: ((notifications: MacNotification[]) => boolean) | null = null;
@@ -352,6 +355,7 @@ export class Engine implements EngineService {
     }
     this.telemetry = deps.telemetry ?? new NoopTelemetry();
     this.pingSummary = new PingSummary(store, this.telemetry, now);
+    this.busyBoard = new BusyBoardReport(store, this.telemetry, now, () => Board.lastSelection(store), deps.syncLog ?? ((line) => console.log(line)));
     this.toolHealth = deps.tools ?? ToolHealth.assumeOk(now);
     const timers = deps.timers ?? systemTimers;
     this.quota = deps.quota ?? new GitHubQuota(() => timers.now());
@@ -661,9 +665,11 @@ export class Engine implements EngineService {
   }
 
   /** The hourly pings_summarized event, when one is due. Never throws: telemetry never breaks a sync or a poll. */
+  /** The hourly telemetry after a sync or a poll cycle: the ping summary, and whether the board cap cut the inbox. */
   private summarizePings(): void {
     try {
       this.pingSummary.sendIfDue();
+      this.busyBoard.sendIfDue();
     } catch (error) {
       (this.deps.syncLog ?? console.log)(`ping summary failed: ${errorText(error)}`);
     }
@@ -1065,6 +1071,10 @@ export class Engine implements EngineService {
     return this.reads.listFinishedTopics();
   }
 
+  async busyInbox(): Promise<BusyInboxView> {
+    return this.reads.busyInbox(!this.deps.writes.enabled());
+  }
+
   async listRepos(): Promise<RepoOverview> {
     return this.reads.repos();
   }
@@ -1448,7 +1458,7 @@ export class Engine implements EngineService {
   async archiveTopic(topicId: string): Promise<ActionResult> {
     const { store } = this.deps;
     const at = this.deps.now().toISOString();
-    if (!new RetireGate(Board.load(store, at)).nothingLeft(topicId)) {
+    if (!topicRetireGate(store, at, topicId).nothingLeft(topicId)) {
       return { ok: false, message: 'Something in this topic is still open or unread', undoToken: null };
     }
     if (!changeTopicStatus(store, topicId, 'retire', at)) {

@@ -53,7 +53,7 @@ export class OpenedReads {
       return NOT_MARKED;
     }
     const nowIso = this.now().toISOString();
-    const board = Board.load(this.store, nowIso);
+    const board = Board.forPr(this.store, nowIso, prKey);
     const input = new OpenedReadInputs(board, this.store).of(prKey);
     const check = openedReadCheck(input);
     if (check.kind === 'skip') {

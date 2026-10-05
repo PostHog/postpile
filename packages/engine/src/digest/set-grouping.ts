@@ -110,7 +110,7 @@ export class SetGrouper {
   }
 
   private stacks(): Map<PrKey, Stack> {
-    return stackByPrKey(buildStacks(this.deps.store.prs.listAll()));
+    return stackByPrKey(buildStacks(this.deps.store.prs.listLight()));
   }
 
   /**

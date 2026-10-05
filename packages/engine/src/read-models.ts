@@ -88,7 +88,13 @@ import {
   type Viewer,
   type ViewerView,
   boardShapeEvents,
+  busyInboxView,
+  threadPrKey,
+  prMatchesTerms,
+  searchTerms,
   type BoardShapeEvent,
+  type BusyInboxView,
+  type LightPr,
 } from '@postpile/core';
 import type { AgentService } from '@postpile/agent';
 import type { Store } from '@postpile/store';
@@ -137,6 +143,11 @@ export interface GlanceStatusSource {
 }
 
 const NO_GLANCE_STATUS: GlanceStatusSource = { agentOff: () => false, catchUp: () => null, catchUpCap: () => ({ off: true, spent: false }) };
+
+/** Cold PRs one search reads at most (newest first), with their stacks and sets: a one-letter query must not read the whole store. */
+export const SEARCH_COLD_MAX = 200;
+
+const HOUR_MS = 60 * 60 * 1000;
 
 /** Builds the API read models. Every call loads a fresh Board, so state is always derived. */
 /**
@@ -188,6 +199,14 @@ export class ReadModels {
 
   private board(): Board {
     return Board.load(this.store, this.now().toISOString());
+  }
+
+  /** The hot Board for its PRs, and one Board read for this request for those of `keys` that went cold. */
+  private boardsFor(keys: PrKey[]): (key: PrKey) => Board {
+    const hot = this.board();
+    const cold = [...new Set(keys)].filter((key) => !hot.prs.has(key));
+    const coldBoard = cold.length > 0 ? Board.forPrs(this.store, this.now().toISOString(), cold) : hot;
+    return (key) => (hot.prs.has(key) ? hot : coldBoard);
   }
 
   /** The repo menu lists a topic when one of its PRs is in the chosen repo; its tiles are never narrowed. */
@@ -393,8 +412,25 @@ export class ReadModels {
     return new Set(prKeys.map((key) => placeOnBoard(board, key)?.tile?.id ?? `pr:${key}`)).size;
   }
 
+  /** A cold PR's place comes from a Board of its topic, read for this click. */
   pingClickTarget(notification: Pick<MacNotification, 'target' | 'prKeys'>): PingTarget | null {
-    return pingClickTargetOnBoard(this.board(), notification);
+    const now = this.now().toISOString();
+    return pingClickTargetOnBoard(this.board(), notification, (key) => Board.forPr(this.store, now, key));
+  }
+
+  /**
+   * The busy inbox card's numbers (`busyInboxView`), from what picked the
+   * last hot Board: no load of its own once any read loaded one.
+   */
+  busyInbox(writesLocked: boolean): BusyInboxView {
+    if (Board.lastSelection(this.store) === null) {
+      // Nothing loaded a Board in this process yet.
+      this.board();
+    }
+    const selection = Board.lastSelection(this.store) ?? { busy: false, inboxPrs: 0, keptByTier: { you: 0, team: 0, others: 0 } };
+    const since = new Date(this.now().getTime() - HOUR_MS).toISOString();
+    const updatesLastHour = this.store.notifications.countPrThreadsUpdatedSince(since);
+    return busyInboxView(selection, { updatesLastHour, writesLocked });
   }
 
   /** The topics the sidebar lists with all repos, each with its tiles. */
@@ -527,9 +563,10 @@ export class ReadModels {
     return at === null ? null : { state: 'ready', at };
   }
 
+  /** The topic whole: from the hot Board, or a Board of its PRs read for this request when some went cold (`Board.forTopic`). */
   getTopic(topicId: string): TopicDetail | null {
     const now = this.now().toISOString();
-    const board = this.board();
+    const board = Board.forTopic(this.store, now, topicId);
     const topic = board.topic(topicId);
     if (!topic) {
       return null;
@@ -575,7 +612,7 @@ export class ReadModels {
     };
     const threads = this.store.notifications.list().slice(0, limit);
     const decisions = pingDecisionsByThread(this.store.pingDecisions.listForThreads(threads.map((thread) => thread.id)));
-    return debugNotificationRows(this.board(), threads, actions, decisions);
+    return debugNotificationRows(this.boardsFor(threads.flatMap((thread) => threadPrKey(thread) ?? [])), threads, actions, decisions);
   }
 
   /** "Handled quietly": the quiet mark-reads of the last HANDLED_QUIETLY_DAYS days, newest first. */
@@ -583,32 +620,67 @@ export class ReadModels {
     const since = new Date(this.now().getTime() - HANDLED_QUIETLY_DAYS * 24 * 3600_000).toISOString();
     const entries = this.store.actionLog.listByOriginSince('quiet', since);
     const titles = new Map(this.store.notifications.list().map((thread) => [thread.id, thread.title]));
-    return quietReadViews(this.board(), entries, titles);
+    return quietReadViews(this.boardsFor(entries.flatMap((entry) => entry.prKey ?? [])), entries, titles);
   }
 
-  /** Search bar filter over the stored PRs, in memory: a few hundred PRs at most. */
+  /**
+   * The listed topics' PRs that went cold and match every term, matched on
+   * their light rows; at most SEARCH_COLD_MAX, newest first.
+   */
+  private coldMatches(board: Board, listed: Topic[], terms: string[]): PrKey[] {
+    const light = new Map<PrKey, LightPr>(this.store.prs.listLight().map((pr) => [pr.key, pr]));
+    const matches: LightPr[] = [];
+    for (const topic of listed) {
+      for (const membership of topic.id === UNSORTED_TOPIC_ID ? [] : this.store.memberships.listForTopic(topic.id)) {
+        const pr = light.get(membership.prKey);
+        if (pr && !board.prs.has(pr.key) && prMatchesTerms(topic, pr, terms)) {
+          matches.push(pr);
+        }
+      }
+    }
+    return matches
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .slice(0, SEARCH_COLD_MAX)
+      .map((pr) => pr.key);
+  }
+
+  /**
+   * Search bar filter over the PRs of the topics the sidebar lists, each
+   * with all its tiles, like an opened topic (`Board.forTopic`): the hot
+   * Board's tiles, plus the tiles of matching PRs that went cold, read for
+   * this request with their stacks and sets so their tile ids are the ones
+   * the opened topic shows.
+   */
   search(query: string, scope?: ListScope): SearchResult {
     const board = this.board();
     const settings = scopedSettings(loadRepoSettings(this.store), scope);
-    // Only the topics the sidebar lists, each with all its tiles, like an opened topic.
     const listed = board.topics().filter((topic) => this.isListed(board.tilesForTopic(topic.id), settings));
+    const terms = searchTerms(query);
+    const cold = terms.length === 0 ? [] : this.coldMatches(board, listed, terms);
+    const coldBoard = cold.length > 0 ? Board.forPrs(this.store, this.now().toISOString(), cold) : null;
+    const searchable = (from: Board, tiles: Tile[]) =>
+      tiles.map((tile) => ({
+        tileId: tile.id,
+        prs: tile.members.flatMap((member) => {
+          const pr = from.prs.get(member.prKey);
+          return pr ? [{ key: pr.key, title: pr.title, author: pr.author, headRef: pr.headRef }] : [];
+        }),
+      }));
     const topics: SearchableTopic[] = listed.map((topic) => ({
       topicId: topic.id,
       name: topic.name,
       area: topic.area,
-      tiles: board.tilesForTopic(topic.id).map((tile) => ({
-        tileId: tile.id,
-        prs: tile.members.flatMap((member) => {
-          const pr = board.prs.get(member.prKey);
-          return pr ? [{ key: pr.key, title: pr.title, author: pr.author, headRef: pr.headRef }] : [];
-        }),
-      })),
+      tiles: [
+        ...searchable(board, board.tilesForTopic(topic.id)),
+        ...(coldBoard && topic.id !== UNSORTED_TOPIC_ID ? searchable(coldBoard, coldBoard.tilesForTopic(topic.id)) : []),
+      ],
     }));
     return searchTopics(topics, query);
   }
 
+  /** A cold PR is read with its topic for this request (`Board.forPr`). */
   getPr(key: PrKey): PrDetail | null {
-    const board = this.board();
+    const board = Board.forPr(this.store, this.now().toISOString(), key);
     const pr = board.prs.get(key);
     if (!pr) {
       return null;

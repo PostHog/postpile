@@ -14,7 +14,7 @@ export const ASSIGNMENT_BATCH_SIZE = 40;
 
 
 /** The newest updatedAt among the PRs, or null for none. ISO strings sort by time. */
-function newestUpdate(prs: Pr[]): string | null {
+function newestUpdate(prs: Array<Pick<Pr, 'updatedAt'>>): string | null {
   let newest: string | null = null;
   for (const pr of prs) {
     if (newest === null || pr.updatedAt > newest) {
@@ -75,7 +75,7 @@ export class TopicAssigner {
    */
   private splitByStack(keys: PrKey[]): StackSplit {
     const { store } = this.deps;
-    const stackOf = stackByPrKey(buildStacks(store.prs.listAll()));
+    const stackOf = stackByPrKey(buildStacks(store.prs.listLight()));
     const memberships = new Map(store.memberships.listAll().map((m) => [m.prKey, m]));
     const activeTopicIds = new Set(store.topics.listActive().map((topic) => topic.id));
     const split: StackSplit = { join: [], ask: [], followers: new Map() };
@@ -125,13 +125,15 @@ export class TopicAssigner {
     return store.topics.list().filter((t) => takesNewPrs(t, lastJoinAt(store.memberships.listForTopic(t.id)), now));
   }
 
+  /** Counts from the light rows: reading every offered topic's snapshots cost a heavy install seconds and gigabytes. */
   private topicChoices(): TopicChoice[] {
     const topics = this.offeredTopics();
     const dossiers = this.deps.store.dossiers.latestMany(topics.map((t) => t.id));
+    const light = new Map(this.deps.store.prs.listLight().map((pr) => [pr.key, pr]));
     return topics.map((t) => {
       const dossier = dossiers.get(t.id);
       const brief = dossier ? dossierBrief(dossier.dossier) : '';
-      const prs = [...this.deps.store.prs.getMany(this.deps.store.memberships.listForTopic(t.id).map((m) => m.prKey)).values()];
+      const prs = this.deps.store.memberships.listForTopic(t.id).flatMap((m) => light.get(m.prKey) ?? []);
       return {
         id: t.id,
         name: t.name,

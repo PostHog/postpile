@@ -113,10 +113,60 @@ describe('PrRepo', () => {
 
   it('serves a new snapshot after an upsert with the same fetched_at', () => {
     store.prs.upsert(makePr({ title: 'first' }), at(1));
-    expect(store.prs.listAll()[0]?.title).toBe('first');
+    expect(store.prs.keepParsed(['acme/app#1']).get('acme/app#1')?.title).toBe('first');
     store.prs.upsert(makePr({ title: 'second' }), at(1));
-    expect(store.prs.listAll()[0]?.title).toBe('second');
+    expect(store.prs.keepParsed(['acme/app#1']).get('acme/app#1')?.title).toBe('second');
     expect(store.prs.getMany(['acme/app#1']).get('acme/app#1')?.title).toBe('second');
+  });
+
+  it('keeps only the hot PRs parsed: the same objects again, the rest parsed per call', () => {
+    store.prs.upsert(makePr({ number: 1 }), at(1));
+    store.prs.upsert(makePr({ number: 2 }), at(1));
+    const hot = store.prs.keepParsed(['acme/app#1']).get('acme/app#1');
+    expect(store.prs.getMany(['acme/app#1']).get('acme/app#1')).toBe(hot);
+    expect(store.prs.getMany(['acme/app#2']).get('acme/app#2')).not.toBe(store.prs.getMany(['acme/app#2']).get('acme/app#2'));
+    // A new hot set lets the old one go.
+    store.prs.keepParsed(['acme/app#2']);
+    expect(store.prs.getMany(['acme/app#1']).get('acme/app#1')).not.toBe(hot);
+  });
+
+  it('lists every PR light, with the columns copied out of the snapshot and its newest event', () => {
+    const merged = makePr({
+      number: 2,
+      title: 'Move CI to Depot',
+      author: 'renovate[bot]',
+      assignees: ['alice'],
+      reviewerUsers: ['bob'],
+      reviewerTeams: ['acme/team-devex'],
+      state: 'MERGED',
+      mergedAt: at(5),
+      previousBaseRefs: ['feat/base'],
+      isCrossRepository: true,
+    });
+    store.prs.upsert(merged, at(6));
+    store.prs.upsert(makePr({ number: 1 }), at(6));
+    store.events.upsertDerived(merged.key, [makeEvent({ id: 'e1', prKey: merged.key, at: at(3) }), makeEvent({ id: 'e2', prKey: merged.key, at: at(4) })]);
+    const light = store.prs.listLight();
+    expect(light.map((pr) => pr.key)).toEqual(['acme/app#1', 'acme/app#2']);
+    expect(light[1]).toEqual({
+      key: merged.key,
+      ref: merged.ref,
+      state: 'MERGED',
+      baseRef: merged.baseRef,
+      headRef: merged.headRef,
+      createdAt: merged.createdAt,
+      updatedAt: merged.updatedAt,
+      mergedAt: at(5),
+      previousBaseRefs: ['feat/base'],
+      isCrossRepository: true,
+      title: 'Move CI to Depot',
+      author: 'renovate[bot]',
+      assignees: ['alice'],
+      reviewerUsers: ['bob'],
+      reviewerTeams: ['acme/team-devex'],
+      lastEventAt: at(4),
+    });
+    expect(light[0]?.lastEventAt).toBeNull();
   });
 
   it('lists every snapshot when the cache fills in several chunks', () => {
@@ -132,9 +182,9 @@ describe('PrRepo', () => {
     const writer = Store.open(join(dir, 'db.sqlite'));
     try {
       writer.prs.upsert(makePr({ title: 'first' }), at(1));
-      expect(reader.prs.listAll()[0]?.title).toBe('first');
+      expect(reader.prs.keepParsed(['acme/app#1']).get('acme/app#1')?.title).toBe('first');
       writer.prs.upsert(makePr({ title: 'second' }), at(2));
-      expect(reader.prs.listAll()[0]?.title).toBe('second');
+      expect(reader.prs.keepParsed(['acme/app#1']).get('acme/app#1')?.title).toBe('second');
     } finally {
       reader.close();
       writer.close();
@@ -156,6 +206,22 @@ describe('PullInRepo', () => {
 
 describe('EventRepo', () => {
   const key = 'acme/app#1';
+
+  it('finds the PRs with an event aimed at the viewer in person, through the partial index', () => {
+    store.events.upsertDerived('acme/app#1', [makeEvent({ id: 'a1', prKey: 'acme/app#1', kind: 'reply_to_user' })]);
+    store.events.upsertDerived('acme/app#2', [makeEvent({ id: 'a2', prKey: 'acme/app#2', kind: 'review_requested', ruleReason: 'review requested from you' })]);
+    store.events.upsertDerived('acme/app#3', [makeEvent({ id: 'a3', prKey: 'acme/app#3', kind: 'review_requested', ruleReason: 'review requested from someone else' })]);
+    store.events.upsertDerived('acme/app#4', [makeEvent({ id: 'a4', prKey: 'acme/app#4', kind: 'commits_pushed', ruleReason: 'addressed your changes' })]);
+    expect([...store.events.prKeysWithPersonalAsks()].sort()).toEqual(['acme/app#1', 'acme/app#2', 'acme/app#4']);
+    const plan = store.db
+      .prepare(
+        `EXPLAIN QUERY PLAN SELECT DISTINCT pr_key FROM pr_event
+       WHERE kind IN ('mention', 'reply_to_user', 'question_to_user')
+          OR rule_reason IN ('review requested from you', 'review request already answered or removed', 'addressed your changes')`,
+      )
+      .all() as Array<{ detail: string }>;
+    expect(plan.map((row) => row.detail).join('\n')).toContain('pr_event_personal_ask');
+  });
 
   it('returns only new ids and keeps seen and override state across re-derivation', () => {
     const first = makeEvent({ id: 'e1', at: at(1) });

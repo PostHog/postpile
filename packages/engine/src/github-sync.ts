@@ -15,12 +15,14 @@ import {
   type PrKey,
   type PrRef,
   type IsoTime,
+  type LayerShape,
   type Viewer,
   selectSyncThreads,
 } from '@postpile/core';
 import type { GitHubReader } from '@postpile/github';
 import type { Store } from '@postpile/store';
 import { writeReadPlan } from './actions/local-change.ts';
+import { Board } from './board.ts';
 import { CAP_FILL_POLL_PRS, CAP_FILL_SYNC_PRS, CapFiller } from './cap-fill.ts';
 import { errorText } from './errors.ts';
 import { LessonKeeper } from './lessons/lesson-keeper.ts';
@@ -413,16 +415,17 @@ export class GitHubSync {
   }
 
   /**
-   * The touch rule over every stored PR, once per full sync. storePr applies
-   * it to each PR it writes; this also covers events stored before the rule
-   * existed, on PRs that have not moved since.
+   * The touch rule over the hot board's PRs, once per full sync. storePr
+   * applies it to each PR it writes; this also covers events stored before
+   * the rule existed, on PRs that have not moved since. A cold PR gets it
+   * here once it turns hot again: reading every stored PR and event for it
+   * took gigabytes on a heavy install.
    */
   private reconcileTouches(viewer: Viewer): void {
-    const prs = this.store.prs.listAll();
-    const events = this.store.events.listForPrs(prs.map((pr) => pr.key));
+    const board = Board.load(this.store, this.now().toISOString());
     this.store.transaction(() => {
-      for (const pr of prs) {
-        this.markSeenBeforeTouch(pr, events.get(pr.key) ?? [], viewer);
+      for (const pr of board.prs.values()) {
+        this.markSeenBeforeTouch(pr, board.events.get(pr.key) ?? [], viewer);
       }
     });
   }
@@ -501,8 +504,8 @@ export class GitHubSync {
    */
   private async pullInStackLayers(fetched: Pr[], viewer: Viewer): Promise<Pr[]> {
     const tracked = this.trackedPrKeys();
-    const seeds = new Map<PrKey, Pr>();
-    for (const pr of [...fetched, ...this.store.prs.listAll().filter((stored) => stored.state === 'OPEN')]) {
+    const seeds = new Map<PrKey, LayerShape & { key: PrKey }>();
+    for (const pr of [...fetched, ...this.store.prs.listLight().filter((stored) => stored.state === 'OPEN')]) {
       if (tracked.has(pr.key) && !seeds.has(pr.key)) {
         seeds.set(pr.key, pr);
       }
@@ -559,7 +562,7 @@ export class GitHubSync {
     const tracked = new Set<PrKey>([...this.trackedPrKeys(), ...this.store.pullIns.listAll().keys()]);
     const cutoff = new Date(this.now().getTime() - FRESHNESS_CLOSED_WINDOW_MS).toISOString();
     return this.store.prs
-      .listAll()
+      .listLight()
       .filter((pr) => tracked.has(pr.key) && !skip.has(pr.key))
       .filter((pr) => pr.state === 'OPEN' || pr.updatedAt >= cutoff)
       .map((pr) => pr.ref);
@@ -582,7 +585,8 @@ export class GitHubSync {
     const remote = await this.reader.prUpdatedAts(refs);
     const stored = this.store.prs.updatedAtByKey();
     // Snapshots stored before assignees were read (2026-09-30) refetch once, or a bot PR's owners stay unknown until it moves.
-    const withoutAssignees = new Set(this.store.prs.listAll().filter((pr) => pr.assignees === undefined).map((pr) => pr.key));
+    const checked = this.store.prs.getMany(refs.map(prKey));
+    const withoutAssignees = new Set([...checked.values()].filter((pr) => pr.assignees === undefined).map((pr) => pr.key));
     const moved = refs.filter((ref) => {
       const updatedAt = remote.get(prKey(ref));
       const was = stored.get(prKey(ref));

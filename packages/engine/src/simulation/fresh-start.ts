@@ -11,6 +11,7 @@ export const KEPT_TABLES: Record<string, string> = {
   meta: 'GitHub and app settings stay (viewer, teams, ETags, setup); agent keys are removed, see AGENT_META_PREFIXES',
   notification_thread: 'GitHub data: every notification is stored on the first sync, read state included',
   pr: 'GitHub data: PR snapshots',
+  pr_light: 'GitHub data: the short columns of each PR snapshot',
   pr_event: 'GitHub data plus seen state; agent loudness overrides are cleared, user ones stay',
   event_log: 'first sightings of events; the simulation hides and re-logs them per round',
   user_pr_state: "the user's own approvals and handled marks (seen state)",

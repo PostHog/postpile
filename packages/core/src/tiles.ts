@@ -88,6 +88,16 @@ export function setIdFromTileId(tileId: string): string | null {
   return tileId.startsWith(SET_TILE_PREFIX) ? tileId.slice(SET_TILE_PREFIX.length) : null;
 }
 
+/** The PR a single tile holds, or the bottom layer of a stack tile; null for a set tile. */
+export function prKeyFromTileId(tileId: string): PrKey | null {
+  for (const prefix of ['pr:', 'stack:']) {
+    if (tileId.startsWith(prefix)) {
+      return tileId.slice(prefix.length);
+    }
+  }
+  return null;
+}
+
 /**
  * A pinged PR is done only when nothing is asked of the viewer (2026-09-28):
  * merged or closed (but not while a merge without their review is unseen,

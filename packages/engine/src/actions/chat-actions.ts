@@ -42,7 +42,7 @@ export class ChatActions {
    * message behind; the renderer puts the text back in the input.
    */
   async topicChat(topicId: string, message: string): Promise<ChatReply> {
-    const board = Board.load(this.store, this.now().toISOString());
+    const board = Board.forTopic(this.store, this.now().toISOString(), topicId);
     const topic = board.topic(topicId);
     if (!topic) {
       throw new Error(`no topic ${topicId}`);

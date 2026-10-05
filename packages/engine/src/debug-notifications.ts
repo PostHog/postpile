@@ -17,8 +17,8 @@ import {
 import { UNSORTED_TOPIC_ID, type Board } from './board.ts';
 
 /** Where the thread's PR shows up: the tile in the PR's own topic (Unsorted included), else why not. */
-export function landingOf(board: Board, key: PrKey | null): NotificationLanding {
-  if (key === null) {
+export function landingOf(board: Board | null, key: PrKey | null): NotificationLanding {
+  if (key === null || board === null) {
     return { kind: 'not_pr' };
   }
   if (!board.prs.has(key)) {
@@ -55,7 +55,7 @@ export function landingOf(board: Board, key: PrKey | null): NotificationLanding 
  * by thread id. Reads only; nothing here touches GitHub.
  */
 export function debugNotificationRows(
-  board: Board,
+  boardFor: (key: PrKey) => Board,
   threads: NotificationThread[],
   actions: ActionLogIndex,
   decisions: Map<string, PingDecision[]>,
@@ -65,8 +65,8 @@ export function debugNotificationRows(
     return {
       thread,
       prKey: key,
-      landing: landingOf(board, key),
-      recentEvents: key === null ? [] : debugEventLines(board.events.get(key) ?? []),
+      landing: key === null ? landingOf(null, key) : landingOf(boardFor(key), key),
+      recentEvents: key === null ? [] : debugEventLines(boardFor(key).events.get(key) ?? []),
       ...actionTrail(actions, thread.id, key),
       pingDecisions: decisions.get(thread.id) ?? [],
     };
@@ -78,7 +78,7 @@ export function debugNotificationRows(
  * reached GitHub (entries in any order come back as given), each with the
  * PR's title and where it lands now.
  */
-export function quietReadViews(board: Board, entries: ActionLogEntry[], threadTitles: Map<string, string>): QuietReadView[] {
+export function quietReadViews(boardFor: (key: PrKey) => Board, entries: ActionLogEntry[], threadTitles: Map<string, string>): QuietReadView[] {
   return entries.flatMap((entry): QuietReadView[] => {
     if (entry.action !== 'mark_read' || entry.outcome !== 'github' || entry.prKey === null) {
       return [];
@@ -93,10 +93,10 @@ export function quietReadViews(board: Board, entries: ActionLogEntry[], threadTi
         prKey: entry.prKey,
         repo: ref.repo,
         number: ref.number,
-        title: board.prs.get(entry.prKey)?.title ?? threadTitle ?? entry.prKey,
+        title: boardFor(entry.prKey).prs.get(entry.prKey)?.title ?? threadTitle ?? entry.prKey,
         reason: quietReasonFromDetail(entry.detail),
         bots: actorsFromQuietDetail(entry.detail),
-        landing: landingOf(board, entry.prKey),
+        landing: landingOf(boardFor(entry.prKey), entry.prKey),
       },
     ];
   });

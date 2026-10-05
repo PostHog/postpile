@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type {
   ActionLogEntry,
   ActionResult,
+  BusyInboxView,
   ChatReply,
   GitHubWritesChange,
   GlanceLookResult,
@@ -195,6 +196,36 @@ describe('server routes over the fake engine', () => {
     const detail = (await (await app.request('/api/topics/topic-cache-warmer')).json()) as TopicDetail;
     expect(detail.topic.status).toBe('retired');
     expect(detail.tiles.map((view) => view.tile.id)).toEqual(['pr:acme/app#1840']);
+  });
+
+  it('says the sample inbox is not busy, with every sample PR kept', async () => {
+    const view = (await (await appWithFake().request('/api/busy-inbox')).json()) as BusyInboxView;
+
+    expect(view.busy).toBe(false);
+    expect(view.quietPrs).toBe(0);
+    expect(view.keptPrs).toBe(view.inboxPrs);
+    expect(view.keptYou + view.keptTeam + view.keptOthers).toBe(view.keptPrs);
+    expect(view.keptYou).toBeGreaterThan(0);
+    expect(view.cap).toBe(1500);
+  });
+
+  it('shows a busy inbox with POSTPILE_FAKE_BUSY numbers', async () => {
+    const app = appWithFake(new FakeEngine({ syncStepMs: 0, busy: true }));
+
+    const view = (await (await app.request('/api/busy-inbox')).json()) as BusyInboxView;
+
+    expect(view).toEqual({
+      busy: true,
+      inboxPrs: 6140,
+      keptPrs: 1500,
+      quietPrs: 4640,
+      cap: 1500,
+      updatesLastHour: 300,
+      writesLocked: true,
+      keptYou: 940,
+      keptTeam: 560,
+      keptOthers: 0,
+    });
   });
 
   it('rechecks a memory line and validates the body', async () => {

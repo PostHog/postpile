@@ -142,4 +142,30 @@ describe('migrations', () => {
     expect(rows.map((row) => [row.id, row.retired_at])).toEqual([['done', '2026-09-05T00:00:00.000Z'], ['live', null]]);
     db.close();
   });
+
+  it('copies the light rows out of PR snapshots stored before 028', () => {
+    const db = new DatabaseSync(':memory:');
+    runMigrations(db, 27);
+    const pr = makePr({ title: 'Move CI to Depot', author: 'renovate[bot]', assignees: ['alice'], reviewerTeams: ['acme/team-devex'], state: 'MERGED', mergedAt: '2026-09-05T00:00:00.000Z' });
+    const old = { ...pr, previousBaseRefs: undefined, isCrossRepository: undefined };
+    db.prepare(
+      `INSERT INTO pr (key, repo, number, state, base_ref, head_ref, updated_at, fetched_at, json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(pr.key, pr.ref.repo, pr.ref.number, pr.state, pr.baseRef, pr.headRef, pr.updatedAt, pr.updatedAt, JSON.stringify(old));
+
+    runMigrations(db);
+
+    expect(db.prepare('SELECT title, author, assignees, reviewer_users, reviewer_teams, created_at, merged_at, previous_base_refs, cross_repository FROM pr_light').get()).toEqual({
+      title: 'Move CI to Depot',
+      author: 'renovate[bot]',
+      assignees: '["alice"]',
+      reviewer_users: '[]',
+      reviewer_teams: '["acme/team-devex"]',
+      created_at: pr.createdAt,
+      merged_at: '2026-09-05T00:00:00.000Z',
+      previous_base_refs: '[]',
+      cross_repository: 0,
+    });
+    db.close();
+  });
 });

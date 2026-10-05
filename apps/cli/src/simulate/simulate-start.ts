@@ -114,7 +114,7 @@ async function copyDatabase(from: string, to: string): Promise<void> {
  */
 export function currentPullIns(store: Store, tracked: Set<PrKey>): SimulationPullIn[] {
   const pullIns: SimulationPullIn[] = [];
-  for (const stack of buildStacks(store.prs.listAll())) {
+  for (const stack of buildStacks(store.prs.listLight())) {
     const keys = stack.prKeys;
     for (let layer = 0; layer < keys.length; layer++) {
       for (let anchor = 0; anchor < keys.length; anchor++) {

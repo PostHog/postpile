@@ -28,12 +28,16 @@ function topicOpenable(board: Board, topicId: string): boolean {
   return topic !== null && topic.status !== 'archived';
 }
 
-/** Where a click on this Mac notification goes on the board as it is now (`pingClickTarget`). */
-export function pingClickTargetOnBoard(board: Board, notification: Pick<MacNotification, 'target' | 'prKeys'>): PingTarget | null {
+/**
+ * Where a click on this Mac notification goes on the board as it is now
+ * (`pingClickTarget`). `boardFor` gives a Board that holds the PR when the
+ * hot one does not (`Board.forPr`).
+ */
+export function pingClickTargetOnBoard(board: Board, notification: Pick<MacNotification, 'target' | 'prKeys'>, boardFor: (key: PrKey) => Board = () => board): PingTarget | null {
   return pingClickTarget(
     notification,
     (key) => {
-      const place = placeOnBoard(board, key);
+      const place = placeOnBoard(board.prs.has(key) ? board : boardFor(key), key);
       return place ? { topicId: place.topicId, tileId: place.tile?.id ?? null } : null;
     },
     (topicId) => topicOpenable(board, topicId),

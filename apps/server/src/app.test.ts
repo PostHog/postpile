@@ -55,6 +55,7 @@ function fakeEngine(overrides: Partial<EngineService>): EngineService {
     boardShape: notImplemented,
     onSyncCompleted: notImplemented,
     listFinishedTopics: notImplemented,
+    busyInbox: notImplemented,
     getViewer: notImplemented,
     getTeamRoles: notImplemented,
     setTeamRole: notImplemented,

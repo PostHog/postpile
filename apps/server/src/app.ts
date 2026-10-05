@@ -285,6 +285,8 @@ export function createApp(
   app.get('/api/topics', async (c) => c.json(await engine.listTopics()));
   // The sidebar's Finished drawer. Before /api/topics/:id, which would take "finished" as an id.
   app.get('/api/topics/finished', async (c) => c.json(await engine.listFinishedTopics()));
+  // The busy inbox card: the board cap cut the hot set (DESIGN.md "Big inboxes: what PostPile loads and works on").
+  app.get('/api/busy-inbox', async (c) => c.json(await engine.busyInbox()));
   app.get('/api/viewer', async (c) => c.json(await engine.getViewer()));
   // Home or routing only per team (DESIGN.md "Team roles"). A flip is local and sticks; it may read the team's members from GitHub.
   app.get('/api/team-roles', async (c) => c.json(await engine.getTeamRoles()));
