@@ -336,10 +336,11 @@ export class PrActions {
     } catch (error) {
       return failed(`Reaction failed: ${errorText(error)}`);
     }
-    // The fetch time stays: the snapshot is no newer than it was.
+    // Read again: a poll may have stored a newer snapshot while GitHub answered. The fetch time stays.
+    const current = this.store.prs.get(key);
     const fetchedAt = this.store.prs.fetchedAtByKey().get(key);
-    if (fetchedAt) {
-      this.store.prs.upsert(withViewerReaction(pr, id), fetchedAt);
+    if (current && fetchedAt) {
+      this.store.prs.upsert(withViewerReaction(current, id), fetchedAt);
     }
     return ok('Thumbs up sent');
   }

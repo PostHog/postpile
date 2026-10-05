@@ -92,6 +92,23 @@ describe('react', () => {
     expect(h.telemetry.events).toContainEqual({ event: 'reaction_sent', props: {} });
   });
 
+  it('marks the snapshot a poll stored while GitHub answered, not the one from before', async () => {
+    const h = await synced();
+    const send = h.writer.addThumbsUp.bind(h.writer);
+    h.writer.addThumbsUp = async (subjectId) => {
+      const stored = h.store.prs.get(pr.key)!;
+      h.store.prs.upsert({ ...stored, title: 'Retry uploads, take two' }, at(500));
+      await send(subjectId);
+    };
+
+    expect((await h.engine.react(pr.key, 'RC2')).ok).toBe(true);
+
+    const stored = h.store.prs.get(pr.key);
+    expect(stored?.title).toBe('Retry uploads, take two');
+    expect(stored?.comments.find((c) => c.id === 'RC2')?.viewerReacted).toBe(true);
+    expect(h.store.prs.fetchedAtByKey().get(pr.key)).toBe(at(500));
+  });
+
   it('takes a review without a body, which is no comment', async () => {
     const h = await synced();
     expect((await h.engine.react(pr.key, 'R2')).ok).toBe(true);
