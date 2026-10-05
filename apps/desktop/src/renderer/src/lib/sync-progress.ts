@@ -25,13 +25,23 @@ const PHASE_WORDS: Record<SyncPhase, string> = {
   events: 'events',
 };
 
-/** "nothing new on GitHub" or "8 new on GitHub"; null while the fetch runs. */
+/**
+ * "8 new on GitHub", "2 PRs updated on GitHub" (a title, body or label
+ * change brings no event but can still need a new glance), or "nothing new
+ * on GitHub"; null while the fetch runs.
+ */
 function gitHubNewsWords(progress: SyncProgress): string | null {
   if (!progress.fromGitHub) {
     return null;
   }
-  const events = progress.fromGitHub.newEvents;
-  return events === 0 ? 'nothing new on GitHub' : `${events} new on GitHub`;
+  const { prsFetched, newEvents } = progress.fromGitHub;
+  if (newEvents > 0) {
+    return `${newEvents} new on GitHub`;
+  }
+  if (prsFetched > 0) {
+    return `${prsFetched} ${prsFetched === 1 ? 'PR' : 'PRs'} updated on GitHub`;
+  }
+  return 'nothing new on GitHub';
 }
 
 /**
@@ -67,6 +77,9 @@ function gitHubLine(progress: SyncProgress): string {
     return 'GitHub: fetching';
   }
   const { prsFetched, newEvents } = progress.fromGitHub;
+  if (newEvents === 0 && prsFetched > 0) {
+    return `GitHub: ${prsFetched} ${prsFetched === 1 ? 'PR' : 'PRs'} updated (title, description, labels or the like), no new events.`;
+  }
   if (newEvents === 0) {
     return 'GitHub: nothing new. The agent works on what the live poll already stored: topics with news it left for the full sync, sets and stacks.';
   }
