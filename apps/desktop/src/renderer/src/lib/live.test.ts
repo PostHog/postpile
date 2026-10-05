@@ -59,28 +59,33 @@ describe('quotaLabel', () => {
 });
 
 describe('pollIsFresh', () => {
-  it('is false while the poll is off or has not run yet', () => {
+  it('is false while the poll is off or GitHub has not answered yet', () => {
     expect(pollIsFresh(undefined, now)).toBe(false);
-    expect(pollIsFresh({ ...OFF_POLL_STATUS, lastPollAt: '2026-09-28T09:59:30Z' }, now)).toBe(false);
+    expect(pollIsFresh({ ...OFF_POLL_STATUS, lastAnsweredAt: '2026-09-28T09:59:30Z' }, now)).toBe(false);
     expect(pollIsFresh(running, now)).toBe(false);
   });
 
-  it('is true while the last poll is within three cycles', () => {
-    expect(pollIsFresh({ ...running, lastPollAt: '2026-09-28T09:59:30Z' }, now)).toBe(true);
-    expect(pollIsFresh({ ...running, lastPollAt: '2026-09-28T09:57:00Z' }, now)).toBe(true);
+  it('is true while the last answer is within three cycles', () => {
+    expect(pollIsFresh({ ...running, lastAnsweredAt: '2026-09-28T09:59:30Z' }, now)).toBe(true);
+    expect(pollIsFresh({ ...running, lastAnsweredAt: '2026-09-28T09:57:00Z' }, now)).toBe(true);
   });
 
-  it('is false while blocked or backing off, though those stamp lastPollAt', () => {
-    expect(pollIsFresh({ ...running, state: 'blocked', lastPollAt: '2026-09-28T09:59:30Z', note: 'consolidating' }, now)).toBe(false);
-    expect(pollIsFresh({ ...running, state: 'backoff', lastPollAt: '2026-09-28T09:59:30Z', backoffUntil: '2026-09-28T10:01:00Z' }, now)).toBe(false);
+  it('is false while blocked or backing off', () => {
+    expect(pollIsFresh({ ...running, state: 'blocked', lastAnsweredAt: '2026-09-28T09:59:30Z', note: 'consolidating' }, now)).toBe(false);
+    expect(pollIsFresh({ ...running, state: 'backoff', lastAnsweredAt: '2026-09-28T09:59:30Z', backoffUntil: '2026-09-28T10:01:00Z' }, now)).toBe(false);
+  });
+
+  it('ignores a recent poll stamp GitHub never answered, as on a retry after a failure', () => {
+    const retrying: LivePollStatus = { ...running, state: 'polling', lastPollAt: '2026-09-28T09:59:30Z', lastAnsweredAt: '2026-09-28T09:50:00Z' };
+    expect(pollIsFresh(retrying, now)).toBe(false);
   });
 
   it('is false once the poll fell behind', () => {
-    expect(pollIsFresh({ ...running, lastPollAt: '2026-09-28T09:56:59Z' }, now)).toBe(false);
+    expect(pollIsFresh({ ...running, lastAnsweredAt: '2026-09-28T09:56:59Z' }, now)).toBe(false);
   });
 
   it('counts cycles at the slower pace of a low quota', () => {
     const quota = { level: 'low' as const, resource: 'core' as const, remainingPercent: 40, resumeAt: '2026-09-28T11:00:00Z', pollSeconds: 300 };
-    expect(pollIsFresh({ ...running, lastPollAt: '2026-09-28T09:50:00Z', githubQuota: quota }, now)).toBe(true);
+    expect(pollIsFresh({ ...running, lastAnsweredAt: '2026-09-28T09:50:00Z', githubQuota: quota }, now)).toBe(true);
   });
 });

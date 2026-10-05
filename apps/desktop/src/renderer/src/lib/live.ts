@@ -62,17 +62,17 @@ export function quotaLabel(status: LivePollStatus | undefined): LiveLabel | null
 const STALE_AFTER_CYCLES = 3;
 
 /**
- * Whether the live poll keeps the data current: it runs normally and asked
- * GitHub within the last few cycles. False while it is off, before its
- * first cycle, while blocked or backing off (both stamp lastPollAt without
- * a successful answer), and once it fell behind (a paused quota, a
- * sleeping Mac).
+ * Whether the live poll keeps the data current: it runs normally and GitHub
+ * answered it within the last few cycles. False while it is off, before
+ * its first answer, while blocked or backing off, and once it fell behind
+ * (a paused quota, a sleeping Mac). Reads lastAnsweredAt, not lastPollAt:
+ * blocked and failed cycles stamp the latter too, and a retry keeps it.
  */
 export function pollIsFresh(status: LivePollStatus | undefined, now: Date): boolean {
-  if (!status || (status.state !== 'waiting' && status.state !== 'polling') || status.lastPollAt === null) {
+  if (!status || (status.state !== 'waiting' && status.state !== 'polling') || status.lastAnsweredAt === null) {
     return false;
   }
   const every = status.githubQuota?.pollSeconds ?? status.everySeconds;
-  const elapsedSeconds = (now.getTime() - Date.parse(status.lastPollAt)) / 1000;
+  const elapsedSeconds = (now.getTime() - Date.parse(status.lastAnsweredAt)) / 1000;
   return elapsedSeconds <= every * STALE_AFTER_CYCLES;
 }

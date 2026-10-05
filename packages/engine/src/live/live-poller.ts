@@ -182,6 +182,7 @@ export class LivePoller {
       return;
     }
     this.failures = 0;
+    this.status.lastAnsweredAt = isoAt(now);
     this.status.state = 'waiting';
     this.status.backoffUntil = null;
     this.status.note = null;

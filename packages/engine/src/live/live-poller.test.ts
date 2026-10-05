@@ -138,6 +138,25 @@ describe('LivePoller', () => {
     expect(poller.currentStatus()).toMatchObject({ state: 'waiting', note: null });
   });
 
+  it('stamps lastAnsweredAt only when GitHub answered, not on blocked or failed cycles', async () => {
+    const poll = new ScriptedPoll()
+      .then(() => Promise.resolve(done()))
+      .then(() => Promise.resolve({ kind: 'blocked', reason: 'consolidating' }))
+      .then(() => Promise.reject(new Error('socket hang up')));
+    const { timers, poller } = setup(poll);
+    poller.start();
+    await tick(timers, poller, 60_000);
+    const answeredAt = poller.currentStatus().lastAnsweredAt;
+    expect(answeredAt).toBe(poller.currentStatus().lastPollAt);
+
+    await tick(timers, poller, 60_000);
+    expect(poller.currentStatus()).toMatchObject({ state: 'blocked', lastAnsweredAt: answeredAt });
+    await tick(timers, poller, 60_000);
+    const status = poller.currentStatus();
+    expect(status).toMatchObject({ state: 'backoff', lastAnsweredAt: answeredAt });
+    expect(status.lastPollAt).not.toBe(answeredAt);
+  });
+
   it('backs off for Retry-After on a secondary rate limit', async () => {
     const limited = new GitHubError('secondary rate limit', 403, { rateLimited: true, retryAfterSeconds: 90 });
     const poll = new ScriptedPoll().then(() => Promise.reject(limited));

@@ -5340,9 +5340,10 @@ renderer sees it through `LivePollStatus.syncRunning` (the title bar shows
 both) and `nextAutoSyncAt` ("next full sync in N min"). The last sync shown
 is the newer of this window's and the stored report. Between syncs the title bar
 reads the live poll, not the report (2026-10-05): "up to date" while the
-poll runs normally and asked GitHub within three cycles (`pollIsFresh`),
-"updates paused" (amber) while it is blocked or backing off (both stamp
-`lastPollAt` without an answer), "checked 5m ago" (amber) once it fell
+poll runs normally and GitHub answered it within three cycles
+(`pollIsFresh` on `LivePollStatus.lastAnsweredAt`; blocked and failed
+cycles stamp only `lastPollAt`, and a retry keeps that stamp), "updates
+paused" (amber) while it is blocked or backing off, "checked 5m ago" (amber) once it fell
 behind, "synced 2h ago" only while the poll is off. Sync errors and the call cap still show next to it; the full sync's
 time and report sit in the tooltip. Full syncs were
 start-only and manual before (2026-09-29). While the GitHub quota is low, a

@@ -65,8 +65,8 @@ function agoWords(iso: string, now: Date): string {
  */
 function freshnessDetail(live: LivePollStatus | undefined, report: SyncReport, now: Date): string {
   const poll =
-    live && live.state !== 'off' && live.lastPollAt
-      ? `Live poll: checked GitHub ${agoWords(live.lastPollAt, now)}, every ${live.githubQuota?.pollSeconds ?? live.everySeconds}s.${live.note ? ` Now: ${live.note}.` : ''}`
+    live && live.state !== 'off' && live.lastAnsweredAt
+      ? `Live poll: GitHub answered ${agoWords(live.lastAnsweredAt, now)}, every ${live.githubQuota?.pollSeconds ?? live.everySeconds}s.${live.note ? ` Now: ${live.note}.` : ''}`
       : 'Live poll off: data is as fresh as the last full sync.';
   const sweep = `Last full sync ${agoWords(report.finishedAt, now)}. It sweeps the last 30 days, groups sets and stacks, folds quiet news (bots, CI) into dossiers and retires finished topics.`;
   return `${poll}\n\n${sweep}\n${syncReportDetail(report)}`;
@@ -117,9 +117,9 @@ function SyncStatus() {
   }
   const paused = live !== undefined && (live.state === 'blocked' || live.state === 'backoff');
   // A stale poll still counts from its last check; without a poll the full sync is the only clock.
-  const lastPollAt = pollOn ? live.lastPollAt : null;
-  const word = lastPollAt ? 'checked' : 'synced';
-  const age = ageLabel(lastPollAt ?? report.finishedAt, now);
+  const lastAnsweredAt = pollOn ? live.lastAnsweredAt : null;
+  const word = lastAnsweredAt ? 'checked' : 'synced';
+  const age = ageLabel(lastAnsweredAt ?? report.finishedAt, now);
   let headline: ReactNode;
   if (fresh) {
     headline = 'up to date';
