@@ -55,4 +55,18 @@ describe('work follows the hot slice', () => {
     expect(report.agentCallStats.byKind.dossier_update?.calls ?? 0).toBe(0);
     expect(h.store.memberships.get(loose.key)).toBeNull();
   });
+
+  it('fetches a stored PR whose new thread says review requested, though its old snapshot has no request', async () => {
+    const h = makeHarness({ now: () => LATER });
+    const before = makePr({ number: 6, author: 'bob', updatedAt: at(0) });
+    h.store.prs.upsert(before, at(1));
+    // Requested from the viewer after that fetch, more than SETTLED_DAYS ago, still unread.
+    const requested = { ...before, reviewerUsers: [viewer.login], updatedAt: '2026-09-10T00:00:00.000Z' };
+    h.reader.addPr(requested, makeThreadFor(requested, { reason: 'review_requested', updatedAt: '2026-09-10T00:00:00.000Z' }));
+
+    await h.engine.sync({ maxAgentCalls: 0 });
+
+    expect(h.store.prs.get(before.key)?.reviewerUsers).toEqual([viewer.login]);
+  });
 });
+

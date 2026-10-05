@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { HotFacts } from './hot-board.ts';
-import { threadOnlyFacts } from './hot-board.ts';
+import { hotTier, threadNewsFacts, threadOnlyFacts } from './hot-board.ts';
 import { hotSyncThreads, selectSyncThreads, syncCutoff, type HotSyncThread, type SyncThread } from './sync-selection.ts';
 import type { NotificationReason, Viewer } from './types.ts';
 
@@ -92,4 +92,42 @@ describe('hotSyncThreads', () => {
     expect(picked.map((t) => t.key).sort()).toEqual(['acme/app#2', 'acme/app#3']);
     expect(shed).toEqual(['acme/app#4']);
   });
+
+  describe('a new review request on a stored PR whose snapshot has none', () => {
+    const routed: Viewer = { ...me, teams: ['acme/team-devex', 'acme/team-routing'] };
+    // Fetched before the request; the thread moved since, both more than SETTLED_DAYS ago.
+    const stored = { ...threadOnlyFacts('acme/app#5', { unread: false, reason: 'subscribed', updatedAt: '2026-09-12T00:00:00Z' }, null), author: 'zoe', personalAsk: false };
+    const request = { unread: true, reason: 'review_requested' as const, updatedAt: '2026-09-15T00:00:00Z' };
+    // A full busy board: the weakest kept unit is a read PR of the user's.
+    const weakest = { key: 'acme/app#1', tier: 'you' as const, unread: false, activityAt: '2026-09-28T00:00:00Z' };
+    const full = { busy: true, weakestKept: weakest, keys: new Set(['acme/app#1']) };
+
+    function pick(facts: HotFacts) {
+      return hotSyncThreads([{ key: facts.key, unread: true, updatedAt: request.updatedAt, facts }], { now: NOW, viewer: routed, selection: full });
+    }
+
+    it('is fetched as the user own ask, also past SETTLED_DAYS on a full busy board', () => {
+      const facts = threadNewsFacts('acme/app#5', stored, request, null, routed);
+
+      expect(hotTier(facts, routed)).toBe('you');
+      expect(pick(facts).picked.map((t) => t.key)).toEqual(['acme/app#5']);
+    });
+
+    it('falls back to its real tier once the fetched snapshot shows a team request', () => {
+      const routing = threadNewsFacts('acme/app#5', { ...stored, reviewerTeams: ['acme/team-routing'] }, request, null, routed);
+      const home = threadNewsFacts('acme/app#5', { ...stored, reviewerTeams: ['acme/team-devex'] }, request, null, routed);
+
+      expect(hotTier(routing, routed)).toBe('others');
+      expect(pick(routing).shed).toEqual(['acme/app#5']);
+      expect(hotTier(home, routed)).toBe('team');
+    });
+
+    it('stays the user own ask when the fetched snapshot shows the request for them', () => {
+      const facts = threadNewsFacts('acme/app#5', { ...stored, reviewerUsers: ['Alice'] }, request, null, routed);
+
+      expect(facts.personalAsk).toBe(false);
+      expect(hotTier(facts, routed)).toBe('you');
+    });
+  });
 });
+

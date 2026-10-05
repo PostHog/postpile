@@ -4,7 +4,7 @@
 // memory. PostPile only loads, and only works on, a recent and fresh slice:
 // the hot PRs. Rules only, no IO: the store hands in cheap facts per PR
 // (columns and joins, never the snapshot), these rules pick the keys.
-import { sameLogin } from './mentions.ts';
+import { isOwnTeam, sameLogin } from './mentions.ts';
 import { isPrOwner, prOwners } from './pr-owners.ts';
 import type { StackLayer } from './stacks.ts';
 import { isHomeTeam } from './team-roles.ts';
@@ -59,9 +59,10 @@ export interface HotFacts {
   /** How the last full sync found it outside the inbox, if it did. */
   found: FoundVia | null;
   /**
-   * A stored event aimed at the viewer personally: a mention, a reply or
-   * question to them, a review requested from them, or the author
-   * answering their changes request.
+   * Aimed at the viewer in person beyond what the other fields say: a
+   * stored mention, reply or question to them, or the author answering
+   * their changes request; or news on its thread the stored snapshot has
+   * not seen that may be a review request for them (`threadNewsFacts`).
    */
   personalAsk: boolean;
   /** The newest of the PR's last update on GitHub, its newest stored event and its thread's last update. */
@@ -119,6 +120,39 @@ export function threadOnlyFacts(
     personalAsk: thread.reason === 'review_requested',
     activityAt: thread.updatedAt,
   };
+}
+
+/** A pending request on the PR is for the viewer in person or for one of their teams, home or routing. */
+function requestedOfViewer(facts: HotFacts, viewer: Viewer): boolean {
+  return facts.reviewerUsers.some((login) => sameLogin(login, viewer.login)) || facts.reviewerTeams.some((team) => isOwnTeam(team, viewer.teams));
+}
+
+/**
+ * What the sync knows of a PR whose thread moved after its snapshot was
+ * fetched: the stored facts with the thread as it is now, or the thread
+ * alone for a PR not stored yet (`threadOnlyFacts`). The thread's reason is
+ * the only word on news the snapshot has not seen, and one rule reads it
+ * for every reason that may name the user: mention, assign and author make
+ * tier you by the reason itself (`hotTier` reads the fresh thread). A
+ * review_requested reason may be the user's or a team's: unless the stored
+ * snapshot holds a pending request for the user or one of their teams that
+ * explains it, it counts as a personal ask until the fetch says whose it
+ * was. Before, a new direct request on a PR stored without one ranked by
+ * the stale snapshot, and an old thread or a busy inbox shed it.
+ */
+export function threadNewsFacts(
+  key: PrKey,
+  stored: HotFacts | null,
+  thread: Pick<NotificationThread, 'unread' | 'reason' | 'updatedAt'>,
+  found: FoundVia | null,
+  viewer: Viewer | null,
+): HotFacts {
+  if (stored === null) {
+    return threadOnlyFacts(key, thread, found);
+  }
+  const facts = { ...stored, thread: { unread: thread.unread, reason: thread.reason } };
+  const unexplainedRequest = thread.reason === 'review_requested' && (viewer === null || !requestedOfViewer(stored, viewer));
+  return unexplainedRequest ? { ...facts, personalAsk: true } : facts;
 }
 
 /** The oldest activity a settled PR may have and still be hot. */

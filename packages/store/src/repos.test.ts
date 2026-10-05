@@ -272,12 +272,12 @@ describe('EventRepo', () => {
     store.events.upsertDerived('acme/app#2', [makeEvent({ id: 'a2', prKey: 'acme/app#2', kind: 'review_requested', ruleReason: 'review requested from you' })]);
     store.events.upsertDerived('acme/app#3', [makeEvent({ id: 'a3', prKey: 'acme/app#3', kind: 'review_requested', ruleReason: 'review requested from someone else' })]);
     store.events.upsertDerived('acme/app#4', [makeEvent({ id: 'a4', prKey: 'acme/app#4', kind: 'commits_pushed', ruleReason: 'addressed your changes' })]);
-    expect([...store.events.prKeysWithPersonalAsks()].sort()).toEqual(['acme/app#1', 'acme/app#2', 'acme/app#4']);
+    // A review request is no personal ask here, even "from you": that rule reason covers the viewer's teams too.
+    expect([...store.events.prKeysWithPersonalAsks()].sort()).toEqual(['acme/app#1', 'acme/app#4']);
     const plan = store.db
       .prepare(
         `EXPLAIN QUERY PLAN SELECT DISTINCT pr_key FROM pr_event
-       WHERE kind IN ('mention', 'reply_to_user', 'question_to_user')
-          OR rule_reason IN ('review requested from you', 'review request already answered or removed', 'addressed your changes')`,
+       WHERE kind IN ('mention', 'reply_to_user', 'question_to_user') OR rule_reason = 'addressed your changes'`,
       )
       .all() as Array<{ detail: string }>;
     expect(plan.map((row) => row.detail).join('\n')).toContain('pr_event_personal_ask');

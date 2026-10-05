@@ -19,7 +19,7 @@ import {
   type Viewer,
   hotSyncThreads,
   selectSyncThreads,
-  threadOnlyFacts,
+  threadNewsFacts,
 } from '@postpile/core';
 import type { GitHubReader } from '@postpile/github';
 import type { Store } from '@postpile/store';
@@ -462,19 +462,19 @@ export class GitHubSync {
     const now = this.now().toISOString();
     const hot = readHotSet(this.store, now, threadsByPrKey(this.threads()));
     const found = this.store.foundPrs.listAll();
+    const viewer = loadViewer(this.store);
     const withRefs = this.threads().flatMap((thread) => {
       const ref = threadPrRef(thread);
       if (!ref) {
         return [];
       }
       const key = prKey(ref);
-      const stored = hot.facts.get(key);
-      // The thread is the news: its own reason and read state count, whatever the stored row says.
-      const facts = stored ? { ...stored, thread: { unread: thread.unread, reason: thread.reason } } : threadOnlyFacts(key, thread, found.get(key)?.via ?? null);
+      // The thread is the news: its reason and read state count over what the stored snapshot says.
+      const facts = threadNewsFacts(key, hot.facts.get(key) ?? null, thread, found.get(key)?.via ?? null, viewer);
       return [{ ref, thread, key, unread: thread.unread, updatedAt: thread.updatedAt, facts }];
     });
     const window = selectSyncThreads(withRefs, this.store.prs.fetchedAtByKey(), now);
-    const { picked, shed } = hotSyncThreads(window, { now, viewer: loadViewer(this.store), selection: hot.selection });
+    const { picked, shed } = hotSyncThreads(window, { now, viewer, selection: hot.selection });
     shed.forEach((key) => this.shed.add(key));
     this.lastShed = shed.length;
     return picked.map(({ ref, thread }) => ({ ref, thread }));

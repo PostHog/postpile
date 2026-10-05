@@ -19,8 +19,11 @@
 // which then rolls back whole.
 //
 // The partial index holds the events aimed at the viewer in person (the hot
-// tier "you"); the same question as a scan of pr_event took 1.5 s on a copy
-// with 485k events.
+// tier "you"): a mention, a reply or question to them, the author answering
+// their changes request. Not review requests: their rule reason says "from
+// you" for a request to one of the viewer's teams too, and a pending
+// personal request is in the header's reviewer_users. The same question as
+// a scan of pr_event took 1.5 s on a copy with 485k events.
 import type { DatabaseSync } from 'node:sqlite';
 
 export const version = 28;
@@ -76,8 +79,7 @@ SELECT
 FROM pr_snapshot;
 CREATE INDEX pr_repo ON pr (repo);
 CREATE INDEX pr_event_personal_ask ON pr_event (pr_key)
-  WHERE kind IN ('mention', 'reply_to_user', 'question_to_user')
-     OR rule_reason IN ('review requested from you', 'review request already answered or removed', 'addressed your changes');
+  WHERE kind IN ('mention', 'reply_to_user', 'question_to_user') OR rule_reason = 'addressed your changes';
 `;
 
 /** Header and snapshot keys must be equal before the migration commits; the runner rolls back on the throw. */

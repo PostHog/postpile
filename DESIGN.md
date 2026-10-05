@@ -429,10 +429,13 @@ cold never make an inbox busy.
 What the tier rules read is cheap per PR: the PR header (owners,
 pending reviewers), the thread's reason, how the sync found it, and
 whether a stored event is aimed at the user (`mention`, `reply_to_user`,
-`question_to_user`, rule reasons "review requested from you", "review
-request already answered or removed" and "addressed your changes", from a
-partial index, `EventRepo.prKeysWithPersonalAsks`). So a team request
-counts while it is pending, and teammates are the stored
+`question_to_user` and the rule reason "addressed your changes", from a
+partial index, `EventRepo.prKeysWithPersonalAsks`). Review request events
+do not count there: their rule reason says "from you" for a request to
+one of the user's teams too, which put team requests in tier you (on the
+normal copy 193 PRs were "you" only through a team request). A personal
+request counts through the header's pending reviewers instead. So a
+request counts while it is pending, and teammates are the stored
 `viewer.teamMembers` (none before the first fetch of them).
 
 **Loading.** `Board.load` builds the hot Board, shared per data change as
@@ -513,8 +516,17 @@ older than SETTLED_DAYS is fetched only when it is unread and aimed at the
 user (tier you), or it is their own open PR; while the inbox is busy only
 what would make the board (`wouldKeep`: tiers you and team, and past a
 full cap only what ranks before the weakest unit kept). A PR not stored
-yet is known from its thread alone (`threadOnlyFacts`): a review request
-on it counts as aimed at the user until the fetch says whose it was. The
+yet is known from its thread alone (`threadOnlyFacts`). The thread's
+reason is the only word on news the snapshot has not seen, read by one
+rule (`threadNewsFacts`): mention, assign and author make tier you by
+themselves, and a review_requested reason counts as the user's own ask
+until the fetch says whose it was, unless the stored snapshot holds a
+pending request for the user or one of their teams that explains it. A
+new direct request on a PR stored without one used to rank by the stale
+snapshot and could be shed (found by Codex review on #116). Left open: a
+new personal request on a PR whose stored snapshot still has a pending
+request for one of the user's routing teams ranks as that team request
+until a fetch; while busy it is shed. The
 order is the board's: tier, unread first, newest first. One full sync
 takes at most 60 PRs (`SYNC_MAX_PRS`); when it stops at that cap the next
 background sync runs 2 minutes later (`BACKLOG_SYNC_MINUTES`), unless the
