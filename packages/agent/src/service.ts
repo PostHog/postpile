@@ -33,7 +33,6 @@ import type {
   SetupRepoCount,
   SetupSectionEdit,
   SetupSource,
-  Tile,
   Topic,
   TopicDelta,
   TopicKind,
@@ -209,8 +208,7 @@ export interface DraftReplyInput {
 
 export interface ChatInput {
   topic: Topic;
-  /** The tile the chat is about; null for a chat on the whole topic. */
-  tile: Tile | null;
+  /** Every PR on the topic's tiles, newest first. */
   prs: Pr[];
   history: ChatMessage[];
   message: string;

@@ -1116,10 +1116,6 @@ export class Engine implements EngineService {
     return this.deps.pendingWrites.discard(() => this.writesStatus());
   }
 
-  async getChat(tileId: string): Promise<ChatMessage[]> {
-    return this.chats.getChat(tileId);
-  }
-
   async approve(prKey: PrKey, headOid: string, body = ''): Promise<ActionResult> {
     const result = await this.prActions.approve(prKey, headOid, body);
     if (result.ok) {
@@ -1272,7 +1268,7 @@ export class Engine implements EngineService {
   }
 
   async sendComment(prKey: PrKey, body: string): Promise<ActionResult> {
-    // The only caller is the Ask mode of the detail pane's compose popover (renderer components/ComposePopover.tsx).
+    // The only caller is the review row's Ask composer (renderer components/ReviewRow.tsx).
     const result = await this.prActions.sendComment(prKey, body);
     if (result.ok) {
       this.telemetry.capture('ask_sent', {});
@@ -1292,12 +1288,6 @@ export class Engine implements EngineService {
 
   async unmuteEvent(eventId: string): Promise<ActionResult> {
     return this.feedback.unmuteEvent(eventId);
-  }
-
-  async chat(tileId: string, message: string): Promise<ChatReply> {
-    const reply = await this.chats.chat(tileId, message);
-    this.telemetry.capture('chat_message_sent', {});
-    return reply;
   }
 
   async getTopicChat(topicId: string): Promise<ChatMessage[]> {

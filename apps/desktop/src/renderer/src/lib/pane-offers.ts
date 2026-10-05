@@ -5,7 +5,6 @@ const ONLY_OPEN: PaneOffers = {
   scope: 'tile',
   lead: 'open_on_github',
   approve: false,
-  open: true,
   ask: false,
   markLabel: null,
   snooze: false,

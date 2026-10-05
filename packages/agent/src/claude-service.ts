@@ -35,7 +35,6 @@ import {
   contextSweepOutput,
   dossierUpdateOutput,
   draftCommentOutput,
-  draftReplyOutput,
   eventBatchOutput,
   factReconcileOutput,
   glanceBatchOutput,
@@ -254,7 +253,7 @@ export class RunnerAgentService implements AgentService {
 
   /** Runs as a draft_comment call (same model and timeout as an ask): a reply is a comment too. */
   async draftReply(input: DraftReplyInput): Promise<{ body: string }> {
-    const { value } = await this.ask('draft_comment', draftReplyPrompt(input), draftReplyOutput);
+    const { value } = await this.ask('draft_comment', draftReplyPrompt(input), draftCommentOutput);
     return { body: value.body };
   }
 

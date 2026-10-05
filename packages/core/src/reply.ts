@@ -61,6 +61,17 @@ export function findReactable(pr: Pr, id: string): Comment | Review | null {
   return findComment(pr, id) ?? pr.reviews.find((review) => review.id === id) ?? null;
 }
 
+/** The PR with the viewer's thumbs up on comment or review `id`, everywhere it shows: comments, reviews and thread comments. */
+export function withViewerReaction(pr: Pr, id: string): Pr {
+  const mark = <T extends { id: string }>(item: T): T => (item.id === id ? { ...item, viewerReacted: true } : item);
+  return {
+    ...pr,
+    comments: pr.comments.map(mark),
+    reviews: pr.reviews.map(mark),
+    threads: pr.threads.map((thread) => ({ ...thread, comments: thread.comments.map(mark) })),
+  };
+}
+
 /**
  * What the agent reads besides the comment when drafting a reply, oldest
  * first and including the comment: its whole review thread for an inline

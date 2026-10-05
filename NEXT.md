@@ -34,7 +34,7 @@ now".
   `viewerReacted` on comments and reviews. Routes under the PR path
   (`/reply`, `/react`, `/draft-reply`) and `/api/topics/:id/chat`; the fake
   engine does all of it in memory and sample #1902 has an author reply in
-  its thread. The tile chat endpoints stay, unused by the renderer.
+  its thread. The tile chat is removed (routes, engine, prompt tile mode).
 - Inbox catch-up dialog (2026-10-03, DESIGN.md "Inbox cleanup"): replaces
   the old cleanup banner and dialog. Unread merged PRs (quiet 7+ / 14+ days
   or all) and everything else older than 14 / 30 days, cleared on GitHub in

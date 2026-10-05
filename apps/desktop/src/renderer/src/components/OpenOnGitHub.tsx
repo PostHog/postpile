@@ -1,4 +1,4 @@
-import { buttonClasses } from './Button.tsx';
+import { buttonClasses, splitSeamClasses } from './Button.tsx';
 import { ChevronIcon, ExternalIcon } from './icons.tsx';
 import { Menu } from './Menu.tsx';
 
@@ -35,8 +35,7 @@ export function OpenOnGitHub(props: { url: string; leads: boolean }) {
         size="icon"
         variant={variant}
         align="right"
-        // The seam: a light line on ink, the outlines overlapping by a pixel on the outlined look.
-        buttonClassName={`rounded-l-none ${props.leads ? 'border-l border-on-ink/30' : '-ml-px'}`}
+        buttonClassName={splitSeamClasses(variant)}
         items={items}
       />
     </div>

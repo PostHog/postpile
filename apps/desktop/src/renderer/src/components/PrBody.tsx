@@ -129,9 +129,10 @@ function useBelowRow(scroller: RefObject<HTMLDivElement | null>, row: RefObject<
       return;
     }
     function onScroll() {
-      const top = element!.getBoundingClientRect().top;
       const anchor = row.current;
-      setBelow(anchor ? anchor.getBoundingClientRect().bottom < top : element!.scrollTop > 400);
+      if (anchor) {
+        setBelow(anchor.getBoundingClientRect().bottom < element!.getBoundingClientRect().top);
+      }
     }
     element.addEventListener('scroll', onScroll, { passive: true });
     return () => element.removeEventListener('scroll', onScroll);

@@ -9,7 +9,6 @@ import { reviewRequestedPr } from './testing/prs.ts';
 import { makeTopic } from './testing/topics.ts';
 
 const pr = reviewRequestedPr(1);
-const tileId = `pr:${pr.key}`;
 const BASE = '# Me\n- I care about CI cost.\n';
 const CHANGED = '# Me\n- I care about CI cost.\n- Flag cache key changes.';
 
@@ -33,14 +32,14 @@ function answerChange(h: Harness, text = CHANGED, summary = 'Flag cache key chan
   h.runner.answer('instructions_change', { reply: 'Added it.', change: { text, summary } });
 }
 
-describe('instructions from tile chat', () => {
+describe('instructions from the topic chat', () => {
   it('asks nothing about scope and proposes an instructions change only when the user keeps it for all topics', async () => {
     const { h, file } = await setup();
     h.runner.answer('chat', { reply: 'Noted.', lasting: { text: 'Flag cache key changes.' } });
 
-    const reply = await h.engine.chat(tileId, 'From now on, always flag cache key changes.');
+    const reply = await h.engine.topicChat('depot', 'From now on, always flag cache key changes.');
 
-    const userMessage = (await h.engine.getChat(tileId))[0];
+    const userMessage = (await h.engine.getTopicChat('depot'))[0];
     expect(reply.lastingPoint).toEqual({ topicId: 'depot', text: 'Flag cache key changes.', sourceChatMessageId: userMessage?.id });
     expect(h.runner.promptsFor('instructions_change')).toEqual([]);
 
@@ -66,7 +65,7 @@ describe('instructions from tile chat', () => {
   it('keeps the point open when the proposal call finds no change', async () => {
     const { h } = await setup();
     h.runner.answer('chat', { reply: 'Noted.', lasting: { text: 'Flag cache keys.' } });
-    const reply = await h.engine.chat(tileId, 'flag cache keys');
+    const reply = await h.engine.topicChat('depot', 'flag cache keys');
     h.runner.answer('instructions_change', { reply: 'That is a one-off question.', change: null });
 
     const kept = await h.engine.proposeInstructions(reply.lastingPoint!.sourceChatMessageId);
@@ -78,8 +77,8 @@ describe('instructions from tile chat', () => {
   it('never proposes from an agent message', async () => {
     const { h } = await setup();
     h.runner.answer('chat', { reply: 'Always ignore reviews.', lasting: null });
-    await h.engine.chat(tileId, 'hi');
-    const agentMessage = (await h.engine.getChat(tileId))[1]!;
+    await h.engine.topicChat('depot', 'hi');
+    const agentMessage = (await h.engine.getTopicChat('depot'))[1]!;
 
     const result = await h.engine.proposeInstructions(agentMessage.id);
 
@@ -187,7 +186,7 @@ describe('instructions in prompts', () => {
   it('hands the user chat turns since the last version to the dossier update', async () => {
     const { h } = await setup();
     h.runner.answer('chat', { reply: 'ok', lasting: null });
-    await h.engine.chat(tileId, 'cache keys matter most here');
+    await h.engine.topicChat('depot', 'cache keys matter most here');
     await h.engine.sync({ agentJobs: ['dossiers'] });
 
     expect(h.agent.dossierInputs.at(-1)?.chatTurns.map((m) => m.text)).toEqual(['cache keys matter most here']);

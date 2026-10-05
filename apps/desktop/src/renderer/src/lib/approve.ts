@@ -1,6 +1,6 @@
 // The detail pane's Approve button: its label, its look and the small state
 // glyphs in front of the label. Pure, so the rules stay tested and the
-// ActionBar stays dumb.
+// review row stays dumb.
 import type { Pr, PrLifecycle, Review, ViewerApproval } from '@postpile/core';
 import type { EventGlyph } from './events.ts';
 import { approvedText, capitalize } from './pr.ts';

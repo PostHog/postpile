@@ -149,8 +149,9 @@ export interface Actions {
   /**
    * `headOid`: the head commit on screen; the server refuses the approval when
    * the PR moved past it. `body`: the note from "Approve with comment", empty for none.
+   * Returns true when it went out.
    */
-  approve(prKey: PrKey, headOid: string, body?: string): Promise<void>;
+  approve(prKey: PrKey, headOid: string, body?: string): Promise<boolean>;
   /**
    * "Comment review": a review with event COMMENT on `headOid`, refused like
    * approve when the PR moved past it. Final, blocked while locked. Returns
@@ -481,12 +482,13 @@ export function ActionsProvider(props: { children: ReactNode }) {
    * answers. A failed PR is put back (the whole call, when it all failed) and
    * the server's message replaces the toast. The busy key holds until the
    * refetch: the topic's own offers are core's and are not worked out here.
+   * Returns true when every PR was approved.
    */
-  async function runApprove(busyKey: string, prKeys: PrKey[], task: () => Promise<ActionResult & { results: PrApproveResult[] }>): Promise<void> {
+  async function runApprove(busyKey: string, prKeys: PrKey[], task: () => Promise<ActionResult & { results: PrApproveResult[] }>): Promise<boolean> {
     if (isBlocked('approve')) {
-      return;
+      return false;
     }
-    await withBusy(busyKey, async () => {
+    return withBusy(busyKey, async () => {
       const showApproved = (keys: PrKey[]) => {
         const at = new Date().toISOString();
         return Promise.all([
@@ -495,11 +497,13 @@ export function ActionsProvider(props: { children: ReactNode }) {
         ]).then((rollbacks) => () => rollbacks.forEach((rollback) => rollback()));
       };
       let rollback: (() => void) | null = null;
+      let allApproved = false;
       try {
         rollback = await showApproved(prKeys);
         show('ok', approvedMessage(prKeys.length));
         const result = await task();
         const failed = result.results.filter((entry) => !entry.ok).map((entry) => entry.prKey);
+        allApproved = failed.length === 0;
         if (failed.length > 0) {
           rollback();
           const worked = prKeys.filter((key) => !failed.includes(key));
@@ -515,6 +519,7 @@ export function ActionsProvider(props: { children: ReactNode }) {
         show('error', errorText(error));
       }
       await refreshAll();
+      return allApproved;
     });
   }
 
@@ -888,12 +893,11 @@ export function ActionsProvider(props: { children: ReactNode }) {
     markThreadRead: async (threadId) => {
       await run(`markThread:${threadId}`, 'markRead', () => request('POST', `/api/notifications/${encodeURIComponent(threadId)}/mark-read`));
     },
-    approve: async (prKey, headOid, body = '') => {
-      await runApprove(`approve:${prKey}`, [prKey], async () => {
+    approve: (prKey, headOid, body = '') =>
+      runApprove(`approve:${prKey}`, [prKey], async () => {
         const result = await request<ActionResult>('POST', `${prPath(prKey)}/approve`, { headOid, body });
         return { ...result, results: [{ prKey, ok: result.ok, message: result.message }] };
-      });
-    },
+      }),
     commentReview: (prKey, headOid, body) =>
       run(`commentReview:${prKey}`, 'commentReview', () => request('POST', `${prPath(prKey)}/comment-review`, { headOid, body })),
     approveAgent: async (input) => {

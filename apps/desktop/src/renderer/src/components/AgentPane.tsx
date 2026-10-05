@@ -35,7 +35,7 @@ const bubble = 'max-w-[85%] rounded-row px-3 py-2 text-[12.5px] leading-normal w
  */
 export function AgentPane(props: AgentPaneProps) {
   const actions = useActions();
-  const chat = useTopicChat(props.topicId, true);
+  const chat = useTopicChat(props.topicId);
   const [draft, setDraft] = useState(props.draft);
   const [point, setPoint] = useState<LastingPointProposal | null>(null);
   const [instructions, setInstructions] = useState<InstructionsProposal | null>(null);

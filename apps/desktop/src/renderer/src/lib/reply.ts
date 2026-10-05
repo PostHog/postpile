@@ -1,7 +1,7 @@
 // What a human comment in the detail pane can be answered with: Reply (in
 // its review thread for a code comment, else a new PR comment that quotes
 // it) and a thumbs up. Pure, so the activity list and "New since" stay dumb.
-import type { ActivityLine, EventKind, Pr } from '@postpile/core';
+import { ADDRESSED_KINDS, findComment, PERSONAL_ASK_KINDS, replyTarget, sameLogin, type ActivityLine, type EventKind, type Pr } from '@postpile/core';
 
 export interface ReplyTarget {
   /** The comment's or review's id: where the reply and the reaction go. */
@@ -19,19 +19,8 @@ export interface ReplyTarget {
   asksYou: boolean;
 }
 
-const HUMAN_TALK: EventKind[] = [
-  'comment',
-  'comment_edited',
-  'reply_to_user',
-  'question_to_user',
-  'mention',
-  'team_mention',
-  'review_approved',
-  'review_changes_requested',
-  'review_commented',
-];
-
-const ASKS_YOU: EventKind[] = ['question_to_user', 'mention'];
+/** A person talking: comments, reviews and everything addressed to the viewer. */
+const HUMAN_TALK: readonly EventKind[] = ['comment', 'comment_edited', ...ADDRESSED_KINDS, 'review_approved', 'review_changes_requested', 'review_commented'];
 
 /**
  * The reply target of an activity line: its newest event's comment or
@@ -41,13 +30,14 @@ const ASKS_YOU: EventKind[] = ['question_to_user', 'mention'];
  */
 export function replyTargetOf(line: ActivityLine, pr: Pr, viewerLogin: string | null): ReplyTarget | null {
   const newest = line.events[0]?.event;
-  if (!newest || newest.isBot || !HUMAN_TALK.includes(newest.kind) || newest.actor === viewerLogin) {
+  if (!newest || newest.isBot || !HUMAN_TALK.includes(newest.kind) || (viewerLogin !== null && sameLogin(newest.actor, viewerLogin))) {
     return null;
   }
-  const asksYou = line.events.some((view) => ASKS_YOU.includes(view.event.kind));
-  const comment = pr.comments.find((candidate) => candidate.id === newest.sourceId);
+  // A personal ask (a mention, a question, a reply to the viewer) makes Reply the emphasized action.
+  const asksYou = line.events.some((view) => PERSONAL_ASK_KINDS.includes(view.event.kind));
+  const comment = findComment(pr, newest.sourceId);
   if (comment) {
-    const inThread = comment.kind === 'review_comment' && comment.threadId !== null;
+    const inThread = replyTarget(comment).kind === 'thread';
     return {
       commentId: comment.id,
       author: comment.author,

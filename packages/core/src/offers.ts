@@ -56,8 +56,6 @@ export interface PaneOffers {
   lead: PaneLead;
   /** Show Approve; its label and look ("Approve again", "Approve draft") stay display. */
   approve: boolean;
-  /** Show Open on GitHub. */
-  open: boolean;
   /** Show "Ask <author>": not on your own PR, not to automation, not on a done PR. */
   ask: boolean;
   /** The mark button's label, null for none. */
@@ -238,8 +236,6 @@ export function paneOffers(view: OfferView, pr: OfferPr): PaneOffers {
     scope,
     lead,
     approve,
-    // Where Mark read is the PR's own primary (your PR or a merged one, tile unread), Open waits until nothing is left to mark.
-    open: lead === 'open_on_github' || (!approve && pr.primaryAction !== 'mark_read'),
     ask: !finished && !pr.facts.ownerIsAutomation && pr.authorRelation !== 'you',
     markLabel: markLabelOf(mark),
     snooze: scope === 'tile' && view.state.kind !== 'done',

@@ -410,7 +410,7 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   stale / marked-wrong / fixed badge, Why? / Recheck / Forget on hover),
   `MemoryButton` ("Forget"), `RecheckDialog`,
   `SourceChip`, `WhyPanel` + `MemorySourceRow` ("Why?"), `DiffView`,
-  `InstructionsProposalCard` (tile chat, the instructions view and under a
+  `InstructionsProposalCard` (the agent pane, the instructions view and under a
   lesson; `onDone(accepted)`),
   `LessonCard` (one lesson: "Remember for future assessments?", the line,
   `lessonSource` / `earlierAssessmentText` from `lib/lessons.ts`, then

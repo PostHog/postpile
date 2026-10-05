@@ -535,11 +535,6 @@ export function createApp(
     return c.json(await engine.snooze(c.req.param('tileId'), body.condition));
   });
   app.delete('/api/tiles/:tileId/snooze', async (c) => c.json(await engine.unsnooze(c.req.param('tileId'))));
-  app.get('/api/tiles/:tileId/chat', async (c) => c.json(await engine.getChat(c.req.param('tileId'))));
-  app.post('/api/tiles/:tileId/chat', async (c) => {
-    const body = z.object({ message: z.string().min(1) }).parse(await c.req.json());
-    return c.json(await engine.chat(c.req.param('tileId'), body.message));
-  });
 
   app.post('/api/undo', async (c) => {
     const body = z.object({ undoToken: z.string().nullable().default(null) }).parse(await c.req.json());

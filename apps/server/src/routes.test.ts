@@ -416,9 +416,9 @@ describe('server routes over the fake engine', () => {
 
   it('turns a lasting chat point into tailoring once confirmed', async () => {
     const app = appWithFake();
-    const reply = await post<ChatReply>(app, `/api/tiles/${setTile}/chat`, { message: 'Always flag Turbo version bumps here' });
+    const reply = await post<ChatReply>(app, '/api/topics/topic-depot/chat', { message: 'Always flag Turbo version bumps here' });
     expect(reply.json.lastingPoint).toMatchObject({ topicId: 'topic-depot', text: 'Always flag Turbo version bumps here' });
-    const history = (await (await app.request(`/api/tiles/${setTile}/chat`)).json()) as unknown[];
+    const history = (await (await app.request('/api/topics/topic-depot/chat')).json()) as unknown[];
     expect(history).toHaveLength(2);
 
     await post(app, '/api/topics/topic-depot/tailoring', { text: 'Always flag Turbo version bumps here', keep: true });
@@ -428,7 +428,7 @@ describe('server routes over the fake engine', () => {
 
   it('turns a point the user keeps for all topics into an instructions proposal and saves it on accept', async () => {
     const app = appWithFake();
-    const reply = await post<ChatReply>(app, `/api/tiles/${setTile}/chat`, { message: 'From now on flag every CI timeout change' });
+    const reply = await post<ChatReply>(app, '/api/topics/topic-depot/chat', { message: 'From now on flag every CI timeout change' });
     const sourceChatMessageId = reply.json.lastingPoint?.sourceChatMessageId;
     const proposed = await post<InstructionsProposalReply>(app, '/api/instructions/proposals', { sourceChatMessageId });
     const proposal = proposed.json.proposal;

@@ -1,5 +1,5 @@
 import type { AgentService } from '@postpile/agent';
-import type { ActionResult, ChatMessage, ChatReply, Pr, Tile, Topic } from '@postpile/core';
+import type { ActionResult, ChatMessage, ChatReply } from '@postpile/core';
 import type { Store } from '@postpile/store';
 import { Board, UNSORTED_TOPIC_ID } from '../board.ts';
 import type { PromptContextSource } from '../prompt-context.ts';
@@ -11,11 +11,11 @@ export function topicChatId(topicId: string): string {
 }
 
 /**
- * Chat on a tile, or on a whole topic ("Ask the agent" on the topic header,
- * 2026-10-05). A lasting point comes back for the user to place; nothing
- * is stored until they do: "Keep for this topic" / "Just this once" go to
- * decideTailoring, "Keep for all topics" to proposeInstructions and then
- * saveInstructions on Accept.
+ * The topic's agent chat ("Ask the agent" on the topic header, 2026-10-05).
+ * A lasting point comes back for the user to place; nothing is stored until
+ * they do: "Keep for this topic" / "Just this once" go to decideTailoring,
+ * "Keep for all topics" to proposeInstructions and then saveInstructions on
+ * Accept.
  */
 export class ChatActions {
   constructor(
@@ -25,56 +25,17 @@ export class ChatActions {
     private readonly now: () => Date,
   ) {}
 
-  getChat(tileId: string): ChatMessage[] {
-    return this.store.chat.listForTile(tileId);
-  }
-
   getTopicChat(topicId: string): ChatMessage[] {
     return this.store.chat.listForTile(topicChatId(topicId));
   }
 
   /**
-   * One turn of a chat stored under `chatId`: the user's message, the
-   * agent's answer, and the lasting point it spotted, if any. Both are
-   * stored only once the answer is in, so a failed call leaves no
-   * unanswered message behind; the renderer puts the text back in the input.
+   * One turn of the topic's chat: the user's message, the agent's answer,
+   * and the lasting point it spotted, if any. The agent sees every PR on the
+   * topic's tiles, newest first; Unsorted works too. Both messages are
+   * stored only once the answer is in, so a failed call leaves no unanswered
+   * message behind; the renderer puts the text back in the input.
    */
-  private async converse(chatId: string, topic: Topic, tile: Tile | null, prs: Pr[], message: string): Promise<ChatReply> {
-    const history = this.store.chat.listForTile(chatId);
-    const sentAt = this.now().toISOString();
-    const isUnsorted = topic.id === UNSORTED_TOPIC_ID;
-    const answer = await this.agent.chat({
-      topic,
-      tile,
-      prs,
-      history,
-      message,
-      context: this.contexts.forTopic(isUnsorted ? null : topic.id),
-    });
-    const { userMessage, reply } = this.store.transaction(() => ({
-      userMessage: this.store.chat.add({ tileId: chatId, topicId: topic.id, role: 'user', text: message, createdAt: sentAt }),
-      reply: this.store.chat.add({ tileId: chatId, topicId: topic.id, role: 'agent', text: answer.reply, createdAt: this.now().toISOString() }),
-    }));
-    if (!answer.lasting) {
-      return { message: reply, lastingPoint: null };
-    }
-    // Unsorted is not a stored topic: the point can still go to all topics, not to this one.
-    const topicId = isUnsorted ? null : topic.id;
-    return { message: reply, lastingPoint: { topicId, text: answer.lasting.text, sourceChatMessageId: userMessage.id } };
-  }
-
-  async chat(tileId: string, message: string): Promise<ChatReply> {
-    const board = Board.load(this.store, this.now().toISOString());
-    const tile = board.findTile(tileId);
-    const topic = tile ? board.topic(tile.topicId) : null;
-    if (!tile || !topic) {
-      throw new Error(`no tile ${tileId}`);
-    }
-    const prs = tile.members.map((m) => board.prs.get(m.prKey)).filter((pr) => pr !== undefined);
-    return this.converse(tileId, topic, tile, prs, message);
-  }
-
-  /** The topic's chat: the agent sees every PR on its tiles, newest first. Unsorted works too. */
   async topicChat(topicId: string, message: string): Promise<ChatReply> {
     const board = Board.load(this.store, this.now().toISOString());
     const topic = board.topic(topicId);
@@ -86,7 +47,20 @@ export class ChatActions {
       .map((key) => board.prs.get(key))
       .filter((pr) => pr !== undefined)
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-    return this.converse(topicChatId(topicId), topic, null, prs, message);
+    const chatId = topicChatId(topicId);
+    const history = this.store.chat.listForTile(chatId);
+    const sentAt = this.now().toISOString();
+    const isUnsorted = topicId === UNSORTED_TOPIC_ID;
+    const answer = await this.agent.chat({ topic, prs, history, message, context: this.contexts.forTopic(isUnsorted ? null : topicId) });
+    const { userMessage, reply } = this.store.transaction(() => ({
+      userMessage: this.store.chat.add({ tileId: chatId, topicId, role: 'user', text: message, createdAt: sentAt }),
+      reply: this.store.chat.add({ tileId: chatId, topicId, role: 'agent', text: answer.reply, createdAt: this.now().toISOString() }),
+    }));
+    if (!answer.lasting) {
+      return { message: reply, lastingPoint: null };
+    }
+    // Unsorted is not a stored topic: the point can still go to all topics, not to this one.
+    return { message: reply, lastingPoint: { topicId: isUnsorted ? null : topicId, text: answer.lasting.text, sourceChatMessageId: userMessage.id } };
   }
 
   /** keep=true appends the text to the topic's tailoring; false only logs it for this once. */

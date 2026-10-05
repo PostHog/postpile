@@ -1,4 +1,4 @@
-import type { Comment } from '@postpile/core';
+import { replyTarget, type Comment } from '@postpile/core';
 import type { DraftReplyInput } from '../service.ts';
 import { clip, contextBlock, GITHUB_DATA_RULE, githubData, jsonOnly, NO_CI_RULE, prLine, viewerLine } from './shared.ts';
 
@@ -12,7 +12,7 @@ function conversationLine(comment: Comment, repliedToId: string): string {
 
 /** Where the comment sits: an inline thread on a file, or the PR conversation. */
 function whereLine(comment: Comment): string {
-  if (comment.kind === 'review_comment') {
+  if (replyTarget(comment).kind === 'thread') {
     return `It is an inline review comment on ${comment.path ?? 'a file'}; the reply goes into its review thread.`;
   }
   return 'It is in the PR conversation; the reply is posted as a new PR comment below it, quoting it.';

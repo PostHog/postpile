@@ -1451,17 +1451,18 @@ event.
 
 **Topic chat** (2026-10-05). "Ask the agent" on the topic header chats
 about the whole topic: `topicChat(topicId, message)` /
-`getTopicChat(topicId)`. Messages live in `chat_message` like tile chats,
-with `tile_id = 'topic:' + topicId` (`topicChatId`; no tile id starts with
-it) and `topic_id = topicId`, so no migration, and the dossier update reads
-them as chat turns like any other. The agent gets the topic, every PR on
-its tiles (newest first, at most 60 in the prompt with a line for the
-rest), the history and the topic's prompt context; `ChatInput.tile` is null
-for it. Unsorted works too; its lasting point comes back with `topicId:
-null`, like a tile chat there. Lasting points work exactly as in the tile
-chat. The tile chat endpoints stay for now. A turn's two messages are stored
-together once the answer is in: a failed call stores nothing, so the
-history never holds an unanswered message.
+`getTopicChat(topicId)`. Messages live in `chat_message` like the old tile
+chats, with `tile_id = 'topic:' + topicId` (`topicChatId`; no tile id starts
+with it) and `topic_id = topicId`, so no migration, and the dossier update
+reads them as chat turns like any other. The agent gets the topic, every PR
+on its tiles (newest first, at most 60 in the prompt with a line for the
+rest), the history and the topic's prompt context. Unsorted works too; its
+lasting point comes back with `topicId: null`. It is the only chat on a
+topic: the tile chat (routes, engine, the prompt's tile mode) was removed
+once the renderer stopped using it; old tile chat rows stay in
+`chat_message` and still reach the dossier through `topic_id`. A turn's
+two messages are stored together once the answer is in: a failed call
+stores nothing, so the history never holds an unanswered message.
 
 Each turn is a fresh `claude -p` call with the whole prompt rebuilt, not a
 kept-open session (`--resume` or a long-lived stream-json process). Checked
@@ -2910,17 +2911,18 @@ any review ask; on top of that:
 - **Thumbs up** (2026-10-05). `PrActions.react(key, id)` takes a comment id
   from `pr.comments` or a review id from `pr.reviews` (an approval without a
   body is no comment but a reactable review node) and sends GraphQL
-  `addReaction` with `THUMBS_UP`. Same lock rules as a reply. After the
-  refresh the stored snapshot marks it (`viewerReacted`), so the pane shows
-  it even when GitHub lagged. The reader asks `reactionGroups { content
+  `addReaction` with `THUMBS_UP`. Same lock rules as a reply. Nothing else
+  on the PR changes, so there is no refetch: the stored snapshot is marked
+  right away (`withViewerReaction`, shared with the fake engine), and the
+  next poll reads GitHub's. The reader asks `reactionGroups { content
   viewerHasReacted }` on issue comments, reviews and thread comments, and
   normalizes the THUMBS_UP group into `Comment.viewerReacted` /
   `Review.viewerReacted` (missing on older snapshots: false). Telemetry
   `reaction_sent`.
-- Both writes are logged as `comment` with a detail (`reply in review
-  thread <id>`, `reply to <author>'s comment <id>`, `thumbs up on <id>`),
-  not as new action kinds: the debug view words every logged action from a
-  closed list, and an unknown kind would break it until it learns them.
+- Replies are logged as `reply`, thumbs ups as `reaction`, each with a
+  detail (`reply in review thread <id>`, `reply to <author>'s comment <id>`,
+  `thumbs up on <id>`); the debug view words them "replied" and "thumbs up
+  given".
 - **Reply drafts** (2026-10-05). `PrActions.draftReply(key, commentId,
   gist)` runs `agent.draftReply` (prompt `prompts/reply.ts`, call kind
   `draft_comment`, same model and timeout as an ask). Inputs: the comment,
@@ -6616,7 +6618,6 @@ preflight and does not know the token, so CORS stays open.
 | `POST /api/tiles/:tileId/mark-read` | `markRead()` |
 | `POST /api/tiles/:tileId/prs/:owner/:repo/:number/mark-read` | `markPrRead()` (detail pane, one PR) |
 | `POST /api/tiles/:tileId/snooze` `{condition}` / `DELETE` | `snooze()` / `unsnooze()` |
-| `GET`/`POST /api/tiles/:tileId/chat` `{message}` | `getChat()` / `chat()` |
 | `GET`/`POST /api/topics/:id/chat` `{message}` | `getTopicChat()` / `topicChat()` (the topic header's "Ask the agent") |
 | `POST /api/undo` `{undoToken}` | `undo()` |
 | `POST /api/feedback` | `giveFeedback()` |

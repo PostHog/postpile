@@ -154,7 +154,6 @@ describe('topic chat', () => {
       [topicChatId('depot'), 'depot', 'user', 'what is left here?'],
       ['topic:depot', 'depot', 'agent', 'Two PRs, both waiting on you.'],
     ]);
-    expect(await h.engine.getChat(`pr:${pr.key}`)).toEqual([]);
     const prompt = h.runner.promptsFor('chat')[0] ?? '';
     expect(prompt).toContain('Retry the upload');
     expect(prompt).toContain('Upload metrics');

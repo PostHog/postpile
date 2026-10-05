@@ -192,6 +192,7 @@ import {
   type PingTarget,
   type OpenedReadResult,
   type QuietReadView,
+  withViewerReaction,
 } from '@postpile/core';
 import { AgentRefresher, AutoSyncSchedule, LivePoller, NEW_COMMITS_SINCE_LOOKED, topicChatId, UNSORTED_TOPIC_ID, type AutoSyncOptions, type EngineService, type GitHubQuota, type LivePollOptions, type PollCycle } from '@postpile/engine';
 import { FakeCatchUp } from './fake-catch-up.ts';
@@ -1266,10 +1267,6 @@ export class FakeEngine implements EngineService {
     };
   }
 
-  async getChat(tileId: string): Promise<ChatMessage[]> {
-    return this.chats.get(tileId) ?? [];
-  }
-
   // -------------------------------------------------------------------------
   // EngineService: actions
   // -------------------------------------------------------------------------
@@ -1661,10 +1658,10 @@ export class FakeEngine implements EngineService {
     }
     const detail = `reply to ${comment.author}'s comment ${comment.id}`;
     if (!this.writes.isEnabled()) {
-      this.writes.record({ action: 'comment', origin: 'detail', outcome: 'skipped', prKey, detail: `${detail}: GitHub writes are off` });
+      this.writes.record({ action: 'reply', origin: 'detail', outcome: 'skipped', prKey, detail: `${detail}: GitHub writes are off` });
       return fail('GitHub writes are off (lock in the footer): the reply was not sent');
     }
-    this.writes.record({ action: 'comment', origin: 'detail', outcome: 'github', prKey, detail: `${detail}: sample data, nothing left the process` });
+    this.writes.record({ action: 'reply', origin: 'detail', outcome: 'github', prKey, detail: `${detail}: sample data, nothing left the process` });
     const target = replyTarget(comment);
     const base = { id: `local-reply-${this.newId()}`, author: this.data.viewer, createdAt: this.timestamp() };
     const reply: Comment =
@@ -1685,17 +1682,11 @@ export class FakeEngine implements EngineService {
     }
     const detail = `thumbs up on ${commentId}`;
     if (!this.writes.isEnabled()) {
-      this.writes.record({ action: 'comment', origin: 'detail', outcome: 'skipped', prKey, detail: `${detail}: GitHub writes are off` });
+      this.writes.record({ action: 'reaction', origin: 'detail', outcome: 'skipped', prKey, detail: `${detail}: GitHub writes are off` });
       return fail('GitHub writes are off (lock in the footer): the reaction was not sent');
     }
-    this.writes.record({ action: 'comment', origin: 'detail', outcome: 'github', prKey, detail: `${detail}: sample data, nothing left the process` });
-    const mark = <T extends { id: string }>(item: T): T => (item.id === commentId ? { ...item, viewerReacted: true } : item);
-    this.data.prs[index] = {
-      ...pr,
-      comments: pr.comments.map(mark),
-      reviews: pr.reviews.map(mark),
-      threads: pr.threads.map((thread) => ({ ...thread, comments: thread.comments.map(mark) })),
-    };
+    this.writes.record({ action: 'reaction', origin: 'detail', outcome: 'github', prKey, detail: `${detail}: sample data, nothing left the process` });
+    this.data.prs[index] = withViewerReaction(pr, commentId);
     return ok('fake: thumbs up kept locally, nothing sent to GitHub');
   }
 
@@ -1773,11 +1764,22 @@ export class FakeEngine implements EngineService {
     return ok('unmuted');
   }
 
+  async getTopicChat(topicId: string): Promise<ChatMessage[]> {
+    return this.chats.get(topicChatId(topicId)) ?? [];
+  }
+
   /**
-   * One canned chat turn stored under `chatId`. A message that sounds lasting
-   * comes back as a lasting point for `lastingTopicId` (null on Unsorted).
+   * Like the engine's topic chat: stored under "topic:<id>", a canned
+   * answer. A message that sounds lasting comes back as a lasting point;
+   * Unsorted's goes nowhere topic-wise.
    */
-  private cannedChat(chatId: string, topicId: string, lastingTopicId: string | null, message: string): ChatReply {
+  async topicChat(topicId: string, message: string): Promise<ChatReply> {
+    this.refuseWithoutAgent();
+    const isUnsorted = topicId === UNSORTED_TOPIC_ID;
+    if (!isUnsorted && !this.data.topics.some((topic) => topic.id === topicId)) {
+      throw new Error(`no topic ${topicId}`);
+    }
+    const chatId = topicChatId(topicId);
     const messages = this.chats.get(chatId) ?? [];
     this.chats.set(chatId, messages);
     const userMessage: ChatMessage = { id: this.newId(), tileId: chatId, topicId, role: 'user', text: message, createdAt: this.timestamp() };
@@ -1793,30 +1795,7 @@ export class FakeEngine implements EngineService {
     if (!LASTING.test(message)) {
       return { message: reply, lastingPoint: null };
     }
-    return { message: reply, lastingPoint: { topicId: lastingTopicId, text: message, sourceChatMessageId: userMessage.id } };
-  }
-
-  async chat(tileId: string, message: string): Promise<ChatReply> {
-    this.refuseWithoutAgent();
-    const tile = this.findTile(tileId);
-    if (!tile) {
-      throw new Error(`no tile ${tileId}`);
-    }
-    return this.cannedChat(tileId, tile.topicId, tile.topicId, message);
-  }
-
-  async getTopicChat(topicId: string): Promise<ChatMessage[]> {
-    return this.chats.get(topicChatId(topicId)) ?? [];
-  }
-
-  /** Like the engine's topic chat: stored under "topic:<id>", a canned answer, Unsorted's lasting points go nowhere topic-wise. */
-  async topicChat(topicId: string, message: string): Promise<ChatReply> {
-    this.refuseWithoutAgent();
-    const isUnsorted = topicId === UNSORTED_TOPIC_ID;
-    if (!isUnsorted && !this.data.topics.some((topic) => topic.id === topicId)) {
-      throw new Error(`no topic ${topicId}`);
-    }
-    return this.cannedChat(topicChatId(topicId), topicId, isUnsorted ? null : topicId, message);
+    return { message: reply, lastingPoint: { topicId: isUnsorted ? null : topicId, text: message, sourceChatMessageId: userMessage.id } };
   }
 
   async decideTailoring(topicId: string, text: string, keep: boolean): Promise<ActionResult> {

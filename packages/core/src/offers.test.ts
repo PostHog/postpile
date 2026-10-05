@@ -115,7 +115,7 @@ describe('detail pane', () => {
     const yours = row(2, { turn: REREVIEW, afterRead: stillYours, primaryAction: 'approved' });
     const set = view('open', REREVIEW, stillYours, [row(1, { primaryAction: 'approved' }), yours]);
     expect(paneOffers(set, set.prs[0]!)).toMatchObject({ scope: 'pr', lead: 'mark_done', markLabel: 'Done for now', snooze: false });
-    expect(paneOffers(set, yours)).toMatchObject({ lead: 'open_on_github', markLabel: null, open: true });
+    expect(paneOffers(set, yours)).toMatchObject({ lead: 'open_on_github', markLabel: null });
     const quietLayer = row(3, { provenance: pulled, primaryAction: 'approved' });
     expect(paneOffers(view('open', NONE, doneAfter, [row(1), quietLayer]), quietLayer).markLabel).toBeNull();
   });
@@ -137,7 +137,6 @@ describe('detail pane', () => {
       scope: 'pr',
       lead: 'open_on_github',
       approve: false,
-      open: true,
       ask: false,
       markLabel: null,
       snooze: false,
@@ -156,7 +155,7 @@ describe('detail pane', () => {
     const bot = row(1, { facts: { ...NO_PR_FACTS, owners: ['renovate[bot]'], ownerIsAutomation: true } });
     expect(paneOffers(view('unread', NONE, doneAfter, [bot]), bot).ask).toBe(false);
     const own = row(1, { authorRelation: 'you', primaryAction: 'mark_read' });
-    expect(paneOffers(view('unread', NONE, doneAfter, [own]), own)).toMatchObject({ ask: false, approve: false, open: false, lead: 'mark_read' });
+    expect(paneOffers(view('unread', NONE, doneAfter, [own]), own)).toMatchObject({ ask: false, approve: false, lead: 'mark_read' });
     expect(paneOffers(view('unread', NONE, doneAfter), row(1)).ask).toBe(true);
   });
 });

@@ -39,6 +39,7 @@ import { filterTopics, searchFilter, visibleTopic } from './lib/search.ts';
 import { filterKey, keptFor, listedTopics, nextKept, resolveSelection, revealedFor, withSelectedTile, type KeptView } from './lib/selection.ts';
 import { clampPaneWidth, DETAIL_MIN_WIDTH, paneColumns, resolvedColumnWidths, type ResizablePane } from './lib/pane-widths.ts';
 import { tileOpenedProps } from './lib/tile-telemetry.ts';
+import { prNumber } from './lib/tiles.ts';
 import { toolsNotice } from './lib/tools.ts';
 import { usePaneWidths } from './lib/use-pane-widths.ts';
 import { useNavHistory, useNavShortcuts } from './lib/use-nav-history.ts';
@@ -349,7 +350,7 @@ export function App() {
       }
     },
   };
-  const backLabel = selected.prKey ? `Back to #${selected.prKey.split('#')[1]}` : 'Back';
+  const backLabel = selected.prKey ? `Back to #${prNumber(selected.prKey)}` : 'Back';
 
   return (
     <TellAgentContext value={tellAgent}>

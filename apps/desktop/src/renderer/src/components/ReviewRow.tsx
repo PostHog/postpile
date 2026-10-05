@@ -5,7 +5,7 @@ import { approveButton, approveStateGlyphs, type ApproveButtonInput, type Approv
 import { reviewRowLabel, type ReviewRowTone } from '../lib/review-row.ts';
 import { ageLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
-import { Button } from './Button.tsx';
+import { Button, splitSeamClasses } from './Button.tsx';
 import { Composer, useCompose } from './Composer.tsx';
 import { Glyph } from './icons.tsx';
 
@@ -94,8 +94,7 @@ export function ReviewRow(props: ReviewRowProps) {
               <Button
                 variant={variant}
                 size="md"
-                // The seam: a light line on green, the outlines overlapping by a pixel on the outlined look.
-                className={`rounded-l-none px-2.5 ${variant === 'safe' ? 'border-l border-on-ink/30' : '-ml-px'}`}
+                className={`${splitSeamClasses(variant)} px-2.5`}
                 disabled={approving || approveBlocked !== null}
                 aria-expanded={open === 'approve'}
                 title={approveBlocked ?? 'Approve with a note you write (or let the agent draft)'}
@@ -140,10 +139,7 @@ export function ReviewRow(props: ReviewRowProps) {
           sending={approving}
           drafting={actions.isBusy(`reviewNote:${pr.key}`)}
           draft={(gist) => actions.draftReviewNote(pr.key, 'approve', gist)}
-          send={async (body) => {
-            await actions.approve(pr.key, pr.headOid, body);
-            return true;
-          }}
+          send={(body) => actions.approve(pr.key, pr.headOid, body)}
           closesOnClick
         />
       )}

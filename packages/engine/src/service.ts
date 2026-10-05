@@ -273,7 +273,6 @@ export interface EngineService {
   listFacts(query: FactQuery): Promise<FactView[]>;
   /** Topic and rule proposals waiting for the user, across all topics. */
   listProposals(): Promise<PendingProposals>;
-  getChat(tileId: string): Promise<ChatMessage[]>;
 
   /**
    * Immediate and final: GitHub approvals cannot be undone. `headOid` is the
@@ -365,10 +364,9 @@ export interface EngineService {
   giveFeedback(input: FeedbackInput): Promise<ActionResult>;
   unmuteEvent(eventId: string): Promise<ActionResult>;
 
-  chat(tileId: string, message: string): Promise<ChatReply>;
   /** The topic's chat ("Ask the agent" on the topic header), oldest first. Unsorted has one too. */
   getTopicChat(topicId: string): Promise<ChatMessage[]>;
-  /** Like chat, about the whole topic: the agent sees all its PRs. Lasting points work the same. */
+  /** One chat turn about the whole topic: the agent sees all its PRs and may spot a lasting point for the user to place. */
   topicChat(topicId: string, message: string): Promise<ChatReply>;
   /** keep=true stores the text as topic tailoring; false logs it as "just this once". */
   decideTailoring(topicId: string, text: string, keep: boolean): Promise<ActionResult>;

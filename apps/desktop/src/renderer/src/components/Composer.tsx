@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useActions } from '../api/actions.tsx';
 import type { GithubWrite } from '../lib/guard.ts';
 import { Button } from './Button.tsx';
@@ -19,7 +19,9 @@ export interface ComposeState {
   /** Opens the reply to a comment and asks the activity list to scroll to it. */
   jumpToReply(commentId: string): void;
   close(): void;
+  /** The kept draft of a target, for a composer that opens again. */
   draftOf(key: string): string;
+  /** Keeps a draft without re-rendering anything: the composer holds the live text itself. */
   setDraft(key: string, text: string): void;
 }
 
@@ -35,23 +37,30 @@ export function useCompose(): ComposeState {
   return state;
 }
 
-/** The pane's compose state. `PrBody` holds it, so it starts fresh per PR. */
+/**
+ * The pane's compose state. `PrBody` holds it, so it starts fresh per PR.
+ * Drafts sit in a ref, not in state: a keystroke re-renders only the
+ * composer, never the pane with its markdown and activity list.
+ */
 export function useComposeState(): ComposeState {
   const [open, setOpen] = useState<ComposeTarget | null>(null);
   const [jump, setJump] = useState<{ commentId: string; seq: number } | null>(null);
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
-  return {
-    open,
-    jump,
-    openTarget: setOpen,
-    jumpToReply: (commentId) => {
-      setOpen({ kind: 'reply', commentId });
-      setJump((current) => ({ commentId, seq: (current?.seq ?? 0) + 1 }));
-    },
-    close: () => setOpen(null),
-    draftOf: (key) => drafts[key] ?? '',
-    setDraft: (key, text) => setDrafts((current) => ({ ...current, [key]: text })),
-  };
+  const drafts = useRef(new Map<string, string>());
+  return useMemo(
+    () => ({
+      open,
+      jump,
+      openTarget: setOpen,
+      jumpToReply: (commentId: string) => {
+        setOpen({ kind: 'reply', commentId });
+        setJump((current) => ({ commentId, seq: (current?.seq ?? 0) + 1 }));
+      },
+      close: () => setOpen(null),
+      draftOf: (key: string) => drafts.current.get(key) ?? '',
+      setDraft: (key: string, text: string) => drafts.current.set(key, text),
+    }),
+    [open, jump],
+  );
 }
 
 interface ComposerProps {
@@ -73,7 +82,7 @@ interface ComposerProps {
   draft: (gist: string) => Promise<string | null>;
   /** True when it went out. */
   send: (body: string) => Promise<boolean>;
-  /** Approve shows its result at once (optimistic), so its composer closes on click. */
+  /** Approve shows its result at once (optimistic), so its composer closes on click. The note stays when it failed. */
   closesOnClick?: boolean;
 }
 
@@ -88,8 +97,13 @@ export function Composer(props: ComposerProps) {
   const actions = useActions();
   const compose = useCompose();
   const key = composeKey(props.target);
-  const text = compose.draftOf(key);
+  const [text, setText] = useState(() => compose.draftOf(key));
   const box = useRef<HTMLDivElement>(null);
+
+  function changeText(next: string) {
+    setText(next);
+    compose.setDraft(key, next);
+  }
 
   // The pane scrolls; bring the whole composer into view when it opens.
   useEffect(() => {
@@ -97,14 +111,14 @@ export function Composer(props: ComposerProps) {
   }, []);
 
   function cancel() {
-    compose.setDraft(key, '');
+    changeText('');
     compose.close();
   }
 
   async function draft() {
     const result = await props.draft(text);
     if (result !== null) {
-      compose.setDraft(key, result);
+      changeText(result);
     }
   }
 
@@ -113,7 +127,7 @@ export function Composer(props: ComposerProps) {
       compose.close();
     }
     if (await props.send(text)) {
-      compose.setDraft(key, '');
+      changeText('');
       compose.close();
     }
   }
@@ -138,7 +152,7 @@ export function Composer(props: ComposerProps) {
           value={text}
           disabled={props.drafting}
           placeholder={props.drafting ? 'Drafting…' : 'Or write it yourself (a gist is enough for a rewrite)'}
-          onChange={(event) => compose.setDraft(key, event.target.value)}
+          onChange={(event) => changeText(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === 'Escape') {
               compose.close();

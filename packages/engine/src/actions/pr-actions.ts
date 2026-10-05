@@ -15,6 +15,7 @@ import {
   type ReplyTarget,
   type ReviewNoteKind,
   type Viewer,
+  withViewerReaction,
 } from '@postpile/core';
 import type { Store } from '@postpile/store';
 import type { PromptContextSource } from '../prompt-context.ts';
@@ -306,7 +307,7 @@ export class PrActions {
       const sent =
         target.kind === 'thread'
           ? await this.writes.replyInThread(target.threadId, body, context)
-          : await this.writes.commentOnPr(pr.ref, quotedReplyBody(comment, body), { ...context, detail: `reply to ${comment.author}'s comment ${comment.id}` });
+          : await this.writes.replyOnPr(pr.ref, quotedReplyBody(comment, body), { ...context, detail: `reply to ${comment.author}'s comment ${comment.id}` });
       if (sent === 'off') {
         return { result: failed('GitHub writes are off (lock in the footer): the reply was not sent'), target };
       }
@@ -320,8 +321,8 @@ export class PrActions {
   /**
    * A thumbs up on a comment or a review (an approval without a body is no
    * comment, but GitHub takes a reaction on the review). Final like a
-   * comment. After the refresh the stored snapshot is marked too, so the
-   * pane shows it even when the refresh failed or GitHub lagged.
+   * comment. Nothing else on the PR changes, so there is no refetch: the
+   * stored snapshot is marked right away, and the next poll reads GitHub's.
    */
   async react(key: PrKey, id: string): Promise<ActionResult> {
     const pr = this.store.prs.get(key);
@@ -335,27 +336,11 @@ export class PrActions {
     } catch (error) {
       return failed(`Reaction failed: ${errorText(error)}`);
     }
-    await this.refreshPr(key);
-    this.mirrorReaction(key, id);
-    return ok('Thumbs up sent');
-  }
-
-  /** Marks the comment or review as reacted to in the stored snapshot, in every place it shows. Keeps the fetch time. */
-  private mirrorReaction(key: PrKey, id: string): void {
-    const stored = this.store.prs.get(key);
+    // The fetch time stays: the snapshot is no newer than it was.
     const fetchedAt = this.store.prs.fetchedAtByKey().get(key);
-    if (!stored || !fetchedAt) {
-      return;
+    if (fetchedAt) {
+      this.store.prs.upsert(withViewerReaction(pr, id), fetchedAt);
     }
-    const mark = <T extends { id: string }>(item: T): T => (item.id === id ? { ...item, viewerReacted: true } : item);
-    this.store.prs.upsert(
-      {
-        ...stored,
-        comments: stored.comments.map(mark),
-        reviews: stored.reviews.map(mark),
-        threads: stored.threads.map((thread) => ({ ...thread, comments: thread.comments.map(mark) })),
-      },
-      fetchedAt,
-    );
+    return ok('Thumbs up sent');
   }
 }

@@ -330,13 +330,13 @@ describe('chat and tailoring', () => {
     h.store.memberships.assign({ prKey: pr.key, topicId: 'depot', assignedBy: 'agent', reason: '', createdAt: at(0) });
     h.runner.answer('chat', { reply: 'Got it.', lasting: { text: 'Ignore preview deploys.' } });
 
-    const reply = await h.engine.chat(tileId, 'preview deploys are noise here');
+    const reply = await h.engine.topicChat('depot', 'preview deploys are noise here');
 
     expect(reply.lastingPoint).toEqual({ topicId: 'depot', text: 'Ignore preview deploys.', sourceChatMessageId: expect.any(Number) });
     // The agent is not asked where the point applies; the user picks.
     expect(h.runner.promptsFor('chat')[0]).not.toContain('"scope"');
     expect(h.runner.promptsFor('instructions_change')).toEqual([]);
-    expect((await h.engine.getChat(tileId)).map((m) => m.role)).toEqual(['user', 'agent']);
+    expect((await h.engine.getTopicChat('depot')).map((m) => m.role)).toEqual(['user', 'agent']);
     expect(h.store.topics.get('depot')?.tailoring).toBe('');
 
     await h.engine.decideTailoring('depot', 'Ignore preview deploys.', true);

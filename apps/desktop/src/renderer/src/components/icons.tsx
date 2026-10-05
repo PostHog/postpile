@@ -87,14 +87,6 @@ export function BranchArrowIcon(props: { className?: string }) {
   );
 }
 
-export function ChatIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-      <path d="M14 7.5a5.5 5.5 0 0 1-8 4.9L2.5 13.5l1-3.2A5.5 5.5 0 1 1 14 7.5z" />
-    </svg>
-  );
-}
-
 /** Reply: the curved arrow back, for "Reply" on a comment. */
 export function ReplyIcon() {
   return (

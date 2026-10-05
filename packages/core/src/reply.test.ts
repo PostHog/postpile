@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { makeComment, makePr, makeReview, makeThread } from './fixtures.ts';
-import { findReactable, quotedReplyBody, replyConversation, replyTarget } from './reply.ts';
+import { findReactable, quotedReplyBody, replyConversation, replyTarget, withViewerReaction } from './reply.ts';
 
 describe('quotedReplyBody', () => {
   it('quotes the first line and mentions the author before the text', () => {
@@ -68,5 +68,24 @@ describe('replyConversation', () => {
     const pr = makePr({ comments });
     const ids = replyConversation(pr, comments[10]!).map((c) => c.id);
     expect(ids).toEqual(['IC2', 'IC3', 'IC4', 'IC5', 'IC6', 'IC7', 'IC8', 'IC9', 'IC10', 'IC11']);
+  });
+});
+
+describe('withViewerReaction', () => {
+  it('marks the comment in the comment list and in its thread, and leaves the rest alone', () => {
+    const inline = makeComment({ id: 'c1', kind: 'review_comment', threadId: 't1' });
+    const other = makeComment({ id: 'c2' });
+    const pr = makePr({ comments: [inline, other], reviews: [makeReview({ id: 'r1' })], threads: [makeThread('t1', [inline])] });
+
+    const marked = withViewerReaction(pr, 'c1');
+
+    expect(marked.comments.map((comment) => comment.viewerReacted ?? false)).toEqual([true, false]);
+    expect(marked.threads[0]?.comments[0]?.viewerReacted).toBe(true);
+    expect(marked.reviews[0]?.viewerReacted ?? false).toBe(false);
+  });
+
+  it('marks a review', () => {
+    const pr = makePr({ reviews: [makeReview({ id: 'r1' })] });
+    expect(withViewerReaction(pr, 'r1').reviews[0]?.viewerReacted).toBe(true);
   });
 });

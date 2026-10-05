@@ -119,7 +119,9 @@ export interface GitHubWritesChange {
  * as a thread's last action.
  * `remove_team_request` and `unsubscribe` are the detail pane's "Remove
  * <team>" (2026-09-29). `comment_review` is the pane's "Comment review", a
- * review with event COMMENT (2026-10-02). mark_done and subscribe get added with their writer
+ * review with event COMMENT (2026-10-02). `reply` is a reply to one comment,
+ * in its review thread or as a new PR comment quoting it, and `reaction` a
+ * thumbs up (2026-10-05). mark_done and subscribe get added with their writer
  * methods; nothing sends them today.
  */
 export type LoggedAction =
@@ -130,6 +132,8 @@ export type LoggedAction =
   | 'approve'
   | 'comment'
   | 'comment_review'
+  | 'reply'
+  | 'reaction'
   | 'remove_team_request'
   | 'unsubscribe'
   | 'bring_back'

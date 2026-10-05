@@ -39,6 +39,16 @@ export function buttonClasses(variant: ButtonVariant = 'secondary', size: Button
   return `flex shrink-0 items-center gap-1.5 rounded-control whitespace-nowrap disabled:cursor-default disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${VARIANTS[variant]} ${sizing}`;
 }
 
+/**
+ * The right half of a split button (Approve + note, Open on GitHub + its
+ * menu). The seam: a light line on a solid look, the outlines overlapping by
+ * a pixel on an outlined one.
+ */
+export function splitSeamClasses(variant: ButtonVariant): string {
+  const solid = variant === 'primary' || variant === 'safe';
+  return solid ? 'rounded-l-none border-l border-on-ink/30' : 'rounded-l-none -ml-px';
+}
+
 /** The button looks from the mockup. Disabled buttons keep their title so the reason shows on hover. */
 export function Button({ variant = 'secondary', size = 'sm', className = '', type = 'button', ...rest }: ButtonProps) {
   return <button type={type} className={`${buttonClasses(variant, size)} ${className}`} {...rest} />;

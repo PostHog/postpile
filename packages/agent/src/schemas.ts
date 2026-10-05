@@ -96,11 +96,6 @@ export const draftCommentOutput = z.object({
   body: text.min(1),
 });
 
-/** A reply to one comment. Same shape as a drafted comment, kept apart so the two can change on their own. */
-export const draftReplyOutput = z.object({
-  body: text.min(1),
-});
-
 export const chatOutput = z.object({
   reply: text.min(1),
   /** A lasting instruction worth keeping, or null. The user picks where it applies. */

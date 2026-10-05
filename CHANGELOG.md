@@ -8,7 +8,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 - The title bar says "up to date" while PostPile keeps checking GitHub every minute, instead of "synced 40m ago", which counted from the last hourly full sync. It says "updates paused" while the checks back off or wait, and shows an age only when they fell behind ("checked 5m ago", amber) or the live poll is off. The full sync's details are in the tooltip; the footer says "last full sync".
 
-## 0.17.0 (unreleased)
+## 0.16.1 (unreleased)
 
 ### Added
 
