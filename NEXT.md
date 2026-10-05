@@ -6,6 +6,11 @@ now".
 
 ## Done
 
+- Newer-schema guard (2026-10-05, DESIGN.md "Safety while building"): a
+  build refuses a database whose schema version is above its newest
+  migration, before any pragma or migration writes; the desktop app shows a
+  dialog and quits. Step 1 of normalizing the PR snapshot (Later). Builds
+  up to 0.19.0 have no guard.
 - Slim PR pane (2026-10-05, DESIGN.md "The PR pane" › "What the pane
   loads"): `PrDetail.pr` is core's `PrPaneView` (`prPaneView`), with a
   checks summary from `summarizeChecks` (`checks.ts`, for the coming
@@ -1275,36 +1280,75 @@ the app meanwhile.
 
 ## Later
 
-- Normalize the PR snapshot (after 0.18.0, in this order: first this, then
-  the `utilityProcess` move below). Since 0.18.0 the short columns live in
-  the PR header (`pr`, migration 028) and the whole PR is still one JSON
-  blob in `pr_snapshot.json` (~80 KB on average; on a normal install 95% of
-  the comment text is bot comments, 6.4 MB is check contexts the rules
-  ignore, and 89% of stored PRs are merged or closed), so a hot board still
-  parses whole PRs to read a few fields, and nothing inside can be queried
-  or indexed. Target: rows under the `pr` header for comments, reviews,
-  threads and thread comments, commits, files and a slim check summary; bot
-  comment bodies trimmed at write time; the board loads only the rows it
-  needs for hot PRs, the PR pane one PR in full; `pr_event` derivation reads
-  the rows; `pr_snapshot` goes away. Transition protocol (checked with
-  Codex GPT-6.1): for each collection, dual-write before backfilling; track
-  completion separately from empty collections; switch reads and drop the
-  JSON field atomically; use bounded, resumable transactions; read,
-  transform and write in one transaction so a rewrite never overwrites
-  newer sync data; move the storage revision (`pr.snapshot_revision`,
-  since 0.18.1) on every local rewrite, so other processes' caches see it.
-  A multi-day refactor of the store and of every place that builds a `Pr`.
-  Together with the `utilityProcess` move it is the real fix for big
-  inboxes. Bot bodies are cut since 0.18.1 (Done). Researched for this, not
-  done yet:
-  - Store thread comments as ids into `comments`, not a second copy: about
-    21% less on top.
-  - A slim `PrDetail.pr` for the renderer: done (Done, "Slim PR pane";
-    the `pr` part about 106 → 7 KB per open PR).
-  - A statement cache for `all`, `get` and `run` in store `sql.ts`, never
-    for `each()`: running a cached statement again resets an iterator
-    still in use.
-  - Text-free skeletons for old merged and closed PRs: disk about 74% less.
+- Normalize the PR snapshot (started after 0.19.0; first this, then the
+  `utilityProcess` move below). The short fields live in the PR header
+  (`pr`, migration 028), the rest of each PR is one JSON blob in
+  `pr_snapshot.json`: comments are half of it (95% of their text from
+  bots, cut since 0.19.0), thread comments and review bodies are second
+  copies of comments, and check contexts are 10% that no rule reads. So a
+  hot board parses whole PRs to read a few fields. Design checked with
+  Codex GPT-6.1 (2026-10-05); its review points win where they differ from
+  the first draft. Estimate from prototyped tables, hot set of 1,500 PRs on
+  the heavy copy: 284 MB of heap today, about 140 MB with comment rows,
+  about 60 MB with the board diet. The plan, one PR each, in this order:
+  1. Newer-schema guard: `openDatabase` refuses a database from a newer
+     PostPile (DESIGN.md "Safety while building"). Ships before anything
+     destructive.
+  2. One storage job runner (`packages/engine/src/storage-jobs/`), with the
+     bot body trim ported as its first job under the trim's existing meta
+     keys. Fails closed (never `done` unless the job's check passes),
+     bounded `BEGIN IMMEDIATE` units with a short busy timeout that
+     reschedule on SQLITE_BUSY, ~30 ms slices 50 ms apart, pauses while
+     sync, poll, consolidation or catch-up run and while the Mac sleeps,
+     cursor and done flag in the unit's transaction, telemetry
+     `storage_job_done`.
+  3. Checks summary pilot (migration 030): `pr.rows_version` and `check_*`
+     header columns (rollup, passed / failed / pending / total, newest
+     finish, FAILURE names), dual-write, a backfill job, the read switch.
+     Next, after the runner.
+  4. Comments, reviews and threads as rows (`pr_comment`, `pr_thread`,
+     `pr_review`, header `mentioned_teams`), shipped in one release together
+     with the strip of the switched fields from the stored JSON.
+  5. Board diet: board reads leave out bot bodies no rule reads
+     (`isBodyReadByRules`), `FullPr` for the readers that need every body
+     (event derivation, write actions, lessons, "Why?" excerpts).
+
+  Rules for every phase:
+  - A global read switch per collection (meta `rows_ready:<collection>`).
+    `rows_version` is cumulative readiness: version k means every
+    collection up to k is in rows. Upserts write every collection the build
+    knows, backfills go in order and never lower it. A PR below the
+    build's version is not an integrity failure while the JSON still holds
+    the field.
+  - Reads take readiness flags, headers, the JSON projection and child rows
+    in one read transaction, so a read-only CLI or MCP never mixes two
+    commits. Parse caches drop when the projection changes.
+  - Completion is checked from the data, never from an empty collection.
+    Jobs fail closed.
+  - Revisions move through the store-wide counter (`prs.ts`, meta
+    `snapshot_revision`), only when what a read returns changes.
+    `snapshot_revision` keeps its name; a rename would need its own
+    migration.
+  - Presence stays visible: a snapshot without `assignees` is refetched, a
+    missing `capHits` never vouches. Rows must not turn missing into empty.
+  - `mentioned_teams` is computed from the stored (cut) text, the loss the
+    trim already accepted.
+  - Child ids are GitHub's node ids, treated as opaque (GitHub has migrated
+    their format before). A refetch replaces the fetched window; absence
+    past a paging cap is not a deletion.
+  - Compaction (`VACUUM INTO`) is offered later as an explicit action,
+    never at startup or quit. Freed pages are reused meanwhile.
+
+  Deferred: commits, timeline and files as rows; PR text and the remaining
+  short fields; retiring `pr_snapshot` (with its own numbered migration, so
+  guarded older builds refuse the database instead of querying a dropped
+  table); text-free skeletons for old merged and closed PRs (no age
+  threshold now: a refetch cannot bring back older paged history). The
+  slim `PrPaneView` for the renderer shipped on its own, apart from this
+  plan (Done, "Slim PR pane": the `pr` part about 106 → 7 KB per open PR).
+  Researched, not planned yet: a statement cache for `all`, `get` and `run`
+  in store `sql.ts`, never for `each()` (running a cached statement again
+  resets an iterator still in use).
 - Move the engine and the server out of Electron main into a
   `utilityProcess` (after 0.18.0, in this order: after normalizing the PR
   snapshot above; a bigger refactor). Electron runs V8

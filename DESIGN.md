@@ -7232,6 +7232,20 @@ preflight and does not know the token, so CORS stays open.
   read commands take `--read-only` (no lock, no GitHub writes); sync, poll, sweep and
   consolidate refuse it. The desktop app also asks `app.requestSingleInstanceLock()`, so a
   second launch of the same app (same userData) only focuses the first window.
+- **A database from a newer PostPile** (2026-10-05, since 0.20.0): `openDatabase` reads the
+  schema version (`MAX(version)` of `schema_migrations`) before anything that could write,
+  the WAL pragma and the migrations, and refuses a version above this build's newest
+  migration with `NewerDatabaseError`. It never migrates down and leaves the file as it was.
+  The desktop app shows "This database was written by a newer PostPile" with Quit and a
+  link to the latest release; the CLI and the server exit with the message. Read-only opens
+  (CLI `--read-only`, MCP) refuse any other version anyway, a newer one with the same error.
+  Self-update only moves forward, so this hits a hand-installed older build.
+  Limits: builds up to 0.19.0 have no guard and still open a newer database, so the
+  protection starts with the first guarded release. And it only sees schema versions: any
+  later step that older builds must not run against (stripping fields from the stored
+  snapshot json, retiring `pr_snapshot`) ships with its own numbered migration, even when
+  the migration itself only adds a column or nothing at all, so the guarded builds refuse
+  that database instead of misreading it or querying a dropped table.
 
 - No GitHub write calls in tests or smoke runs. Tests use fakes; `GitHubWriteClient` is only
   constructed by `createEngine`, and not at all with `POSTPILE_READ_ONLY=1`. A fresh

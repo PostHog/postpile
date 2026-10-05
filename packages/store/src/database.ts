@@ -4,21 +4,62 @@ import { DatabaseSync } from 'node:sqlite';
 import { LATEST_VERSION, runMigrations } from './migrate.ts';
 
 /**
+ * A database written by a newer PostPile: its schema has migrations this
+ * build does not know, so this build's queries may not fit it. PostPile
+ * never migrates down, and the file is left exactly as it was.
+ */
+export class NewerDatabaseError extends Error {
+  constructor(
+    readonly path: string,
+    readonly version: number,
+    readonly knownVersion: number,
+  ) {
+    super(
+      `The database at ${path} was written by a newer PostPile (schema version ${version}, this build knows up to ${knownVersion}). Update PostPile to open it. Nothing in it was changed.`,
+    );
+    this.name = 'NewerDatabaseError';
+  }
+}
+
+/** The version recorded in the file, read without creating anything. 0 for a file without migrations. */
+export function recordedVersion(db: DatabaseSync): number {
+  const table = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'").get();
+  if (!table) {
+    return 0;
+  }
+  const row = db.prepare('SELECT MAX(version) AS version FROM schema_migrations').get() as { version: number | null };
+  return row.version ?? 0;
+}
+
+/** Closes db and throws NewerDatabaseError when its schema is newer than this build's. Only reads. */
+function refuseNewerSchema(db: DatabaseSync, path: string): void {
+  const version = recordedVersion(db);
+  if (version > LATEST_VERSION) {
+    db.close();
+    throw new NewerDatabaseError(path, version, LATEST_VERSION);
+  }
+}
+
+/**
  * Opens (or creates) the SQLite file and brings the schema up to date.
  * Pass ":memory:" in tests. WAL lets the CLI read while the desktop app writes.
+ * A database from a newer PostPile is refused (NewerDatabaseError) before
+ * anything that could write to it: the journal mode and the migrations.
  */
 export function openDatabase(path: string): DatabaseSync {
   if (path !== ':memory:') {
     mkdirSync(dirname(path), { recursive: true });
   }
   const db = new DatabaseSync(path);
+  // A setting of this connection, nothing on disk. Set first, so the version read can wait out another writer.
+  db.exec('PRAGMA busy_timeout = 5000');
+  refuseNewerSchema(db, path);
   db.exec('PRAGMA journal_mode = WAL');
   // A reset WAL is reused from the start but keeps its size on disk (954 MB
   // after rewriting a heavy install's snapshots in one transaction). With a
   // limit each reset cuts it back to 64 MB: https://sqlite.org/pragma.html#pragma_journal_size_limit
   db.exec('PRAGMA journal_size_limit = 67108864');
   db.exec('PRAGMA foreign_keys = ON');
-  db.exec('PRAGMA busy_timeout = 5000');
   runMigrations(db);
   return db;
 }
@@ -44,21 +85,12 @@ export function inTransaction<T>(db: DatabaseSync, fn: () => T): T {
   }
 }
 
-/** The version recorded in the file, read without creating anything. 0 for a file without migrations. */
-export function recordedVersion(db: DatabaseSync): number {
-  const table = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'").get();
-  if (!table) {
-    return 0;
-  }
-  const row = db.prepare('SELECT MAX(version) AS version FROM schema_migrations').get() as { version: number | null };
-  return row.version ?? 0;
-}
-
 /**
  * Opens an existing SQLite file read-only, e.g. for the CLI while the app
  * holds the lock: no migrations, no pragmas that write (WAL is already on).
  * Refuses a missing file and a schema of another version, since the queries
- * of this build only fit its own schema.
+ * of this build only fit its own schema. A newer schema gets the same
+ * NewerDatabaseError as openDatabase.
  */
 export function openDatabaseReadOnly(path: string): DatabaseSync {
   let db: DatabaseSync;
@@ -68,11 +100,13 @@ export function openDatabaseReadOnly(path: string): DatabaseSync {
     throw new Error(`Cannot open ${path} read-only: ${error instanceof Error ? error.message : String(error)}`);
   }
   db.exec('PRAGMA busy_timeout = 5000');
+  refuseNewerSchema(db, path);
   const version = recordedVersion(db);
   if (version !== LATEST_VERSION) {
     db.close();
-    const hint = version < LATEST_VERSION ? 'open it once without --read-only (or with the app) to migrate it' : 'this build is older than the database, update it';
-    throw new Error(`The database at ${path} has schema version ${version}, this build expects ${LATEST_VERSION}. Read-only access runs no migrations: ${hint}.`);
+    throw new Error(
+      `The database at ${path} has schema version ${version}, this build expects ${LATEST_VERSION}. Read-only access runs no migrations: open it once without --read-only (or with the app) to migrate it.`,
+    );
   }
   return db;
 }
