@@ -39,6 +39,7 @@ Read this file first. Details live elsewhere:
   - Interaction: ⌘K palettes, keyboard-first design.
   - Full custom icon sets (found overdone), hand-drawn styles.
   - A Rolodex/3D right pane, flat queue views that replace topics, and an app-only "bring back" (GitHub can't mark unread).
+- **PR pane** (2026-10-05, DESIGN.md "The PR pane"): writes grouped by who hears them. The review row sits right after the glance, outside it, with a GitHub review-state label; housekeeping is a quiet line right under it; replies live on the comment in the activity list; one inline composer for every write. The agent chat is topic-scoped and takes over the right pane ("Ask the agent"). The glance never holds the user's actions.
 - **Deferred:** "Dig deeper", a chat send mode running Opus with read-only tools for a user's hunch.
 
 The full dated list is under "Decided" in `NEXT.md`. Add to it when the user decides something.

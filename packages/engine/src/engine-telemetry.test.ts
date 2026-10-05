@@ -133,10 +133,11 @@ describe('engine telemetry', () => {
     expect(h.telemetry.events).toContainEqual({ event: 'snoozed', props: { duration_bucket: 'ci_green' } });
   });
 
-  it('fires chat_message_sent on chat', async () => {
+  it('fires chat_message_sent on a topic chat', async () => {
     const h = await synced();
+    topicWithPrs(h, 'depot', []);
     h.runner.answer('chat', { reply: 'Got it.' });
-    await h.engine.chat(tileId, 'hello');
+    await h.engine.topicChat('depot', 'hello');
     expect(h.telemetry.events.map((e) => e.event)).toContain('chat_message_sent');
   });
 

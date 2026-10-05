@@ -104,7 +104,6 @@ export interface ExpectedPane {
   scope: 'tile' | 'pr';
   lead: PaneLead;
   approve: boolean;
-  open: boolean;
   ask: boolean;
   markLabel: MarkLabel | null;
   snooze: boolean;
@@ -140,7 +139,6 @@ export function expectedPane(view: TileView, row: PrSummary, pr: Pr, viewer: Vie
     scope,
     lead,
     approve,
-    open: lead === 'open_on_github' || (!approve && primary !== 'mark_read'),
     ask: !finished && !specOwners(pr).every(isAutomationLogin) && !viewerOwns(pr, viewer),
     markLabel: expectedMarkLabel(mark),
     snooze: scope === 'tile' && view.state.kind !== 'done',

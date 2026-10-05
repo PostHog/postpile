@@ -149,8 +149,9 @@ export interface Actions {
   /**
    * `headOid`: the head commit on screen; the server refuses the approval when
    * the PR moved past it. `body`: the note from "Approve with comment", empty for none.
+   * Returns true when it went out.
    */
-  approve(prKey: PrKey, headOid: string, body?: string): Promise<void>;
+  approve(prKey: PrKey, headOid: string, body?: string): Promise<boolean>;
   /**
    * "Comment review": a review with event COMMENT on `headOid`, refused like
    * approve when the PR moved past it. Final, blocked while locked. Returns
@@ -235,11 +236,25 @@ export interface Actions {
   setTopicDriver(topicId: string, driver: string | null): Promise<void>;
   /** Returns the agent's draft, or null when drafting failed. */
   draftAsk(prKey: PrKey, person: string, intent: string): Promise<string | null>;
-  /** The agent's draft for "Approve with comment" or "Comment review", or null when drafting failed. */
-  draftReviewNote(prKey: PrKey, kind: ReviewNoteKind): Promise<string | null>;
+  /**
+   * The agent's draft for "Approve with a note" or "Comment review", or null
+   * when drafting failed. `gist`: the user's words to write it from ("Rewrite
+   * with the agent"); empty drafts from the PR alone.
+   */
+  draftReviewNote(prKey: PrKey, kind: ReviewNoteKind, gist?: string): Promise<string | null>;
+  /** The agent's draft of a reply to one comment, from its thread and `gist` (empty: from the thread alone). Null when drafting failed. */
+  draftReply(prKey: PrKey, commentId: string, gist: string): Promise<string | null>;
   /** Returns true when the comment went out. */
   sendComment(prKey: PrKey, body: string): Promise<boolean>;
-  chat(tileId: string, message: string): Promise<ChatReply | null>;
+  /**
+   * Reply to one human comment: in its thread for a code comment, else a new
+   * PR comment that quotes it. Final, blocked while locked. True when it went out.
+   */
+  replyToComment(prKey: PrKey, commentId: string, body: string): Promise<boolean>;
+  /** A thumbs up on a comment or review. Blocked while locked. True when it went out. */
+  react(prKey: PrKey, commentId: string): Promise<boolean>;
+  /** A message in the topic's agent chat ("Ask the agent"). Local, not a GitHub write. */
+  topicChat(topicId: string, message: string): Promise<ChatReply | null>;
   /** A message in the "Your instructions" chat. Local, not a GitHub write. */
   instructionsChat(message: string): Promise<InstructionsChatReply | null>;
   /** "Keep for all topics": the user's chat message asked as an instructions change. Null when it changes nothing. */
@@ -467,12 +482,13 @@ export function ActionsProvider(props: { children: ReactNode }) {
    * answers. A failed PR is put back (the whole call, when it all failed) and
    * the server's message replaces the toast. The busy key holds until the
    * refetch: the topic's own offers are core's and are not worked out here.
+   * Returns true when every PR was approved.
    */
-  async function runApprove(busyKey: string, prKeys: PrKey[], task: () => Promise<ActionResult & { results: PrApproveResult[] }>): Promise<void> {
+  async function runApprove(busyKey: string, prKeys: PrKey[], task: () => Promise<ActionResult & { results: PrApproveResult[] }>): Promise<boolean> {
     if (isBlocked('approve')) {
-      return;
+      return false;
     }
-    await withBusy(busyKey, async () => {
+    return withBusy(busyKey, async () => {
       const showApproved = (keys: PrKey[]) => {
         const at = new Date().toISOString();
         return Promise.all([
@@ -481,11 +497,13 @@ export function ActionsProvider(props: { children: ReactNode }) {
         ]).then((rollbacks) => () => rollbacks.forEach((rollback) => rollback()));
       };
       let rollback: (() => void) | null = null;
+      let allApproved = false;
       try {
         rollback = await showApproved(prKeys);
         show('ok', approvedMessage(prKeys.length));
         const result = await task();
         const failed = result.results.filter((entry) => !entry.ok).map((entry) => entry.prKey);
+        allApproved = failed.length === 0;
         if (failed.length > 0) {
           rollback();
           const worked = prKeys.filter((key) => !failed.includes(key));
@@ -501,6 +519,7 @@ export function ActionsProvider(props: { children: ReactNode }) {
         show('error', errorText(error));
       }
       await refreshAll();
+      return allApproved;
     });
   }
 
@@ -724,10 +743,11 @@ export function ActionsProvider(props: { children: ReactNode }) {
     }
   }
 
-  async function chat(tileId: string, message: string): Promise<ChatReply | null> {
+  async function topicChat(topicId: string, message: string): Promise<ChatReply | null> {
     try {
-      const reply = await withBusy(`chat:${tileId}`, () => request<ChatReply>('POST', `${tilePath(tileId)}/chat`, { message }));
-      await queryClient.invalidateQueries({ queryKey: queryKeys.chat(tileId) });
+      const path = `/api/topics/${encodeURIComponent(topicId)}/chat`;
+      const reply = await withBusy(`chat:${topicId}`, () => request<ChatReply>('POST', path, { message }));
+      await queryClient.invalidateQueries({ queryKey: queryKeys.topicChat(topicId) });
       return reply;
     } catch (error) {
       show('error', `Chat failed: ${errorText(error)}`);
@@ -873,12 +893,11 @@ export function ActionsProvider(props: { children: ReactNode }) {
     markThreadRead: async (threadId) => {
       await run(`markThread:${threadId}`, 'markRead', () => request('POST', `/api/notifications/${encodeURIComponent(threadId)}/mark-read`));
     },
-    approve: async (prKey, headOid, body = '') => {
-      await runApprove(`approve:${prKey}`, [prKey], async () => {
+    approve: (prKey, headOid, body = '') =>
+      runApprove(`approve:${prKey}`, [prKey], async () => {
         const result = await request<ActionResult>('POST', `${prPath(prKey)}/approve`, { headOid, body });
         return { ...result, results: [{ prKey, ok: result.ok, message: result.message }] };
-      });
-    },
+      }),
     commentReview: (prKey, headOid, body) =>
       run(`commentReview:${prKey}`, 'commentReview', () => request('POST', `${prPath(prKey)}/comment-review`, { headOid, body })),
     approveAgent: async (input) => {
@@ -963,9 +982,13 @@ export function ActionsProvider(props: { children: ReactNode }) {
     markOpenedRead,
     refreshGlanceOnLook,
     draftAsk: (prKey, person, intent) => draft(`ask:${prKey}`, `${prPath(prKey)}/draft-ask`, { person, intent }),
-    draftReviewNote: (prKey, kind) => draft(`reviewNote:${prKey}`, `${prPath(prKey)}/draft-review-note`, { kind }),
+    draftReviewNote: (prKey, kind, gist = '') => draft(`reviewNote:${prKey}`, `${prPath(prKey)}/draft-review-note`, { kind, gist }),
+    draftReply: (prKey, commentId, gist) => draft(`reply:${prKey}:${commentId}`, `${prPath(prKey)}/draft-reply`, { commentId, gist }),
     sendComment: (prKey, body) => run(`comment:${prKey}`, 'comment', () => request('POST', `${prPath(prKey)}/comment`, { body })),
-    chat,
+    replyToComment: (prKey, commentId, body) =>
+      run(`replySend:${prKey}:${commentId}`, 'reply', () => request('POST', `${prPath(prKey)}/reply`, { commentId, body })),
+    react: (prKey, commentId) => run(`react:${prKey}:${commentId}`, 'react', () => request('POST', `${prPath(prKey)}/react`, { commentId })),
+    topicChat,
     instructionsChat,
     proposeInstructions,
     saveInstructions,

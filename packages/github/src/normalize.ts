@@ -28,6 +28,7 @@ import type {
   RawConnection,
   RawEdit,
   RawPullRequest,
+  RawReactions,
   RawRequestedReviewer,
   RawReview,
   RawReviewThread,
@@ -138,6 +139,18 @@ function toReviewDecision(decision: string | null): ReviewDecision {
   return decision && REVIEW_DECISIONS.has(decision) ? (decision as ReviewDecision) : 'NONE';
 }
 
+/**
+ * Whether the viewer gave it a thumbs up, as `viewerReacted`. Left out when
+ * the raw node has no reaction groups (fixtures and answers from before
+ * they were asked for), so those read as false like older snapshots.
+ */
+function toReacted(raw: RawReactions): Pick<Comment, 'viewerReacted'> {
+  if (raw.reactionGroups === undefined) {
+    return {};
+  }
+  return { viewerReacted: raw.reactionGroups.some((group) => group.content === 'THUMBS_UP' && group.viewerHasReacted) };
+}
+
 function toReview(raw: RawReview): Review {
   return {
     id: raw.id,
@@ -146,6 +159,7 @@ function toReview(raw: RawReview): Review {
     body: raw.body,
     submittedAt: isoTime(raw.submittedAt ?? raw.createdAt),
     commitOid: raw.commit?.oid ?? null,
+    ...toReacted(raw),
   };
 }
 
@@ -172,6 +186,7 @@ function toIssueComment(raw: RawComment): Comment {
     path: null,
     threadId: null,
     ...toEdit(raw),
+    ...toReacted(raw),
   };
 }
 
@@ -186,6 +201,7 @@ function toReviewBodyComment(raw: RawReview): Comment {
     path: null,
     threadId: null,
     ...toEdit(raw),
+    ...toReacted(raw),
   };
 }
 
@@ -210,6 +226,7 @@ function toThread(raw: RawReviewThread): ReviewThread {
     path: raw.path,
     threadId: raw.id,
     ...toEdit(c),
+    ...toReacted(c),
   }));
   return { id: raw.id, path: raw.path, isResolved: raw.isResolved, comments };
 }

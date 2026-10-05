@@ -1,5 +1,22 @@
-import type { AgentService } from '@postpile/agent';
-import { isOwnTeam, prReadScope, teamSlug, viewerHeadReview, type ActionResult, type Pr, type PrKey, type ReviewNoteKind } from '@postpile/core';
+import type { AgentService, PromptContext } from '@postpile/agent';
+import {
+  findComment,
+  findReactable,
+  isOwnTeam,
+  prReadScope,
+  quotedReplyBody,
+  replyConversation,
+  replyTarget,
+  teamSlug,
+  viewerHeadReview,
+  type ActionResult,
+  type Pr,
+  type PrKey,
+  type ReplyTarget,
+  type ReviewNoteKind,
+  type Viewer,
+  withViewerReaction,
+} from '@postpile/core';
 import type { Store } from '@postpile/store';
 import type { PromptContextSource } from '../prompt-context.ts';
 import { errorText } from '../errors.ts';
@@ -196,24 +213,58 @@ export class PrActions {
     }
   }
 
-  /** One draft through the agent, with the instructions and work context of the PR's topic. Never sent by the agent. */
-  private async draftComment(key: PrKey, person: string | null, intent: string, notes: string[] = []): Promise<{ body: string }> {
+  /** The stored PR and the viewer a draft needs; throws before the first sync. */
+  private draftInputs(key: PrKey): { pr: Pr; viewer: Viewer } {
     const pr = this.store.prs.get(key);
     const viewer = loadViewer(this.store);
     if (!pr || !viewer) {
       throw new Error(`${key} is not in the store yet; run a sync first`);
     }
+    return { pr, viewer };
+  }
+
+  /** The instructions and work context of the PR's topic, for drafts. */
+  private contextFor(key: PrKey): PromptContext {
     const topicId = this.store.memberships.get(key)?.topicId ?? null;
-    return this.agent.draftComment({ pr, viewer, person, intent, notes, context: this.contexts.forTopic(topicId) });
+    return this.contexts.forTopic(topicId);
   }
 
-  draftAsk(key: PrKey, person: string, intent: string): Promise<{ body: string }> {
-    return this.draftComment(key, person, intent);
+  /** "Ask <person>": a draft through the agent the user edits before sendComment. Never sent by the agent. */
+  async draftAsk(key: PrKey, person: string, intent: string): Promise<{ body: string }> {
+    const { pr, viewer } = this.draftInputs(key);
+    return this.agent.draftComment({ pr, viewer, person, intent, notes: [], context: this.contextFor(key) });
   }
 
-  /** The draft for the review note popover (Approve with comment, Comment review): addressed to nobody, fed the glance. */
-  draftReviewNote(key: PrKey, kind: ReviewNoteKind): Promise<{ body: string }> {
-    return this.draftComment(key, null, reviewNoteIntent(kind), reviewNoteGlanceNotes(this.store.glances.get(key)));
+  /**
+   * The draft for the review note popover (Approve with comment, Comment
+   * review): addressed to nobody, fed the glance. A non-empty `gist` is the
+   * user's own text ("Rewrite with the agent") the note is written from.
+   */
+  async draftReviewNote(key: PrKey, kind: ReviewNoteKind, gist = ''): Promise<{ body: string }> {
+    const { pr, viewer } = this.draftInputs(key);
+    const notes = reviewNoteGlanceNotes(this.store.glances.get(key));
+    return this.agent.draftComment({ pr, viewer, person: null, intent: reviewNoteIntent(kind), notes, gist, context: this.contextFor(key) });
+  }
+
+  /**
+   * A reply to one comment, drafted from its thread or the conversation
+   * around it, or from the user's own words in `gist`. Never sent by the agent.
+   */
+  async draftReply(key: PrKey, commentId: string, gist: string): Promise<{ body: string }> {
+    const { pr, viewer } = this.draftInputs(key);
+    const comment = findComment(pr, commentId);
+    if (!comment) {
+      throw new Error(`no comment ${commentId} on ${key}`);
+    }
+    return this.agent.draftReply({
+      pr,
+      viewer,
+      comment,
+      conversation: replyConversation(pr, comment),
+      gist,
+      notes: reviewNoteGlanceNotes(this.store.glances.get(key)),
+      context: this.contextFor(key),
+    });
   }
 
   async sendComment(key: PrKey, body: string): Promise<ActionResult> {
@@ -233,5 +284,64 @@ export class PrActions {
     }
     await this.refreshPr(key);
     return ok('Comment sent');
+  }
+
+  /**
+   * A reply to one comment (2026-10-05): an inline comment is answered in its
+   * review thread; an issue comment or review body gets a new PR comment
+   * that quotes its first line and mentions its author (`quotedReplyBody`).
+   * Final, blocked while writes are locked; the PR is fetched again after.
+   */
+  async replyToComment(key: PrKey, commentId: string, body: string): Promise<{ result: ActionResult; target: ReplyTarget | null }> {
+    const pr = this.store.prs.get(key);
+    const comment = pr ? findComment(pr, commentId) : null;
+    if (!pr || !comment) {
+      return { result: failed(`No comment ${commentId} on ${key} in the store`), target: null };
+    }
+    if (body.trim() === '') {
+      return { result: failed('Empty reply'), target: null };
+    }
+    const target = replyTarget(comment);
+    const context = { origin: 'detail' as const, prKey: key };
+    try {
+      const sent =
+        target.kind === 'thread'
+          ? await this.writes.replyInThread(target.threadId, body, context)
+          : await this.writes.replyOnPr(pr.ref, quotedReplyBody(comment, body), { ...context, detail: `reply to ${comment.author}'s comment ${comment.id}` });
+      if (sent === 'off') {
+        return { result: failed('GitHub writes are off (lock in the footer): the reply was not sent'), target };
+      }
+    } catch (error) {
+      return { result: failed(`Reply failed: ${errorText(error)}`), target };
+    }
+    await this.refreshPr(key);
+    return { result: ok('Reply sent'), target };
+  }
+
+  /**
+   * A thumbs up on a comment or a review (an approval without a body is no
+   * comment, but GitHub takes a reaction on the review). Final like a
+   * comment. Nothing else on the PR changes, so there is no refetch: the
+   * stored snapshot is marked right away, and the next poll reads GitHub's.
+   */
+  async react(key: PrKey, id: string): Promise<ActionResult> {
+    const pr = this.store.prs.get(key);
+    if (!pr || !findReactable(pr, id)) {
+      return failed(`No comment or review ${id} on ${key} in the store`);
+    }
+    try {
+      if ((await this.writes.addThumbsUp(id, { origin: 'detail', prKey: key })) === 'off') {
+        return failed('GitHub writes are off (lock in the footer): the reaction was not sent');
+      }
+    } catch (error) {
+      return failed(`Reaction failed: ${errorText(error)}`);
+    }
+    // Read again: a poll may have stored a newer snapshot while GitHub answered. The fetch time stays.
+    const current = this.store.prs.get(key);
+    const fetchedAt = this.store.prs.fetchedAtByKey().get(key);
+    if (current && fetchedAt) {
+      this.store.prs.upsert(withViewerReaction(current, id), fetchedAt);
+    }
+    return ok('Thumbs up sent');
   }
 }

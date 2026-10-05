@@ -1,6 +1,6 @@
 import { createContext, useContext } from 'react';
 
-/** "Tell the agent what's wrong": opens the selected tile's chat with a draft. */
+/** "Tell the agent" (what's wrong): opens the topic's agent pane with a draft. */
 export interface TellAgent {
   /** False while no tile is selected, so there is no chat to open. */
   available: boolean;
@@ -13,9 +13,10 @@ export function useTellAgent(): TellAgent {
   return useContext(TellAgentContext);
 }
 
-/** A request to open the tile chat with `draft`; `seq` tells two equal drafts apart. */
+/** A request to open the agent pane of `topicId` with `draft`; `seq` tells two equal drafts apart. */
 export interface ChatRequest {
   seq: number;
+  topicId: string;
   draft: string;
 }
 

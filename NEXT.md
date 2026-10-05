@@ -6,6 +6,35 @@ now".
 
 ## Done
 
+- Agent chat sending (2026-10-05, DESIGN.md "Topic chat", "Ask the
+  agent"): the message shows at once with a "Thinking…" bubble, the list
+  stays on the newest message, the input is a growing textarea (Enter
+  sends), and a failed turn stores nothing and puts the text back.
+  Kept-open CLI sessions and streaming were checked and left out: prompt
+  caching already works across one-off calls and the process start is
+  about 0.25s of a ~4.5s answer.
+- PR pane actions (2026-10-05, DESIGN.md "The PR pane"): review row
+  (`ReviewRow`) right after the glance with a GitHub review-state label,
+  housekeeping as a quiet line under it (`PaneHousekeeping`), one "Open on
+  GitHub" with a place menu (`OpenOnGitHub`), one inline `Composer` for
+  approve-with-note, comment review, Ask and replies, Reply and React on
+  every person's comment in the activity, "Reply ↓" jumps from "New
+  since", Recheck and "Tell the agent" on the glance title, and the
+  topic-scoped `AgentPane` that takes over the right pane ("Ask the agent"
+  in the topic header). Replaced `ActionBar`, `ApproveButtons`,
+  `ComposePopover`, `RemoveTeamButton` and `TileChat`.
+- PR pane backend: reply, thumbs up, reply drafts, topic chat (2026-10-05,
+  DESIGN.md "Reply to a comment", "Thumbs up", "Reply drafts", "Topic
+  chat"): `replyToComment` (inline comment: reply in its review thread;
+  issue comment or review body: a PR comment quoting its first line and
+  mentioning the author), `react` (thumbs up on a comment or review),
+  `draftReply` (from the thread or conversation, or from the user's gist),
+  an optional `gist` on `draftReviewNote`, and `topicChat` /
+  `getTopicChat` stored under `topic:<id>`. The reader fetches
+  `viewerReacted` on comments and reviews. Routes under the PR path
+  (`/reply`, `/react`, `/draft-reply`) and `/api/topics/:id/chat`; the fake
+  engine does all of it in memory and sample #1902 has an author reply in
+  its thread. The tile chat is removed (routes, engine, prompt tile mode).
 - Inbox catch-up dialog (2026-10-03, DESIGN.md "Inbox cleanup"): replaces
   the old cleanup banner and dialog. Unread merged PRs (quiet 7+ / 14+ days
   or all) and everything else older than 14 / 30 days, cleared on GitHub in
@@ -1143,6 +1172,20 @@ the app meanwhile.
   cycles, "synced 2h ago" only with the poll off. The full
   sync's time, counts and report sit in the tooltip; the footer says "last
   full sync".
+- **The PR pane by audience** (2026-10-05, DESIGN.md "The PR pane"): eight
+  rules (act where you read, one surface per audience, fixed order, use
+  and pointer set prominence, say where it goes, one way to write, depth
+  on GitHub, the agent holds no controls). The review row is its own row
+  right after the glance: shortest pointer path from the tile. Replies
+  live in the activity; "New since" only jumps there. The agent chat is
+  topic-scoped and takes over the right pane. Rejected: buttons welded
+  into the glance, a review row in the PR header, a composer dock, a "your
+  move" card that reorders actions, reply composers inside "New since",
+  chips and a three-button card for lasting points, an agent sheet over
+  the app.
+- **Agent chat per topic** (2026-10-05, DESIGN.md "Topic chat"): "Ask the
+  agent" moves from the tile to the topic header; stored in `chat_message`
+  under `topic:<id>`, no migration.
 - **Self-update** (2026-10-03, DESIGN.md "Self-update"): the app downloads
   releases itself (electron-updater, GitHub provider) and the reminder
   offers "Restart to update"; the brew command stays as the fallback. The

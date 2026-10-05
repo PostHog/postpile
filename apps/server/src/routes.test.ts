@@ -416,9 +416,9 @@ describe('server routes over the fake engine', () => {
 
   it('turns a lasting chat point into tailoring once confirmed', async () => {
     const app = appWithFake();
-    const reply = await post<ChatReply>(app, `/api/tiles/${setTile}/chat`, { message: 'Always flag Turbo version bumps here' });
+    const reply = await post<ChatReply>(app, '/api/topics/topic-depot/chat', { message: 'Always flag Turbo version bumps here' });
     expect(reply.json.lastingPoint).toMatchObject({ topicId: 'topic-depot', text: 'Always flag Turbo version bumps here' });
-    const history = (await (await app.request(`/api/tiles/${setTile}/chat`)).json()) as unknown[];
+    const history = (await (await app.request('/api/topics/topic-depot/chat')).json()) as unknown[];
     expect(history).toHaveLength(2);
 
     await post(app, '/api/topics/topic-depot/tailoring', { text: 'Always flag Turbo version bumps here', keep: true });
@@ -428,7 +428,7 @@ describe('server routes over the fake engine', () => {
 
   it('turns a point the user keeps for all topics into an instructions proposal and saves it on accept', async () => {
     const app = appWithFake();
-    const reply = await post<ChatReply>(app, `/api/tiles/${setTile}/chat`, { message: 'From now on flag every CI timeout change' });
+    const reply = await post<ChatReply>(app, '/api/topics/topic-depot/chat', { message: 'From now on flag every CI timeout change' });
     const sourceChatMessageId = reply.json.lastingPoint?.sourceChatMessageId;
     const proposed = await post<InstructionsProposalReply>(app, '/api/instructions/proposals', { sourceChatMessageId });
     const proposal = proposed.json.proposal;
@@ -472,6 +472,58 @@ describe('server routes over the fake engine', () => {
     await post(app, '/api/github-writes', { enabled: true });
     const sent = await post<ActionResult>(app, '/api/prs/acme/app/1915/comment', { body: draft.json.body });
     expect(sent.json.message).toContain('nothing sent to GitHub');
+  });
+
+  it('replies to a thread comment and an issue comment, and keeps both local', async () => {
+    const app = appWithFake();
+    const locked = await post<ActionResult>(app, '/api/prs/acme/app/1902/reply', { commentId: 'thread-1902-1-0', body: 'Yes, next layer.' });
+    expect(locked.json.ok).toBe(false);
+    await post(app, '/api/github-writes', { enabled: true });
+    const inThread = await post<ActionResult>(app, '/api/prs/acme/app/1902/reply', { commentId: 'thread-1902-1-0', body: 'Yes, next layer.' });
+    const quoting = await post<ActionResult>(app, '/api/prs/acme/app/1902/reply', { commentId: 'issuecomment-2', body: 'One cold hour is fine.' });
+    expect([inThread.json.ok, quoting.json.ok]).toEqual([true, true]);
+    const pr = ((await (await app.request('/api/prs/acme/app/1902')).json()) as PrDetail).pr;
+    expect(pr.threads.find((thread) => thread.id === 'thread-1902-1')?.comments.map((comment) => comment.author)).toEqual(['nell', 'rowan', 'you']);
+    expect(pr.comments.at(-1)?.body).toMatch(/^> @you does the warm-up job need a feature flag[^\n]*\n\n@lyra One cold hour is fine\.$/);
+    expect((await post<ActionResult>(app, '/api/prs/acme/app/1902/reply', { commentId: 'nope', body: 'x' })).json.ok).toBe(false);
+    expect((await post(app, '/api/prs/acme/app/1902/reply', { commentId: 'issuecomment-2', body: '' })).status).not.toBe(200);
+  });
+
+  it('gives a thumbs up to a comment and to a review', async () => {
+    const app = appWithFake();
+    await post(app, '/api/github-writes', { enabled: true });
+    expect((await post<ActionResult>(app, '/api/prs/acme/app/1902/react', { commentId: 'issuecomment-2' })).json.ok).toBe(true);
+    expect((await post<ActionResult>(app, '/api/prs/acme/app/1902/react', { commentId: 'review-1902-0' })).json.ok).toBe(true);
+    const pr = ((await (await app.request('/api/prs/acme/app/1902')).json()) as PrDetail).pr;
+    expect(pr.comments.find((comment) => comment.id === 'issuecomment-2')?.viewerReacted).toBe(true);
+    expect(pr.reviews.find((review) => review.id === 'review-1902-0')?.viewerReacted).toBe(true);
+    expect((await post<ActionResult>(app, '/api/prs/acme/app/1902/react', { commentId: 'nope' })).json.ok).toBe(false);
+  });
+
+  it('drafts replies and review notes from a gist', async () => {
+    const app = appWithFake();
+    const fromContext = await post<{ body: string }>(app, '/api/prs/acme/app/1902/draft-reply', { commentId: 'thread-1902-1-0' });
+    expect(fromContext.json.body).not.toBe('');
+    const fromGist = await post<{ body: string }>(app, '/api/prs/acme/app/1902/draft-reply', { commentId: 'issuecomment-2', gist: 'one cold hour is fine' });
+    expect(fromGist.json.body).toBe('One cold hour is fine.');
+    const note = await post<{ body: string }>(app, '/api/prs/acme/app/1902/draft-review-note', { kind: 'approve', gist: 'watch the first cold run' });
+    expect(note.json.body).toBe('Watch the first cold run.');
+    const plainNote = await post<{ body: string }>(app, '/api/prs/acme/app/1902/draft-review-note', { kind: 'approve' });
+    expect(plainNote.json.body).toBe('No blockers. A test for the retry limit can follow.');
+  });
+
+  it('chats on a whole topic, apart from the tile chats', async () => {
+    const app = appWithFake();
+    const reply = await post<ChatReply>(app, '/api/topics/topic-depot/chat', { message: 'always flag runner image changes' });
+    expect(reply.json.lastingPoint).toMatchObject({ topicId: 'topic-depot' });
+    const chat = (await (await app.request('/api/topics/topic-depot/chat')).json()) as ChatReply['message'][];
+    expect(chat.map((message) => [message.tileId, message.role])).toEqual([
+      ['topic:topic-depot', 'user'],
+      ['topic:topic-depot', 'agent'],
+    ]);
+    const unsorted = await post<ChatReply>(app, '/api/topics/unsorted/chat', { message: 'always flag runner image changes' });
+    expect(unsorted.json.lastingPoint).toMatchObject({ topicId: null });
+    expect((await post(app, '/api/topics/topic-depot/chat', { message: '' })).status).not.toBe(200);
   });
 
   it('unmutes an event and decides a proposal', async () => {

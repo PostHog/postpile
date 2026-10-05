@@ -30,7 +30,7 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
 
 - One file per resource in `api/`: `topics.ts` (`useTopics`, `useTopic`,
   `useFinishedTopics` for the sidebar's Archive drawer),
-  `pr.ts` (`usePr`), `chat.ts` (`useChat`), `config.ts` (`useAppConfig`),
+  `pr.ts` (`usePr`), `chat.ts` (`useTopicChat`, the agent pane), `config.ts` (`useAppConfig`),
   `viewer.ts` (`useViewer`, login, teammates and home teams for the filter
   buttons; no home team hides Team, `visibleQueueFilters`),
   `team-roles.ts` (`useTeamRoles`, home or routing only per team for "Your
@@ -110,9 +110,9 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
 
 - **Every POST/DELETE goes through `useActions()`** from `api/actions.tsx`.
   Components never call `request()` for a mutation.
-- **GitHub writes are guarded.** approve, send comment, mark read (tile
-  and PR-scoped), "not mine" (it queues a mark-read) and "Remove <team>"
-  pass through `writeBlockedReason` in
+- **GitHub writes are guarded.** approve, comment review, send comment,
+  reply, react, mark read (tile and PR-scoped), "not mine" (it queues a
+  mark-read) and "Remove <team>" pass through `writeBlockedReason` in
   `lib/guard.ts`, which reads the footer lock (`useGitHubWrites`, `GET
   /api/github-writes`, changes at runtime). With the lock closed
   (read-only, the default) approve and comment are blocked with a clear
@@ -168,13 +168,14 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
 - Big memory lines get "Recheck" (and "Forget" on a care): `MemoryLine`
   takes `canRecheck` (dossier status, goal, open questions, people, cares;
   facts with `FactView.recheckable`), never change lines or activity. The
-  action bar's "Recheck" opens `RecheckDialog` for the whole glance
-  (`prKey` set, no Accept, only Tell the agent / Close). Recheck opens
+  glance's "Recheck" (on its title line, next to "Tell the agent") opens
+  `RecheckDialog` for the whole glance (`prKey` set, no Accept, only Tell
+  the agent / Close). Recheck opens
   `RecheckDialog`: `recheckMemory` runs one agent call and writes nothing;
   the user then accepts the outcome through `correctMemory` (holds ->
   `confirm`, fix -> `fix` with `fixedText`, drop -> `wrong`) or picks "Tell
-  the agent what's wrong", which opens the selected tile's chat with the
-  line quoted (`TellAgentContext`). Corrections only touch local memory, so
+  the agent what's wrong", which opens the topic's agent pane with the
+  line quoted (`TellAgentContext`, `AgentPane`). Corrections only touch local memory, so
   they are not on the `GithubWrite` list, and carry an undo token (toast
   Undo, 6s). A fact changes right away; a dossier line shows struck through
   (`correctedClaims`) or with its fix (`fixedClaims`) until the next sync
@@ -184,9 +185,9 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   `saveInstructions`) are local (instructions.md + SQLite), not on the
   `GithubWrite` list. The user's instructions are never changed without an
   Accept on a proposal; the card shows a line diff (`lib/diff.ts`), Edit
-  and Reject. In tile chat the user places a lasting point ("Keep for this
-  topic" / "Keep for all topics" / "Just this once"); the agent never picks
-  the scope. A save that comes back with `rebased` (the
+  and Reject. In the agent pane the user places a lasting point with one
+  line ("For this topic · For all topics"; left alone it is just this
+  once); the agent never picks the scope. A save that comes back with `rebased` (the
   file changed on disk meanwhile) replaces the card's proposal, it is not
   an error to swallow.
 - Lessons (DESIGN.md "Lessons from your reviews") are local, not on the
@@ -255,7 +256,23 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   the words come from `glanceState` and `glanceRefreshBlock`. Its timer
   (`lib/glance-look.ts`) is its own, apart from the opened mark's.
 - Approve is final (GitHub has no un-approve). Keep it a deliberate click in
-  the detail pane, in the action bar right under the assessment boxes.
+  the detail pane, in the review row right after the glance (DESIGN.md
+  "The PR pane", 2026-10-05): its own row with a GitHub review-state label
+  (`reviewRowLabel` over core's `PrDetail.viewerReview`), never inside the
+  glance, same order on every PR.
+- The pane's writes share one inline `Composer` (state per PR in `PrBody`
+  through `ComposeProvider`, one open at a time, drafts kept per target):
+  a header that says where it goes, one box with the agent's pill where the
+  text starts ("✨ Draft with agent" / "✨ Rewrite with agent", never an
+  automatic draft), Cancel and a button that names the target. Replies live in the activity list
+  (core's `ActivityLine.reply`, once per comment); "New since" only jumps there
+  ("Reply ↓", `jumpToReply`). Housekeeping (`PaneHousekeeping`) is a quiet
+  line right under the review row, never in `DetailContext` (that band is
+  the stack/set PR picker); "Open on GitHub" (`OpenOnGitHub`) only on the
+  state line.
+- The agent pane (`AgentPane`, App's `agentRequest`) replaces the detail
+  pane for the topic on screen; `go()` clears it, so any pick hands the
+  column back to the PR. Never put agent talk inside the PR pane.
 - The detail pane acts on the selected PR, the tile footer on the tile
   (2026-09-29). What each button says, whether it shows and which one leads
   come from core (`TileView.offers`: `footer`, `markLabel`, `github`,
@@ -267,10 +284,10 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   Don't pick a primary or decide a button's visibility in a component or
   in `lib/`; add it to core's offers. Approve's label and look
   (`approveButton`) stay display.
-- "Remove <team>" (`RemoveTeamButton`, one per `PaneOffers.removeTeams`
-  entry via `removeTeamButtons` in `lib/team-request.ts`) removes the
-  team's review request, unsubscribes and marks the PR done. It asks once
-  in a small popover and has no undo. Never the primary.
+- "Remove <team>" (one item per `PaneOffers.removeTeams` entry via
+  `removeTeamButtons` in `lib/team-request.ts`, in `PaneHousekeeping`'s ⋯
+  menu) removes the team's review request, unsubscribes and marks the PR
+  done. It asks once in the menu's panel and has no undo. Never the primary.
 - "Not up to date" has one wording (`lib/staleness.ts`): "updating" while
   `useActions().syncing` or a catch-up writes (`glanceState` `writing`
   for a glance; `memoryUpdating` on the topic or PR for dossier and facts,
@@ -356,10 +373,12 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
 - One component per file in `components/`, named like the UI part:
   `TitleBar`, `TopicSidebar`, `TopicHeader` (+ `SinceLastLooked`,
   `DossierPanel`, `TopicRepo` on the owner line), `InboxPane`, `TileGrid`, `Tile`, `PrRow` (+ `AssignedTo`, also in `PrBody`), `NotificationsPane` (+ `NotificationRow`), `HandledQuietlyPane`,
-  `DetailPane` (+ `DetailContext`, `PrBody`, `GlanceCard`, `KeyFiles`,
-  `PrDescription`, `PrFacts`, `ReviewList`, `NewSinceBox` (under the
-  title; the activity list then shows only earlier events),
-  `AgentFacts`, `ActivityTimeline`, `ActionBar` (+ `RemoveTeamButton`, `ApproveButtons` (split Approve and Comment review), `ComposePopover` (Approve with comment, Comment review and Ask share it)), `TileChat`),
+  `DetailPane` (+ `DetailContext`, `PrBody` with `OpenOnGitHub`,
+  `GlanceCard`, `ReviewRow`, `PaneHousekeeping`, `Composer`, `KeyFiles`,
+  `PrDescription`, `PrFacts`, `ReviewList`, `NewSinceBox` (the digest
+  under the title, "Reply ↓" jumps), `AgentFacts`, `ActivityTimeline`
+  (every line, Reply and React on people's comments)), `AgentPane` (the
+  topic's agent, in the detail pane's place),
   `StatusFooter` (+ `WritesLock`), `Toast`, `SearchField` (title bar filter),
   `ToolsNotice` (missing gh or claude, with `FixCommand`, shared with setup),
   `RepoScopeMenu` (title bar repo scope + "Let it go stale"),
@@ -385,14 +404,14 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   `McpConnectOffer` (the offer body, shared with `SetupAcceptStep`'s
   optional box; secondary button there so Accept stays the one primary).
 - Shared kit: `Button` (variants primary, safe, secondary, move for the
-  "Your move" footer; sizes sm, md, icon, icon-md), `Menu`, `Avatar`, `SectionLabel`, `pills.tsx` (verdict, `UnreadDot`
+  "Your move" footer, quiet for the pane's housekeeping; sizes sm, md, icon, icon-md), `Menu`, `Avatar`, `SectionLabel`, `pills.tsx` (verdict, `UnreadDot`
   (the coral dot before a PR number and on a topic, core `TileView.unreadPrKeys`), `ForWhomChip`,
   `StateWordLabel`, `StackMark`: the "1/3" layers tag, place from
   `stackPlaces` in `lib/stacks.ts` over `tile.stacks`), `icons.tsx` (`Glyph` event set, `PrStateIcon`), `TurnLine`, and for memory `MemoryLine` (text, source chips,
   stale / marked-wrong / fixed badge, Why? / Recheck / Forget on hover),
   `MemoryButton` ("Forget"), `RecheckDialog`,
   `SourceChip`, `WhyPanel` + `MemorySourceRow` ("Why?"), `DiffView`,
-  `InstructionsProposalCard` (tile chat, the instructions view and under a
+  `InstructionsProposalCard` (the agent pane, the instructions view and under a
   lesson; `onDone(accepted)`),
   `LessonCard` (one lesson: "Remember for future assessments?", the line,
   `lessonSource` / `earlierAssessmentText` from `lib/lessons.ts`, then

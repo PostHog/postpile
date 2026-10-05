@@ -70,7 +70,7 @@ function fakeEngine(overrides: Partial<EngineService>): EngineService {
     discardPendingWrites: notImplemented,
     markThreadRead: notImplemented,
     markOpenedRead: notImplemented,
-    getChat: notImplemented,
+    getTopicChat: notImplemented,
     approve: notImplemented,
     approveMany: notImplemented,
     commentReview: notImplemented,
@@ -84,9 +84,12 @@ function fakeEngine(overrides: Partial<EngineService>): EngineService {
     draftAsk: notImplemented,
     draftReviewNote: notImplemented,
     sendComment: notImplemented,
+    draftReply: notImplemented,
+    replyToComment: notImplemented,
+    react: notImplemented,
     giveFeedback: notImplemented,
     unmuteEvent: notImplemented,
-    chat: notImplemented,
+    topicChat: notImplemented,
     decideTailoring: notImplemented,
     decideTopicProposal: notImplemented,
     refreshNow: notImplemented,
@@ -327,12 +330,13 @@ describe('server app', () => {
 
   it('decodes encoded tile ids', async () => {
     let seen = '';
-    const getChat = async (tileId: string) => {
+    const unsnooze = async (tileId: string) => {
       seen = tileId;
-      return [];
+      return { ok: true, message: 'Unsnoozed', undoToken: null };
     };
-    const app = createApp(fakeEngine({ getChat }), 'secret', CONFIG);
-    await app.request(`/api/tiles/${encodeURIComponent('pr:acme/app#1')}/chat`, {
+    const app = createApp(fakeEngine({ unsnooze }), 'secret', CONFIG);
+    await app.request(`/api/tiles/${encodeURIComponent('pr:acme/app#1')}/snooze`, {
+      method: 'DELETE',
       headers: { [TOKEN_HEADER]: 'secret' },
     });
     expect(seen).toBe('pr:acme/app#1');

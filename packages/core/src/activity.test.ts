@@ -207,3 +207,54 @@ describe('reviewRequestSubject', () => {
     expect(reviewRequestSubject('rowan commented')).toBeNull();
   });
 });
+
+describe('activityList replies', () => {
+  const lines = (pr: ReturnType<typeof makePr>, ...views: EventView[]) => {
+    const list = activityList(views, who, null, pr);
+    return [...list.fresh, ...list.earlier];
+  };
+
+  it('replies to a conversation comment with a new PR comment, and in its thread to a code comment', () => {
+    const inline = makeComment({ id: 'rc1', author: 'alice', kind: 'review_comment', threadId: 't1', path: '.github/ci.yml' });
+    const pr = makePr({ comments: [makeComment({ id: 'c1', author: 'alice' }), inline] });
+    const [code, plain] = lines(pr, ev({ actor: 'alice', sourceId: 'c1', at: at(1) }), ev({ actor: 'alice', sourceId: 'rc1', at: at(2) }));
+    expect(plain?.reply).toEqual({ commentId: 'c1', author: 'alice', inThread: false, path: null, canReply: true, viewerReacted: false, asksYou: false });
+    expect(code?.reply).toMatchObject({ commentId: 'rc1', inThread: true, path: '.github/ci.yml' });
+  });
+
+  it('asks the viewer on a question, offers only a reaction on an approval without text, carries the viewer reaction', () => {
+    const pr = makePr({ comments: [makeComment({ id: 'c1', author: 'alice', viewerReacted: true })], reviews: [makeReview({ id: 'r1', author: 'lyra' })] });
+    const [review, question] = lines(pr, ev({ kind: 'question_to_user', actor: 'alice', sourceId: 'c1', at: at(1) }), ev({ kind: 'review_approved', actor: 'lyra', sourceId: 'r1', at: at(2) }));
+    expect(question?.reply).toMatchObject({ commentId: 'c1', asksYou: true, viewerReacted: true });
+    expect(review?.reply).toMatchObject({ commentId: 'r1', canReply: false });
+  });
+
+  it('has none for the viewer, bots, pushes or a comment the snapshot lost', () => {
+    const pr = makePr({ comments: [makeComment({ id: 'c1', author: me })] });
+    const views = [
+      ev({ actor: me, sourceId: 'c1', at: at(1) }),
+      ev({ kind: 'comment', actor: 'alice', sourceId: 'gone', at: at(2) }),
+      ev({ kind: 'commits_pushed', actor: 'alice', sourceId: 'head', at: at(3) }),
+    ];
+    expect(lines(pr, ...views).map((line) => line.reply)).toEqual([null, null, null]);
+  });
+
+  it('gives a comment on two lines its reply once, on the newest line, asking when either line asks', () => {
+    const pr = makePr({ comments: [makeComment({ id: 'c1', author: 'alice' }), makeComment({ id: 'c2', author: 'bob' })] });
+    const mention = ev({ kind: 'mention', actor: 'alice', sourceId: 'c1', at: at(1) });
+    const other = ev({ actor: 'bob', sourceId: 'c2', at: at(2) });
+    const edited = ev({ kind: 'comment_edited', actor: 'alice', sourceId: 'c1', at: at(3) });
+    const replies = lines(pr, mention, other, edited).map((line) => [line.id, line.reply?.commentId ?? null, line.reply?.asksYou ?? null]);
+    expect(replies).toEqual([
+      [edited.event.id, 'c1', true],
+      [other.event.id, 'c2', false],
+      [mention.event.id, null, null],
+    ]);
+  });
+
+  it('has no replies without the PR or the viewer', () => {
+    const view = ev({ actor: 'alice', sourceId: 'c1', at: at(1) });
+    expect(activityList([view], null, null, makePr({ comments: [makeComment({ id: 'c1', author: 'alice' })] })).earlier[0]?.reply).toBeNull();
+    expect(activityList([view], who).earlier[0]?.reply).toBeNull();
+  });
+});
