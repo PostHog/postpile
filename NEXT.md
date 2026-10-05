@@ -26,9 +26,18 @@ now".
   (migration 27). The Dock badge counts tiles with a ping not handled yet,
   no badge under Never; it used to count unread topics. The welcome
   notification, and with it the macOS permission prompt, comes only after
-  an opt-in. Checked in fake mode: the setup step, Accept storing the pick,
-  the sidebar menu switching it. Not tried by hand: a real roundup on the
-  Mac, the badge on the real Dock, the permission prompt after an opt-in.
+  an opt-in. Installs that never chose (`InterruptionsView.chosen` false,
+  e.g. from before 0.18, when pings were on by default) get a one-time
+  dialog, `InterruptionsPrompt`, with the same three cards and Never
+  preselected; Save, Esc or a click outside all store a mode, so it never
+  comes back, and it closes only once that save landed (a failed one keeps
+  it open). It never stacks on setup or the inbox cleanup start dialog.
+  Checked in fake mode: the setup step, Accept storing the pick, the
+  sidebar menu switching it, the prompt (Save, Esc and a click outside
+  each store a mode, gone after a reload; not on top of setup; only after
+  the inbox start dialog is answered). Not tried by hand: a real roundup on the Mac, the badge on the
+  real Dock, the permission prompt after an opt-in, the prompt on a real
+  pre-0.18 database.
 - Agent chat sending (2026-10-05, DESIGN.md "Topic chat", "Ask the
   agent"): the message shows at once with a "Thinking…" bubble, the list
   stays on the newest message, the input is a growing textarea (Enter
@@ -1225,6 +1234,9 @@ the app meanwhile.
   move" and a count of your-move topics. Open: the roundup times (fixed for
   now), and whether batches should be the default. A bell in the
   title bar (proposed the same day) is out: it puts pings front and center.
+  Existing installs that never chose are asked once after the update,
+  Never preselected, instead of silently losing the pings they had by
+  default (decided the same day).
   Also from the same day: lead docs with "inbox zero when PRs keep flying
   at you" (AGENTS.md, DESIGN.md Product model).
 

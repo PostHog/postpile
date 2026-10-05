@@ -27,6 +27,7 @@ import type {
   CleanupRequest,
   SafeCleanupRequest,
   InboxCleanupView,
+  InterruptionsFrom,
   InterruptionsMode,
   InterruptionsView,
   PendingWritesResult,
@@ -1030,14 +1031,14 @@ export class Engine implements EngineService {
   }
 
   async interruptions(): Promise<InterruptionsView> {
-    return interruptionsView(this.pingDelivery.mode());
+    return interruptionsView(this.pingDelivery.mode(), this.pingDelivery.chosen());
   }
 
-  async setInterruptions(mode: InterruptionsMode, from: 'setup' | 'sidebar'): Promise<InterruptionsView> {
+  async setInterruptions(mode: InterruptionsMode, from: InterruptionsFrom): Promise<InterruptionsView> {
     this.pingDelivery.setMode(mode);
     this.telemetry.capture('interruptions_changed', { mode, from });
     this.interruptionsListener?.(mode);
-    return interruptionsView(mode);
+    return interruptionsView(mode, true);
   }
 
   onInterruptionsChange(listener: (mode: InterruptionsMode) => void): void {

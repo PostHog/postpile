@@ -1,4 +1,4 @@
-import type { InterruptionsMode } from '@postpile/core';
+import type { InterruptionsMode, InterruptionsView } from '@postpile/core';
 
 /**
  * The mode shown before GET /api/interruptions answers: core's
@@ -101,4 +101,29 @@ export function interruptionsAcceptLine(mode: InterruptionsMode, times: string[]
 /** Only a mode that shows notifications makes macOS ask for permission. */
 export function asksNotificationPermission(mode: InterruptionsMode): boolean {
   return mode !== 'never';
+}
+
+/**
+ * The one-time prompt for installs that never chose (`chosen` false): only
+ * once the view has loaded, and never on top of setup or the inbox cleanup
+ * start dialog (`blocked`).
+ */
+export function showsInterruptionsPrompt(view: InterruptionsView | undefined, blocked: boolean): boolean {
+  if (view === undefined || blocked) {
+    return false;
+  }
+  return !view.chosen;
+}
+
+/**
+ * The quiet lines next to the prompt's Save. Closing the prompt also stores
+ * the current mode, so the first line says what closing keeps; a second line
+ * with the macOS note only for a pick that notifies.
+ */
+export function interruptionsPromptHint(stored: InterruptionsMode, pick: InterruptionsMode): string[] {
+  const lines = [`You can switch any time from Interruptions at the bottom of the sidebar. Closing this keeps ${TITLES[stored]}.`];
+  if (asksNotificationPermission(pick)) {
+    lines.push('macOS may ask for permission once.');
+  }
+  return lines;
 }

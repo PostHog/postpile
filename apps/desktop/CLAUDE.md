@@ -61,10 +61,12 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   the server, so only enabled on the checks screen; "Check again" is its
   refetch), `useSetupSweep`, polled every second while the job runs),
   `interruptions.ts` (`useInterruptions`: when PostPile may show a Mac
-  notification, never / batches / asap, plus the roundup times; read by the
-  setup step "Your day" and the sidebar's Interruptions menu; changed only
-  through `useActions().setInterruptions`, a PUT that shows the new mode
-  right away and rolls back on failure, no toast),
+  notification, never / batches / asap, whether one was ever `chosen`, plus
+  the roundup times; read by the setup step "Your day", the sidebar's
+  Interruptions menu and the one-time `InterruptionsPrompt`; changed only
+  through `useActions().setInterruptions(mode, from)`, a PUT that shows the
+  new mode right away and rolls back on failure, no toast; `chosen` flips
+  only with the server's answer, and it returns whether it saved),
   `tools.ts` (`useTools`: gh and claude status with fix commands, every
   30s while something is wrong, else every 5 min; "Check again" is
   `useActions().checkTools`),
@@ -412,6 +414,16 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   above it with the three modes as menuitemradio rows and "Send a test
   notification", disabled outside the desktop app; the bell means only
   interruptions, notification lists use `ListIcon`),
+  `InterruptionsChoice` (the three mode cards with `InterruptionsArt`,
+  shared by `SetupDayStep` and the prompt) + `InterruptionsPrompt` (mounted
+  once in App: the one-time dialog for installs that never chose,
+  `InterruptionsView.chosen` false, `showsInterruptionsPrompt` in
+  `lib/interruptions.ts`; blocked while setup shows or its status loads,
+  and while the inbox cleanup view loads or its start dialog is due; Save
+  stores the pick, Esc and a click outside store the current mode, both
+  through `setInterruptions(mode, 'prompt')`; it closes only once that
+  returns true, a failed save keeps it open with Save usable again; wiring
+  test in `InterruptionsPrompt.test.tsx`),
   `McpFooterItem` ("agents: not connected" in the footer, only while
   `mcpFooterShows` in `lib/mcp.ts`; never while the state is unknown) +
   `McpConnectOffer` (the offer body, shared with `SetupAcceptStep`'s
@@ -540,7 +552,7 @@ server stop saying `needed`, and the screen must not vanish mid-sync. The
 start sync waits for the setup status and is skipped while setup is
 needed; a first-run "Skip for now" runs it. Screens: `SetupChecksStep`,
 `SetupSweepStep`, `SetupReviewStep` (+ `SetupSectionCard` with "Why?",
-`SetupRepoChoices`), `SetupDayStep` ("Your day": three `aria-pressed`
+`SetupRepoChoices`), `SetupDayStep` ("Your day": `InterruptionsChoice`, three `aria-pressed`
 cards for never / batches / asap with `InterruptionsArt`, small animated
 illustrations on the `interrupt-*` keyframes in `app.css`, only under
 `motion-safe:`; words in `lib/interruptions.ts`; the pick lives in

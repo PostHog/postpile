@@ -921,13 +921,13 @@ export class FakeEngine implements EngineService {
   }
 
   async interruptions(): Promise<InterruptionsView> {
-    return interruptionsView(this.pingDelivery.mode());
+    return interruptionsView(this.pingDelivery.mode(), this.pingDelivery.chosen());
   }
 
   async setInterruptions(mode: InterruptionsMode): Promise<InterruptionsView> {
     this.pingDelivery.setMode(mode);
     this.interruptionsListener?.(mode);
-    return interruptionsView(mode);
+    return interruptionsView(mode, true);
   }
 
   onInterruptionsChange(listener: (mode: InterruptionsMode) => void): void {

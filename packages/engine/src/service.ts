@@ -22,6 +22,7 @@ import type {
   CleanupRequest,
   SafeCleanupRequest,
   InboxCleanupView,
+  InterruptionsFrom,
   InterruptionsMode,
   InterruptionsView,
   PendingWritesResult,
@@ -188,7 +189,7 @@ export interface EngineService {
    * goes away); leaving batches drops the queued ones. Local, never a
    * GitHub write. The listener hears every change.
    */
-  setInterruptions(mode: InterruptionsMode, from: 'setup' | 'sidebar'): Promise<InterruptionsView>;
+  setInterruptions(mode: InterruptionsMode, from: InterruptionsFrom): Promise<InterruptionsView>;
   /** Runs `listener` after every change of the pick; one listener, a second call replaces it. */
   onInterruptionsChange(listener: (mode: InterruptionsMode) => void): void;
   /** The Dock badge: tiles holding a PR PostPile pinged about that is not handled yet (tile opened, read or done). */

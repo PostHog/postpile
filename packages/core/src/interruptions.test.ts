@@ -20,7 +20,7 @@ describe('interruptionsModeOf', () => {
   });
 
   it('shows the roundup times as words', () => {
-    expect(interruptionsView('asap')).toEqual({ mode: 'asap', roundupTimes: ['9:30', '13:30', '16:30'] });
+    expect(interruptionsView('asap', true)).toEqual({ mode: 'asap', chosen: true, roundupTimes: ['9:30', '13:30', '16:30'] });
   });
 });
 

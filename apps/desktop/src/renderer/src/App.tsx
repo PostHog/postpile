@@ -15,6 +15,7 @@ import { DetailPane } from './components/DetailPane.tsx';
 import { InboxStartDialog } from './components/InboxStartDialog.tsx';
 import { InboxPane } from './components/InboxPane.tsx';
 import { InstructionsPane } from './components/InstructionsPane.tsx';
+import { InterruptionsPrompt } from './components/InterruptionsPrompt.tsx';
 import { NotificationsPane } from './components/NotificationsPane.tsx';
 import { HandledQuietlyPane } from './components/HandledQuietlyPane.tsx';
 import { PaneDivider } from './components/PaneDivider.tsx';
@@ -462,6 +463,8 @@ export function App() {
           <StatusFooter topics={items} detail={topic.data} live={live.data} />
           <Toast onShowActionLog={() => go({ ...shown, pane: 'notifications' })} />
           <InboxStartDialog />
+          {/* Installs that never picked an interruptions mode get asked once, never on top of setup. */}
+          <InterruptionsPrompt blocked={showSetup || !setupLoaded} />
           <TidyOverlay />
         </div>
       </OpenedReadContext>

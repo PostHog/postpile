@@ -166,11 +166,13 @@ describe('server routes over the fake engine', () => {
 
   it('keeps the interruptions pick, never by default', async () => {
     const app = appWithFake();
-    expect(await (await app.request('/api/interruptions')).json()).toEqual({ mode: 'never', roundupTimes: ['9:30', '13:30', '16:30'] });
+    expect(await (await app.request('/api/interruptions')).json()).toEqual({ mode: 'never', chosen: false, roundupTimes: ['9:30', '13:30', '16:30'] });
     const put = (body: unknown) => app.request('/api/interruptions', { method: 'PUT', body: JSON.stringify(body), headers: { 'content-type': 'application/json' } });
-    expect(await (await put({ mode: 'batches' })).json()).toMatchObject({ mode: 'batches' });
-    expect(await (await app.request('/api/interruptions')).json()).toMatchObject({ mode: 'batches' });
+    expect(await (await put({ mode: 'batches' })).json()).toMatchObject({ mode: 'batches', chosen: true });
+    expect(await (await app.request('/api/interruptions')).json()).toMatchObject({ mode: 'batches', chosen: true });
+    expect(await (await put({ mode: 'never', from: 'prompt' })).json()).toMatchObject({ mode: 'never', chosen: true });
     expect((await put({ mode: 'loud' })).status).toBe(400);
+    expect((await put({ mode: 'never', from: 'setup' })).status).toBe(400);
   });
 
   it('lists topics grouped by whether they need the user', async () => {

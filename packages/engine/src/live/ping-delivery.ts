@@ -19,6 +19,8 @@ export const INTERRUPTIONS_META_KEY = 'interruptions_mode';
 /** Where the pick and the held pings live: the store in the engine, memory in the fake. */
 export interface PingHold {
   mode(): InterruptionsMode;
+  /** A mode was ever picked; false on installs that never chose. */
+  chosen(): boolean;
   setMode(mode: InterruptionsMode): void;
   list(): MacPingRecord[];
   queue(ping: Ping, at: IsoTime): void;
@@ -33,6 +35,10 @@ export class StorePingHold implements PingHold {
 
   mode(): InterruptionsMode {
     return interruptionsModeOf(this.store.meta.get(INTERRUPTIONS_META_KEY));
+  }
+
+  chosen(): boolean {
+    return this.store.meta.get(INTERRUPTIONS_META_KEY) !== null;
   }
 
   setMode(mode: InterruptionsMode): void {
@@ -62,11 +68,15 @@ export class StorePingHold implements PingHold {
 
 /** For the sample data: the same rules, nothing kept across restarts. */
 export class MemoryPingHold implements PingHold {
-  private picked: InterruptionsMode = DEFAULT_INTERRUPTIONS;
+  private picked: InterruptionsMode | null = null;
   private readonly records = new Map<PrKey, MacPingRecord>();
 
   mode(): InterruptionsMode {
-    return this.picked;
+    return this.picked ?? DEFAULT_INTERRUPTIONS;
+  }
+
+  chosen(): boolean {
+    return this.picked !== null;
   }
 
   setMode(mode: InterruptionsMode): void {
@@ -128,6 +138,10 @@ export class PingDelivery {
 
   mode(): InterruptionsMode {
     return this.deps.hold.mode();
+  }
+
+  chosen(): boolean {
+    return this.deps.hold.chosen();
   }
 
   /** Never drops every held ping, so the Dock badge goes away; leaving batches drops the queue (those PRs are in the list anyway). */
