@@ -1,4 +1,4 @@
-import { effectiveLoudness, emptyAgentCallStats, GLANCE_BATCH_SIZE, type AgentCallStats, type PrKey, type Viewer } from '@postpile/core';
+import { emptyAgentCallStats, isMemoryTrigger, GLANCE_BATCH_SIZE, type AgentCallStats, type PrKey, type Viewer } from '@postpile/core';
 import { AgentBudget } from '../budget.ts';
 import { Board } from '../board.ts';
 import type { DigestDeps } from '../digest/deps.ts';
@@ -15,19 +15,21 @@ import { errorText } from '../errors.ts';
 import type { CatchUpCap } from './catch-up-cap.ts';
 
 /**
- * Topics a poll cycle's PRs need a catch-up run for: a PR with a new loud
- * event (its dossier is behind), or a PR that should have a glance and has
- * none yet (new to the app). Quiet news (a bot comment, CI) waits for the
- * next full sync. Null is the virtual Unsorted topic.
+ * Topics a poll cycle's PRs need a catch-up run for: a PR with a new event
+ * that starts a dossier update (`isMemoryTrigger`: anything loud, anything a
+ * person did, a bot changing the PR itself), or a PR that should have a
+ * glance and has none yet (new to the app). Bot comments wait for the next
+ * update and noise (CI, bot edits, deploys) never counts, as in the full
+ * sync. Null is the virtual Unsorted topic.
  */
 export function topicsToCatchUp(board: Board, fetched: PrKey[], newEventIds: string[], hasGlance: (key: PrKey) => boolean): (string | null)[] {
   const fresh = new Set(newEventIds);
   const wanted = glanceTargetKeys(board);
   const topics = new Set<string | null>();
   for (const key of fetched) {
-    const loud = (board.events.get(key) ?? []).some((event) => fresh.has(event.id) && effectiveLoudness(event) === 'loud');
+    const triggered = (board.events.get(key) ?? []).some((event) => fresh.has(event.id) && isMemoryTrigger(event));
     const missing = wanted.has(key) && !hasGlance(key);
-    if (loud || missing) {
+    if (triggered || missing) {
       topics.add(board.memberships.get(key)?.topicId ?? null);
     }
   }

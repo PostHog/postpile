@@ -62,6 +62,33 @@ describe('glance catch-up after a poll', () => {
     expect((ran?.props as { agent_calls: number } | undefined)?.agent_calls).toBeGreaterThan(0);
   });
 
+  it('catches up on quiet news a person made, not only on loud news', async () => {
+    const { h, pr } = await syncedTopic();
+    const next = { ...pr, updatedAt: LATER, comments: [makeComment({ id: 'c2', author: 'bob', body: 'Bumped the cache size.', createdAt: FRESH })] };
+    h.reader.addPr(next, makeThreadFor(next, { updatedAt: LATER }));
+    h.reader.etag = 'etag-2';
+    h.runner.answer('ping_decision', { decisions: [] });
+
+    await h.engine.pollOnce();
+
+    expect(h.store.events.listForPr(pr.key).find((event) => event.actor === 'bob')?.ruleLoudness).toBe('quiet');
+    await vi.waitFor(() => expect(h.store.dossiers.latest('depot')?.version).toBe(2));
+    expect(catchUpRunIds(h)).toEqual([expect.stringMatching(/^catchup:depot:/)]);
+  });
+
+  it('leaves a bot comment for the next full sync', async () => {
+    const { h, pr } = await syncedTopic();
+    const next = { ...pr, updatedAt: LATER, comments: [makeComment({ id: 'c3', author: 'github-actions[bot]', body: 'Bundle size: +2 KB', createdAt: FRESH })] };
+    h.reader.addPr(next, makeThreadFor(next, { updatedAt: LATER }));
+    h.reader.etag = 'etag-2';
+    h.runner.answer('ping_decision', { decisions: [] });
+
+    await h.engine.pollOnce();
+
+    expect(catchUpRunIds(h)).toEqual([]);
+    expect(h.store.dossiers.latest('depot')?.version).toBe(1);
+  });
+
   it('writes the first glance of a PR new to the app in its new topic', async () => {
     const { h } = await syncedTopic();
     const fresh = reviewRequestedPr(3, { updatedAt: LATER });
