@@ -79,6 +79,8 @@ type FetchedForDigest = Pick<GitHubSyncResult, 'viewer' | 'fetchedPrKeys' | 'new
 interface HeldSync {
   fetched: FetchedForDigest;
   options: SyncOptions;
+  /** PRs the held fetch read from GitHub (fetched and found), for the resumed sync's progress. */
+  prsFromGitHub: number;
 }
 
 function union<T>(a: T[], b: T[]): T[] {
@@ -342,10 +344,11 @@ export class SyncRun {
       // The start dialog is due: the agent work waits for its answer, which resumes the sync (fetching
       // again is cheap: unchanged PRs are skipped, and the bulk mark-reads show up in the inbox).
       const forDigest = withHeld(fetched, this.held);
-      // What the digest works on: a resumed sync also digests the fetch it was held after.
-      live.fromGitHub = { prsFetched: forDigest.fetchedPrKeys.length, newEvents: forDigest.newEventIds.length };
+      // What GitHub brought, held fetch included. Not fetchedPrKeys: it also carries PRs the poll stored earlier.
+      const prsFromGitHub = fetched.prsFetched + fetched.prsFound + (this.held?.prsFromGitHub ?? 0);
+      live.fromGitHub = { prsFetched: prsFromGitHub, newEvents: forDigest.newEventIds.length };
       held = this.catchUpGate.holds();
-      this.held = held ? { fetched: forDigest, options } : null;
+      this.held = held ? { fetched: forDigest, options, prsFromGitHub } : null;
       if (held) {
         report.heldForCatchUp = true;
         this.log('sync: held after the fetch until the inbox catch-up dialog is answered');
