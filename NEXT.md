@@ -6,6 +6,20 @@ now".
 
 ## Done
 
+- Calm wake and crash signals (2026-10-05, DESIGN.md "Memory on big
+  boards"): after a wake the renderer no longer refetches every query
+  (`refetchOnReconnect: false`), and on `powerMonitor` `resume` the next
+  auto sync waits at least 3 minutes (`Engine.noteWake`,
+  `AutoSyncSchedule.wake`, set from the wall clock). A run that ends
+  without a clean quit leaves `running.json` in userData, and the next
+  start sends `app_crashed_last_run` (`version_changed`). `sync_completed`
+  gained `heap_used_mb` and `heap_limit_mb`. `crashReporter` keeps
+  minidumps locally (`uploadToServer: false`, `<userData>/Crashpad`).
+  Checked in a fake-mode Electron run: `resume` emitted through the main
+  inspector held a due sync 3 minutes and kept a later one, `process.crash()`
+  left a dump and the marker and the next start logged it, SIGTERM and the
+  fake "Restart to update" stayed clean. Not tried: a real sleep and wake,
+  and whether a V8 out-of-memory abort leaves a dump.
 - Memory on big boards (2026-10-05, DESIGN.md "Memory on big boards"): a
   heavy install (about 5,000 tiles, 11k PRs, 485k events, on 0.16) crashed
   out of memory in the main process. Boards are now shared per data change
@@ -1172,6 +1186,16 @@ the app meanwhile.
 
 ## Later
 
+- Move the engine and the server out of Electron main into a
+  `utilityProcess` (after 0.18.0, a bigger refactor). Electron runs V8
+  with pointer compression and one shared cage per process, so the ~4 GB
+  heap limit covers all isolates of a process together: worker threads
+  share it and would not help. A utility process has its own pid and heap,
+  talks over a MessagePort, and its crash or out-of-memory shows as
+  `child-process-gone` instead of taking the app down, so main can restart
+  it and stays responsive during big reads. Electron's guide suggests
+  workers first for a blocked main thread and a process as the last step;
+  here the memory cap is the reason for the process.
 - Replace FakeEngine with the real Engine over a seeded store. Not now
   (decided 2026-09-28): the shared core builders (`buildTileView`,
   `deriveTileState`, …) already keep the two in step.

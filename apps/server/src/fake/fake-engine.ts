@@ -2187,6 +2187,10 @@ export class FakeEngine implements EngineService {
     this.autoSync = null;
   }
 
+  noteWake(): void {
+    this.autoSync?.wake();
+  }
+
   async retryGlance(prKey: PrKey): Promise<ActionResult> {
     const agentOff = this.toolStatus.agentOff();
     if (agentOff !== null) {

@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
-import { app, autoUpdater as nativeAutoUpdater, BrowserWindow, dialog, ipcMain, Menu, nativeImage, session, shell } from 'electron';
+import { app, autoUpdater as nativeAutoUpdater, BrowserWindow, crashReporter, dialog, ipcMain, Menu, nativeImage, powerMonitor, session, shell } from 'electron';
 import electronUpdater from 'electron-updater';
 import { arch, homedir, release } from 'node:os';
 import {
@@ -24,6 +24,7 @@ import { ActiveDayReporter } from './active-day.ts';
 import { BoardWatcher } from './board-watcher.ts';
 import { MacNotifier } from './mac-notifier.ts';
 import { OpenedPrs } from './opened-prs.ts';
+import { RunMarker } from './run-marker.ts';
 import { fakeInstallStatus, FakeSelfUpdate, menuCheckAnswer, SelfUpdateOff, selfUpdateMode, SelfUpdater, type SelfUpdate } from './self-update.ts';
 import { firstLaunchOnce, welcomeOnce } from './welcome.ts';
 
@@ -92,6 +93,12 @@ app.setAboutPanelOptions({
 if (profileFromEnv(process.env) === 'dev') {
   app.setPath('userData', process.env.POSTPILE_DATA_DIR || dataDirs().dataDir);
 }
+// Crash dumps stay on this Mac: when a process of the app crashes, Crashpad
+// writes a minidump under Crashpad/ in the data folder, and nothing is
+// uploaded (docs/development.md). Early, so the window's renderer is covered
+// too, and after userData is set, which the folder hangs off.
+app.setPath('crashDumps', join(app.getPath('userData'), 'Crashpad'));
+crashReporter.start({ uploadToServer: false });
 
 // A second launch of the same app (same userData) only focuses the first
 // window. A dev run and the packaged app have different userData; the
@@ -136,6 +143,8 @@ let shutdownPromise: Promise<void> | null = null;
 let shutdownDone = false;
 // PRs opened on github.com from the app; refreshed when the window gets focus back.
 const openedPrs = new OpenedPrs();
+// running.json in userData while this run lives; the clean quit removes it, so one left over means the last run crashed.
+let runMarker: RunMarker | null = null;
 
 function openExternalLink(url: string): void {
   const problem = externalLinkProblem(url);
@@ -206,6 +215,8 @@ async function shutdown(): Promise<void> {
 function shutdownOnce(): Promise<void> {
   shutdownPromise ??= shutdown().finally(() => {
     shutdownDone = true;
+    // Every deliberate quit gets here (Cmd+Q, SIGTERM, SIGINT, the restart to update): not a crash at the next start.
+    runMarker?.clear();
   });
   return shutdownPromise;
 }
@@ -244,6 +255,8 @@ async function restartToUpdate(): Promise<void> {
   console.log(`restarting to install PostPile ${selfUpdate.current().version ?? '(sample)'}`);
   setTimeout(() => {
     console.error('the update did not install, starting the current version again');
+    // A stuck shutdown or a failed install, logged above, not a crash.
+    runMarker?.clear();
     app.relaunch();
     app.exit(0);
   }, INSTALL_FALLBACK_MS).unref();
@@ -481,6 +494,9 @@ async function start(): Promise<void> {
     }
     throw error;
   }
+  // After the database lock: a run that stopped at the lock dialog never marked itself.
+  runMarker = new RunMarker(app.getPath('userData'));
+  const lastRun = runMarker.start(app.getVersion());
   const config = appConfigFromEnv();
   // The title bar's update reminder asks GitHub for releases ~30s after start, then every 6 hours.
   updates = updateSourceFromEnv(app.getVersion());
@@ -497,6 +513,10 @@ async function start(): Promise<void> {
   ipcMain.on('postpile:restart-to-update', () => void restartToUpdate());
   selfUpdate.start();
   telemetry.capture('app_launched', { first_launch: firstLaunchOnce(app.getPath('userData')) });
+  if (lastRun) {
+    console.warn(`the last run ended without a clean quit${lastRun.versionChanged ? ' (it was another version)' : ''}`);
+    telemetry.capture('app_crashed_last_run', { version_changed: lastRun.versionChanged });
+  }
   activeDay = new ActiveDayReporter(join(app.getPath('userData'), 'telemetry-active-day'), () => telemetry.capture('app_active', {}));
   checkActiveDay();
   setInterval(checkActiveDay, ACTIVE_DAY_CHECK_MS).unref();
@@ -592,6 +612,14 @@ async function start(): Promise<void> {
   const service = engine;
   consolidationSchedule = new ConsolidationSchedule((options) => service.consolidate(options), config.syncCallCap);
   consolidationSchedule.start();
+  // After a wake (DESIGN.md "Memory on big boards"): the live poll keeps its
+  // cycle and brings the news; the background auto sync waits a few minutes,
+  // so it does not land on top of the poll, its catch-ups and the window's refetches.
+  powerMonitor.on('suspend', () => console.log('the Mac is going to sleep'));
+  powerMonitor.on('resume', () => {
+    console.log('the Mac woke from sleep');
+    service.noteWake();
+  });
 }
 
 app.on('before-quit', (event) => {

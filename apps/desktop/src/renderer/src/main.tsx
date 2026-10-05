@@ -14,12 +14,16 @@ watchWindowErrors(window, errorReporter);
 
 // Reads are local and cheap, but the data only changes on sync, an action or
 // a live poll cycle with news, and all three invalidate what they touch. No
-// refetch on focus, one retry. The 30s staleTime stops a refetch of the topic
-// and PR on every revisit (back / forward, clicking between two topics); the
-// cap keeps time-based state such as expired snoozes from going stale for long.
+// refetch on focus, one retry. No refetch on reconnect either: the API is on
+// this Mac, and the browser's "online" after a wake from sleep would refetch
+// every query at once (all are stale by then) on top of the wake's poll and
+// catch-ups (DESIGN.md "Memory on big boards"); the live poll's news refetches
+// what changed. The 30s staleTime stops a refetch of the topic and PR on
+// every revisit (back / forward, clicking between two topics); the cap keeps
+// time-based state such as expired snoozes from going stale for long.
 const queryClient = new QueryClient({
   defaultOptions: {
-    queries: { refetchOnWindowFocus: false, retry: 1, staleTime: 30_000 },
+    queries: { refetchOnWindowFocus: false, refetchOnReconnect: false, retry: 1, staleTime: 30_000 },
   },
 });
 

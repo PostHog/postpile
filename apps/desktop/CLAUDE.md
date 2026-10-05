@@ -89,6 +89,11 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   render errors. Raw error in, the engine scrubs it; logic in
   `lib/error-report.ts`).
   Each hook wraps `useQuery` with a key from `api/keys.ts`.
+- QueryClient defaults (`main.tsx`): no refetch on window focus and none on
+  reconnect (`refetchOnReconnect: false`: after a wake the browser's `online`
+  refetched every query at once against the local API), one retry, 30s
+  `staleTime`. Data moves through invalidation (actions, `useLivePoll`), not
+  through browser events; a hook that needs one sets it itself (`useMcpConnection`).
 - Wire types come from `@postpile/core` as `import type` only. The
   renderer never imports runtime code from other workspace packages; small
   pure helpers live in `lib/` with tests next to them.
@@ -689,6 +694,14 @@ stays on screen and listed (`KeptView`).
   `POSTPILE_LOG_DIR` overrides), console output plus uncaught errors,
   rotated at 5 MB, 3 files (`main/file-log.ts`). Help › Reveal Logs shows it
   in Finder. The sync logs its start, a summary and each error.
+- Crash and wake signals (DESIGN.md "Memory on big boards"): `main/run-marker.ts`
+  (`RunMarker`) writes `running.json` in userData at start and
+  `shutdownOnce` removes it; one left over sends `app_crashed_last_run`.
+  Every deliberate quit must go through `shutdownOnce` (or clear the marker,
+  like the install fallback), else it counts as a crash. `crashReporter`
+  starts at the top of `index.ts` with `uploadToServer: false`, dumps under
+  `<userData>/Crashpad`. `powerMonitor` `resume` calls `engine.noteWake()`
+  (the auto sync waits a few minutes) and logs the sleep and the wake.
 - The last sync report (errors, timing) is stored in meta
   `last_sync_report` and shows in the footer's "last full sync" and the
   title bar's sync status tooltips (`lib/sync-report.ts`) and in the notifications

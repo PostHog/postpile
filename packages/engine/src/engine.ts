@@ -873,6 +873,10 @@ export class Engine implements EngineService {
     this.autoSync = null;
   }
 
+  noteWake(): void {
+    this.autoSync?.wake();
+  }
+
   async retryGlance(prKey: PrKey): Promise<ActionResult> {
     const { store, now } = this.deps;
     const agentOff = this.toolHealth.agentOffReason();

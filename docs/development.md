@@ -56,6 +56,8 @@ The packaged app bundles main, preload, renderer, the workspace packages and the
 
 Logs go to `~/Library/Logs/PostPile/main.log` (dev runs: `~/Library/Logs/PostPile-dev`), rotated at 5 MB. Help › Reveal Logs opens the folder.
 
+Crash dumps stay on the Mac, nothing is uploaded: when a process of the app crashes, Crashpad writes a minidump (`.dmp`) under `~/Library/Application Support/PostPile/Crashpad` (dev runs: `PostPile-dev/Crashpad`, or `Crashpad/` in `POSTPILE_DATA_DIR`), in `pending/` or `completed/`. `process.crash()` in the main process makes one for a check. A run that ended without a clean quit also leaves `running.json` in the same folder; the next start logs "the last run ended without a clean quit" and sends `app_crashed_last_run`.
+
 ### Simulate a fresh start
 
 `pnpm cli simulate-start` replays a new user's first syncs on a copy of a database, once per agent pipeline, to compare them from the same start:

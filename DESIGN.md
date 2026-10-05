@@ -342,6 +342,30 @@ readers without writes between stay at 1.9 GB (died at the seventh). Still
 open: what is stored never shrinks, so a board keeps growing with the inbox
 (NEXT.md "GitHub writes on by default", and the bound on the board).
 
+*After a wake* (2026-10-05). The crash came about 5 minutes after the Mac
+woke from sleep, when everything catches up at once. The renderer's
+QueryClient no longer refetches on reconnect (`refetchOnReconnect: false`):
+the browser's `online` after a wake refetched every query, all stale by then,
+though the local API's data does not change because the network came back;
+the live poll's news refetches what changed. On Electron's `powerMonitor`
+`resume`, main calls `Engine.noteWake()`: the live poll keeps its own cycle
+(cheap, and it brings the news), and the next background auto sync is set
+again from the wall clock but at least 3 minutes out
+(`WAKE_SYNC_DELAY_MINUTES`, `AutoSyncSchedule.wake`), so an overdue one does
+not land in the burst. Main logs the sleep, the wake and the new due time.
+
+*Seeing the next one* (2026-10-05; this crash was only known from Slack).
+Main writes `running.json` (pid, version, start time) to the data folder at
+start, and the clean quit path removes it (Cmd+Q, SIGTERM or SIGINT, "Restart
+to update", all through `shutdownOnce`). A marker still there at the next
+start sends `app_crashed_last_run` (`RunMarker` in `apps/desktop/src/main`).
+`sync_completed` carries the heap (`heap_used_mb`, `heap_limit_mb`), so a heap
+creeping up to the limit shows before it dies. Electron's `crashReporter`
+runs with `uploadToServer: false`: Crashpad keeps minidumps under `Crashpad/`
+in the data folder for debugging by hand. Whether a V8 out-of-memory abort
+leaves one is not documented, so the marker is the signal to count on. The
+real fix is a process of its own for the engine (NEXT.md "Later").
+
 **Reconciling with GitHub's read time.** Every event on a thread from before
 that thread's `last_read_at` counts as seen, stamped with that time, whenever
 the app learns it (core `eventsReadOnGitHub`), not only on a PR's first
@@ -5735,7 +5759,8 @@ behind, "synced 2h ago" only while the poll is off. Sync errors and the call cap
 time and report sit in the tooltip. Full syncs were
 start-only and manual before (2026-09-29). While the GitHub quota is low, a
 due auto sync (the backlog follow-up too) waits until the reset instead
-(see "GitHub quota").
+(see "GitHub quota"). After the Mac wakes from sleep the next auto sync
+waits at least 3 minutes (see "Memory on big boards").
 
 ## GitHub quota
 
@@ -6027,7 +6052,12 @@ topic names are never event props.
    gh_requests = GitHub requests made while it ran, gh_core_remaining_pct and
    gh_graphql_remaining_pct = the lowest whole percent of that limit left
    during the sync, absent when no answer carried it, writes_on = GitHub
-   writes on when it ended, since 2026-10-05), `github_writes_changed`
+   writes on when it ended, since 2026-10-05; heap_used_mb and heap_limit_mb
+   = the V8 heap of the process that ran it, Electron main in the app, in
+   whole MB, used at the end and the limit, since 0.18.0),
+   `app_crashed_last_run` (version_changed: sent at start when the last run
+   ended without a clean quit, see "Memory on big boards"; true when that
+   run was another version), `github_writes_changed`
    (enabled: the footer lock opened or closed, 2026-10-05; with writes
    locked PostPile cannot mark anything read, so a heavy inbox only grows),
    `catch_up_ran` (topics, always 1; agent_calls, duration_ms, ok: one glance

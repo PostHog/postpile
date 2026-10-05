@@ -38,6 +38,7 @@ function fakeEngine(overrides: Partial<EngineService>): EngineService {
     stopLivePoll: notImplemented,
     startAutoSync: notImplemented,
     stopAutoSync: notImplemented,
+    noteWake: notImplemented,
     retryGlance: notImplemented,
     refreshGlanceOnLook: notImplemented,
     livePollStatus: notImplemented,

@@ -166,8 +166,13 @@ export const TELEMETRY_EVENTS = {
       gh_graphql_remaining_pct: percent.optional(),
       // GitHub writes on when the sync ended (2026-10-05; absent before).
       writes_on: z.boolean().optional(),
+      // The V8 heap of the process that ran the sync (Electron main in the app), whole MB: used at the end, and the limit (absent before 0.18.0).
+      heap_used_mb: count.optional(),
+      heap_limit_mb: count.optional(),
     })
     .strict(),
+  // At start: the last run ended without a clean quit (crash, out of memory, force quit). version_changed: that run was another version.
+  app_crashed_last_run: z.object({ version_changed: z.boolean() }).strict(),
   sync_failed: z.object({ error_kind: syncErrorKind }).strict(),
   rate_limited: z.object({ source: rateLimitSource, where: rateLimitWhere }).strict(),
   // Once per drop into a worse level within one rate-limit window, not per request (DESIGN.md "GitHub quota").

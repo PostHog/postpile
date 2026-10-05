@@ -11,6 +11,14 @@ export const DEFAULT_AUTO_SYNC_MINUTES = 60;
  */
 export const BACKLOG_SYNC_MINUTES = 2;
 
+/**
+ * Minutes a background sync waits at least after the Mac woke from sleep.
+ * Right after a wake the live poll, glance catch-ups and the window's
+ * refetches already run; the full sync, the heaviest thing PostPile does,
+ * comes after them (DESIGN.md "Memory on big boards").
+ */
+export const WAKE_SYNC_DELAY_MINUTES = 3;
+
 export interface AutoSyncOptions {
   /** 0 or less keeps it off. */
   minutes: number;
@@ -114,5 +122,21 @@ export class AutoSyncSchedule {
 
   nextSyncAt(): IsoTime | null {
     return this.dueAt === null ? null : new Date(this.dueAt).toISOString();
+  }
+
+  /**
+   * The Mac woke from sleep. Whether the timer counted the sleep depends on
+   * the clock under it, so the next sync is set again from the wall clock,
+   * but never sooner than WAKE_SYNC_DELAY_MINUTES from now: an overdue sync
+   * waits those minutes instead of joining the wake burst. Nothing while
+   * off, or while the auto sync itself runs (its end sets the next one).
+   */
+  wake(): void {
+    if (!this.started || this.dueAt === null || this.timer === null) {
+      return;
+    }
+    const minimumMs = WAKE_SYNC_DELAY_MINUTES * 60 * 1000;
+    this.scheduleIn(Math.max(minimumMs, this.dueAt - this.timers.now()));
+    this.log(`auto sync: woke from sleep, next one at ${this.nextSyncAt()}`);
   }
 }

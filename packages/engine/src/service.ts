@@ -119,6 +119,12 @@ export interface EngineService {
   startAutoSync(options: AutoSyncOptions): void;
   stopAutoSync(): void;
   /**
+   * The Mac woke from sleep (desktop main, powerMonitor 'resume'): the next
+   * auto sync waits at least WAKE_SYNC_DELAY_MINUTES, so it does not land in
+   * the wake burst. The live poll keeps its own cycle.
+   */
+  noteWake(): void;
+  /**
    * Retry on a glance that failed: clears the PR's glance gap and runs a
    * glance catch-up for its topic now (or queues the one follow-up when a run
    * is going). Local: agent calls only, never a GitHub write.
