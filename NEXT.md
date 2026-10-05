@@ -6,6 +6,20 @@ now".
 
 ## Done
 
+- "Wrong topic" sticks (2026-10-05, DESIGN.md › Product model): a PR the
+  user took out of a topic stays out of it. Pure rule `excludedTopicIds`
+  (core; follows accepted merges), read per run by `TopicExclusions`
+  (engine) from the feedback log and accepted merge proposals, no new
+  table. The stack shortcut skips an excluded topic and asks the agent;
+  the assignment prompt gets a per-PR "took this PR out of topic id X"
+  note outside the fence (`TopicAssignmentInput.notIn`), and an answer
+  that picks it, by id or by a "new" name, counts as left out (retry,
+  else Unsorted). The topic tidy folds nothing that puts a PR together
+  with a topic it left (either way round, re-read per fold) and splits
+  nothing into it. "Wrong topic" on a stack now logs one row per layer
+  that moved. Also fixed: an assignment answer no longer overwrites a
+  topic the user picked while the call ran. Topic assignment has no input
+  hash, so no cached answer goes stale.
 - Newer-schema guard (2026-10-05, DESIGN.md "Safety while building"): a
   build refuses a database whose schema version is above its newest
   migration, before any pragma or migration writes; the desktop app shows a

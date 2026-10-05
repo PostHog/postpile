@@ -1,7 +1,9 @@
-import { at, makeThreadFor } from '@postpile/core/fixtures';
+import type { Pr } from '@postpile/core';
+import { at, makePr, makeThreadFor } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
-import { makeHarness } from '../testing/fakes.ts';
+import { makeHarness, type Harness } from '../testing/fakes.ts';
 import { reviewRequestedPr } from '../testing/prs.ts';
+import { makeTopic, topicWithPrs } from '../testing/topics.ts';
 
 const prs = Array.from({ length: 12 }, (_, index) => reviewRequestedPr(index + 1));
 
@@ -110,5 +112,162 @@ describe('topic assignment places every PR', () => {
 
     const topicId = h.store.memberships.get(pr.key)!.topicId;
     expect(h.store.topics.get(topicId)?.summary).toBe('Ship the desktop app that sorts PR notifications.');
+  });
+});
+
+/** The PRs sit in the topic as the agent placed them. */
+function placedByAgent(h: Harness, topicId: string, placed: Pr[]): void {
+  topicWithPrs(h, topicId, placed);
+  for (const pr of placed) {
+    h.store.memberships.assign({ prKey: pr.key, topicId, assignedBy: 'agent', reason: '', createdAt: at(0) });
+  }
+}
+
+/** A "Wrong topic" logged before this run, the way the action logs it. */
+function tookOut(h: Harness, pr: Pr, topicId: string): void {
+  h.store.feedback.add({ kind: 'wrong_topic', topicId, prKey: pr.key, tileId: `pr:${pr.key}`, setId: null, eventId: null, note: '', createdAt: at(1) });
+}
+
+describe('"Wrong topic" keeps a PR out of the topic it left', () => {
+  const pr = reviewRequestedPr(1);
+
+  /** pr sat in billing; the user said "Wrong topic" without picking where it goes. */
+  async function takenOutOfBilling(): Promise<Harness> {
+    const h = makeHarness();
+    placedByAgent(h, 'billing', [pr]);
+    h.store.topics.create(makeTopic('payments'));
+    await h.engine.sync({ maxAgentCalls: 0 });
+    const result = await h.engine.giveFeedback({ kind: 'wrong_topic', tileId: `pr:${pr.key}`, prKey: pr.key, targetTopicId: null, note: '' });
+    expect(result.ok).toBe(true);
+    expect(h.store.memberships.get(pr.key)).toBeNull();
+    return h;
+  }
+
+  it('tells the agent, and asks again when the answer puts it back', async () => {
+    const h = await takenOutOfBilling();
+    h.runner.answer('topic_assignment', { assignments: [{ prKey: pr.key, kind: 'existing', topicId: 'billing', reason: 'billing work' }] });
+    h.runner.answer('topic_assignment', { assignments: [{ prKey: pr.key, kind: 'existing', topicId: 'payments', reason: 'payments work' }] });
+
+    await h.engine.sync({ agentJobs: ['topics'] });
+
+    const prompts = h.runner.promptsFor('topic_assignment');
+    expect(prompts).toHaveLength(2);
+    expect(prompts[0]).toContain('The user took this PR out of topic id billing. Never put it back there');
+    expect(h.store.memberships.get(pr.key)).toMatchObject({ topicId: 'payments', assignedBy: 'agent' });
+  });
+
+  it('drops a new topic named like the one it left, and leaves the PR in Unsorted after the retry', async () => {
+    const h = await takenOutOfBilling();
+    h.runner.answer('topic_assignment', { assignments: [{ prKey: pr.key, kind: 'new', name: 'Billing', goal: 'Bill people.', reason: 'billing work' }] });
+    h.runner.answer('topic_assignment', { assignments: [{ prKey: pr.key, kind: 'existing', topicId: 'billing', reason: 'billing work' }] });
+
+    const report = await h.engine.sync({ agentJobs: ['topics'] });
+
+    expect(h.store.memberships.get(pr.key)).toBeNull();
+    expect(report.errors).toContain(`topic assignment: no topic after a retry, asked again next sync: ${pr.key}`);
+    expect(h.store.topics.list().map((topic) => topic.id).sort()).toEqual(['billing', 'payments']);
+  });
+
+  it('keeps it out of the topic the one it left was merged into', async () => {
+    const h = await takenOutOfBilling();
+    h.store.proposals.add({
+      id: 'm1',
+      kind: 'merge',
+      topicId: 'billing',
+      name: null,
+      intoTopicId: 'payments',
+      fromArea: null,
+      prKeys: [],
+      reason: 'same invoices work',
+      status: 'pending',
+      createdAt: at(2),
+      decidedAt: null,
+      source: 'consolidation',
+      client: null,
+    });
+    expect((await h.engine.decideTopicProposal('m1', true)).ok).toBe(true);
+    h.runner.answer('topic_assignment', { assignments: [{ prKey: pr.key, kind: 'existing', topicId: 'payments', reason: 'payments work' }] });
+    h.runner.answer('topic_assignment', { assignments: [{ prKey: pr.key, kind: 'new', name: 'Login flow', goal: 'Fix logins.', reason: 'its own work' }] });
+
+    await h.engine.sync({ agentJobs: ['topics'] });
+
+    expect(h.runner.promptsFor('topic_assignment')[0]).toContain('The user took this PR out of topic id payments.');
+    const topicId = h.store.memberships.get(pr.key)?.topicId;
+    expect(h.store.topics.get(topicId ?? '')?.name).toBe('Login flow');
+  });
+
+  it('goes back when the user picks that topic, and stays there', async () => {
+    const h = await takenOutOfBilling();
+
+    const result = await h.engine.giveFeedback({ kind: 'wrong_topic', tileId: `pr:${pr.key}`, prKey: pr.key, targetTopicId: 'billing', note: '' });
+    await h.engine.sync({ agentJobs: ['topics'] });
+
+    expect(result.ok).toBe(true);
+    expect(h.runner.promptsFor('topic_assignment')).toEqual([]);
+    expect(h.store.memberships.get(pr.key)).toMatchObject({ topicId: 'billing', assignedBy: 'user' });
+  });
+
+  it('keeps a topic the user picked while the agent call ran', async () => {
+    const h = await takenOutOfBilling();
+    const run = h.runner.run.bind(h.runner);
+    h.runner.run = async (request) => {
+      if (request.purpose === 'topic_assignment') {
+        await h.engine.giveFeedback({ kind: 'wrong_topic', tileId: `pr:${pr.key}`, prKey: pr.key, targetTopicId: 'billing', note: '' });
+      }
+      return run(request);
+    };
+    h.runner.answer('topic_assignment', { assignments: [{ prKey: pr.key, kind: 'existing', topicId: 'payments', reason: 'payments work' }] });
+
+    await h.engine.sync({ agentJobs: ['topics'] });
+
+    expect(h.store.memberships.get(pr.key)).toMatchObject({ topicId: 'billing', assignedBy: 'user' });
+  });
+
+  it('does not join a stack whose topic it was taken out of: the agent places it', async () => {
+    const h = makeHarness();
+    const bottom = reviewRequestedPr(1, { baseRef: 'master', headRef: 's1' });
+    const top = reviewRequestedPr(2, { baseRef: 's1', headRef: 's2' });
+    placedByAgent(h, 'depot', [bottom]);
+    h.store.topics.create(makeTopic('billing'));
+    h.reader.addPr(top, makeThreadFor(top));
+    // The stack formed after the user took the top PR out of depot.
+    tookOut(h, top, 'depot');
+    h.runner.answer('topic_assignment', { assignments: [{ prKey: top.key, kind: 'existing', topicId: 'billing', reason: 'billing work' }] });
+
+    await h.engine.sync({ agentJobs: ['topics'] });
+
+    const prompts = h.runner.promptsFor('topic_assignment');
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toContain('The user took this PR out of topic id depot.');
+    expect(h.store.memberships.get(top.key)).toMatchObject({ topicId: 'billing', assignedBy: 'agent' });
+  });
+
+  it('keeps every layer of a stack out, and asks about the stack as one', async () => {
+    const h = makeHarness();
+    const bottom = reviewRequestedPr(1, { baseRef: 'master', headRef: 's1' });
+    const middle = reviewRequestedPr(2, { baseRef: 's1', headRef: 's2' });
+    const top = makePr({ number: 3, baseRef: 's2', headRef: 's3', isDraft: true });
+    placedByAgent(h, 'depot', [bottom, middle]);
+    h.reader.addStackPr(top);
+    await h.engine.sync({ maxAgentCalls: 0 });
+
+    await h.engine.giveFeedback({ kind: 'wrong_topic', tileId: `stack:${bottom.key}`, prKey: middle.key, targetTopicId: null, note: '' });
+
+    expect(h.store.feedback.listAllOfKind('wrong_topic').map((row) => [row.prKey, row.topicId])).toEqual([
+      [bottom.key, 'depot'],
+      [middle.key, 'depot'],
+    ]);
+    h.runner.answer('topic_assignment', { assignments: [{ prKey: bottom.key, kind: 'existing', topicId: 'depot', reason: 'runner work' }] });
+    h.runner.answer('topic_assignment', { assignments: [{ prKey: bottom.key, kind: 'new', name: 'Billing', goal: 'Bill people.', reason: 'billing work' }] });
+
+    await h.engine.sync({ agentJobs: ['topics'] });
+
+    const prompts = h.runner.promptsFor('topic_assignment');
+    expect(prompts).toHaveLength(2);
+    expect(prompts[0]).toContain('The user took this PR out of topic id depot.');
+    expect(prompts[0]).not.toContain(`${middle.key} "`);
+    const billing = h.store.memberships.get(bottom.key)?.topicId;
+    expect(billing).not.toBe('depot');
+    expect(h.store.memberships.get(middle.key)?.topicId).toBe(billing);
   });
 });

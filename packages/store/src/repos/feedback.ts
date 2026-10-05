@@ -86,6 +86,11 @@ export class FeedbackRepo {
     ).map(toFeedback);
   }
 
+  /** Every row of one kind, oldest first. For rules that hold for good, like "Wrong topic" keeping a PR out of a topic. */
+  listAllOfKind(kind: FeedbackKind): Feedback[] {
+    return all<FeedbackRow>(this.db, 'SELECT * FROM feedback WHERE kind = ? ORDER BY created_at, id', kind).map(toFeedback);
+  }
+
   /** Everything said about one PR, e.g. "not mine" before re-offering it. */
   listForPr(prKey: string): Feedback[] {
     return all<FeedbackRow>(this.db, 'SELECT * FROM feedback WHERE pr_key = ? ORDER BY created_at, id', prKey).map(

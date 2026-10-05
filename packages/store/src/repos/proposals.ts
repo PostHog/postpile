@@ -125,6 +125,11 @@ export class TopicProposalRepo {
     return one<{ n: number }>(this.db, "SELECT COUNT(*) AS n FROM topic_proposal WHERE source = 'agent' AND created_at >= ?", since)?.n ?? 0;
   }
 
+  /** Every accepted topic merge (the user's, or the upgrade tidy's), oldest first: where a merged-away topic's work went. */
+  listAcceptedMerges(): TopicProposal[] {
+    return all<ProposalRow>(this.db, "SELECT * FROM topic_proposal WHERE kind = 'merge' AND status = 'accepted' ORDER BY decided_at, id").map(toProposal);
+  }
+
   /** Every area_merge proposal, any status, oldest first. They name no topic. */
   listAreaMerges(): TopicProposal[] {
     return all<ProposalRow>(this.db, "SELECT * FROM topic_proposal WHERE kind = 'area_merge' ORDER BY created_at, id").map(toProposal);

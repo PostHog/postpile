@@ -2,6 +2,13 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## 0.21.0 (unreleased)
+
+### Fixed
+
+- "Wrong topic" no longer puts a PR back into the topic you took it out of. The next sort keeps it out of there, also when the rest of its stack sits in that topic or the topic was merged into another one. It goes back only when you pick that topic yourself.
+- A topic you pick for a PR while a sync is sorting PRs is no longer replaced by the sync's own pick.
+
 ## 0.20.0 (2026-10-05)
 
 ### Changed

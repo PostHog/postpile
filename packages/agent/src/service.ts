@@ -93,6 +93,12 @@ export interface TopicAssignmentInput {
   waiting?: Pr[];
   viewer: Viewer;
   topics: TopicChoice[];
+  /**
+   * By PR key, the ids of offered topics the user took that PR out of
+   * ("Wrong topic"). The prompt says so per PR; the engine drops an answer
+   * that puts it back. A PR left out (or no map at all) has none.
+   */
+  notIn?: Record<PrKey, string[]>;
   context: PromptContext;
 }
 

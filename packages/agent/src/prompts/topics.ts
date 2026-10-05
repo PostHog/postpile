@@ -71,6 +71,20 @@ ${githubData(others.map(waitingLine).join('\n'))}
 }
 
 /**
+ * The topics the user took this PR out of ("Wrong topic"), after its fenced
+ * details: the app speaking, like the own-PR note. Only topic ids, which the
+ * list above shows with their names. Most PRs have none and read as before.
+ */
+function notInNote(pr: Pr, input: TopicAssignmentInput): string {
+  const ids = input.notIn?.[pr.key] ?? [];
+  if (ids.length === 0) {
+    return '';
+  }
+  const topics = ids.map((id) => `topic id ${id}`).join(', ');
+  return `\nThe user took this PR out of ${topics}. Never put it back there, also not as a new topic of the same name.`;
+}
+
+/**
  * Sorts new or changed PRs into the user's topics. Every PR gets one: an
  * existing topic or a new one. A topic is one goal (WORK_GLOSSARY) of a
  * project's size (TOPIC_SIZE_EXAMPLES): a PR joins a live goal it serves or
@@ -81,7 +95,7 @@ ${githubData(others.map(waitingLine).join('\n'))}
  */
 export function topicAssignmentPrompt(input: TopicAssignmentInput): string {
   const topics = input.topics.length === 0 ? '(none yet)' : input.topics.map(topicLine).join('\n');
-  const prs = input.prs.map((pr) => prDetails(pr, input.viewer, shortDetail)).join('\n\n---\n\n');
+  const prs = input.prs.map((pr) => `${prDetails(pr, input.viewer, shortDetail)}${notInNote(pr, input)}`).join('\n\n---\n\n');
   return `You are sorting GitHub pull requests into topics for a developer.
 ${WORK_GLOSSARY}
 
