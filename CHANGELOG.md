@@ -8,6 +8,10 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 - Mute a PR for good: "Mute until I'm mentioned" at the end of the Snooze menu. The tile leaves your inbox and stays out whatever others or bots do, and comes back only when someone mentions you, asks you, replies to you or requests your review. Muting marks it read and unsubscribes you from the PR's GitHub notifications, so GitHub stays quiet too. Unmute, where Unsnooze is, subscribes you again. If you watch the repo, GitHub still notifies you about it.
 
+### Fixed
+
+- A tile that already says "Not yours" no longer offers "Not mine" in its ⋯ menu. Mark read clears it. A stack or set only counts when its verdict says Not yours, so one PR the agent calls Not yours next to one that needs a look keeps the option.
+
 ## 0.20.0 (2026-10-05)
 
 ### Changed

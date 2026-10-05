@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { at, makeEvent, makePr, makeUserState, NO_OPENED_READ, NO_OPENED_READ_INPUT, NO_PR_FACTS, viewer } from './fixtures.ts';
-import { buildPrSummary, tileUnreadPrKeys, tileVerdict, type PrSummaryInput } from './tile-view.ts';
+import { tileVerdict } from './tile-verdict.ts';
+import { buildPrSummary, tileUnreadPrKeys, type PrSummaryInput } from './tile-view.ts';
 import type { Pr, PrEvent, TileMember, TileState } from './types.ts';
 import type { PrSummary } from './views.ts';
 

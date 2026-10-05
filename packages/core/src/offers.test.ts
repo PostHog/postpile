@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { TileAfterRead } from './after-read.ts';
 import { at, NO_PR_FACTS } from './fixtures.ts';
 import { leadPrKey, paneOffers, tileFooterAction, tileOffers, type OfferPr, type OfferView } from './offers.ts';
-import type { TileMember, TileStateKind } from './types.ts';
+import type { TileMember, TileStateKind, Verdict } from './types.ts';
 import type { WhoseTurn } from './whose-turn.ts';
 
 const NONE: WhoseTurn = { kind: 'none', who: null, what: '', prKey: null };
@@ -83,6 +83,35 @@ describe('tile footer', () => {
     const set = view('unread', NONE, doneAfter, [doneRow, row(2, { done: true })]);
     expect(paneOffers(set, doneRow).markLabel).toBe('Mark read');
     expect(paneOffers(set, row(2, { done: true })).lead).toBe('open_on_github');
+  });
+});
+
+describe('Not mine in the tile menu', () => {
+  // A row with the glance fields the tile's verdict pill reads (`tileVerdict`).
+  function glanced(number: number, verdict: Verdict | null, overrides: Partial<OfferPr & { glanceStale: boolean }> = {}) {
+    return { ...row(number, overrides), verdict, glanceStale: overrides.glanceStale ?? false, glanceGap: null, glanceState: 'ready' as const, glanceRefreshBlock: null };
+  }
+
+  // Bug fixed 2026-10-05: the menu offered "Not mine" on a tile whose pill already said Not yours.
+  it('is left out while the tile already reads Not yours, stale or not, so Mark read clears it', () => {
+    const offers = tileOffers(view('unread', NONE, doneAfter, [glanced(1, 'NOT_YOURS')]));
+    expect(offers).toMatchObject({ notMine: false, markLabel: 'Mark read' });
+    expect(tileOffers(view('open', NONE, doneAfter, [glanced(1, 'NOT_YOURS', { glanceStale: true })])).notMine).toBe(false);
+  });
+
+  it('stays for any other verdict, and without a glance', () => {
+    for (const verdict of ['LOOKS_SAFE', 'LOOK_CLOSER', null] as const) {
+      expect(tileOffers(view('unread', NONE, doneAfter, [glanced(1, verdict)])).notMine).toBe(true);
+    }
+  });
+
+  it('on a stack or set follows the pill: left out only when every open tracked PR is Not yours', () => {
+    const allNotYours = [glanced(1, 'NOT_YOURS'), glanced(2, 'NOT_YOURS'), glanced(3, 'LOOK_CLOSER', { state: 'MERGED' })];
+    expect(tileOffers(view('unread', NONE, doneAfter, allNotYours)).notMine).toBe(false);
+    const oneNeedsALook = [glanced(1, 'NOT_YOURS'), glanced(2, 'LOOK_CLOSER')];
+    expect(tileOffers(view('unread', NONE, doneAfter, oneNeedsALook)).notMine).toBe(true);
+    const oneLooksSafe = [glanced(1, 'NOT_YOURS'), glanced(2, 'LOOKS_SAFE')];
+    expect(tileOffers(view('unread', NONE, doneAfter, oneLooksSafe)).notMine).toBe(true);
   });
 });
 

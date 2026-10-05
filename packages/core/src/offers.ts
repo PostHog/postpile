@@ -4,6 +4,7 @@
 // the PR's primary action. Worked out here once, shipped as
 // `TileView.offers`; the renderer only displays them.
 import { isTracked } from './provenance.ts';
+import { tileVerdict } from './tile-verdict.ts';
 import type { PrKey, TileState } from './types.ts';
 import type { PrSummary, TilePendingWrite, TileView } from './views.ts';
 
@@ -83,6 +84,11 @@ export interface TileOffers {
   snooze: boolean;
   /** Next to Snooze when the footer leads with it; null otherwise. */
   github: GitHubLinkOffer | null;
+  /**
+   * Show "Not mine" in the tile's ⋯ menu: not while the tile's verdict pill
+   * already says Not yours (`notMineOffer`).
+   */
+  notMine: boolean;
   /**
    * "Unmute the rest" in the Snooze menu: the tile came back while some of
    * its PRs are still muted (`TileState.partlyMuted`), and it is not done.
@@ -250,6 +256,20 @@ export function paneOffers(view: OfferView, pr: OfferPr): PaneOffers {
   };
 }
 
+/**
+ * "Not mine" says the tile is not the viewer's: it clears the tile and
+ * teaches the agent. When the tile's verdict pill already says Not yours
+ * (stale or not, the way the rules read it), the agent agrees and there is
+ * nothing to teach, so the menu leaves it out and Mark read is the way to
+ * clear the tile (2026-10-05). The pill is the worst glance among the open
+ * tracked PRs (`tileVerdict`), so a stack or set reads Not yours only when
+ * every open PR it tracks does; one Not yours PR next to a Look closer one
+ * keeps "Not mine", which then still says something about the rest.
+ */
+export function notMineOffer(view: Pick<OfferView, 'prs'>, lead: PrKey | null): boolean {
+  return tileVerdict(view.prs, lead)?.verdict !== 'NOT_YOURS';
+}
+
 /** Every button of the tile: footer, lead PR and the detail pane per PR. */
 export function tileOffers(view: OfferView): TileOffers {
   const footer = tileFooterAction(view);
@@ -265,6 +285,7 @@ export function tileOffers(view: OfferView): TileOffers {
     snooze: view.state.kind !== 'done',
     github: footer === 'snooze' ? githubLink(view, lead) : null,
     unmuteRest: view.state.kind !== 'done' && view.state.partlyMuted === true,
+    notMine: notMineOffer(view, lead),
     pane,
   };
 }
