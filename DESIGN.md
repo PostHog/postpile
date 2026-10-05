@@ -114,7 +114,8 @@ incidents behave like short projects, chores are single tiles.
 (merged away, never comes back). The app says "Archive" for retired topics;
 code keeps "retired" because "archived" already means merged away. Every
 full sync ends by retiring each active topic that passes the gate
-(`RetireGate`, `retireFinishedTopics`): every member PR merged or closed, no
+(`RetireGate`, `retireFinishedTopics`, on the whole topic with its cold PRs,
+see "Big inboxes: what PostPile loads and works on"): every member PR merged or closed, no
 human activity for 2 days (2026-10-01; was any event for 3 days: deploys,
 CI and bot comments land after a merge and kept 18 of 32 finished topics of
 a real database in the sidebar), every thread of the topic read on
@@ -315,62 +316,8 @@ minutes later instead of an hour (`BACKLOG_SYNC_MINUTES`), so a backlog
 already show. Before, a year of unread notifications kept the first sync
 running for 20+ minutes.
 
-**Memory on big boards** (2026-10-05, after an out-of-memory crash on a
-heavy install: about 5,000 tiles, 11k PRs, 485k events). The engine runs in
-Electron's main process, whose V8 heap stops at about 4 GB (pointer
-compression; `--max-old-space-size` cannot raise it). `Board.load` reads
-every stored PR and every event, and nothing stored ever ages out (the
-30-day window above only picks what gets fetched), so one board on that
-install held about 350 MB once built and allocated about 800 MB on the way.
-The renderer's refetch, the Dock badge, the poll, catch-ups and the sync
-each built their own, several stayed alive across agent calls, and the
-pr_event `.all()` of the seventh died in `v8::Object::New`. Now:
-
-- `Board.load` hands out the last Board again while the store's change
-  version (`Store.changeVersion`: `total_changes()` plus `PRAGMA
-  data_version`, so a CLI write counts) is the same and it is at most 5 s
-  old (`BOARD_REUSE_MS`; tile rules read minutes). The old Board is let go
-  before a new read. A Board is read-only, so sharing is safe.
-- The PR parse cache fills 200 rows at a time (`PARSE_CHUNK`), and
-  `listForPrs` iterates rows (`each` in store `sql.ts`) instead of one array.
-- At most two glance catch-up runs go at once (`MAX_RUNNING_CATCH_UPS`, see
-  "Glance catch-up"): each holds boards across its agent calls.
-
-Measured on a 14x copy of a normal database: a refetch storm went from 6
-boards and 8 s to one, a cold start fits in 1.7 GB (needed 3.4), and 20
-readers without writes between stay at 1.9 GB (died at the seventh). Still
-open: what is stored never shrinks, so a board keeps growing with the inbox
-(NEXT.md "GitHub writes on by default", and the bound on the board).
-
-*After a wake* (2026-10-05). The crash came about 5 minutes after the Mac
-woke from sleep, when everything catches up at once. The renderer's
-QueryClient no longer refetches on reconnect (`refetchOnReconnect: false`):
-the browser's `online` after a wake refetched every query, all stale by then,
-though the local API's data does not change because the network came back;
-the live poll's news refetches what changed. Its `networkMode: 'always'`
-keeps queries and mutations running while macOS reports no network: the API
-is on 127.0.0.1. On Electron's `powerMonitor` `suspend`, main calls
-`Engine.noteSuspend()`: the auto sync's timer stops and its due time is kept
-(`AutoSyncSchedule.suspend`), so a due time that passes during sleep cannot
-fire before the wake is noted. On `resume`, `Engine.noteWake()`: the live
-poll keeps its own cycle (cheap, and it brings the news), and the next
-background auto sync is set again from the kept due time on the wall clock
-but at least 3 minutes out (`WAKE_SYNC_DELAY_MINUTES`,
-`AutoSyncSchedule.wake`), so an overdue one does not land in the burst. Main
-logs the sleep, the wake and the new due time.
-
-*Seeing the next one* (2026-10-05; this crash was only known from Slack).
-Main writes `running.json` (pid, version, start time) to the data folder at
-start, and the clean quit path removes it (Cmd+Q, SIGTERM or SIGINT, "Restart
-to update", all through `shutdownOnce`). A marker still there at the next
-start sends `app_crashed_last_run` (`RunMarker` in `apps/desktop/src/main`).
-`sync_completed` carries the heap (`heap_used_mb`, `heap_limit_mb`), so a heap
-creeping up to the limit shows before it dies. Electron's `crashReporter`
-runs with `uploadToServer: false`: Crashpad keeps minidumps in Electron's
-default `crashDumps` folder, `Crashpad/` in the data folder, for debugging by
-hand. Whether a V8 out-of-memory abort
-leaves one is not documented, so the marker is the signal to count on. The
-real fix is a process of its own for the engine (NEXT.md "Later").
+**Memory on big boards**: the board holds the hot set only, see "Big
+inboxes: what PostPile loads and works on" (2026-10-05).
 
 **Reconciling with GitHub's read time.** Every event on a thread from before
 that thread's `last_read_at` counts as seen, stamped with that time, whenever
@@ -442,6 +389,189 @@ Action details:
   "finished". Retired topics are never suggested. Topics the user recently
   moved tiles into are not ranked yet (the renderer has no feedback history).
 - unmute: user override (`quiet`, or the rule loudness if that was not muted).
+
+## Big inboxes: what PostPile loads and works on (2026-10-05)
+
+Nothing stored ever ages out: every notification, PR snapshot and event
+stays in the database. On a heavy install (about 5,000 tiles, 11k PRs,
+924 MB of snapshot JSON, 485k events; two installs see 150 to 300 PR
+updates an hour) a board that read all of it ran the main process out of
+memory. The owner's rule: PostPile only ever works with a recent, fresh
+slice and ignores older stuff, stays safe and fast however big the inbox
+is, and never asks the user to clean up for it. The slice is the hot set;
+it is the one rule for what PostPile loads into the board.
+
+**The hot set** (core `hot-board.ts`, `selectHotBoard`). A stored PR is
+hot when any of these holds:
+
+- its thread is unread on GitHub;
+- it is open and tracked: it has a thread, or the sync found it;
+- it had activity in the last 7 days (`SETTLED_DAYS`): the newest of its
+  last update on GitHub (a merge or close moves it), its newest stored
+  event and its thread's last update;
+- it shares a stack or an active set with a hot PR (`withGroups`): stacks
+  and sets load whole or not at all, so a pulled-in layer of a hot PR is
+  hot too.
+
+Everything else is cold: not loaded, not parsed, no events in memory.
+Nothing is deleted, and the set is worked out again on every load from
+short rows, so a cold PR is back the moment it qualifies (a new comment,
+its thread turning unread).
+
+**Tiers and the cap** (owner decision, 2026-10-05). PostPile works for the
+user first, then their team, then everyone else (`hotTier`):
+
+1. *you*: the user's own PR (author, or a bot PR assigned to them, as
+   `isPrOwner`), a review requested from them in person, a mention, a
+   reply or question to them, their changes request answered.
+2. *team*: a request to one of their home teams (routing-only teams do not
+   count), or a PR a home-team member owns.
+3. *others*: everything else.
+
+Inside a tier unread goes first, then the newest activity. The board holds
+at most 1,500 PRs (`HOT_BOARD_MAX_PRS`). When the hot set is bigger the
+inbox is *busy*: tiers you and team fill the cap by rank, each PR with its
+stack and set (the last one may take the board a few PRs past the cap; a
+stack is never cut), and tier others gets nothing at all, even when room
+is left: PostPile stops working for others while busy. Settled PRs going
+cold never make an inbox busy.
+
+What the tier rules read is cheap per PR: the `pr_light` row (owners,
+pending reviewers), the thread's reason, how the sync found it, and
+whether a stored event is aimed at the user (`mention`, `reply_to_user`,
+`question_to_user`, rule reasons "review requested from you", "review
+request already answered or removed" and "addressed your changes", from a
+partial index, `EventRepo.prKeysWithPersonalAsks`). So a team request
+counts while it is pending, and teammates are the stored
+`viewer.teamMembers` (none before the first fetch of them).
+
+**Loading.** `Board.load` builds the hot Board, shared per data change as
+before (see "Memory on big boards" below). The PR parse cache holds the
+hot set and nothing more (`PrRepo.keepParsed`); any other read parses for
+its call only (`getMany`). Whatever can show or need a cold PR reads it on
+demand, for the request, and lets it go:
+
+- `Board.forTopic`: a topic whole, the hot Board when it holds every PR of
+  the topic, else a Board of the topic's PRs with their stacks and sets.
+  `getTopic` (an opened topic, the Archive drawer, MCP `topic`), the topic
+  chat, the proposal and outside-agent topic checks, and the retire gate.
+- `Board.forPr`: the PR pane (`getPr`, MCP `pr_context`), a Mac ping's
+  click target, "opened in PostPile" reads.
+- `Board.forTile`: actions on a cold tile the topic pane shows (mark read,
+  snooze, feedback).
+- `Board.forPrs`: search hits on cold PRs of the listed topics (matched on
+  their short rows first, at most 200, `SEARCH_COLD_MAX`), the notifications
+  debug view and Handled quietly.
+
+Short rows (migration 028): `pr_light` holds title, author, assignees,
+pending reviewers and the stack fields beside each `pr` row, filled from
+the json once and then on every upsert (a table of its own: columns after
+the json sit behind its overflow pages, which made adding them take 10 s
+and reading them 300 ms on the heavy copy). `PrRepo.listLight` reads them
+with each PR's newest event time. Stacks over every stored PR come from
+these rows (`buildStacks` takes them), so a stack is the same on every
+Board and `movesWith` / `topicIdOf` work for cold PRs. The assignment
+prompt's topic counts, consolidation's counts, the sync's stack walk and
+freshness check, set grouping and the team-role re-derivation (in chunks)
+no longer parse every snapshot either.
+
+**Retiring.** The retire step pre-checks each active topic from short rows
+(every member merged or closed, no member thread unread) and only then
+checks the gate on the whole topic (`topicRetireGate`, cold PRs included).
+Consolidation's retire and "Archive now" use the same. An active topic
+whose PRs all went cold leaves the sidebar (it has no hot tile), and the
+next full sync moves it to the Archive when it passes the gate, where it
+opens whole. A topic cut by the cap with open PRs stays active and comes
+back with its next news.
+
+**What changes on screen.** The sidebar counts hot tiles only. On a copy
+of a normal database (809 PRs, 438 hot): the same 61 topics in the same
+order and sections, with the same unread, open and your-move counts; 20
+topics count fewer tiles (130 tiles of PRs merged or closed over a week
+ago), 10 lose a face; every opened topic, active or in the Archive, is the
+same; search finds the same tiles and PRs; the repo menu drops 2 repos that
+only had old settled PRs.
+
+**Busy inbox** (UI to follow). `GET /api/busy-inbox` (`busyInbox`,
+`BusyInboxView`): `busy` (the cap cut the hot set on the last load),
+`inboxPrs` (PRs that would be hot without the cap), `keptPrs`, `quietPrs`
+(the difference: not loaded, fetched or worked on), `keptYou`,
+`keptTeam`, `keptOthers` (kept PRs by their own tier), `cap`,
+`updatesLastHour` (PR threads with activity in the last hour) and
+`writesLocked` (GitHub writes off, so PostPile cannot shed load by marking
+things read). It reuses what the last load picked. `POSTPILE_FAKE_BUSY=1`
+makes the fake inbox busy with invented numbers. While busy, the engine
+logs a line and sends `board_trimmed { kept, dropped }` at most once an
+hour.
+
+**Numbers** (14x copy of a normal database, 11k PRs; Node, 4 GB heap):
+
+| | before | after |
+|---|---|---|
+| PRs on the board | 11,326 | 1,500 (6,132 hot, busy) |
+| first load | 3.0 s | 0.8 s |
+| later loads | 1.1 s | 0.3 to 0.5 s |
+| heap with one board and the parse cache | 1.9 GB | 0.35 GB |
+| boards held at once | 7, died at the 8th | 12 in 1.1 GB |
+
+On the normal copy a load went from 70 to 50 ms and the heap from 150 to
+86 MB. Migration 028 took 0.7 s on the 14x copy.
+
+**Memory on big boards** (2026-10-05, after an out-of-memory crash on a
+heavy install: about 5,000 tiles, 11k PRs, 485k events). The engine runs in
+Electron's main process, whose V8 heap stops at about 4 GB (pointer
+compression; `--max-old-space-size` cannot raise it). `Board.load` read
+every stored PR and every event before the hot set, so one board on that
+install held about 350 MB once built and allocated about 800 MB on the way.
+The renderer's refetch, the Dock badge, the poll, catch-ups and the sync
+each built their own, several stayed alive across agent calls, and the
+pr_event `.all()` of the seventh died in `v8::Object::New`. Now:
+
+- `Board.load` hands out the last Board again while the store's change
+  version (`Store.changeVersion`: `total_changes()` plus `PRAGMA
+  data_version`, so a CLI write counts) is the same and it is at most 5 s
+  old (`BOARD_REUSE_MS`; tile rules read minutes). The old Board is let go
+  before a new read. A Board is read-only, so sharing is safe.
+- The PR parse cache fills 200 rows at a time (`PARSE_CHUNK`), and
+  `listForPrs` iterates rows (`each` in store `sql.ts`) instead of one array.
+- At most two glance catch-up runs go at once (`MAX_RUNNING_CATCH_UPS`, see
+  "Glance catch-up"): each holds boards across its agent calls.
+
+Measured on a 14x copy of a normal database: a refetch storm went from 6
+boards and 8 s to one, a cold start fits in 1.7 GB (needed 3.4), and 20
+readers without writes between stay at 1.9 GB (died at the seventh). What
+is stored still never shrinks; the hot set above is what keeps a board
+from growing with it.
+
+*After a wake* (2026-10-05). The crash came about 5 minutes after the Mac
+woke from sleep, when everything catches up at once. The renderer's
+QueryClient no longer refetches on reconnect (`refetchOnReconnect: false`):
+the browser's `online` after a wake refetched every query, all stale by then,
+though the local API's data does not change because the network came back;
+the live poll's news refetches what changed. Its `networkMode: 'always'`
+keeps queries and mutations running while macOS reports no network: the API
+is on 127.0.0.1. On Electron's `powerMonitor` `suspend`, main calls
+`Engine.noteSuspend()`: the auto sync's timer stops and its due time is kept
+(`AutoSyncSchedule.suspend`), so a due time that passes during sleep cannot
+fire before the wake is noted. On `resume`, `Engine.noteWake()`: the live
+poll keeps its own cycle (cheap, and it brings the news), and the next
+background auto sync is set again from the kept due time on the wall clock
+but at least 3 minutes out (`WAKE_SYNC_DELAY_MINUTES`,
+`AutoSyncSchedule.wake`), so an overdue one does not land in the burst. Main
+logs the sleep, the wake and the new due time.
+
+*Seeing the next one* (2026-10-05; this crash was only known from Slack).
+Main writes `running.json` (pid, version, start time) to the data folder at
+start, and the clean quit path removes it (Cmd+Q, SIGTERM or SIGINT, "Restart
+to update", all through `shutdownOnce`). A marker still there at the next
+start sends `app_crashed_last_run` (`RunMarker` in `apps/desktop/src/main`).
+`sync_completed` carries the heap (`heap_used_mb`, `heap_limit_mb`), so a heap
+creeping up to the limit shows before it dies. Electron's `crashReporter`
+runs with `uploadToServer: false`: Crashpad keeps minidumps in Electron's
+default `crashDumps` folder, `Crashpad/` in the data folder, for debugging by
+hand. Whether a V8 out-of-memory abort
+leaves one is not documented, so the marker is the signal to count on. The
+real fix is a process of its own for the engine (NEXT.md "Later").
 
 ## Merged without your review
 
@@ -3423,11 +3553,12 @@ avatars and filters", QueuesB2).
   (`GET /api/topics/finished`, `FinishedTopic`: name and how long ago it
   retired, PR count in the tooltip). Quiet on purpose: muted names, no
   bubble, no faces, no count on the header. A row opens the topic like any
-  other (`getTopic` and `tilesForTopic` work for a retired topic; the
+  other (`getTopic` reads a retired topic whole, `Board.forTopic`; the
   breadcrumb says "Archive"). Search and the queue filters cover live
   topics only, so the drawer hides while they narrow. Hidden when empty.
 - **Counts** come from `TopicListItem.queues` (`topicQueues` in core): PRs
-  per tier over the PRs in the topic's tiles (each PR once), plus open PRs
+  per tier over the PRs in the topic's tiles on the hot board (each PR
+  once; PRs that went cold are not counted), plus open PRs
   by you / by a teammate. Only open PRs get a real tier; merged and closed
   ones are `rest`.
 - **Pulled-in stack layers** (provenance `pulled_in`, no tile holds them
@@ -4749,7 +4880,7 @@ Merging or closing counts only when the viewer did it.
    rule: the engine marks every event up to and including the touch seen in
    the store, stamped with the touch time (core `eventsSeenByTouch`), each
    time a PR snapshot is stored (sync and poll, so the poll never pings for
-   them) and once per full sync over every stored PR (events stored before
+   them) and once per full sync over the hot board's PRs (events stored before
    the rule). The PRs join the seen-cursor move like read-time ones. Details
    the build settled:
    - A push counts only on the viewer's own PR. On someone else's PR a
@@ -6832,6 +6963,7 @@ preflight and does not know the token, so CORS stays open.
 | `POST /api/sync` | `sync()` |
 | `GET /api/topics` | `listTopics()` |
 | `GET /api/topics/:id` | `getTopic()` |
+| `GET /api/busy-inbox` | `busyInbox()` (`BusyInboxView`: the board cap cut the hot set, kept per tier, see "Big inboxes: what PostPile loads and works on") |
 | `GET /api/inbox-cleanup` | `inboxCleanup()` (merged and old unread counts, every pick with what it clears, the start case, a run's progress) |
 | `POST /api/inbox-cleanup/clear` `{merged, older, countedAt, from}` | `clearInbox()` (GitHub writes in the background, one pending write while locked) |
 | `POST /api/inbox-cleanup/start-as-usual` | `startAsUsual()` (answers the start dialog, the held sync goes on) |

@@ -6,6 +6,22 @@ now".
 
 ## Done
 
+- The hot board (2026-10-05, DESIGN.md "Big inboxes: what PostPile loads
+  and works on"): the board holds only PRs that are unread on GitHub, open
+  and tracked, or active in the last 7 days, each with its whole stack and
+  set; the rest stays in the database, cold, until there is news on it.
+  Past 1,500 PRs the inbox is busy: the user's own and personal asks go
+  first, then the home team, and everyone else gets nothing. Cold topics
+  and PRs are read on demand (`Board.forTopic`, `forPr`, `forTile`,
+  `forPrs`) for the topic pane, the PR pane, MCP reads, search, ping
+  clicks, retiring and the debug views. Migration 028 adds `pr_light`
+  (short rows beside each snapshot) and a partial index for events aimed at
+  the user. `GET /api/busy-inbox` carries the numbers for a busy inbox card
+  (UI to follow; `POSTPILE_FAKE_BUSY=1` in fake mode), and
+  `board_trimmed` goes out at most hourly while busy. On a 14x copy a load
+  went from 1.1 s to 0.3 s and the heap from 1.9 GB to 0.35 GB; on a
+  normal copy only the sidebar's counts of old settled tiles changed.
+  Not tried by hand: the app on a real heavy database.
 - Calm wake and crash signals (2026-10-05, DESIGN.md "Memory on big
   boards"): after a wake the renderer no longer refetches every query
   (`refetchOnReconnect: false`; `networkMode: 'always'`, so no network
@@ -30,9 +46,8 @@ now".
   (5 s at most), the PR parse cache fills in chunks, events are iterated,
   and at most two catch-up runs go at once. Telemetry gained
   `github_writes_changed` and `writes_on` on `sync_completed`. Reproduced
-  and measured on a 14x copy of a normal database. Still open: nothing
-  stored ages out, so the board keeps growing (see Decided "GitHub writes
-  on by default").
+  and measured on a 14x copy of a normal database. Nothing stored ages
+  out still; the hot board (above) keeps the board from growing with it.
 - Interruptions (2026-10-05, DESIGN.md "Interruptions"): Mac notifications
   are opt-in. Three modes, kept in meta `interruptions_mode`: never (the
   default, nothing reaches the Mac), in batches (a roundup at 9:30, 13:30
@@ -1240,6 +1255,17 @@ the app meanwhile.
   code-manager folder migration (`legacy-data.ts`) once the move has run.
 
 ## Decided
+
+- **The hot set decides what PostPile loads and works on** (2026-10-05,
+  DESIGN.md "Big inboxes: what PostPile loads and works on"): PostPile
+  only ever works with a recent, fresh slice and ignores older stuff, and
+  stays safe and fast however big the inbox is without the user cleaning
+  up. Hot: unread on GitHub, open and tracked, or active in the last 7
+  days, with whole stacks and sets. The cap is 1,500 PRs. Over it the
+  inbox is busy and PostPile works for the user first (own PRs, personal
+  asks), then the home team (requests to it, teammates' PRs), and stops
+  working for everyone else, even with room left. A visible "busy inbox"
+  card shows it (data built, UI to follow).
 
 - **GitHub writes on by default; locked writes choke PostPile** (2026-10-05,
   not built yet): PostPile can only shed load by marking things read on
