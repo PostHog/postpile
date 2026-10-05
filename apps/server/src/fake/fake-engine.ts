@@ -2175,8 +2175,8 @@ export class FakeEngine implements EngineService {
 
   stopWorkContextSchedule(): void {}
 
-  /** The sample data has no stored snapshots to cut. */
-  startBotBodyTrim(): void {}
+  /** The sample data has no stored data to rewrite. */
+  startStorageJobs(): void {}
 
   async consolidate(): Promise<ConsolidationReport> {
     return this.memory.consolidate();

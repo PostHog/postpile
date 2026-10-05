@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { inTransaction, openDatabase, openDatabaseReadOnly } from './database.ts';
+import { inImmediateTransaction, inTransaction, openDatabase, openDatabaseReadOnly } from './database.ts';
 import { one } from './sql.ts';
 import { ActionLogRepo } from './repos/action-log.ts';
 import { AgentCallRepo } from './repos/agent-calls.ts';
@@ -138,6 +138,15 @@ export class Store {
   /** Runs fn in one transaction across repositories. fn must be synchronous. */
   transaction<T>(fn: () => T): T {
     return inTransaction(this.db, fn);
+  }
+
+  /**
+   * Runs fn in one BEGIN IMMEDIATE transaction, waiting at most lockWaitMs
+   * for the write lock, else throwing SQLITE_BUSY (inImmediateTransaction):
+   * for background rewrites that read and write in one go.
+   */
+  immediateTransaction<T>(lockWaitMs: number, fn: () => T): T {
+    return inImmediateTransaction(this.db, lockWaitMs, fn);
   }
 
   close(): void {

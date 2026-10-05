@@ -123,13 +123,14 @@ export interface EngineService {
   /**
    * The Mac goes to sleep (desktop main, powerMonitor 'suspend'): the auto
    * sync's timer stops until noteWake(), so a due time that passes during
-   * sleep cannot fire before the wake is noted.
+   * sleep cannot fire before the wake is noted. Storage jobs pause too.
    */
   noteSuspend(): void;
   /**
    * The Mac woke from sleep (desktop main, powerMonitor 'resume'): the next
    * auto sync waits at least WAKE_SYNC_DELAY_MINUTES, so it does not land in
-   * the wake burst. The live poll keeps its own cycle.
+   * the wake burst, and a running storage job goes on after 30 s. The live
+   * poll keeps its own cycle.
    */
   noteWake(): void;
   /**
@@ -487,12 +488,13 @@ export interface EngineService {
   startWorkContextSchedule(): void;
   stopWorkContextSchedule(): void;
   /**
-   * The one-time cut of bot bodies in stored snapshots (desktop app): in
-   * small steps in the background, after a delay and never during a sync,
-   * poll, consolidation or catch-up. Resumes where a quit left it, a no-op
-   * once it ran to the end.
+   * The storage jobs (desktop app; DESIGN.md "Storage jobs"), one-time
+   * rewrites of stored data such as the cut of bot bodies in stored
+   * snapshots: in order, in small slices in the background, after a delay
+   * and never during a sync, poll, consolidation or catch-up, nor while the
+   * Mac sleeps. Each resumes where a quit left it; a no-op once all are done.
    */
-  startBotBodyTrim(): void;
+  startStorageJobs(): void;
 
   /**
    * gh and claude: found, logged in, usable, with the exact fix commands.

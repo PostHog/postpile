@@ -640,8 +640,9 @@ fire before the wake is noted. On `resume`, `Engine.noteWake()`: the live
 poll keeps its own cycle (cheap, and it brings the news), and the next
 background auto sync is set again from the kept due time on the wall clock
 but at least 3 minutes out (`WAKE_SYNC_DELAY_MINUTES`,
-`AutoSyncSchedule.wake`), so an overdue one does not land in the burst. Main
-logs the sleep, the wake and the new due time.
+`AutoSyncSchedule.wake`), so an overdue one does not land in the burst. A
+running storage job pauses on suspend and goes on 30 s after the wake
+("Storage jobs"). Main logs the sleep, the wake and the new due time.
 
 *Seeing the next one* (2026-10-05; this crash was only known from Slack).
 Main writes `running.json` (pid, version, start time) to the data folder at
@@ -2800,14 +2801,14 @@ open and never splits a character.
   earliest, when both ids were logged). This covers a stored body first
   cut by a fetch and the role-change re-derive. Any other kind change
   stays a new event: a comment that now mentions the viewer is news.
-- **Stored snapshots** are cut once by `BotBodyTrim` (engine, started by
-  the desktop app). It leaves events alone and keeps `fetched_at`. It
-  waits 30 s after start and while a sync, poll, consolidation or catch-up
-  runs, then goes one PR at a time in ~30 ms transactions 20 ms apart
-  (one PR of several MB can take longer). It resumes after a quit (meta
-  `bot_body_trim_after`, done at `bot_body_trim_done`) and empties the WAL
-  at the end without waiting for other connections. No VACUUM (7 s on a
-  heavy copy): SQLite reuses the freed pages.
+- **Stored snapshots** are cut once by storage job 1, `bot_body_trim`
+  (`BotBodyTrimJob`, see "Storage jobs" below for how it runs; 0.19.0 ran
+  it on its own timer). One unit is one PR in key order, written back
+  through `PrRepo.upsert` only when the cut changed it. It leaves events
+  alone and keeps `fetched_at`. Its meta keys stay 0.19.0's
+  (`bot_body_trim_after`, done at `bot_body_trim_done`), so an install
+  mid-way resumes and one that finished never runs it again. No VACUUM
+  (7 s on a heavy copy): SQLite reuses the freed pages.
 - **Caches see a rewrite** (migration 029): every write of a PR's snapshot
   gives its header a new `pr.snapshot_revision`, in the same transaction,
   and the parse caches compare it instead of `fetched_at`. The value comes
@@ -2824,6 +2825,76 @@ open and never splits a character.
   did not take and a parked batch look a captured machine comment id up
   under its other kind when it is gone (`machineCommentTwinId`), so the
   renamed event turns unseen again with its thread.
+
+## Storage jobs (2026-10-05)
+
+A one-time rewrite of stored data that needs JS (parse, cut, rebuild) runs
+as a storage job, never in a numbered migration: a migration runs at
+startup in one transaction on Electron's main thread, and on a heavy
+install that is seconds of a frozen app and a WAL the size of the rewrite.
+The bot body trim is job 1; the PR snapshot normalization (NEXT.md) adds
+its backfills and strips as later jobs. Code in
+`packages/engine/src/storage-jobs/`: `runner.ts` (`StorageJobRunner`),
+`jobs.ts` (the ordered list), one file per job. Checked with Codex
+GPT-6.1 (2026-10-05).
+
+- **One at a time, in order.** `jobs.ts` is append only. A job starts once
+  every job before it is done, so an install that skipped releases runs
+  them all, in turn, in one go. The desktop app starts them
+  (`EngineService.startStorageJobs`); the CLI and the MCP never do.
+- **A job** walks a cursor over keys. `step(store, after)` does one unit
+  after the cursor and returns its key, or null when nothing is left.
+  Each job names its own meta keys for the cursor and the done flag, and
+  never reuses them (new jobs: `storage_job:<name>:after` / `:done`).
+- **Slices.** One slice is one `BEGIN IMMEDIATE` transaction
+  (`Store.immediateTransaction`): units until ~30 ms are spent, the
+  expected commit included (a running average of the last commits; every
+  few commits SQLite's automatic checkpoint adds ~15 ms), at least one
+  unit, never a unit cut short. Then a 50 ms pause, so a job takes at
+  most ~38% of the main thread. A unit reads what it rewrites inside the
+  slice's transaction, so it never writes over a newer sync write. The
+  cursor and the done flag are written in the same transaction as the
+  units: a crash, a quit or a failing unit leaves the cursor at the last
+  slice that committed, and the next start goes on from there.
+- **Never in the way.** It starts 30 s after launch. No slice starts while
+  a sync, a poll cycle, a consolidation or a catch-up runs (it looks again
+  every 2 s), nor while the Mac sleeps (`noteSuspend`; it goes on 30 s
+  after `noteWake`).
+- **No waiting on the lock.** `BEGIN IMMEDIATE` runs with a busy timeout of
+  0 for that call; the connection's 5 s comes back right after. On
+  SQLITE_BUSY (another connection holds the write lock) the slice runs
+  nothing and the runner tries again in 2 s, instead of holding the main
+  thread for up to 5 s. SQLite documents that IMMEDIATE can return BUSY:
+  https://sqlite.org/lang_transaction.html
+- **Fail closed.** When a job finds nothing left, its `complete()` checks
+  from the data that it is complete, in the same transaction, and switches
+  what depends on it. Only then is it done. A failed check walks the job
+  once more from the start; a second failure leaves it incomplete (meta
+  `storage_job_incomplete:<name>`, a log line), never done, and the jobs
+  after it wait. The next start tries again. The trim's walk is its own
+  check: a PR stored behind the cursor meanwhile came from a fetch, which
+  cuts on save.
+- **Caches.** A job writes only where what a read returns changes, and
+  then through `PrRepo.upsert`, so the PR's `snapshot_revision` moves from
+  the store-wide counter (migration 029) and every process's parse cache
+  reads it again. A second trim pass on the heavy copy wrote nothing and
+  moved no revision.
+- **The end of a job:** the WAL is emptied without waiting for other
+  connections (`checkpointWal`, part of the last slice), one log line, and
+  `storage_job_done` (see "Usage analytics").
+- **A failing unit** rolls its slice back; the runner logs it and stops
+  until the next start.
+
+Measured on `.backup` copies (2026-10-05, Node 24.21, SQLite 3.53.4, the
+bot body trim with real timers):
+
+| copy | PRs | rewritten | slices | slice p50 / p95 / max | work | wall | peak WAL |
+|---|---|---|---|---|---|---|---|
+| normal | 809 | 643 | 15 | 28 / 40 / 40 ms | 0.45 s | 1.2 s | 8 MB |
+| heavy (14x) | 11,326 | 9,002 | 218 | 31 / 40 / 50 ms | 6.8 s | 18 s | 9 MB |
+
+Without the commit allowance the normal copy's slices ran 47 ms at the
+median.
 
 ## Colour per meaning (2026-10-01)
 
@@ -6371,6 +6442,10 @@ topic names are never event props.
    `work_shed` (skipped_prs: PRs with news that syncs and polls left alone
    in the last hour because they are outside the hot slice; at most hourly,
    since 0.18.0, see "Big inboxes: what PostPile loads and works on"),
+   `storage_job_done` (name, one of the known jobs (`bot_body_trim`);
+   units, work_ms, longest_slice_ms, wall_ms: a background storage job
+   finished and its check passed, this run's share of it, see "Storage
+   jobs"; since 0.20.0),
    `sync_failed` (error_kind, currently only
    `gh_unavailable`: a blocked sync never runs), `rate_limited` (source
    `graphql`/`rest`, read from the error text — GitHub's GraphQL and REST

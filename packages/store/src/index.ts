@@ -1,6 +1,7 @@
 export { openDatabase, openDatabaseReadOnly, inTransaction, recordedVersion } from './database.ts';
 export { runMigrations, currentVersion, LATEST_VERSION } from './migrate.ts';
 export { Store } from './store.ts';
+export { inImmediateTransaction, isBusyError } from './database.ts';
 export { MetaRepo } from './repos/meta.ts';
 export { NotificationRepo } from './repos/notifications.ts';
 export { PrRepo } from './repos/prs.ts';

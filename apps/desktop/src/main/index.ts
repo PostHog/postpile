@@ -608,9 +608,10 @@ async function start(): Promise<void> {
   engine.startAutoSync({ minutes: config.autoSyncMinutes, maxAgentCalls: config.syncCallCap });
   // "What you're working on": checked now and every 30 minutes, runs once a day from 06:00.
   engine.startWorkContextSchedule();
-  // Once per install: long bot bodies in stored snapshots are cut like a fetch cuts them.
-  // It waits 30 s and while a sync, poll or catch-up runs, goes in ~30 ms steps, and resumes after a quit.
-  engine.startBotBodyTrim();
+  // One-time rewrites of stored data, in order (first: long bot bodies in stored snapshots
+  // are cut like a fetch cuts them). They wait 30 s and while a sync, poll, consolidation or
+  // catch-up runs or the Mac sleeps, go in ~30 ms slices 50 ms apart, and resume after a quit.
+  engine.startStorageJobs();
   // Consolidation (merge proposals, facts, retiring): checked every 30 minutes,
   // runs when due, capped like a sync. The engine never lets it overlap a sync.
   const service = engine;
