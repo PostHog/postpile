@@ -4,12 +4,6 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ## 0.16.1 (unreleased)
 
-### Changed
-
-- The title bar says "up to date" while PostPile keeps checking GitHub every minute, instead of "synced 40m ago", which counted from the last hourly full sync. It says "updates paused" while the checks back off or wait, and shows an age only when they fell behind ("checked 5m ago", amber) or the live poll is off. The full sync's details are in the tooltip; the footer says "last full sync".
-
-## 0.16.1 (unreleased)
-
 ### Added
 
 - Reply to a person's comment right in PostPile. Every comment in the PR's activity has Reply (in its review thread for a comment on code, else a new PR comment that quotes it) and Thumbs up, which adds a 👍 reaction on GitHub. In "New since you looked", "Reply ↓" jumps to the comment and opens the reply there.
@@ -22,6 +16,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - One way to write: approving with a note, a comment review, asking the author and replying all open the same box in place, which says where the text goes. The agent drafts only when you click "✨ Draft with agent" at the start of the box, or "✨ Rewrite with agent" once you typed something.
 - Recheck moved onto the assessment's title line.
 - The agent chat shows your message right away with a "Thinking…" bubble, scrolls to the newest message, and takes several lines (Enter sends, Shift+Enter for a new line). A failed message goes back into the input instead of staying in the chat unanswered.
+- The title bar says "up to date" while PostPile keeps checking GitHub every minute, instead of "synced 40m ago", which counted from the last hourly full sync. It says "updates paused" while the checks back off or wait, and shows an age only when they fell behind ("checked 5m ago", amber) or the live poll is off. The full sync's details are in the tooltip; the footer says "last full sync".
 
 ## 0.16.0 (2026-10-03)
 
