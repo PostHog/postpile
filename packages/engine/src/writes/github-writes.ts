@@ -109,6 +109,22 @@ export class GitHubWrites {
     return this.send('comment', context, () => this.writeSwitch.writer().commentOnPr(ref, body));
   }
 
+  /**
+   * A reply in an inline review thread. Logged as a comment (with the thread
+   * in the detail): the debug view's text for each logged action is written
+   * against a closed list, and on GitHub a reply is a comment.
+   */
+  replyInThread(threadId: string, body: string, context: WriteContext): Promise<WriteResult> {
+    const detail = `reply in review thread ${threadId}`;
+    return this.send('comment', { detail, ...context }, () => this.writeSwitch.writer().replyInThread(threadId, body), (reason) => `${detail}: ${reason}`);
+  }
+
+  /** A thumbs up on a comment or review. Logged as a comment like replyInThread, the detail says what it was. */
+  addThumbsUp(subjectId: string, context: WriteContext): Promise<WriteResult> {
+    const detail = `thumbs up on ${subjectId}`;
+    return this.send('comment', { detail, ...context }, () => this.writeSwitch.writer().addThumbsUp(subjectId), (reason) => `${detail}: ${reason}`);
+  }
+
   /** Removes one team's review request (`teamSlug` without the org). */
   removeTeamReviewRequest(ref: PrRef, teamSlug: string, context: WriteContext): Promise<WriteResult> {
     const detail = `team ${teamSlug}`;

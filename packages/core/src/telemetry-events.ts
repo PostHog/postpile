@@ -73,6 +73,7 @@ const percent = z.number().int().min(0).max(100);
 
 const mcpTool = z.enum(['pr_context', 'topic', 'search_prs', 'whats_on_me', 'refresh_from_github', 'propose_topic_change']);
 const mcpConnectFrom = z.enum(['footer', 'setup']);
+const replyTarget = z.enum(['thread', 'comment']);
 
 /** No props: an empty object, so every event has a stable shape to validate against. */
 const NO_PROPS = z.object({}).strict();
@@ -100,6 +101,10 @@ export const TELEMETRY_EVENTS = {
   snoozed: z.object({ duration_bucket: snoozeDurationBucket }).strict(),
   opened_on_github: NO_PROPS,
   ask_sent: NO_PROPS,
+  // A reply to one comment from the detail pane: in its review thread, or as a quoting PR comment.
+  reply_sent: z.object({ target: replyTarget }).strict(),
+  // A thumbs up on a comment or review from the detail pane.
+  reaction_sent: NO_PROPS,
   // "Remove <team>" in the detail pane: a team review request removed. No PR, no team slug.
   team_request_removed: NO_PROPS,
   chat_message_sent: NO_PROPS,

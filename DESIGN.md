@@ -1448,6 +1448,18 @@ Unaccepted lessons never reach a prompt: no feedback row, no dossier input,
 no glance context. The dossier still reads the review itself as an ordinary
 event.
 
+**Topic chat** (2026-10-05). "Ask the agent" on the topic header chats
+about the whole topic: `topicChat(topicId, message)` /
+`getTopicChat(topicId)`. Messages live in `chat_message` like tile chats,
+with `tile_id = 'topic:' + topicId` (`topicChatId`; no tile id starts with
+it) and `topic_id = topicId`, so no migration, and the dossier update reads
+them as chat turns like any other. The agent gets the topic, every PR on
+its tiles (newest first, at most 60 in the prompt with a line for the
+rest), the history and the topic's prompt context; `ChatInput.tile` is null
+for it. Unsorted works too; its lasting point comes back with `topicId:
+null`, like a tile chat there. Lasting points work exactly as in the tile
+chat. The tile chat endpoints stay for now.
+
 **Instructions changes via chat.** Tile chat returns a lasting point
 without a scope; the user picks it: "Keep for this topic" stores tailoring,
 "Just this once" only logs it, "Keep for all topics" calls
@@ -2733,7 +2745,46 @@ any review ask; on top of that:
   you, which can carry local work context into a public note (Codex on
   #94).
   The usual context (instructions and work context) goes along, so
-  `instructions.md` can steer the tone.
+  `instructions.md` can steer the tone. Since 2026-10-05 an optional
+  `gist` ("Rewrite with the agent": the user's own words, a gist or a rough
+  draft) goes along too; the note is written from it, keeping their points.
+  It is the user's text, so it sits outside the fence. Empty: as before.
+- **Reply to a comment** (2026-10-05, backend for the redesigned detail
+  pane). `PrActions.replyToComment(key, commentId, body)` finds the comment
+  in `pr.comments` (core `reply.ts`). An inline review comment with a
+  thread id gets the reply in its thread (GraphQL
+  `addPullRequestReviewThreadReply`). An issue comment or review body has no
+  thread on GitHub, so the reply is a new PR comment (`commentOnPr`) that
+  quotes the first non-empty, non-quote line of the comment (clipped to 200
+  characters), then `@author ` and the user's text, unless the text already
+  mentions the author (`quotedReplyBody`). Unknown comment or empty text:
+  failed, no GitHub call. Final, blocked while writes are locked (never a
+  pending write), the PR is refetched after, like `sendComment`. Telemetry
+  `reply_sent {target: thread|comment}`.
+- **Thumbs up** (2026-10-05). `PrActions.react(key, id)` takes a comment id
+  from `pr.comments` or a review id from `pr.reviews` (an approval without a
+  body is no comment but a reactable review node) and sends GraphQL
+  `addReaction` with `THUMBS_UP`. Same lock rules as a reply. After the
+  refresh the stored snapshot marks it (`viewerReacted`), so the pane shows
+  it even when GitHub lagged. The reader asks `reactionGroups { content
+  viewerHasReacted }` on issue comments, reviews and thread comments, and
+  normalizes the THUMBS_UP group into `Comment.viewerReacted` /
+  `Review.viewerReacted` (missing on older snapshots: false). Telemetry
+  `reaction_sent`.
+- Both writes are logged as `comment` with a detail (`reply in review
+  thread <id>`, `reply to <author>'s comment <id>`, `thumbs up on <id>`),
+  not as new action kinds: the debug view words every logged action from a
+  closed list, and an unknown kind would break it until it learns them.
+- **Reply drafts** (2026-10-05). `PrActions.draftReply(key, commentId,
+  gist)` runs `agent.draftReply` (prompt `prompts/reply.ts`, call kind
+  `draft_comment`, same model and timeout as an ask). Inputs: the comment,
+  its whole review thread for an inline comment, else the human
+  conversation around it (`replyConversation`: up to 8 before, 4 after, no
+  bots), the PR line, the glance's Verdict / Risk lines, the topic's
+  instructions and tailoring. All GitHub text is fenced; the gist is not.
+  Empty gist: the most useful reply from the conversation. Non-empty: the
+  reply written from the user's words, nothing added they did not say. The
+  draft never quotes or @mentions: the reply path adds both where needed.
 - One compose popover (2026-10-02, `ComposePopover`): Approve with comment,
   Comment review and "Ask <owner>" share one popover under the button that
   opened it (surface, rounded-tile, shadow-menu; title, one-line hint,
@@ -3346,6 +3397,8 @@ only: the REST docs and a GraphQL schema introspection,
 | subscribe / ignore a thread | REST `PUT /notifications/threads/{id}/subscription` `{ignored}` ([docs](https://docs.github.com/en/rest/activity/notifications#set-a-thread-subscription)) | `ignored: true` mutes future notifications until you comment or get @mentioned. Changes future pings only, never read state. |
 | unsubscribe (mute) a thread | REST `DELETE /notifications/threads/{id}/subscription` ([docs](https://docs.github.com/en/rest/activity/notifications#delete-a-thread-subscription)) | 204. Same: future notifications only. Used by "Remove <team>" (`GitHubWriteClient.unsubscribeThread`, 2026-09-29). |
 | remove a team review request | REST `DELETE /repos/{owner}/{repo}/pulls/{n}/requested_reviewers` `{reviewers: [], team_reviewers: [slug]}` ([docs](https://docs.github.com/en/rest/pulls/review-requests#remove-requested-reviewers-from-a-pull-request)) | Used by "Remove <team>" (`GitHubWriteClient.removeTeamReviewRequest`, 2026-09-29). Re-adding the team notifies everyone again, so no undo. |
+| reply in an inline review thread | GraphQL `addPullRequestReviewThreadReply(pullRequestReviewThreadId, body)` ([docs](https://docs.github.com/en/graphql/reference/mutations#addpullrequestreviewthreadreply)) | Posted right away, outside any pending review. Used by the detail pane's reply (`GitHubWriteClient.replyInThread`, 2026-10-05). |
+| thumbs up on a comment or review | GraphQL `addReaction(subjectId, content: THUMBS_UP)` ([docs](https://docs.github.com/en/graphql/reference/mutations#addreaction)) | Takes IssueComment, PullRequestReviewComment and PullRequestReview node ids. Used by the detail pane's thumbs up (`GitHubWriteClient.addThumbsUp`, 2026-10-05). |
 | subscription on the PR itself | GraphQL `updateSubscription(subscribableId, state: SUBSCRIBED/UNSUBSCRIBED/IGNORED)` ([docs](https://docs.github.com/en/graphql/reference/mutations#updatesubscription)) | Per issue/PR/repo, not per thread. Future notifications only. |
 | mark a thread **unread** | none | No REST endpoint. The public GraphQL schema has no notification type and no notification mutation at all (the ones github.com uses internally are not exposed). |
 | "Saved" notifications | none | Neither REST nor GraphQL can list or set them. `GET /notifications?all=true` only adds read threads. |
@@ -5609,7 +5662,9 @@ topic names are never event props.
    props: no PR, no team slug), `snoozed`
    (the condition name for an event-based snooze — someone replies, a push,
    CI green — or a time bucket for `until_time`), `opened_on_github`,
-   `ask_sent` (the Ask popover's send), `chat_message_sent`, `mac_ping_shown` /
+   `ask_sent` (the Ask popover's send), `reply_sent` (target `thread` or
+   `comment`, 2026-10-05), `reaction_sent` (a thumbs up, 2026-10-05),
+   `chat_message_sent` (tile and topic chat), `mac_ping_shown` /
    `mac_ping_clicked`, `pings_summarized` (pinged, withheld_rules,
    withheld_agent, pinged_glance (Look closer on routed reviews),
    handled_quietly: counts since the last summary, from
@@ -6405,14 +6460,18 @@ preflight and does not know the token, so CORS stays open.
 | `POST /api/prs/:owner/:repo/:number/approve` `{headOid, body?}` | `approve()` (body: "Approve with comment") |
 | `POST /api/prs/:owner/:repo/:number/comment-review` `{headOid, body}` | `commentReview()` (event COMMENT; final; refused while locked) |
 | `POST /api/prs/:owner/:repo/:number/draft-ask` `{person, intent}` | `draftAsk()` |
-| `POST /api/prs/:owner/:repo/:number/draft-review-note` `{kind}` | `draftReviewNote()` (kind `approve` or `comment`; agent only) |
+| `POST /api/prs/:owner/:repo/:number/draft-review-note` `{kind, gist?}` | `draftReviewNote()` (kind `approve` or `comment`; gist: the user's words to write from; agent only) |
 | `POST /api/prs/:owner/:repo/:number/comment` `{body}` | `sendComment()` |
+| `POST /api/prs/:owner/:repo/:number/draft-reply` `{commentId, gist?}` | `draftReply()` (agent only) |
+| `POST /api/prs/:owner/:repo/:number/reply` `{commentId, body}` | `replyToComment()` (thread reply or quoting comment; final; refused while locked) |
+| `POST /api/prs/:owner/:repo/:number/react` `{commentId}` | `react()` (thumbs up on a comment or review; final; refused while locked) |
 | `POST /api/prs/:owner/:repo/:number/opened` | `markOpenedRead()` (opened in the detail pane; `{marked}`: thread marked read or PR handled) |
 | `POST /api/prs/:owner/:repo/:number/remove-team-request` `{team}` | `removeTeamRequest()` (final; refused while locked) |
 | `POST /api/tiles/:tileId/mark-read` | `markRead()` |
 | `POST /api/tiles/:tileId/prs/:owner/:repo/:number/mark-read` | `markPrRead()` (detail pane, one PR) |
 | `POST /api/tiles/:tileId/snooze` `{condition}` / `DELETE` | `snooze()` / `unsnooze()` |
 | `GET`/`POST /api/tiles/:tileId/chat` `{message}` | `getChat()` / `chat()` |
+| `GET`/`POST /api/topics/:id/chat` `{message}` | `getTopicChat()` / `topicChat()` (the topic header's "Ask the agent") |
 | `POST /api/undo` `{undoToken}` | `undo()` |
 | `POST /api/feedback` | `giveFeedback()` |
 | `POST /api/events/:id/unmute` | `unmuteEvent()` |

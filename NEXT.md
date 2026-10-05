@@ -6,6 +6,19 @@ now".
 
 ## Done
 
+- PR pane backend: reply, thumbs up, reply drafts, topic chat (2026-10-05,
+  DESIGN.md "Reply to a comment", "Thumbs up", "Reply drafts", "Topic
+  chat"): `replyToComment` (inline comment: reply in its review thread;
+  issue comment or review body: a PR comment quoting its first line and
+  mentioning the author), `react` (thumbs up on a comment or review),
+  `draftReply` (from the thread or conversation, or from the user's gist),
+  an optional `gist` on `draftReviewNote`, and `topicChat` /
+  `getTopicChat` stored under `topic:<id>`. The reader fetches
+  `viewerReacted` on comments and reviews. Routes under the PR path
+  (`/reply`, `/react`, `/draft-reply`) and `/api/topics/:id/chat`; the fake
+  engine does all of it in memory and sample #1902 has an author reply in
+  its thread. The renderer side lands separately; the tile chat endpoints
+  stay until it moves over.
 - Inbox catch-up dialog (2026-10-03, DESIGN.md "Inbox cleanup"): replaces
   the old cleanup banner and dialog. Unread merged PRs (quiet 7+ / 14+ days
   or all) and everything else older than 14 / 30 days, cleared on GitHub in
@@ -1143,6 +1156,9 @@ the app meanwhile.
   cycles, "synced 2h ago" only with the poll off. The full
   sync's time, counts and report sit in the tooltip; the footer says "last
   full sync".
+- **Agent chat per topic** (2026-10-05, DESIGN.md "Topic chat"): "Ask the
+  agent" moves from the tile to the topic header; stored in `chat_message`
+  under `topic:<id>`, no migration.
 - **Self-update** (2026-10-03, DESIGN.md "Self-update"): the app downloads
   releases itself (electron-updater, GitHub provider) and the reminder
   offers "Restart to update"; the brew command stays as the fallback. The

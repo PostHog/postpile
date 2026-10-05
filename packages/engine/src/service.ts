@@ -337,14 +337,39 @@ export interface EngineService {
 
   /** Agent drafts a comment asking `person` something; the user edits it before sendComment. */
   draftAsk(prKey: PrKey, person: string, intent: string): Promise<{ body: string }>;
-  /** Agent drafts the one- or two-line note for "Approve with comment" or "Comment review"; the user edits it first. */
-  draftReviewNote(prKey: PrKey, kind: ReviewNoteKind): Promise<{ body: string }>;
+  /**
+   * Agent drafts the one- or two-line note for "Approve with comment" or
+   * "Comment review"; the user edits it first. A non-empty `gist` is the
+   * user's own text ("Rewrite with the agent") the note is written from.
+   */
+  draftReviewNote(prKey: PrKey, kind: ReviewNoteKind, gist?: string): Promise<{ body: string }>;
   sendComment(prKey: PrKey, body: string): Promise<ActionResult>;
+  /**
+   * Agent drafts a reply to one comment (`commentId` from `pr.comments`), from
+   * its review thread or the conversation around it. Empty `gist`: drafted
+   * from context; otherwise written from the user's words. Never sent.
+   */
+  draftReply(prKey: PrKey, commentId: string, gist: string): Promise<{ body: string }>;
+  /**
+   * A reply to one comment: in its review thread for an inline comment,
+   * else a new PR comment quoting its first line and mentioning its author.
+   * Final; refused while GitHub writes are locked. Unknown comment: failed.
+   */
+  replyToComment(prKey: PrKey, commentId: string, body: string): Promise<ActionResult>;
+  /**
+   * A thumbs up on a comment (from `pr.comments`) or a review (from
+   * `pr.reviews`). Final; refused while GitHub writes are locked. Unknown id: failed.
+   */
+  react(prKey: PrKey, commentId: string): Promise<ActionResult>;
 
   giveFeedback(input: FeedbackInput): Promise<ActionResult>;
   unmuteEvent(eventId: string): Promise<ActionResult>;
 
   chat(tileId: string, message: string): Promise<ChatReply>;
+  /** The topic's chat ("Ask the agent" on the topic header), oldest first. Unsorted has one too. */
+  getTopicChat(topicId: string): Promise<ChatMessage[]>;
+  /** Like chat, about the whole topic: the agent sees all its PRs. Lasting points work the same. */
+  topicChat(topicId: string, message: string): Promise<ChatReply>;
   /** keep=true stores the text as topic tailoring; false logs it as "just this once". */
   decideTailoring(topicId: string, text: string, keep: boolean): Promise<ActionResult>;
   decideTopicProposal(proposalId: string, accept: boolean): Promise<ActionResult>;

@@ -9,6 +9,7 @@ import { AgentOutputError, parseAgentJson } from './json.ts';
 import { modelFor } from './models.ts';
 import { chatPrompt } from './prompts/chat.ts';
 import { draftCommentPrompt } from './prompts/comment.ts';
+import { draftReplyPrompt } from './prompts/reply.ts';
 import { consolidationPrompt } from './prompts/consolidation.ts';
 import { contextSweepPrompt } from './prompts/context-sweep.ts';
 import { INSTRUCTIONS_MAX_CHARS, INSTRUCTIONS_SUMMARY_MAX, instructionsChangePrompt } from './prompts/instructions.ts';
@@ -34,6 +35,7 @@ import {
   contextSweepOutput,
   dossierUpdateOutput,
   draftCommentOutput,
+  draftReplyOutput,
   eventBatchOutput,
   factReconcileOutput,
   glanceBatchOutput,
@@ -60,6 +62,7 @@ import type {
   DossierUpdateInput,
   DossierUpdateResult,
   DraftCommentInput,
+  DraftReplyInput,
   EventBatchInput,
   EventOverrideProposal,
   FactReconcileInput,
@@ -246,6 +249,12 @@ export class RunnerAgentService implements AgentService {
 
   async draftComment(input: DraftCommentInput): Promise<{ body: string }> {
     const { value } = await this.ask('draft_comment', draftCommentPrompt(input), draftCommentOutput);
+    return { body: value.body };
+  }
+
+  /** Runs as a draft_comment call (same model and timeout as an ask): a reply is a comment too. */
+  async draftReply(input: DraftReplyInput): Promise<{ body: string }> {
+    const { value } = await this.ask('draft_comment', draftReplyPrompt(input), draftReplyOutput);
     return { body: value.body };
   }
 

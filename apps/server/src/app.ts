@@ -358,6 +358,12 @@ export function createApp(
     return c.json(await engine.decideTailoring(c.req.param('id'), body.text, body.keep));
   });
   app.post('/api/topics/:id/seen', async (c) => c.json(await engine.markTopicSeen(c.req.param('id'))));
+  // "Ask the agent" on the topic header: the chat about the whole topic (also Unsorted).
+  app.get('/api/topics/:id/chat', async (c) => c.json(await engine.getTopicChat(c.req.param('id'))));
+  app.post('/api/topics/:id/chat', async (c) => {
+    const body = z.object({ message: z.string().min(1) }).parse(await c.req.json());
+    return c.json(await engine.topicChat(c.req.param('id'), body.message));
+  });
   app.post('/api/topics/:id/archive', async (c) => c.json(await engine.archiveTopic(c.req.param('id'))));
   // The header's driver menu: a login, ':team' or ':outside', null resets to automatic. Local, not a GitHub write.
   app.post('/api/topics/:id/driver', async (c) => {
@@ -489,13 +495,29 @@ export function createApp(
     return c.json(await engine.draftAsk(prKeyFromParams(c.req.param()), body.person, body.intent));
   });
   // The review note popover's draft (Approve with comment, Comment review). Agent call only, never a GitHub write.
+  // gist: the user's own text for "Rewrite with the agent", empty or missing drafts from the PR alone.
   app.post('/api/prs/:owner/:repo/:number/draft-review-note', async (c) => {
-    const body = z.object({ kind: z.enum(['approve', 'comment']) }).parse(await c.req.json());
-    return c.json(await engine.draftReviewNote(prKeyFromParams(c.req.param()), body.kind));
+    const body = z.object({ kind: z.enum(['approve', 'comment']), gist: z.string().max(65_536).default('') }).parse(await c.req.json());
+    return c.json(await engine.draftReviewNote(prKeyFromParams(c.req.param()), body.kind, body.gist));
   });
   app.post('/api/prs/:owner/:repo/:number/comment', async (c) => {
     const body = z.object({ body: z.string().min(1) }).parse(await c.req.json());
     return c.json(await engine.sendComment(prKeyFromParams(c.req.param()), body.body));
+  });
+  // A reply drafted for one comment, from its conversation or the user's gist. Agent call only, never a GitHub write.
+  app.post('/api/prs/:owner/:repo/:number/draft-reply', async (c) => {
+    const body = z.object({ commentId: z.string().min(1).max(300), gist: z.string().max(65_536).default('') }).parse(await c.req.json());
+    return c.json(await engine.draftReply(prKeyFromParams(c.req.param()), body.commentId, body.gist));
+  });
+  // A reply to one comment: in its review thread, or a PR comment quoting it. Final; refused while writes are locked.
+  app.post('/api/prs/:owner/:repo/:number/reply', async (c) => {
+    const body = z.object({ commentId: z.string().min(1).max(300), body: z.string().min(1).max(65_536) }).parse(await c.req.json());
+    return c.json(await engine.replyToComment(prKeyFromParams(c.req.param()), body.commentId, body.body));
+  });
+  // A thumbs up on a comment or review. Final; refused while writes are locked.
+  app.post('/api/prs/:owner/:repo/:number/react', async (c) => {
+    const body = z.object({ commentId: z.string().min(1).max(300) }).parse(await c.req.json());
+    return c.json(await engine.react(prKeyFromParams(c.req.param()), body.commentId));
   });
 
   app.post('/api/tiles/:tileId/mark-read', async (c) => c.json(await engine.markRead(c.req.param('tileId'))));

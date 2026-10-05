@@ -1,7 +1,7 @@
 // Small builders that keep sample-data.ts readable. Everything here fills in
 // the fields a fake does not care about with plain defaults.
 import { prKey } from '@postpile/core';
-import type { CheckRollup, EventKind, Glance, KeyFile, Loudness, Pr, PrEvent, PrKey, Provenance, PrState, ReviewDecision, ReviewState, Tile, TileKind, TileMember, Topic, TopicKind, UserRole, Verdict } from '@postpile/core';
+import type { CheckRollup, Comment, EventKind, Glance, KeyFile, Loudness, Pr, PrEvent, PrKey, Provenance, PrState, Review, ReviewDecision, ReviewState, ReviewThread, Tile, TileKind, TileMember, Topic, TopicKind, UserRole, Verdict } from '@postpile/core';
 
 export const SAMPLE_REPO = 'acme/app';
 export const SAMPLE_VIEWER = 'you';
@@ -102,17 +102,64 @@ function sampleReviewDecision(reviews: [string, ReviewState, string?, string?, n
   return reviews.some(([, state]) => state === 'APPROVED') ? 'APPROVED' : 'REVIEW_REQUIRED';
 }
 
+/** Review bodies with text, as comments, like the GitHub reader adds them to `pr.comments`. */
+function reviewBodyComments(reviews: Review[], url: string): Comment[] {
+  return reviews
+    .filter((review) => review.body.trim() !== '')
+    .map((review) => ({ id: review.id, author: review.author, body: review.body, createdAt: review.submittedAt, kind: 'review' as const, url: `${url}#${review.id}`, path: null, threadId: null }));
+}
+
 export function samplePr(clock: SampleClock, input: SamplePrInput): Pr {
   const key = sampleKey(input.number);
   const repo = sampleRepo(input.number);
+  const url = `https://github.com/${repo}/pull/${input.number}`;
   const headOid = `sha${input.number}`;
   const mergedAt = input.mergedHoursAgo === undefined ? null : clock.hoursAgo(input.mergedHoursAgo);
   const [additions, deletions, changedFiles] = input.size;
+  const reviews: Review[] = (input.reviews ?? []).map(([author, state, body, commitOid, hoursAgo], index) => ({
+    id: `review-${input.number}-${index}`,
+    author,
+    state,
+    body: body ?? '',
+    submittedAt: clock.hoursAgo(hoursAgo ?? 1),
+    commitOid: commitOid ?? headOid,
+  }));
+  const issueComments: Comment[] = (input.comments ?? []).map((comment) => ({
+    id: comment.id,
+    author: comment.author,
+    body: comment.body,
+    createdAt: clock.hoursAgo(comment.hoursAgo),
+    kind: 'comment' as const,
+    url: `${url}#${comment.id}`,
+    path: null,
+    threadId: null,
+    lastEditedAt: comment.editedHoursAgo === undefined ? null : clock.hoursAgo(comment.editedHoursAgo),
+    editor: comment.editedHoursAgo === undefined ? null : comment.author,
+  }));
+  const threads: ReviewThread[] = (input.threads ?? []).map((thread) => ({
+    id: thread.id,
+    path: thread.path,
+    isResolved: thread.resolved ?? false,
+    comments: thread.comments.map((comment, index) => ({
+      id: `${thread.id}-${index}`,
+      author: comment.author,
+      body: comment.body,
+      createdAt: clock.hoursAgo(comment.hoursAgo),
+      kind: 'review_comment' as const,
+      url: `${url}#discussion_${thread.id}`,
+      path: thread.path,
+      threadId: thread.id,
+    })),
+  }));
+  // Every authored body, oldest first, like the GitHub reader: issue comments, review bodies, inline comments.
+  const comments = [...issueComments, ...reviewBodyComments(reviews, url), ...threads.flatMap((thread) => thread.comments)].sort((a, b) =>
+    a.createdAt.localeCompare(b.createdAt),
+  );
   return {
     key,
     ref: { repo, number: input.number },
     title: input.title,
-    url: `https://github.com/${repo}/pull/${input.number}`,
+    url,
     body: input.body ?? '',
     author: input.author,
     assignees: input.assignees ?? [],
@@ -128,14 +175,7 @@ export function samplePr(clock: SampleClock, input: SamplePrInput): Pr {
     reviewDecision: sampleReviewDecision(input.reviews ?? []),
     reviewerUsers: input.reviewerUsers ?? [],
     reviewerTeams: input.reviewerTeams ?? [],
-    reviews: (input.reviews ?? []).map(([author, state, body, commitOid, hoursAgo], index) => ({
-      id: `review-${input.number}-${index}`,
-      author,
-      state,
-      body: body ?? '',
-      submittedAt: clock.hoursAgo(hoursAgo ?? 1),
-      commitOid: commitOid ?? headOid,
-    })),
+    reviews,
     commits: (input.commits ?? []).map((commit) => ({
       oid: commit.oid,
       headline: commit.headline,
@@ -143,33 +183,8 @@ export function samplePr(clock: SampleClock, input: SamplePrInput): Pr {
       committer: input.author,
       committedAt: clock.hoursAgo(commit.hoursAgo),
     })),
-    comments: (input.comments ?? []).map((comment) => ({
-      id: comment.id,
-      author: comment.author,
-      body: comment.body,
-      createdAt: clock.hoursAgo(comment.hoursAgo),
-      kind: 'comment' as const,
-      url: `https://github.com/${repo}/pull/${input.number}#${comment.id}`,
-      path: null,
-      threadId: null,
-      lastEditedAt: comment.editedHoursAgo === undefined ? null : clock.hoursAgo(comment.editedHoursAgo),
-      editor: comment.editedHoursAgo === undefined ? null : comment.author,
-    })),
-    threads: (input.threads ?? []).map((thread) => ({
-      id: thread.id,
-      path: thread.path,
-      isResolved: thread.resolved ?? false,
-      comments: thread.comments.map((comment, index) => ({
-        id: `${thread.id}-${index}`,
-        author: comment.author,
-        body: comment.body,
-        createdAt: clock.hoursAgo(comment.hoursAgo),
-        kind: 'review_comment' as const,
-        url: `https://github.com/${repo}/pull/${input.number}#discussion_${thread.id}`,
-        path: thread.path,
-        threadId: thread.id,
-      })),
-    })),
+    comments,
+    threads,
     timeline: input.queued
       ? [{ id: `queue-${input.number}`, kind: 'added_to_merge_queue' as const, actor: 'mergify[bot]', at: clock.hoursAgo(1), subject: null }]
       : [],
