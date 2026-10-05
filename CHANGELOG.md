@@ -13,8 +13,18 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ## 0.16.1 (unreleased)
 
+### Added
+
+- Reply to a person's comment right in PostPile. Every comment in the PR's activity has Reply (in its review thread for a comment on code, else a new PR comment that quotes it) and Thumbs up, which adds a 👍 reaction on GitHub. In "New since you looked", "Reply ↓" jumps to the comment and opens the reply there.
+- "Ask the agent" on the topic header: the agent chat now covers the whole topic and takes over the right pane. "Tell the agent" on a PR's assessment opens it with the PR named. "Back to #1907" returns to the PR.
+
 ### Changed
 
+- The PR pane is reorganized. Approve, Comment review and Ask sit in their own row right after the assessment, under a label that says where your review stands ("Review requested from you", "You approved 2h ago"). The buttons keep the same order on every PR.
+- Mark read, Snooze and "Remove <team>" sit in a quieter line right under the review row. "Open on GitHub" sits once, next to the PR number, with a menu for Files changed, Commits and Checks.
+- One way to write: approving with a note, a comment review, asking the author and replying all open the same box in place, which says where the text goes. The agent drafts only when you click "✨ Draft with agent" at the start of the box, or "✨ Rewrite with agent" once you typed something.
+- Recheck moved onto the assessment's title line.
+- The agent chat shows your message right away with a "Thinking…" bubble, scrolls to the newest message, and takes several lines (Enter sends, Shift+Enter for a new line). A failed message goes back into the input instead of staying in the chat unanswered.
 - The title bar says "up to date" while PostPile keeps checking GitHub every minute, instead of "synced 40m ago", which counted from the last hourly full sync. It says "updates paused" while the checks back off or wait, and shows an age only when they fell behind ("checked 5m ago", amber) or the live poll is off. The full sync's details are in the tooltip; the footer says "last full sync".
 
 ## 0.16.0 (2026-10-03)

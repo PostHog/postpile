@@ -1382,7 +1382,8 @@ until the user accepts in the dialog, through `correctMemory`:
   writes it in.
 - drop -> `wrong`: as before, the fact closes, the line logs `memory_wrong`.
 - Every outcome and errors (failed call, cap, gone fact) also offer "Tell
-  the agent what's wrong": the tile chat opens with the line quoted.
+  the agent what's wrong": the topic's agent pane opens with the line
+  quoted (the tile chat until 2026-10-05, see "The PR pane").
 
 **Recheck only on big claims** (2026-09-28, Recheck on every line was noise).
 Every line keeps "Why?"; Recheck (and Forget) only show on:
@@ -1395,8 +1396,8 @@ Every line keeps "Why?"; Recheck (and Forget) only show on:
   `decided` (decisions), `blocked_by` (risks), `user_cares`. Trivial and
   never rechecked: `reviews` (reviewer assigned), `works_on`, `part_of`,
   `depends_on` (stack relations), `status` (short state notes), `note`.
-- The PR's glance as a whole: "Recheck" in the detail pane's action bar
-  ("Recheck this assessment") sends the joined glance as the claim with
+- The PR's glance as a whole: "Recheck" on the glance's title line (the
+  action bar until 2026-10-05) ("Recheck this assessment") sends the joined glance as the claim with
   `MemoryRecheckRequest.prKey`; the engine reads it against that PR, its
   newest events and its topic's dossier (`recordedIn`: "Glance: ..."). A
   glance is not memory, so the dialog has no Accept: it shows the outcome,
@@ -1482,6 +1483,37 @@ picks where it applies. Types and rules: core `lessons.ts`; table `lesson`
 Unaccepted lessons never reach a prompt: no feedback row, no dossier input,
 no glance context. The dossier still reads the review itself as an ordinary
 event.
+
+**Topic chat** (2026-10-05). "Ask the agent" on the topic header chats
+about the whole topic: `topicChat(topicId, message)` /
+`getTopicChat(topicId)`. Messages live in `chat_message` like the old tile
+chats, with `tile_id = 'topic:' + topicId` (`topicChatId`; no tile id starts
+with it) and `topic_id = topicId`, so no migration, and the dossier update
+reads them as chat turns like any other. The agent gets the topic, every PR
+on its tiles (newest first, at most 60 in the prompt with a line for the
+rest), the history and the topic's prompt context. Unsorted works too; its
+lasting point comes back with `topicId: null`. It is the only chat on a
+topic: the tile chat (routes, engine, the prompt's tile mode) was removed
+once the renderer stopped using it; old tile chat rows stay in
+`chat_message` and still reach the dossier through `topic_id`. A topic
+merge (accepted proposal or the topic tidy) moves the merged topic's
+messages and its chat to the target (`moveTopicChat`). A turn's
+two messages are stored together once the answer is in: a failed call
+stores nothing, so the history never holds an unanswered message.
+
+Each turn is a fresh `claude -p` call with the whole prompt rebuilt, not a
+kept-open session (`--resume` or a long-lived stream-json process). Checked
+2026-10-05: prompt caching already works across separate calls (a second
+call with the same ~28k-token prefix read all of it from cache and wrote
+none), and spawning the process adds about 0.25s; chat answers averaged
+about 4.5s, most of it the answer being written. The prompt keeps the
+stable part first (topic, PRs) and the history and new message last, so
+the cache holds between turns, and nothing in it is relative to now. A
+session would save almost nothing and cost: PR data frozen at the first
+turn, transcripts on disk (`--no-session-persistence` is on for that
+reason), a second copy of the history next to `chat_message`, and a
+process per topic to keep alive. Streaming is left out for the same
+reason: answers are short by design.
 
 **Instructions changes via chat.** Tile chat returns a lasting point
 without a scope; the user picks it: "Keep for this topic" stores tailoring,
@@ -2246,6 +2278,144 @@ happened when it did. Chosen from a clickable mockup:
   write (`detailPendingWrite`), not the tile's, so a locked mark-read of
   one PR does not block its neighbours (Codex review on PR #15).
 
+## The PR pane (2026-10-05)
+
+Decided 2026-10-05 from a design round on a canvas (use cases, today
+annotated, proposed pane, writing states, agent pane). The old pane had
+one wrapping bar under the glance with up to nine controls for four
+audiences (formal review, public comment, private agent, housekeeping),
+a lead that jumped to the front per PR, one speech-bubble icon for both
+"approve with comment" and the agent chat, three writes sharing one
+popover, a two-step Ask, no way to answer a person's comment, and a tile
+chat that replaced the whole PR. Telemetry over 30 days: opening on
+GitHub and approving are the real jobs in the pane; explicit mark-read
+happens almost only from the tile footer (the pane's count includes the
+automatic mark on open); Ask and the chat were barely used.
+
+**Use cases** of the pane, by who hears it: go deeper on GitHub (leaves the
+app), give a review verdict (approve, approve with a note, comment review:
+public, formal), reply to a person (public, on that comment), ask the
+author something new (public), acknowledge a reply with a thumbs up
+(public, no text), talk to the agent (private: moved out, see below) and
+housekeeping (mark read or done, snooze, remove team: no message). Out of
+scope here: request changes, merge, re-request a reviewer, resolve a
+thread, reading the diff.
+
+**Rules** (each grounded in an established principle):
+
+1. Act where you read: review buttons sit with the PR's review state, a
+   reply on the comment it answers (Gestalt proximity, recognition over
+   recall).
+2. One surface, one audience: the PR pane talks to GitHub, the agent talks
+   to you about a topic; they never share a button, an icon or a box
+   (Norman's mode errors).
+3. Fixed spots: every action keeps its place in the order on every PR;
+   whose move it is shows through emphasis (the fill), never by reordering
+   (spatial memory, consistency).
+4. Prominence follows use, and the pointer: Open and Approve sit where the
+   pointer already is, close to the tile just clicked; housekeeping is
+   quiet (Fitts's and Hick's laws, progressive disclosure).
+5. Say where it goes: every write names its target on the button ("Post
+   reply to alice"); nothing posts without that press (error prevention).
+6. One way to write: reply, new comment, approve with a note and comment
+   review use the same composer, opened in place, one at a time; the agent
+   can draft, as a link, not a step (no modes).
+7. Leave depth to GitHub: code, diffs and long threads are one click away
+   (Jakob's law, Tesler's law).
+8. The agent advises, it holds no controls: a glance can be missing, out of
+   date or wrong and changes its look by verdict, so the user's actions
+   never live inside it and the layout never depends on it (Guidelines for
+   Human-AI Interaction G2, G8, G9; graceful degradation).
+
+**Layout, top down:**
+
+- Header band (`DetailContext`): kind, and for a stack or set the title,
+  counter, arrows and the PR picker, as before. Nothing else: housekeeping
+  there collided with the picker and was the longest pointer path from the
+  tile (tried and dropped the same day).
+- State line: state, review word, repo#number and "Open on GitHub" with an
+  arrow menu (Files changed, Commits, Checks): the pane's only link to
+  github.com, its right edge on the boxes' edge (22px), not the 34px text
+  line. Ink when core's lead is Open (own PR, done PR), else outlined.
+- Title, branch line, then "New since you looked": a digest you read. A
+  person's comment that can take a reply gets "Reply ↓", which scrolls the
+  pane to that comment in the activity list, tints it for a moment and
+  opens the reply there with the thread around it. Rejected: a composer
+  inside the digest (no context, bloats the box, two homes for Reply).
+- The glance (`GlanceCard`), on its own. Its title line carries only its
+  own controls: Recheck and "Tell the agent" (opens the topic's agent pane
+  with "About #1907: " typed in).
+- The review row (`ReviewRow`), right after the glance, outside it: a label
+  with the review state from GitHub (`reviewRowLabel` over core's
+  `viewerReviewStand` on `PrDetail.viewerReview`: "You approved 2h
+  ago, commits since", "You requested changes", "Review requested from
+  you", "... from team-devex", "Your PR", "Your review"), then Approve with
+  its "+ note" half, Comment review, and "Ask <owner>" on the right. Same
+  order on every PR; Approve fills green when it is core's lead, else
+  outlined. Shown when core offers Approve or Ask. Rejected 2026-10-05:
+  welding the buttons into the glance's footer (the glance is agent output
+  and may be missing or change its look), and a row in the PR header above
+  the glance (longer pointer path from the tile, buttons before the
+  reasons). Its place follows the glance's height; its order never changes.
+- The housekeeping line (`PaneHousekeeping`) right under it: Mark read /
+  Done for now, Snooze (single-PR tiles only) and ⋯ with "Remove <team>"
+  (its one-sentence confirm inside the menu), in the quiet look (text until
+  hovered). Close to the tile like the review buttons, apart from them by
+  look. When core's lead is the mark or Snooze (nothing else to do), that
+  one is outlined. The opened mark's note ("✓ Marked read · Undo") takes
+  the mark button's place, as before. With no review row (own PR, done PR)
+  the line sits after the glance alone.
+- Description, facts, reviews, what the agent knows, then the activity
+  (`ActivityTimeline`, label "Activity"): every line, new first, then
+  earlier. A person's comment or review gets Reply (a button when it asks
+  you, else a quiet link; "Reply in thread" on a code comment) and "Thumbs
+  up" (a 👍 reaction on GitHub, said in its tooltip; "You: thumbs up" in a
+  pressed pill once given; "React" alone did not say what it posts). An
+  approval without text only takes the thumbs up. Nothing for the viewer's own words, bots or pushes.
+  Core puts it on the line (`ActivityLine.reply`, filled by `activityList`
+  with the PR and the viewer); a comment on several lines (its event and an
+  edit, a review and a mention in it) gets it once, on the newest line. The
+  renderer only reads it: workspace imports there stay type-only.
+- "Back to top" floats at the pane's bottom while the review row has
+  scrolled out above.
+
+**One composer** (`Composer`, state per PR in `PrBody`): no frame of its own (a label, the app's plain text field, the buttons, like Teach future assessments; an accent frame with a halo read as too bordery, 2026-10-05); opens in place
+under what it answers (the review row or the comment), one at a time;
+drafts stay per target until sent or cancelled. A header says where it
+goes ("Reply to alice · new PR comment, quotes their line", "Reply in
+thread · on ci.yml", "Approve with a note · on a1b2c3d, cannot be undone",
+"Comment review · on a1b2c3d, does not approve", "Ask alice · new PR
+comment"); one text box with the agent's pill where the text starts (the
+first thing to click; the text starts under it): "✨ Draft with agent" on
+an empty box (from the PR and its topic), "✨ Rewrite with agent" once
+there is text (from the user's words; replaces the old person field, gist
+field and Draft step); Cancel; and a button that names the target ("Post reply to alice",
+"Approve with note" in green, every other post in ink). No agent draft
+starts by itself. Escape closes it and keeps the draft.
+
+**Ask the agent** (`AgentPane`): the agent chat's scope is the topic, and
+it takes over the right pane. Entry: "Ask the agent" in the topic header,
+and "Tell the agent" from the glance or a memory line's recheck (with the
+PR or line typed in). Private and it looks it: a grey band with a lock
+("Agent · <topic>", "Only you see this. Nothing here goes to GitHub.")
+instead of the blue PR band, no Approve or Post buttons. "‹ Back to #1907"
+returns to the PR; any pick (tile, PR, topic) does too. A lasting point is
+one line: "Remember "..."? For this topic · For all topics"; leaving it
+alone means just this once (nothing logged). All topics still shows the
+instructions diff first. The tile chat is gone from the renderer. The
+point waiting for a pick, the instructions diff waiting for Accept or
+Reject and the unsent text (also a message whose turn failed) are kept per
+topic while the app runs, so leaving the pane (also while the answer is
+still coming) and coming back shows them again. A new turn replaces the
+point and the diff only once it is in.
+
+Sending: the message shows right away as the user's bubble with a
+"Thinking…" bubble under it, and the input empties; the list keeps the
+newest message in view. A failed call removes both and puts the text back
+in the input (the toast says why). The input is a textarea that grows to
+about eight lines: Enter sends, Shift+Enter starts a new line, as in most
+chats.
+
 ## PR ownership: bot PRs belong to their assignees (2026-09-30)
 
 Coding agents open PRs through a GitHub App on someone's behalf: the author
@@ -2768,8 +2938,48 @@ any review ask; on top of that:
   you, which can carry local work context into a public note (Codex on
   #94).
   The usual context (instructions and work context) goes along, so
-  `instructions.md` can steer the tone.
-- One compose popover (2026-10-02, `ComposePopover`): Approve with comment,
+  `instructions.md` can steer the tone. Since 2026-10-05 an optional
+  `gist` ("Rewrite with the agent": the user's own words, a gist or a rough
+  draft) goes along too; the note is written from it, keeping their points.
+  It is the user's text, so it sits outside the fence. Empty: as before.
+- **Reply to a comment** (2026-10-05, backend for the redesigned detail
+  pane). `PrActions.replyToComment(key, commentId, body)` finds the comment
+  in `pr.comments` (core `reply.ts`). An inline review comment with a
+  thread id gets the reply in its thread (GraphQL
+  `addPullRequestReviewThreadReply`). An issue comment or review body has no
+  thread on GitHub, so the reply is a new PR comment (`commentOnPr`) that
+  quotes the first non-empty, non-quote line of the comment (clipped to 200
+  characters), then `@author ` and the user's text, unless the text already
+  mentions the author (`quotedReplyBody`). Unknown comment or empty text:
+  failed, no GitHub call. Final, blocked while writes are locked (never a
+  pending write), the PR is refetched after, like `sendComment`. Telemetry
+  `reply_sent {target: thread|comment}`.
+- **Thumbs up** (2026-10-05). `PrActions.react(key, id)` takes a comment id
+  from `pr.comments` or a review id from `pr.reviews` (an approval without a
+  body is no comment but a reactable review node) and sends GraphQL
+  `addReaction` with `THUMBS_UP`. Same lock rules as a reply. Nothing else
+  on the PR changes, so there is no refetch: the stored snapshot is marked
+  right away (`withViewerReaction`, shared with the fake engine), and the
+  next poll reads GitHub's. The reader asks `reactionGroups { content
+  viewerHasReacted }` on issue comments, reviews and thread comments, and
+  normalizes the THUMBS_UP group into `Comment.viewerReacted` /
+  `Review.viewerReacted` (missing on older snapshots: false). Telemetry
+  `reaction_sent`.
+- Replies are logged as `reply`, thumbs ups as `reaction`, each with a
+  detail (`reply in review thread <id>`, `reply to <author>'s comment <id>`,
+  `thumbs up on <id>`); the debug view words them "replied" and "thumbs up
+  given".
+- **Reply drafts** (2026-10-05). `PrActions.draftReply(key, commentId,
+  gist)` runs `agent.draftReply` (prompt `prompts/reply.ts`, call kind
+  `draft_comment`, same model and timeout as an ask). Inputs: the comment,
+  its whole review thread for an inline comment, else the human
+  conversation around it (`replyConversation`: up to 8 before, 4 after, no
+  bots), the PR line, the glance's Verdict / Risk lines, the topic's
+  instructions and tailoring. All GitHub text is fenced; the gist is not.
+  Empty gist: the most useful reply from the conversation. Non-empty: the
+  reply written from the user's words, nothing added they did not say. The
+  draft never quotes or @mentions: the reply path adds both where needed.
+- Superseded 2026-10-05 by one inline composer (see "The PR pane"). One compose popover (2026-10-02, `ComposePopover`): Approve with comment,
   Comment review and "Ask <owner>" share one popover under the button that
   opened it (surface, rounded-tile, shadow-menu; title, one-line hint,
   textarea, Cancel and the primary action), one open at a time. Ask keeps its
@@ -3381,6 +3591,8 @@ only: the REST docs and a GraphQL schema introspection,
 | subscribe / ignore a thread | REST `PUT /notifications/threads/{id}/subscription` `{ignored}` ([docs](https://docs.github.com/en/rest/activity/notifications#set-a-thread-subscription)) | `ignored: true` mutes future notifications until you comment or get @mentioned. Changes future pings only, never read state. |
 | unsubscribe (mute) a thread | REST `DELETE /notifications/threads/{id}/subscription` ([docs](https://docs.github.com/en/rest/activity/notifications#delete-a-thread-subscription)) | 204. Same: future notifications only. Used by "Remove <team>" (`GitHubWriteClient.unsubscribeThread`, 2026-09-29). |
 | remove a team review request | REST `DELETE /repos/{owner}/{repo}/pulls/{n}/requested_reviewers` `{reviewers: [], team_reviewers: [slug]}` ([docs](https://docs.github.com/en/rest/pulls/review-requests#remove-requested-reviewers-from-a-pull-request)) | Used by "Remove <team>" (`GitHubWriteClient.removeTeamReviewRequest`, 2026-09-29). Re-adding the team notifies everyone again, so no undo. |
+| reply in an inline review thread | GraphQL `addPullRequestReviewThreadReply(pullRequestReviewThreadId, body)` ([docs](https://docs.github.com/en/graphql/reference/mutations#addpullrequestreviewthreadreply)) | Posted right away, outside any pending review. Used by the detail pane's reply (`GitHubWriteClient.replyInThread`, 2026-10-05). |
+| thumbs up on a comment or review | GraphQL `addReaction(subjectId, content: THUMBS_UP)` ([docs](https://docs.github.com/en/graphql/reference/mutations#addreaction)) | Takes IssueComment, PullRequestReviewComment and PullRequestReview node ids. Used by the detail pane's thumbs up (`GitHubWriteClient.addThumbsUp`, 2026-10-05). |
 | subscription on the PR itself | GraphQL `updateSubscription(subscribableId, state: SUBSCRIBED/UNSUBSCRIBED/IGNORED)` ([docs](https://docs.github.com/en/graphql/reference/mutations#updatesubscription)) | Per issue/PR/repo, not per thread. Future notifications only. |
 | mark a thread **unread** | none | No REST endpoint. The public GraphQL schema has no notification type and no notification mutation at all (the ones github.com uses internally are not exposed). |
 | "Saved" notifications | none | Neither REST nor GraphQL can list or set them. `GET /notifications?all=true` only adds read threads. |
@@ -5663,7 +5875,9 @@ topic names are never event props.
    props: no PR, no team slug), `snoozed`
    (the condition name for an event-based snooze — someone replies, a push,
    CI green — or a time bucket for `until_time`), `opened_on_github`,
-   `ask_sent` (the Ask popover's send), `chat_message_sent`, `mac_ping_shown` /
+   `ask_sent` (the Ask popover's send), `reply_sent` (target `thread` or
+   `comment`, 2026-10-05), `reaction_sent` (a thumbs up, 2026-10-05),
+   `chat_message_sent` (tile and topic chat), `mac_ping_shown` /
    `mac_ping_clicked`, `pings_summarized` (pinged, withheld_rules,
    withheld_agent, pinged_glance (Look closer on routed reviews),
    handled_quietly: counts since the last summary, from
@@ -6228,7 +6442,7 @@ ask) next to the existing `turn`, `done` and `afterRead`; Board caches tile
 state and whose turn per snapshot (`stateOf`, `turnOf`). Offers are
 `tileOffers` / `paneOffers` in `core/offers.ts`, shipped as
 `TileView.offers` (footer action and label, GitHub link, lead PR, and the
-pane's buttons per PR key); `ActionBar` and `Tile` only lay them out. A done
+pane's buttons per PR key); the pane (`PaneHousekeeping`, `ReviewRow`, `OpenOnGitHub`) and `Tile` only lay them out. A done
 PR (or one on a done tile) gets no Approve, Ask or Remove team; a done PR
 whose news keeps its tile unread keeps Mark read. The renderer's tier order
 is typed with core's `PrTierOrder`, so a drift fails to compile. The fake
@@ -6459,14 +6673,17 @@ preflight and does not know the token, so CORS stays open.
 | `POST /api/prs/:owner/:repo/:number/approve` `{headOid, body?}` | `approve()` (body: "Approve with comment") |
 | `POST /api/prs/:owner/:repo/:number/comment-review` `{headOid, body}` | `commentReview()` (event COMMENT; final; refused while locked) |
 | `POST /api/prs/:owner/:repo/:number/draft-ask` `{person, intent}` | `draftAsk()` |
-| `POST /api/prs/:owner/:repo/:number/draft-review-note` `{kind}` | `draftReviewNote()` (kind `approve` or `comment`; agent only) |
+| `POST /api/prs/:owner/:repo/:number/draft-review-note` `{kind, gist?}` | `draftReviewNote()` (kind `approve` or `comment`; gist: the user's words to write from; agent only) |
 | `POST /api/prs/:owner/:repo/:number/comment` `{body}` | `sendComment()` |
+| `POST /api/prs/:owner/:repo/:number/draft-reply` `{commentId, gist?}` | `draftReply()` (agent only) |
+| `POST /api/prs/:owner/:repo/:number/reply` `{commentId, body}` | `replyToComment()` (thread reply or quoting comment; final; refused while locked) |
+| `POST /api/prs/:owner/:repo/:number/react` `{commentId}` | `react()` (thumbs up on a comment or review; final; refused while locked) |
 | `POST /api/prs/:owner/:repo/:number/opened` | `markOpenedRead()` (opened in the detail pane; `{marked}`: thread marked read or PR handled) |
 | `POST /api/prs/:owner/:repo/:number/remove-team-request` `{team}` | `removeTeamRequest()` (final; refused while locked) |
 | `POST /api/tiles/:tileId/mark-read` | `markRead()` |
 | `POST /api/tiles/:tileId/prs/:owner/:repo/:number/mark-read` | `markPrRead()` (detail pane, one PR) |
 | `POST /api/tiles/:tileId/snooze` `{condition}` / `DELETE` | `snooze()` / `unsnooze()` |
-| `GET`/`POST /api/tiles/:tileId/chat` `{message}` | `getChat()` / `chat()` |
+| `GET`/`POST /api/topics/:id/chat` `{message}` | `getTopicChat()` / `topicChat()` (the topic header's "Ask the agent") |
 | `POST /api/undo` `{undoToken}` | `undo()` |
 | `POST /api/feedback` | `giveFeedback()` |
 | `POST /api/events/:id/unmute` | `unmuteEvent()` |

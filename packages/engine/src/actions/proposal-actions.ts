@@ -3,6 +3,7 @@ import type { Store } from '@postpile/store';
 import { Board } from '../board.ts';
 import { newTopicId } from '../ids.ts';
 import { changeTopicStatus } from '../topic-status.ts';
+import { moveTopicChat } from './chat-actions.ts';
 import { failed, ok } from './results.ts';
 
 /** Topic renames, merges, splits and new topics only happen here, after the user said yes. */
@@ -39,6 +40,7 @@ export class ProposalActions {
       for (const membership of this.store.memberships.listForTopic(proposal.topicId)) {
         this.store.memberships.assign({ ...membership, topicId: proposal.intoTopicId, createdAt: at });
       }
+      moveTopicChat(this.store, proposal.topicId, proposal.intoTopicId);
       changeTopicStatus(this.store, proposal.topicId, 'archive', at);
     } else if (proposal.kind === 'area_merge' && proposal.fromArea && proposal.name) {
       this.store.topics.renameArea(proposal.fromArea, proposal.name, at);

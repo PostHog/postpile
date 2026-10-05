@@ -27,7 +27,7 @@ function paneOf(view: TileView, pr: PrSummary): PaneOffers {
 
 /** A done PR or tile offers only Open on GitHub, and never Approve, Ask, Snooze or Remove team. */
 function expectOnlyOpen(pane: PaneOffers): void {
-  expect(pane).toMatchObject({ lead: 'open_on_github', open: true, approve: false, ask: false, markLabel: null, snooze: false, removeTeams: [] });
+  expect(pane).toMatchObject({ lead: 'open_on_github', approve: false, ask: false, markLabel: null, snooze: false, removeTeams: [] });
 }
 
 describe('quiet rows on the sample board', () => {
@@ -77,7 +77,7 @@ describe('rules agree on the sample boards', () => {
           expect(pane, pr.key).toMatchObject({ approve: false, ask: false, removeTeams: [] });
           expect(pane.markLabel, pr.key).not.toBeNull();
         } else {
-          expect(pane, pr.key).toMatchObject({ lead: 'open_on_github', open: true, approve: false, ask: false, markLabel: null, removeTeams: [] });
+          expect(pane, pr.key).toMatchObject({ lead: 'open_on_github', approve: false, ask: false, markLabel: null, removeTeams: [] });
         }
       }
     }

@@ -10,6 +10,7 @@ import { sendTelemetry } from './api/telemetry.ts';
 import { useTools } from './api/tools.ts';
 import { useFinishedTopics, useTopic, useTopics } from './api/topics.ts';
 import { useViewer } from './api/viewer.ts';
+import { AgentPane } from './components/AgentPane.tsx';
 import { DetailPane } from './components/DetailPane.tsx';
 import { InboxStartDialog } from './components/InboxStartDialog.tsx';
 import { InboxPane } from './components/InboxPane.tsx';
@@ -38,6 +39,7 @@ import { filterTopics, searchFilter, visibleTopic } from './lib/search.ts';
 import { filterKey, keptFor, listedTopics, nextKept, resolveSelection, revealedFor, withSelectedTile, type KeptView } from './lib/selection.ts';
 import { clampPaneWidth, DETAIL_MIN_WIDTH, paneColumns, resolvedColumnWidths, type ResizablePane } from './lib/pane-widths.ts';
 import { tileOpenedProps } from './lib/tile-telemetry.ts';
+import { prNumber } from './lib/tiles.ts';
 import { toolsNotice } from './lib/tools.ts';
 import { usePaneWidths } from './lib/use-pane-widths.ts';
 import { useNavHistory, useNavShortcuts } from './lib/use-nav-history.ts';
@@ -78,8 +80,8 @@ export function App() {
     setQueueFilter(filter);
     sendTelemetry('queue_filter_changed', { filter: filter ?? 'none' });
   };
-  // "Tell the agent what's wrong" from a memory line opens the selected tile's chat with a draft.
-  const [chatRequest, setChatRequest] = useState<ChatRequest | null>(null);
+  // "Ask the agent" on the topic header, or "Tell the agent" from a glance or a memory line: the topic's agent takes the right pane.
+  const [agentRequest, setAgentRequest] = useState<ChatRequest | null>(null);
   const search = useSearch(query);
   // The setup flow takes the middle and right panes on a first run (the server says
   // it is needed) or after "Run setup again". Once open it stays open until the user
@@ -113,7 +115,16 @@ export function App() {
   const finishedIds = new Set((finished.data ?? []).map((entry) => entry.id));
   // Navigation is a back / forward history; the current entry is what the user picked.
   const nav = useNavHistory(new Set([...items.map((item) => item.topic.id), ...finishedIds]));
-  useNavShortcuts(nav.back, nav.forward);
+  // Back and forward pick another entry like any pick: the agent pane closes first, as in go().
+  const back = () => {
+    setAgentRequest(null);
+    nav.back();
+  };
+  const forward = () => {
+    setAgentRequest(null);
+    nav.forward();
+  };
+  useNavShortcuts(back, forward);
   const pane = nav.current.pane;
   // A blank query filters nothing, even while react-query still holds the last answer.
   const filter = searchFilter(query.trim() === '' ? undefined : search.data);
@@ -148,6 +159,9 @@ export function App() {
   // A topic kept on screen after it stopped matching is listed, so it does not count as hidden.
   const hiddenByQueueFilter = searched.filter((item) => !sidebarTopics.includes(item)).length;
   const topic = useTopic(activeTopicId);
+  // The agent pane shows for the topic on screen only; picking anything else hands the pane back (`go`).
+  const agentShown = pane === 'topic' && agentRequest !== null && agentRequest.topicId === activeTopicId;
+  const openAgent = (topicId: string, draft: string) => setAgentRequest({ seq: Date.now(), topicId, draft });
   const matchingTileIds = activeItem && filter ? (filter.tilesByTopic.get(activeItem.topic.id) ?? new Set<string>()) : null;
   const allTiles = topic.data?.tiles ?? [];
   const shownTiles = allTiles.filter((view) => !matchingTileIds || matchingTileIds.has(view.tile.id));
@@ -164,6 +178,8 @@ export function App() {
     }
   });
   const go = (next: NavEntry) => {
+    // Any pick hands the right pane back to the PR.
+    setAgentRequest(null);
     if (!sameView(shown, next)) {
       nav.navigate(next);
     } else if (selected.auto && next.pane === 'topic' && next.tileId !== null) {
@@ -292,7 +308,12 @@ export function App() {
     main = (
       <MainPane>
         <ToolsNotice place="banner" />
-        <TopicHeader detail={topic.data} topics={items} />
+        <TopicHeader
+          detail={topic.data}
+          topics={items}
+          agentOpen={agentShown}
+          onAskAgent={() => (agentShown ? setAgentRequest(null) : openAgent(topic.data!.topic.id, ''))}
+        />
         <TileGrid
           detail={topic.data}
           topics={items}
@@ -325,15 +346,20 @@ export function App() {
   const columns = paneColumns(panes.widths);
   const wideList = pane === 'notifications' || pane === 'quiet';
   // A PR open in the detail pane counts like a visit on github.com when nothing is asked of the user (DESIGN "You already dealt with it").
-  const detailShown = !showSetup && !wideList;
+  const detailShown = !showSetup && !wideList && !agentShown;
   const openedRead = useOpenedRead(detailShown ? selected.view : null, detailShown ? selected.prKey : null);
   // The user's pick clears its Mac pings from Notification Center; a tile the app picked does not.
   useTileVisit(detailShown && !selected.auto ? selected.view : null, visits);
 
   const tellAgent = {
     available: selected.view !== null,
-    tell: (draft: string) => setChatRequest({ seq: (chatRequest?.seq ?? 0) + 1, draft }),
+    tell: (draft: string) => {
+      if (selected.view) {
+        openAgent(selected.view.tile.topicId, draft);
+      }
+    },
   };
+  const backLabel = selected.prKey ? `Back to #${prNumber(selected.prKey)}` : 'Back';
 
   return (
     <TellAgentContext value={tellAgent}>
@@ -342,8 +368,8 @@ export function App() {
           <TitleBar
             canBack={nav.canBack}
             canForward={nav.canForward}
-            onBack={nav.back}
-            onForward={nav.forward}
+            onBack={back}
+            onForward={forward}
             search={<SearchField value={query} onChange={setQuery} />}
             repoScope={<RepoScopeMenu />}
           />
@@ -410,13 +436,22 @@ export function App() {
             )}
             {!showSetup && main}
             {/* The notifications and Handled quietly lists are wide and have no tile of their own; they take the detail pane's column too. */}
-            {!showSetup && !wideList && (
+            {!showSetup && !wideList && agentShown && agentRequest && (
+              <AgentPane
+                key={agentRequest.seq}
+                topicId={agentRequest.topicId}
+                topicName={topic.data?.topic.name ?? ''}
+                draft={agentRequest.draft}
+                backLabel={backLabel}
+                onBack={() => setAgentRequest(null)}
+              />
+            )}
+            {!showSetup && !wideList && !agentShown && (
               <DetailPane
                 key={selected.view?.tile.id ?? 'none'}
                 view={selected.view}
                 prKey={selected.prKey}
                 onSelectPr={(prKey) => selected.view && pickTile(selected.view.tile.id, prKey)}
-                chatRequest={chatRequest}
                 noSelectionText="Pick a tile to see it."
               />
             )}

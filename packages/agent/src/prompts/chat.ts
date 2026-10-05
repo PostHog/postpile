@@ -7,23 +7,34 @@ function historyLine(message: ChatMessage): string {
   return `${who}: ${clip(message.text, 1000)}`;
 }
 
+/** A topic chat sees at most this many PRs (the caller passes the newest first); Unsorted can hold hundreds. */
+export const TOPIC_CHAT_PRS = 60;
+
+/** The PRs the chat is about, with a line for the ones left out. */
+function prsBlock(input: ChatInput): string {
+  const shown = input.prs.slice(0, TOPIC_CHAT_PRS);
+  const prs = shown.map((pr) => prDetails(pr, null, shortDetail)).join('\n\n---\n\n');
+  const left = input.prs.length - shown.length;
+  return left > 0 ? `${prs}\n\n(${left} older pull requests of this topic are not shown.)` : prs;
+}
+
 /**
- * Chat on a tile. Besides answering, the agent spots lasting points in the
- * user's own message. It does not judge where they apply: the user picks
- * this topic, all topics or just this once. Nothing is stored from here.
+ * Chat on a whole topic ("Ask the agent" on the topic header). Besides
+ * answering, the agent spots lasting points in the user's own message. It
+ * does not judge where they apply: the user picks this topic, all topics or
+ * just this once. Nothing is stored from here.
  */
 export function chatPrompt(input: ChatInput): string {
-  const prs = input.prs.map((pr) => prDetails(pr, null, shortDetail)).join('\n\n---\n\n');
   const history = input.history.length === 0 ? '(no earlier messages)' : input.history.slice(-20).map(historyLine).join('\n');
-  // Tile titles, topic names and summaries are written from GitHub text, so they are fenced like it.
-  const about = githubData(`Tile: ${input.tile.title}\nTopic: ${input.topic.name}\nTopic summary: ${input.topic.summary}`);
-  return `You are the assistant inside a developer's code review inbox, chatting about one tile in a topic:
+  // Topic names and summaries are written from GitHub text, so they are fenced like it.
+  const about = githubData(`Topic: ${input.topic.name}\nTopic summary: ${input.topic.summary}`);
+  return `You are the assistant inside a developer's code review inbox, chatting about one topic and all its pull requests:
 ${about}
 ${GITHUB_DATA_RULE}
 ${contextBlock(input.context)}${workContextBlock(input.context)}
-Pull requests on this tile:
+Pull requests in this topic, newest first:
 
-${prs}
+${prsBlock(input)}
 
 Conversation so far:
 ${history}

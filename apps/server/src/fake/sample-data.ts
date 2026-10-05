@@ -305,7 +305,11 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
         {
           id: 'thread-1902-1',
           path: 'turbo.json',
-          comments: [{ author: 'nell', body: 'Does the cache key include the runner image?', hoursAgo: 2 }],
+          // nell asks, the author answers in the thread: the detail pane's reply and thumbs up have a conversation to show.
+          comments: [
+            { author: 'nell', body: 'Does the cache key include the runner image?', hoursAgo: 2 },
+            { author: 'rowan', body: 'Not yet. The image tag goes in with the next layer, so arm and x86 runs stop sharing entries.', hoursAgo: 1.5 },
+          ],
         },
       ],
       commits: [

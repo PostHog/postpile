@@ -1,5 +1,5 @@
 import type { IsoTime, PrRef } from '@postpile/core';
-import { GitHubHttp, type FetchFn } from './http.ts';
+import { GitHubHttp, graphqlFailure, type FetchFn } from './http.ts';
 import type { TokenSource } from './token.ts';
 import type { GitHubWriter } from './writer.ts';
 
@@ -67,6 +67,40 @@ export class GitHubWriteClient implements GitHubWriter {
   /** A top-level PR comment. PR conversations are issue comments in the REST API. */
   async commentOnPr(ref: PrRef, body: string): Promise<void> {
     await this.http.requestOk('POST', `repos/${ref.repo}/issues/${ref.number}/comments`, { body: { body } });
+  }
+
+  /**
+   * A GraphQL mutation. GitHub answers 200 with errors when it refuses one
+   * (no access, unknown node), so those throw like a failed REST call.
+   */
+  private async mutate(what: string, mutation: string, variables: Record<string, unknown>): Promise<void> {
+    const result = await this.http.graphql<unknown>(mutation, variables);
+    if (result.errors.length > 0 || result.data === null) {
+      throw graphqlFailure(what, result.errors);
+    }
+  }
+
+  /**
+   * https://docs.github.com/en/graphql/reference/mutations#addpullrequestreviewthreadreply
+   * Posted right away, outside any pending review of the viewer.
+   */
+  async replyInThread(threadId: string, body: string): Promise<void> {
+    const mutation = `mutation($threadId: ID!, $body: String!) {
+  addPullRequestReviewThreadReply(input: { pullRequestReviewThreadId: $threadId, body: $body }) { comment { id } }
+}`;
+    await this.mutate('thread reply', mutation, { threadId, body });
+  }
+
+  /**
+   * https://docs.github.com/en/graphql/reference/mutations#addreaction
+   * Takes the node id of an IssueComment, PullRequestReviewComment or
+   * PullRequestReview. Adding a reaction the viewer already has is a no-op on GitHub.
+   */
+  async addThumbsUp(subjectId: string): Promise<void> {
+    const mutation = `mutation($subjectId: ID!) {
+  addReaction(input: { subjectId: $subjectId, content: THUMBS_UP }) { reaction { content } }
+}`;
+    await this.mutate('reaction', mutation, { subjectId });
   }
 
   /**

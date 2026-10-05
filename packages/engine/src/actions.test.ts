@@ -330,18 +330,28 @@ describe('chat and tailoring', () => {
     h.store.memberships.assign({ prKey: pr.key, topicId: 'depot', assignedBy: 'agent', reason: '', createdAt: at(0) });
     h.runner.answer('chat', { reply: 'Got it.', lasting: { text: 'Ignore preview deploys.' } });
 
-    const reply = await h.engine.chat(tileId, 'preview deploys are noise here');
+    const reply = await h.engine.topicChat('depot', 'preview deploys are noise here');
 
     expect(reply.lastingPoint).toEqual({ topicId: 'depot', text: 'Ignore preview deploys.', sourceChatMessageId: expect.any(Number) });
     // The agent is not asked where the point applies; the user picks.
     expect(h.runner.promptsFor('chat')[0]).not.toContain('"scope"');
     expect(h.runner.promptsFor('instructions_change')).toEqual([]);
-    expect((await h.engine.getChat(tileId)).map((m) => m.role)).toEqual(['user', 'agent']);
+    expect((await h.engine.getTopicChat('depot')).map((m) => m.role)).toEqual(['user', 'agent']);
     expect(h.store.topics.get('depot')?.tailoring).toBe('');
 
     await h.engine.decideTailoring('depot', 'Ignore preview deploys.', true);
     expect(h.store.topics.get('depot')?.tailoring).toBe('Ignore preview deploys.');
     expect(h.store.feedback.recentForTopic('depot', 1)[0]?.kind).toBe('tailoring_kept');
+  });
+
+  it('stores nothing when the agent call fails, so no unanswered message stays in the history', async () => {
+    const h = await synced();
+    h.store.topics.create(topic('depot'));
+    h.store.memberships.assign({ prKey: pr.key, topicId: 'depot', assignedBy: 'agent', reason: '', createdAt: at(0) });
+
+    await expect(h.engine.topicChat('depot', 'what is left here?')).rejects.toThrow();
+
+    expect(await h.engine.getTopicChat('depot')).toEqual([]);
   });
 });
 
@@ -368,6 +378,34 @@ describe('topic proposals', () => {
     expect((await h.engine.decideTopicProposal('p1', true)).ok).toBe(true);
     expect(h.store.topics.get('depot')?.name).toBe('Depot runners');
     expect((await h.engine.decideTopicProposal('p1', true)).ok).toBe(false);
+  });
+  it('carries the merged topic\'s chat into the target on an accepted merge', async () => {
+    const h = await synced();
+    h.store.topics.create(topic('depot'));
+    h.store.topics.create(topic('runners'));
+    h.store.memberships.assign({ prKey: pr.key, topicId: 'depot', assignedBy: 'agent', reason: '', createdAt: at(0) });
+    h.runner.answer('chat', { reply: 'Noted.', lasting: null });
+    await h.engine.topicChat('depot', 'cache keys matter here');
+    h.store.proposals.add({
+      id: 'p2',
+      kind: 'merge',
+      topicId: 'depot',
+      name: null,
+      intoTopicId: 'runners',
+      fromArea: null,
+      prKeys: [],
+      reason: 'same work',
+      status: 'pending',
+      createdAt: at(1),
+      decidedAt: null,
+      source: 'consolidation',
+      client: null,
+    });
+
+    expect((await h.engine.decideTopicProposal('p2', true)).ok).toBe(true);
+
+    expect((await h.engine.getTopicChat('runners')).map((m) => m.text)).toEqual(['cache keys matter here', 'Noted.']);
+    expect(await h.engine.getTopicChat('depot')).toEqual([]);
   });
 });
 

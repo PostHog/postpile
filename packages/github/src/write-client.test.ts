@@ -62,6 +62,33 @@ describe('GitHubWriteClient', () => {
     });
   });
 
+  it('replies in a review thread through addPullRequestReviewThreadReply', async () => {
+    const fake = new FakeFetch([{ body: { data: { addPullRequestReviewThreadReply: { comment: { id: 'RC9' } } } } }]);
+    await new GitHubWriteClient(fakeTokens, fake.fn).replyInThread('T1', 'Fixed in the last push.');
+    expect(fake.requests).toHaveLength(1);
+    const request = fake.requests[0]!;
+    expect([request.method, request.url]).toEqual(['POST', 'https://api.github.com/graphql']);
+    const body = request.body as { query: string; variables: unknown };
+    expect(body.query).toContain('addPullRequestReviewThreadReply(input: { pullRequestReviewThreadId: $threadId, body: $body })');
+    expect(body.variables).toEqual({ threadId: 'T1', body: 'Fixed in the last push.' });
+  });
+
+  it('adds a THUMBS_UP reaction through addReaction', async () => {
+    const fake = new FakeFetch([{ body: { data: { addReaction: { reaction: { content: 'THUMBS_UP' } } } } }]);
+    await new GitHubWriteClient(fakeTokens, fake.fn).addThumbsUp('IC1');
+    const body = fake.requests[0]!.body as { query: string; variables: unknown };
+    expect(fake.requests[0]!.url).toBe('https://api.github.com/graphql');
+    expect(body.query).toContain('addReaction(input: { subjectId: $subjectId, content: THUMBS_UP })');
+    expect(body.variables).toEqual({ subjectId: 'IC1' });
+  });
+
+  it('throws GitHubError when GitHub refuses a mutation with a 200 and errors', async () => {
+    const fake = new FakeFetch([{ body: { data: null, errors: [{ message: 'Could not resolve to a node with the global id of T404' }] } }]);
+    const call = new GitHubWriteClient(fakeTokens, fake.fn).replyInThread('T404', 'Hi');
+    await expect(call).rejects.toBeInstanceOf(GitHubError);
+    await expect(call).rejects.toThrow(/thread reply failed: Could not resolve/);
+  });
+
   it('removes one team review request with DELETE and an empty user list', async () => {
     const fake = new FakeFetch([{ status: 200, body: { number: 42 } }]);
     await new GitHubWriteClient(fakeTokens, fake.fn).removeTeamReviewRequest(ref, 'team-platform');

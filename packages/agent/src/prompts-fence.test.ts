@@ -111,7 +111,6 @@ const prompts: Record<string, string> = {
   glance: glanceBatchPrompt({ topic, dossier: null, items: [{ pr, provenance: { kind: 'pinged', reason: 'review_requested' } }], viewer, context: fullContext, attempt: 1 }),
   chat: chatPrompt({
     topic,
-    tile: { id: `pr:${pr.key}`, topicId: topic.id, kind: 'single', title: pr.title, members: [], stacks: [] },
     prs: [pr],
     history: [],
     message: 'what is left here?',

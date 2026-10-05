@@ -154,7 +154,6 @@ describe('RunnerAgentService.draftComment and chat', () => {
     const topic = makeTopic();
     const input = {
       topic,
-      tile: { id: 'pr:acme/app#1', topicId: topic.id, kind: 'single' as const, title: 'x', members: [], stacks: [] },
       prs: [makePr()],
       history: [],
       message: 'always flag cache key changes',

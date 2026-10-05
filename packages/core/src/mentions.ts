@@ -3,16 +3,20 @@ function escapeRegex(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/** Word-boundary match for "@login", case-insensitive. */
+/**
+ * "@login" as a whole GitHub login, case-insensitive. Logins hold letters,
+ * digits and dashes, so "@bob" in "@bob-helper" is not a mention of bob (a
+ * plain \b would stop at the dash).
+ */
 export function mentionsUser(body: string, login: string): boolean {
   if (login === '') {
     return false;
   }
-  return new RegExp(`@${escapeRegex(login)}\\b`, 'i').test(body);
+  return new RegExp(`@${escapeRegex(login)}(?![A-Za-z0-9-])`, 'i').test(body);
 }
 
-// Cannot reuse mentionsUser: \b treats a dash as a boundary and team slugs are
-// full of dashes, so "@org/team" would also match "@org/team-other".
+// Cannot reuse mentionsUser: a team is "@org/slug", and the slug must not run
+// on ("@org/team" must not match "@org/team-other").
 export function mentionsTeam(body: string, team: string): boolean {
   if (team === '') {
     return false;

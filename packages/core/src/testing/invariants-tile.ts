@@ -334,7 +334,7 @@ export const donePrIsNeverYourMove: Invariant = {
 };
 
 function onlyOpen(pane: PaneOffers): boolean {
-  return pane.lead === 'open_on_github' && pane.open && !pane.approve && !pane.ask && pane.markLabel === null && pane.removeTeams.length === 0;
+  return pane.lead === 'open_on_github' && !pane.approve && !pane.ask && pane.markLabel === null && pane.removeTeams.length === 0;
 }
 
 export const doneTileOffersOnlyOpen: Invariant = {
@@ -491,8 +491,8 @@ export const tileTierIsMostUrgentRowTier: Invariant = {
   },
 };
 
-function paneLine(pane: Pick<PaneOffers, 'scope' | 'lead' | 'approve' | 'open' | 'ask' | 'markLabel' | 'snooze' | 'removeTeams'>): string {
-  return JSON.stringify([pane.scope, pane.lead, pane.approve, pane.open, pane.ask, pane.markLabel, pane.snooze, pane.removeTeams]);
+function paneLine(pane: Pick<PaneOffers, 'scope' | 'lead' | 'approve' | 'ask' | 'markLabel' | 'snooze' | 'removeTeams'>): string {
+  return JSON.stringify([pane.scope, pane.lead, pane.approve, pane.ask, pane.markLabel, pane.snooze, pane.removeTeams]);
 }
 
 /**

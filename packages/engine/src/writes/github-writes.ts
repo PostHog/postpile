@@ -109,6 +109,23 @@ export class GitHubWrites {
     return this.send('comment', context, () => this.writeSwitch.writer().commentOnPr(ref, body));
   }
 
+  /** A reply in an inline review thread. */
+  replyInThread(threadId: string, body: string, context: WriteContext): Promise<WriteResult> {
+    const detail = `reply in review thread ${threadId}`;
+    return this.send('reply', { detail, ...context }, () => this.writeSwitch.writer().replyInThread(threadId, body), (reason) => `${detail}: ${reason}`);
+  }
+
+  /** A reply to a comment outside a review thread: a new PR comment (the body already quotes it). */
+  replyOnPr(ref: PrRef, body: string, context: WriteContext): Promise<WriteResult> {
+    return this.send('reply', context, () => this.writeSwitch.writer().commentOnPr(ref, body));
+  }
+
+  /** A thumbs up on a comment or review. */
+  addThumbsUp(subjectId: string, context: WriteContext): Promise<WriteResult> {
+    const detail = `thumbs up on ${subjectId}`;
+    return this.send('reaction', { detail, ...context }, () => this.writeSwitch.writer().addThumbsUp(subjectId), (reason) => `${detail}: ${reason}`);
+  }
+
   /** Removes one team's review request (`teamSlug` without the org). */
   removeTeamReviewRequest(ref: PrRef, teamSlug: string, context: WriteContext): Promise<WriteResult> {
     const detail = `team ${teamSlug}`;

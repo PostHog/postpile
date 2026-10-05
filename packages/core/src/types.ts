@@ -32,6 +32,8 @@ export interface Review {
   submittedAt: IsoTime;
   /** Head commit the review was made against. Used for "new commits after approval". */
   commitOid: string | null;
+  /** The viewer has a THUMBS_UP reaction on the review. Missing on older snapshots: read as false. */
+  viewerReacted?: boolean;
 }
 
 export interface Commit {
@@ -73,6 +75,8 @@ export interface Comment {
   editor?: string | null;
   /** GitHub's updatedAt of the comment. Stored for debugging, no rule reads it. Missing on older snapshots. */
   updatedAt?: IsoTime;
+  /** The viewer has a THUMBS_UP reaction on it (the detail pane's thumbs up). Missing on older snapshots: read as false. */
+  viewerReacted?: boolean;
 }
 
 export interface ReviewThread {

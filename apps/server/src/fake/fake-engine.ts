@@ -79,6 +79,7 @@ import type {
   ApprovePrRequest,
   BatchApproveResult,
   PrApproveResult,
+  Comment,
   ReviewNoteKind,
   ToolsView,
   Topic,
@@ -93,12 +94,17 @@ import type {
   BoardShapeEvent,
 } from '@postpile/core';
 import {
+  findComment,
+  findReactable,
+  quotedReplyBody,
+  replyTarget,
   activityList,
   whatsNew,
   agentOnlyApprovers,
   standingApprovals,
   UNDO_WINDOW_MS,
   viewerApproval,
+  viewerReviewStand,
   agentPrFacts,
   agentApproveRefusal,
   agentApproveSkip,
@@ -187,8 +193,9 @@ import {
   type PingTarget,
   type OpenedReadResult,
   type QuietReadView,
+  withViewerReaction,
 } from '@postpile/core';
-import { AgentRefresher, AutoSyncSchedule, LivePoller, NEW_COMMITS_SINCE_LOOKED, type AutoSyncOptions, type EngineService, type GitHubQuota, type LivePollOptions, type PollCycle } from '@postpile/engine';
+import { AgentRefresher, AutoSyncSchedule, LivePoller, NEW_COMMITS_SINCE_LOOKED, topicChatId, UNSORTED_TOPIC_ID, type AutoSyncOptions, type EngineService, type GitHubQuota, type LivePollOptions, type PollCycle } from '@postpile/engine';
 import { FakeCatchUp } from './fake-catch-up.ts';
 import { FakeInstructions } from './fake-instructions.ts';
 import { FakeLessons } from './fake-lessons.ts';
@@ -291,6 +298,13 @@ function ok(message: string, undoToken: string | null = null): ActionResult {
 
 function fail(message: string): ActionResult {
   return { ok: false, message, undoToken: null };
+}
+
+/** Stand-in for a draft written from the user's gist: their words, capitalised and finished. */
+function fromGist(gist: string): string {
+  const text = gist.trim();
+  const sentence = `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
+  return /[.!?]$/.test(sentence) ? sentence : `${sentence}.`;
 }
 
 /** Stand-in for the agent spotting a lasting point in chat. Where it applies is the user's pick. */
@@ -1252,15 +1266,12 @@ export class FakeEngine implements EngineService {
       memoryUpdating: this.catchUp.memoryUpdating(this.topicPrKeys(this.data.membership.get(prKey) ?? '')),
       userState: this.data.userStates.find((state) => state.prKey === prKey) ?? null,
       viewerApproval: viewerApproval(pr, this.data.userStates.find((state) => state.prKey === prKey) ?? null, this.viewer().login),
+      viewerReview: viewerReviewStand(pr, this.viewer()),
       agentApprovers: agentOnlyApprovers(standingApprovals(pr)),
       topicId: this.data.membership.get(prKey) ?? null,
       tileIds: this.data.tiles.filter((tile) => tile.members.some((member) => member.prKey === prKey)).map((tile) => tile.id),
       facts: this.memory.prFacts(prKey),
     };
-  }
-
-  async getChat(tileId: string): Promise<ChatMessage[]> {
-    return this.chats.get(tileId) ?? [];
   }
 
   // -------------------------------------------------------------------------
@@ -1608,13 +1619,82 @@ export class FakeEngine implements EngineService {
     return { body: `@${person} ${question}${context}` };
   }
 
-  /** Canned review notes, one per kind. */
-  async draftReviewNote(prKey: PrKey, kind: ReviewNoteKind): Promise<{ body: string }> {
+  /** Canned review notes, one per kind; with a gist, the user's words with a canned finish. */
+  async draftReviewNote(prKey: PrKey, kind: ReviewNoteKind, gist = ''): Promise<{ body: string }> {
     this.refuseWithoutAgent();
+    if (gist.trim() !== '') {
+      return { body: fromGist(gist) };
+    }
     if (kind === 'comment') {
       return { body: 'The retry path in `sync.ts` has no test. It needs one before this merges.' };
     }
     return { body: 'No blockers. A test for the retry limit can follow.' };
+  }
+
+  /** A canned reply: from the user's gist when given, else a stock answer that fits where the comment is. */
+  async draftReply(prKey: PrKey, commentId: string, gist: string): Promise<{ body: string }> {
+    this.refuseWithoutAgent();
+    const pr = this.data.prs.find((candidate) => candidate.key === prKey);
+    const comment = pr ? findComment(pr, commentId) : null;
+    if (!comment) {
+      throw new Error(`no comment ${commentId} on ${prKey}`);
+    }
+    if (gist.trim() !== '') {
+      return { body: fromGist(gist) };
+    }
+    if (comment.kind === 'review_comment') {
+      return { body: 'Good catch. The next push covers it, with a test.' };
+    }
+    return { body: 'Yes, that is the plan. One cold hour after a lockfile change is fine, so no flag for now.' };
+  }
+
+  /**
+   * Like PrActions.replyToComment, in memory: an inline comment gets the
+   * reply in its thread, anything else a new PR comment that quotes it.
+   * Nothing leaves the process.
+   */
+  async replyToComment(prKey: PrKey, commentId: string, body: string): Promise<ActionResult> {
+    const index = this.data.prs.findIndex((candidate) => candidate.key === prKey);
+    const pr = this.data.prs[index];
+    const comment = pr ? findComment(pr, commentId) : null;
+    if (!pr || !comment) {
+      return fail(`No comment ${commentId} on ${prKey} in the sample`);
+    }
+    if (body.trim() === '') {
+      return fail('Empty reply');
+    }
+    const detail = `reply to ${comment.author}'s comment ${comment.id}`;
+    if (!this.writes.isEnabled()) {
+      this.writes.record({ action: 'reply', origin: 'detail', outcome: 'skipped', prKey, detail: `${detail}: GitHub writes are off` });
+      return fail('GitHub writes are off (lock in the footer): the reply was not sent');
+    }
+    this.writes.record({ action: 'reply', origin: 'detail', outcome: 'github', prKey, detail: `${detail}: sample data, nothing left the process` });
+    const target = replyTarget(comment);
+    const base = { id: `local-reply-${this.newId()}`, author: this.data.viewer, createdAt: this.timestamp() };
+    const reply: Comment =
+      target.kind === 'thread'
+        ? { ...base, body, kind: 'review_comment', url: comment.url, path: comment.path, threadId: target.threadId }
+        : { ...base, body: quotedReplyBody(comment, body), kind: 'comment', url: pr.url, path: null, threadId: null };
+    const threads = pr.threads.map((thread) => (thread.id === reply.threadId ? { ...thread, comments: [...thread.comments, reply] } : thread));
+    this.data.prs[index] = { ...pr, comments: [...pr.comments, reply], threads };
+    return ok('fake: reply kept locally, nothing sent to GitHub');
+  }
+
+  /** Like PrActions.react, in memory: the comment or review shows the viewer's thumbs up. */
+  async react(prKey: PrKey, commentId: string): Promise<ActionResult> {
+    const index = this.data.prs.findIndex((candidate) => candidate.key === prKey);
+    const pr = this.data.prs[index];
+    if (!pr || !findReactable(pr, commentId)) {
+      return fail(`No comment or review ${commentId} on ${prKey} in the sample`);
+    }
+    const detail = `thumbs up on ${commentId}`;
+    if (!this.writes.isEnabled()) {
+      this.writes.record({ action: 'reaction', origin: 'detail', outcome: 'skipped', prKey, detail: `${detail}: GitHub writes are off` });
+      return fail('GitHub writes are off (lock in the footer): the reaction was not sent');
+    }
+    this.writes.record({ action: 'reaction', origin: 'detail', outcome: 'github', prKey, detail: `${detail}: sample data, nothing left the process` });
+    this.data.prs[index] = withViewerReaction(pr, commentId);
+    return ok('fake: thumbs up kept locally, nothing sent to GitHub');
   }
 
   async sendComment(prKey: PrKey, body: string): Promise<ActionResult> {
@@ -1691,19 +1771,29 @@ export class FakeEngine implements EngineService {
     return ok('unmuted');
   }
 
-  async chat(tileId: string, message: string): Promise<ChatReply> {
+  async getTopicChat(topicId: string): Promise<ChatMessage[]> {
+    return this.chats.get(topicChatId(topicId)) ?? [];
+  }
+
+  /**
+   * Like the engine's topic chat: stored under "topic:<id>", a canned
+   * answer. A message that sounds lasting comes back as a lasting point;
+   * Unsorted's goes nowhere topic-wise.
+   */
+  async topicChat(topicId: string, message: string): Promise<ChatReply> {
     this.refuseWithoutAgent();
-    const tile = this.findTile(tileId);
-    if (!tile) {
-      throw new Error(`no tile ${tileId}`);
+    const isUnsorted = topicId === UNSORTED_TOPIC_ID;
+    if (!isUnsorted && !this.data.topics.some((topic) => topic.id === topicId)) {
+      throw new Error(`no topic ${topicId}`);
     }
-    const messages = this.chats.get(tileId) ?? [];
-    this.chats.set(tileId, messages);
-    const userMessage: ChatMessage = { id: this.newId(), tileId, topicId: tile.topicId, role: 'user', text: message, createdAt: this.timestamp() };
+    const chatId = topicChatId(topicId);
+    const messages = this.chats.get(chatId) ?? [];
+    this.chats.set(chatId, messages);
+    const userMessage: ChatMessage = { id: this.newId(), tileId: chatId, topicId, role: 'user', text: message, createdAt: this.timestamp() };
     const reply: ChatMessage = {
       id: this.newId(),
-      tileId,
-      topicId: tile.topicId,
+      tileId: chatId,
+      topicId,
       role: 'agent',
       text: 'Noted. (The fake engine does not think; this is a canned reply.)',
       createdAt: this.timestamp(),
@@ -1712,7 +1802,7 @@ export class FakeEngine implements EngineService {
     if (!LASTING.test(message)) {
       return { message: reply, lastingPoint: null };
     }
-    return { message: reply, lastingPoint: { topicId: tile.topicId, text: message, sourceChatMessageId: userMessage.id } };
+    return { message: reply, lastingPoint: { topicId: isUnsorted ? null : topicId, text: message, sourceChatMessageId: userMessage.id } };
   }
 
   async decideTailoring(topicId: string, text: string, keep: boolean): Promise<ActionResult> {

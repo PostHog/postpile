@@ -1,6 +1,6 @@
 import { Children, Fragment, isValidElement, type ButtonHTMLAttributes, type ReactNode } from 'react';
 
-export type ButtonVariant = 'primary' | 'safe' | 'secondary' | 'move' | 'safe-soft' | 'joined';
+export type ButtonVariant = 'primary' | 'safe' | 'secondary' | 'move' | 'safe-soft' | 'joined' | 'quiet';
 export type ButtonSize = 'sm' | 'md' | 'icon' | 'icon-md';
 
 const VARIANTS: Record<ButtonVariant, string> = {
@@ -15,6 +15,8 @@ const VARIANTS: Record<ButtonVariant, string> = {
   'safe-soft': 'bg-safe-soft font-medium text-safe shadow-control inset-ring inset-ring-safe/40 hover:inset-ring-safe/60',
   // One segment of JoinedButtons: the group draws the fill, the outline and the dividers.
   joined: 'bg-transparent text-ink-2 hover:bg-subtle',
+  // Housekeeping in the detail pane's header: text until hovered, so it never competes with the review row.
+  quiet: 'bg-transparent text-hint hover:bg-subtle hover:text-ink',
 };
 
 // Solid buttons get a pixel more side padding than outlined ones, as in the mockup.
@@ -35,6 +37,16 @@ export function buttonClasses(variant: ButtonVariant = 'secondary', size: Button
   const solid = variant === 'primary' || variant === 'safe';
   const sizing = solid ? SIZES[size].solid : SIZES[size].outlined;
   return `flex shrink-0 items-center gap-1.5 rounded-control whitespace-nowrap disabled:cursor-default disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${VARIANTS[variant]} ${sizing}`;
+}
+
+/**
+ * The right half of a split button (Approve + note, Open on GitHub + its
+ * menu). The seam: a light line on a solid look, the outlines overlapping by
+ * a pixel on an outlined one.
+ */
+export function splitSeamClasses(variant: ButtonVariant): string {
+  const solid = variant === 'primary' || variant === 'safe';
+  return solid ? 'rounded-l-none border-l border-on-ink/30' : 'rounded-l-none -ml-px';
 }
 
 /** The button looks from the mockup. Disabled buttons keep their title so the reason shows on hover. */

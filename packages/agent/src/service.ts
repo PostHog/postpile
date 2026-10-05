@@ -1,6 +1,7 @@
 import type {
   AmbiguousCandidate,
   ChatMessage,
+  Comment,
   Dossier,
   DossierFlag,
   DossierVersion,
@@ -32,7 +33,6 @@ import type {
   SetupRepoCount,
   SetupSectionEdit,
   SetupSource,
-  Tile,
   Topic,
   TopicDelta,
   TopicKind,
@@ -182,12 +182,33 @@ export interface DraftCommentInput {
   intent: string;
   /** Untrusted background lines (e.g. an earlier glance). Rendered inside the GitHub data fence, never as instructions. */
   notes?: string[];
+  /**
+   * Review notes only: what the user typed ("Rewrite with the agent"), a gist
+   * or a rough draft the note is written from. Empty or missing: drafted
+   * from the PR alone.
+   */
+  gist?: string;
+  context: PromptContext;
+}
+
+/** A reply to one comment on a PR, drafted for the user to edit and send. */
+export interface DraftReplyInput {
+  pr: Pr;
+  viewer: Viewer;
+  /** The comment being answered. */
+  comment: Comment;
+  /** Its review thread, or the conversation around it, oldest first, including the comment. */
+  conversation: Comment[];
+  /** The user's own words: a gist or a rough draft to write the reply from. Empty: drafted from the conversation. */
+  gist: string;
+  /** Untrusted background lines (the glance). Rendered inside the GitHub data fence. */
+  notes: string[];
   context: PromptContext;
 }
 
 export interface ChatInput {
   topic: Topic;
-  tile: Tile;
+  /** Every PR on the topic's tiles, newest first. */
   prs: Pr[];
   history: ChatMessage[];
   message: string;
@@ -646,6 +667,7 @@ export interface AgentService {
   /** Changes to the topic's sets; empty when nothing should change. */
   groupSets(input: SetGroupingInput): Promise<SetChanges>;
   draftComment(input: DraftCommentInput): Promise<{ body: string }>;
+  draftReply(input: DraftReplyInput): Promise<{ body: string }>;
   chat(input: ChatInput): Promise<AgentChatReply>;
   /** A proposed new instructions text from one of the user's own messages. Nothing is written here. */
   proposeInstructionsChange(input: InstructionsChangeInput): Promise<InstructionsChangeReply>;

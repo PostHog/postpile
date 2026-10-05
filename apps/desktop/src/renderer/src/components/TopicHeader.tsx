@@ -175,7 +175,7 @@ function PrCountPill(props: { detail: TopicDetail }) {
 }
 
 /** Breadcrumb, name, who drives (a menu that moves the topic), the dossier (or the plain summary before one exists), what the user told the agent and the lessons waiting for a decision. */
-export function TopicHeader(props: { detail: TopicDetail; topics: TopicListItem[] }) {
+export function TopicHeader(props: { detail: TopicDetail; topics: TopicListItem[]; onAskAgent: () => void; agentOpen: boolean }) {
   const { topic, pendingProposals, dossier, placement, driver, repoLine } = props.detail;
   const actions = useActions();
   // Only a whole-topic catch-up rewrites the dossier; a glance-only refresh on look does not (server decides).
@@ -208,6 +208,15 @@ export function TopicHeader(props: { detail: TopicDetail; topics: TopicListItem[
           <PrCountPill detail={props.detail} />
         </span>
         <YourMoveChip moves={props.detail.yourMoves} />
+        {/* The agent's scope is the topic: it takes over the right pane until a tile or PR is picked. */}
+        <Button
+          className="ml-auto"
+          aria-pressed={props.agentOpen}
+          title="Ask the agent about this topic and its PRs. Private: nothing goes to GitHub."
+          onClick={props.onAskAgent}
+        >
+          Ask the agent
+        </Button>
       </div>
       {placement && (
         <div className="mt-1.5">

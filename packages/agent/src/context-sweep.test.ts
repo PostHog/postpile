@@ -70,7 +70,6 @@ function promptsWith(context: PromptContext): Record<string, string> {
     }),
     chat: chatPrompt({
       topic,
-      tile: { id: `pr:${pr.key}`, topicId: topic.id, kind: 'single', title: pr.title, members: [], stacks: [] },
       prs: [pr],
       history: [],
       message: 'what is this?',
