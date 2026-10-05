@@ -3625,7 +3625,9 @@ is still subscribed.
 **The lock.** GitHub writes are a runtime switch (`WriteSwitch` in
 engine `writes/`), off (read-only) on first run, flipped by the lock in the
 status footer (`POST /api/github-writes {enabled}`), kept in meta
-`github_writes` so it survives restarts. While off the switch hands out the
+`github_writes` so it survives restarts (decided 2026-10-05, not built yet:
+on by default, and a locked heavy inbox stops PostPile at thresholds, see
+NEXT.md "GitHub writes on by default"). While off the switch hands out the
 `ReadOnlyWriter`, so a path that forgets to ask still cannot write.
 `POSTPILE_READ_ONLY=1` never builds the real write client; the lock
 then shows disabled with the reason and turning it on answers `ok: false`.

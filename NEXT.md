@@ -1180,6 +1180,24 @@ the app meanwhile.
 
 ## Decided
 
+- **GitHub writes on by default; locked writes choke PostPile** (2026-10-05,
+  not built yet): PostPile can only shed load by marking things read on
+  GitHub (quiet reads, the inbox cleanup, mark read), so with the lock
+  closed a heavy inbox only grows. Telemetry the same day: only 2 of 14
+  installs show writes on (approvals, quiet reads); the two heavy installs
+  (150 to 300 PR updates an hour, one with about 6,000 PRs on the board,
+  which crashed out of memory on 0.16) show none, and the one heavy board
+  that shrank (1,254 to 362 tiles) had writes on. Decided: writes are on by
+  default; the lock stays as an opt-out, and `POSTPILE_READ_ONLY=1` still
+  forces read-only (dev sessions keep using it). With writes locked,
+  PostPile stops taking on more work once it runs into thresholds (defined
+  later: board size, tracked PRs, activity rate), says why, and offers the
+  inbox cleanup or a fresh start instead of growing until it runs out of
+  memory. Open: the thresholds, what stopping means exactly, what existing
+  locked installs get (switched on, or asked once), and telemetry for the
+  lock state (a `github_writes_changed` event, `writes_on` on
+  `sync_completed`; today it can only be inferred).
+
 - **A helper, not an interrupter** (2026-10-05, DESIGN.md Product model,
   AGENTS.md focus): team feedback valued the digests and the agent layer,
   but the excitement about pings made PostPile look like one more app that
