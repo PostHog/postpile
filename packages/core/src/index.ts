@@ -84,6 +84,7 @@ export * from './quiet-reads.ts';
 export * from './snapshot-coverage.ts';
 export * from './work-context.ts';
 export * from './tile-view.ts';
+export * from './tile-verdict.ts';
 export * from './tile-groups.ts';
 export * from './agent-actions.ts';
 export * from './set-history.ts';
