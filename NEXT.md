@@ -30,7 +30,8 @@ now".
   e.g. from before 0.18, when pings were on by default) get a one-time
   dialog, `InterruptionsPrompt`, with the same three cards and Never
   preselected; Save, Esc or a click outside all store a mode, so it never
-  comes back. It never stacks on setup or the inbox cleanup start dialog.
+  comes back, and it closes only once that save landed (a failed one keeps
+  it open). It never stacks on setup or the inbox cleanup start dialog.
   Checked in fake mode: the setup step, Accept storing the pick, the
   sidebar menu switching it, the prompt (Save, Esc and a click outside
   each store a mode, gone after a reload; not on top of setup; only after

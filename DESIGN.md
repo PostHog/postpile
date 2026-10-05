@@ -5159,7 +5159,10 @@ notification; the poll, the tiles and the list work the same in every mode.
   setup status and the inbox cleanup view have loaded and never shows on top
   of setup or the inbox cleanup start dialog. Saving or closing (Esc, a
   click outside) counts as a choice: closing stores the current mode
-  (Never) and says so next to Save, so the dialog never comes back. The PUT
+  (Never) and says so next to Save, so the dialog never comes back. It
+  closes only once the save landed; while it runs Save reads "Saving…",
+  and a failed save keeps the dialog open (with the error toast) so the
+  user can try again. The PUT
   carries `from: 'prompt'`, and so does `interruptions_changed`. A new
   install that skips setup has not chosen either, so it gets the same
   question once after skipping.

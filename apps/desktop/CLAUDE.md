@@ -65,7 +65,8 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   the roundup times; read by the setup step "Your day", the sidebar's
   Interruptions menu and the one-time `InterruptionsPrompt`; changed only
   through `useActions().setInterruptions(mode, from)`, a PUT that shows the
-  new mode right away and rolls back on failure, no toast),
+  new mode right away and rolls back on failure, no toast; `chosen` flips
+  only with the server's answer, and it returns whether it saved),
   `tools.ts` (`useTools`: gh and claude status with fix commands, every
   30s while something is wrong, else every 5 min; "Check again" is
   `useActions().checkTools`),
@@ -420,7 +421,9 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   `lib/interruptions.ts`; blocked while setup shows or its status loads,
   and while the inbox cleanup view loads or its start dialog is due; Save
   stores the pick, Esc and a click outside store the current mode, both
-  through `setInterruptions(mode, 'prompt')`, and it hides at once),
+  through `setInterruptions(mode, 'prompt')`; it closes only once that
+  returns true, a failed save keeps it open with Save usable again; wiring
+  test in `InterruptionsPrompt.test.tsx`),
   `McpFooterItem` ("agents: not connected" in the footer, only while
   `mcpFooterShows` in `lib/mcp.ts`; never while the state is unknown) +
   `McpConnectOffer` (the offer body, shared with `SetupAcceptStep`'s

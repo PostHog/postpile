@@ -232,9 +232,11 @@ export interface Actions {
    * The sidebar's Interruptions menu, or the one-time prompt for installs
    * that never chose (`from` 'prompt'): when PostPile may show a Mac
    * notification. Local, quiet (no toast); the row shows the new mode right
-   * away and goes back on a failure.
+   * away and goes back on a failure. `chosen` flips only with the server's
+   * answer, so the prompt stays up until the save landed. Returns whether
+   * it saved.
    */
-  setInterruptions(mode: InterruptionsMode, from?: 'sidebar' | 'prompt'): Promise<void>;
+  setInterruptions(mode: InterruptionsMode, from?: 'sidebar' | 'prompt'): Promise<boolean>;
   /** "Send a test notification" (desktop app only, over the preload). Says in a toast what happened. */
   sendTestNotification(): Promise<void>;
   /** Quiet: no toast. Called when the user leaves a topic. */
@@ -716,14 +718,17 @@ export function ActionsProvider(props: { children: ReactNode }) {
     }
   }
 
-  async function setInterruptions(mode: InterruptionsMode, from: 'sidebar' | 'prompt' = 'sidebar'): Promise<void> {
-    const rollback = await changeCache<InterruptionsView>(queryKeys.interruptions, (view) => ({ ...view, mode, chosen: true }));
+  async function setInterruptions(mode: InterruptionsMode, from: 'sidebar' | 'prompt' = 'sidebar'): Promise<boolean> {
+    // Only the mode changes early: an early `chosen` would hide the prompt before the save is known to have landed.
+    const rollback = await changeCache<InterruptionsView>(queryKeys.interruptions, (view) => ({ ...view, mode }));
     try {
       const view = await withBusy('interruptions', () => request<InterruptionsView>('PUT', '/api/interruptions', { mode, from }));
       queryClient.setQueryData(queryKeys.interruptions, view);
+      return true;
     } catch (error) {
       rollback();
       show('error', `Could not change interruptions: ${errorText(error)}`);
+      return false;
     }
   }
 

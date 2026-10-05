@@ -11,18 +11,30 @@ import { InterruptionsChoice } from './InterruptionsChoice.tsx';
  * The dialog: the three cards with the stored mode preselected, the pick
  * held here. Save stores the pick; Esc and a click outside store the stored
  * mode (Never), so closing counts as a choice too and it never asks again.
+ * It closes only once the save landed: on a failure (the action shows the
+ * error toast) it stays open, so the user can try again.
  */
 function InterruptionsPromptDialog(props: { mode: InterruptionsMode; roundupTimes: string[]; onClose: () => void }) {
   const actions = useActions();
-  const { mode, roundupTimes, onClose } = props;
-  const [pick, setPick] = useState<InterruptionsMode>(mode);
+  const { roundupTimes, onClose } = props;
+  // The mode when the dialog opened: the setInterruptions early cache update changes the prop while a save runs.
+  const [stored] = useState<InterruptionsMode>(props.mode);
+  const [pick, setPick] = useState<InterruptionsMode>(props.mode);
+  const [saving, setSaving] = useState(false);
 
-  function save(chosen: InterruptionsMode) {
-    void actions.setInterruptions(chosen, 'prompt');
-    onClose();
+  async function save(chosen: InterruptionsMode) {
+    if (saving) {
+      return;
+    }
+    setSaving(true);
+    const saved = await actions.setInterruptions(chosen, 'prompt');
+    setSaving(false);
+    if (saved) {
+      onClose();
+    }
   }
 
-  const dismiss = () => save(mode);
+  const dismiss = () => void save(stored);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -53,11 +65,11 @@ function InterruptionsPromptDialog(props: { mode: InterruptionsMode; roundupTime
         </div>
         <InterruptionsChoice mode={pick} roundupTimes={roundupTimes} onPick={setPick} />
         <div className="flex items-center gap-2.5 pt-0.5">
-          <Button variant="primary" onClick={() => save(pick)}>
-            Save
+          <Button variant="primary" disabled={saving} onClick={() => void save(pick)}>
+            {saving ? 'Saving…' : 'Save'}
           </Button>
           <span className="flex flex-col text-[11.5px] leading-snug text-hint">
-            {interruptionsPromptHint(mode, pick).map((line) => (
+            {interruptionsPromptHint(stored, pick).map((line) => (
               <span key={line}>{line}</span>
             ))}
           </span>
@@ -71,8 +83,9 @@ function InterruptionsPromptDialog(props: { mode: InterruptionsMode; roundupTime
  * The one-time question for installs that never picked a mode (DESIGN.md
  * "Interruptions"): before 0.18 they got pings by default, now Never. Mounted
  * once in App. Never on top of setup (`blocked`, from App) or the inbox
- * cleanup start dialog, which goes first. Saved or closed, it hides at once;
- * the refetched view says `chosen` from then on.
+ * cleanup start dialog, which goes first. Once a save landed it hides for
+ * good: the view says `chosen` from then on, and `closed` keeps it hidden
+ * for the session anyway.
  */
 export function InterruptionsPrompt(props: { blocked: boolean }) {
   const view = useInterruptions().data;
