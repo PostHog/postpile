@@ -55,6 +55,8 @@ function sendMessage(done: number, failed: number, notTaken: string[]): string {
 export class PendingWrites {
   /** The send in flight; a second "Send" while it runs joins it instead of sending the same rows twice. */
   private sending: Promise<PendingWritesResult> | null = null;
+  /** Discard asked the send in flight to stop before its next write. */
+  private stopRequested = false;
 
   constructor(
     private readonly store: Store,
@@ -292,9 +294,15 @@ export class PendingWrites {
 
   /**
    * A mark_read through the queue's guarded send (each thread read again
-   * first), then its next state. True when it is done.
+   * first), then its next state. True when it is done. Sends the row as it
+   * is stored now, not as the send's list had it: a row read elsewhere
+   * meanwhile counts as done and sends nothing.
    */
-  private async sendMarkRead(write: PendingWrite, queue: MarkReadQueue, origin: 'footer' | 'default', notTaken: string[]): Promise<boolean> {
+  private async sendMarkRead(listed: PendingWrite, queue: MarkReadQueue, origin: 'footer' | 'default', notTaken: string[]): Promise<boolean> {
+    const write = this.list().find((candidate) => candidate.id === listed.id);
+    if (!write) {
+      return true;
+    }
     const outcomes = await queue.markThreads(write.threads, { origin, tileId: write.tileId, batchId: write.batch });
     return this.apply(write, { kind: 'sent', outcomes }, origin, notTaken);
   }
@@ -343,13 +351,18 @@ export class PendingWrites {
       return { ok: false, message: `Not sent: GitHub writes are off. ${reason}`, done: 0, failed: writes.length, status: status() };
     }
     let done = 0;
+    let tried = 0;
     const notTaken: string[] = [];
     for (const write of writes) {
+      if (this.stopRequested) {
+        break;
+      }
+      tried += 1;
       if (await this.sendOne(write, queue, startCatchUp, notTaken)) {
         done += 1;
       }
     }
-    const failed = writes.length - done;
+    const failed = tried - done;
     return { ok: failed === 0, message: sendMessage(done, failed, notTaken), done, failed, status: status() };
   }
 
@@ -366,13 +379,18 @@ export class PendingWrites {
   private async sendUnchanged(queue: MarkReadQueue, status: () => GitHubWritesStatus): Promise<PendingWritesResult> {
     const writes = this.list().filter((write) => write.kind === 'mark_read');
     let done = 0;
+    let tried = 0;
     const notTaken: string[] = [];
     for (const write of writes) {
+      if (this.stopRequested) {
+        break;
+      }
+      tried += 1;
       if (await this.sendMarkRead(write, queue, 'default', notTaken)) {
         done += 1;
       }
     }
-    const failed = writes.length - done;
+    const failed = tried - done;
     return { ok: failed === 0, message: sendMessage(done, failed, notTaken), done, failed, status: status() };
   }
 
@@ -400,8 +418,22 @@ export class PendingWrites {
     return this.sending;
   }
 
-  /** "Discard": drops every pending write. Nothing changes in the app; the tiles stay unread, like on GitHub. */
-  discard(status: () => GitHubWritesStatus): PendingWritesResult {
+  /**
+   * "Discard": drops every pending write. Nothing changes in the app; the
+   * tiles stay unread, like on GitHub. A send in flight (Send, or the one
+   * when writes went on by default) stops before its next write; the write
+   * it is on finishes, then the rest is dropped. Dropping rows under a
+   * running send would let it mark them read on GitHub after the discard.
+   */
+  async discard(status: () => GitHubWritesStatus): Promise<PendingWritesResult> {
+    if (this.sending) {
+      this.stopRequested = true;
+      try {
+        await this.sending.catch(() => undefined);
+      } finally {
+        this.stopRequested = false;
+      }
+    }
     const writes = this.list();
     for (const write of writes) {
       this.apply(write, { kind: 'discarded' }, 'footer');

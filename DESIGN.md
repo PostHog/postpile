@@ -4123,6 +4123,11 @@ sends less, since nobody pressed Send and the clicks can be days old
 - Every row is in the action log with origin `default` ("marked read by
   PostPile when GitHub writes went on by default" in the debug view). A
   footer Send already running is left to itself.
+- The footer can still Discard while it runs: Discard asks the send in
+  flight (this one or a footer Send) to stop before its next write, waits
+  for the write it is on, then drops the rest. Each write is read from the
+  store again right before it is sent, so a row gone meanwhile sends
+  nothing.
 
 **Pending writes** (2026-09-28). GitHub is the source of truth for read and
 unread; the app never holds a read state GitHub doesn't have. So a mark-read

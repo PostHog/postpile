@@ -169,6 +169,40 @@ describe('the pending backlog when writes go on by default', () => {
     expect((await h.engine.githubWrites()).pending).toEqual([expect.objectContaining({ kind: 'catch_up', error: null })]);
   });
 
+  it('a Discard while the send runs stops it before the next write: the discarded ones never reach GitHub', async () => {
+    const h = afterUpdate(await lockedInstallWithBacklog());
+    // The guard's read of the first thread waits until the test lets it go, so Discard lands mid-send.
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let reached: () => void = () => {};
+    const atFirstThread = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    const getThread = h.reader.getThread.bind(h.reader);
+    h.reader.getThread = async (threadId) => {
+      if (threadId === 'thread-1') {
+        reached();
+        await held;
+      }
+      return getThread(threadId);
+    };
+
+    const sync = h.engine.sync({ maxAgentCalls: 0 });
+    await atFirstThread;
+    const discard = h.engine.discardPendingWrites();
+    release();
+    const [discarded] = await Promise.all([discard, sync]);
+
+    // The write it was on went through; the other one was dropped, never sent.
+    expect(h.writer.calls).toEqual(['markThreadRead thread-1']);
+    expect(discarded).toMatchObject({ ok: true, done: 1 });
+    expect(discarded.status.pending).toEqual([]);
+    expect(await tileState(h, two.key)).toBe('unread');
+    expect(h.store.actionLog.listRecent(1)[0]).toMatchObject({ threadId: 'thread-2', origin: 'footer', outcome: 'discarded' });
+  });
+
   it('waits while gh does not work: nothing kept, nothing sent', async () => {
     const h = afterUpdate(await lockedInstallWithBacklog());
     h.commands.missing.add('gh');
