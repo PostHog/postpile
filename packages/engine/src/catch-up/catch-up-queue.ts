@@ -206,6 +206,11 @@ export class CatchUpQueue {
     return null;
   }
 
+  /** A run is going now. */
+  isRunning(): boolean {
+    return this.running.size > 0;
+  }
+
   /** Settles once every run going now has ended. Follow-ups started later are not waited for. */
   settled(): Promise<void> {
     return Promise.all([...this.running.values()].map((run) => run.done)).then(() => {});

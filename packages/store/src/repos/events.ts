@@ -53,27 +53,86 @@ export function toEvent(row: EventRow): PrEvent {
 /** Events PostPile makes itself, never derived from a GitHub snapshot: a snapshot store keeps them. */
 export const APP_EVENT_KINDS: readonly EventKind[] = ['look_closer'];
 
+/**
+ * The two kinds a machine comment's event takes, by whether the kept part
+ * of its body says "deploy" (core `commentEvent`). Its id changes with the
+ * kind, but it stays the same event.
+ */
+const MACHINE_COMMENT_KINDS: readonly EventKind[] = ['deploy', 'bot_comment'];
+
+interface StoredId {
+  id: string;
+  kind: string;
+  source_id: string;
+}
+
+/**
+ * The derived event that continues a stored one under a new id: the same
+ * machine comment, now the other of its two kinds. A body cut on save no
+ * longer says "deploy" in the part kept (DESIGN.md "Bot bodies are cut
+ * when saved"), or a bot's edit made it say so. Any other kind change is a
+ * new event: a comment that now mentions the viewer is news.
+ */
+function successorOf(stored: StoredId, events: PrEvent[], existing: Set<string>): PrEvent | null {
+  if (!MACHINE_COMMENT_KINDS.includes(stored.kind as EventKind)) {
+    return null;
+  }
+  return (
+    events.find((event) => event.sourceId === stored.source_id && event.kind !== stored.kind && MACHINE_COMMENT_KINDS.includes(event.kind) && !existing.has(event.id)) ??
+    null
+  );
+}
+
 export class EventRepo {
   constructor(private readonly db: DatabaseSync) {}
 
   /**
+   * Gives a stored event a new id and keeps everything else on its row
+   * (seen_at, override_*). Its event log entry follows, so it keeps its
+   * first sighting. When both ids were logged (the comment had this kind
+   * before), the earlier sighting stays and the later row goes.
+   */
+  private rename(oldId: string, newId: string): void {
+    run(this.db, 'UPDATE pr_event SET id = ? WHERE id = ?', newId, oldId);
+    const logged = all<{ seq: number; event_id: string }>(this.db, 'SELECT seq, event_id FROM event_log WHERE event_id IN (?, ?) ORDER BY seq', oldId, newId);
+    const [first, ...later] = logged;
+    if (first === undefined) {
+      return;
+    }
+    for (const row of later) {
+      run(this.db, 'DELETE FROM event_log WHERE seq = ?', row.seq);
+    }
+    if (first.event_id !== newId) {
+      run(this.db, 'UPDATE event_log SET event_id = ? WHERE seq = ?', newId, first.seq);
+    }
+  }
+
+  /**
    * Writes freshly derived events for one PR. Keeps seen_at and override_* of
    * events that already exist, and drops events the new snapshot no longer
-   * produces (deleted comments, a kind that changed). App-made events
-   * (`APP_EVENT_KINDS`, see `addAppEvent`) are not derived and stay. Returns
-   * the new ids.
+   * produces (deleted comments, a kind that changed). A machine comment
+   * that changed between deploy and bot_comment is renamed instead
+   * (`successorOf`, `rename`): it keeps its seen time, override and event
+   * log seq. App-made events (`APP_EVENT_KINDS`, see `addAppEvent`) are not
+   * derived and stay. Returns the new ids; a renamed one is not new.
    */
   upsertDerived(prKey: PrKey, events: PrEvent[]): string[] {
     return inTransaction(this.db, () => {
-      const existing = new Set(
-        all<{ id: string; kind: string }>(this.db, 'SELECT id, kind FROM pr_event WHERE pr_key = ?', prKey)
-          .filter((row) => !APP_EVENT_KINDS.includes(row.kind as EventKind))
-          .map((row) => row.id),
+      const stored = all<StoredId>(this.db, 'SELECT id, kind, source_id FROM pr_event WHERE pr_key = ?', prKey).filter(
+        (row) => !APP_EVENT_KINDS.includes(row.kind as EventKind),
       );
+      const existing = new Set(stored.map((row) => row.id));
       const incoming = new Set(events.map((event) => event.id));
-      for (const id of existing) {
-        if (!incoming.has(id)) {
-          run(this.db, 'DELETE FROM pr_event WHERE id = ?', id);
+      for (const row of stored) {
+        if (incoming.has(row.id)) {
+          continue;
+        }
+        const successor = successorOf(row, events, existing);
+        if (successor === null) {
+          run(this.db, 'DELETE FROM pr_event WHERE id = ?', row.id);
+        } else {
+          this.rename(row.id, successor.id);
+          existing.add(successor.id);
         }
       }
       const created: string[] = [];

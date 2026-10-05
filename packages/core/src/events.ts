@@ -1,3 +1,4 @@
+import { trimBotBody } from './bot-bodies.ts';
 import { isBot, isMachineComment } from './bots.ts';
 import { ADDRESSED_KINDS } from './kinds.ts';
 import { lastSpokeAt, spokeAfter } from './last-touch.ts';
@@ -127,7 +128,9 @@ function commentEvent(comment: Comment, pr: Pr, viewer: Viewer): RawEvent | null
   const machine = isMachineComment(comment);
   let kind: EventKind | null;
   if (machine) {
-    kind = deployBody.test(comment.body) ? 'deploy' : 'bot_comment';
+    // Only the part of a bot's body PostPile keeps: a snapshot stored before
+    // bodies were cut must derive the same kind (part of the event id) as one cut on save.
+    kind = deployBody.test(trimBotBody(comment)) ? 'deploy' : 'bot_comment';
   } else if (sameLogin(comment.author, viewer.login)) {
     kind = 'comment';
   } else {

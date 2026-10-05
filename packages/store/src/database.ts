@@ -13,6 +13,10 @@ export function openDatabase(path: string): DatabaseSync {
   }
   const db = new DatabaseSync(path);
   db.exec('PRAGMA journal_mode = WAL');
+  // A reset WAL is reused from the start but keeps its size on disk (954 MB
+  // after rewriting a heavy install's snapshots in one transaction). With a
+  // limit each reset cuts it back to 64 MB: https://sqlite.org/pragma.html#pragma_journal_size_limit
+  db.exec('PRAGMA journal_size_limit = 67108864');
   db.exec('PRAGMA foreign_keys = ON');
   db.exec('PRAGMA busy_timeout = 5000');
   runMigrations(db);

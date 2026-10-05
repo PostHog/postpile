@@ -131,6 +131,7 @@ function fakeEngine(overrides: Partial<EngineService>): EngineService {
     setSweepSkip: notImplemented,
     startWorkContextSchedule: notImplemented,
     stopWorkContextSchedule: notImplemented,
+    startBotBodyTrim: notImplemented,
     flushPendingWrites: notImplemented,
     close: notImplemented,
     ...overrides,

@@ -1,8 +1,8 @@
-import { snapshotCoversSince, deriveEvents, quietReadCheck, touchedReadCheck, type Pr } from '@postpile/core';
+import { BOT_BODY_MAX, snapshotCoversSince, deriveEvents, quietReadCheck, touchedReadCheck, trimBotBody, type Pr } from '@postpile/core';
 import { viewer } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { loadFixture } from './fake-fetch.ts';
-import { toPr } from './normalize.ts';
+import { addOlderPage, toPr } from './normalize.ts';
 import type { RawBatchResponse, RawPullRequest } from './raw.ts';
 
 const ref = { repo: 'acme/app', number: 42 };
@@ -303,5 +303,50 @@ describe('toPr: viewer reactions', () => {
     const pr = toPr(ref, rawPr());
     expect(pr.comments.every((comment) => comment.viewerReacted === undefined)).toBe(true);
     expect(pr.reviews.every((review) => review.viewerReacted === undefined)).toBe(true);
+  });
+});
+
+describe('toPr and addOlderPage: bot bodies', () => {
+  const long = `Walkthrough\n${'- a long line of generated review notes\n'.repeat(200)}`;
+  const bot = { __typename: 'Bot', login: 'coderabbitai' };
+  const person = { __typename: 'User', login: 'alice' };
+  const short = trimBotBody({ author: 'coderabbitai[bot]', body: long });
+
+  it('cuts a bot body in every copy it lands in, and leaves people and the description alone', () => {
+    const raw = rawPr();
+    raw.body = long;
+    Object.assign(raw.comments.nodes[0]!, { author: bot, body: long });
+    Object.assign(raw.comments.nodes[1]!, { author: person, body: long });
+    Object.assign(raw.reviews.nodes[0]!, { author: bot, body: long });
+    Object.assign(raw.reviewThreads.nodes[0]!.comments.nodes[0]!, { author: bot, body: long });
+    const pr = toPr(ref, raw);
+    expect(short.length).toBeLessThanOrEqual(BOT_BODY_MAX);
+    const byId = (id: string) => pr.comments.find((comment) => comment.id === id)?.body;
+    expect([byId('IC1'), byId('IC2'), byId('R1'), byId('RC1')]).toEqual([short, long, short, short]);
+    expect(pr.reviews.find((review) => review.id === 'R1')?.body).toBe(short);
+    expect(pr.threads[0]?.comments[0]?.body).toBe(short);
+    expect(pr.body).toBe(long);
+  });
+
+  it('keeps a bot body a person edited last whole, in the review and its comment copy', () => {
+    const raw = rawPr();
+    Object.assign(raw.comments.nodes[0]!, { author: bot, body: long, editor: person, lastEditedAt: '2026-09-19T12:30:00Z' });
+    Object.assign(raw.reviews.nodes[0]!, { author: bot, body: long, editor: person, lastEditedAt: '2026-09-19T12:30:00Z' });
+    const pr = toPr(ref, raw);
+    expect(pr.comments.find((comment) => comment.id === 'IC1')?.body).toBe(long);
+    expect(pr.comments.find((comment) => comment.id === 'R1')?.body).toBe(long);
+    expect(pr.reviews.find((review) => review.id === 'R1')?.body).toBe(long);
+  });
+
+  it('cuts the bot bodies an older page brings in', () => {
+    const pr = toPr(ref, rawPr());
+    const older = addOlderPage(pr, {
+      list: 'comments',
+      page: {
+        nodes: [{ id: 'IC0', url: 'https://github.com/acme/app/pull/42#issuecomment-0', author: bot, body: long, createdAt: '2026-09-18T09:00:00Z' }],
+        pageInfo: { hasPreviousPage: false, startCursor: null },
+      },
+    });
+    expect(older.comments.find((comment) => comment.id === 'IC0')?.body).toBe(short);
   });
 });

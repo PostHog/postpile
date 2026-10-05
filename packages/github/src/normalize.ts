@@ -1,5 +1,6 @@
 import {
   prKey,
+  trimBotBody,
   type CapHit,
   type CheckContext,
   type CheckRollup,
@@ -151,12 +152,26 @@ function toReacted(raw: RawReactions): Pick<Comment, 'viewerReacted'> {
   return { viewerReacted: raw.reactionGroups.some((group) => group.content === 'THUMBS_UP' && group.viewerHasReacted) };
 }
 
+/** Who edited a comment or review body last, null when GitHub does not say. */
+function editorLogin(raw: RawEdit): string | null {
+  return raw.editor ? actorLogin(raw.editor) : null;
+}
+
+/**
+ * The body as PostPile stores it: a bot's long body cut to BOT_BODY_MAX
+ * (`trimBotBody`, DESIGN.md "Bot bodies are cut when saved"), the same way
+ * in every copy and on every path that fetches a PR.
+ */
+function storedBody(raw: RawEdit & { author: RawActor | null; body: string }): string {
+  return trimBotBody({ author: actorLogin(raw.author), body: raw.body, editor: editorLogin(raw) });
+}
+
 function toReview(raw: RawReview): Review {
   return {
     id: raw.id,
     author: actorLogin(raw.author),
     state: REVIEW_STATES.has(raw.state) ? (raw.state as ReviewState) : 'COMMENTED',
-    body: raw.body,
+    body: storedBody(raw),
     submittedAt: isoTime(raw.submittedAt ?? raw.createdAt),
     commitOid: raw.commit?.oid ?? null,
     ...toReacted(raw),
@@ -167,7 +182,7 @@ function toReview(raw: RawReview): Review {
 function toEdit(raw: RawEdit): Pick<Comment, 'lastEditedAt' | 'editor' | 'updatedAt'> {
   const edit: Pick<Comment, 'lastEditedAt' | 'editor' | 'updatedAt'> = {
     lastEditedAt: isoTimeOrNull(raw.lastEditedAt ?? null),
-    editor: raw.editor ? actorLogin(raw.editor) : null,
+    editor: editorLogin(raw),
   };
   if (raw.updatedAt) {
     edit.updatedAt = isoTime(raw.updatedAt);
@@ -179,7 +194,7 @@ function toIssueComment(raw: RawComment): Comment {
   return {
     id: raw.id,
     author: actorLogin(raw.author),
-    body: raw.body,
+    body: storedBody(raw),
     createdAt: isoTime(raw.createdAt),
     kind: 'comment',
     url: raw.url,
@@ -194,7 +209,7 @@ function toReviewBodyComment(raw: RawReview): Comment {
   return {
     id: raw.id,
     author: actorLogin(raw.author),
-    body: raw.body,
+    body: storedBody(raw),
     createdAt: isoTime(raw.submittedAt ?? raw.createdAt),
     kind: 'review',
     url: raw.url,
@@ -219,7 +234,7 @@ function toThread(raw: RawReviewThread): ReviewThread {
   const comments: Comment[] = submitted.map((c) => ({
     id: c.id,
     author: actorLogin(c.author),
-    body: c.body,
+    body: storedBody(c),
     createdAt: isoTime(c.createdAt),
     kind: 'review_comment',
     url: c.url,

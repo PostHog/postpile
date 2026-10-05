@@ -486,6 +486,13 @@ export interface EngineService {
   /** The daily sweep on a timer (desktop app): at start, then every 30 minutes if due. A second call is ignored. */
   startWorkContextSchedule(): void;
   stopWorkContextSchedule(): void;
+  /**
+   * The one-time cut of bot bodies in stored snapshots (desktop app): in
+   * small steps in the background, after a delay and never during a sync,
+   * poll, consolidation or catch-up. Resumes where a quit left it, a no-op
+   * once it ran to the end.
+   */
+  startBotBodyTrim(): void;
 
   /**
    * gh and claude: found, logged in, usable, with the exact fix commands.
