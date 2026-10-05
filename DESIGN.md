@@ -34,8 +34,9 @@ Bigger splits stay proposals.
 **"Wrong topic" sticks** (2026-10-05): no rule and no agent puts a PR back
 into a topic the user took it out of. The stack shortcut skips that topic
 and asks the agent; the assignment prompt names it per PR, and an answer
-that picks it (by id, or by a "new" name that finds it) is dropped, so the
-PR gets the retry and else waits in Unsorted; the topic tidy folds or
+that picks it (by id, or by a "new" name matching its name, also when the
+topic is in the Archive and no longer offered) is dropped, so the PR gets
+the retry and else waits in Unsorted; the topic tidy folds or
 splits nothing that would put it back with that work. The "no" follows the
 topic into whatever it is merged into, and on a stack it holds for every
 layer that moved (one feedback row each). Only the user puts it back, by

@@ -1,4 +1,4 @@
-import type { TopicAssignment, TopicChoice } from '@postpile/agent';
+import type { ExcludedTopic, TopicAssignment, TopicChoice } from '@postpile/agent';
 import { buildStacks, cleanTopicName, dossierBrief, lastJoinAt, newTopic, stackByPrKey, stackTopicId, takesNewPrs, type Pr, type PrKey, type Topic, type TopicKind } from '@postpile/core';
 import { Board } from '../board.ts';
 import { newTopicId } from '../ids.ts';
@@ -193,26 +193,45 @@ export class TopicAssigner {
   }
 
   /**
-   * Per PR of the batch, the offered topics the user took it (or a layer
-   * that follows it) out of. PRs with none are left out.
+   * The stored topics the user took these PRs out of, offered or not: one
+   * in the Archive that no longer takes PRs can still come back as a "new"
+   * topic of the same name.
    */
-  private notIn(batch: Pr[], topics: TopicChoice[]): Record<PrKey, string[]> {
-    const result: Record<PrKey, string[]> = {};
+  private excludedTopics(keys: PrKey[]): Topic[] {
+    return [...this.exclusions.forKeys(keys)].flatMap((id) => this.deps.store.topics.get(id) ?? []);
+  }
+
+  /** Per PR of the batch, the topics the user took it (or a layer that follows it) out of. PRs with none are left out. */
+  private notIn(batch: Pr[]): Record<PrKey, ExcludedTopic[]> {
+    const result: Record<PrKey, ExcludedTopic[]> = {};
     for (const pr of batch) {
-      const excluded = this.exclusions.forKeys(this.unitOf(pr.key));
-      const ids = topics.map((topic) => topic.id).filter((id) => excluded.has(id));
-      if (ids.length > 0) {
-        result[pr.key] = ids;
+      const topics = this.excludedTopics(this.unitOf(pr.key));
+      if (topics.length > 0) {
+        result[pr.key] = topics.map((topic) => ({ id: topic.id, name: topic.name }));
       }
     }
     return result;
   }
 
   /**
+   * The answer puts the PR back into a topic the user took it out of: by id,
+   * or by a "new" name that is that topic's (cleaned, any case), checked
+   * before anything is created.
+   */
+  private putsBack(assignment: TopicAssignment, keys: PrKey[]): boolean {
+    const excluded = this.excludedTopics(keys);
+    if (assignment.kind === 'existing') {
+      return excluded.some((topic) => topic.id === assignment.topicId);
+    }
+    const wanted = cleanTopicName(assignment.name).toLowerCase();
+    return excluded.some((topic) => cleanTopicName(topic.name).toLowerCase() === wanted);
+  }
+
+  /**
    * Stores the answers and returns the PRs placed. An answer that puts a PR
-   * into a topic the user took it out of, by id or by a "new" name that
-   * finds that topic, is dropped: the PR counts as left out, so it gets the
-   * retry and else waits in Unsorted for the next sync. A PR the user
+   * into a topic the user took it out of (`putsBack`) is dropped: the PR
+   * counts as left out, so it gets the retry and else waits in Unsorted for
+   * the next sync. A PR the user
    * placed while the call ran stays where they put it.
    */
   private apply(assignments: TopicAssignment[]): Set<PrKey> {
@@ -222,10 +241,10 @@ export class TopicAssigner {
     store.transaction(() => {
       for (const assignment of assignments) {
         const keys = this.unitOf(assignment.prKey);
-        const topicId = this.topicIdFor(assignment);
-        if (this.exclusions.forKeys(keys).has(topicId)) {
+        if (this.putsBack(assignment, keys)) {
           continue;
         }
+        const topicId = this.topicIdFor(assignment);
         // A new PR is news: it brings a retired topic back.
         changeTopicStatus(store, topicId, 'revive', at);
         for (const prKey of keys.filter((key) => store.memberships.get(key)?.assignedBy !== 'user')) {
@@ -254,7 +273,7 @@ export class TopicAssigner {
         waiting,
         viewer: this.deps.viewer,
         topics,
-        notIn: this.notIn(batch, topics),
+        notIn: this.notIn(batch),
         context: this.deps.contexts.forTopic(null),
       });
       // A new topic whose name is empty after cleaning is an unusable answer: the PR is asked again.

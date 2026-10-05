@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { makeHarness, type Harness } from '../testing/fakes.ts';
 import { reviewRequestedPr } from '../testing/prs.ts';
 import { makeTopic, topicWithPrs } from '../testing/topics.ts';
+import { changeTopicStatus } from '../topic-status.ts';
 
 const prs = Array.from({ length: 12 }, (_, index) => reviewRequestedPr(index + 1));
 
@@ -152,7 +153,7 @@ describe('"Wrong topic" keeps a PR out of the topic it left', () => {
 
     const prompts = h.runner.promptsFor('topic_assignment');
     expect(prompts).toHaveLength(2);
-    expect(prompts[0]).toContain('The user took this PR out of topic id billing. Never put it back there');
+    expect(prompts[0]).toContain('out of these topics. Never put it back there, also not as a new topic of the same name:\n<github_data>\n- id billing: "billing"\n</github_data>');
     expect(h.store.memberships.get(pr.key)).toMatchObject({ topicId: 'payments', assignedBy: 'agent' });
   });
 
@@ -166,6 +167,21 @@ describe('"Wrong topic" keeps a PR out of the topic it left', () => {
     expect(h.store.memberships.get(pr.key)).toBeNull();
     expect(report.errors).toContain(`topic assignment: no topic after a retry, asked again next sync: ${pr.key}`);
     expect(h.store.topics.list().map((topic) => topic.id).sort()).toEqual(['billing', 'payments']);
+  });
+
+  it('drops a new topic named like the one it left when that one is no longer offered', async () => {
+    const h = await takenOutOfBilling();
+    changeTopicStatus(h.store, 'billing', 'archive', at(2));
+    h.runner.answer('topic_assignment', { assignments: [{ prKey: pr.key, kind: 'new', name: 'BILLING', goal: 'Bill people.', reason: 'billing work' }] });
+    h.runner.answer('topic_assignment', { assignments: [{ prKey: pr.key, kind: 'new', name: 'Login flow', goal: 'Fix logins.', reason: 'its own work' }] });
+
+    await h.engine.sync({ agentJobs: ['topics'] });
+
+    const prompt = h.runner.promptsFor('topic_assignment')[0]!;
+    expect(prompt).not.toContain('- id billing: "billing" (');
+    expect(prompt).toContain('- id billing: "billing"\n</github_data>');
+    expect(h.store.topics.list().filter((topic) => topic.name.toLowerCase() === 'billing')).toHaveLength(1);
+    expect(h.store.topics.get(h.store.memberships.get(pr.key)?.topicId ?? '')?.name).toBe('Login flow');
   });
 
   it('keeps it out of the topic the one it left was merged into', async () => {
@@ -191,7 +207,7 @@ describe('"Wrong topic" keeps a PR out of the topic it left', () => {
 
     await h.engine.sync({ agentJobs: ['topics'] });
 
-    expect(h.runner.promptsFor('topic_assignment')[0]).toContain('The user took this PR out of topic id payments.');
+    expect(h.runner.promptsFor('topic_assignment')[0]).toContain('- id payments: "payments"\n</github_data>');
     const topicId = h.store.memberships.get(pr.key)?.topicId;
     expect(h.store.topics.get(topicId ?? '')?.name).toBe('Login flow');
   });
@@ -238,7 +254,7 @@ describe('"Wrong topic" keeps a PR out of the topic it left', () => {
 
     const prompts = h.runner.promptsFor('topic_assignment');
     expect(prompts).toHaveLength(1);
-    expect(prompts[0]).toContain('The user took this PR out of topic id depot.');
+    expect(prompts[0]).toContain('- id depot: "depot"\n</github_data>');
     expect(h.store.memberships.get(top.key)).toMatchObject({ topicId: 'billing', assignedBy: 'agent' });
   });
 
@@ -264,7 +280,7 @@ describe('"Wrong topic" keeps a PR out of the topic it left', () => {
 
     const prompts = h.runner.promptsFor('topic_assignment');
     expect(prompts).toHaveLength(2);
-    expect(prompts[0]).toContain('The user took this PR out of topic id depot.');
+    expect(prompts[0]).toContain('- id depot: "depot"\n</github_data>');
     expect(prompts[0]).not.toContain(`${middle.key} "`);
     const billing = h.store.memberships.get(bottom.key)?.topicId;
     expect(billing).not.toBe('depot');

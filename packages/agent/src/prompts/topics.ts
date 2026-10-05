@@ -72,16 +72,17 @@ ${githubData(others.map(waitingLine).join('\n'))}
 
 /**
  * The topics the user took this PR out of ("Wrong topic"), after its fenced
- * details: the app speaking, like the own-PR note. Only topic ids, which the
- * list above shows with their names. Most PRs have none and read as before.
+ * details: the app speaking, like the own-PR note, with the topic names in
+ * a fence of their own. Also topics no longer offered, since a new topic of
+ * the same name would put it back. Most PRs have none and read as before.
  */
 function notInNote(pr: Pr, input: TopicAssignmentInput): string {
-  const ids = input.notIn?.[pr.key] ?? [];
-  if (ids.length === 0) {
+  const topics = input.notIn?.[pr.key] ?? [];
+  if (topics.length === 0) {
     return '';
   }
-  const topics = ids.map((id) => `topic id ${id}`).join(', ');
-  return `\nThe user took this PR out of ${topics}. Never put it back there, also not as a new topic of the same name.`;
+  const lines = topics.map((topic) => `- id ${topic.id}: "${topic.name}"`).join('\n');
+  return `\nThe user took this PR out of these topics. Never put it back there, also not as a new topic of the same name:\n${githubData(lines)}`;
 }
 
 /**

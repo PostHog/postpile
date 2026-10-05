@@ -83,6 +83,12 @@ export interface TopicChoice {
   lastActivityAt: string | null;
 }
 
+/** A topic the user took a PR out of ("Wrong topic"), offered or not. */
+export interface ExcludedTopic {
+  id: string;
+  name: string;
+}
+
 export interface TopicAssignmentInput {
   prs: Pr[];
   /**
@@ -94,11 +100,12 @@ export interface TopicAssignmentInput {
   viewer: Viewer;
   topics: TopicChoice[];
   /**
-   * By PR key, the ids of offered topics the user took that PR out of
-   * ("Wrong topic"). The prompt says so per PR; the engine drops an answer
-   * that puts it back. A PR left out (or no map at all) has none.
+   * By PR key, the topics the user took that PR out of ("Wrong topic"),
+   * also ones no longer offered: a "new" topic of the same name would put
+   * it back too. The prompt says so per PR; the engine drops an answer that
+   * puts it back. A PR left out (or no map at all) has none.
    */
-  notIn?: Record<PrKey, string[]>;
+  notIn?: Record<PrKey, ExcludedTopic[]>;
   context: PromptContext;
 }
 

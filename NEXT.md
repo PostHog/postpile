@@ -11,10 +11,11 @@ now".
   (core; follows accepted merges), read per run by `TopicExclusions`
   (engine) from the feedback log and accepted merge proposals, no new
   table. The stack shortcut skips an excluded topic and asks the agent;
-  the assignment prompt gets a per-PR "took this PR out of topic id X"
-  note outside the fence (`TopicAssignmentInput.notIn`), and an answer
-  that picks it, by id or by a "new" name, counts as left out (retry,
-  else Unsorted). The topic tidy folds nothing that puts a PR together
+  the assignment prompt gets a per-PR "took this PR out of these topics"
+  note with ids and fenced names (`TopicAssignmentInput.notIn`), also for
+  topics no longer offered, and an answer that picks one, by id or by a
+  "new" name matching its name, counts as left out before anything is
+  created (retry, else Unsorted). The topic tidy folds nothing that puts a PR together
   with a topic it left (either way round, re-read per fold) and splits
   nothing into it. "Wrong topic" on a stack now logs one row per layer
   that moved. Also fixed: an assignment answer no longer overwrites a
