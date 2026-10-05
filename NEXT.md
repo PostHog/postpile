@@ -1135,6 +1135,13 @@ the app meanwhile.
 
 ## Decided
 
+- **Title bar says "up to date"** (2026-10-05, DESIGN.md "Auto sync"): the
+  live poll checks GitHub every minute, so "synced 40m ago" (the last full
+  sync) suggested stale data that wasn't. The title bar reads the poll:
+  "up to date" while it keeps up, "checked 5m ago" with an amber dot once it
+  missed three cycles, "synced 2h ago" only with the poll off. The full
+  sync's time, counts and report sit in the tooltip; the footer says "last
+  full sync".
 - **Self-update** (2026-10-03, DESIGN.md "Self-update"): the app downloads
   releases itself (electron-updater, GitHub provider) and the reminder
   offers "Restart to update"; the brew command stays as the fallback. The

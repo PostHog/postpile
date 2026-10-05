@@ -5338,7 +5338,12 @@ the last sync, whoever started it (`reschedule` on every sync end), so a
 renderer sees it through `LivePollStatus.syncRunning` (the title bar shows
 `syncing · agent 34/82` like for "Sync now", `useActions().syncing` covers
 both) and `nextAutoSyncAt` ("next full sync in N min"). The last sync shown
-is the newer of this window's and the stored report. Full syncs were
+is the newer of this window's and the stored report. Between syncs the title bar
+reads the live poll, not the report (2026-10-05): "up to date" while the
+poll asked GitHub within three cycles (`pollIsFresh`), "checked 5m ago"
+with an amber dot once it fell behind, "synced 2h ago" only while the poll
+is off. Sync errors and the call cap still show next to it; the full sync's
+time and report sit in the tooltip. Full syncs were
 start-only and manual before (2026-09-29). While the GitHub quota is low, a
 due auto sync (the backlog follow-up too) waits until the reset instead
 (see "GitHub quota").

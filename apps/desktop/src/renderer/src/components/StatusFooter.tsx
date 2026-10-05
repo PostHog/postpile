@@ -103,7 +103,7 @@ export function StatusFooter(props: { topics: TopicListItem[]; detail: TopicDeta
     ),
     lastSync && (
       <span key="sync" title={syncReportDetail(lastSync)} className={lastSync.errors.length > 0 ? 'text-status-bad' : ''}>
-        last sync: <Num>{lastSync.agentCallStats.total}</Num> {callStatsWords(lastSync.agentCallStats)}
+        last full sync: <Num>{lastSync.agentCallStats.total}</Num> {callStatsWords(lastSync.agentCallStats)}
         {lastSync.errors.length > 0 && ` · ${lastSync.errors.length} ${lastSync.errors.length === 1 ? 'error' : 'errors'}`}
       </span>
     ),

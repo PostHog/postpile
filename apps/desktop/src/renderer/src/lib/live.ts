@@ -57,3 +57,20 @@ export function quotaLabel(status: LivePollStatus | undefined): LiveLabel | null
     title: `${resource}: ${quota.remainingPercent}% of the hourly limit left; the live poll slows down. ${shared}`,
   };
 }
+
+/** Missed poll cycles before the title bar stops saying "up to date". */
+const STALE_AFTER_CYCLES = 3;
+
+/**
+ * Whether the live poll keeps the data current: it is on and asked GitHub
+ * within the last few cycles. False while it is off, before its first
+ * cycle, and once it fell behind (backoff, a paused quota, a sleeping Mac).
+ */
+export function pollIsFresh(status: LivePollStatus | undefined, now: Date): boolean {
+  if (!status || status.state === 'off' || status.lastPollAt === null) {
+    return false;
+  }
+  const every = status.githubQuota?.pollSeconds ?? status.everySeconds;
+  const elapsedSeconds = (now.getTime() - Date.parse(status.lastPollAt)) / 1000;
+  return elapsedSeconds <= every * STALE_AFTER_CYCLES;
+}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { OFF_POLL_STATUS, type LivePollStatus } from '@postpile/core';
-import { liveLabel, quotaLabel } from './live.ts';
+import { liveLabel, pollIsFresh, quotaLabel } from './live.ts';
 
 const now = new Date('2026-09-28T10:00:00Z');
 const running: LivePollStatus = { ...OFF_POLL_STATUS, state: 'waiting', intervalSeconds: 60, githubPollIntervalSeconds: 60, everySeconds: 60 };
@@ -55,5 +55,27 @@ describe('quotaLabel', () => {
     const status: LivePollStatus = { ...running, githubQuota: { level: 'critical', resource: 'core', remainingPercent: 12, resumeAt, pollSeconds: null } };
     expect(quotaLabel(status)?.text).toBe('GitHub quota nearly used: background sync and live poll paused until 14:05');
     expect(quotaLabel(status)?.title).toMatch(/^REST: 12%/);
+  });
+});
+
+describe('pollIsFresh', () => {
+  it('is false while the poll is off or has not run yet', () => {
+    expect(pollIsFresh(undefined, now)).toBe(false);
+    expect(pollIsFresh({ ...OFF_POLL_STATUS, lastPollAt: '2026-09-28T09:59:30Z' }, now)).toBe(false);
+    expect(pollIsFresh(running, now)).toBe(false);
+  });
+
+  it('is true while the last poll is within three cycles', () => {
+    expect(pollIsFresh({ ...running, lastPollAt: '2026-09-28T09:59:30Z' }, now)).toBe(true);
+    expect(pollIsFresh({ ...running, lastPollAt: '2026-09-28T09:57:00Z' }, now)).toBe(true);
+  });
+
+  it('is false once the poll fell behind', () => {
+    expect(pollIsFresh({ ...running, lastPollAt: '2026-09-28T09:56:59Z' }, now)).toBe(false);
+  });
+
+  it('counts cycles at the slower pace of a low quota', () => {
+    const quota = { level: 'low' as const, resource: 'core' as const, remainingPercent: 40, resumeAt: '2026-09-28T11:00:00Z', pollSeconds: 300 };
+    expect(pollIsFresh({ ...running, lastPollAt: '2026-09-28T09:50:00Z', githubQuota: quota }, now)).toBe(true);
   });
 });
