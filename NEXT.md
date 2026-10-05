@@ -6,6 +6,18 @@ now".
 
 ## Done
 
+- Busy inbox card (2026-10-05, DESIGN.md "Big inboxes" › "The busy inbox
+  card"): while the board cap cuts the inbox, the sidebar shows a calm amber
+  card right above the topics, with the aching robot, the quiet PR count,
+  what is kept per tier, Clean up (the cleanup dialog), Unlock writes
+  (opens the footer lock's popover, only while locked) and an inline Why?.
+  It folds to one line for the session. `useBusyInbox` reads
+  `GET /api/busy-inbox`, refetched with everything else. Checked in fake
+  mode (`POSTPILE_FAKE_BUSY=1`) in the static renderer build: the card,
+  Why? open, Clean up and Unlock writes opening their dialogs, the folded
+  line, the default and the 200px sidebar. Not tried: a real busy
+  database, and dark mode (the app has no dark theme yet, so it looks the
+  same).
 - The hot board (2026-10-05, DESIGN.md "Big inboxes: what PostPile loads
   and works on"): the board holds only PRs that are unread on GitHub, open
   and tracked, or active in the last 7 days, each with its whole stack and
@@ -1278,6 +1290,12 @@ the app meanwhile.
   header and is the existence authority; `pr_snapshot` is the renamed old
   table, the json being phased out; both are written in one transaction.
 
+- **Busy inbox shows as a sidebar card with the aching robot** (2026-10-05,
+  DESIGN.md "The busy inbox card"): variant C of the mockups, picked over
+  a bar under the title bar and a title bar pill with a popover. It sits
+  above the topics, "cause that's where it hits you with topics
+  missing". App-health amber, calm wording (focusing, not broken), the
+  robot moves only without Reduce Motion.
 - **The hot set decides what PostPile loads and works on** (2026-10-05,
   DESIGN.md "Big inboxes: what PostPile loads and works on"): PostPile
   only ever works with a recent, fresh slice and ignores older stuff, and
