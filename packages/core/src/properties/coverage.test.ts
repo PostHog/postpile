@@ -7,6 +7,8 @@ import { boardLabels, boardSpecArb, buildBoard, REQUIRED_LABELS, tileViewsOf } f
 
 const BOARDS = 4000;
 const MIN_SHARE = 0.01;
+// Building 4000 boards is CPU-bound: about 1.5s alone, past the default 5s when the whole suite runs in parallel.
+const TIMEOUT_MS = 30_000;
 
 describe('generator coverage', () => {
   it('reaches every required label on at least 1% of boards', () => {
@@ -21,5 +23,5 @@ describe('generator coverage', () => {
       (label) => `${label}: ${(((counts.get(label) ?? 0) / BOARDS) * 100).toFixed(1)}%`,
     );
     expect(rare).toEqual([]);
-  });
+  }, TIMEOUT_MS);
 });
