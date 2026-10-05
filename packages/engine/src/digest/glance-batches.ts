@@ -120,12 +120,12 @@ export class GlanceBatchWriter {
     return targets.filter((target) => target.topicId === null || !skipTopics.has(target.topicId));
   }
 
-  /** Called once the topic's dossier is final: the hash carries its version. */
+  /** Called once the topic's dossier is final, so a glance written now reads it. */
   private needingGlance(group: GlanceTarget[], inputs: GlanceInputs): GlanceTarget[] {
     const { store, agent, budget } = this.deps;
     const stored = store.glances.getMany(group.map((target) => target.item.pr.key));
     return group.filter((target) => {
-      if (stored.get(target.item.pr.key)?.inputHash === inputs.itemHash(agent, target)) {
+      if (inputs.isCurrent(agent, target, stored.get(target.item.pr.key)?.inputHash)) {
         budget.skipUnchanged('glance_batch');
         return false;
       }

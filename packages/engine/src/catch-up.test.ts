@@ -1,5 +1,5 @@
 import type { GlanceGap, Pr, PrKey } from '@postpile/core';
-import { makeComment, makeThreadFor, viewer } from '@postpile/core/fixtures';
+import { makeComment, makeCommit, makeThreadFor, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it, vi } from 'vitest';
 import { glanceGapKey } from './digest/glance-batches.ts';
 import { makeHarness, NOW, type Harness, type HarnessOptions } from './testing/fakes.ts';
@@ -100,6 +100,59 @@ describe('glance catch-up after a poll', () => {
     at += 10 * 60_000;
     await h.engine.pollOnce();
     await vi.waitFor(() => expect(catchUpRunIds(h)).toHaveLength(2));
+  });
+
+  it('refreshes only the pushed PR\'s glance: no dossier rewrite, nothing out of date', async () => {
+    const h = makeHarness({ catchUpCallsPerDay: 300 });
+    const first = reviewRequestedPr(1);
+    const second = reviewRequestedPr(2);
+    topicWithPrs(h, 'depot', [first, second]);
+    await h.engine.sync({ maxAgentCalls: 50 });
+    const secondGlance = h.store.glances.get(second.key);
+
+    const pushed = { ...first, updatedAt: LATER, headOid: 'pushed', commits: [...first.commits, makeCommit({ oid: 'pushed', author: first.author, committedAt: FRESH })] };
+    h.reader.addPr(pushed, makeThreadFor(pushed, { updatedAt: LATER }));
+    h.reader.etag = 'etag-push';
+    h.runner.answer('ping_decision', { decisions: [] });
+
+    await h.engine.pollOnce();
+
+    await vi.waitFor(() => expect(h.store.glances.get(first.key)?.inputHash).not.toBe(undefined));
+    await vi.waitFor(async () => expect((await h.engine.getPr(first.key))?.glanceStale).toBe(false));
+    expect(h.store.dossiers.latest('depot')?.version).toBe(1);
+    expect((await h.engine.getTopic('depot'))?.dossier?.eventsBehind).toBe(0);
+    expect(h.store.glances.get(second.key)).toEqual(secondGlance);
+    expect((await h.engine.getPr(second.key))?.glanceStale).toBe(false);
+  });
+
+  it('keeps the other PRs\' glances current when a comment rewrites the dossier', async () => {
+    const h = makeHarness({ catchUpCallsPerDay: 300 });
+    const first = reviewRequestedPr(1);
+    const second = reviewRequestedPr(2);
+    topicWithPrs(h, 'depot', [first, second]);
+    await h.engine.sync({ maxAgentCalls: 50 });
+    const secondGlance = h.store.glances.get(second.key);
+    askViewer(h, first, 'c9', 'etag-2');
+
+    await h.engine.pollOnce();
+
+    await vi.waitFor(() => expect(h.store.dossiers.latest('depot')?.version).toBe(2));
+    await vi.waitFor(async () => expect((await h.engine.getPr(first.key))?.glanceState).toBe('ready'));
+    expect(h.store.glances.get(second.key)).toEqual(secondGlance);
+    expect((await h.engine.getPr(second.key))?.glanceStale).toBe(false);
+  });
+
+  it('counts a glance stored with the old hash, which had the dossier version, as current', async () => {
+    const { h, pr } = await syncedTopic();
+    const stored = h.store.glances.get(pr.key)!;
+    // The input the sync wrote the glance from: same PR, same dossier (version 1) as now.
+    const input = h.agent.glanceInputs.at(-1)!;
+    const item = input.items.find((candidate) => candidate.pr.key === pr.key)!;
+    const legacy = h.agent.legacyGlanceItemInputHash(input, item);
+    expect(legacy).not.toBe(stored.inputHash);
+    h.store.glances.put({ ...stored, inputHash: legacy });
+
+    expect((await h.engine.getPr(pr.key))?.glanceStale).toBe(false);
   });
 
   it('leaves a bot comment for the next full sync', async () => {

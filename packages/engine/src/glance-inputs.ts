@@ -125,9 +125,25 @@ export class GlanceInputs {
     return { topic: parts.topic, dossier: parts.dossier, items, viewer: this.viewer, context: parts.context, attempt };
   }
 
-  /** The hash a stored glance must carry to still be current. Never depends on the other PRs in a batch. */
+  /** The hash a glance written now carries. Never depends on the other PRs in a batch. */
   itemHash(agent: AgentService, target: GlanceTarget): string {
     return agent.glanceItemInputHash(this.batchInput(target.topicId, [target.item], 1), target.item);
+  }
+
+  /**
+   * Whether a stored glance still matches its input. Never depends on the
+   * other PRs in a batch. The hash from before 2026-10-05, with the dossier
+   * version, still counts while that dossier is the latest, so updating
+   * the app regenerates no glance.
+   */
+  isCurrent(agent: AgentService, target: GlanceTarget, storedHash: string | undefined): boolean {
+    if (storedHash === undefined) {
+      return false;
+    }
+    if (storedHash === this.itemHash(agent, target)) {
+      return true;
+    }
+    return storedHash === agent.legacyGlanceItemInputHash(this.batchInput(target.topicId, [target.item], 1), target.item);
   }
 }
 
@@ -141,5 +157,5 @@ export function pendingGlanceKeys(store: Store, board: Board, viewer: Viewer, co
   const inputs = new GlanceInputs(store, board, viewer, contexts);
   const targets = inputs.targets();
   const stored = store.glances.getMany(targets.map((target) => target.item.pr.key));
-  return new Set(targets.filter((target) => stored.get(target.item.pr.key)?.inputHash !== inputs.itemHash(agent, target)).map((target) => target.item.pr.key));
+  return new Set(targets.filter((target) => !inputs.isCurrent(agent, target, stored.get(target.item.pr.key)?.inputHash)).map((target) => target.item.pr.key));
 }

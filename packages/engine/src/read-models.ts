@@ -200,7 +200,7 @@ export class ReadModels {
     const stale = new Set<PrKey>();
     for (const [key, glance] of glances) {
       const target = targets.get(key);
-      if (!target || glance.inputHash !== inputs.itemHash(this.agent, target)) {
+      if (!target || !inputs.isCurrent(this.agent, target, glance.inputHash)) {
         stale.add(key);
       }
     }

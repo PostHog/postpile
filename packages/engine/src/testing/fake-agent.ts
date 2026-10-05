@@ -21,7 +21,7 @@ import {
   type TopicDigestInput,
   type TopicDigestResult,
 } from '@postpile/agent';
-import { emptyDossier, type Glance, type ReconcileAction } from '@postpile/core';
+import { emptyDossier, isBot, type Glance, type ReconcileAction } from '@postpile/core';
 
 type Answer<I, O> = (input: I) => O;
 
@@ -166,7 +166,22 @@ export class FakeAgent extends RunnerAgentService {
     );
   }
 
+  /** Like the real hash: the PR's code and its human discussion, not the dossier version. */
   override glanceItemInputHash(input: GlanceBatchInput, item: GlanceBatchItem): string {
+    return inputHash(
+      'glance_batch',
+      item.pr.key,
+      item.pr.headOid,
+      item.pr.comments.filter((comment) => !isBot(comment.author)).map((comment) => comment.id),
+      item.provenance,
+      input.topic?.name ?? null,
+      input.context.instructions,
+      input.context.tailoring,
+      input.context.standingRules,
+    );
+  }
+
+  override legacyGlanceItemInputHash(input: GlanceBatchInput, item: GlanceBatchItem): string {
     return inputHash(
       'glance_batch',
       item.pr.key,

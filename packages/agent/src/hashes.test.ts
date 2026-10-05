@@ -1,6 +1,6 @@
 import type { PrSet } from '@postpile/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { dossierContextHash, dossierInputHash, glanceItemInputHash, setGroupingTriggers } from './hashes.ts';
+import { dossierContextHash, dossierInputHash, glanceItemInputHash, legacyGlanceItemInputHash, setGroupingTriggers } from './hashes.ts';
 import type { DossierUpdateInput, GlanceBatchInput } from './service.ts';
 import {
   emptyContext,
@@ -70,8 +70,17 @@ describe('glanceItemInputHash', () => {
     expect(glanceItemInputHash(glanceBatch({ items: [other, item], attempt: 2 }), item)).toBe(base);
   });
 
-  it('covers the dossier version and feedback on this PR only', () => {
-    expect(glanceHash(item.pr, { dossier: makeDossierVersion({ version: 8 }) })).not.toBe(base);
+  it('leaves the dossier version out, so a rewrite for another PR keeps the glance current', () => {
+    expect(glanceHash(item.pr, { dossier: makeDossierVersion({ version: 8 }) })).toBe(base);
+  });
+
+  it('keeps the old shape, with the dossier version, as the legacy hash', () => {
+    const legacy = (version: number) => legacyGlanceItemInputHash(glanceBatch({ items: [item], dossier: makeDossierVersion({ version }) }), item);
+    expect(legacy(1)).not.toBe(base);
+    expect(legacy(8)).not.toBe(legacy(1));
+  });
+
+  it('covers feedback on this PR only', () => {
     expect(glanceHash(item.pr, { context: { ...emptyContext, recentFeedback: [makeFeedback({ prKey: 'acme/app#9' })] } })).toBe(base);
     expect(glanceHash(item.pr, { context: { ...emptyContext, recentFeedback: [makeFeedback({ prKey: item.pr.key })] } })).not.toBe(base);
   });
