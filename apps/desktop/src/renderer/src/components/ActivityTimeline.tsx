@@ -195,18 +195,18 @@ function TalkActions(props: { prKey: string; target: ReplyTarget }) {
         {target.viewerReacted ? (
           <span role="status" title="You gave it a thumbs up on GitHub" className="flex h-6 items-center gap-1 rounded-full bg-accent-soft px-2 text-[11px] font-semibold text-accent">
             <ThumbsUpIcon />
-            You
+            You: thumbs up
           </span>
         ) : (
           <Button
             variant="quiet"
             className={target.canReply ? '' : '-ml-2.5'}
             disabled={reactBlocked !== null || actions.isBusy(`react:${props.prKey}:${target.commentId}`)}
-            title={reactBlocked ?? `A thumbs up for ${target.author} on GitHub: seen, nothing to add`}
+            title={reactBlocked ?? `Adds a 👍 reaction on GitHub: tells ${target.author} you saw it, nothing to add`}
             onClick={() => void actions.react(props.prKey, target.commentId)}
           >
             <ThumbsUpIcon />
-            React
+            Thumbs up
           </Button>
         )}
       </span>

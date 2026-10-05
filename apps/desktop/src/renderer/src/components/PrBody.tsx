@@ -18,6 +18,7 @@ import { Button } from './Button.tsx';
 import { ComposeProvider, useComposeState } from './Composer.tsx';
 import { BranchArrowIcon, PrStateIcon } from './icons.tsx';
 import { OpenOnGitHub } from './OpenOnGitHub.tsx';
+import { PaneHousekeeping } from './PaneHousekeeping.tsx';
 import { ReviewRow } from './ReviewRow.tsx';
 import { StackMark, StateWordLabel } from './pills.tsx';
 import { PrDescription } from './PrDescription.tsx';
@@ -93,7 +94,8 @@ function StateLine(props: { pr: PrBodyProps['detail']['pr']; status: PrStatus; s
       {status.mergeQueue && <span className="shrink-0 text-[11px] text-hint">since {sinceLabel(status.mergeQueue.since, now)}</span>}
       {review && <StateWordLabel word={review} size="md" />}
       <RepoRef prKey={pr.key} />
-      <span className="ml-auto">
+      {/* The line's text starts at 34px, but the button ends on the boxes' right edge, 12px further out. */}
+      <span className="-mr-3 ml-auto">
         <OpenOnGitHub url={pr.url} leads={props.openLeads} />
       </span>
     </div>
@@ -142,7 +144,8 @@ function useBelowRow(scroller: RefObject<HTMLDivElement | null>, row: RefObject<
  * (with Open on GitHub), title, "New since you looked" (a digest; its
  * "Reply ↓" jumps to the comment), the agent's glance (advice, on its own),
  * the review row (its own row right after the glance: the shortest pointer
- * path from the tile), then description, facts and the activity, where
+ * path from the tile) with the quiet housekeeping line under it (mark read,
+ * snooze, ⋯), then description, facts and the activity, where
  * every person's comment takes Reply and React. One composer is open at a
  * time; its state lives here, so it starts fresh per PR.
  */
@@ -198,11 +201,10 @@ export function PrBody(props: PrBodyProps) {
           </div>
           <NewSinceBox detail={props.detail} />
           <GlanceCard detail={props.detail} summary={props.summary} view={props.view} />
-          {(offers.approve || offers.ask) && (
-            <div ref={reviewRow}>
-              <ReviewRow detail={props.detail} offers={offers} askPerson={askPerson} />
-            </div>
-          )}
+          <div ref={reviewRow} className="flex flex-col gap-2.5">
+            {(offers.approve || offers.ask) && <ReviewRow detail={props.detail} offers={offers} askPerson={askPerson} />}
+            <PaneHousekeeping view={props.view} prKey={pr.key} offers={offers} />
+          </div>
           <PrDescription body={pr.body} />
           <PrFacts pr={pr} agentApprovers={props.detail.agentApprovers} />
           <ReviewList pr={pr} />

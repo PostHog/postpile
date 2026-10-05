@@ -3,7 +3,6 @@ import { usePr } from '../api/pr.ts';
 import { useGlanceLook } from '../lib/use-glance-look.ts';
 import { paneOffersFor } from '../lib/pane-offers.ts';
 import { DetailContext } from './DetailContext.tsx';
-import { PaneHousekeeping } from './PaneHousekeeping.tsx';
 import { PrBody } from './PrBody.tsx';
 
 interface DetailPaneProps {
@@ -18,8 +17,8 @@ interface DetailPaneProps {
 const paneFrame = 'flex min-h-0 flex-col bg-surface shadow-[inset_1px_0_0_var(--hairline-strong)]';
 
 /**
- * Right pane: the selected tile's context header (with the quiet
- * housekeeping: mark read, snooze, ⋯), then one of its PRs in full. Talking
+ * Right pane: the selected tile's context header (and for a stack or set
+ * its PR picker), then one of its PRs in full. Talking
  * to the agent is not here: "Ask the agent" on the topic takes this column
  * over (`AgentPane`).
  */
@@ -52,7 +51,7 @@ export function DetailPane(props: DetailPaneProps) {
 
   return (
     <aside aria-label="Details" className={paneFrame}>
-      <DetailContext view={view} prKey={prKey} onSelectPr={props.onSelectPr} housekeeping={<PaneHousekeeping view={view} prKey={prKey} offers={offers} />} />
+      <DetailContext view={view} prKey={prKey} onSelectPr={props.onSelectPr} />
       {body}
     </aside>
   );

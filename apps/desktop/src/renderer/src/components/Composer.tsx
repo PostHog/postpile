@@ -130,30 +130,34 @@ export function Composer(props: ComposerProps) {
         <span className="shrink-0 font-semibold text-ink">{props.title}</span>
         <span className="truncate text-hint">· {props.hint}</span>
       </div>
-      <textarea
-        className="min-h-20 rounded-control border border-control bg-surface p-2 text-[12.5px] leading-normal outline-none select-text focus:border-accent"
-        value={text}
-        disabled={props.drafting}
-        placeholder={props.drafting ? 'Drafting…' : 'Write it, or type the gist and let the agent draft it'}
-        onChange={(event) => compose.setDraft(key, event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === 'Escape') {
-            compose.close();
-          }
-        }}
-        aria-label={props.title}
-        autoFocus
-      />
-      <div className="flex items-center gap-1.5">
+      {/* The agent's pill sits where the text starts, the first thing to click; the text starts under it. */}
+      <div className="relative flex">
+        <textarea
+          className="min-h-24 flex-1 rounded-control border border-control bg-surface p-2 pt-9 text-[12.5px] leading-normal outline-none select-text focus:border-accent"
+          value={text}
+          disabled={props.drafting}
+          placeholder={props.drafting ? 'Drafting…' : 'Or write it yourself (a gist is enough for a rewrite)'}
+          onChange={(event) => compose.setDraft(key, event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              compose.close();
+            }
+          }}
+          aria-label={props.title}
+          autoFocus
+        />
         <button
           type="button"
           disabled={props.drafting}
           title={text.trim() === '' ? 'The agent writes it from the PR and its topic' : 'The agent rewrites it from your words'}
           onClick={() => void draft()}
-          className="text-[11.5px] font-medium text-accent hover:underline disabled:text-hint disabled:no-underline"
+          className="absolute top-2 left-2 flex h-6 items-center gap-1 rounded-full bg-segment px-2.5 text-[11px] font-semibold text-ink-2 inset-ring inset-ring-hairline hover:bg-chip disabled:opacity-60"
         >
-          {props.drafting ? 'Drafting…' : text.trim() === '' ? 'Let the agent draft' : 'Rewrite with the agent'}
+          <span aria-hidden="true">✨</span>
+          {props.drafting ? 'Drafting…' : text.trim() === '' ? 'Draft with agent' : 'Rewrite with agent'}
         </button>
+      </div>
+      <div className="flex items-center gap-1.5">
         <Button className="ml-auto" onClick={cancel}>
           Cancel
         </Button>

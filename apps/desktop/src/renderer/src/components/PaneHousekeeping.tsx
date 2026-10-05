@@ -42,11 +42,11 @@ interface PaneHousekeepingProps {
 }
 
 /**
- * Mark read / Done for now, Snooze and the ⋯ menu ("Remove <team>"), quiet
- * in the detail pane's header: mark-reads mostly happen on tiles and on
- * their own when a PR is opened, so nothing here competes with the review
- * row. When core makes one of them the lead (nothing else to do), it gets
- * the outlined look. After the open marked the PR, its note takes the mark
+ * Mark read / Done for now, Snooze and the ⋯ menu ("Remove <team>"), a
+ * quiet line right under the review row: close to the tile like the review
+ * buttons, but in the quiet look so nothing here competes with them. When
+ * core makes one of them the lead (nothing else to do), it gets the
+ * outlined look. Renders nothing when core offers none of them. After the open marked the PR, its note takes the mark
  * button's place, also once core offers no mark button.
  */
 export function PaneHousekeeping(props: PaneHousekeepingProps) {
@@ -71,8 +71,12 @@ export function PaneHousekeeping(props: PaneHousekeepingProps) {
     panel: (close) => <RemoveTeamPanel prKey={prKey} team={button.team} question={button.question} close={close} />,
   }));
 
+  if (!openedMark && !offers.markLabel && !offers.snooze && removeItems.length === 0) {
+    return null;
+  }
   return (
-    <div className="flex shrink-0 items-center gap-1">
+    // Starts on the 22px line like the buttons above, so the quiet labels line up with their labels at 34.
+    <div className="flex flex-wrap items-center gap-1">
       {openedMark ? (
         <OpenedMarkNote mark={openedMark} onUndo={opened.undo} />
       ) : (
@@ -91,7 +95,7 @@ export function PaneHousekeeping(props: PaneHousekeepingProps) {
       {offers.snooze && (
         <SnoozeMenu tileId={tileId} snoozed={view.state.kind === 'snoozed'} size="md" variant={offers.lead === 'snooze' ? 'secondary' : 'quiet'} />
       )}
-      {removeItems.length > 0 && <Menu label={<MoreIcon />} title="More" size="icon-md" variant="quiet" align="right" items={removeItems} />}
+      {removeItems.length > 0 && <Menu label={<MoreIcon />} title="More" size="icon-md" variant="quiet" items={removeItems} />}
     </div>
   );
 }

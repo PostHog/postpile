@@ -8,7 +8,7 @@ now".
 
 - PR pane actions (2026-10-05, DESIGN.md "The PR pane"): review row
   (`ReviewRow`) right after the glance with a GitHub review-state label,
-  housekeeping quiet in the header (`PaneHousekeeping`), one "Open on
+  housekeeping as a quiet line under it (`PaneHousekeeping`), one "Open on
   GitHub" with a place menu (`OpenOnGitHub`), one inline `Composer` for
   approve-with-note, comment review, Ask and replies, Reply and React on
   every person's comment in the activity, "Reply ↓" jumps from "New

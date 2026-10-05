@@ -2276,16 +2276,13 @@ thread, reading the diff.
 **Layout, top down:**
 
 - Header band (`DetailContext`): kind, and for a stack or set the title,
-  counter, arrows and PR list as before. At the end of its first line the
-  housekeeping (`PaneHousekeeping`): Mark read / Done for now, Snooze
-  (single-PR tiles only) and ⋯ with "Remove <team>" (its one-sentence
-  confirm inside the menu), in the quiet look (text until hovered). When
-  core's lead is the mark or Snooze (nothing else to do), that one is
-  outlined. The opened mark's note ("✓ Marked read · Undo") takes the mark
-  button's place, as before.
+  counter, arrows and the PR picker, as before. Nothing else: housekeeping
+  there collided with the picker and was the longest pointer path from the
+  tile (tried and dropped the same day).
 - State line: state, review word, repo#number and "Open on GitHub" with an
   arrow menu (Files changed, Commits, Checks): the pane's only link to
-  github.com. Ink when core's lead is Open (own PR, done PR), else outlined.
+  github.com, its right edge on the boxes' edge (22px), not the 34px text
+  line. Ink when core's lead is Open (own PR, done PR), else outlined.
 - Title, branch line, then "New since you looked": a digest you read. A
   person's comment that can take a reply gets "Reply ↓", which scrolls the
   pane to that comment in the activity list, tints it for a moment and
@@ -2305,12 +2302,21 @@ thread, reading the diff.
   and may be missing or change its look), and a row in the PR header above
   the glance (longer pointer path from the tile, buttons before the
   reasons). Its place follows the glance's height; its order never changes.
+- The housekeeping line (`PaneHousekeeping`) right under it: Mark read /
+  Done for now, Snooze (single-PR tiles only) and ⋯ with "Remove <team>"
+  (its one-sentence confirm inside the menu), in the quiet look (text until
+  hovered). Close to the tile like the review buttons, apart from them by
+  look. When core's lead is the mark or Snooze (nothing else to do), that
+  one is outlined. The opened mark's note ("✓ Marked read · Undo") takes
+  the mark button's place, as before. With no review row (own PR, done PR)
+  the line sits after the glance alone.
 - Description, facts, reviews, what the agent knows, then the activity
   (`ActivityTimeline`, label "Activity"): every line, new first, then
   earlier. A person's comment or review gets Reply (a button when it asks
-  you, else a quiet link; "Reply in thread" on a code comment) and React (a
-  thumbs up; "You" in a pressed pill once given). An approval without text
-  only takes React. Nothing for the viewer's own words, bots or pushes
+  you, else a quiet link; "Reply in thread" on a code comment) and "Thumbs
+  up" (a 👍 reaction on GitHub, said in its tooltip; "You: thumbs up" in a
+  pressed pill once given; "React" alone did not say what it posts). An
+  approval without text only takes the thumbs up. Nothing for the viewer's own words, bots or pushes
   (`replyTargetOf`).
 - "Back to top" floats at the pane's bottom while the review row has
   scrolled out above.
@@ -2321,10 +2327,11 @@ drafts stay per target until sent or cancelled. A header says where it
 goes ("Reply to alice · new PR comment, quotes their line", "Reply in
 thread · on ci.yml", "Approve with a note · on a1b2c3d, cannot be undone",
 "Comment review · on a1b2c3d, does not approve", "Ask alice · new PR
-comment"); one text box; "Let the agent draft" on an empty box (from the PR
-and its topic), "Rewrite with the agent" once there is text (from the
-user's words; replaces the old person field, gist field and Draft step);
-Cancel; and a button that names the target ("Post reply to alice",
+comment"); one text box with the agent's pill where the text starts (the
+first thing to click; the text starts under it): "✨ Draft with agent" on
+an empty box (from the PR and its topic), "✨ Rewrite with agent" once
+there is text (from the user's words; replaces the old person field, gist
+field and Draft step); Cancel; and a button that names the target ("Post reply to alice",
 "Approve with note" in green, every other post in ink). No agent draft
 starts by itself. Escape closes it and keeps the draft.
 

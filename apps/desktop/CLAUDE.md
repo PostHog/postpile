@@ -261,13 +261,14 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   (`reviewRowLabel`), never inside the glance, same order on every PR.
 - The pane's writes share one inline `Composer` (state per PR in `PrBody`
   through `ComposeProvider`, one open at a time, drafts kept per target):
-  a header that says where it goes, one box, "Let the agent draft" /
-  "Rewrite with the agent" as a link (never an automatic draft), Cancel and
-  a button that names the target. Replies live in the activity list
+  a header that says where it goes, one box with the agent's pill where the
+  text starts ("✨ Draft with agent" / "✨ Rewrite with agent", never an
+  automatic draft), Cancel and a button that names the target. Replies live in the activity list
   (`replyTargetOf` in `lib/reply.ts`); "New since" only jumps there
-  ("Reply ↓", `jumpToReply`). Housekeeping (`PaneHousekeeping`) sits quiet
-  in `DetailContext`; "Open on GitHub" (`OpenOnGitHub`) only on the state
-  line.
+  ("Reply ↓", `jumpToReply`). Housekeeping (`PaneHousekeeping`) is a quiet
+  line right under the review row, never in `DetailContext` (that band is
+  the stack/set PR picker); "Open on GitHub" (`OpenOnGitHub`) only on the
+  state line.
 - The agent pane (`AgentPane`, App's `agentRequest`) replaces the detail
   pane for the topic on screen; `go()` clears it, so any pick hands the
   column back to the PR. Never put agent talk inside the PR pane.
@@ -371,8 +372,8 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
 - One component per file in `components/`, named like the UI part:
   `TitleBar`, `TopicSidebar`, `TopicHeader` (+ `SinceLastLooked`,
   `DossierPanel`, `TopicRepo` on the owner line), `InboxPane`, `TileGrid`, `Tile`, `PrRow` (+ `AssignedTo`, also in `PrBody`), `NotificationsPane` (+ `NotificationRow`), `HandledQuietlyPane`,
-  `DetailPane` (+ `DetailContext` with `PaneHousekeeping`, `PrBody` with
-  `OpenOnGitHub`, `GlanceCard`, `ReviewRow`, `Composer`, `KeyFiles`,
+  `DetailPane` (+ `DetailContext`, `PrBody` with `OpenOnGitHub`,
+  `GlanceCard`, `ReviewRow`, `PaneHousekeeping`, `Composer`, `KeyFiles`,
   `PrDescription`, `PrFacts`, `ReviewList`, `NewSinceBox` (the digest
   under the title, "Reply ↓" jumps), `AgentFacts`, `ActivityTimeline`
   (every line, Reply and React on people's comments)), `AgentPane` (the

@@ -12,14 +12,14 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ### Added
 
-- Reply to a person's comment right in PostPile. Every comment in the PR's activity has Reply (in its review thread for a comment on code, else a new PR comment that quotes it) and React for a quick thumbs up. In "New since you looked", "Reply ↓" jumps to the comment and opens the reply there.
+- Reply to a person's comment right in PostPile. Every comment in the PR's activity has Reply (in its review thread for a comment on code, else a new PR comment that quotes it) and Thumbs up, which adds a 👍 reaction on GitHub. In "New since you looked", "Reply ↓" jumps to the comment and opens the reply there.
 - "Ask the agent" on the topic header: the agent chat now covers the whole topic and takes over the right pane. "Tell the agent" on a PR's assessment opens it with the PR named. "Back to #1907" returns to the PR.
 
 ### Changed
 
 - The PR pane is reorganized. Approve, Comment review and Ask sit in their own row right after the assessment, under a label that says where your review stands ("Review requested from you", "You approved 2h ago"). The buttons keep the same order on every PR.
-- Mark read, Snooze and "Remove <team>" moved to the pane's header, quieter. "Open on GitHub" sits once, next to the PR number, with a menu for Files changed, Commits and Checks.
-- One way to write: approving with a note, a comment review, asking the author and replying all open the same box in place, which says where the text goes. The agent drafts only when you click "Let the agent draft" or "Rewrite with the agent" (from your own words).
+- Mark read, Snooze and "Remove <team>" sit in a quieter line right under the review row. "Open on GitHub" sits once, next to the PR number, with a menu for Files changed, Commits and Checks.
+- One way to write: approving with a note, a comment review, asking the author and replying all open the same box in place, which says where the text goes. The agent drafts only when you click "✨ Draft with agent" at the start of the box, or "✨ Rewrite with agent" once you typed something.
 - Recheck moved onto the assessment's title line.
 
 ## 0.16.0 (2026-10-03)
