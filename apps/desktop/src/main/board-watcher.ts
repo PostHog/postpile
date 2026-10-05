@@ -1,14 +1,18 @@
-import type { ListScope, LivePollStatus, PrKey, TopicListItem } from '@postpile/core';
+import type { LivePollStatus, PrKey } from '@postpile/core';
 
 /** The reads the watcher needs; the engine has both. */
 export interface BoardReader {
-  listTopics(scope?: ListScope): Promise<TopicListItem[]>;
+  pingBadge(): Promise<number>;
   unreadPrKeys(): Promise<PrKey[]>;
 }
 
 export interface BoardSnapshot {
-  /** Topics with an unread tile: the ones with a dot in the sidebar, like unread channels in Slack. */
-  unreadTopics: number;
+  /**
+   * The Dock badge: tiles PostPile pinged about that are not handled yet
+   * (DESIGN.md "Interruptions"). Never unread topics or merged PRs: the
+   * number only holds what PostPile raised, and 0 under Never.
+   */
+  badge: number;
   unreadPrKeys: PrKey[];
 }
 
@@ -19,8 +23,8 @@ function statusSignature(status: LivePollStatus): string {
 
 /**
  * Reads the board for the Mac surfaces (Dock badge, Notification Center)
- * and hands it to `onBoard`. The count comes from the engine's topic list,
- * the same `unreadTiles` the sidebar shows, so no rule is repeated here.
+ * and hands it to `onBoard`. The badge comes from the engine's held pings,
+ * so no rule is repeated here.
  * One read at a time; a request during a read runs once more afterwards.
  */
 export class BoardWatcher {
@@ -63,10 +67,9 @@ export class BoardWatcher {
 
   private async readOnce(): Promise<void> {
     try {
-      const topics = await this.reader.listTopics({ allRepos: true });
+      const badge = await this.reader.pingBadge();
       const unreadPrKeys = await this.reader.unreadPrKeys();
-      const unreadTopics = topics.filter((topic) => topic.unreadTiles > 0).length;
-      this.onBoard({ unreadTopics, unreadPrKeys });
+      this.onBoard({ badge, unreadPrKeys });
     } catch (error) {
       this.onError(error);
     }

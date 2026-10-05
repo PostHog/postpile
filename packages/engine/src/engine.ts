@@ -27,6 +27,8 @@ import type {
   CleanupRequest,
   SafeCleanupRequest,
   InboxCleanupView,
+  InterruptionsMode,
+  InterruptionsView,
   PendingWritesResult,
   InstructionsChatReply,
   InstructionsDecision,
@@ -91,6 +93,7 @@ import {
   CATCH_UP_PACE_MS,
   driverKind,
   emptyAgentCallStats,
+  interruptionsView,
   normalizeRepoScope,
   OFF_POLL_STATUS,
   parsePrKey,
@@ -145,6 +148,7 @@ import { McpConnection } from './mcp-connection.ts';
 import { InstructionsHistory } from './instructions/history.ts';
 import { InstructionsProposer } from './instructions/proposer.ts';
 import { LivePoller } from './live/live-poller.ts';
+import { PingDelivery, StorePingHold } from './live/ping-delivery.ts';
 import { GlancePings } from './live/glance-pings.ts';
 import { PING_DECISIONS_PER_DAY, PingDecider } from './live/ping-decider.ts';
 import { RaisedPings } from './live/raised-pings.ts';
@@ -321,6 +325,10 @@ export class Engine implements EngineService {
   private readonly quietReads: QuietReads;
   private readonly telemetry: Telemetry;
   private readonly pingSummary: PingSummary;
+  private readonly pingDelivery: PingDelivery;
+  /** The live poll's onNotify, while it runs. */
+  private notifyMac: ((notifications: MacNotification[]) => boolean) | null = null;
+  private interruptionsListener: ((mode: InterruptionsMode) => void) | null = null;
   private readonly quota: GitHubQuota;
   /** What the next poll cycle also looks at, set by refreshOnFocus. */
   private focus: PollFocus = NO_FOCUS;
@@ -458,6 +466,11 @@ export class Engine implements EngineService {
     );
     this.quietCatchUps = new QuietCatchUps(now);
     this.pollRun = new PollRun(runDeps, github, decider, this.quietReads, (topics) => this.requestCatchUps(topics), () => deps.writes.enabled());
+    this.pingDelivery = new PingDelivery({
+      hold: new StorePingHold(store),
+      unreadPrKeys: () => this.reads.unreadPrKeys(),
+      onNotify: (notifications) => this.notifyMac?.(notifications) ?? false,
+    });
     this.teamMembers = new TeamMembers(store, deps.reader, now);
     this.teamRoles = new TeamRoleKeeper(store, deps.reader, now, this.quota, deps.syncLog ?? ((line) => console.log(line)));
     const setupSweep = new SetupSweep({
@@ -818,7 +831,8 @@ export class Engine implements EngineService {
     if (this.livePoller) {
       return;
     }
-    this.livePoller = new LivePoller(() => this.pollOnce(), this.deps.timers ?? systemTimers, options, this.quota);
+    this.notifyMac = options.onNotify;
+    this.livePoller = new LivePoller(() => this.pollOnce(), this.deps.timers ?? systemTimers, options, this.pingDelivery, this.quota);
     this.livePoller.start();
   }
 
@@ -999,6 +1013,29 @@ export class Engine implements EngineService {
 
   async pingClickTarget(notification: Pick<MacNotification, 'target' | 'prKeys'>): Promise<PingTarget | null> {
     return this.reads.pingClickTarget(notification);
+  }
+
+  async interruptions(): Promise<InterruptionsView> {
+    return interruptionsView(this.pingDelivery.mode());
+  }
+
+  async setInterruptions(mode: InterruptionsMode, from: 'setup' | 'sidebar'): Promise<InterruptionsView> {
+    this.pingDelivery.setMode(mode);
+    this.telemetry.capture('interruptions_changed', { mode, from });
+    this.interruptionsListener?.(mode);
+    return interruptionsView(mode);
+  }
+
+  onInterruptionsChange(listener: (mode: InterruptionsMode) => void): void {
+    this.interruptionsListener = listener;
+  }
+
+  async pingBadge(): Promise<number> {
+    return this.reads.tilesHolding(this.pingDelivery.shownPrKeys());
+  }
+
+  async pingsVisited(prKeys: PrKey[]): Promise<void> {
+    this.pingDelivery.visited(prKeys);
   }
 
   async listFinishedTopics(): Promise<FinishedTopic[]> {
@@ -1563,6 +1600,9 @@ export class Engine implements EngineService {
     const result = await this.setup.accept(request);
     if (result.ok) {
       this.telemetry.capture('setup_completed', {});
+      if (request.interruptions !== null) {
+        await this.setInterruptions(request.interruptions, 'setup');
+      }
     }
     return result;
   }

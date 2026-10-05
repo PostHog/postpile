@@ -60,6 +60,11 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   `setup.ts` (`useSetupStatus`, `useSetupChecks` (runs gh and claude on
   the server, so only enabled on the checks screen; "Check again" is its
   refetch), `useSetupSweep`, polled every second while the job runs),
+  `interruptions.ts` (`useInterruptions`: when PostPile may show a Mac
+  notification, never / batches / asap, plus the roundup times; read by the
+  setup step "Your day" and the sidebar's Interruptions menu; changed only
+  through `useActions().setInterruptions`, a PUT that shows the new mode
+  right away and rolls back on failure, no toast),
   `tools.ts` (`useTools`: gh and claude status with fix commands, every
   30s while something is wrong, else every 5 min; "Check again" is
   `useActions().checkTools`),
@@ -211,7 +216,9 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   come back refused when the proposal no longer fits; show the message,
   never retry.
 - Setup (`startSetupSweep`, `refineSetup`, `acceptSetup`, `skipSetup`) is
-  local, not on the `GithubWrite` list. Accept is the only write and it
+  local, not on the `GithubWrite` list. Accept also carries the "Your day"
+  pick (`interruptions`, null leaves the stored mode); the engine sends
+  `interruptions_changed`, never the renderer. Accept is the only write and it
   writes a new instructions version; a result with `current` means the
   file changed meanwhile: go back to review with that as the base, never
   retry blindly. `refineSetup` is one agent call and writes nothing; fire
@@ -400,6 +407,11 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   download note, or the brew command `FixCommand`) + `UpdateBar` (full-width bar under
   the title bar from 24h behind, amber `--amber-*` tokens, never coral; mounted
   in `App.tsx`; Later drops back to the pill for 24h; `update_bar_shown` once per run),
+  `InterruptionsMenu` (sidebar footer row after "Handled quietly": bell-off
+  icon for Never, bell otherwise, the mode as a quiet word; opens a menu
+  above it with the three modes as menuitemradio rows and "Send a test
+  notification", disabled outside the desktop app; the bell means only
+  interruptions, notification lists use `ListIcon`),
   `McpFooterItem` ("agents: not connected" in the footer, only while
   `mcpFooterShows` in `lib/mcp.ts`; never while the state is unknown) +
   `McpConnectOffer` (the offer body, shared with `SetupAcceptStep`'s
@@ -528,7 +540,12 @@ server stop saying `needed`, and the screen must not vanish mid-sync. The
 start sync waits for the setup status and is skipped while setup is
 needed; a first-run "Skip for now" runs it. Screens: `SetupChecksStep`,
 `SetupSweepStep`, `SetupReviewStep` (+ `SetupSectionCard` with "Why?",
-`SetupRepoChoices`), `SetupAcceptStep`, with `SetupSteps` (worded step
+`SetupRepoChoices`), `SetupDayStep` ("Your day": three `aria-pressed`
+cards for never / batches / asap with `InterruptionsArt`, small animated
+illustrations on the `interrupt-*` keyframes in `app.css`, only under
+`motion-safe:`; words in `lib/interruptions.ts`; the pick lives in
+`SetupFlow`, preselected from `useInterruptions`, Never while it loads),
+`SetupAcceptStep`, with `SetupSteps` (worded step
 chips) and `SetupChip` (OK / Fix this / Working ...). The step lives in
 `App` so the sidebar can name it; the draft, edits and picks live in
 `SetupFlow`. Pure helpers in `lib/setup.ts`, including `draftText`, a copy
@@ -648,9 +665,13 @@ stays on screen and listed (`KeptView`).
 - The preload hands over only the API URL and token (asked from main with
   `ipcRenderer.sendSync('postpile:connection')`; main answers only its own
   page, and nothing secret goes into `additionalArguments`), plus the swipe and
-  notification-click listeners and `sendTestNotification` (the footer's
-  "test ping", through `useActions().sendTestNotification`). The first
-  launch shows a welcome notification (`main/welcome.ts`, flag in userData). As a plain web page the
+  notification-click listeners and `sendTestNotification` ("Send a test
+  notification" in the sidebar's Interruptions menu, through
+  `useActions().sendTestNotification`). The welcome notification
+  (`main/welcome.ts`, flag in userData) comes only once the user picks
+  batches or asap, never on a plain first launch. The Dock badge is main's
+  (`BoardWatcher` over the engine's `pingBadge`); the renderer only sends
+  `tileVisited`. As a plain web page the
   renderer takes `?api=…&token=…` instead.
 - Packaging: `pnpm dist` (root) -> `apps/desktop/dist/mac-arm64/PostPile.app`,
   config in `electron-builder.yml`. Main must stay self-contained: keep

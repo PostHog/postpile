@@ -153,11 +153,14 @@ const setupFitBody = z.object({
   sections: z.array(setupSection).max(20),
 });
 
+const interruptionsMode = z.enum(['never', 'batches', 'asap']);
+
 const setupAcceptBody = z.object({
   sections: z.array(setupSection).max(20),
   quietRepos: z.array(repoName).max(50).default([]),
   mainRepo: repoName.nullable().default(null),
   baseVersion: z.number().int().positive().nullable(),
+  interruptions: interruptionsMode.nullable().default(null),
 });
 
 /** Parses a JSON body that may be missing entirely. */
@@ -301,6 +304,12 @@ export function createApp(
   app.post('/api/repos/quiet', async (c) => {
     const body = z.object({ repo: repoName, quiet: z.boolean() }).parse(await c.req.json());
     return c.json(await engine.setRepoQuiet(body.repo, body.quiet));
+  });
+  // When PostPile may show a Mac notification: never, in batches or as soon as it matters. Kept in meta; local, never a GitHub write.
+  app.get('/api/interruptions', async (c) => c.json(await engine.interruptions()));
+  app.put('/api/interruptions', async (c) => {
+    const body = z.object({ mode: interruptionsMode }).parse(await c.req.json());
+    return c.json(await engine.setInterruptions(body.mode, 'sidebar'));
   });
   // Search bar filter: ?q= is matched term by term (AND); a missing or empty q matches nothing.
   app.get('/api/search', async (c) => c.json(await engine.search(c.req.query('q') ?? '')));

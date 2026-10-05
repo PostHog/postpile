@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import type { SetupCurrentInstructions, SetupDraft, SetupFitNote, SetupSectionEdit } from '@postpile/core';
+import type { InterruptionsMode, SetupCurrentInstructions, SetupDraft, SetupFitNote, SetupSectionEdit } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
+import { useInterruptions } from '../api/interruptions.ts';
 import { useSetupSweep } from '../api/setup.ts';
 import { sendTelemetry } from '../api/telemetry.ts';
 import {
@@ -17,13 +18,15 @@ import {
   type SetupPicks,
   type SetupStepKey,
 } from '../lib/setup.ts';
+import { FALLBACK_INTERRUPTIONS } from '../lib/interruptions.ts';
 import { SetupAcceptStep } from './SetupAcceptStep.tsx';
 import { SetupChecksStep } from './SetupChecksStep.tsx';
+import { SetupDayStep } from './SetupDayStep.tsx';
 import { SetupReviewStep } from './SetupReviewStep.tsx';
 import { SetupSteps } from './SetupSteps.tsx';
 import { SetupSweepStep } from './SetupSweepStep.tsx';
 
-/** What the user is working on in steps 3 and 4: the draft, their edits and picks, and the file it is compared with. */
+/** What the user is working on from step 3 on: the draft, their edits and picks, and the file it is compared with. */
 interface Review {
   draft: SetupDraft;
   edits: SetupSectionEdit[];
@@ -47,7 +50,7 @@ function fitWithout(fit: SetupFitState | null, note: SetupFitNote, edits: SetupS
 
 /**
  * The setup flow over the middle and right panes: check the basics, sweep,
- * review the draft, accept. One calm screen per step with the progress
+ * review the draft, your day (when PostPile may notify you), accept. One calm screen per step with the progress
  * indicator on top. `rerun` is "Run setup again" from the instructions
  * pane: the skip button then only closes, it stores no flag. A first-run
  * skip stores the flag and hands back to App, which runs the start sync
@@ -66,6 +69,12 @@ export function SetupFlow(props: {
   const actions = useActions();
   const sweep = useSetupSweep(props.step === 'sweep');
   const [review, setReview] = useState<Review | null>(null);
+  const interruptions = useInterruptions().data;
+  // The "Your day" pick; until the user picks, the stored mode (Never while it loads).
+  const [pickedMode, setPickedMode] = useState<InterruptionsMode | null>(null);
+  // What Accept sends: null leaves the stored mode as it is when neither is known.
+  const acceptMode = pickedMode ?? interruptions?.mode ?? null;
+  const roundupTimes = interruptions?.roundupTimes ?? [];
   const { step, onStep } = props;
 
   async function startSweep() {
@@ -171,8 +180,18 @@ export function SetupFlow(props: {
         onQuiet={setQuiet}
         mainRepo={review.picks.mainRepo}
         onMainRepo={setMainRepo}
-        onContinue={toAccept}
+        onContinue={() => onStep('day')}
         onBack={() => onStep('sweep')}
+      />
+    );
+  } else if (step === 'day' && review) {
+    screen = (
+      <SetupDayStep
+        mode={acceptMode ?? FALLBACK_INTERRUPTIONS}
+        roundupTimes={roundupTimes}
+        onPick={setPickedMode}
+        onContinue={toAccept}
+        onBack={() => onStep('review')}
       />
     );
   } else if (step === 'accept' && review) {
@@ -182,6 +201,8 @@ export function SetupFlow(props: {
         base={review.base}
         quiet={review.picks.quiet}
         mainRepo={review.picks.mainRepo}
+        interruptions={acceptMode}
+        roundupTimes={roundupTimes}
         fit={review.fit}
         onFitFix={fixFit}
         onFitKeep={keepFit}
@@ -191,7 +212,7 @@ export function SetupFlow(props: {
           onStep('review');
         }}
         onDone={props.onDone}
-        onBack={() => onStep('review')}
+        onBack={() => onStep('day')}
       />
     );
   }

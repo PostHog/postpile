@@ -20,6 +20,8 @@ import type {
   InstructionsProposal,
   InstructionsProposalReply,
   InstructionsSaveResult,
+  InterruptionsMode,
+  InterruptionsView,
   McpConnectFrom,
   MemoryCorrection,
   MemoryRecheckRequest,
@@ -226,7 +228,13 @@ export interface Actions {
   connectMcp(from: McpConnectFrom): Promise<boolean>;
   /** "Not now" on the footer's MCP offer. Local, kept by the server. */
   hideMcpConnect(): Promise<boolean>;
-  /** "Send test notification" (desktop app only, over the preload). Says in a toast what happened. */
+  /**
+   * The sidebar's Interruptions menu: when PostPile may show a Mac
+   * notification. Local, quiet (no toast); the row shows the new mode right
+   * away and goes back on a failure.
+   */
+  setInterruptions(mode: InterruptionsMode): Promise<void>;
+  /** "Send a test notification" (desktop app only, over the preload). Says in a toast what happened. */
   sendTestNotification(): Promise<void>;
   /** Quiet: no toast. Called when the user leaves a topic. */
   markTopicSeen(topicId: string): Promise<void>;
@@ -707,6 +715,17 @@ export function ActionsProvider(props: { children: ReactNode }) {
     }
   }
 
+  async function setInterruptions(mode: InterruptionsMode): Promise<void> {
+    const rollback = await changeCache<InterruptionsView>(queryKeys.interruptions, (view) => ({ ...view, mode }));
+    try {
+      const view = await withBusy('interruptions', () => request<InterruptionsView>('PUT', '/api/interruptions', { mode }));
+      queryClient.setQueryData(queryKeys.interruptions, view);
+    } catch (error) {
+      rollback();
+      show('error', `Could not change interruptions: ${errorText(error)}`);
+    }
+  }
+
   async function sendTestNotification(): Promise<void> {
     const send = window.postpile?.sendTestNotification;
     if (!send) {
@@ -969,6 +988,7 @@ export function ActionsProvider(props: { children: ReactNode }) {
     setRepoScope,
     setRepoQuiet,
     setTeamRole,
+    setInterruptions,
     sendTestNotification,
     // One busy key each: withBusy drops every copy of a key when one run ends.
     clearInbox: (cleanupRequest) => run(CLEANUP_BUSY.clear, 'cleanup', () => request('POST', '/api/inbox-cleanup/clear', cleanupRequest)),

@@ -2,7 +2,6 @@ import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 import { app, autoUpdater as nativeAutoUpdater, BrowserWindow, dialog, ipcMain, Menu, nativeImage, session, shell } from 'electron';
 import electronUpdater from 'electron-updater';
-import { existsSync } from 'node:fs';
 import { arch, homedir, release } from 'node:os';
 import {
   applyLegacyEnv,
@@ -16,7 +15,7 @@ import {
   type EngineService,
   type Telemetry,
 } from '@postpile/engine';
-import type { MacNotification, McpLauncher } from '@postpile/core';
+import type { InterruptionsMode, MacNotification, McpLauncher } from '@postpile/core';
 import { appConfigFromEnv, engineFromEnv, isFake, pollSecondsFromEnv, startServer, updateSourceFromEnv, type RunningServer, type UpdateSource } from '@postpile/server';
 import { externalLinkProblem, isAppPage } from './app-page.ts';
 import { ConsolidationSchedule } from './consolidation-schedule.ts';
@@ -26,7 +25,7 @@ import { BoardWatcher } from './board-watcher.ts';
 import { MacNotifier } from './mac-notifier.ts';
 import { OpenedPrs } from './opened-prs.ts';
 import { fakeInstallStatus, FakeSelfUpdate, menuCheckAnswer, SelfUpdateOff, selfUpdateMode, SelfUpdater, type SelfUpdate } from './self-update.ts';
-import { welcomeOnce, WELCOME_FLAG_FILE } from './welcome.ts';
+import { firstLaunchOnce, welcomeOnce } from './welcome.ts';
 
 const REPO_URL = 'https://github.com/PostHog/postpile';
 
@@ -497,9 +496,7 @@ async function start(): Promise<void> {
   ipcMain.handle('postpile:install-state', () => selfUpdate.current());
   ipcMain.on('postpile:restart-to-update', () => void restartToUpdate());
   selfUpdate.start();
-  // Before welcomeOnce below writes its flag file: whether this run is the very first one.
-  const firstLaunch = !existsSync(join(app.getPath('userData'), WELCOME_FLAG_FILE));
-  telemetry.capture('app_launched', { first_launch: firstLaunch });
+  telemetry.capture('app_launched', { first_launch: firstLaunchOnce(app.getPath('userData')) });
   activeDay = new ActiveDayReporter(join(app.getPath('userData'), 'telemetry-active-day'), () => telemetry.capture('app_active', {}));
   checkActiveDay();
   setInterval(checkActiveDay, ACTIVE_DAY_CHECK_MS).unref();
@@ -515,27 +512,30 @@ async function start(): Promise<void> {
       void openPing(notification);
     },
   });
-  // A visit to a tile in the app takes its pings out of Notification Center (DESIGN.md "Mac notifications").
-  ipcMain.on('postpile:tile-visited', (_event, prKeys: unknown) => {
-    if (Array.isArray(prKeys) && prKeys.every((key) => typeof key === 'string')) {
-      notifier.closeVisited(prKeys);
-    }
-  });
-  // The Dock badge counts topics with an unread tile; a ping leaves
-  // Notification Center once its tile is read or done. Both follow the board:
-  // poll cycles and syncs (the live status moves), local actions (the API's
-  // non-read requests) and each new ping.
+  // The Dock badge counts the tiles PostPile pinged about that are not
+  // handled yet (DESIGN.md "Interruptions"); a ping leaves Notification
+  // Center once its tile is read or done. Both follow the board: poll cycles
+  // and syncs (the live status moves), local actions (the API's non-read
+  // requests), each new ping and each change of the interruptions pick.
   const board = engine;
   boardWatcher = new BoardWatcher(
     board,
     (snapshot) => {
-      app.setBadgeCount(snapshot.unreadTopics);
+      app.setBadgeCount(snapshot.badge);
       notifier.closeRead(snapshot.unreadPrKeys);
     },
     (error) => console.warn('board watcher:', error),
   );
   const watcher = boardWatcher;
   void watcher.refresh();
+  // A visit to a tile in the app takes its pings out of Notification Center
+  // and off the Dock badge (DESIGN.md "Mac notifications").
+  ipcMain.on('postpile:tile-visited', (_event, prKeys: unknown) => {
+    if (Array.isArray(prKeys) && prKeys.every((key) => typeof key === 'string')) {
+      notifier.closeVisited(prKeys);
+      void board.pingsVisited(prKeys).then(() => watcher.refresh());
+    }
+  });
   async function sendBoardShape(): Promise<void> {
     try {
       for (const { event, props } of await board.boardShape()) {
@@ -548,20 +548,33 @@ async function start(): Promise<void> {
   setInterval(() => void board.livePollStatus().then((status) => watcher.checkStatus(status)), BOARD_CHECK_MS).unref();
   // A full sync ran to the end: the board is fresh, so take the daily snapshot (once per day).
   board.onSyncCompleted(() => boardShapeDay?.check(new Date()));
-  // "Send test notification" in the status footer.
+  // "Send a test notification" in the sidebar's Interruptions menu.
   ipcMain.handle('postpile:test-notification', () => notifier.showTest());
-  // First launch: one calm welcome notification, so macOS asks for the
-  // permission now and not on the first real ping. A few seconds after the
-  // window shows, once the app has settled.
-  setTimeout(() => welcomeOnce(app.getPath('userData'), () => notifier.showWelcome()), 3000);
+  // Once the user lets PostPile interrupt them (setup or the sidebar): one
+  // calm welcome notification, so macOS asks for the permission now and not
+  // on the first real ping. Under Never nothing asks, ever.
+  function welcomeAfterOptIn(mode: InterruptionsMode): void {
+    if (mode !== 'never') {
+      welcomeOnce(app.getPath('userData'), () => notifier.showWelcome(mode));
+    }
+  }
+  board.onInterruptionsChange((mode) => {
+    welcomeAfterOptIn(mode);
+    void watcher.refresh();
+  });
+  // An earlier pick whose welcome could not show yet (notifications were off), a few seconds after the window shows.
+  setTimeout(() => void board.interruptions().then((view) => welcomeAfterOptIn(view.mode)), 3000);
   // The fast notification poll runs as long as the app does, window open or not.
   engine.startLivePoll({
     intervalSeconds: pollSecondsFromEnv(process.env.POSTPILE_POLL_SECONDS),
     onNotify: (notifications) => {
-      if (notifier.show(notifications) === 'shown') {
-        telemetry.capture('mac_ping_shown', { count: notifications.length });
-        void watcher.refresh();
+      if (notifier.show(notifications) !== 'shown') {
+        return false;
       }
+      telemetry.capture('mac_ping_shown', { count: notifications.length });
+      // Next tick: the engine records the pings for the Dock badge once this answers.
+      setImmediate(() => void watcher.refresh());
+      return true;
     },
   });
   // Agents on this Mac (Claude Code through postpile-mcp) leave requests in the

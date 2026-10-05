@@ -1,19 +1,18 @@
-import type { LivePollStatus, TopicListItem } from '@postpile/core';
+import type { LivePollStatus } from '@postpile/core';
 import { OFF_POLL_STATUS } from '@postpile/core';
 import { describe, expect, it } from 'vitest';
 import { BoardWatcher, type BoardSnapshot } from './board-watcher.ts';
 
-function topic(unreadTiles: number): TopicListItem {
-  return { unreadTiles } as unknown as TopicListItem;
-}
-
-function setup(topics: TopicListItem[]) {
+function setup(badge: number) {
   const seen: BoardSnapshot[] = [];
-  const state = { topics, reads: 0 };
+  const state = { badge, failing: false, reads: 0 };
   const reader = {
-    listTopics: async () => {
+    pingBadge: async () => {
       state.reads += 1;
-      return state.topics;
+      if (state.failing) {
+        throw new Error('read failed');
+      }
+      return state.badge;
     },
     unreadPrKeys: async () => ['acme/app#1'],
   };
@@ -27,14 +26,14 @@ function status(overrides: Partial<LivePollStatus>): LivePollStatus {
 }
 
 describe('BoardWatcher', () => {
-  it('counts topics with an unread tile and passes the unread PRs', async () => {
-    const { watcher, seen } = setup([topic(2), topic(0), topic(3)]);
+  it('passes the ping badge and the unread PRs', async () => {
+    const { watcher, seen } = setup(2);
     await watcher.refresh();
-    expect(seen).toEqual([{ unreadTopics: 2, unreadPrKeys: ['acme/app#1'] }]);
+    expect(seen).toEqual([{ badge: 2, unreadPrKeys: ['acme/app#1'] }]);
   });
 
   it('reads again only when the live status moved', async () => {
-    const { watcher, state } = setup([topic(1)]);
+    const { watcher, state } = setup(1);
     await watcher.checkStatus(status({ changeCount: 1 }));
     await watcher.checkStatus(status({ changeCount: 1 }));
     expect(state.reads).toBe(1);
@@ -44,17 +43,17 @@ describe('BoardWatcher', () => {
   });
 
   it('runs once more when asked during a read', async () => {
-    const { watcher, state } = setup([topic(1)]);
+    const { watcher, state } = setup(1);
     await Promise.all([watcher.refresh(), watcher.refresh(), watcher.refresh()]);
     expect(state.reads).toBe(2);
   });
 
   it('reports a failing read and keeps going', async () => {
-    const { watcher, state, errors, seen } = setup([topic(1)]);
-    state.topics = null as unknown as TopicListItem[];
+    const { watcher, state, errors, seen } = setup(1);
+    state.failing = true;
     await watcher.refresh();
     expect(errors).toHaveLength(1);
-    state.topics = [topic(1)];
+    state.failing = false;
     await watcher.refresh();
     expect(seen).toHaveLength(1);
   });

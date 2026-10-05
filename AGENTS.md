@@ -13,6 +13,10 @@ Read this file first. Details live elsewhere:
 
 ## What the app is for (focus)
 
+**Your way to inbox zero when PRs keep flying at you.** With agents opening PRs alongside people, there is more review traffic than anyone can read. PostPile is how a person still gets to inbox zero and stays there: it sorts, condenses and remembers, then shows only what needs them. Lead with this in docs, release notes and onboarding.
+
+**A helper, not another app that interrupts.** PostPile cuts down the noise: less to read, less to keep track of, fewer interruptions. Its value is the calm list you open when you choose to. It is not a feed that pulls you away from your work. Mac pings are an opt-in extra for people who want them, never the pitch and never on by default. Don't frame PostPile around pings in docs, release notes, onboarding or UI. A colleague's first impression decides whether they keep it (team feedback, 2026-10-05).
+
 1. **Tell the user what needs them, and why, at a glance.** Every tile answers four questions in fixed spots: for whom (word chip + left band), why now (actor avatar + event), status (segment pill), and whose turn (footer). Attention goes where it's the user's move, not where the unread count is highest.
 2. **Keep topics as the structure.** The agent layer's job is to cluster work into topics and remember what's going on in them (dossiers, facts). Sections (the asks Needs reply, Changes you requested, To review, Team mentioned, then You drive, Your team owns, Other work) *contain topics*. They never become a flat pile of PRs.
 3. **Memory the user can trust and correct.** The user owns `instructions.md` (changed only through accepted diffs or hand edits). The agent owns dossiers, facts and the work-context digest. Every agent claim shows its sources ("Why?") and can be rechecked or forgotten.

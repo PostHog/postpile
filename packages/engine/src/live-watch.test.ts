@@ -90,7 +90,7 @@ describe('after a full sync', () => {
     const h = makeHarness();
     const pr = reviewRequestedPr(1);
     h.reader.addPr(pr, makeThreadFor(pr));
-    h.engine.startLivePoll({ intervalSeconds: 10, onNotify: () => {} });
+    h.engine.startLivePoll({ intervalSeconds: 10, onNotify: () => true });
 
     await h.engine.sync({ maxAgentCalls: 0 });
     for (let i = 0; i < 50 && (await h.engine.livePollStatus()).lastPollAt === null; i++) {
@@ -109,7 +109,7 @@ describe('poll on window focus', () => {
   async function afterFirstCycle(h: Harness): Promise<void> {
     const pr = reviewRequestedPr(1);
     h.reader.addPr(pr, makeThreadFor(pr));
-    h.engine.startLivePoll({ intervalSeconds: 60, onNotify: () => {} });
+    h.engine.startLivePoll({ intervalSeconds: 60, onNotify: () => true });
     await h.engine.sync({ maxAgentCalls: 0 });
     for (let i = 0; i < 50 && (await h.engine.livePollStatus()).lastPollAt === null; i++) {
       await new Promise((resolve) => setImmediate(resolve));

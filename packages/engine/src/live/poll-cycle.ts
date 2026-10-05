@@ -19,8 +19,8 @@ export type PollCycle =
 export interface LivePollOptions {
   /** 0 or less keeps the poll off. */
   intervalSeconds: number;
-  /** Called with what to show; a burst is already grouped. */
-  onNotify: (notifications: MacNotification[]) => void;
+  /** Called with what to show; a burst is already grouped. Answers whether they reached the Mac (false: notifications off or unsupported). */
+  onNotify: (notifications: MacNotification[]) => boolean;
   /** Defaults to console.log. */
   log?: (message: string) => void;
 }

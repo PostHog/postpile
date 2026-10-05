@@ -22,6 +22,8 @@ import type {
   CleanupRequest,
   SafeCleanupRequest,
   InboxCleanupView,
+  InterruptionsMode,
+  InterruptionsView,
   PendingWritesResult,
   InstructionsChatReply,
   InstructionsDecision,
@@ -179,6 +181,20 @@ export interface EngineService {
    * Null: its PRs and its topic are gone, the app only comes to the front.
    */
   pingClickTarget(notification: Pick<MacNotification, 'target' | 'prKeys'>): Promise<PingTarget | null>;
+  /** When PostPile may show a Mac notification (DESIGN.md "Interruptions"): never, in batches or as soon as it matters. */
+  interruptions(): Promise<InterruptionsView>;
+  /**
+   * Keeps the pick in meta. Never drops every held ping (the Dock badge
+   * goes away); leaving batches drops the queued ones. Local, never a
+   * GitHub write. The listener hears every change.
+   */
+  setInterruptions(mode: InterruptionsMode, from: 'setup' | 'sidebar'): Promise<InterruptionsView>;
+  /** Runs `listener` after every change of the pick; one listener, a second call replaces it. */
+  onInterruptionsChange(listener: (mode: InterruptionsMode) => void): void;
+  /** The Dock badge: tiles holding a PR PostPile pinged about that is not handled yet (tile opened, read or done). */
+  pingBadge(): Promise<number>;
+  /** The user opened a tile holding these PRs: their held pings are handled. */
+  pingsVisited(prKeys: PrKey[]): Promise<void>;
   /** Runs `listener` after every full sync that ran to the end (the moment sync_completed is sent); one listener, a second call replaces it. */
   onSyncCompleted(listener: () => void): void;
   /** The daily board snapshot's events over the topics the sidebar lists (all repos), counts only. */

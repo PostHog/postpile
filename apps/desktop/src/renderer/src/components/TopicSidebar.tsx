@@ -27,10 +27,11 @@ import { useNow } from '../lib/use-now.ts';
 import { teamPill } from '../lib/faces.ts';
 import { UnreadDot } from './pills.tsx';
 import { Avatar } from './Avatar.tsx';
-import { BellIcon, CheckIcon, ChevronIcon, InboxIcon, InstructionsIcon, PeopleIcon, PrStateIcon } from './icons.tsx';
+import { CheckIcon, ChevronIcon, InboxIcon, InstructionsIcon, ListIcon, PeopleIcon, PrStateIcon } from './icons.tsx';
 import { QueueFilters } from './QueueFilters.tsx';
 import { YourMoveChip } from './YourMoveChip.tsx';
 import { InboxCleanupLine } from './InboxCleanupLine.tsx';
+import { InterruptionsMenu } from './InterruptionsMenu.tsx';
 
 /**
  * The "what's going on" snippet under the name: the dossier summary, else its
@@ -627,7 +628,7 @@ export function TopicSidebar(props: TopicSidebarProps) {
           }`}
         >
           <span className="text-muted">
-            <BellIcon />
+            <ListIcon />
           </span>
           Notifications
           <span className="ml-auto font-mono text-[9.5px] font-normal text-faint">debug</span>
@@ -646,6 +647,7 @@ export function TopicSidebar(props: TopicSidebarProps) {
           </span>
           Handled quietly
         </button>
+        <InterruptionsMenu />
       </div>
     </nav>
   );

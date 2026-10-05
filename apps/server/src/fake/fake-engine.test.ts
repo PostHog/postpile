@@ -40,7 +40,7 @@ describe('FakeEngine', () => {
   it('reports the live poll as off until it is started', async () => {
     const engine = new FakeEngine();
     expect((await engine.livePollStatus()).state).toBe('off');
-    engine.startLivePoll({ intervalSeconds: 10, onNotify: () => {}, log: () => {} });
+    engine.startLivePoll({ intervalSeconds: 10, onNotify: () => true, log: () => {} });
     expect((await engine.livePollStatus()).state).toBe('waiting');
     await engine.close();
     expect((await engine.livePollStatus()).state).toBe('off');

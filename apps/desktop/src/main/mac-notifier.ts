@@ -1,5 +1,5 @@
 import { app, Notification } from 'electron';
-import type { MacNotification, PrKey } from '@postpile/core';
+import { ROUNDUP_TIMES, roundupTimeLabel, type InterruptionsMode, type MacNotification, type PrKey } from '@postpile/core';
 import { PingShelf, type Closable } from './ping-shelf.ts';
 
 /**
@@ -10,7 +10,7 @@ import { PingShelf, type Closable } from './ping-shelf.ts';
 const KEEP_NOTIFICATIONS = 30;
 
 export interface MacNotifierOptions {
-  /** POSTPILE_MAC_NOTIFICATIONS=0 turns them off; the poll still updates tiles. */
+  /** POSTPILE_MAC_NOTIFICATIONS=0 turns them off whatever the user picked; the poll still updates tiles. */
   enabled: boolean;
   /** Gets the notification itself: where it goes is looked up at the click, its ids may be stale by then. */
   onClick: (notification: MacNotification) => void;
@@ -100,14 +100,20 @@ export class MacNotifier {
   }
 
   /**
-   * The first-launch welcome: a calm first notification, so macOS asks for
-   * the permission now and not in the middle of a real ping.
+   * The welcome after the user first lets PostPile interrupt them: a calm
+   * notification saying what to expect, so macOS asks for the permission
+   * now and not in the middle of a real ping.
    */
-  showWelcome(): 'shown' | 'off' | 'unsupported' {
-    return this.show([{ title: 'PostPile', body: 'PostPile will ping you here when something needs you.', target: null, prKeys: [], count: 1, personal: false }]);
+  showWelcome(mode: Exclude<InterruptionsMode, 'never'>): 'shown' | 'off' | 'unsupported' {
+    const times = ROUNDUP_TIMES.map(roundupTimeLabel).join(', ');
+    const body =
+      mode === 'batches'
+        ? `PostPile will send a short roundup here at ${times} on weekdays, when something needs you.`
+        : 'PostPile will tap you here when someone is waiting on you.';
+    return this.show([{ title: 'PostPile', body, target: null, prKeys: [], count: 1, personal: false }]);
   }
 
-  /** "Send test notification" from the status footer. */
+  /** "Send a test notification" from the sidebar's Interruptions menu. */
   showTest(): 'shown' | 'off' | 'unsupported' {
     return this.show([{ title: 'PostPile test notification', body: 'This is how a ping looks. Clicking one opens its tile.', target: null, prKeys: [], count: 1, personal: false }]);
   }

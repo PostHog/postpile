@@ -44,6 +44,7 @@ export const WIPED_TABLES: Record<string, string> = {
   agent_call: 'agent call accounting; the report counts only the simulated calls',
   snooze: 'old tile snoozes (unused since migration 19)',
   pr_snooze: 'snoozes the user set on old tiles; a new user has none',
+  mac_ping: 'pings held for a roundup or the Dock badge; a new user has none',
 };
 
 /**

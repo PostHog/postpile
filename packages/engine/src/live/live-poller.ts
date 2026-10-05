@@ -1,9 +1,8 @@
-import { OFF_POLL_STATUS, type LivePollStatus, type Timers } from '@postpile/core';
+import { OFF_POLL_STATUS, type LivePollStatus, type Ping, type Timers } from '@postpile/core';
 import { GitHubError } from '@postpile/github';
 import { errorText } from '../errors.ts';
 import type { GitHubQuota } from '../github-quota.ts';
 import type { LivePollOptions, PollCycle } from './poll-cycle.ts';
-import { PingThrottle } from './ping-throttle.ts';
 
 /** First wait after a rate limit without Retry-After; doubles per failure. */
 export const RATE_LIMIT_BACKOFF_SECONDS = 60;
@@ -15,6 +14,17 @@ export const QUOTA_PAUSE_NOTE = 'GitHub quota nearly used';
 /** Window focus runs no cycle when the last one started less than this ago. */
 export const FOCUS_DEBOUNCE_SECONDS = 15;
 
+/** How often a due roundup is looked for while the poll runs. */
+export const ROUNDUP_CHECK_MS = 60_000;
+
+/** Where the poll's pings go: PingDelivery in the engine, by the user's interruptions pick. */
+export interface PingSink {
+  /** Answers how many notifications went to the Mac now. */
+  deliver(pings: Ping[], nowMs: number): number;
+  /** A roundup when one is due; answers how many notifications went out. */
+  roundUp(nowMs: number): number;
+}
+
 function isoAt(ms: number): string {
   return new Date(ms).toISOString();
 }
@@ -23,18 +33,19 @@ function isoAt(ms: number): string {
  * Runs the fast notification poll on a timer: one cycle at a time, the next
  * one scheduled when the last one is done. Backs off on rate limits (Retry-
  * After or X-RateLimit-Reset when GitHub says, doubling from a minute when
- * not) and on errors, waits while a full sync runs, and hands grouped pings
- * to onNotify. GitHub's X-Poll-Interval is obeyed: the next cycle waits the
+ * not) and on errors, waits while a full sync runs, and hands pings to the
+ * sink. GitHub's X-Poll-Interval is obeyed: the next cycle waits the
  * configured interval or the last X-Poll-Interval, whichever is longer. The
  * GitHub quota slows it to once a minute when low and pauses it until the
  * reset when critical (DESIGN.md "GitHub quota"); the slower rule wins.
- * Window focus runs one cycle right away (runOnFocus), debounced.
+ * Window focus runs one cycle right away (runOnFocus), debounced. The sink
+ * also gets a look every minute for a due roundup.
  */
 export class LivePoller {
-  private readonly throttle = new PingThrottle();
   private readonly log: (message: string) => void;
   private readonly status: LivePollStatus;
   private timer: unknown = null;
+  private roundupTimer: unknown = null;
   private running: Promise<void> | null = null;
   private stopped = true;
   private failures = 0;
@@ -47,6 +58,7 @@ export class LivePoller {
     private readonly poll: () => Promise<PollCycle>,
     private readonly timers: Timers,
     private readonly options: LivePollOptions,
+    private readonly sink: PingSink,
     /** Null: no quota rules, e.g. in tests that do not care. */
     private readonly quota: GitHubQuota | null = null,
   ) {
@@ -63,11 +75,16 @@ export class LivePoller {
     this.stopped = false;
     this.status.state = 'waiting';
     this.schedule(this.options.intervalSeconds);
+    this.scheduleRoundup();
   }
 
   stop(): void {
     this.stopped = true;
     this.clearTimer();
+    if (this.roundupTimer !== null) {
+      this.timers.clearTimeout(this.roundupTimer);
+      this.roundupTimer = null;
+    }
     this.status.state = 'off';
     this.status.nextPollAt = null;
   }
@@ -119,6 +136,22 @@ export class LivePoller {
       this.timer = null;
       void this.runCycle();
     }, seconds * 1000);
+  }
+
+  /** Every minute while the poll runs: a roundup goes out once its time passed (batches only). */
+  private scheduleRoundup(): void {
+    this.roundupTimer = this.timers.setTimeout(() => {
+      this.roundupTimer = null;
+      if (this.stopped) {
+        return;
+      }
+      try {
+        this.status.notificationsShown += this.sink.roundUp(this.timers.now());
+      } catch (error) {
+        this.log(`live poll: a roundup failed: ${errorText(error)}`);
+      }
+      this.scheduleRoundup();
+    }, ROUNDUP_CHECK_MS);
   }
 
   /** The quota is nearly used: no request until it resets. Logged once per pause. */
@@ -206,13 +239,8 @@ export class LivePoller {
   }
 
   private notify(result: Extract<PollCycle, { kind: 'done' }>, now: number): void {
-    const notifications = this.throttle.plan(result.pings, now);
-    if (notifications.length === 0) {
-      return;
-    }
-    this.status.notificationsShown += notifications.length;
     try {
-      this.options.onNotify(notifications);
+      this.status.notificationsShown += this.sink.deliver(result.pings, now);
     } catch (error) {
       this.log(`live poll: showing a notification failed: ${errorText(error)}`);
     }

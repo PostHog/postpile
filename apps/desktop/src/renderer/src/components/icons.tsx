@@ -249,11 +249,32 @@ export function TrashIcon(props: IconProps) {
   );
 }
 
+/** Interruptions: PostPile may show Mac notifications (batches or as soon as it matters). */
 export function BellIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
       <path d="M4 11V7a4 4 0 0 1 8 0v4l1.2 1.5H2.8z" />
       <path d="M6.5 14h3" />
+    </svg>
+  );
+}
+
+/** Interruptions set to Never: the bell with a slash. */
+export function BellOffIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" aria-hidden="true">
+      <path d="M5.2 3.9A4 4 0 0 1 12 7v3.2M10.5 12.5H2.8L4 11V7" />
+      <path d="M6.5 14h3M2.5 2.5l11 11" />
+    </svg>
+  );
+}
+
+/** Rows of a list: notification threads (the debug view, the inbox cleanup's "everything else"). The bell is kept for interruptions. */
+export function ListIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" aria-hidden="true">
+      <path d="M6 4h7.5M6 8h7.5M6 12h7.5" />
+      <path d="M2.75 4h.5M2.75 8h.5M2.75 12h.5" />
     </svg>
   );
 }

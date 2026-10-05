@@ -216,6 +216,118 @@
       rotate: -14deg;
     }
   }
+
+  /* The setup step "Your day": one 4.8s loop per card (InterruptionsArt). Use with motion-safe:;
+     without motion every piece rests in its end state. `backwards` keeps a delayed piece hidden until it starts. */
+  --animate-interrupt-settle: interrupt-settle 4.8s ease-out infinite backwards;
+  --animate-interrupt-check: interrupt-check 4.8s ease-out infinite;
+  --animate-interrupt-zz: interrupt-zz 3.2s ease-in-out infinite;
+  --animate-interrupt-gather: interrupt-gather 4.8s ease-out infinite backwards;
+  --animate-interrupt-roundup: interrupt-roundup 4.8s ease-in-out infinite;
+  --animate-interrupt-hand: interrupt-hand 4.8s linear infinite;
+  --animate-interrupt-banner: interrupt-banner 4.8s ease-in-out infinite;
+
+  /* Never: three tiles settle into a stack. */
+  @keyframes interrupt-settle {
+    0%,
+    15% {
+      translate: 0 -7px;
+      opacity: 0;
+    }
+    35%,
+    100% {
+      translate: 0 0;
+      opacity: 1;
+    }
+  }
+
+  /* Never: the check pops in once the stack has settled. */
+  @keyframes interrupt-check {
+    0%,
+    45% {
+      opacity: 0;
+      scale: 0.6;
+    }
+    60%,
+    100% {
+      opacity: 1;
+      scale: 1;
+    }
+  }
+
+  /* Never: the faint "z z" drifts. */
+  @keyframes interrupt-zz {
+    0%,
+    100% {
+      opacity: 0.25;
+      translate: 0 0;
+    }
+    50% {
+      opacity: 0.8;
+      translate: 1px -2px;
+    }
+  }
+
+  /* In batches: three slim cards gather... */
+  @keyframes interrupt-gather {
+    0%,
+    10% {
+      translate: 0 -10px;
+      opacity: 0;
+    }
+    28%,
+    100% {
+      translate: 0 0;
+      opacity: 1;
+    }
+  }
+
+  /* ...then fold into one roundup notification. */
+  @keyframes interrupt-roundup {
+    0%,
+    48% {
+      translate: 0 6px;
+      opacity: 0;
+    }
+    60%,
+    88% {
+      translate: 0 0;
+      opacity: 1;
+    }
+    100% {
+      translate: 0 0;
+      opacity: 0;
+    }
+  }
+
+  /* In batches: the clock hand turns. */
+  @keyframes interrupt-hand {
+    0% {
+      rotate: 0deg;
+    }
+    100% {
+      rotate: 360deg;
+    }
+  }
+
+  /* As soon as it matters: a notification slides in and out. */
+  @keyframes interrupt-banner {
+    0%,
+    12% {
+      translate: 14px 0;
+      opacity: 0;
+    }
+    24%,
+    78% {
+      translate: 0 0;
+      opacity: 1;
+    }
+    90%,
+    100% {
+      translate: 14px 0;
+      opacity: 0;
+    }
+  }
 }
 
 html,

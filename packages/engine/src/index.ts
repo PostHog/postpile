@@ -21,8 +21,9 @@ export { claudeDirFromEnv, DEFAULT_COLLECT_BUDGET, SESSION_DAYS } from './work-c
 export { DEFAULT_SWEEP_SKIP, resolveSweepSkip, sweepSkipFromEnv } from './work-context/skip-list.ts';
 export { UserConfigFile, type UserConfigData } from './user-config.ts';
 export { launchToolPath, systemPathDirs, type LaunchToolPathOptions } from './tool-path.ts';
-export { LivePoller, MAX_ERROR_BACKOFF_SECONDS, MAX_RATE_LIMIT_BACKOFF_SECONDS, QUOTA_PAUSE_NOTE, RATE_LIMIT_BACKOFF_SECONDS } from './live/live-poller.ts';
+export { LivePoller, ROUNDUP_CHECK_MS, type PingSink, MAX_ERROR_BACKOFF_SECONDS, MAX_RATE_LIMIT_BACKOFF_SECONDS, QUOTA_PAUSE_NOTE, RATE_LIMIT_BACKOFF_SECONDS } from './live/live-poller.ts';
 export { PingThrottle, PING_TILE_WINDOW_MS, PINGS_BEFORE_SUMMARY } from './live/ping-throttle.ts';
+export { MemoryPingHold, PingDelivery, StorePingHold, INTERRUPTIONS_META_KEY, type PingHold } from './live/ping-delivery.ts';
 export { PING_DECISIONS_PER_DAY, PING_FRESH_MS } from './live/ping-decider.ts';
 export type { LivePollOptions, PollCycle } from './live/poll-cycle.ts';
 export { isExecutableFile, ToolHealth, type BrokenToolState, type ToolHealthDeps } from './tools/tool-health.ts';
