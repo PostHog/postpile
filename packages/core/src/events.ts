@@ -1,3 +1,4 @@
+import { trimBotBody } from './bot-bodies.ts';
 import { isBot, isMachineComment } from './bots.ts';
 import { ADDRESSED_KINDS } from './kinds.ts';
 import { lastSpokeAt, spokeAfter } from './last-touch.ts';
@@ -127,7 +128,9 @@ function commentEvent(comment: Comment, pr: Pr, viewer: Viewer): RawEvent | null
   const machine = isMachineComment(comment);
   let kind: EventKind | null;
   if (machine) {
-    kind = deployBody.test(comment.body) ? 'deploy' : 'bot_comment';
+    // Only the part of a bot's body PostPile keeps: a snapshot stored before
+    // bodies were cut must derive the same kind (part of the event id) as one cut on save.
+    kind = deployBody.test(trimBotBody(comment)) ? 'deploy' : 'bot_comment';
   } else if (sameLogin(comment.author, viewer.login)) {
     kind = 'comment';
   } else {
@@ -439,6 +442,24 @@ export function eventId(prKey: string, kind: EventKind, sourceId: string): strin
 /** A comment_edited event's id: the comment and the edit time, so re-syncs keep it and a later edit is a new one. */
 export function editEventId(prKey: string, commentId: string, editedAt: IsoTime): string {
   return eventId(prKey, 'comment_edited', `${commentId}@${editedAt}`);
+}
+
+/**
+ * A machine comment's event id under its other kind: deploy and
+ * bot_comment of one comment are one event, renamed when the kept part of
+ * its body starts or stops saying "deploy" (store `EventRepo.upsertDerived`).
+ * Null for any other id. A PR key ("owner/repo#1") holds no colon, so the
+ * kind is what sits between the first two.
+ */
+export function machineCommentTwinId(id: string): string | null {
+  const kindStart = id.indexOf(':') + 1;
+  const kindEnd = id.indexOf(':', kindStart);
+  if (kindStart === 0 || kindEnd === -1) {
+    return null;
+  }
+  const kind = id.slice(kindStart, kindEnd);
+  const twin = kind === 'deploy' ? 'bot_comment' : kind === 'bot_comment' ? 'deploy' : null;
+  return twin === null ? null : `${id.slice(0, kindStart)}${twin}${id.slice(kindEnd)}`;
 }
 
 /**

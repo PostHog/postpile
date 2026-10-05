@@ -169,7 +169,7 @@ describe('migrations', () => {
     });
     const db = before028([{ key: pr.key, json: JSON.stringify(pr) }]);
 
-    runMigrations(db);
+    runMigrations(db, 28);
 
     expect(db.prepare('SELECT * FROM pr').get()).toEqual({
       key: pr.key,
@@ -229,6 +229,15 @@ describe('migrations', () => {
     const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('pr', 'pr_snapshot')").all().map((row) => row.name);
     expect(tables).toEqual(['pr']);
     expect(db.prepare('SELECT json FROM pr').get()).toEqual({ json: '{"title": "cut off' });
+    db.close();
+  });
+
+  it('starts every stored header at snapshot revision 0', () => {
+    const db = before028([{ key: 'acme/app#1', json: JSON.stringify(makePr()) }]);
+
+    runMigrations(db);
+
+    expect(db.prepare('SELECT key, snapshot_revision FROM pr').all()).toEqual([{ key: 'acme/app#1', snapshot_revision: 0 }]);
     db.close();
   });
 });

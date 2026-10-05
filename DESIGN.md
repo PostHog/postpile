@@ -2756,6 +2756,57 @@ counted as a teammate's.
 - **Shown on the tile**: see "PR rows" under "Tile faces": when someone other
   than the author is assigned, the row and the detail pane say so.
 
+## Bot bodies are cut when saved (2026-10-05)
+
+Every PR is stored as one JSON snapshot, and most of its comment text is
+bots' (review summaries, CI reports, preview tables). So the fetch cuts a
+bot's body (`trimBotBody`, called by `normalize.ts` on every path that
+stores a PR) to 3,072 UTF-16 code units with the marker "… (trimmed by
+PostPile)", the same way in comments, thread comments and review bodies.
+3,072 because the most any reader takes is the 3,000 a reply draft reads
+of the comment it answers (summaries take 100, excerpts 240, quotes 200;
+PR prompts leave bot comments out). A cut never leaves an HTML comment
+open and never splits a character.
+
+- **Kept whole**: people's bodies, a deleted author's, the PR description,
+  a merge queue bot's (`mergeQueueState` looks for Trunk's markers anywhere
+  in it) and a bot body a person edited last (its edit event reads the
+  whole body for mentions of the viewer). "deploy" counts only in the kept
+  part. So the cut changes no event id, kind or loudness: the tests compare
+  the rules on both, and so did the measurements on a normal and a heavy
+  copy. What it gives up: a team named only past the cut of a bot comment
+  no longer picks which of the viewer's teams the tile chip names.
+- **Events keep their state** (`EventRepo.upsertDerived`): a machine
+  comment's event that flips between deploy and bot_comment is renamed,
+  not replaced. It keeps its seen time, override and event-log seq (the
+  earliest, when both ids were logged). This covers a stored body first
+  cut by a fetch and the role-change re-derive. Any other kind change
+  stays a new event: a comment that now mentions the viewer is news.
+- **Stored snapshots** are cut once by `BotBodyTrim` (engine, started by
+  the desktop app). It leaves events alone and keeps `fetched_at`. It
+  waits 30 s after start and while a sync, poll, consolidation or catch-up
+  runs, then goes one PR at a time in ~30 ms transactions 20 ms apart
+  (one PR of several MB can take longer). It resumes after a quit (meta
+  `bot_body_trim_after`, done at `bot_body_trim_done`) and empties the WAL
+  at the end without waiting for other connections. No VACUUM (7 s on a
+  heavy copy): SQLite reuses the freed pages.
+- **Caches see a rewrite** (migration 029): every write of a PR's snapshot
+  gives its header a new `pr.snapshot_revision`, in the same transaction,
+  and the parse caches compare it instead of `fetched_at`. The value comes
+  from one store-wide counter that only goes up (meta `snapshot_revision`),
+  so a PR deleted and stored again never gets a revision a cache holds. A
+  rewrite that keeps the fetch time (this job) still reaches another
+  process's cache, like the CLI's. `fetched_at` keeps meaning when GitHub
+  was asked. When the snapshot is normalized (NEXT.md), the revision stays
+  the generation of the assembled stored PR: any child-table write or
+  backfill that changes what readers assemble moves it in the same
+  transaction.
+- **Mark read put back**: a click captures event ids, and a fetch in the
+  undo window can rename a deploy event to bot_comment. Undo, a send GitHub
+  did not take and a parked batch look a captured machine comment id up
+  under its other kind when it is gone (`machineCommentTwinId`), so the
+  renamed event turns unseen again with its thread.
+
 ## Colour per meaning (2026-10-01)
 
 The same colour meant several things: amber was the agent's Look closer and

@@ -6,9 +6,18 @@ import { all, each, one, placeholders, run } from '../sql.ts';
 /** PR rows read and parsed per query (~80 KB of json each on a busy install). */
 const PARSE_CHUNK = 200;
 
+/** The meta key of the last snapshot revision handed out (migration 029). */
+const SNAPSHOT_REVISION_KEY = 'snapshot_revision';
+
 interface ParsedPr {
-  fetchedAt: string;
+  revision: number;
   pr: Pr;
+}
+
+/** A header's key and the revision of its snapshot (migration 029): what a cached copy is checked against. */
+interface RevisionRow {
+  key: string;
+  snapshot_revision: number;
 }
 
 interface HeaderRow {
@@ -70,13 +79,14 @@ function toHeader(row: HeaderRow): PrHeader {
 export class PrRepo {
   /**
    * Parsed snapshots of the hot board's PRs (`keepParsed`), with the
-   * fetched_at they were stored with. The json blobs are large (comments,
-   * review threads: ~80 KB a PR on a busy install) and every read model
-   * loads the board, so parsing them on each request cost ~45 ms. Only the
-   * hot PRs stay: a cache of every PR held ~1.9 GB on a heavy install. A
-   * row is parsed again once its fetched_at changes, which also catches
-   * writes from another process (the CLI). Callers must not mutate the
-   * returned PRs.
+   * snapshot revision they were read at. The json blobs are large
+   * (comments, review threads: ~80 KB a PR on a busy install) and every
+   * read model loads the board, so parsing them on each request cost
+   * ~45 ms. Only the hot PRs stay: a cache of every PR held ~1.9 GB on a
+   * heavy install. A row is parsed again once its revision moves, which
+   * every snapshot write does, a local rewrite that keeps the fetch time
+   * too, and in another process as well (the CLI). Callers must not mutate
+   * the returned PRs.
    */
   private readonly parsed = new Map<PrKey, ParsedPr>();
 
@@ -91,8 +101,8 @@ export class PrRepo {
    * entry dropped: that is an integrity failure, and the sync fetches the PR
    * again (`fetchedAtByKey`, `updatedAtByKey` leave it out too).
    */
-  private parse(rows: Array<{ key: string; fetched_at: string }>, keep: (key: PrKey) => boolean): Map<PrKey, Pr> {
-    const stale = rows.filter((row) => this.parsed.get(row.key)?.fetchedAt !== row.fetched_at);
+  private parse(rows: RevisionRow[], keep: (key: PrKey) => boolean): Map<PrKey, Pr> {
+    const stale = rows.filter((row) => this.parsed.get(row.key)?.revision !== row.snapshot_revision);
     const fresh = new Map<PrKey, Pr>();
     for (let start = 0; start < stale.length; start += PARSE_CHUNK) {
       const chunk = stale.slice(start, start + PARSE_CHUNK);
@@ -111,7 +121,7 @@ export class PrRepo {
         const pr = JSON.parse(text) as Pr;
         fresh.set(row.key, pr);
         if (keep(row.key)) {
-          this.parsed.set(row.key, { fetchedAt: row.fetched_at, pr });
+          this.parsed.set(row.key, { revision: row.snapshot_revision, pr });
         }
       }
     }
@@ -119,7 +129,7 @@ export class PrRepo {
     const result = new Map<PrKey, Pr>();
     for (const row of rows) {
       const cached = this.parsed.get(row.key);
-      const pr = fresh.get(row.key) ?? (cached?.fetchedAt === row.fetched_at ? cached.pr : undefined);
+      const pr = fresh.get(row.key) ?? (cached?.revision === row.snapshot_revision ? cached.pr : undefined);
       if (pr) {
         result.set(row.key, pr);
       }
@@ -128,18 +138,18 @@ export class PrRepo {
   }
 
   /**
-   * The headers' fetch times for these keys, a chunk at a time. Keys
+   * The headers' snapshot revisions for these keys, a chunk at a time. Keys
    * without a header, or whose header has lost its snapshot, are left out
    * and their cached copies dropped.
    */
-  private fetchedAtRows(keys: PrKey[]): Array<{ key: string; fetched_at: string }> {
-    const rows: Array<{ key: string; fetched_at: string }> = [];
+  private revisionRows(keys: PrKey[]): RevisionRow[] {
+    const rows: RevisionRow[] = [];
     for (let start = 0; start < keys.length; start += PARSE_CHUNK) {
       const chunk = keys.slice(start, start + PARSE_CHUNK);
       rows.push(
-        ...all<{ key: string; fetched_at: string }>(
+        ...all<RevisionRow>(
           this.db,
-          `SELECT p.key, p.fetched_at FROM pr p JOIN pr_snapshot s ON s.key = p.key WHERE p.key IN (${placeholders(chunk.length)})`,
+          `SELECT p.key, p.snapshot_revision FROM pr p JOIN pr_snapshot s ON s.key = p.key WHERE p.key IN (${placeholders(chunk.length)})`,
           ...chunk,
         ),
       );
@@ -153,14 +163,36 @@ export class PrRepo {
     return rows;
   }
 
-  /** Header first, then snapshot, in one transaction: never one without the other. */
+  /**
+   * The next snapshot revision, from one counter for the whole store that
+   * only goes up: a revision is never handed out twice, not even to a PR
+   * deleted and stored again, so a cache never takes another snapshot for
+   * the one it holds.
+   */
+  private nextRevision(): number {
+    const row = one<{ value: string }>(
+      this.db,
+      `INSERT INTO meta (key, value) VALUES (?, '1')
+       ON CONFLICT (key) DO UPDATE SET value = CAST(value AS INTEGER) + 1
+       RETURNING value`,
+      SNAPSHOT_REVISION_KEY,
+    );
+    return Number(row?.value);
+  }
+
+  /**
+   * Header first, then snapshot, in one transaction: never one without the
+   * other. Every write gives the header a new snapshot_revision, so parse
+   * caches in this and other processes read the snapshot again.
+   */
   upsert(pr: Pr, fetchedAt: string): void {
     inTransaction(this.db, () => {
+      const revision = this.nextRevision();
       run(
         this.db,
         `INSERT INTO pr (key, repo, number, state, is_draft, title, author, assignees, reviewer_users, reviewer_teams,
-           base_ref, head_ref, head_oid, previous_base_refs, cross_repository, created_at, updated_at, merged_at, fetched_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           base_ref, head_ref, head_oid, previous_base_refs, cross_repository, created_at, updated_at, merged_at, fetched_at, snapshot_revision)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (key) DO UPDATE SET
            repo = excluded.repo, number = excluded.number, state = excluded.state, is_draft = excluded.is_draft,
            title = excluded.title, author = excluded.author, assignees = excluded.assignees,
@@ -168,7 +200,7 @@ export class PrRepo {
            base_ref = excluded.base_ref, head_ref = excluded.head_ref, head_oid = excluded.head_oid,
            previous_base_refs = excluded.previous_base_refs, cross_repository = excluded.cross_repository,
            created_at = excluded.created_at, updated_at = excluded.updated_at, merged_at = excluded.merged_at,
-           fetched_at = excluded.fetched_at`,
+           fetched_at = excluded.fetched_at, snapshot_revision = excluded.snapshot_revision`,
         pr.key,
         pr.ref.repo,
         pr.ref.number,
@@ -188,6 +220,7 @@ export class PrRepo {
         pr.updatedAt,
         pr.mergedAt,
         fetchedAt,
+        revision,
       );
       // The snapshot's own short columns are legacy: written for NOT NULL, never read.
       run(
@@ -209,7 +242,7 @@ export class PrRepo {
         JSON.stringify(pr),
       );
     });
-    // Two upserts can share a fetched_at, so never trust the cache after one.
+    // The revision moved anyway; dropping the old copy now frees its memory at once.
     this.parsed.delete(pr.key);
   }
 
@@ -230,7 +263,7 @@ export class PrRepo {
 
   /** Stored PRs by key. A hot PR comes from the cache; any other is parsed for this call only and not kept. */
   getMany(keys: PrKey[]): Map<PrKey, Pr> {
-    return keys.length === 0 ? new Map() : this.parse(this.fetchedAtRows(keys), () => false);
+    return keys.length === 0 ? new Map() : this.parse(this.revisionRows(keys), () => false);
   }
 
   /**
@@ -245,7 +278,7 @@ export class PrRepo {
         this.parsed.delete(key);
       }
     }
-    return this.parse(this.fetchedAtRows(keys), (key) => wanted.has(key));
+    return this.parse(this.revisionRows(keys), (key) => wanted.has(key));
   }
 
   /**
@@ -254,7 +287,7 @@ export class PrRepo {
    * `getMany` for the PRs it needs.
    */
   listAll(): Pr[] {
-    const rows = all<{ key: string; fetched_at: string }>(this.db, 'SELECT key, fetched_at FROM pr ORDER BY repo, number');
+    const rows = all<RevisionRow>(this.db, 'SELECT key, snapshot_revision FROM pr ORDER BY repo, number');
     return [...this.parse(rows, () => false).values()];
   }
 
@@ -311,5 +344,22 @@ export class PrRepo {
   fetchedAtByKey(): Map<PrKey, string> {
     const rows = all<{ key: string; fetched_at: string }>(this.db, 'SELECT p.key, p.fetched_at FROM pr p JOIN pr_snapshot s ON s.key = p.key');
     return new Map(rows.map((row) => [row.key, row.fetched_at]));
+  }
+
+  /**
+   * The stored PR with the next key after `afterKey` ('' for the first),
+   * with the fetched_at its header holds; null after the last. A header
+   * without its snapshot is skipped. One row per call, parsed for this call
+   * and never cached: for a job that walks every stored PR in small steps
+   * and writes some back (`upsert` with the same fetched_at), with no
+   * statement left open between them.
+   */
+  nextAfter(afterKey: PrKey): { key: PrKey; pr: Pr; fetchedAt: string } | null {
+    const row = one<{ key: string; fetched_at: string; json: string }>(
+      this.db,
+      'SELECT p.key, p.fetched_at, s.json FROM pr p JOIN pr_snapshot s ON s.key = p.key WHERE p.key > ? ORDER BY p.key LIMIT 1',
+      afterKey,
+    );
+    return row === null ? null : { key: row.key, pr: JSON.parse(row.json) as Pr, fetchedAt: row.fetched_at };
   }
 }

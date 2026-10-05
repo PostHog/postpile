@@ -176,6 +176,7 @@ import { TeamRoleKeeper } from './team-roles.ts';
 import { ToolHealth } from './tools/tool-health.ts';
 import { claudeDirFromEnv } from './work-context/collector.ts';
 import { WorkContextSchedule } from './work-context/schedule.ts';
+import { BotBodyTrim } from './bot-body-trim.ts';
 import { WorkContextSweeper } from './work-context/sweeper.ts';
 import type { UserConfigFile } from './user-config.ts';
 import { WorkContextMemory } from './work-context/work-context.ts';
@@ -303,6 +304,7 @@ export class Engine implements EngineService {
   private readonly sweeper: WorkContextSweeper;
   private readonly workContext: WorkContextMemory;
   private readonly sweepSchedule: WorkContextSchedule;
+  private readonly botBodyTrim: BotBodyTrim;
   private readonly cleanup: InboxCleanup;
   private readonly setup: SetupFlow;
   private readonly toolHealth: ToolHealth;
@@ -380,6 +382,13 @@ export class Engine implements EngineService {
     });
     this.workContext = new WorkContextMemory(store, this.sweeper, now);
     this.sweepSchedule = new WorkContextSchedule(this.sweeper, deps.timers ?? systemTimers, now);
+    this.botBodyTrim = new BotBodyTrim({
+      store,
+      now,
+      timers: deps.timers ?? systemTimers,
+      busy: () => this.syncing !== null || this.polling !== null || this.consolidating !== null || this.catchUps.isRunning(),
+      log: deps.syncLog ?? ((line) => console.log(line)),
+    });
     const contexts = new PromptContextSource(store, history, () => this.workContext.promptText());
     this.reads = new ReadModels(store, deps.agent, contexts, now, deps.pendingWrites, {
       agentOff: () => agentOff() !== null,
@@ -1593,6 +1602,10 @@ export class Engine implements EngineService {
     this.sweepSchedule.stop();
   }
 
+  startBotBodyTrim(): void {
+    this.botBodyTrim.start();
+  }
+
   async setupStatus(): Promise<SetupStatus> {
     return this.setup.status();
   }
@@ -1678,6 +1691,8 @@ export class Engine implements EngineService {
     this.catchUps.dropQueued();
     // A running sweep is not awaited (it can take minutes); its late write fails quietly.
     this.stopWorkContextSchedule();
+    // No further trim step; the next start goes on after the last one.
+    this.botBodyTrim.stop();
     await this.writeRefresh;
     await this.polling?.catch(() => {});
     await this.syncing?.catch(() => {});

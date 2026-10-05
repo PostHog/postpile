@@ -2,6 +2,12 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## 0.18.1 (unreleased)
+
+### Changed
+
+- PostPile stores about a quarter less, and needs less memory with it: long comments from bots (review summaries, CI reports, preview tables) are stored cut to their first 3,000 or so characters, and the ones already stored are cut once in the background a little after the update. People's comments, PR descriptions and merge queue comments stay whole, and the full bot text is still on GitHub. The database file keeps its size and fills the freed space first.
+
 ## 0.18.0 (2026-10-05)
 
 ### Added
