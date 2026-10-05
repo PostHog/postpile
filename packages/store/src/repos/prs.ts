@@ -2,6 +2,9 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { Pr, PrKey } from '@postpile/core';
 import { all, one, placeholders, run } from '../sql.ts';
 
+/** PR rows read and parsed per query when the cache fills (~80 KB of json each on a busy install). */
+const PARSE_CHUNK = 200;
+
 interface ParsedPr {
   fetchedAt: string;
   pr: Pr;
@@ -20,19 +23,24 @@ export class PrRepo {
 
   constructor(private readonly db: DatabaseSync) {}
 
-  /** Parses the json of the given keys that are missing from the cache or older than their row. */
+  /**
+   * Parses the json of the given keys that are missing from the cache or
+   * older than their row. A chunk at a time: the raw json strings of a
+   * whole cold start (~1 GB for ~11k PRs) next to their parsed copies went
+   * past the main process's 4 GB heap.
+   */
   private refreshParsed(rows: Array<{ key: string; fetched_at: string }>): void {
     const stale = rows.filter((row) => this.parsed.get(row.key)?.fetchedAt !== row.fetched_at).map((row) => row.key);
-    if (stale.length === 0) {
-      return;
-    }
-    const fresh = all<{ key: string; fetched_at: string; json: string }>(
-      this.db,
-      `SELECT key, fetched_at, json FROM pr WHERE key IN (${placeholders(stale.length)})`,
-      ...stale,
-    );
-    for (const row of fresh) {
-      this.parsed.set(row.key, { fetchedAt: row.fetched_at, pr: JSON.parse(row.json) as Pr });
+    for (let start = 0; start < stale.length; start += PARSE_CHUNK) {
+      const chunk = stale.slice(start, start + PARSE_CHUNK);
+      const fresh = all<{ key: string; fetched_at: string; json: string }>(
+        this.db,
+        `SELECT key, fetched_at, json FROM pr WHERE key IN (${placeholders(chunk.length)})`,
+        ...chunk,
+      );
+      for (const row of fresh) {
+        this.parsed.set(row.key, { fetchedAt: row.fetched_at, pr: JSON.parse(row.json) as Pr });
+      }
     }
   }
 
