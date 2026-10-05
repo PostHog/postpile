@@ -702,9 +702,9 @@ export class Engine implements EngineService {
 
   sync(options: SyncOptions = {}): Promise<SyncReport> {
     if (!this.syncing) {
-      // The sync digests every topic: queued catch-up follow-ups and waiting quiet news are dropped, running ones waited for.
+      // The sync digests every topic: queued catch-up follow-ups are dropped, running ones waited for.
+      // Waiting quiet news stays: the sync may never digest, and a run after one that did makes no call.
       this.catchUps.dropQueued();
-      this.quietCatchUps.clear();
       const before = Engine.settled([this.consolidating, this.polling, this.catchUps.settled()]);
       // PRs left over by the PR cap bring the next background sync forward.
       let backlog = false;

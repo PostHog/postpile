@@ -14,7 +14,10 @@ function keyOf(topicId: string | null): string {
  * topic's first quiet news runs at once; more within QUIET_CATCH_UP_MINUTES
  * of its last run waits, and one run then covers all of it. An agent pushing
  * 27 times an hour into one topic costs a few runs, not one per push.
- * Kept in memory: a restart only lets one run through early.
+ * Kept in memory: a restart only lets one run through early. A full sync
+ * does not clear the waiting list: it may never digest (gh off, a crash),
+ * and a run after a sync that covered the topic finds nothing to do and
+ * makes no agent call.
  */
 export class QuietCatchUps {
   private readonly lastRunAt = new Map<string, number>();
@@ -46,10 +49,5 @@ export class QuietCatchUps {
       }
     }
     return ready;
-  }
-
-  /** A full sync is about to start and covers every topic. */
-  clear(): void {
-    this.waiting.clear();
   }
 }

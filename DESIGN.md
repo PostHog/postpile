@@ -1168,7 +1168,9 @@ stored and before a dossier goes into a glance prompt
   dossier rewrite left every glance in the topic out of date, though the
   news was on one PR; browsing showed "out of date" all over and the next
   catch-up or sync re-glanced the whole topic. A glance picks up the newer
-  dossier when its own PR changes or on a look. `legacyGlanceItemInputHash`
+  dossier when its own PR changes or on a look. A person's comment edit
+  counts through its edit time in the new hash (the dossier version used to
+  cover it). `legacyGlanceItemInputHash`
   (the old shape, with the version) still counts as current
   (`GlanceInputs.isCurrent`) while that dossier is the latest, so the
   update regenerates no glance; the next rewrite stores the new shape.
@@ -5204,7 +5206,9 @@ bot edits, deploys) never counts. Loud news and a missing glance run right
 away; other triggers run a topic at most once per 15 minutes
 (`QuietCatchUps`, `QUIET_CATCH_UP_MINUTES`): the first at once, the rest
 wait and one run covers them. Every poll cycle, news or not, starts the
-topics whose wait ended; a full sync clears the waiting list. Telemetry
+topics whose wait ended. A full sync leaves the waiting list alone: it may
+never digest (gh off, a crash), and a run after a sync that covered the
+topic finds nothing to do and makes no agent call. Telemetry
 (2026-10-05) showed why: three heavy installs already used the whole daily
 cap with loud news alone, and an agent pushing 27 times an hour into one
 topic would otherwise start a run per push. The topic is the PR's

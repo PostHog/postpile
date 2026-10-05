@@ -41,14 +41,4 @@ describe('QuietCatchUps', () => {
     quiet.add(['depot', 'billing']);
     expect(quiet.due()).toEqual(['billing']);
   });
-
-  it('forgets waiting topics when a full sync starts', () => {
-    const time = clock('2026-10-05T10:00:00Z');
-    const quiet = new QuietCatchUps(time.now);
-    quiet.noteRun('depot');
-    quiet.add(['depot']);
-    quiet.clear();
-    time.advanceMinutes(QUIET_CATCH_UP_MINUTES);
-    expect(quiet.due()).toEqual([]);
-  });
 });
