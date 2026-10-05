@@ -93,11 +93,16 @@ now".
   sync, poll, consolidation or catch-up runs and while the Mac sleeps. A
   job is done only when its check passes; a second failed check leaves it
   incomplete and the jobs after it wait. `storage_job_done` reports each
-  finished job. `startBotBodyTrim` is now `startStorageJobs`. Measured on
-  copies: normal 15 slices, longest 40 ms, 1.2 s wall; heavy 218 slices,
-  p95 40 ms, longest 50 ms, 6.8 s of work, 18 s wall, peak WAL 9 MB; a
-  second pass on heavy wrote nothing and moved no revision. Not tried by
-  hand: the app on a real heavy database.
+  finished job. `startBotBodyTrim` is now `startStorageJobs`. The final
+  WAL checkpoint the trim ran is gone, and with it `Store.checkpointWal`:
+  it could copy a large WAL on the main thread in one call; SQLite's
+  automatic checkpoint and the 64 MB journal size limit keep the WAL
+  small. Jobs may write any rows inside their slice; revisions move only
+  when a PR read changes (GPT-6.1 review). Measured on copies: normal 14
+  slices, longest 41 ms, 1.1 s wall; heavy 190 slices, p95 40 ms, longest
+  46 ms, 5.9 s of work, 16 s wall, peak WAL 10 MB (it stays that size and
+  is reused); a second pass on heavy wrote nothing and moved no revision.
+  Not tried by hand: the app on a real heavy database.
 - Calm wake and crash signals (2026-10-05, DESIGN.md "Memory on big
   boards"): after a wake the renderer no longer refetches every query
   (`refetchOnReconnect: false`; `networkMode: 'always'`, so no network

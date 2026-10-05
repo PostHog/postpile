@@ -2,7 +2,7 @@
 // bodies are cut when saved"): a machine comment's event keeps its state
 // when its kind changes, a job can walk every snapshot, and the WAL can be
 // emptied without waiting.
-import { mkdtempSync, rmSync, statSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -179,30 +179,8 @@ describe('PrRepo: snapshot_revision', () => {
 });
 
 describe('the WAL after a big rewrite', () => {
-  it('opens with a 64 MB WAL size limit, and checkpointWal empties the WAL', () => {
+  // SQLite's automatic checkpoint keeps copying the WAL into the file; the limit cuts its size back on each reset.
+  it('opens with a 64 MB WAL size limit', () => {
     expect(store.db.prepare('PRAGMA journal_size_limit').get()).toEqual({ journal_size_limit: 67108864 });
-    for (let number = 1; number <= 50; number++) {
-      store.prs.upsert(makePr({ number, body: 'x'.repeat(20_000) }), at(1));
-    }
-    const wal = join(dir, 'db.sqlite-wal');
-    expect(statSync(wal).size).toBeGreaterThan(0);
-    expect(store.checkpointWal()).toBe(true);
-    expect(statSync(wal).size).toBe(0);
-    expect(store.db.prepare('PRAGMA busy_timeout').get()).toEqual({ timeout: 5000 });
-  });
-
-  it('waits for nobody: with another connection inside a write it gives up at once and says so', () => {
-    store.prs.upsert(makePr({ body: 'x'.repeat(20_000) }), at(1));
-    const other = Store.open(join(dir, 'db.sqlite'));
-    try {
-      other.db.exec('BEGIN IMMEDIATE');
-      const started = Date.now();
-      expect(store.checkpointWal()).toBe(false);
-      expect(Date.now() - started).toBeLessThan(1000);
-      other.db.exec('ROLLBACK');
-    } finally {
-      other.close();
-    }
-    expect(store.db.prepare('PRAGMA busy_timeout').get()).toEqual({ timeout: 5000 });
   });
 });

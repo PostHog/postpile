@@ -50,17 +50,21 @@ export interface StorageJob {
   /**
    * The next unit after `after` ('' at the start), inside the runner's
    * BEGIN IMMEDIATE transaction: read what it rewrites, change it with pure
-   * code, write it back. Writes only when what a read returns changes, and
-   * then through PrRepo.upsert, so the PR's revision moves (the store-wide
-   * counter) and every process's parse cache reads it again. Returns null
-   * when nothing is left.
+   * code, write it back. Any SQL or repository write goes, as long as it
+   * stays inside that transaction (no transaction of its own). A PR's
+   * revision moves (the store-wide counter, `PrRepo.upsert`) only when
+   * what a read of that PR returns changes, like the trim's cut; a
+   * backfill into rows that reads don't use yet, or a strip of what they
+   * no longer read, leaves it alone. Returns null when nothing is left.
    */
   step(store: Store, after: string): StorageJobUnit | null;
   /**
    * In the transaction that found nothing left: checks from the data that
-   * the job is complete, and switches what depends on it. Only 'done' marks
-   * it done. 'again' walks it once more from the start; a second 'again'
-   * leaves it incomplete, and the jobs after it wait.
+   * the job is complete and, only then, switches what depends on it
+   * (readiness flags). Only 'done' marks it done. 'again' walks it once
+   * more from the start and must leave every switch unset, since it
+   * commits; a second 'again' leaves it incomplete, and the jobs after it
+   * wait.
    */
   complete(store: Store): 'done' | 'again';
 }
@@ -71,7 +75,7 @@ export interface StorageJobReport {
   units: number;
   /** Of the units, the ones that wrote. */
   wrote: number;
-  /** Main-thread time in its slices, commits and the final WAL checkpoint included. */
+  /** Main-thread time in its slices, commits included. */
   workMs: number;
   longestSliceMs: number;
   /** From its first slice to the end, pauses and waits included. */
@@ -210,7 +214,7 @@ export class StorageJobRunner {
     return this.progress;
   }
 
-  private finish(progress: Progress, walEmptied: boolean): void {
+  private finish(progress: Progress): void {
     const report: StorageJobReport = {
       name: progress.name,
       units: progress.units,
@@ -221,7 +225,7 @@ export class StorageJobRunner {
     };
     this.progress = null;
     this.deps.log(
-      `storage job ${report.name} done: ${report.wrote} of ${report.units} units rewritten, work ${report.workMs} ms, longest slice ${report.longestSliceMs} ms, wall ${report.wallMs} ms${walEmptied ? '' : ', WAL not emptied (another connection was busy)'}`,
+      `storage job ${report.name} done: ${report.wrote} of ${report.units} units rewritten, work ${report.workMs} ms, longest slice ${report.longestSliceMs} ms, wall ${report.wallMs} ms`,
     );
     this.deps.onDone(report);
   }
@@ -245,11 +249,11 @@ export class StorageJobRunner {
       throw error;
     }
     this.commitMs = (this.commitMs + timers.now() - unitsEnded) / 2;
-    // The slices' commits leave the WAL as big as the biggest one; empty it now if nobody reads. Part of the last slice.
-    const walEmptied = work.end === 'done' ? store.checkpointWal() : true;
+    // No checkpoint of its own at the end: one call could copy and sync a WAL that grew while a
+    // reader held checkpoints back. SQLite's automatic checkpoint and journal_size_limit keep it small.
     const progress = this.noteSlice(job, started, work);
     if (work.end === 'done') {
-      this.finish(progress, walEmptied);
+      this.finish(progress);
     } else if (work.end === 'again') {
       this.walkedAgain.add(job.name);
       this.deps.log(`storage job ${job.name}: its check failed at the end, walking it once more`);

@@ -2874,14 +2874,22 @@ GPT-6.1 (2026-10-05).
   after it wait. The next start tries again. The trim's walk is its own
   check: a PR stored behind the cursor meanwhile came from a fetch, which
   cuts on save.
-- **Caches.** A job writes only where what a read returns changes, and
-  then through `PrRepo.upsert`, so the PR's `snapshot_revision` moves from
-  the store-wide counter (migration 029) and every process's parse cache
-  reads it again. A second trim pass on the heavy copy wrote nothing and
-  moved no revision.
-- **The end of a job:** the WAL is emptied without waiting for other
-  connections (`checkpointWal`, part of the last slice), one log line, and
-  `storage_job_done` (see "Usage analytics").
+- **What a job may write, and revisions.** A unit may issue any SQL or
+  repository write inside the slice's transaction (never a transaction of
+  its own). A PR's `snapshot_revision` moves (the store-wide counter,
+  migration 029, through `PrRepo.upsert`) only when what a read of that PR
+  returns changes: the trim's cut does, a backfill into rows no read uses
+  yet or a strip of what reads no longer use does not. A readiness switch
+  is set in `complete()` only when it answers 'done'; 'again' commits too,
+  so it must leave every switch unset. A second trim pass on the heavy
+  copy wrote nothing and moved no revision. (GPT-6.1 review on #123.)
+- **The end of a job:** one log line and `storage_job_done` (see "Usage
+  analytics"). No WAL checkpoint of its own (GPT-6.1 review on #123): a
+  zero busy timeout bounds the wait for locks, not the checkpoint's I/O,
+  so one call could copy and sync a WAL that grew while a reader held
+  checkpoints back, all on the main thread. SQLite's automatic checkpoint
+  and `journal_size_limit` (64 MB) keep the WAL small; it peaked at 9 MB
+  on the heavy copy. 0.19.0's trim emptied it at the end.
 - **A failing unit** rolls its slice back; the runner logs it and stops
   until the next start.
 
@@ -2890,11 +2898,11 @@ bot body trim with real timers):
 
 | copy | PRs | rewritten | slices | slice p50 / p95 / max | work | wall | peak WAL |
 |---|---|---|---|---|---|---|---|
-| normal | 809 | 643 | 15 | 28 / 40 / 40 ms | 0.45 s | 1.2 s | 8 MB |
-| heavy (14x) | 11,326 | 9,002 | 218 | 31 / 40 / 50 ms | 6.8 s | 18 s | 9 MB |
+| normal | 809 | 643 | 14 | 35 / 40 / 41 ms | 0.43 s | 1.1 s | 8 MB |
+| heavy (14x) | 11,326 | 9,002 | 190 | 31 / 40 / 46 ms | 5.9 s | 16 s | 10 MB |
 
 Without the commit allowance the normal copy's slices ran 47 ms at the
-median.
+median. The WAL stays at its peak size afterwards and is reused.
 
 ## Colour per meaning (2026-10-01)
 

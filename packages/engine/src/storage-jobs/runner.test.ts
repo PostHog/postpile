@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type { StorageJobName } from '@postpile/core';
-import { FakeTimers } from '@postpile/core/fixtures';
+import { at, FakeTimers, makePr } from '@postpile/core/fixtures';
 import { Store } from '@postpile/store';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { NOW } from '../testing/fakes.ts';
@@ -364,6 +364,49 @@ describe('StorageJobRunner', () => {
     expect(items(store)).toEqual(['a+tag', 'b+tag', 'c+tag', 'd+tag']);
     expect(store.meta.get(job.doneKey)).not.toBeNull();
     expect(reports).toMatchObject([{ units: 2 }]);
+  });
+
+  it('lets a job write rows of its own beside the PRs and switch on readiness, moving no PR revision', () => {
+    for (const number of [1, 2, 3]) {
+      store.prs.upsert(makePr({ number }), at(1));
+    }
+    const revisions = (): unknown[] => store.db.prepare('SELECT key, snapshot_revision FROM pr ORDER BY key').all();
+    const before = revisions();
+    const counter = store.meta.get('snapshot_revision');
+    store.db.exec('CREATE TABLE pr_side (pr_key TEXT PRIMARY KEY, title TEXT NOT NULL)');
+    // Like a backfill: copies into rows no read uses yet, then sets its flag only once every PR has them.
+    const backfill: StorageJob = {
+      name: jobName('side'),
+      cursorKey: 'test_job:side:after',
+      doneKey: 'test_job:side:done',
+      step(jobStore, after) {
+        const row = jobStore.db.prepare('SELECT key, title FROM pr WHERE key > ? ORDER BY key LIMIT 1').get(after) as { key: string; title: string } | undefined;
+        if (row === undefined) {
+          return null;
+        }
+        jobStore.db.prepare('INSERT INTO pr_side (pr_key, title) VALUES (?, ?)').run(row.key, row.title);
+        return { key: row.key, wrote: true };
+      },
+      complete(jobStore) {
+        const missing = jobStore.db.prepare('SELECT count(*) AS n FROM pr WHERE key NOT IN (SELECT pr_key FROM pr_side)').get() as { n: number };
+        if (missing.n > 0) {
+          return 'again';
+        }
+        jobStore.meta.set('test_ready:side', '1');
+        return 'done';
+      },
+    };
+
+    runnerFor([backfill], 0).start(0);
+    for (let index = 0; index < 10; index += 1) {
+      clock.advance(PAUSE_MS);
+    }
+
+    expect(store.db.prepare('SELECT count(*) AS n FROM pr_side').get()).toEqual({ n: 3 });
+    expect(store.meta.get('test_ready:side')).toBe('1');
+    expect(store.meta.get(backfill.doneKey)).not.toBeNull();
+    expect(revisions()).toEqual(before);
+    expect(store.meta.get('snapshot_revision')).toBe(counter);
   });
 
   it('runs every job in order on an install that skipped releases, each once the one before is done', () => {
