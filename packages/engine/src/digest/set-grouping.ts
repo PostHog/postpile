@@ -11,6 +11,7 @@ import {
   type Stack,
   type Topic,
 } from '@postpile/core';
+import { Board } from '../board.ts';
 import { newSetId } from '../ids.ts';
 import { errorText } from '../errors.ts';
 import type { DigestDeps } from './deps.ts';
@@ -109,8 +110,12 @@ export class SetGrouper {
     this.deps.store.sets.recordChange({ setId, topicId, prKey, kind, reason, by, at: this.deps.now().toISOString() });
   }
 
+  /** Stacks over every stored PR, read once per grouper: the headers of a heavy install take tens of milliseconds. */
+  private stackOf: Map<PrKey, Stack> | null = null;
+
   private stacks(): Map<PrKey, Stack> {
-    return stackByPrKey(buildStacks(this.deps.store.prs.listAll()));
+    this.stackOf ??= stackByPrKey(buildStacks(this.deps.store.prs.listHeaders()));
+    return this.stackOf;
   }
 
   /**
@@ -363,7 +368,10 @@ export class SetGrouper {
     }
   }
 
+  /** Active topics; one whose PRs all went cold is left as it is (`Board.wentCold`, DESIGN.md "Big inboxes: what PostPile loads and works on"). */
   async run(): Promise<void> {
-    await Promise.all(this.deps.store.topics.listActive().map((topic) => this.group(topic)));
+    const board = Board.load(this.deps.store, this.deps.now().toISOString());
+    const topics = this.deps.store.topics.listActive().filter((topic) => !board.wentCold(topic.id));
+    await Promise.all(topics.map((topic) => this.group(topic)));
   }
 }

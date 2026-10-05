@@ -66,7 +66,7 @@ export class FeedbackActions {
   }
 
   giveFeedback(input: FeedbackInput): ActionResult {
-    const board = Board.load(this.store, this.now().toISOString());
+    const board = Board.forTile(this.store, this.now().toISOString(), input.tileId);
     const tile = board.findTile(input.tileId);
     if (!tile) {
       return failed(`no tile ${input.tileId}`);
@@ -97,7 +97,7 @@ export class FeedbackActions {
         }
         // Ends by units, like an agent change: one stack and nothing else is just that stack.
         const left = this.store.sets.get(setId);
-        if (left?.status === 'active' && setUnitCount(left.members, stackByPrKey(buildStacks(this.store.prs.listAll()))) < 2) {
+        if (left?.status === 'active' && setUnitCount(left.members, stackByPrKey(buildStacks(this.store.prs.listHeaders()))) < 2) {
           this.store.sets.dissolve(setId, at);
         }
         const change = { setId, topicId: tile.topicId, by: 'user' as const, at };

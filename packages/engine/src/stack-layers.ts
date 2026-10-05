@@ -1,4 +1,4 @@
-import { oneLayerPerHead, prKey, sitsOn, type IsoTime, type LayerShape, type Pr, type PrKey, type PrRef, type PullIn } from '@postpile/core';
+import { oneLayerPerHead, prKey, sitsOn, type IsoTime, type LayerShape, type PrKey, type PrRef, type PullIn } from '@postpile/core';
 import type { BranchLookup, BranchPr, GitHubReader } from '@postpile/github';
 
 /** Layers walked each way from a seed PR. Deeper stacks are rare and would cost a query per layer. */
@@ -53,7 +53,10 @@ function layersFor(step: Step, answers: BranchPr[]): BranchPr[] {
   return direct ? [direct] : candidates.slice(0, 1);
 }
 
-function firstSteps(seed: Pr): Step[] {
+/** A seed of the walk: a stored PR as the stack rules read it, a full snapshot or its header. */
+type Seed = LayerShape & { key: PrKey };
+
+function firstSteps(seed: Seed): Step[] {
   const directions: Direction[] = ['below', 'above'];
   return directions.map((direction) => ({ from: seed, direction, anchor: seed.ref }));
 }
@@ -86,7 +89,7 @@ export class StackLayerFinder {
   }
 
   /** seeds: tracked PRs whose stacks to walk. tracked: every PR with a notification thread or found by the sync. */
-  async find(seeds: Pr[], tracked: Set<PrKey>): Promise<StackLayer[]> {
+  async find(seeds: Seed[], tracked: Set<PrKey>): Promise<StackLayer[]> {
     const at = this.now().toISOString();
     const visited = new Set<PrKey>(seeds.map((pr) => pr.key));
     const found: StackLayer[] = [];

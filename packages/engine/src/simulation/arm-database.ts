@@ -41,21 +41,21 @@ export class ArmDatabase {
   }
 
   /**
-   * Removes every PR snapshot with its events, log rows, stack layers and
+   * Removes every PR (header and snapshot) with its events, log rows, stack layers and
    * found rows. Notification threads stay: the first real sync stores every
    * notification at once and only the PR fetches are capped, and a thread
    * without a PR snapshot shows nowhere and reaches no prompt.
    */
   hidePrs(): void {
     this.store.transaction(() => {
-      for (const table of ['pr_found', 'pr_pull_in', 'event_log', 'pr_event', 'pr']) {
+      for (const table of ['pr_found', 'pr_pull_in', 'event_log', 'pr_event', 'pr_snapshot', 'pr']) {
         this.store.db.exec(`DELETE FROM ${table}`);
       }
     });
   }
 
   /**
-   * Copies the round's PRs from the full copy: snapshot, events (with the
+   * Copies the round's PRs from the full copy: header and snapshot, events (with the
    * user's seen state), then their event log rows in their old order. The
    * log rows get new seqs (AUTOINCREMENT never reuses one), so they land
    * after every cursor and the digest reads them as new. Stack layer and
@@ -65,7 +65,11 @@ export class ArmDatabase {
     const keys = JSON.stringify([...round.pinged, ...round.found, ...round.pulledIn]);
     this.withSource(sourcePath, () => {
       const db = this.store.db;
+      // Header first, then its snapshot, in the same transaction: a PR is stored with both or not at all.
       db.prepare('INSERT OR IGNORE INTO main.pr SELECT * FROM source.pr WHERE key IN (SELECT value FROM json_each(?))').run(keys);
+      db.prepare(
+        'INSERT OR IGNORE INTO main.pr_snapshot SELECT * FROM source.pr_snapshot WHERE key IN (SELECT key FROM main.pr) AND key IN (SELECT value FROM json_each(?))',
+      ).run(keys);
       db.prepare('INSERT OR IGNORE INTO main.pr_event SELECT * FROM source.pr_event WHERE pr_key IN (SELECT value FROM json_each(?))').run(keys);
       db.prepare(
         `INSERT OR IGNORE INTO main.event_log (event_id, pr_key, logged_at)

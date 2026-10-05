@@ -74,6 +74,7 @@ describe('startFresh', () => {
       expect(count(store, table), table).toBe(0);
     }
     expect(count(store, 'pr')).toBe(3);
+    expect(count(store, 'pr_snapshot')).toBe(3);
     expect(count(store, 'notification_thread')).toBe(3);
     expect(count(store, 'pr_event')).toBe(events);
     expect(count(store, 'event_log')).toBe(logged);
@@ -118,11 +119,15 @@ describe('ArmDatabase', () => {
     const arm = ArmDatabase.open(join(dir, 'arm.sqlite'));
     arm.hidePrs();
     expect(count(arm.store, 'pr')).toBe(0);
+    expect(count(arm.store, 'pr_snapshot')).toBe(0);
     expect(count(arm.store, 'event_log')).toBe(0);
     expect(count(arm.store, 'notification_thread')).toBe(3);
 
     arm.reveal(base, { pinged: [PR1.key], found: [], pulledIn: [] });
 
+    // Header and snapshot come back together.
+    expect(arm.store.prs.listHeaders().map((pr) => pr.key)).toEqual([PR1.key]);
+    expect(count(arm.store, 'pr_snapshot')).toBe(1);
     expect(arm.store.prs.listAll().map((pr) => pr.key)).toEqual([PR1.key]);
     const revealed = arm.store.eventLog.listSince([PR1.key], 0);
     expect(revealed.length).toBe(arm.store.events.listForPr(PR1.key).length);

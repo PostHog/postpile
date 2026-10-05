@@ -26,6 +26,7 @@ import * as topicDriverPick from './migrations/024_topic_driver_pick.ts';
 import * as lesson from './migrations/025_lesson.ts';
 import * as pendingCatchUp from './migrations/026_pending_catch_up.ts';
 import * as macPing from './migrations/027_mac_ping.ts';
+import * as prHeader from './migrations/028_pr_header.ts';
 
 interface Migration {
   version: number;
@@ -35,7 +36,7 @@ interface Migration {
 }
 
 // Append new migrations here, in order. Never edit one that has shipped.
-const migrations: Migration[] = [init, engineMemory, factRecheck, instructionsVersions, topicAreas, pullIns, pingDecisions, actionLog, workContext, dropBroughtBack, pendingWrite, prEventOrderIndex, pendingWriteKind, foundPr, dropTopicDeferred, glanceKeyFiles, topicProposalSource, cleanTopicNames, prSnooze, topicRetiredAt, dropStartFresh, prSetChange, topicKind, topicDriverPick, lesson, pendingCatchUp, macPing];
+const migrations: Migration[] = [init, engineMemory, factRecheck, instructionsVersions, topicAreas, pullIns, pingDecisions, actionLog, workContext, dropBroughtBack, pendingWrite, prEventOrderIndex, pendingWriteKind, foundPr, dropTopicDeferred, glanceKeyFiles, topicProposalSource, cleanTopicNames, prSnooze, topicRetiredAt, dropStartFresh, prSetChange, topicKind, topicDriverPick, lesson, pendingCatchUp, macPing, prHeader];
 
 /** The schema version this build writes and expects. */
 export const LATEST_VERSION = migrations[migrations.length - 1]!.version;

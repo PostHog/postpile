@@ -85,7 +85,7 @@ function readTopics(store: Store, now: IsoTime): SnapshotTopic[] {
 }
 
 function readGlances(store: Store): Record<PrKey, SnapshotGlance> {
-  const keys = store.prs.listAll().map((pr) => pr.key).sort();
+  const keys = store.prs.keys();
   const glances = store.glances.getMany(keys);
   const result: Record<PrKey, SnapshotGlance> = {};
   for (const key of keys) {

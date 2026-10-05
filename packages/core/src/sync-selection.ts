@@ -3,7 +3,9 @@
 // threads; digesting all of them made the first sync take 20+ minutes
 // (2026-09-29). Old threads are left alone, and one full sync takes a
 // bounded batch, newest first; the rest follow on later syncs.
-import type { IsoTime, PrKey } from './types.ts';
+import { compareHotRank, hotRank, settledSince, wouldKeep, type HotFacts, type HotRank, type HotSelection } from './hot-board.ts';
+import { isPrOwner } from './pr-owners.ts';
+import type { IsoTime, PrKey, Viewer } from './types.ts';
 
 /** Threads last updated longer ago than this are never fetched or digested. */
 export const SYNC_MAX_AGE_DAYS = 30;
@@ -59,4 +61,55 @@ export function selectSyncThreads<T extends SyncThread>(
     result.push(thread);
   }
   return result;
+}
+
+/** A sync candidate with what the hot rules read of its PR: its stored facts, or its thread alone (`threadOnlyFacts`). */
+export interface HotSyncThread extends SyncThread {
+  facts: HotFacts;
+}
+
+export interface HotSyncOptions {
+  now: IsoTime;
+  viewer: Viewer | null;
+  /** The hot set as the store stands: what is on the board, and the busy rule. */
+  selection: Pick<HotSelection, 'busy' | 'weakestKept' | 'keys'>;
+}
+
+/**
+ * Worth a fetch at all: activity in the last SETTLED_DAYS, or, older than
+ * that, unread and aimed at the user, or the user's own open PR (stored as
+ * theirs, or a thread GitHub gives them as its author). A read thread from
+ * three weeks ago on someone else's PR would only go cold again.
+ */
+function worthFetching(thread: HotSyncThread, rank: HotRank, since: IsoTime, viewer: Viewer | null): boolean {
+  const own = thread.facts.thread?.reason === 'author' || (viewer !== null && isPrOwner(thread.facts, viewer.login));
+  const ownOpen = own && thread.facts.state === 'OPEN';
+  return thread.updatedAt >= since || (thread.unread && rank.tier === 'you') || ownOpen;
+}
+
+/**
+ * The hot slice of the candidates `selectSyncThreads` picked (DESIGN.md
+ * "Big inboxes: what PostPile loads and works on"): every PR on the board
+ * (its tile shows the snapshot, so a moved thread is fetched), and of the
+ * others only what would be hot (`worthFetching`) and, while the inbox is
+ * busy, would make the board (`wouldKeep`: tiers you and team, ranked). In
+ * board order: tier, unread first, newest activity first. `shed` are the
+ * keys left out, for the log and telemetry.
+ */
+export function hotSyncThreads<T extends HotSyncThread>(threads: T[], options: HotSyncOptions): { picked: T[]; shed: PrKey[] } {
+  const since = settledSince(options.now);
+  const ranked: Array<{ thread: T; rank: HotRank }> = [];
+  const shed: PrKey[] = [];
+  for (const thread of threads) {
+    const facts = { ...thread.facts, activityAt: thread.updatedAt > thread.facts.activityAt ? thread.updatedAt : thread.facts.activityAt };
+    const rank = hotRank(facts, options.viewer);
+    const onBoard = options.selection.keys.has(thread.key);
+    if (onBoard || (worthFetching(thread, rank, since, options.viewer) && wouldKeep(options.selection, rank))) {
+      ranked.push({ thread, rank });
+    } else {
+      shed.push(thread.key);
+    }
+  }
+  const picked = ranked.sort((a, b) => compareHotRank(a.rank, b.rank)).map((entry) => entry.thread);
+  return { picked, shed };
 }

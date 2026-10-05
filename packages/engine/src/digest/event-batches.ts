@@ -1,5 +1,6 @@
 import type { EventBatchInput, EventOverrideProposal } from '@postpile/agent';
 import { awaitsJudgement, isUnansweredAsk, PERSONAL_ASK_KINDS, type Pr, type PrEvent, type PrKey } from '@postpile/core';
+import { Board } from '../board.ts';
 import { errorText } from '../errors.ts';
 import { chunk } from '../lists.ts';
 import type { DigestDeps, TopicScope } from './deps.ts';
@@ -121,14 +122,19 @@ export class EventBatchClassifier {
    */
   private groups(): EventGroup[] {
     const { store } = this.deps;
+    // Hot PRs only: a cold PR's events wait until it turns hot (DESIGN.md "Big inboxes: what PostPile loads and works on").
+    const hot = Board.load(store, this.deps.now().toISOString()).prs;
     const judged = store.topics.list().filter((topic) => topic.status !== 'archived');
     const topics = judged.map((topic) => ({
       topicId: topic.id,
       scope: topic.id,
-      prKeys: store.memberships.listForTopic(topic.id).map((m) => m.prKey),
+      prKeys: store.memberships
+        .listForTopic(topic.id)
+        .map((m) => m.prKey)
+        .filter((key) => hot.has(key)),
     }));
     // Only pinged and found PRs: a pulled-in stack layer gets no agent calls of its own.
-    const unassigned = store.memberships.listUnassignedPrKeys();
+    const unassigned = store.memberships.listUnassignedPrKeys().filter((key) => hot.has(key));
     const threads = store.notifications.getByPrKeys(unassigned);
     const found = store.foundPrs.listAll();
     const unsorted = { topicId: null, scope: UNSORTED_SCOPE, prKeys: unassigned.filter((key) => threads.has(key) || found.has(key)) };

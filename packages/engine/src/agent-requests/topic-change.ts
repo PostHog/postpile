@@ -23,7 +23,7 @@ export class OutsideProposals {
   }
 
   private snapshot(change: TopicChangeRequest, at: string): TopicChangeSnapshot {
-    const board = Board.load(this.store, at);
+    const board = Board.forTopic(this.store, at, change.topicId);
     const members = [...new Set(board.tilesForTopic(change.topicId).flatMap((tile) => tile.members.map((member) => member.prKey)))];
     return {
       now: at,

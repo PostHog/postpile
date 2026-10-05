@@ -156,6 +156,24 @@ export class EventRepo {
     return result;
   }
 
+  /**
+   * PRs with an event aimed at the viewer in person: a mention, a reply or
+   * question to them, the author answering their changes request. The hot
+   * tier "you" reads it. Review requests are left out: their rule reason
+   * says "from you" for a request to one of the viewer's teams as well, and
+   * a pending personal request is in the PR header's reviewers. The WHERE
+   * must stay the predicate of the partial index from migration 028 word for
+   * word, or SQLite scans every event (1.5 s on 485k events).
+   */
+  prKeysWithPersonalAsks(): Set<PrKey> {
+    const rows = all<{ pr_key: string }>(
+      this.db,
+      `SELECT DISTINCT pr_key FROM pr_event
+       WHERE kind IN ('mention', 'reply_to_user', 'question_to_user') OR rule_reason = 'addressed your changes'`,
+    );
+    return new Set(rows.map((row) => row.pr_key));
+  }
+
   /** Leaves events that were already seen alone, so the first seen time sticks. */
   markSeen(eventIds: string[], at: string): void {
     if (eventIds.length === 0) {

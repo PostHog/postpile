@@ -142,4 +142,93 @@ describe('migrations', () => {
     expect(rows.map((row) => [row.id, row.retired_at])).toEqual([['done', '2026-09-05T00:00:00.000Z'], ['live', null]]);
     db.close();
   });
+
+  /** A database at version 27 with these PR rows as an older build stored them. */
+  function before028(rows: Array<{ key: string; json: string; updatedAt?: string }>): DatabaseSync {
+    const db = new DatabaseSync(':memory:');
+    runMigrations(db, 27);
+    const insert = db.prepare(
+      `INSERT INTO pr (key, repo, number, state, base_ref, head_ref, updated_at, fetched_at, json)
+       VALUES (?, 'acme/app', ?, 'OPEN', 'main', 'feat', ?, '2026-09-02T00:00:00.000Z', ?)`,
+    );
+    rows.forEach((row, index) => insert.run(row.key, index + 1, row.updatedAt ?? '2026-09-01T00:00:00.000Z', row.json));
+    return db;
+  }
+
+  it('splits pr into the header and pr_snapshot, filling the header from the json', () => {
+    const pr = makePr({
+      title: 'Move CI to Depot',
+      author: 'renovate[bot]',
+      assignees: ['alice'],
+      reviewerTeams: ['acme/team-devex'],
+      state: 'MERGED',
+      isDraft: true,
+      headOid: 'abc123',
+      mergedAt: '2026-09-05T00:00:00.000Z',
+      isCrossRepository: true,
+    });
+    const db = before028([{ key: pr.key, json: JSON.stringify(pr) }]);
+
+    runMigrations(db);
+
+    expect(db.prepare('SELECT * FROM pr').get()).toEqual({
+      key: pr.key,
+      repo: 'acme/app',
+      number: 1,
+      state: 'OPEN',
+      is_draft: 1,
+      title: 'Move CI to Depot',
+      author: 'renovate[bot]',
+      assignees: '["alice"]',
+      reviewer_users: '[]',
+      reviewer_teams: '["acme/team-devex"]',
+      base_ref: 'main',
+      head_ref: 'feat',
+      head_oid: 'abc123',
+      previous_base_refs: '[]',
+      cross_repository: 1,
+      created_at: pr.createdAt,
+      updated_at: '2026-09-01T00:00:00.000Z',
+      merged_at: '2026-09-05T00:00:00.000Z',
+      fetched_at: '2026-09-02T00:00:00.000Z',
+    });
+    expect(db.prepare('SELECT key, json FROM pr_snapshot').get()).toEqual({ key: pr.key, json: JSON.stringify(pr) });
+    const indexes = (table: string) => db.prepare(`PRAGMA index_list(${table})`).all().map((row) => row.name);
+    expect(indexes('pr')).toContain('pr_repo');
+    expect(indexes('pr_snapshot')).not.toContain('pr_repo');
+    expect(indexes('pr_event')).toContain('pr_event_personal_ask');
+    db.close();
+  });
+
+  it('fills legacy and odd-shaped snapshots with defaults', () => {
+    const legacy = { key: 'acme/app#1', title: 'Legacy' };
+    const odd = { key: 'acme/app#2', title: 42, author: null, assignees: 'alice', reviewerUsers: { login: 'bob' }, previousBaseRefs: null, createdAt: 7, isDraft: 'yes', isCrossRepository: 1, mergedAt: 0 };
+    const db = before028([
+      { key: 'acme/app#1', json: JSON.stringify(legacy), updatedAt: '2026-09-03T00:00:00.000Z' },
+      { key: 'acme/app#2', json: JSON.stringify(odd), updatedAt: '2026-09-04T00:00:00.000Z' },
+    ]);
+
+    runMigrations(db);
+
+    const rows = db
+      .prepare('SELECT key, is_draft, title, author, assignees, reviewer_users, reviewer_teams, head_oid, previous_base_refs, cross_repository, created_at, merged_at FROM pr ORDER BY key')
+      .all();
+    expect(rows).toEqual([
+      { key: 'acme/app#1', is_draft: 0, title: 'Legacy', author: '', assignees: '[]', reviewer_users: '[]', reviewer_teams: '[]', head_oid: '', previous_base_refs: '[]', cross_repository: 0, created_at: '2026-09-03T00:00:00.000Z', merged_at: null },
+      { key: 'acme/app#2', is_draft: 0, title: '', author: '', assignees: '[]', reviewer_users: '[]', reviewer_teams: '[]', head_oid: '', previous_base_refs: '[]', cross_repository: 0, created_at: '2026-09-04T00:00:00.000Z', merged_at: null },
+    ]);
+    db.close();
+  });
+
+  it('rolls the split back whole on a malformed snapshot', () => {
+    const db = before028([{ key: 'acme/app#1', json: '{"title": "cut off' }]);
+
+    expect(() => runMigrations(db)).toThrow();
+
+    expect(currentVersion(db)).toBe(27);
+    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('pr', 'pr_snapshot')").all().map((row) => row.name);
+    expect(tables).toEqual(['pr']);
+    expect(db.prepare('SELECT json FROM pr').get()).toEqual({ json: '{"title": "cut off' });
+    db.close();
+  });
 });

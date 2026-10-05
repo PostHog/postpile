@@ -1,8 +1,9 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { Pr, PrKey } from '@postpile/core';
-import { all, one, placeholders, run } from '../sql.ts';
+import type { Pr, PrHeader, PrKey, PrState } from '@postpile/core';
+import { inTransaction } from '../database.ts';
+import { all, each, one, placeholders, run } from '../sql.ts';
 
-/** PR rows read and parsed per query when the cache fills (~80 KB of json each on a busy install). */
+/** PR rows read and parsed per query (~80 KB of json each on a busy install). */
 const PARSE_CHUNK = 200;
 
 interface ParsedPr {
@@ -10,116 +11,305 @@ interface ParsedPr {
   pr: Pr;
 }
 
+interface HeaderRow {
+  key: string;
+  repo: string;
+  number: number;
+  state: string;
+  is_draft: number;
+  title: string;
+  author: string;
+  assignees: string;
+  reviewer_users: string;
+  reviewer_teams: string;
+  base_ref: string;
+  head_ref: string;
+  head_oid: string;
+  previous_base_refs: string;
+  cross_repository: number;
+  created_at: string;
+  updated_at: string;
+  merged_at: string | null;
+  last_event_at: string | null;
+}
+
+/** A JSON list column; most are empty, which needs no parse. */
+function listOf(text: string): string[] {
+  return text === '[]' ? [] : (JSON.parse(text) as string[]);
+}
+
+function toHeader(row: HeaderRow): PrHeader {
+  return {
+    key: row.key,
+    ref: { repo: row.repo, number: row.number },
+    state: row.state as PrState,
+    isDraft: row.is_draft !== 0,
+    title: row.title,
+    author: row.author,
+    assignees: listOf(row.assignees),
+    reviewerUsers: listOf(row.reviewer_users),
+    reviewerTeams: listOf(row.reviewer_teams),
+    baseRef: row.base_ref,
+    headRef: row.head_ref,
+    headOid: row.head_oid,
+    previousBaseRefs: listOf(row.previous_base_refs),
+    isCrossRepository: row.cross_repository !== 0,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    mergedAt: row.merged_at,
+    lastEventAt: row.last_event_at,
+  };
+}
+
+/**
+ * Stored PRs (migration 028): the header in `pr` (short columns, the
+ * existence authority: a PR is stored if and only if it has one) and the
+ * snapshot json in `pr_snapshot` (the blob being phased out). Both are
+ * written together; reads of the json ignore a snapshot without a header.
+ */
 export class PrRepo {
   /**
-   * Parsed snapshots by key, with the fetched_at they were stored with. The
-   * json blobs are large (comments, review threads: ~15 MB for ~150 PRs) and
-   * every read model loads all PRs, so parsing them on each request cost
-   * ~45 ms. A row is parsed again once its fetched_at changes, which also
-   * catches writes from another process (the CLI). Callers must not mutate
-   * the returned PRs.
+   * Parsed snapshots of the hot board's PRs (`keepParsed`), with the
+   * fetched_at they were stored with. The json blobs are large (comments,
+   * review threads: ~80 KB a PR on a busy install) and every read model
+   * loads the board, so parsing them on each request cost ~45 ms. Only the
+   * hot PRs stay: a cache of every PR held ~1.9 GB on a heavy install. A
+   * row is parsed again once its fetched_at changes, which also catches
+   * writes from another process (the CLI). Callers must not mutate the
+   * returned PRs.
    */
   private readonly parsed = new Map<PrKey, ParsedPr>();
 
   constructor(private readonly db: DatabaseSync) {}
 
   /**
-   * Parses the json of the given keys that are missing from the cache or
-   * older than their row. A chunk at a time: the raw json strings of a
-   * whole cold start (~1 GB for ~11k PRs) next to their parsed copies went
-   * past the main process's 4 GB heap.
+   * The given header rows' snapshots, parsed: cached ones that are still
+   * current from the cache, the others read and parsed a chunk at a time
+   * (the raw json of a whole board next to its parsed copy went past the
+   * main process's 4 GB heap). `keep` says which freshly parsed ones go into
+   * the cache. A header whose snapshot is missing is left out and its cache
+   * entry dropped: that is an integrity failure, and the sync fetches the PR
+   * again (`fetchedAtByKey`, `updatedAtByKey` leave it out too).
    */
-  private refreshParsed(rows: Array<{ key: string; fetched_at: string }>): void {
-    const stale = rows.filter((row) => this.parsed.get(row.key)?.fetchedAt !== row.fetched_at).map((row) => row.key);
+  private parse(rows: Array<{ key: string; fetched_at: string }>, keep: (key: PrKey) => boolean): Map<PrKey, Pr> {
+    const stale = rows.filter((row) => this.parsed.get(row.key)?.fetchedAt !== row.fetched_at);
+    const fresh = new Map<PrKey, Pr>();
     for (let start = 0; start < stale.length; start += PARSE_CHUNK) {
       const chunk = stale.slice(start, start + PARSE_CHUNK);
-      const fresh = all<{ key: string; fetched_at: string; json: string }>(
+      const read = all<{ key: string; json: string }>(
         this.db,
-        `SELECT key, fetched_at, json FROM pr WHERE key IN (${placeholders(chunk.length)})`,
-        ...chunk,
+        `SELECT key, json FROM pr_snapshot WHERE key IN (${placeholders(chunk.length)})`,
+        ...chunk.map((row) => row.key),
       );
-      for (const row of fresh) {
-        this.parsed.set(row.key, { fetchedAt: row.fetched_at, pr: JSON.parse(row.json) as Pr });
+      const json = new Map(read.map((row) => [row.key, row.json]));
+      for (const row of chunk) {
+        const text = json.get(row.key);
+        if (text === undefined) {
+          this.parsed.delete(row.key);
+          continue;
+        }
+        const pr = JSON.parse(text) as Pr;
+        fresh.set(row.key, pr);
+        if (keep(row.key)) {
+          this.parsed.set(row.key, { fetchedAt: row.fetched_at, pr });
+        }
       }
     }
-  }
-
-  upsert(pr: Pr, fetchedAt: string): void {
-    run(
-      this.db,
-      `INSERT INTO pr (key, repo, number, state, base_ref, head_ref, updated_at, fetched_at, json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT (key) DO UPDATE SET
-         repo = excluded.repo, number = excluded.number, state = excluded.state,
-         base_ref = excluded.base_ref, head_ref = excluded.head_ref, updated_at = excluded.updated_at,
-         fetched_at = excluded.fetched_at, json = excluded.json`,
-      pr.key,
-      pr.ref.repo,
-      pr.ref.number,
-      pr.state,
-      pr.baseRef,
-      pr.headRef,
-      pr.updatedAt,
-      fetchedAt,
-      JSON.stringify(pr),
-    );
-    // Two upserts can share a fetched_at, so never trust the cache after one.
-    this.parsed.delete(pr.key);
-  }
-
-  get(key: PrKey): Pr | null {
-    const row = one<{ json: string }>(this.db, 'SELECT json FROM pr WHERE key = ?', key);
-    return row ? (JSON.parse(row.json) as Pr) : null;
-  }
-
-  getMany(keys: PrKey[]): Map<PrKey, Pr> {
+    // In the order of `rows`, so callers see the same order whether a PR came from the cache or not.
     const result = new Map<PrKey, Pr>();
-    if (keys.length === 0) {
-      return result;
-    }
-    const rows = all<{ key: string; fetched_at: string }>(
-      this.db,
-      `SELECT key, fetched_at FROM pr WHERE key IN (${placeholders(keys.length)})`,
-      ...keys,
-    );
-    this.refreshParsed(rows);
     for (const row of rows) {
       const cached = this.parsed.get(row.key);
-      if (cached) {
-        result.set(row.key, cached.pr);
+      const pr = fresh.get(row.key) ?? (cached?.fetchedAt === row.fetched_at ? cached.pr : undefined);
+      if (pr) {
+        result.set(row.key, pr);
       }
     }
     return result;
   }
 
-  /** Ordered by number. */
-  listByRepo(repo: string): Pr[] {
-    return all<{ json: string }>(this.db, 'SELECT json FROM pr WHERE repo = ? ORDER BY number', repo).map(
-      (row) => JSON.parse(row.json) as Pr,
-    );
+  /**
+   * The headers' fetch times for these keys, a chunk at a time. Keys
+   * without a header, or whose header has lost its snapshot, are left out
+   * and their cached copies dropped.
+   */
+  private fetchedAtRows(keys: PrKey[]): Array<{ key: string; fetched_at: string }> {
+    const rows: Array<{ key: string; fetched_at: string }> = [];
+    for (let start = 0; start < keys.length; start += PARSE_CHUNK) {
+      const chunk = keys.slice(start, start + PARSE_CHUNK);
+      rows.push(
+        ...all<{ key: string; fetched_at: string }>(
+          this.db,
+          `SELECT p.key, p.fetched_at FROM pr p JOIN pr_snapshot s ON s.key = p.key WHERE p.key IN (${placeholders(chunk.length)})`,
+          ...chunk,
+        ),
+      );
+    }
+    const stored = new Set(rows.map((row) => row.key));
+    for (const key of keys) {
+      if (!stored.has(key)) {
+        this.parsed.delete(key);
+      }
+    }
+    return rows;
   }
 
-  /** Every stored PR, for stack detection across topics. */
+  /** Header first, then snapshot, in one transaction: never one without the other. */
+  upsert(pr: Pr, fetchedAt: string): void {
+    inTransaction(this.db, () => {
+      run(
+        this.db,
+        `INSERT INTO pr (key, repo, number, state, is_draft, title, author, assignees, reviewer_users, reviewer_teams,
+           base_ref, head_ref, head_oid, previous_base_refs, cross_repository, created_at, updated_at, merged_at, fetched_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (key) DO UPDATE SET
+           repo = excluded.repo, number = excluded.number, state = excluded.state, is_draft = excluded.is_draft,
+           title = excluded.title, author = excluded.author, assignees = excluded.assignees,
+           reviewer_users = excluded.reviewer_users, reviewer_teams = excluded.reviewer_teams,
+           base_ref = excluded.base_ref, head_ref = excluded.head_ref, head_oid = excluded.head_oid,
+           previous_base_refs = excluded.previous_base_refs, cross_repository = excluded.cross_repository,
+           created_at = excluded.created_at, updated_at = excluded.updated_at, merged_at = excluded.merged_at,
+           fetched_at = excluded.fetched_at`,
+        pr.key,
+        pr.ref.repo,
+        pr.ref.number,
+        pr.state,
+        pr.isDraft ? 1 : 0,
+        pr.title,
+        pr.author,
+        JSON.stringify(pr.assignees ?? []),
+        JSON.stringify(pr.reviewerUsers),
+        JSON.stringify(pr.reviewerTeams),
+        pr.baseRef,
+        pr.headRef,
+        pr.headOid,
+        JSON.stringify(pr.previousBaseRefs ?? []),
+        pr.isCrossRepository ? 1 : 0,
+        pr.createdAt,
+        pr.updatedAt,
+        pr.mergedAt,
+        fetchedAt,
+      );
+      // The snapshot's own short columns are legacy: written for NOT NULL, never read.
+      run(
+        this.db,
+        `INSERT INTO pr_snapshot (key, repo, number, state, base_ref, head_ref, updated_at, fetched_at, json)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (key) DO UPDATE SET
+           repo = excluded.repo, number = excluded.number, state = excluded.state,
+           base_ref = excluded.base_ref, head_ref = excluded.head_ref, updated_at = excluded.updated_at,
+           fetched_at = excluded.fetched_at, json = excluded.json`,
+        pr.key,
+        pr.ref.repo,
+        pr.ref.number,
+        pr.state,
+        pr.baseRef,
+        pr.headRef,
+        pr.updatedAt,
+        fetchedAt,
+        JSON.stringify(pr),
+      );
+    });
+    // Two upserts can share a fetched_at, so never trust the cache after one.
+    this.parsed.delete(pr.key);
+  }
+
+  /** Header and snapshot together, and the cached copy. */
+  delete(key: PrKey): void {
+    inTransaction(this.db, () => {
+      run(this.db, 'DELETE FROM pr_snapshot WHERE key = ?', key);
+      run(this.db, 'DELETE FROM pr WHERE key = ?', key);
+    });
+    this.parsed.delete(key);
+  }
+
+  /** The stored snapshot; null without a header (a snapshot alone is not a stored PR) or without a snapshot. */
+  get(key: PrKey): Pr | null {
+    const row = one<{ json: string }>(this.db, 'SELECT s.json FROM pr p JOIN pr_snapshot s ON s.key = p.key WHERE p.key = ?', key);
+    return row ? (JSON.parse(row.json) as Pr) : null;
+  }
+
+  /** Stored PRs by key. A hot PR comes from the cache; any other is parsed for this call only and not kept. */
+  getMany(keys: PrKey[]): Map<PrKey, Pr> {
+    return keys.length === 0 ? new Map() : this.parse(this.fetchedAtRows(keys), () => false);
+  }
+
+  /**
+   * The hot board's read: these PRs, parsed and kept in the cache, and
+   * every other cached PR let go. The cache then holds the hot set and
+   * nothing more, however many PRs are stored.
+   */
+  keepParsed(keys: PrKey[]): Map<PrKey, Pr> {
+    const wanted = new Set(keys);
+    for (const key of this.parsed.keys()) {
+      if (!wanted.has(key)) {
+        this.parsed.delete(key);
+      }
+    }
+    return this.parse(this.fetchedAtRows(keys), (key) => wanted.has(key));
+  }
+
+  /**
+   * Every stored snapshot, parsed for this call. Tests and dev tools only:
+   * on a heavy install this is about 2 GB. App code reads `listHeaders`, or
+   * `getMany` for the PRs it needs.
+   */
   listAll(): Pr[] {
     const rows = all<{ key: string; fetched_at: string }>(this.db, 'SELECT key, fetched_at FROM pr ORDER BY repo, number');
-    this.refreshParsed(rows);
-    return rows.flatMap((row) => this.parsed.get(row.key)?.pr ?? []);
+    return [...this.parse(rows, () => false).values()];
   }
 
-  /** updated_at per stored PR, so sync can skip PRs that did not move. */
+  /** Every stored key. */
+  keys(): PrKey[] {
+    return all<{ key: string }>(this.db, 'SELECT key FROM pr ORDER BY key').map((row) => row.key);
+  }
+
+  /**
+   * Every stored PR's header with the time of its newest stored event,
+   * from `pr` alone, never the json. Stacks over every PR, the hot rules
+   * and the search read these: ~11k rows in tens of milliseconds, where
+   * parsing their snapshots took seconds.
+   */
+  listHeaders(): PrHeader[] {
+    const rows = each<HeaderRow>(
+      this.db,
+      `SELECT key, repo, number, state, is_draft, title, author, assignees, reviewer_users, reviewer_teams,
+         base_ref, head_ref, head_oid, previous_base_refs, cross_repository, created_at, updated_at, merged_at,
+         (SELECT max(at) FROM pr_event WHERE pr_event.pr_key = pr.key) AS last_event_at
+       FROM pr ORDER BY repo, number`,
+    );
+    const result: PrHeader[] = [];
+    for (const row of rows) {
+      result.push(toHeader(row));
+    }
+    return result;
+  }
+
+  /** Open, merged or closed per stored PR. */
+  stateByKey(): Map<PrKey, PrState> {
+    const rows = all<{ key: string; state: string }>(this.db, 'SELECT key, state FROM pr');
+    return new Map(rows.map((row) => [row.key, row.state as PrState]));
+  }
+
+  /**
+   * updated_at per stored PR, so sync can skip PRs that did not move. A
+   * header without its snapshot is left out, so the sync fetches it again.
+   */
   updatedAtByKey(): Map<PrKey, string> {
-    const rows = all<{ key: string; updated_at: string }>(this.db, 'SELECT key, updated_at FROM pr');
+    const rows = all<{ key: string; updated_at: string }>(this.db, 'SELECT p.key, p.updated_at FROM pr p JOIN pr_snapshot s ON s.key = p.key');
     return new Map(rows.map((row) => [row.key, row.updated_at]));
   }
 
   /** When this PR's stored snapshot was fetched; null when it is not stored. */
   fetchedAt(key: PrKey): string | null {
-    return one<{ fetched_at: string }>(this.db, 'SELECT fetched_at FROM pr WHERE key = ?', key)?.fetched_at ?? null;
+    return one<{ fetched_at: string }>(this.db, 'SELECT p.fetched_at FROM pr p JOIN pr_snapshot s ON s.key = p.key WHERE p.key = ?', key)?.fetched_at ?? null;
   }
 
-  /** When each stored snapshot was fetched. */
+  /**
+   * When each stored snapshot was fetched. A header without its snapshot is
+   * left out, so the sync takes it for never fetched and fetches it again.
+   */
   fetchedAtByKey(): Map<PrKey, string> {
-    const rows = all<{ key: string; fetched_at: string }>(this.db, 'SELECT key, fetched_at FROM pr');
+    const rows = all<{ key: string; fetched_at: string }>(this.db, 'SELECT p.key, p.fetched_at FROM pr p JOIN pr_snapshot s ON s.key = p.key');
     return new Map(rows.map((row) => [row.key, row.fetched_at]));
   }
 }

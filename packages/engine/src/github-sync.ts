@@ -15,12 +15,17 @@ import {
   type PrKey,
   type PrRef,
   type IsoTime,
+  type LayerShape,
   type Viewer,
+  hotSyncThreads,
   selectSyncThreads,
+  threadNewsFacts,
 } from '@postpile/core';
 import type { GitHubReader } from '@postpile/github';
 import type { Store } from '@postpile/store';
 import { writeReadPlan } from './actions/local-change.ts';
+import { Board } from './board.ts';
+import { readHotSet, threadsByPrKey } from './hot-set.ts';
 import { CAP_FILL_POLL_PRS, CAP_FILL_SYNC_PRS, CapFiller } from './cap-fill.ts';
 import { errorText } from './errors.ts';
 import { LessonKeeper } from './lessons/lesson-keeper.ts';
@@ -134,6 +139,10 @@ export class GitHubSync {
   private readonly watchAnswers = { total: 0, changed: 0 };
   /** When the freshness check last ran, in ms; 0 before the first. */
   private lastFreshnessAt = 0;
+  /** PRs with news left out of the fetch since the last `takeShed` (telemetry's work_shed). */
+  private shed = new Set<PrKey>();
+  /** How many the last pick left out, for the sync's log line. */
+  private lastShed = 0;
 
   constructor(
     private readonly store: Store,
@@ -413,16 +422,17 @@ export class GitHubSync {
   }
 
   /**
-   * The touch rule over every stored PR, once per full sync. storePr applies
-   * it to each PR it writes; this also covers events stored before the rule
-   * existed, on PRs that have not moved since.
+   * The touch rule over the hot board's PRs, once per full sync. storePr
+   * applies it to each PR it writes; this also covers events stored before
+   * the rule existed, on PRs that have not moved since. A cold PR gets it
+   * here once it turns hot again: reading every stored PR and event for it
+   * took gigabytes on a heavy install.
    */
   private reconcileTouches(viewer: Viewer): void {
-    const prs = this.store.prs.listAll();
-    const events = this.store.events.listForPrs(prs.map((pr) => pr.key));
+    const board = Board.load(this.store, this.now().toISOString());
     this.store.transaction(() => {
-      for (const pr of prs) {
-        this.markSeenBeforeTouch(pr, events.get(pr.key) ?? [], viewer);
+      for (const pr of board.prs.values()) {
+        this.markSeenBeforeTouch(pr, board.events.get(pr.key) ?? [], viewer);
       }
     });
   }
@@ -436,22 +446,45 @@ export class GitHubSync {
 
   /**
    * PR threads worth fetching (`selectSyncThreads`): updated in the last
-   * SYNC_MAX_AGE_DAYS, with activity after the stored snapshot was fetched,
-   * unread first, newest first inside each. Read threads count too, so a PR
-   * handled entirely on github.com still gets its events logged (as seen)
-   * and reaches topics, dossiers and facts. Compared against fetch time,
-   * not the PR's updatedAt: a thread's updated_at runs ahead of the PR's
-   * (CI, bots), which would refetch every PR on every sync. Taken from the
-   * store, not the last response, so PRs left over by maxPrs still get
-   * fetched after the inbox answers 304.
+   * SYNC_MAX_AGE_DAYS, with activity after the stored snapshot was fetched.
+   * Read threads count too, so a PR handled entirely on github.com still
+   * gets its events logged (as seen) and reaches topics, dossiers and
+   * facts. Compared against fetch time, not the PR's updatedAt: a thread's
+   * updated_at runs ahead of the PR's (CI, bots), which would refetch every
+   * PR on every sync. Taken from the store, not the last response, so PRs
+   * left over by maxPrs still get fetched after the inbox answers 304.
+   * Then the hot slice only (`hotSyncThreads`, DESIGN.md "Big inboxes: what
+   * PostPile loads and works on"): a thread older than SETTLED_DAYS only
+   * when unread and aimed at the user or on their own open PR, and while
+   * the inbox is busy only what would make the board; in board order.
    */
   private candidates(): Candidate[] {
+    const now = this.now().toISOString();
+    const hot = readHotSet(this.store, now, threadsByPrKey(this.threads()));
+    const found = this.store.foundPrs.listAll();
+    const viewer = loadViewer(this.store);
     const withRefs = this.threads().flatMap((thread) => {
       const ref = threadPrRef(thread);
-      return ref ? [{ ref, thread, key: prKey(ref), unread: thread.unread, updatedAt: thread.updatedAt }] : [];
+      if (!ref) {
+        return [];
+      }
+      const key = prKey(ref);
+      // The thread is the news: its reason and read state count over what the stored snapshot says.
+      const facts = threadNewsFacts(key, hot.facts.get(key) ?? null, thread, found.get(key)?.via ?? null, viewer);
+      return [{ ref, thread, key, unread: thread.unread, updatedAt: thread.updatedAt, facts }];
     });
-    const picked = selectSyncThreads(withRefs, this.store.prs.fetchedAtByKey(), this.now().toISOString());
+    const window = selectSyncThreads(withRefs, this.store.prs.fetchedAtByKey(), now);
+    const { picked, shed } = hotSyncThreads(window, { now, viewer, selection: hot.selection });
+    shed.forEach((key) => this.shed.add(key));
+    this.lastShed = shed.length;
     return picked.map(({ ref, thread }) => ({ ref, thread }));
+  }
+
+  /** PRs with news the sync and the poll left alone since the last call, because they are outside the hot slice. */
+  takeShed(): PrKey[] {
+    const keys = [...this.shed];
+    this.shed = new Set();
+    return keys;
   }
 
   /**
@@ -495,14 +528,15 @@ export class GitHubSync {
   /**
    * Fetches the missing layers of the stacks tracked PRs (pinged or found)
    * sit in, and records them as pulled in. Seeds are the tracked PRs fetched
-   * this sync plus every stored open tracked PR, since a new layer on top
-   * (often a draft) does not move the PR below it. A layer whose snapshot
+   * this sync plus every stored open tracked PR on the hot board, since a
+   * new layer on top (often a draft) does not move the PR below it. A layer whose snapshot
    * has not moved since the last fetch is not fetched again.
    */
   private async pullInStackLayers(fetched: Pr[], viewer: Viewer): Promise<Pr[]> {
     const tracked = this.trackedPrKeys();
-    const seeds = new Map<PrKey, Pr>();
-    for (const pr of [...fetched, ...this.store.prs.listAll().filter((stored) => stored.state === 'OPEN')]) {
+    const seeds = new Map<PrKey, LayerShape & { key: PrKey }>();
+    const hot = Board.load(this.store, this.now().toISOString()).prs;
+    for (const pr of [...fetched, ...this.store.prs.listHeaders().filter((stored) => stored.state === 'OPEN' && hot.has(stored.key))]) {
       if (tracked.has(pr.key) && !seeds.has(pr.key)) {
         seeds.set(pr.key, pr);
       }
@@ -553,13 +587,15 @@ export class GitHubSync {
 
   /**
    * PRs a tile shows (pinged, found or pulled in) that are open or draft,
-   * plus ones merged or closed within FRESHNESS_CLOSED_WINDOW_MS.
+   * plus ones merged or closed within FRESHNESS_CLOSED_WINDOW_MS. Hot ones
+   * only: a PR the board leaves out would only be fetched to be cut again.
    */
   private freshnessRefs(skip: Set<PrKey>): PrRef[] {
-    const tracked = new Set<PrKey>([...this.trackedPrKeys(), ...this.store.pullIns.listAll().keys()]);
+    const hot = Board.load(this.store, this.now().toISOString()).prs;
+    const tracked = new Set<PrKey>([...this.trackedPrKeys(), ...this.store.pullIns.listAll().keys()].filter((key) => hot.has(key)));
     const cutoff = new Date(this.now().getTime() - FRESHNESS_CLOSED_WINDOW_MS).toISOString();
     return this.store.prs
-      .listAll()
+      .listHeaders()
       .filter((pr) => tracked.has(pr.key) && !skip.has(pr.key))
       .filter((pr) => pr.state === 'OPEN' || pr.updatedAt >= cutoff)
       .map((pr) => pr.ref);
@@ -582,7 +618,8 @@ export class GitHubSync {
     const remote = await this.reader.prUpdatedAts(refs);
     const stored = this.store.prs.updatedAtByKey();
     // Snapshots stored before assignees were read (2026-09-30) refetch once, or a bot PR's owners stay unknown until it moves.
-    const withoutAssignees = new Set(this.store.prs.listAll().filter((pr) => pr.assignees === undefined).map((pr) => pr.key));
+    const checked = this.store.prs.getMany(refs.map(prKey));
+    const withoutAssignees = new Set([...checked.values()].filter((pr) => pr.assignees === undefined).map((pr) => pr.key));
     const moved = refs.filter((ref) => {
       const updatedAt = remote.get(prKey(ref));
       const was = stored.get(prKey(ref));
@@ -707,6 +744,9 @@ export class GitHubSync {
 
     const candidates = this.candidates();
     const picked = candidates.slice(0, maxPrs);
+    if (this.lastShed > 0) {
+      this.textLog(`sync: ${this.lastShed} PRs with news left alone, outside the hot slice (settled, or not for you or your team while the inbox is busy)`);
+    }
     // A failed batch, found-PRs query or stack lookup should not cost the rest of the sync; the next sync tries again.
     const errors: string[] = [];
     // Before the quiet reads, older pages for PRs whose snapshot stops short of their unread thread's last read.

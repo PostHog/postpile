@@ -48,9 +48,15 @@ export function searchTerms(query: string): string[] {
 }
 
 /** Everything a term may hit for one PR: its own fields plus its topic's name and area. */
-function haystack(topic: SearchableTopic, pr: SearchablePr): string {
+function haystack(topic: Pick<SearchableTopic, 'name' | 'area'>, pr: SearchablePr): string {
   const { repo, number } = parsePrKey(pr.key);
   return [pr.title, `#${number}`, pr.author, repo, pr.headRef, topic.name, topic.area ?? ''].join('\n').toLowerCase();
+}
+
+/** Every term is found in the PR's fields or its topic's name and area (`searchTopics`'s match for one PR). */
+export function prMatchesTerms(topic: Pick<SearchableTopic, 'name' | 'area'>, pr: SearchablePr, terms: string[]): boolean {
+  const text = haystack(topic, pr);
+  return terms.every((term) => text.includes(term));
 }
 
 /**
@@ -69,10 +75,7 @@ export function searchTopics(topics: SearchableTopic[], query: string): SearchRe
     const tileIds: string[] = [];
     const prKeys = new Set<PrKey>();
     for (const tile of topic.tiles) {
-      const matching = tile.prs.filter((pr) => {
-        const text = haystack(topic, pr);
-        return terms.every((term) => text.includes(term));
-      });
+      const matching = tile.prs.filter((pr) => prMatchesTerms(topic, pr, terms));
       if (matching.length > 0) {
         tileIds.push(tile.tileId);
         for (const pr of matching) {

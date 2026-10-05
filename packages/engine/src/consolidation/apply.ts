@@ -78,7 +78,8 @@ export class ConsolidationApplier {
   constructor(
     private readonly store: Store,
     private readonly facts: FactWriter,
-    private readonly gate: RetireGate,
+    /** The retire gate of one topic, on a Board that holds all of its PRs. */
+    private readonly gateFor: (topicId: string) => RetireGate,
     private readonly counts: ConsolidationCounts,
     private readonly now: () => Date,
   ) {}
@@ -195,7 +196,7 @@ export class ConsolidationApplier {
   }
 
   retire(topicId: string, at: string): void {
-    if (this.gate.passes(topicId) && changeTopicStatus(this.store, topicId, 'retire', at)) {
+    if (this.gateFor(topicId).passes(topicId) && changeTopicStatus(this.store, topicId, 'retire', at)) {
       this.counts.topicsRetired += 1;
     }
   }

@@ -9,6 +9,12 @@ import { changeTopicStatus } from './topic-status.ts';
 /** Four weeks after the fixture PRs' activity, so the 3 quiet days have passed. */
 const MONTH_LATER = new Date('2026-09-30T12:00:00Z');
 
+/**
+ * Past the 2 quiet days but within SETTLED_DAYS, so the PRs are still hot:
+ * consolidation leaves a topic whose PRs all went cold to the retire step.
+ */
+const FOUR_DAYS_LATER = new Date('2026-09-05T12:00:00Z');
+
 function finishedDossier(): Dossier {
   return { ...emptyDossier(), summary: 'Done.', status: 'finished' };
 }
@@ -181,7 +187,7 @@ describe('Engine.consolidate', () => {
   });
 
   it('retires a finished topic only when the gate holds', async () => {
-    const h = makeHarness({ now: () => MONTH_LATER });
+    const h = makeHarness({ now: () => FOUR_DAYS_LATER });
     await finishedTopic(h, [mergedPr(1)]);
     h.agent.answerConsolidation(() => ({ finishedTopics: [{ topicId: 'depot', reason: 'all merged' }] }));
 
@@ -189,6 +195,17 @@ describe('Engine.consolidate', () => {
 
     expect(report.topicsRetired).toBe(1);
     expect(h.store.topics.get('depot')?.status).toBe('retired');
+  });
+
+  it('leaves a topic whose PRs all went cold out of consolidation', async () => {
+    const h = makeHarness({ now: () => MONTH_LATER });
+    await finishedTopic(h, [mergedPr(1)]);
+    h.agent.answerConsolidation(() => ({ finishedTopics: [{ topicId: 'depot', reason: 'all merged' }] }));
+
+    const report = await h.engine.consolidate();
+
+    expect(report.agentCallStats.byKind.consolidation).toBeUndefined();
+    expect(h.store.topics.get('depot')?.status).toBe('active');
   });
 
   it('keeps a topic with an open PR even when the agent calls it finished', async () => {
@@ -203,7 +220,7 @@ describe('Engine.consolidate', () => {
   });
 
   it('retires a topic whose dossier says finished without any agent call', async () => {
-    const h = makeHarness({ now: () => MONTH_LATER });
+    const h = makeHarness({ now: () => FOUR_DAYS_LATER });
     h.agent.answerDossier(() => ({ dossier: finishedDossier() }));
     await finishedTopic(h, [mergedPr(1)]);
 

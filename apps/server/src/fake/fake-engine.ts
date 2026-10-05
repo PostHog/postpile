@@ -92,8 +92,12 @@ import type {
   TeamRolesView,
   ViewerView,
   BoardShapeEvent,
+  BusyInboxView,
 } from '@postpile/core';
 import {
+  busyInboxView,
+  hotFactsOf,
+  hotTier,
   findComment,
   findReactable,
   quotedReplyBody,
@@ -249,7 +253,13 @@ export interface FakeEngineOptions {
   quota?: FakeQuotaLevel | null;
   /** POSTPILE_FAKE_TIDY=1: the first sync runs the one-time topic tidy, so the overlay shows. */
   tidyOnFirstSync?: boolean;
+  /** POSTPILE_FAKE_BUSY=1: the busy inbox card shows, with invented numbers (see `busyInbox`). */
+  busy?: boolean;
 }
+
+/** The invented busy inbox of POSTPILE_FAKE_BUSY=1: a heavy install over the cap, writes locked. */
+const FAKE_BUSY_INBOX = { busy: true, inboxPrs: 6140, keptByTier: { you: 940, team: 560, others: 0 } };
+const FAKE_BUSY_UPDATES_LAST_HOUR = 300;
 
 /** One step of the fake sync: what runs, calls it plans, calls that come back by its end. */
 interface FakeSyncStep {
@@ -385,6 +395,7 @@ export class FakeEngine implements EngineService {
   /** The fake sync stopped after its fetch step until the start dialog is answered. */
   private heldSync = false;
   private readonly catchUpGate: boolean;
+  private readonly busy: boolean;
   // Starts above the ids of the seeded feedback.
   private nextId = 100;
   /** When each sample PR was last "fetched": a few minutes before start, moved by a fake agent refresh. */
@@ -397,6 +408,7 @@ export class FakeEngine implements EngineService {
     this.recheckDelayMs = options.recheckDelayMs ?? 1500;
     this.syncStepMs = options.syncStepMs ?? 800;
     this.tidyPending = options.tidyOnFirstSync ?? false;
+    this.busy = options.busy ?? false;
     this.catchUpGate = options.catchUpGate ?? false;
     this.data = buildSampleData(this.now());
     const catchUpStepMs = options.catchUpStepMs ?? 4000;
@@ -1105,6 +1117,29 @@ export class FakeEngine implements EngineService {
     const result = this.cleanup.startAsUsual();
     this.resumeHeldSync();
     return result;
+  }
+
+  /**
+   * Not busy: every sample PR is hot and kept, counted by the engine's tier
+   * rule. POSTPILE_FAKE_BUSY=1: a heavy install over the cap with writes
+   * locked, so the card can be built and checked on sample data.
+   */
+  async busyInbox(): Promise<BusyInboxView> {
+    if (this.busy) {
+      return busyInboxView(FAKE_BUSY_INBOX, { updatesLastHour: FAKE_BUSY_UPDATES_LAST_HOUR, writesLocked: true });
+    }
+    const threads = this.prThreads();
+    const keptByTier = { you: 0, team: 0, others: 0 };
+    for (const pr of this.data.prs) {
+      const thread = threads.get(pr.key) ?? null;
+      const facts = hotFactsOf(
+        { ...pr, assignees: pr.assignees ?? [], lastEventAt: null },
+        { thread, found: null, personalAsk: false },
+      );
+      keptByTier[hotTier(facts, this.viewer())] += 1;
+    }
+    const writesLocked = !this.writes.status().enabled;
+    return busyInboxView({ busy: false, inboxPrs: this.data.prs.length, keptByTier }, { updatesLastHour: 0, writesLocked });
   }
 
   /** The Archive's sample topics that still take new PRs, newest first, like the engine. Samples keep no join times. */

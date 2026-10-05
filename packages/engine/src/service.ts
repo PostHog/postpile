@@ -77,6 +77,7 @@ import type {
   WorkThreadForget,
   ViewerView,
   BoardShapeEvent,
+  BusyInboxView,
 } from '@postpile/core';
 import type { AutoSyncOptions } from './auto-sync.ts';
 import type { LivePollOptions, PollCycle } from './live/poll-cycle.ts';
@@ -214,6 +215,12 @@ export interface EngineService {
   boardShape(): Promise<BoardShapeEvent[]>;
   /** Topics retired in the last 30 days, newest first, for the sidebar's Finished drawer. getTopic opens any of them. */
   listFinishedTopics(): Promise<FinishedTopic[]>;
+  /**
+   * The busy inbox card's numbers (DESIGN.md "Big inboxes: what PostPile
+   * loads and works on" › Busy inbox): whether the board cap cut the hot
+   * set on the last load, and what it kept per tier. Reuses the last load.
+   */
+  busyInbox(): Promise<BusyInboxView>;
   /** The stored viewer and their teammates, for the sidebar's Mine and Team filters. */
   getViewer(): Promise<ViewerView>;
   /** The viewer's teams with their roles (home or routing only) and why. */

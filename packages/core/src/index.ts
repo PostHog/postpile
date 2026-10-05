@@ -17,6 +17,7 @@ export * from './activity.ts';
 export * from './last-touch.ts';
 export * from './whats-new.ts';
 export * from './stacks.ts';
+export * from './hot-board.ts';
 export * from './snooze.ts';
 export * from './review-request.ts';
 export * from './tiles.ts';

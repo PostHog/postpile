@@ -127,6 +127,24 @@ export class PrSetRepo {
     ).map((row) => this.toSet(row));
   }
 
+  /** The current members of every active set, one list per set: the hot board loads a set whole or not at all. */
+  activeMemberGroups(): PrKey[][] {
+    const rows = all<{ set_id: string; pr_key: string }>(
+      this.db,
+      `SELECT m.set_id, m.pr_key FROM pr_set_member m
+       JOIN pr_set s ON s.id = m.set_id
+       WHERE s.status = 'active' AND m.removed_at IS NULL
+       ORDER BY m.set_id, m.position`,
+    );
+    const groups = new Map<string, PrKey[]>();
+    for (const row of rows) {
+      const members = groups.get(row.set_id) ?? [];
+      members.push(row.pr_key);
+      groups.set(row.set_id, members);
+    }
+    return [...groups.values()];
+  }
+
   /** All statuses, so regrouping can see what the user already dissolved. */
   listForTopic(topicId: string): PrSet[] {
     return all<SetRow>(this.db, 'SELECT * FROM pr_set WHERE topic_id = ? ORDER BY created_at, id', topicId).map(

@@ -6,6 +6,8 @@ import {
   type DossierVersion,
   type EntityRef,
   type Fact,
+  type PrHeader,
+  type PrKey,
   type Topic,
 } from '@postpile/core';
 import type { Store } from '@postpile/store';
@@ -16,7 +18,7 @@ import { chunk } from '../lists.ts';
 import type { FactWriter } from '../memory/fact-writer.ts';
 import type { PromptContextSource } from '../prompt-context.ts';
 import { ConsolidationApplier, type ConsolidationCounts } from './apply.ts';
-import { RetireGate } from './retire-gate.ts';
+import { topicRetireGate } from './retire.ts';
 
 /** A run is due this long after the last one, if a dossier changed since. */
 export const CONSOLIDATION_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -100,9 +102,10 @@ export class Consolidator {
     return this.deps.now() >= dueAt && dossiers.some((dossier) => dossier.createdAt > cursor.updatedAt);
   }
 
-  private consolidationTopic(topic: Topic, dossier: DossierVersion | null, board: Board): ConsolidationTopic {
+  /** Counts from the PR headers (`headers`, by key): reading every topic's snapshots cost a heavy install seconds and gigabytes. */
+  private consolidationTopic(topic: Topic, dossier: DossierVersion | null, board: Board, headers: Map<PrKey, PrHeader>): ConsolidationTopic {
     const keys = this.deps.store.memberships.listForTopic(topic.id).map((m) => m.prKey);
-    const prs = [...this.deps.store.prs.getMany(keys).values()];
+    const prs = keys.flatMap((key) => headers.get(key) ?? []);
     const lastActivityAt = prs.map((pr) => pr.updatedAt).sort().at(-1) ?? null;
     return {
       topic,
@@ -172,9 +175,13 @@ export class Consolidator {
     }
     const board = Board.load(store, this.deps.now().toISOString());
     const counts: ConsolidationCounts = report;
-    const applier = new ConsolidationApplier(store, this.deps.facts, new RetireGate(board), counts, this.deps.now);
+    const applier = new ConsolidationApplier(store, this.deps.facts, (topicId) => topicRetireGate(store, this.deps.now().toISOString(), topicId), counts, this.deps.now);
 
-    const offered = topics.map((topic) => this.consolidationTopic(topic, dossiers.get(topic.id) ?? null, board));
+    const headers = new Map(store.prs.listHeaders().map((pr) => [pr.key, pr]));
+    // A topic whose PRs all went cold is settled: the retire step handles it, consolidation leaves it out.
+    const offered = topics
+      .filter((topic) => !board.wentCold(topic.id))
+      .map((topic) => this.consolidationTopic(topic, dossiers.get(topic.id) ?? null, board, headers));
     const complete = offered.length === 0 || (await this.askAgent(this.inputs(offered), applier));
     this.retireFinished(dossiers, applier);
     if (complete) {

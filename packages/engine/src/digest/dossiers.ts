@@ -133,10 +133,16 @@ export class DossierUpdater {
   }
 
   /** Every active topic, or only the scope's (none for Unsorted, which has no dossier). */
+  /**
+   * Active topics, unread ones first. A topic whose PRs all went cold
+   * (`Board.wentCold`) gets no update until one turns hot again, even when
+   * instructions changed (DESIGN.md "Big inboxes: what PostPile loads and
+   * works on"); its update then reads its whole history as before.
+   */
   private topicsInOrder(board: Board, scope: TopicScope | null): Topic[] {
     const hasUnread = (topic: Topic): boolean =>
       board.tilesForTopic(topic.id).some((tile) => board.stateOf(tile).kind === 'unread');
-    const active = this.deps.store.topics.listActive();
+    const active = this.deps.store.topics.listActive().filter((topic) => !board.wentCold(topic.id));
     const topics = scope === null ? active : active.filter((topic) => topic.id === scope.topicId);
     return [...topics.filter(hasUnread), ...topics.filter((topic) => !hasUnread(topic))];
   }

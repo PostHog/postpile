@@ -1,4 +1,4 @@
-import type { IsoTime, Pr, PrKey, PrRef, PrState, Stack, TopicMembership } from './types.ts';
+import type { IsoTime, PrKey, PrRef, PrState, Stack, TopicMembership } from './types.ts';
 
 /**
  * What the stack rules need of a PR. A full snapshot has it, and so does a
@@ -13,6 +13,16 @@ export interface LayerShape {
   updatedAt: IsoTime;
   mergedAt: IsoTime | null;
   previousBaseRefs?: string[];
+}
+
+/**
+ * A stored PR as stack detection reads it: a full snapshot, or its header
+ * (`PrRepo.listHeaders`), so stacks over every stored PR never parse the
+ * snapshots.
+ */
+export interface StackLayer extends LayerShape {
+  key: PrKey;
+  isCrossRepository?: boolean;
 }
 
 const STATE_RANK: Record<PrState, number> = { OPEN: 0, MERGED: 1, CLOSED: 2 };
@@ -77,7 +87,7 @@ export function sitsOn(child: LayerShape, parent: LayerShape): boolean {
 }
 
 /** The PR this one sits on. The current base wins over a former one. */
-function parentOf(pr: Pr, byHead: Map<string, Pr>): Pr | undefined {
+function parentOf<T extends StackLayer>(pr: T, byHead: Map<string, T>): T | undefined {
   const refs = [pr.baseRef, ...(pr.previousBaseRefs ?? [])];
   for (const ref of refs) {
     const candidate = byHead.get(ref);
@@ -88,11 +98,11 @@ function parentOf(pr: Pr, byHead: Map<string, Pr>): Pr | undefined {
   return undefined;
 }
 
-function stacksInRepo(repo: string, prs: Pr[]): Stack[] {
+function stacksInRepo<T extends StackLayer>(repo: string, prs: T[]): Stack[] {
   const layers = oneLayerPerHead(prs.filter((pr) => !pr.isCrossRepository));
   const byHead = new Map(layers.map((pr) => [pr.headRef, pr]));
-  const children = new Map<Pr, Pr[]>();
-  const starts: Pr[] = [];
+  const children = new Map<T, T[]>();
+  const starts: T[] = [];
   for (const pr of layers) {
     const parent = parentOf(pr, byHead);
     if (!parent) {
@@ -106,16 +116,16 @@ function stacksInRepo(repo: string, prs: Pr[]): Stack[] {
   starts.sort(byNumber);
 
   const stacks: Stack[] = [];
-  const visited = new Set<Pr>();
+  const visited = new Set<T>();
   while (starts.length > 0) {
-    const start = starts.shift() as Pr;
-    const chain: Pr[] = [];
-    let current: Pr | undefined = start;
+    const start = starts.shift() as T;
+    const chain: T[] = [];
+    let current: T | undefined = start;
     while (current && !visited.has(current)) {
       visited.add(current);
       chain.push(current);
       // Fork children start their own chain; see buildStacks for the rule.
-      const next: Pr[] = (children.get(current) ?? []).filter((child) => !visited.has(child)).sort(byStateThenNumber);
+      const next: T[] = (children.get(current) ?? []).filter((child) => !visited.has(child)).sort(byStateThenNumber);
       current = next[0];
       starts.push(...next.slice(1));
     }
@@ -144,8 +154,8 @@ function stacksInRepo(repo: string, prs: Pr[]): Stack[] {
  * closed attempt from taking the place of the open layers that replaced it:
  * those would form a chain of pulled-in PRs only, which no tile shows.
  */
-export function buildStacks(prs: Pr[]): Stack[] {
-  const byRepo = new Map<string, Pr[]>();
+export function buildStacks<T extends StackLayer>(prs: T[]): Stack[] {
+  const byRepo = new Map<string, T[]>();
   for (const pr of prs) {
     const list = byRepo.get(pr.ref.repo) ?? [];
     list.push(pr);
