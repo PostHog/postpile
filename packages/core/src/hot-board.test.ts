@@ -242,7 +242,7 @@ describe('wouldKeep', () => {
 
 describe('busyInboxView', () => {
   it('counts what the cap kept and left quiet', () => {
-    const view = busyInboxView({ busy: true, inboxPrs: 6140, keptByTier: { you: 900, team: 600, others: 0 } }, { updatesLastHour: 300, writesLocked: true });
+    const view = busyInboxView({ busy: true, inboxPrs: 6140, keptByTier: { you: 900, team: 600, others: 0 } }, { updatesLastHour: 300 });
     expect(view).toEqual({
       busy: true,
       inboxPrs: 6140,
@@ -250,7 +250,6 @@ describe('busyInboxView', () => {
       quietPrs: 4640,
       cap: 1500,
       updatesLastHour: 300,
-      writesLocked: true,
       keptYou: 900,
       keptTeam: 600,
       keptOthers: 0,

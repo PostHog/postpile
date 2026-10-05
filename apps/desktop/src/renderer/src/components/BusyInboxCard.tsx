@@ -74,11 +74,11 @@ function KeptLine(props: { view: BusyInboxView }) {
  * the place where topics go missing when the board cap cuts the inbox
  * (DESIGN.md "Big inboxes: what PostPile loads and works on"). Only while
  * `busy`. Calm amber, never coral or honey: PostPile is focusing, nothing
- * broke. Clean up opens the inbox cleanup dialog, Unlock writes (only while
- * locked) opens the footer lock's popover through `onUnlockWrites`, Why?
- * says what PostPile does now. It folds to one line for the session.
+ * broke. Clean up opens the inbox cleanup dialog, Why? says what PostPile
+ * does now. It folds to one line for the session. No GitHub writes lock
+ * here: the footer is the only place for it (2026-10-05).
  */
-export function BusyInboxCard(props: { onUnlockWrites: () => void }) {
+export function BusyInboxCard() {
   const view = useBusyInbox().data;
   const cleanup = useInboxCleanup().data;
   const [folded, setFolded] = useState(readFolded);
@@ -136,11 +136,6 @@ export function BusyInboxCard(props: { onUnlockWrites: () => void }) {
         <button type="button" disabled={blocked !== null} title={blocked ?? 'Mark merged PRs and old notifications read on GitHub'} onClick={() => setCleanupOpen(true)} className={LINK}>
           Clean up
         </button>
-        {view.writesLocked && (
-          <button type="button" title="Opens the GitHub writes lock in the footer" onClick={props.onUnlockWrites} className={LINK}>
-            Unlock writes
-          </button>
-        )}
         <button type="button" aria-expanded={whyOpen} aria-controls="busy-inbox-why" onClick={() => setWhyOpen(!whyOpen)} className={LINK}>
           Why?
         </button>

@@ -402,8 +402,6 @@ interface TopicSidebarProps {
   onQueueFilter: (filter: QueueFilter | null) => void;
   filterCounts: Record<QueueFilter, number>;
   viewer: ViewerView | undefined;
-  /** The busy inbox card's "Unlock writes": opens the footer lock's popover. */
-  onUnlockWrites: () => void;
 }
 
 /** Plain lines in the list (filter, hidden topics, errors) start on the topic names' x: a row's 8px padding plus its 14px leading slot. */
@@ -534,7 +532,7 @@ export function TopicSidebar(props: TopicSidebarProps) {
       <QueueFilters counts={props.filterCounts} active={props.queueFilter} viewer={props.viewer} onChange={props.onQueueFilter} />
       <InboxItem count={props.inboxCount} active={props.inboxOpen} onSelect={props.onOpenInbox} />
       {/* Right above the topics: a busy inbox is where topics go missing. Renders nothing unless busy. */}
-      <BusyInboxCard onUnlockWrites={props.onUnlockWrites} />
+      <BusyInboxCard />
       {filter &&<FilterHint topics={props.shown.length} tiles={filter.tileCount} onClear={props.onClearFilter} />}
       {props.error && <p className={`text-xs text-status-bad ${TEXT_COLUMN}`}>Could not load topics: {props.error}</p>}
       {narrowed && props.shown.length === 0 && props.topics.length > 0 && (

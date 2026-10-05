@@ -401,8 +401,7 @@ export function isBoardFull(selection: Pick<HotSelection, 'keys'>, max: number =
  * never make it busy. inboxPrs: PRs that would be hot without the cap;
  * keptPrs: on the board; quietPrs: the difference, which PostPile does not
  * load, fetch or work on. updatesLastHour: PR threads with fresh activity
- * PostPile decided about in the last hour. writesLocked: GitHub writes are
- * off, so PostPile cannot shed load by marking things read.
+ * PostPile decided about in the last hour.
  */
 export interface BusyInboxView {
   busy: boolean;
@@ -411,7 +410,6 @@ export interface BusyInboxView {
   quietPrs: number;
   cap: number;
   updatesLastHour: number;
-  writesLocked: boolean;
   keptYou: number;
   keptTeam: number;
   keptOthers: number;
@@ -419,7 +417,7 @@ export interface BusyInboxView {
 
 export function busyInboxView(
   selection: Pick<HotSelection, 'busy' | 'inboxPrs' | 'keptByTier'>,
-  parts: { updatesLastHour: number; writesLocked: boolean; cap?: number },
+  parts: { updatesLastHour: number; cap?: number },
 ): BusyInboxView {
   const { you, team, others } = selection.keptByTier;
   const keptPrs = you + team + others;
@@ -430,7 +428,6 @@ export function busyInboxView(
     quietPrs: Math.max(0, selection.inboxPrs - keptPrs),
     cap: parts.cap ?? HOT_BOARD_MAX_PRS,
     updatesLastHour: parts.updatesLastHour,
-    writesLocked: parts.writesLocked,
     keptYou: you,
     keptTeam: team,
     keptOthers: others,

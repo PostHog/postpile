@@ -33,6 +33,12 @@ export const OBSERVED_PENDING_DETAIL = 'left the inbox: read on github.com or an
  */
 export type CatchUpStarter = (write: PendingWrite) => string | null;
 
+/** "Sent 3 to GitHub", or "Sent 2 to GitHub, 1 failed and stays pending", then what GitHub did not take. */
+function sendMessage(done: number, failed: number, notTaken: string[]): string {
+  const summary = failed === 0 ? `Sent ${done} to GitHub` : `Sent ${done} to GitHub, ${failed} failed and ${failed === 1 ? 'stays' : 'stay'} pending`;
+  return [summary, ...notTaken].join('. ');
+}
+
 /**
  * Mark-reads made while GitHub writes are locked. GitHub is the source of
  * truth for read and unread, so a locked mark-read changes nothing in the
@@ -210,7 +216,7 @@ export class PendingWrites {
    * handle keys handled. Returns true when the write is gone; what the user
    * should hear goes to `notes`.
    */
-  private apply(write: PendingWrite, cause: PendingWriteCause, origin: 'footer' | 'sync' | 'poll', notes: string[] = []): boolean {
+  private apply(write: PendingWrite, cause: PendingWriteCause, origin: 'footer' | 'default' | 'sync' | 'poll', notes: string[] = []): boolean {
     const step = pendingWriteStep(write, cause);
     const at = this.now().toISOString();
     for (const effect of step.effects) {
@@ -285,6 +291,15 @@ export class PendingWrites {
   }
 
   /**
+   * A mark_read through the queue's guarded send (each thread read again
+   * first), then its next state. True when it is done.
+   */
+  private async sendMarkRead(write: PendingWrite, queue: MarkReadQueue, origin: 'footer' | 'default', notTaken: string[]): Promise<boolean> {
+    const outcomes = await queue.markThreads(write.threads, { origin, tileId: write.tileId, batchId: write.batch });
+    return this.apply(write, { kind: 'sent', outcomes }, origin, notTaken);
+  }
+
+  /**
    * Sends one pending write. Returns true when it is done: every thread
    * reached GitHub, was already read, or was left unread on purpose (activity
    * after the last sync, its reason goes to `notTaken`). Threads that failed
@@ -297,8 +312,7 @@ export class PendingWrites {
     if (write.kind === 'catch_up') {
       return this.sendCatchUp(write, startCatchUp, notTaken);
     }
-    const outcomes = await queue.markThreads(write.threads, { origin: 'footer', tileId: write.tileId, batchId: write.batch });
-    return this.apply(write, { kind: 'sent', outcomes }, 'footer', notTaken);
+    return this.sendMarkRead(write, queue, 'footer', notTaken);
   }
 
   /**
@@ -336,10 +350,7 @@ export class PendingWrites {
       }
     }
     const failed = writes.length - done;
-    const summary =
-      failed === 0 ? `Sent ${done} to GitHub` : `Sent ${done} to GitHub, ${failed} failed and ${failed === 1 ? 'stays' : 'stay'} pending`;
-    const message = [summary, ...notTaken].join('. ');
-    return { ok: failed === 0, message, done, failed, status: status() };
+    return { ok: failed === 0, message: sendMessage(done, failed, notTaken), done, failed, status: status() };
   }
 
   /** "Send N to GitHub". Refused while writes are off (the lock, or POSTPILE_READ_ONLY=1). A send while one runs joins it. */
@@ -349,6 +360,43 @@ export class PendingWrites {
         this.sending = null;
       });
     }
+    return this.sending;
+  }
+
+  private async sendUnchanged(queue: MarkReadQueue, status: () => GitHubWritesStatus): Promise<PendingWritesResult> {
+    const writes = this.list().filter((write) => write.kind === 'mark_read');
+    let done = 0;
+    const notTaken: string[] = [];
+    for (const write of writes) {
+      if (await this.sendMarkRead(write, queue, 'default', notTaken)) {
+        done += 1;
+      }
+    }
+    const failed = writes.length - done;
+    return { ok: failed === 0, message: sendMessage(done, failed, notTaken), done, failed, status: status() };
+  }
+
+  /**
+   * GitHub writes went on by default for an install that had mark-reads
+   * waiting from its locked days (DESIGN.md "GitHub writes: lock, action
+   * log" › On by default). Nobody pressed Send and the clicks can be days
+   * old, so this sends less than Send does:
+   * - only mark-reads: a cleanup stays pending for the user to send or discard;
+   * - a thread only when nothing happened on it since the click: the guard
+   *   reads it again first, and a thread with newer activity is left unread
+   *   and drops out, never decided again (MarkReadQueue, origin `default`);
+   * - a failure stays pending with its error, like after Send.
+   * A Send while it runs joins it. A Send already running is left to it:
+   * this runs inside the sync, and Send's second decision waits for the
+   * running sync, so joining it could wait forever.
+   */
+  sendAfterDefault(queue: MarkReadQueue, status: () => GitHubWritesStatus): Promise<PendingWritesResult> {
+    if (this.sending) {
+      return Promise.resolve({ ok: true, message: 'Send from the footer is running', done: 0, failed: 0, status: status() });
+    }
+    this.sending = this.sendUnchanged(queue, status).finally(() => {
+      this.sending = null;
+    });
     return this.sending;
   }
 

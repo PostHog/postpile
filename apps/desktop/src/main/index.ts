@@ -472,7 +472,7 @@ async function start(): Promise<void> {
   // The token keeps other local processes and web pages from driving the API.
   const token = randomBytes(24).toString('hex');
   // POSTPILE_FAKE=1 runs on sample data, see engineFromEnv.
-  // GitHub writes stay off until the footer lock is opened (kept in the store); POSTPILE_READ_ONLY=1 forces off.
+  // GitHub writes: the footer lock's choice (kept in the store), on when there is none in the packaged app; POSTPILE_READ_ONLY=1 forces off.
   try {
     // The legacy folder move already ran at the top of this file, before userData existed.
     engine = engineFromEnv({

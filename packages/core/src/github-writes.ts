@@ -5,10 +5,11 @@ import type { CleanupPicks } from './inbox-cleanup.ts';
 import type { IsoTime, PrKey } from './types.ts';
 
 /**
- * Whether the app may write to GitHub right now. Off (read-only) on first run;
- * the user flips it with the lock in the status footer and the choice is kept
- * in the store. POSTPILE_READ_ONLY=1 forces it off: then `forcedOffReason`
- * says why and turning it on is refused.
+ * Whether the app may write to GitHub right now. On by default in the
+ * packaged app (2026-10-05; dev runs start locked); the user flips it with
+ * the lock in the status footer and the choice is kept in the store.
+ * POSTPILE_READ_ONLY=1 forces it off: then `forcedOffReason` says why and
+ * turning it on is refused.
  */
 export interface GitHubWritesStatus extends WriteSwitchState {
   /** Mark-reads waiting for the user to unlock (or discard), oldest first. */
@@ -151,12 +152,15 @@ export type LoggedAction =
  * - sync / poll: the full sync or the live poll saw a thread leave the inbox
  *   (read on github.com or another client) and mirrored it locally
  * - footer: the lock in the status footer (also sending or discarding pending writes)
+ * - default: PostPile, when GitHub writes went on by default for an install
+ *   that never chose (2026-10-05): the switch itself, and the pending
+ *   mark-reads it sent because nothing happened on their threads since the click
  * - cleanup: the inbox cleanup dialog (merged PRs, everything older than N days)
  * - quiet: PostPile itself, after a full sync: a thread the user had read
  *   turned unread only because of bots ("Handled quietly")
  * - agent: an outside agent through the MCP server (refresh_from_github); a GitHub read, never a write
  */
-export type ActionOrigin = 'tile' | 'detail' | 'debug' | 'queue' | 'quit' | 'sync' | 'poll' | 'footer' | 'cleanup' | 'quiet' | 'agent';
+export type ActionOrigin = 'tile' | 'detail' | 'debug' | 'queue' | 'quit' | 'sync' | 'poll' | 'footer' | 'default' | 'cleanup' | 'quiet' | 'agent';
 
 /**
  * What came of it.
