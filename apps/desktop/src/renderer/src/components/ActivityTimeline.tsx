@@ -275,9 +275,15 @@ export function ActivityTimeline(props: { activity: ActivityList; pr: Pr; viewer
   const { fresh, earlier, noise } = props.activity;
   const lines = [...fresh, ...earlier];
   const jumpIndex = compose.jump ? lines.findIndex((line) => replyTargetOf(line, props.pr, props.viewerLogin)?.commentId === compose.jump?.commentId) : -1;
-  // A jump to a folded line opens the list first; the line then scrolls itself into view.
-  const opened = showAll || jumpIndex >= props.activity.cap;
-  const shown = opened ? lines : lines.slice(0, props.activity.cap);
+  const jumpSeq = compose.jump?.seq ?? null;
+  const jumpFolded = jumpIndex >= props.activity.cap;
+  // A jump to a folded line opens the list once; the line then scrolls itself into view. "Show fewer" still folds it after.
+  useEffect(() => {
+    if (jumpFolded) {
+      setShowAll(true);
+    }
+  }, [jumpSeq, jumpFolded]);
+  const shown = showAll ? lines : lines.slice(0, props.activity.cap);
   const { threadChangedAt } = props.activity;
   const empty = lines.length === 0 && noise.length === 0 && threadChangedAt === null;
   return (
@@ -291,8 +297,8 @@ export function ActivityTimeline(props: { activity: ActivityList; pr: Pr; viewer
         <TalkLine key={line.id} line={line} last={index === shown.length - 1} pr={props.pr} viewerLogin={props.viewerLogin} />
       ))}
       {lines.length > props.activity.cap && (
-        <button type="button" className={linkButton} onClick={() => setShowAll(!opened)}>
-          {opened ? 'Show fewer' : `Show all ${lines.length}`}
+        <button type="button" className={linkButton} onClick={() => setShowAll(!showAll)}>
+          {showAll ? 'Show fewer' : `Show all ${lines.length}`}
         </button>
       )}
       {noise.length > 0 && (
