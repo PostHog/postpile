@@ -77,6 +77,7 @@ export class PendingWrites {
     const createdAt = this.now().toISOString();
     const base = { readBefore: null, createdAt, origin: batch.origin, tileId: batch.tileId, batch: batch.batchId };
     const subscription = batch.subscription !== null && batch.subscription.threads.length > 0 ? batch.subscription : null;
+    const subscriptionError = batch.subscriptionError ?? null;
     this.store.transaction(() => {
       // The local change belongs to the mark-read: without an unread thread it needed no GitHub and stays.
       if (batch.threads.length > 0) {
@@ -84,12 +85,17 @@ export class PendingWrites {
         this.store.pendingWrites.add({ ...base, kind: 'mark_read', prKeys: batch.prKeys, handleKeys: batch.handleKeys, threads: batch.threads });
       }
       if (subscription !== null) {
-        this.store.pendingWrites.add({ ...base, kind: subscriptionKind(subscription), prKeys: [], handleKeys: [], threads: subscription.threads });
+        const id = this.store.pendingWrites.add({ ...base, kind: subscriptionKind(subscription), prKeys: [], handleKeys: [], threads: subscription.threads });
+        // Sent with writes on and not taken: it shows as a failed pending write, to send again from the lock.
+        if (subscriptionError !== null) {
+          this.store.pendingWrites.keepAfterTry(id, subscription.threads, subscriptionError, createdAt);
+        }
       }
     });
-    const subscriptionRows = subscription === null ? [] : subscription.threads.map((thread) => ({ thread, action: subscriptionKind(subscription) }));
-    const logged = [...batch.threads.map((thread) => ({ thread, action: 'mark_read' as const })), ...subscriptionRows];
-    for (const { thread, action } of logged) {
+    const subscriptionDetail = subscriptionError === null ? PENDING_DETAIL : `GitHub didn't take it: ${subscriptionError}; waits in the lock to be sent again`;
+    const markRows = batch.threads.map((thread) => ({ thread, action: 'mark_read' as const, detail: PENDING_DETAIL }));
+    const subscriptionRows = subscription === null ? [] : subscription.threads.map((thread) => ({ thread, action: subscriptionKind(subscription), detail: subscriptionDetail }));
+    for (const { thread, action, detail } of [...markRows, ...subscriptionRows]) {
       this.writes.log.record({
         action,
         origin: batch.origin,
@@ -98,7 +104,7 @@ export class PendingWrites {
         prKey: thread.prKey,
         tileId: batch.tileId,
         batch: batch.batchId,
-        detail: PENDING_DETAIL,
+        detail,
       });
     }
   }

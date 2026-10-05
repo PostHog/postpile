@@ -29,6 +29,15 @@ export function isSnoozedByRule(board: PropertyBoard, view: TileView): boolean {
   );
 }
 
+/** The PR has a mute that still holds by the spec (`expectedSnoozePhase` active). */
+function isMutedByRule(board: PropertyBoard, key: string): boolean {
+  const snooze = board.snoozes.get(key);
+  if (!snooze || snooze.condition.kind !== 'muted') {
+    return false;
+  }
+  return expectedSnoozePhase({ pr: prOf(board, key), events: eventsOf(board, key), viewer: board.viewer, snooze, now: board.now }) === 'active';
+}
+
 /** Done by the spec (spec-rules.ts `expectedDone`), not by `isPrDone`. */
 export function prDone(board: PropertyBoard, key: string): boolean {
   return expectedDone({ pr: prOf(board, key), events: eventsOf(board, key), viewer: board.viewer, userState: board.userStates.get(key) ?? null, notYours: board.notYours.has(key), lastReadAt: board.threads.get(key)?.lastReadAt ?? null });
@@ -47,6 +56,9 @@ export const snoozedWhileEveryTrackedPrSnoozed: Invariant = {
       ensure((view.state.kind === 'snoozed') === expected, `${view.tile.id}: state ${view.state.kind}, every tracked PR snoozed: ${expected}`);
       const muted = expected && trackedMembers(view).every((member) => board.snoozes.get(member.prKey)?.condition.kind === 'muted');
       ensure((view.state.muted === true) === muted, `${view.tile.id}: muted ${view.state.muted === true}, every tracked PR muted: ${muted}`);
+      const partly = !expected && trackedMembers(view).some((member) => isMutedByRule(board, member.prKey));
+      ensure((view.state.partlyMuted === true) === partly, `${view.tile.id}: partly muted ${view.state.partlyMuted === true}, a tracked PR still muted: ${partly}`);
+      ensure(view.offers.unmuteRest === (partly && view.state.kind !== 'done'), `${view.tile.id}: Unmute the rest offered ${view.offers.unmuteRest}`);
     }
   },
 };

@@ -24,6 +24,9 @@ const MUTE_TITLE =
 
 const UNMUTE_TITLE = 'Shows the tile again and subscribes you to its GitHub notifications again.';
 
+const UNMUTE_REST_TITLE =
+  'Someone asked you on one PR here, so the tile is back, but the other PRs are still muted. Unmute takes their mute back and subscribes you to them on GitHub again.';
+
 /**
  * Snooze for a tile, or Unsnooze when it is snoozed. Snoozes are local, no
  * GitHub write. The last item, "Mute until I'm mentioned", is: it marks the
@@ -36,6 +39,8 @@ export function SnoozeMenu(props: {
   tileId: string;
   snoozed: boolean;
   muted?: boolean;
+  /** Core's `TileOffers.unmuteRest`: the tile is back while some of its PRs are still muted. */
+  unmuteRest?: boolean;
   size?: ButtonSize;
   up?: boolean;
   /** `right` where the button sits at a column's right edge (the tile footer), so the list opens inwards. */
@@ -76,5 +81,12 @@ export function SnoozeMenu(props: {
     title: actions.blockedReason('mute') ?? [MUTE_TITLE, markReadNote(actions.writes)].filter(Boolean).join(' '),
     onSelect: () => void actions.snooze(props.tileId, { kind: 'muted' }),
   });
+  if (props.unmuteRest) {
+    items.push({
+      label: 'Unmute the rest',
+      title: actions.blockedReason('mute') ?? UNMUTE_REST_TITLE,
+      onSelect: () => void actions.unsnooze(props.tileId, true),
+    });
+  }
   return <Menu label="Snooze" variant={props.variant} size={props.size} up={props.up} align={props.align} items={items} disabled={busy} />;
 }

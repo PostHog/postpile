@@ -151,6 +151,28 @@ describe('Mute until I am mentioned', () => {
     expect(h.writer.calls).toEqual(['markThreadRead thread-1', 'unsubscribeThread thread-1']);
   });
 
+  it('keeps a subscribe GitHub did not take as a failed pending write, so it can be sent again', async () => {
+    const h = await synced();
+    await h.engine.snooze(tileId, MUTED);
+    await afterUndoWindow(h);
+    h.writer.failSubscribe = true;
+
+    await h.engine.unsnooze(tileId);
+    await afterUndoWindow(h);
+
+    const pending = (await h.engine.githubWrites()).pending;
+    expect(pending.map((write) => [write.kind, write.error])).toEqual([['subscribe', 'boom: subscribe']]);
+    expect(logRows(h).slice(-2)).toEqual([
+      ['subscribe', 'queue', 'failed'],
+      ['subscribe', 'tile', 'pending'],
+    ]);
+
+    h.writer.failSubscribe = false;
+    expect(await h.engine.sendPendingWrites()).toMatchObject({ ok: true, done: 1 });
+    expect(h.writer.calls.at(-1)).toBe('subscribeThread thread-1');
+    expect((await h.engine.githubWrites()).pending).toEqual([]);
+  });
+
   it('waits as a pending subscribe when Unmute happens while locked', async () => {
     const h = await synced();
     await h.engine.snooze(tileId, MUTED);
@@ -162,6 +184,41 @@ describe('Mute until I am mentioned', () => {
 
     expect((await h.engine.githubWrites()).pending.map((write) => [write.kind, write.title])).toEqual([['subscribe', `Unmute: ${pr.title}`]]);
     expect(h.writer.calls).toEqual(['markThreadRead thread-1', 'unsubscribeThread thread-1']);
+  });
+
+  it('on a set, a mention on one PR brings the tile back and offers Unmute for the rest, which subscribes both again', async () => {
+    let now = NOW;
+    const h = makeHarness({ now: () => now });
+    const other = reviewRequestedPr(2);
+    h.reader.addPr(pr, makeThreadFor(pr));
+    h.reader.addPr(other, makeThreadFor(other));
+    await h.engine.sync({ maxAgentCalls: 0 });
+    h.store.topics.create({ id: 'depot', name: 'depot', summary: '', summaryInputHash: null, area: null, tailoring: '', driver: null, userRole: 'reviewer', status: 'active', kind: 'project', retiredAt: null, createdAt: at(0), updatedAt: at(0) });
+    for (const key of [pr.key, other.key]) {
+      h.store.memberships.assign({ prKey: key, topicId: 'depot', assignedBy: 'agent', reason: '', createdAt: at(0) });
+    }
+    const members = [{ prKey: pr.key, reason: 'a' }, { prKey: other.key, reason: 'b' }];
+    h.store.sets.save({ id: 's1', topicId: 'depot', title: 'Pair', take: '', members, removedKeys: [], status: 'active', inputHash: 'h', createdAt: at(0), updatedAt: at(0) });
+    const setTile = async () => (await h.engine.getTopic('depot'))?.tiles.find((view) => view.tile.id === 'set:s1');
+
+    await h.engine.snooze('set:s1', MUTED);
+    await afterUndoWindow(h);
+    expect((await setTile())?.state).toMatchObject({ kind: 'snoozed', muted: true });
+
+    const mention = makeComment({ id: 'c1', author: 'rogue', body: `@${viewer.login} one question`, createdAt: at(1690) });
+    const asked: Pr = { ...pr, updatedAt: at(1700), comments: [mention] };
+    h.reader.addPr(asked, makeThreadFor(asked));
+    h.reader.etag = 'etag-2';
+    now = new Date(at(1705));
+    await h.engine.sync({ maxAgentCalls: 0 });
+    const back = await setTile();
+    expect(back?.state).toMatchObject({ kind: 'unread', partlyMuted: true });
+    expect(back?.offers.unmuteRest).toBe(true);
+
+    await h.engine.unsnooze('set:s1');
+    await afterUndoWindow(h);
+    expect(h.writer.calls.filter((call) => call.startsWith('subscribeThread')).sort()).toEqual(['subscribeThread thread-1', 'subscribeThread thread-2']);
+    expect((await setTile())?.state.partlyMuted).toBeUndefined();
   });
 
   it('stays muted through other people, and a mention of the viewer brings the tile back', async () => {

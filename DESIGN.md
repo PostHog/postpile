@@ -7025,6 +7025,16 @@ away for good:
   stay quiet about the PR: new activity would never turn the tile unread
   again, and a tile that looks unmuted but never comes back is worse than
   one more write. Undo of an Unmute puts the mute back.
+- A subscription change GitHub did not take is not dropped like a failed
+  mark-read (that one puts the PR back to unread, so the app agrees with
+  GitHub again; a mute or unmute stays here either way). It waits as a
+  failed pending write with the error, to be sent again from the lock.
+- A muted stack or set comes back when one PR gets a personal ask; the
+  other PRs keep their mute (and stay unsubscribed). The tile then says
+  `TileState.partlyMuted` and its Snooze menu offers "Unmute the rest"
+  (core `TileOffers.unmuteRest`, not on a done tile), which is the same
+  Unmute: every snooze of the tile goes, every muted thread is subscribed
+  again.
 - Known gap: GitHub still notifies a user who watches the repo; the DELETE
   does not cover that. GitHub documents `PUT .../subscription` with
   `ignored: true` for watched repos (a stronger block; that it still lets a

@@ -28,14 +28,14 @@ function stubFetch(): Call[] {
   return calls;
 }
 
-function renderMenu(props: { snoozed: boolean; muted: boolean }) {
+function renderMenu(props: { snoozed: boolean; muted: boolean; unmuteRest?: boolean }) {
   const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } });
   // Locked on purpose: a mute is guarded like a mark-read, so it still runs and waits as a pending write.
   client.setQueryData(queryKeys.githubWrites, LOCKED);
   render(
     <QueryClientProvider client={client}>
       <ActionsProvider>
-        <SnoozeMenu tileId="pr:acme/app#1" snoozed={props.snoozed} muted={props.muted} />
+        <SnoozeMenu tileId="pr:acme/app#1" snoozed={props.snoozed} muted={props.muted} unmuteRest={props.unmuteRest} />
       </ActionsProvider>
     </QueryClientProvider>,
   );
@@ -73,5 +73,20 @@ describe('SnoozeMenu', () => {
     cleanup();
     renderMenu({ snoozed: true, muted: false });
     expect(screen.getByRole('button', { name: 'Unsnooze' })).toBeTruthy();
+  });
+
+  it('adds "Unmute the rest" only when core offers it, and it takes the remaining mutes back', async () => {
+    const calls = stubFetch();
+    renderMenu({ snoozed: false, muted: false });
+    fireEvent.click(screen.getByRole('button', { name: 'Snooze' }));
+    expect(screen.queryByRole('menuitem', { name: 'Unmute the rest' })).toBeNull();
+    cleanup();
+
+    renderMenu({ snoozed: false, muted: false, unmuteRest: true });
+    fireEvent.click(screen.getByRole('button', { name: 'Snooze' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Unmute the rest' }));
+
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0]?.method).toBe('DELETE');
   });
 });

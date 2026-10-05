@@ -263,30 +263,39 @@ function unseenMergeReasons(input: TileStateInput): UnreadReason[] {
   return reasonsWhere(input, members, isUnseenMergeWithoutReview);
 }
 
+/** The PR's snooze, when it has one that still holds (`snoozePhase` active). */
+function activeSnooze(input: TileStateInput, prKey: PrKey): Snooze | null {
+  const snooze = input.snoozes.get(prKey);
+  const pr = input.prs.get(prKey);
+  if (!snooze || !pr) {
+    return null;
+  }
+  const context = { pr, events: input.events.get(prKey) ?? [], now: input.now, viewer: input.viewer ?? null };
+  return snoozePhase(snooze, context) === 'active' ? snooze : null;
+}
+
 /**
  * A tile is snoozed while every tracked PR in it has an active snooze. A PR
  * that joins it unsnoozed, or whose snooze broke or ended, shows the tile.
  */
 function isTileSnoozed(input: TileStateInput): boolean {
   const tracked = input.tile.members.filter((member) => isTracked(member.provenance));
-  if (tracked.length === 0) {
-    return false;
-  }
-  return tracked.every((member) => {
-    const snooze = input.snoozes.get(member.prKey);
-    const pr = input.prs.get(member.prKey);
-    if (!snooze || !pr) {
-      return false;
-    }
-    const context = { pr, events: input.events.get(member.prKey) ?? [], now: input.now, viewer: input.viewer ?? null };
-    return snoozePhase(snooze, context) === 'active';
-  });
+  return tracked.length > 0 && tracked.every((member) => activeSnooze(input, member.prKey) !== null);
 }
 
 /** Every tracked PR of a snoozed tile is put away by a mute. */
 function isTileMuted(input: TileStateInput): boolean {
   const tracked = input.tile.members.filter((member) => isTracked(member.provenance));
   return tracked.every((member) => input.snoozes.get(member.prKey)?.condition.kind === 'muted');
+}
+
+/**
+ * A tracked PR still has an active mute although the tile shows: a muted
+ * stack or set came back through a personal ask on another of its PRs. The
+ * rest stays muted (and unsubscribed on GitHub) until Unmute.
+ */
+function isTilePartlyMuted(input: TileStateInput): boolean {
+  return input.tile.members.filter((member) => isTracked(member.provenance)).some((member) => activeSnooze(input, member.prKey)?.condition.kind === 'muted');
 }
 
 function allPingedDone(input: TileStateInput): boolean {
@@ -300,12 +309,27 @@ function allPingedDone(input: TileStateInput): boolean {
   });
 }
 
+/** A tile that is not snoozed: unread, done or open (see `deriveTileState`). */
+function shownTileState(input: TileStateInput, unreadThreads: TileMember[], loudWithoutThread: TileMember[], loud: boolean): TileState {
+  const unreadOnGitHub = unreadThreads.length > 0;
+  if (unreadOnGitHub || loudWithoutThread.length > 0) {
+    return { kind: 'unread', unreadBecause: unreadReasons(input, unreadThreads, loudWithoutThread), unreadOnGitHub, loud };
+  }
+  if (!loud && allPingedDone(input)) {
+    return { kind: 'done', unreadBecause: [], unreadOnGitHub, loud };
+  }
+  const unseenMerges = unseenMergeReasons(input);
+  const open: TileState = { kind: 'open', unreadBecause: [], unreadOnGitHub, loud };
+  return unseenMerges.length > 0 ? { ...open, unseenMerges } : open;
+}
+
 /**
  * DESIGN.md "GitHub unread is PostPile unread" (2026-09-30):
  * snoozed: every tracked PR has a snooze whose condition is not met and that
  * no human broke with a loud event since it started. It keeps its snooze
  * while a thread is unread; `unreadOnGitHub` says so. `muted` when every
- * tracked PR's snooze is a mute.
+ * tracked PR's snooze is a mute; any other state is `partlyMuted` while a
+ * tracked PR's mute still holds.
  * unread: a member's notification thread is unread on GitHub, or a
  * pulled-in layer has unseen loud news, or an unseen Look closer event;
  * unreadBecause says which PR and why. Done or not does not matter: a done
@@ -325,15 +349,8 @@ export function deriveTileState(input: TileStateInput): TileState {
     const snoozed: TileState = { kind: 'snoozed', unreadBecause: [], unreadOnGitHub, loud };
     return isTileMuted(input) ? { ...snoozed, muted: true } : snoozed;
   }
-  if (unreadOnGitHub || loudWithoutThread.length > 0) {
-    return { kind: 'unread', unreadBecause: unreadReasons(input, unreadThreads, loudWithoutThread), unreadOnGitHub, loud };
-  }
-  if (!loud && allPingedDone(input)) {
-    return { kind: 'done', unreadBecause: [], unreadOnGitHub, loud };
-  }
-  const unseenMerges = unseenMergeReasons(input);
-  const open: TileState = { kind: 'open', unreadBecause: [], unreadOnGitHub, loud };
-  return unseenMerges.length > 0 ? { ...open, unseenMerges } : open;
+  const shown = shownTileState(input, unreadThreads, loudWithoutThread, loud);
+  return isTilePartlyMuted(input) ? { ...shown, partlyMuted: true } : shown;
 }
 
 /** One line for the CLI and tooltips: why the tile is in its state. */

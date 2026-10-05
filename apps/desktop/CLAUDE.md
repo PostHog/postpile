@@ -309,7 +309,8 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
 - The detail pane acts on the selected PR, the tile footer on the tile
   (2026-09-29). What each button says, whether it shows and which one leads
   come from core (`TileView.offers`: `footer`, `markLabel`, `github`,
-  `leadPrKey`, and `pane[prKey]` with `scope`, `lead`, `approve`, `open`,
+  `leadPrKey`, `unmuteRest` (the Snooze menu's "Unmute the rest" on a
+  partly muted stack or set), and `pane[prKey]` with `scope`, `lead`, `approve`, `open`,
   `ask`, `markLabel`, `snooze`, `removeTeams`, `pendingWrite`). On a stack
   or set (`scope: 'pr'`) the mark button marks only that PR
   (`useActions().markPrRead`, own undo, toast without the Snooze offer) and

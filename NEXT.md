@@ -13,7 +13,10 @@ now".
   unsubscribe in one mark-read batch (`MarkReadRequest.subscription`): one
   Undo, and locked it waits as pending writes `mark_read` + `unsubscribe`.
   Unmute subscribes again (`subscribeThread`, pending kind `subscribe`).
-  `TileState.muted` drives the "Muted" label and Unmute; telemetry bucket
+  `TileState.muted` drives the "Muted" label and Unmute; a stack or set
+  that came back through one PR is `partlyMuted` and offers "Unmute the
+  rest" (`TileOffers.unmuteRest`). A subscription change GitHub did not
+  take waits as a failed pending write. Telemetry bucket
   `muted`; the fake engine logs the unsubscribe and subscribe. Gap: a
   watched repo still notifies (see DESIGN), the "N pending mark-reads"
   headline counts a locked mute as two.

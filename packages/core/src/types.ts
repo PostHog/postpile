@@ -654,6 +654,12 @@ export interface TileState {
    */
   muted?: boolean;
   /**
+   * Only on a tile that is not snoozed, and only true: a tracked PR's mute
+   * still holds, because a muted stack or set came back through a personal
+   * ask on another of its PRs. The tile offers Unmute for the rest.
+   */
+  partlyMuted?: boolean;
+  /**
    * A member (not a found PR) has an unseen loud event. Pings, the coral
    * "new since you looked", urgency and sections follow loud news, not
    * unread: a tile unread with only quiet news pings nothing.

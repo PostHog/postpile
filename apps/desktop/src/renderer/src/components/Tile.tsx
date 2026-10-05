@@ -331,7 +331,9 @@ export function Tile(props: TileProps) {
               {markLabel}
             </Button>
           )}
-          {view.offers.snooze && <SnoozeMenu tileId={tile.id} snoozed={state.kind === 'snoozed'} muted={state.muted === true} align="right" variant="joined" />}
+          {view.offers.snooze && (
+            <SnoozeMenu tileId={tile.id} snoozed={state.kind === 'snoozed'} muted={state.muted === true} unmuteRest={view.offers.unmuteRest} align="right" variant="joined" />
+          )}
           {footerAction === 'open' && (
             <Button variant="joined" onClick={selectLead}>
               Open
