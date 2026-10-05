@@ -300,6 +300,26 @@ describe('StorageJobRunner', () => {
     expect(items(store)).toEqual(['a+first+first+first+second', 'b+first+first+first+second']);
   });
 
+  it('gives an incomplete job its one more walk again when the same runner starts again, and counts only that run', () => {
+    addItems(store, ['a', 'b']);
+    const job = new TagJob('tag', clock);
+    job.checks = ['again', 'again', 'again', 'done'];
+    const runner = runnerFor([job], 0);
+    runner.start(0);
+    for (let index = 0; index < 20; index += 1) {
+      clock.advance(PAUSE_MS);
+    }
+    expect(store.meta.get(`${INCOMPLETE_KEY_PREFIX}tag`)).not.toBeNull();
+
+    runner.start(0);
+    for (let index = 0; index < 20; index += 1) {
+      clock.advance(PAUSE_MS);
+    }
+    expect(items(store)).toEqual(['a+tag+tag+tag+tag', 'b+tag+tag+tag+tag']);
+    expect(store.meta.get(job.doneKey)).not.toBeNull();
+    expect(reports).toMatchObject([{ name: 'tag', units: 4 }]);
+  });
+
   it('rolls a failing slice back whole and stops; the next start goes on after the last slice that committed', () => {
     addItems(store, ['a', 'b', 'c', 'd', 'e', 'f']);
     const job = new TagJob('tag', clock, 10);

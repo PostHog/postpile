@@ -302,6 +302,9 @@ export class StorageJobRunner {
       return;
     }
     this.running = true;
+    // A new run: every job gets its one more walk again, and its numbers start over.
+    this.walkedAgain.clear();
+    this.progress = null;
     if (!this.suspended) {
       this.schedule(delayMs);
     }
