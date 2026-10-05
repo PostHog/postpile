@@ -195,7 +195,7 @@ function prHeadLines(detail: PrDetail, tiles: TileView[]): string[] {
       lines.push(`Unread for you: ${withActor(reason.actor, reason.summary)} (${day(reason.at)})`);
     }
     if (view.state.kind === 'snoozed') {
-      lines.push('The user snoozed this.');
+      lines.push(view.state.muted ? 'The user muted this until someone asks them in person.' : 'The user snoozed this.');
     }
   }
   lines.push(...stackLines(tiles, pr.key));

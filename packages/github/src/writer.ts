@@ -29,4 +29,6 @@ export interface GitHubWriter {
   removeTeamReviewRequest(ref: PrRef, teamSlug: string): Promise<void>;
   /** Mutes the notification thread until the viewer comments or is mentioned (DELETE its subscription). */
   unsubscribeThread(threadId: string): Promise<void>;
+  /** Subscribes the viewer to the notification thread again (PUT its subscription, not ignored). */
+  subscribeThread(threadId: string): Promise<void>;
 }

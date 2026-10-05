@@ -6,6 +6,17 @@ now".
 
 ## Done
 
+- Mute until I'm mentioned (2026-10-05, for 0.21.0; DESIGN.md "Mute until
+  I'm mentioned"): the Snooze menu's last item. A `muted` snooze per
+  tracked PR that only a personal ask ends (`isPersonalAsk`, split out of
+  `isPersonalPing`), plus the tile's mark-read and the threads' GitHub
+  unsubscribe in one mark-read batch (`MarkReadRequest.subscription`): one
+  Undo, and locked it waits as pending writes `mark_read` + `unsubscribe`.
+  Unmute subscribes again (`subscribeThread`, pending kind `subscribe`).
+  `TileState.muted` drives the "Muted" label and Unmute; telemetry bucket
+  `muted`; the fake engine logs the unsubscribe and subscribe. Gap: a
+  watched repo still notifies (see DESIGN), the "N pending mark-reads"
+  headline counts a locked mute as two.
 - Newer-schema guard (2026-10-05, DESIGN.md "Safety while building"): a
   build refuses a database whose schema version is above its newest
   migration, before any pragma or migration writes; the desktop app shows a
@@ -1405,6 +1416,13 @@ the app meanwhile.
   code-manager folder migration (`legacy-data.ts`) once the move has run.
 
 ## Decided
+
+- **Mute a PR until someone asks you in person** (2026-10-05, owner report
+  "no way to snooze/dismiss forever"): a snooze kind, not a new screen.
+  Personal asks only (mention, question, reply, a review request naming
+  you); muting marks read and unsubscribes on GitHub (DELETE thread
+  subscription) through the mark-read queue and lock. Unmute subscribes
+  again, so the tile can turn unread on new activity.
 
 - **Split pr into header + pr_snapshot; pr is the future model's parent**
   (2026-10-05, checked with Codex GPT-6.1; DESIGN.md "Big inboxes: what

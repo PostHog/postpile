@@ -283,6 +283,12 @@ function isTileSnoozed(input: TileStateInput): boolean {
   });
 }
 
+/** Every tracked PR of a snoozed tile is put away by a mute. */
+function isTileMuted(input: TileStateInput): boolean {
+  const tracked = input.tile.members.filter((member) => isTracked(member.provenance));
+  return tracked.every((member) => input.snoozes.get(member.prKey)?.condition.kind === 'muted');
+}
+
 function allPingedDone(input: TileStateInput): boolean {
   return input.tile.members.filter((m) => isTracked(m.provenance)).every((member) => {
     const pr = input.prs.get(member.prKey);
@@ -298,7 +304,8 @@ function allPingedDone(input: TileStateInput): boolean {
  * DESIGN.md "GitHub unread is PostPile unread" (2026-09-30):
  * snoozed: every tracked PR has a snooze whose condition is not met and that
  * no human broke with a loud event since it started. It keeps its snooze
- * while a thread is unread; `unreadOnGitHub` says so.
+ * while a thread is unread; `unreadOnGitHub` says so. `muted` when every
+ * tracked PR's snooze is a mute.
  * unread: a member's notification thread is unread on GitHub, or a
  * pulled-in layer has unseen loud news, or an unseen Look closer event;
  * unreadBecause says which PR and why. Done or not does not matter: a done
@@ -315,7 +322,8 @@ export function deriveTileState(input: TileStateInput): TileState {
   const unreadOnGitHub = unreadThreads.length > 0;
   const loud = loudReasons(input).length > 0;
   if (isTileSnoozed(input)) {
-    return { kind: 'snoozed', unreadBecause: [], unreadOnGitHub, loud };
+    const snoozed: TileState = { kind: 'snoozed', unreadBecause: [], unreadOnGitHub, loud };
+    return isTileMuted(input) ? { ...snoozed, muted: true } : snoozed;
   }
   if (unreadOnGitHub || loudWithoutThread.length > 0) {
     return { kind: 'unread', unreadBecause: unreadReasons(input, unreadThreads, loudWithoutThread), unreadOnGitHub, loud };

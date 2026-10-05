@@ -2,6 +2,7 @@ import { isAutomation } from './bots.ts';
 import { PUSH_KINDS } from './kinds.ts';
 import { effectiveLoudness, raisedToLoud } from './loudness.ts';
 import { sameLogin } from './mentions.ts';
+import { isPersonalAsk } from './pings.ts';
 import { isTracked } from './provenance.ts';
 import { reviewRequestTarget } from './review-request.ts';
 import type { EventKind, IsoTime, Pr, PrEvent, PrKey, Snooze, SnoozeCondition, Tile, Viewer } from './types.ts';
@@ -57,10 +58,28 @@ function ciGreen(context: SnoozeContext): boolean {
 }
 
 /**
- * True once the snooze condition is met: a human reply, a push, green CI, or
- * the time passed. Every snooze also ends when the PR is merged or closed
- * (decided 2026-09-30): nothing left to wait for, and a snooze that holds a
- * finished PR keeps its topic from retiring.
+ * What ends a mute (2026-10-05): someone asked the viewer in person since
+ * (`isPersonalAsk`: a mention, question or reply to them, a comment edited
+ * to mention them, a review request that names them). Never automation: a
+ * bot's mention does not count, a review request that names the viewer does
+ * (`isAutomation` calls it no bot's, whoever clicked it). The viewer's own
+ * events never do. Without a viewer nothing is aimed at anyone yet.
+ */
+function personallyAsked(snooze: Snooze, context: SnoozeContext): boolean {
+  const viewer = context.viewer ?? null;
+  if (viewer === null) {
+    return false;
+  }
+  return context.events.some(
+    (event) => event.at > snooze.since && isPersonalAsk(event, context.pr, viewer) && !isAutomationOn(event, context) && !isByViewer(event, viewer),
+  );
+}
+
+/**
+ * True once the snooze condition is met: a human reply, a push, green CI,
+ * the time passed, or for a mute a personal ask. Every snooze also ends when
+ * the PR is merged or closed (decided 2026-09-30): nothing left to wait for,
+ * and a snooze that holds a finished PR keeps its topic from retiring.
  */
 export function isSnoozeOver(snooze: Snooze, context: SnoozeContext): boolean {
   if (context.pr.state !== 'OPEN') {
@@ -75,6 +94,8 @@ export function isSnoozeOver(snooze: Snooze, context: SnoozeContext): boolean {
       return ciGreen(context);
     case 'until_time':
       return context.now >= snooze.condition.until;
+    case 'muted':
+      return personallyAsked(snooze, context);
   }
 }
 
@@ -86,8 +107,14 @@ export function isSnoozeOver(snooze: Snooze, context: SnoozeContext): boolean {
  * snooze, the app's own Look closer event does not. An automation event the
  * agent raised to loud wakes it too (decided 2026-09-30); a bot event at its
  * rule's loudness never does.
+ *
+ * A mute is the exception: it stays whatever bots or other people do, so
+ * only its own condition (`personallyAsked`) ends it.
  */
 export function breaksSnooze(event: PrEvent, snooze: Snooze, context: SnoozeContext): boolean {
+  if (snooze.condition.kind === 'muted') {
+    return false;
+  }
   if (event.at <= snooze.since || event.seenAt !== null || effectiveLoudness(event) !== 'loud') {
     return false;
   }
@@ -135,7 +162,7 @@ export function snoozeWrites(tile: Tile, change: SnoozeChange): SnoozeWrites {
   }
 }
 
-export type SnoozeTelemetryBucket = 'hours' | 'a_day' | 'days' | 'a_week' | 'someone_replies' | 'new_push' | 'ci_green';
+export type SnoozeTelemetryBucket = 'hours' | 'a_day' | 'days' | 'a_week' | 'someone_replies' | 'new_push' | 'ci_green' | 'muted';
 
 /** The `snoozed` telemetry event's prop: a time bucket for `until_time`, the condition name otherwise. */
 export function snoozeTelemetryBucket(condition: SnoozeCondition, nowMs: number): SnoozeTelemetryBucket {

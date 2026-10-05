@@ -1,10 +1,34 @@
-import { isTracked, prReadScope, snoozeWrites, threadPrKey, tileReadScope, tilesReadScope, type ActionResult, type PrKey, type SnoozeCondition, type SnoozeWrites, type Tile } from '@postpile/core';
+import {
+  isTracked,
+  prReadScope,
+  snoozeWrites,
+  threadPrKey,
+  tileReadScope,
+  tilesReadScope,
+  type ActionResult,
+  type PendingThread,
+  type PrKey,
+  type Snooze,
+  type SnoozeCondition,
+  type SnoozeWrites,
+  type Tile,
+} from '@postpile/core';
 import type { Store } from '@postpile/store';
 import { Board } from '../board.ts';
+import type { PendingBatch } from '../mark-read-queue.ts';
 import type { ReadMarker } from './read-marker.ts';
-import { failed, ok, readMessage } from './results.ts';
+import { failed, muteMessage, ok, readMessage, unmuteMessage } from './results.ts';
+
+/** What a mute or unmute replaced, kept by its undo token: Undo removes `remove` and puts `restore` back. */
+interface SnoozeUndo {
+  remove: PrKey[];
+  restore: Snooze[];
+}
 
 export class TileActions {
+  /** In memory, like the queue's batches: once a window ends there is nothing left to undo. */
+  private readonly snoozeUndos = new Map<string, SnoozeUndo>();
+
   constructor(
     private readonly store: Store,
     private readonly readMarker: ReadMarker,
@@ -92,14 +116,6 @@ export class TileActions {
     return ok(readMessage('Marked read', batch), batch.token);
   }
 
-  undo(token: string | null): ActionResult {
-    const batch = this.readMarker.undo(token);
-    if (!batch) {
-      return failed('Nothing to undo: already sent to GitHub');
-    }
-    return ok('Undone');
-  }
-
   /** Writes a snooze change for every PR of a tile at once. */
   private applySnoozeWrites(writes: SnoozeWrites): void {
     this.store.transaction(() => {
@@ -108,11 +124,73 @@ export class TileActions {
     });
   }
 
-  /** Snoozes each tracked PR of the tile with the same condition (see `snoozeWrites`). */
+  /** A mute's or unmute's undo puts the snoozes back as they were. */
+  private putBackSnoozes(token: string): void {
+    const entry = this.snoozeUndos.get(token);
+    if (!entry) {
+      return;
+    }
+    this.snoozeUndos.delete(token);
+    this.applySnoozeWrites({ put: entry.restore, remove: entry.remove });
+  }
+
+  undo(token: string | null): ActionResult {
+    const batch = this.readMarker.undo(token);
+    if (!batch) {
+      if (token !== null) {
+        this.snoozeUndos.delete(token);
+      }
+      return failed('Nothing to undo: already sent to GitHub');
+    }
+    this.putBackSnoozes(batch.token);
+    return ok('Undone');
+  }
+
+  /** Keeps what a mute or unmute replaced while its batch can be undone; entries whose window ended go on the way. */
+  private keepForUndo(batch: PendingBatch, remove: PrKey[], restore: Snooze[]): void {
+    for (const token of this.snoozeUndos.keys()) {
+      if (!this.readMarker.canUndo(token)) {
+        this.snoozeUndos.delete(token);
+      }
+    }
+    this.snoozeUndos.set(batch.token, { remove, restore });
+  }
+
+  /** The notification threads of these PRs, read or unread: a mute unsubscribes from each, an unmute subscribes again. */
+  private threadsOf(keys: PrKey[]): PendingThread[] {
+    return [...this.store.notifications.getByPrKeys(keys).entries()].map(([key, thread]) => ({ id: thread.id, updatedAt: thread.updatedAt, prKey: key }));
+  }
+
+  /**
+   * "Mute until I'm mentioned" (2026-10-05): the tile's tracked PRs get a
+   * mute (`muted` snooze, only a personal ask ends it), the tile is marked
+   * read like the other clears, and GitHub unsubscribes the viewer from each
+   * thread after the undo window, or later as a pending write while locked.
+   * Undo takes all of it back.
+   */
+  private mute(tile: Tile): ActionResult {
+    const writes = snoozeWrites(tile, { kind: 'start', condition: { kind: 'muted' }, at: this.now().toISOString() });
+    if (writes.put.length === 0) {
+      return failed(`nothing to mute in tile ${tile.id}`);
+    }
+    const keys = writes.put.map((snooze) => snooze.prKey);
+    const before = keys.flatMap((key) => this.store.snoozes.get(key) ?? []);
+    this.applySnoozeWrites(writes);
+    const threads = this.threadsOf(keys);
+    const subscription = threads.length > 0 ? { subscribed: false, threads } : null;
+    const batch = this.readMarker.markRead(tileReadScope(tile), { kind: 'button' }, { origin: 'tile', tileId: tile.id }, subscription);
+    this.keepForUndo(batch, keys, before);
+    return ok(muteMessage(batch), batch.token);
+  }
+
+  /** Snoozes each tracked PR of the tile with the same condition (see `snoozeWrites`); a mute does more (`mute`). */
   snooze(tileId: string, condition: SnoozeCondition): ActionResult {
     const tile = this.findTile(tileId);
     if (!tile) {
       return failed(`no tile ${tileId}`);
+    }
+    if (condition.kind === 'muted') {
+      return this.mute(tile);
     }
     const writes = snoozeWrites(tile, { kind: 'start', condition, at: this.now().toISOString() });
     if (writes.put.length === 0) {
@@ -122,12 +200,29 @@ export class TileActions {
     return ok('Snoozed');
   }
 
+  /**
+   * Takes the tile's snooze back. Unmute also subscribes the viewer to the
+   * muted PRs' threads again (2026-10-05): without that GitHub stays quiet
+   * about them, so new activity would never turn the tile unread. It goes
+   * to GitHub after the undo window, or as a pending write while locked.
+   */
   unsnooze(tileId: string): ActionResult {
     const tile = this.findTile(tileId);
     if (!tile) {
       return failed(`no tile ${tileId}`);
     }
+    const snoozes = tile.members.flatMap((member) => this.store.snoozes.get(member.prKey) ?? []);
     this.applySnoozeWrites(snoozeWrites(tile, { kind: 'end' }));
-    return ok('Unsnoozed');
+    const mutedKeys = snoozes.filter((snooze) => snooze.condition.kind === 'muted').map((snooze) => snooze.prKey);
+    if (mutedKeys.length === 0) {
+      return ok('Unsnoozed');
+    }
+    const threads = this.threadsOf(mutedKeys);
+    if (threads.length === 0) {
+      return ok('Unmuted');
+    }
+    const batch = this.readMarker.changeSubscription({ subscribed: true, threads }, { origin: 'tile', tileId });
+    this.keepForUndo(batch, [], snoozes);
+    return ok(unmuteMessage(batch), batch.token);
   }
 }

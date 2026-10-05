@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { PrKey, Snooze, SnoozeCondition } from '@postpile/core';
-import { all, run } from '../sql.ts';
+import { all, one, run } from '../sql.ts';
 
 interface SnoozeRow {
   pr_key: string;
@@ -18,6 +18,11 @@ export class SnoozeRepo {
 
   list(): Snooze[] {
     return all<SnoozeRow>(this.db, 'SELECT * FROM pr_snooze ORDER BY since, pr_key').map(toSnooze);
+  }
+
+  get(prKey: PrKey): Snooze | null {
+    const row = one<SnoozeRow>(this.db, 'SELECT * FROM pr_snooze WHERE pr_key = ?', prKey);
+    return row ? toSnooze(row) : null;
   }
 
   /** A new snooze replaces the PR's old one. */

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PrSummary, TileView, TopicDetail, WhoseTurn } from '@postpile/core';
 import { at, NO_OPENED_READ, NO_PR_FACTS, withOffers } from '@postpile/core/fixtures';
-import { approvedPrsTile, markedReadPr, markedReadTile, snoozedTile, withTile, withTiles } from './optimistic.ts';
+import { approvedPrsTile, markedReadPr, markedReadTile, mutedTile, snoozedTile, withTile, withTiles } from './optimistic.ts';
 
 const NONE: WhoseTurn = { kind: 'none', who: null, what: '', prKey: null };
 const REVIEW: WhoseTurn = { kind: 'you', move: 'review', who: 'rowan', what: 'Review, rowan asked', prKey: 'acme/app#1' };
@@ -85,6 +85,15 @@ describe('markedReadTile', () => {
     expect(markedReadTile(snoozedTile(stillYours)).state.kind).toBe('snoozed');
     // A snoozed tile marked read leaves Unread for Open, even when a mark-read would leave it done.
     expect(markedReadTile(snoozedTile(unreadTile([summary(1)]))).group).toBe('open');
+  });
+});
+
+describe('mutedTile', () => {
+  it('says Muted, and turns read at once only with GitHub writes on', () => {
+    const threadUnread = unreadTile([summary(1)]);
+    expect(mutedTile(threadUnread, true)).toMatchObject({ state: { kind: 'snoozed', muted: true, unreadOnGitHub: false }, group: 'open' });
+    expect(mutedTile(threadUnread, false)).toMatchObject({ state: { kind: 'snoozed', muted: true, unreadOnGitHub: true }, group: 'unread' });
+    expect(snoozedTile(mutedTile(threadUnread, true)).state.muted).toBeUndefined();
   });
 });
 

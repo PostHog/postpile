@@ -341,6 +341,10 @@ export class FakeWriter implements GitHubWriter {
     }
     this.calls.push(`unsubscribeThread ${threadId}`);
   }
+
+  async subscribeThread(threadId: string): Promise<void> {
+    this.calls.push(`subscribeThread ${threadId}`);
+  }
 }
 
 /**

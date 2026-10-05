@@ -114,6 +114,7 @@ import {
   agentApproveSkip,
   agentMarkReadRefusal,
   approvalsSummary,
+  tileReadScope,
   tilesReadScope,
   buildPrSummary,
   buildTileView,
@@ -219,7 +220,7 @@ import { FakeMemory } from './fake-memory.ts';
 import { FakeCleanup } from './fake-cleanup.ts';
 import { isSampleMergedThread, sampleMergedVerdict, sampleThreads } from './fake-notifications.ts';
 import { samplePingDecisions, sampleQuietReads } from './fake-quiet.ts';
-import { FakeWrites, type FakeLocalChange } from './fake-writes.ts';
+import { FakeWrites, type FakeLocalChange, type FakeSubscription } from './fake-writes.ts';
 import { buildSampleData, type SampleData } from './sample-data.ts';
 
 interface MarkReadBatch {
@@ -383,6 +384,8 @@ export class FakeEngine implements EngineService {
   /** Sample decisions plus the fake poll's own, oldest sample first. */
   private readonly pingDecisions: PingDecision[];
   private readonly memoryUndos = new Map<string, { until: number; undo: () => void }>();
+  /** What a mute or unmute replaced, by its undo token (like TileActions). */
+  private readonly snoozeUndos = new Map<string, { remove: PrKey[]; restore: Snooze[] }>();
   private readonly recheckDelayMs: number;
   private readonly syncStepMs: number;
   private tidyPending: boolean;
@@ -1512,6 +1515,7 @@ export class FakeEngine implements EngineService {
     origin: 'tile' | 'detail' | 'debug',
     tileId: string | null,
     extraThreads: NotificationThread[] = [],
+    subscription: FakeSubscription | null = null,
   ): ActionResult {
     // Read the GitHub flags before the events change: the fake derives a thread's first flag from them.
     const githubThreads = this.threadsOnGitHub();
@@ -1530,7 +1534,7 @@ export class FakeEngine implements EngineService {
       queuedAt: this.now().getTime(),
     };
     this.batches.push(batch);
-    this.writes.queued({ ...batch, origin, tileId, threads, prKeys, handleKeys, local, writesOn });
+    this.writes.queued({ ...batch, origin, tileId, threads, prKeys, handleKeys, local, writesOn, subscription });
     if (!changeHere) {
       return ok('Marked read: pending until you unlock GitHub writes, stays unread here until then', batch.token);
     }
@@ -1660,6 +1664,7 @@ export class FakeEngine implements EngineService {
     }
     this.writes.undone(batch.token);
     this.revertLocal(batch.eventIds, batch.handledPrKeys);
+    this.putBackSnoozes(batch.token);
     return ok('undone');
   }
 
@@ -1668,23 +1673,73 @@ export class FakeEngine implements EngineService {
     writes.put.forEach((snooze) => this.snoozes.set(snooze.prKey, snooze));
   }
 
+  /** Like TileActions: a mute's or unmute's undo puts the snoozes back as they were. */
+  private putBackSnoozes(token: string): void {
+    const entry = this.snoozeUndos.get(token);
+    if (entry) {
+      this.snoozeUndos.delete(token);
+      this.applySnoozeWrites({ put: entry.restore, remove: entry.remove });
+    }
+  }
+
+  /** The sample threads of these PRs, read or unread: what a mute unsubscribes from and an unmute subscribes to. */
+  private sampleThreadsOf(keys: PrKey[]): { id: string; prKey: PrKey | null }[] {
+    return this.threadsOnGitHub()
+      .filter((thread) => keys.includes(threadPrKey(thread) ?? ''))
+      .map((thread) => ({ id: thread.id, prKey: threadPrKey(thread) }));
+  }
+
+  /** Like TileActions.mute: the mute, a mark-read of the tile and the unsubscribe in one batch, one undo token. */
+  private mute(tile: Tile): ActionResult {
+    const writes = snoozeWrites(tile, { kind: 'start', condition: { kind: 'muted' }, at: this.timestamp() });
+    const keys = writes.put.map((snooze) => snooze.prKey);
+    const before = keys.flatMap((key) => this.snoozes.get(key) ?? []);
+    this.applySnoozeWrites(writes);
+    const threads = this.sampleThreadsOf(keys);
+    const subscription = threads.length > 0 ? { subscribed: false, threads } : null;
+    const scope = tileReadScope(tile);
+    const marked = this.markPrsRead(scope.prKeys, scope.handleKeys, 'tile', tile.id, [], subscription);
+    if (marked.undoToken) {
+      this.snoozeUndos.set(marked.undoToken, { remove: keys, restore: before });
+    }
+    const github = this.writes.isEnabled() ? 'Unsubscribed on GitHub in a few seconds' : 'Unsubscribing on GitHub is pending until you unlock GitHub writes';
+    return ok(`Muted until you're mentioned. ${github}`, marked.undoToken);
+  }
+
   async snooze(tileId: string, condition: SnoozeCondition): Promise<ActionResult> {
     const tile = this.findTile(tileId);
     if (!tile) {
       return fail(`no tile ${tileId}`);
     }
+    if (condition.kind === 'muted') {
+      return this.mute(tile);
+    }
     this.applySnoozeWrites(snoozeWrites(tile, { kind: 'start', condition, at: this.timestamp() }));
     return ok(`snoozed until ${condition.kind}`);
   }
 
-  /** Like TileActions.unsnooze: a tile id that no longer exists fails. */
+  /** Like TileActions.unsnooze: a tile id that no longer exists fails; an unmute subscribes again through the fake queue. */
   async unsnooze(tileId: string): Promise<ActionResult> {
     const tile = this.findTile(tileId);
     if (!tile) {
       return fail(`no tile ${tileId}`);
     }
+    const snoozes = tile.members.flatMap((member) => this.snoozes.get(member.prKey) ?? []);
     this.applySnoozeWrites(snoozeWrites(tile, { kind: 'end' }));
-    return ok('Unsnoozed');
+    const mutedKeys = snoozes.filter((snooze) => snooze.condition.kind === 'muted').map((snooze) => snooze.prKey);
+    if (mutedKeys.length === 0) {
+      return ok('Unsnoozed');
+    }
+    const threads = this.sampleThreadsOf(mutedKeys);
+    if (threads.length === 0) {
+      return ok('Unmuted');
+    }
+    const marked = this.markPrsRead([], [], 'tile', tileId, [], { subscribed: true, threads });
+    if (marked.undoToken) {
+      this.snoozeUndos.set(marked.undoToken, { remove: [], restore: snoozes });
+    }
+    const github = this.writes.isEnabled() ? 'Subscribed again on GitHub in a few seconds' : 'Subscribing you again on GitHub is pending until you unlock GitHub writes';
+    return ok(`Unmuted. ${github}`, marked.undoToken);
   }
 
   /** Agent actions fail with the headline while the agent is off, as the engine's do. */

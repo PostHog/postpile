@@ -246,7 +246,8 @@ team-devex" instead of the bot's name.
   and sits in the Unread group (see "Groups inside a topic").
 - `snoozed`: every tracked PR in the tile has an active snooze whose condition is not met
   yet. Snoozes are stored per PR (see "Snoozes belong to PRs"); every snooze also ends
-  when its PR is merged or closed.
+  when its PR is merged or closed. `TileState.muted` when every one of them is a
+  mute (see "Mute until I'm mentioned").
 - `done`: every pinged member is done, nothing loud is unseen and no thread is unread
   on GitHub. A PR is done only when
   nothing is asked of the user (`isPrDone`, 2026-09-28): merged or closed (except a merge
@@ -270,7 +271,9 @@ against the user's own instructions), `does`, `risk`, `othersSaid`. Cached by a
 hash of its inputs; regenerated only when the PR moves or instructions change.
 
 **User actions**: approve (single press, immediate, no undo), mark read, snooze
-(until someone replies | new push | CI green, the user's own pick | a time), "ask <person>" (agent
+(until someone replies | new push | CI green, the user's own pick | a time), mute
+(until someone asks the user in person; also a mark-read and GitHub's thread
+unsubscribe), "ask <person>" (agent
 drafts a PR comment, user edits and sends), feedback on a tile ("not mine",
 "not related" for sets, "wrong topic"), chat on a tile. Lasting points from
 chat come back for the user to place: "Keep for this topic" (tailoring), "Keep
@@ -364,6 +367,9 @@ Action details:
 - approve: GitHub approval right away, pinned with `commit_id` to the synced
   head (the commit the glance and the user saw), then the same mark-read for
   that PR. The undo token only brings back the unread state, never the approval.
+- mute (2026-10-05): a `muted` snooze on each tracked PR, then the same as
+  mark read with the threads' unsubscribe in the batch; unmute subscribes
+  again. See "Mute until I'm mentioned".
 - not mine: same as mark read (events seen, handled, thread mark-read queued,
   undo token) + feedback, one row per member for a stack or set tile.
 - not related: member marked removed in the set (a set left with one member
@@ -6989,6 +6995,43 @@ its PR is merged or closed (push and CI snoozes first, every kind since
 stays human news only, plus automation the agent raised to loud (since
 2026-09-30): the app's own Look-closer event does not break a snooze (its
 ping already skips snoozed tiles).
+
+**Mute until I'm mentioned (2026-10-05).** Owner: "there is no way to
+snooze/dismiss forever? e.g. a rogue contributor keeping commenting". The
+last item of the Snooze menu, "Mute until I'm mentioned", puts the tile
+away for good:
+- A mute is a snooze with the condition `muted` on each tracked PR, so it
+  follows the PR like any snooze and every snooze rule applies (it ends when
+  the PR is merged or closed, so the topic can still retire).
+- Only a personal ask ends it (`isPersonalAsk`, the same one personal pings
+  use): a mention, question or reply to the user, a comment edited to
+  mention them, or a review request that names them (a bot-made one too).
+  Nothing else wakes it: no person's or bot's loud news (`breaksSnooze`
+  says no for a mute), no team mention, no team request, no push, no
+  author's answer to the user's changes request. A bot's mention does not
+  count; the user's own events neither.
+- Muting marks the tile read like the other clears and unsubscribes the user
+  from each PR's notification thread (`DELETE
+  /notifications/threads/{id}/subscription`, GitHub's own mute until you
+  comment or are @mentioned), so GitHub agrees. Both are one batch through
+  the mark-read queue (`MarkReadRequest.subscription`): Undo inside the
+  window takes all of it back (the snoozes too); locked, the mark-read and
+  the unsubscribe wait as two pending writes of the same batch (kinds
+  `mark_read` and `unsubscribe`, listed as "Mute: <title>") and go out from
+  the lock. The unsubscribe goes to a thread that is read already too.
+- Unmute (where Unsnooze is) takes the snoozes back and subscribes the user
+  again (`PUT .../subscription` with `ignored: false`; pending kind
+  `subscribe`), through the same queue and lock. Without it GitHub would
+  stay quiet about the PR: new activity would never turn the tile unread
+  again, and a tile that looks unmuted but never comes back is worse than
+  one more write. Undo of an Unmute puts the mute back.
+- Known gap: GitHub still notifies a user who watches the repo; the DELETE
+  does not cover that. GitHub documents `PUT .../subscription` with
+  `ignored: true` for watched repos (a stronger block; that it still lets a
+  mention through is not checked yet, so it is not used). Such a
+  notification makes the thread unread, so the muted tile sits in the
+  Unread group like any snoozed tile with an unread thread until it is
+  marked read.
 
 **Topic status has one writer.** All status changes (retire, revive,
 archive; nothing restores a topic today) go through `nextTopicStatus` in

@@ -6,6 +6,7 @@ import {
   type PendingThread,
   type PrKey,
   type ReadScope,
+  type SubscriptionChange,
 } from '@postpile/core';
 import type { Store } from '@postpile/store';
 import type { BatchOrigin, MarkReadQueue, PendingBatch } from '../mark-read-queue.ts';
@@ -73,7 +74,7 @@ export class ReadMarker {
    * writes it. Locked with an unread thread, nothing changes here; the batch
    * keeps the handle keys so the pending write can handle them later.
    */
-  private enqueueBatch(threads: PendingThread[], scope: ReadScope, cause: QueuedReadCause, origin: BatchOrigin): PendingBatch {
+  private enqueueBatch(threads: PendingThread[], scope: ReadScope, cause: QueuedReadCause, origin: BatchOrigin, subscription: SubscriptionChange | null): PendingBatch {
     const changeHere = this.queue.writesEnabled() || threads.length === 0;
     const at = this.now().toISOString();
     const { handleKeys, local } = this.store.transaction(() => {
@@ -89,14 +90,23 @@ export class ReadMarker {
       }
       return { handleKeys: plan.handleKeys, local: { ...writeReadPlan(this.store, plan), threads: readThreadsLocally(this.store, threads) } };
     });
-    const batch = this.queue.enqueue({ threads, prKeys: scope.prKeys, handleKeys, local }, origin);
+    const batch = this.queue.enqueue({ threads, prKeys: scope.prKeys, handleKeys, local, subscription }, origin);
     this.logQueued(batch, threads, scope.prKeys, changeHere);
     return batch;
   }
 
-  /** The scope's events become seen, its handle keys count as done unless the cause says otherwise. The batch's token is the undo token. */
-  markRead(scope: ReadScope, cause: QueuedReadCause, origin: BatchOrigin): PendingBatch {
-    return this.enqueueBatch(this.unreadThreads(scope.prKeys), scope, cause, origin);
+  /**
+   * The scope's events become seen, its handle keys count as done unless the
+   * cause says otherwise. The batch's token is the undo token. Mute passes
+   * its unsubscribe, which then goes to GitHub with the mark-read.
+   */
+  markRead(scope: ReadScope, cause: QueuedReadCause, origin: BatchOrigin, subscription: SubscriptionChange | null = null): PendingBatch {
+    return this.enqueueBatch(this.unreadThreads(scope.prKeys), scope, cause, origin, subscription);
+  }
+
+  /** Unmute's subscribe: nothing to mark read, the same undo window, lock and pending write as a mark-read. */
+  changeSubscription(subscription: SubscriptionChange, origin: BatchOrigin): PendingBatch {
+    return this.enqueueBatch([], { prKeys: [], handleKeys: [] }, { kind: 'button' }, origin, subscription);
   }
 
   /**
@@ -110,7 +120,12 @@ export class ReadMarker {
       return this.markRead(prReadScope(key, true), { kind: 'button' }, origin);
     }
     const threads = thread.unread ? [{ id: thread.id, updatedAt: thread.updatedAt, prKey: key }] : [];
-    return this.enqueueBatch(threads, { prKeys: [], handleKeys: [] }, { kind: 'button' }, origin);
+    return this.enqueueBatch(threads, { prKeys: [], handleKeys: [] }, { kind: 'button' }, origin, null);
+  }
+
+  /** The batch still waits out its undo window. */
+  canUndo(token: string): boolean {
+    return this.queue.pending().some((batch) => batch.token === token);
   }
 
   /** Null token undoes the newest pending batch. Returns null when nothing is left to undo. */
@@ -120,7 +135,11 @@ export class ReadMarker {
       return null;
     }
     putBackLocalChange(this.store, batch.local);
-    const keys = batch.prKeys.length > 0 ? batch.prKeys : [null];
+    let keys: (PrKey | null)[] = batch.prKeys;
+    if (keys.length === 0) {
+      // A thread-only batch (debug view) logs one row by thread; Unmute's batch marks nothing read and logs none.
+      keys = batch.threadIds.length > 0 ? [null] : [];
+    }
     for (const key of keys) {
       this.log.record({
         action: 'undo_mark_read',

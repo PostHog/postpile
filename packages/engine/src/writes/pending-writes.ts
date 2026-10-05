@@ -1,5 +1,6 @@
 import {
   cleanupPicksWords,
+  isSubscriptionWrite,
   pendingWriteStep,
   PENDING_WRITES_OFF,
   unreadOlderThan,
@@ -12,6 +13,7 @@ import {
   type PendingWriteView,
   type PendingWritesResult,
   type PrKey,
+  type SubscriptionChange,
   type TilePendingWrite,
 } from '@postpile/core';
 import type { Store } from '@postpile/store';
@@ -25,6 +27,12 @@ export const DISCARDED_DETAIL = 'discarded while locked: stays unread, like on G
 export const CLEANUP_PENDING_DETAIL = 'GitHub writes are locked: the cleanup waits until you unlock and send it';
 export const CLEANUP_DISCARDED_DETAIL = 'cleanup discarded while locked: GitHub keeps them unread';
 export const OBSERVED_PENDING_DETAIL = 'left the inbox: read on github.com or another client; pending mark-read cleared';
+export const SUBSCRIPTION_DISCARDED_DETAIL = 'discarded while locked: the GitHub subscription stays as it was';
+
+/** The pending write kind and log action of a Mute's or Unmute's subscription change. */
+function subscriptionKind(change: SubscriptionChange): 'subscribe' | 'unsubscribe' {
+  return change.subscribed ? 'subscribe' : 'unsubscribe';
+}
 
 /**
  * Starts a parked catch-up's run in the background (InboxCleanup), with the
@@ -41,6 +49,10 @@ export type CatchUpStarter = (write: PendingWrite) => string | null;
  * sends them when unlocking (the PRs turn read here as each thread reaches
  * GitHub; failures stay pending with the error), or discards them (nothing
  * changes, the tiles stay unread like GitHub has them).
+ *
+ * A Mute's or Unmute's GitHub subscription change waits the same way, as
+ * its own row next to the click's mark-read (kind `unsubscribe` or
+ * `subscribe`, same batch); sending it changes nothing in the app.
  *
  * What happens to a stored write is decided by `pendingWriteStep` (core);
  * `apply` carries out its effects and stores the next state, so every
@@ -63,23 +75,23 @@ export class PendingWrites {
    */
   park(batch: ParkedBatch): void {
     const createdAt = this.now().toISOString();
+    const base = { readBefore: null, createdAt, origin: batch.origin, tileId: batch.tileId, batch: batch.batchId };
+    const subscription = batch.subscription !== null && batch.subscription.threads.length > 0 ? batch.subscription : null;
     this.store.transaction(() => {
-      putBackLocalChange(this.store, batch.local);
-      this.store.pendingWrites.add({
-        kind: 'mark_read',
-        readBefore: null,
-        createdAt,
-        origin: batch.origin,
-        tileId: batch.tileId,
-        batch: batch.batchId,
-        prKeys: batch.prKeys,
-        handleKeys: batch.handleKeys,
-        threads: batch.threads,
-      });
+      // The local change belongs to the mark-read: without an unread thread it needed no GitHub and stays.
+      if (batch.threads.length > 0) {
+        putBackLocalChange(this.store, batch.local);
+        this.store.pendingWrites.add({ ...base, kind: 'mark_read', prKeys: batch.prKeys, handleKeys: batch.handleKeys, threads: batch.threads });
+      }
+      if (subscription !== null) {
+        this.store.pendingWrites.add({ ...base, kind: subscriptionKind(subscription), prKeys: [], handleKeys: [], threads: subscription.threads });
+      }
     });
-    for (const thread of batch.threads) {
+    const subscriptionRows = subscription === null ? [] : subscription.threads.map((thread) => ({ thread, action: subscriptionKind(subscription) }));
+    const logged = [...batch.threads.map((thread) => ({ thread, action: 'mark_read' as const })), ...subscriptionRows];
+    for (const { thread, action } of logged) {
       this.writes.log.record({
-        action: 'mark_read',
+        action,
         origin: batch.origin,
         outcome: 'pending',
         threadId: thread.id,
@@ -126,6 +138,19 @@ export class PendingWrites {
     return this.list().filter((write) => write.kind === 'mark_all_read_before').at(-1)?.readBefore ?? null;
   }
 
+  /** The first PR's title (+N for more), else the notification's. A subscription change names its PRs through its threads. */
+  private prTitle(write: PendingWrite): string {
+    const keys = write.prKeys.length > 0 ? write.prKeys : write.threads.flatMap((thread) => (thread.prKey === null ? [] : [thread.prKey]));
+    const firstKey = keys[0] ?? null;
+    const pr = firstKey === null ? null : this.store.prs.get(firstKey);
+    const more = keys.length > 1 ? ` (+${keys.length - 1})` : '';
+    if (pr) {
+      return `${pr.title}${more}`;
+    }
+    const thread = write.threads[0] ? this.store.notifications.get(write.threads[0].id) : null;
+    return thread?.title ?? firstKey ?? 'notification';
+  }
+
   private title(write: PendingWrite): string {
     if (write.kind === 'mark_all_read_before') {
       return `Cleanup: mark everything before ${(write.readBefore ?? '').slice(0, 10)} read`;
@@ -133,14 +158,13 @@ export class PendingWrites {
     if (write.catchUp !== null) {
       return `Inbox cleanup: ${cleanupPicksWords(write.catchUp)}`;
     }
-    const firstKey = write.prKeys[0] ?? write.threads[0]?.prKey ?? null;
-    const pr = firstKey === null ? null : this.store.prs.get(firstKey);
-    const more = write.prKeys.length > 1 ? ` (+${write.prKeys.length - 1})` : '';
-    if (pr) {
-      return `${pr.title}${more}`;
+    if (write.kind === 'unsubscribe') {
+      return `Mute: ${this.prTitle(write)}`;
     }
-    const thread = write.threads[0] ? this.store.notifications.get(write.threads[0].id) : null;
-    return thread?.title ?? firstKey ?? 'notification';
+    if (write.kind === 'subscribe') {
+      return `Unmute: ${this.prTitle(write)}`;
+    }
+    return this.prTitle(write);
   }
 
   views(): PendingWriteView[] {
@@ -189,16 +213,17 @@ export class PendingWrites {
       });
       return;
     }
+    const action = write.kind === 'unsubscribe' || write.kind === 'subscribe' ? write.kind : 'mark_read';
     for (const thread of write.threads) {
       this.writes.log.record({
-        action: 'mark_read',
+        action,
         origin: 'footer',
         outcome: 'discarded',
         threadId: thread.id,
         prKey: thread.prKey,
         tileId: write.tileId,
         batch: write.batch,
-        detail: DISCARDED_DETAIL,
+        detail: action === 'mark_read' ? DISCARDED_DETAIL : SUBSCRIPTION_DISCARDED_DETAIL,
       });
     }
   }
@@ -297,7 +322,12 @@ export class PendingWrites {
     if (write.kind === 'catch_up') {
       return this.sendCatchUp(write, startCatchUp, notTaken);
     }
-    const outcomes = await queue.markThreads(write.threads, { origin: 'footer', tileId: write.tileId, batchId: write.batch });
+    const context = { origin: 'footer' as const, tileId: write.tileId, batchId: write.batch };
+    if (isSubscriptionWrite(write)) {
+      const outcomes = await queue.changeSubscriptions({ subscribed: write.kind === 'subscribe', threads: write.threads }, context);
+      return this.apply(write, { kind: 'sent', outcomes }, 'footer', notTaken);
+    }
+    const outcomes = await queue.markThreads(write.threads, context);
     return this.apply(write, { kind: 'sent', outcomes }, 'footer', notTaken);
   }
 

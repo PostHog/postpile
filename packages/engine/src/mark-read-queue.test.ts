@@ -29,7 +29,7 @@ function queueWithTwoThreads(writesOn = true) {
   ];
   const origin = { origin: 'tile' as const, tileId: null };
   const keys = [first.key, second.key];
-  const request = { threads, prKeys: keys, handleKeys: keys, local: NO_LOCAL_CHANGE };
+  const request = { threads, prKeys: keys, handleKeys: keys, local: NO_LOCAL_CHANGE, subscription: null };
   return { store, queue, reader, writer, writes, marked, parked, request, origin };
 }
 

@@ -7,6 +7,7 @@ import {
   type IsoTime,
   type PendingThread,
   type PrKey,
+  type SubscriptionChange,
   type ThreadOutcome,
   type Timers,
 } from '@postpile/core';
@@ -35,6 +36,8 @@ export interface MarkReadRequest {
   /** PRs that also count as handled once read (pinged members). */
   handleKeys: PrKey[];
   local: LocalChange;
+  /** Mute's unsubscribe or Unmute's subscribe, sent after the mark-read on the same terms; null for a plain mark-read. */
+  subscription: SubscriptionChange | null;
 }
 
 interface MarkReadPayload extends BatchOrigin, MarkReadRequest {
@@ -51,6 +54,7 @@ export interface PendingBatch extends BatchOrigin {
   prKeys: PrKey[];
   writesOn: boolean;
   local: LocalChange;
+  subscription: SubscriptionChange | null;
   dueAt: number;
 }
 
@@ -84,7 +88,7 @@ export interface SendContext {
 }
 
 function toPending(batch: DeferredBatch<MarkReadPayload>): PendingBatch {
-  const { threads, prKeys, writesOn, batchId, origin, tileId, local } = batch.payload;
+  const { threads, prKeys, writesOn, batchId, origin, tileId, local, subscription } = batch.payload;
   return {
     token: batch.token,
     batchId,
@@ -92,6 +96,7 @@ function toPending(batch: DeferredBatch<MarkReadPayload>): PendingBatch {
     prKeys,
     writesOn,
     local,
+    subscription,
     origin,
     tileId,
     dueAt: batch.dueAt,
@@ -117,6 +122,10 @@ function toPending(batch: DeferredBatch<MarkReadPayload>): PendingBatch {
  * Every send goes through GitHubWrites, so it respects the footer lock and
  * lands in the action log (origin `queue`, `quit` for the flush, `footer`
  * for pending writes).
+ *
+ * Mute and Unmute ride along (2026-10-05): a batch's `subscription` change
+ * goes to GitHub after its mark-read, on the same terms: undone inside the
+ * window, parked as a pending write while locked.
  */
 export class MarkReadQueue {
   private readonly queue: DeferredQueue<MarkReadPayload>;
@@ -202,18 +211,65 @@ export class MarkReadQueue {
   }
 
   /**
+   * Changes the viewer's subscription to each thread on GitHub, in order:
+   * Mute's unsubscribe or Unmute's subscribe. One failed thread does not
+   * stop the rest; its outcome carries the error (already logged).
+   */
+  async changeSubscriptions(change: SubscriptionChange, context: SendContext): Promise<ThreadOutcome[]> {
+    const outcomes: ThreadOutcome[] = [];
+    for (const thread of change.threads) {
+      const writeContext = { origin: context.origin, prKey: thread.prKey, tileId: context.tileId, batch: context.batchId };
+      try {
+        const result = change.subscribed ? await this.writes.subscribeThread(thread.id, writeContext) : await this.writes.unsubscribeThread(thread.id, writeContext);
+        outcomes.push(result === 'off' ? { kind: 'off' } : { kind: 'sent' });
+      } catch (error) {
+        outcomes.push({ kind: 'failed', error: errorText(error) });
+      }
+    }
+    return outcomes;
+  }
+
+  /**
+   * The batch's subscription change, after its mark-read. A thread GitHub did
+   * not take is said in the next sync report; the ones the lock stopped
+   * mid-send are returned, to be parked.
+   */
+  private async sendSubscription(payload: MarkReadPayload, context: SendContext): Promise<PendingThread[]> {
+    if (payload.subscription === null) {
+      return [];
+    }
+    const outcomes = await this.changeSubscriptions(payload.subscription, context);
+    const verb = payload.subscription.subscribed ? 'subscribe' : 'unsubscribe';
+    const off: PendingThread[] = [];
+    outcomes.forEach((outcome, index) => {
+      const thread = payload.subscription?.threads[index];
+      if (!thread) {
+        return;
+      }
+      if (outcome.kind === 'off') {
+        off.push(thread);
+      } else if (outcome.kind === 'failed') {
+        this.notes.push(`${verb} of ${thread.prKey ?? `notification ${thread.id}`}: GitHub didn't take it: ${outcome.error}`);
+      }
+    });
+    return off;
+  }
+
+  /**
    * Threads the lock stopped mid-send become a pending write, like a batch
    * that found writes off before it started. Their PRs go back to unread
-   * first: GitHub does not have them read yet.
+   * first: GitHub does not have them read yet. A subscription change the
+   * lock stopped waits the same way.
    */
-  private parkOff(payload: MarkReadPayload, off: PendingThread[]): void {
-    if (off.length === 0) {
+  private parkOff(payload: MarkReadPayload, off: PendingThread[], subscriptionOff: PendingThread[]): void {
+    if (off.length === 0 && subscriptionOff.length === 0) {
       return;
     }
     for (const thread of off) {
       this.onNotTaken(thread, payload.local);
     }
     const offKeys = new Set(off.flatMap((thread) => (thread.prKey === null ? [] : [thread.prKey])));
+    const subscribed = payload.subscription?.subscribed ?? false;
     this.onParked({
       origin: payload.origin,
       tileId: payload.tileId,
@@ -222,6 +278,7 @@ export class MarkReadQueue {
       prKeys: [...offKeys],
       handleKeys: payload.handleKeys.filter((key) => offKeys.has(key)),
       local: NO_LOCAL_CHANGE,
+      subscription: subscriptionOff.length > 0 ? { subscribed, threads: subscriptionOff } : null,
     });
   }
 
@@ -230,10 +287,11 @@ export class MarkReadQueue {
    * a batch sent from the queue: it already left the undo queue. A thread
    * GitHub did not take (failed, or skipped for newer activity) puts its PR
    * back to unread here, and the next sync report says why. Threads the lock
-   * stopped mid-send are parked (parkOff).
+   * stopped mid-send are parked (parkOff). A Mute's or Unmute's
+   * subscription change goes after the mark-read, whatever became of it.
    */
   private async send(payload: MarkReadPayload): Promise<void> {
-    if (payload.threads.length === 0) {
+    if (payload.threads.length === 0 && (payload.subscription?.threads.length ?? 0) === 0) {
       return;
     }
     if (!payload.writesOn || !this.writes.enabled()) {
@@ -260,7 +318,8 @@ export class MarkReadQueue {
       this.onNotTaken(thread, payload.local);
       this.notes.push(`mark-read of ${thread.prKey ?? `notification ${thread.id}`}: ${notTakenDetail(reason)}`);
     });
-    this.parkOff(payload, off);
+    const subscriptionOff = await this.sendSubscription(payload, context);
+    this.parkOff(payload, off, subscriptionOff);
   }
 
   enqueue(request: MarkReadRequest, origin: BatchOrigin): PendingBatch {

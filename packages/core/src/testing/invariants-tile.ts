@@ -34,13 +34,19 @@ export function prDone(board: PropertyBoard, key: string): boolean {
   return expectedDone({ pr: prOf(board, key), events: eventsOf(board, key), viewer: board.viewer, userState: board.userStates.get(key) ?? null, notYours: board.notYours.has(key), lastReadAt: board.threads.get(key)?.lastReadAt ?? null });
 }
 
-/** A tile is snoozed exactly while every tracked PR in it has an active snooze (DESIGN "Snoozes belong to PRs"). */
+/**
+ * A tile is snoozed exactly while every tracked PR in it has an active snooze
+ * (DESIGN "Snoozes belong to PRs"), and reads muted exactly while snoozed and
+ * every one of those snoozes is a mute.
+ */
 export const snoozedWhileEveryTrackedPrSnoozed: Invariant = {
-  name: 'a tile is snoozed exactly while every tracked PR has an active snooze',
+  name: 'a tile is snoozed exactly while every tracked PR has an active snooze, muted when every one is a mute',
   check(board, views) {
     for (const view of views) {
       const expected = isSnoozedByRule(board, view);
       ensure((view.state.kind === 'snoozed') === expected, `${view.tile.id}: state ${view.state.kind}, every tracked PR snoozed: ${expected}`);
+      const muted = expected && trackedMembers(view).every((member) => board.snoozes.get(member.prKey)?.condition.kind === 'muted');
+      ensure((view.state.muted === true) === muted, `${view.tile.id}: muted ${view.state.muted === true}, every tracked PR muted: ${muted}`);
     }
   },
 };

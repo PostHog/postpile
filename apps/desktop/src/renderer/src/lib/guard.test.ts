@@ -21,6 +21,7 @@ describe('writeBlockedReason', () => {
   it('lets mark-reads run while locked, they become pending writes', () => {
     expect(writeBlockedReason('markRead', OFF)).toBeNull();
     expect(writeBlockedReason('notMine', FORCED)).toBeNull();
+    expect(writeBlockedReason('mute', OFF)).toBeNull();
     expect(markReadNote(OFF)).toMatch(/pending write/);
     expect(markReadNote(ON)).toBeUndefined();
   });
@@ -32,5 +33,6 @@ describe('writeBlockedReason', () => {
 
   it('blocks while the writes state is still loading', () => {
     expect(writeBlockedReason('markRead', undefined)).toMatch(/until the app knows/);
+    expect(writeBlockedReason('mute', undefined)).toMatch(/Muting or unmuting is blocked until the app knows/);
   });
 });

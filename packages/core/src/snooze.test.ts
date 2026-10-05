@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { deriveEvents } from './events.ts';
 import { at, makeEvent, makePr, makeTimelineItem, viewer } from './fixtures.ts';
 import { lookCloserEvent } from './glance-pings.ts';
-import { breaksSnooze, isSnoozeOver, snoozeTelemetryBucket, type SnoozeContext } from './snooze.ts';
-import type { Snooze, SnoozeCondition } from './types.ts';
+import { breaksSnooze, isSnoozeOver, snoozePhase, snoozeTelemetryBucket, type SnoozeContext } from './snooze.ts';
+import type { PrEvent, Snooze, SnoozeCondition, TimelineItem } from './types.ts';
 
 function snooze(condition: SnoozeCondition): Snooze {
   return { prKey: 'acme/app#1', condition, since: at(10) };
@@ -89,6 +89,45 @@ describe('breaksSnooze', () => {
   });
 });
 
+describe('mute: only a personal ask brings it back', () => {
+  const muted = snooze({ kind: 'muted' });
+  const phase = (events: PrEvent[], pr = makePr({ author: 'rogue' })) => snoozePhase(muted, context({ pr, events }));
+
+  it('stays through bots and other people, however loud', () => {
+    const comment = makeEvent({ kind: 'comment', actor: 'rogue', ruleLoudness: 'loud', at: at(11) });
+    const review = makeEvent({ kind: 'review_changes_requested', actor: 'lyra', ruleLoudness: 'loud', at: at(12) });
+    const push = makeEvent({ kind: 'commits_pushed', actor: 'rogue', ruleLoudness: 'loud', at: at(13) });
+    const bot = makeEvent({ kind: 'bot_comment', actor: 'vercel', isBot: true, ruleLoudness: 'quiet', override: { loudness: 'loud', reason: 'deploy failed', by: 'agent' }, at: at(14) });
+    const teamMention = makeEvent({ kind: 'team_mention', actor: 'rogue', ruleLoudness: 'loud', at: at(15) });
+    expect(phase([comment, review, push, bot, teamMention])).toBe('active');
+    expect([comment, review, push, bot, teamMention].some((event) => breaksSnooze(event, muted, context()))).toBe(false);
+  });
+
+  it('ends on a mention, question or reply to the viewer from a person, never from a bot or the viewer', () => {
+    for (const kind of ['mention', 'question_to_user', 'reply_to_user'] as const) {
+      expect(phase([makeEvent({ kind, actor: 'rogue', at: at(11) })])).toBe('over');
+    }
+    expect(phase([makeEvent({ kind: 'mention', actor: 'rogue', at: at(9) })])).toBe('active');
+    expect(phase([makeEvent({ kind: 'mention', actor: 'mergebot[bot]', isBot: true, at: at(11) })])).toBe('active');
+    expect(phase([makeEvent({ kind: 'mention', actor: viewer.login, at: at(11) })])).toBe('active');
+  });
+
+  it('ends on a review request that names the viewer, also a bot-made one, never on a team request', () => {
+    const personal = makeTimelineItem({ id: 'rr-you', actor: 'assignbot[bot]', subject: viewer.login, at: at(15) });
+    const team = makeTimelineItem({ id: 'rr-team', actor: 'rogue', subject: 'acme/team-platform', at: at(15) });
+    const requested = (item: TimelineItem) => {
+      const pr = makePr({ author: 'rogue', timeline: [item] });
+      return phase(deriveEvents(pr, viewer, null).filter((event) => event.kind === 'review_requested'), pr);
+    };
+    expect(requested(personal)).toBe('over');
+    expect(requested(team)).toBe('active');
+  });
+
+  it('ends like every snooze once the PR is merged or closed', () => {
+    expect(phase([], makePr({ author: 'rogue', state: 'MERGED' }))).toBe('over');
+  });
+});
+
 describe('snoozeTelemetryBucket', () => {
   const nowMs = new Date('2026-01-01T00:00:00.000Z').getTime();
 
@@ -96,6 +135,7 @@ describe('snoozeTelemetryBucket', () => {
     expect(snoozeTelemetryBucket({ kind: 'someone_replies' }, nowMs)).toBe('someone_replies');
     expect(snoozeTelemetryBucket({ kind: 'new_push' }, nowMs)).toBe('new_push');
     expect(snoozeTelemetryBucket({ kind: 'ci_green' }, nowMs)).toBe('ci_green');
+    expect(snoozeTelemetryBucket({ kind: 'muted' }, nowMs)).toBe('muted');
   });
 
   it('buckets a time-based snooze by how far out it is', () => {

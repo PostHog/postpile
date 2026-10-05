@@ -649,6 +649,11 @@ export interface TileState {
    */
   unreadOnGitHub: boolean;
   /**
+   * Only on a snoozed tile, and only true: every tracked PR is put away by a
+   * mute (`muted` snooze). The tile says Muted and offers Unmute.
+   */
+  muted?: boolean;
+  /**
    * A member (not a found PR) has an unseen loud event. Pings, the coral
    * "new since you looked", urgency and sections follow loud news, not
    * unread: a tile unread with only quiet news pings nothing.
@@ -709,11 +714,19 @@ export interface UserPrState {
   handledAt: IsoTime | null;
 }
 
+/**
+ * muted: "Mute until I'm mentioned" (2026-10-05). Only something aimed at the
+ * viewer in person ends it (`isPersonalAsk`); other people's and bots' news
+ * never does. Muting also unsubscribes the viewer from the GitHub thread.
+ * Not the same as an event's `muted` loudness, which is a rule about one
+ * event kind.
+ */
 export type SnoozeCondition =
   | { kind: 'someone_replies' }
   | { kind: 'new_push' }
   | { kind: 'ci_green' }
-  | { kind: 'until_time'; until: IsoTime };
+  | { kind: 'until_time'; until: IsoTime }
+  | { kind: 'muted' };
 
 /**
  * One PR put away for later. A tile's snooze is one of these per tracked PR,

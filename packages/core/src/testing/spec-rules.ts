@@ -515,8 +515,25 @@ function isRaisedToLoud(event: PrEvent): boolean {
 }
 
 /**
+ * Someone asked the viewer in person (2026-10-05, what ends a mute): a
+ * mention, question or reply to them, a comment edited to mention them, or a
+ * review request naming them. Never automation, never the viewer.
+ */
+function asksViewerInPerson(pr: Pr, viewer: Viewer, event: PrEvent): boolean {
+  if (isAutomationEvent(pr, viewer, event) || isViewerLogin(viewer, event.actor)) {
+    return false;
+  }
+  if (SPEC_PERSONAL_ASK_KINDS.includes(event.kind) || editAsks(pr, viewer, event) === 'you') {
+    return true;
+  }
+  const subject = event.kind === 'review_requested' ? requestSubjectOf(pr, event) : null;
+  return subject !== null && sameLogin(subject, viewer.login);
+}
+
+/**
  * broken: unseen loud news after the start, from a person, or automation
  * the agent raised to loud (2026-09-30; the app's Look closer event never).
+ * A mute never breaks: only its own condition ends it.
  * over: the PR merged or closed (every kind, 2026-09-30), or the condition
  * met. active otherwise.
  */
@@ -525,7 +542,7 @@ export function expectedSnoozePhase(input: { pr: Pr; events: PrEvent[]; viewer: 
   const after = events.filter((event) => event.at > snooze.since);
   const wakes = (event: PrEvent) =>
     event.seenAt === null && effectiveLoudnessOf(event) === 'loud' && (!isAutomationEvent(pr, viewer, event) || isRaisedToLoud(event));
-  if (after.some(wakes)) {
+  if (snooze.condition.kind !== 'muted' && after.some(wakes)) {
     return 'broken';
   }
   if (pr.state !== 'OPEN') {
@@ -541,6 +558,8 @@ export function expectedSnoozePhase(input: { pr: Pr; events: PrEvent[]; viewer: 
       return pr.checks.rollup === 'SUCCESS' ? 'over' : 'active';
     case 'until_time':
       return input.now >= condition.until ? 'over' : 'active';
+    case 'muted':
+      return after.some((event) => asksViewerInPerson(pr, viewer, event)) ? 'over' : 'active';
   }
 }
 

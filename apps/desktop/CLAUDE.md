@@ -138,7 +138,11 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   Components never call `request()` for a mutation.
 - **GitHub writes are guarded.** approve, comment review, send comment,
   reply, react, mark read (tile and PR-scoped), "not mine" (it queues a
-  mark-read) and "Remove <team>" pass through `writeBlockedReason` in
+  mark-read), Mute and Unmute (`mute`: the Snooze menu's "Mute until I'm
+  mentioned" queues a mark-read and the GitHub unsubscribe, Unmute the
+  subscribe; both run while locked like a mark-read and wait as pending
+  writes; a muted tile is `TileState.muted`, says Muted and offers Unmute in
+  `SnoozeMenu`) and "Remove <team>" pass through `writeBlockedReason` in
   `lib/guard.ts`, which reads the footer lock (`useGitHubWrites`, `GET
   /api/github-writes`, changes at runtime). With the lock closed
   (read-only, the default) approve and comment are blocked with a clear

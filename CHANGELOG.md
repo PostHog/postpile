@@ -2,6 +2,12 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## 0.21.0 (unreleased)
+
+### Added
+
+- Mute a PR for good: "Mute until I'm mentioned" at the end of the Snooze menu. The tile leaves your inbox and stays out whatever others or bots do, and comes back only when someone mentions you, asks you, replies to you or requests your review. Muting marks it read and unsubscribes you from the PR's GitHub notifications, so GitHub stays quiet too. Unmute, where Unsnooze is, subscribes you again. If you watch the repo, GitHub still notifies you about it.
+
 ## 0.20.0 (2026-10-05)
 
 ### Changed

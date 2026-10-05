@@ -502,6 +502,7 @@ export const REQUIRED_LABELS: readonly string[] = [
   'snooze:new_push',
   'snooze:ci_green',
   'snooze:until_time',
+  'snooze:muted',
   'snooze-phase:active',
   'snooze-phase:broken',
   'snooze-phase:over',

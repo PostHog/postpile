@@ -29,6 +29,8 @@ const snoozeCondition = z.discriminatedUnion('kind', [
     kind: z.literal('until_time'),
     until: z.iso.datetime({ offset: true }).transform((value) => new Date(value).toISOString()),
   }),
+  // "Mute until I'm mentioned": also marks read and unsubscribes on GitHub, through the engine's writes lock.
+  z.object({ kind: z.literal('muted') }),
 ]);
 
 const agentActionFrom = z.enum(['agent_tile', 'agent_topic']);
