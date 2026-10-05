@@ -7233,9 +7233,11 @@ preflight and does not know the token, so CORS stays open.
   consolidate refuse it. The desktop app also asks `app.requestSingleInstanceLock()`, so a
   second launch of the same app (same userData) only focuses the first window.
 - **A database from a newer PostPile** (2026-10-05, since 0.20.0): `openDatabase` reads the
-  schema version (`MAX(version)` of `schema_migrations`) before anything that could write,
-  the WAL pragma and the migrations, and refuses a version above this build's newest
-  migration with `NewerDatabaseError`. It never migrates down and leaves the file as it was.
+  schema version (`MAX(version)` of `schema_migrations`) through a read-only connection of
+  its own before it opens the file for writing, and refuses a version above this build's
+  newest migration with `NewerDatabaseError`. It never migrates down and leaves the file as
+  it was: no WAL pragma, no migrations, and no checkpoint (closing the last read-write
+  connection would copy a WAL the newer build left behind into the file; Codex review on #121).
   The desktop app shows "This database was written by a newer PostPile" with Quit and a
   link to the latest release; the CLI and the server exit with the message. Read-only opens
   (CLI `--read-only`, MCP) refuse any other version anyway, a newer one with the same error.

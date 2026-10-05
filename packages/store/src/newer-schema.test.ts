@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -62,6 +62,25 @@ describe('a database from a newer PostPile', () => {
     expect(check.prepare('PRAGMA journal_mode').get()).toEqual({ journal_mode: 'delete' });
     expect(check.prepare('SELECT MAX(version) AS v FROM schema_migrations').get()).toEqual({ v: LATEST_VERSION + 1 });
     check.close();
+  });
+
+  it('leaves the WAL a newer build left behind as it is, never checkpointing it into the file', () => {
+    // Copied while the newer build's connection is open: what a killed app leaves, its last commits only in the WAL.
+    const source = tempDb();
+    const writer = new DatabaseSync(source);
+    writer.exec('PRAGMA journal_mode = WAL');
+    writer.exec('PRAGMA wal_autocheckpoint = 0');
+    runMigrations(writer);
+    writer.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run(LATEST_VERSION + 1, '2026-10-05T00:00:00.000Z');
+    const path = tempDb();
+    copyFileSync(source, path);
+    copyFileSync(`${source}-wal`, `${path}-wal`);
+    writer.close();
+    const before = { db: fileHash(path), wal: fileHash(`${path}-wal`) };
+
+    expect(() => openDatabase(path)).toThrow(NewerDatabaseError);
+    expect(() => Store.openReadOnly(path)).toThrow(NewerDatabaseError);
+    expect({ db: fileHash(path), wal: fileHash(`${path}-wal`) }).toEqual(before);
   });
 
   it('is refused by Store.open and Store.openReadOnly the same way', () => {

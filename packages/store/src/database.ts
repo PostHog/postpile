@@ -1,4 +1,4 @@
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { LATEST_VERSION, runMigrations } from './migrate.ts';
@@ -31,11 +31,26 @@ export function recordedVersion(db: DatabaseSync): number {
   return row.version ?? 0;
 }
 
-/** Closes db and throws NewerDatabaseError when its schema is newer than this build's. Only reads. */
-function refuseNewerSchema(db: DatabaseSync, path: string): void {
-  const version = recordedVersion(db);
+/**
+ * Throws NewerDatabaseError when the file at `path` has a schema newer than
+ * this build's. Reads through a read-only connection of its own: closing
+ * the last read-write connection would checkpoint a WAL a newer build left
+ * behind into the file, and that build's data must stay as it was. No file
+ * yet is a new database.
+ */
+function refuseNewerSchema(path: string): void {
+  if (path === ':memory:' || !existsSync(path)) {
+    return;
+  }
+  const probe = new DatabaseSync(path, { readOnly: true });
+  let version: number;
+  try {
+    probe.exec('PRAGMA busy_timeout = 5000');
+    version = recordedVersion(probe);
+  } finally {
+    probe.close();
+  }
   if (version > LATEST_VERSION) {
-    db.close();
     throw new NewerDatabaseError(path, version, LATEST_VERSION);
   }
 }
@@ -44,22 +59,21 @@ function refuseNewerSchema(db: DatabaseSync, path: string): void {
  * Opens (or creates) the SQLite file and brings the schema up to date.
  * Pass ":memory:" in tests. WAL lets the CLI read while the desktop app writes.
  * A database from a newer PostPile is refused (NewerDatabaseError) before
- * anything that could write to it: the journal mode and the migrations.
+ * this opens it for writing: no journal mode, no migrations, no checkpoint.
  */
 export function openDatabase(path: string): DatabaseSync {
   if (path !== ':memory:') {
     mkdirSync(dirname(path), { recursive: true });
   }
+  refuseNewerSchema(path);
   const db = new DatabaseSync(path);
-  // A setting of this connection, nothing on disk. Set first, so the version read can wait out another writer.
-  db.exec('PRAGMA busy_timeout = 5000');
-  refuseNewerSchema(db, path);
   db.exec('PRAGMA journal_mode = WAL');
   // A reset WAL is reused from the start but keeps its size on disk (954 MB
   // after rewriting a heavy install's snapshots in one transaction). With a
   // limit each reset cuts it back to 64 MB: https://sqlite.org/pragma.html#pragma_journal_size_limit
   db.exec('PRAGMA journal_size_limit = 67108864');
   db.exec('PRAGMA foreign_keys = ON');
+  db.exec('PRAGMA busy_timeout = 5000');
   runMigrations(db);
   return db;
 }
@@ -100,8 +114,11 @@ export function openDatabaseReadOnly(path: string): DatabaseSync {
     throw new Error(`Cannot open ${path} read-only: ${error instanceof Error ? error.message : String(error)}`);
   }
   db.exec('PRAGMA busy_timeout = 5000');
-  refuseNewerSchema(db, path);
   const version = recordedVersion(db);
+  if (version > LATEST_VERSION) {
+    db.close();
+    throw new NewerDatabaseError(path, version, LATEST_VERSION);
+  }
   if (version !== LATEST_VERSION) {
     db.close();
     throw new Error(
