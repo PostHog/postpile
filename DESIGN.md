@@ -2361,7 +2361,10 @@ instead of the blue PR band, no Approve or Post buttons. "‹ Back to #1907"
 returns to the PR; any pick (tile, PR, topic) does too. A lasting point is
 one line: "Remember "..."? For this topic · For all topics"; leaving it
 alone means just this once (nothing logged). All topics still shows the
-instructions diff first. The tile chat is gone from the renderer.
+instructions diff first. The tile chat is gone from the renderer. The
+point waiting for a pick is kept per topic while the app runs, so leaving
+the pane (also while the answer is still coming) and coming back shows it
+again; a new message replaces it.
 
 Sending: the message shows right away as the user's bubble with a
 "Thinking…" bubble under it, and the input empties; the list keeps the

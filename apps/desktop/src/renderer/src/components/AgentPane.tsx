@@ -21,6 +21,13 @@ const linkButton = 'text-[11.5px] font-semibold text-accent hover:underline disa
 const bubble = 'max-w-[85%] rounded-row px-3 py-2 text-[12.5px] leading-normal whitespace-pre-wrap select-text';
 
 /**
+ * The lasting point waiting for the user's pick, per topic, for as long as
+ * the app runs. The pane closes on Back or any pick, also while an answer is
+ * still coming; the point is then here when the topic's pane opens again.
+ */
+const waitingPoints = new Map<string, LastingPointProposal>();
+
+/**
  * "Ask the agent": the topic's agent chat, in the right pane in place of the
  * PR. Private and it looks it: a grey band with a lock instead of the blue PR
  * band, and nothing here writes to GitHub. A lasting point comes back as one
@@ -31,13 +38,15 @@ const bubble = 'max-w-[85%] rounded-row px-3 py-2 text-[12.5px] leading-normal w
  * A sent message shows right away with a "Thinking…" bubble under it (an
  * answer takes a few seconds), and the list keeps the newest message in
  * view. When the call fails, the bubble goes and the text is back in the
- * input; the engine stores nothing for a failed turn.
+ * input; the engine stores nothing for a failed turn. A lasting point
+ * outlives the pane (`waitingPoints`): leaving it alone still means just this
+ * once, but leaving the pane does not throw it away.
  */
 export function AgentPane(props: AgentPaneProps) {
   const actions = useActions();
   const chat = useTopicChat(props.topicId);
   const [draft, setDraft] = useState(props.draft);
-  const [point, setPoint] = useState<LastingPointProposal | null>(null);
+  const [point, setShownPoint] = useState<LastingPointProposal | null>(() => waitingPoints.get(props.topicId) ?? null);
   const [instructions, setInstructions] = useState<InstructionsProposal | null>(null);
   /** The message on its way, with how many messages the chat had when it was sent. */
   const [pending, setPending] = useState<{ text: string; count: number } | null>(null);
@@ -54,6 +63,16 @@ export function AgentPane(props: AgentPaneProps) {
       element.scrollTop = element.scrollHeight;
     }
   }, [messageCount, waiting, point, instructions]);
+
+  /** Shows the point and keeps it for the next time the pane opens; null drops it. */
+  function setPoint(next: LastingPointProposal | null) {
+    if (next) {
+      waitingPoints.set(props.topicId, next);
+    } else {
+      waitingPoints.delete(props.topicId);
+    }
+    setShownPoint(next);
+  }
 
   async function send() {
     const text = draft.trim();
