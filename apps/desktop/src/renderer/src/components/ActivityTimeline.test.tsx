@@ -33,7 +33,7 @@ function Pane() {
   return (
     <ComposeProvider value={compose}>
       <JumpButton />
-      <ActivityTimeline activity={activity} pr={pr} viewerLogin={viewer.login} />
+      <ActivityTimeline activity={activity} prKey={pr.key} />
     </ComposeProvider>
   );
 }

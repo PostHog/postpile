@@ -83,6 +83,27 @@ export function viewerRequestedChanges(pr: Pr, viewer: Viewer): boolean {
   return newestVerdictBy(pr.reviews, viewer.login)?.state === 'CHANGES_REQUESTED';
 }
 
+/**
+ * Where the viewer's review stands, apart from an approval (`viewerApproval`)
+ * and a team request (`PaneOffers.removeTeams`): the detail pane's review
+ * row label reads it. In order: their newest verdict asks for changes, a
+ * review is requested from them, it is their own PR; else null.
+ */
+export type ViewerReviewStand = 'changes_requested' | 'requested' | 'own_pr' | null;
+
+export function viewerReviewStand(pr: Pr, viewer: Viewer | null): ViewerReviewStand {
+  if (!viewer) {
+    return null;
+  }
+  if (viewerRequestedChanges(pr, viewer)) {
+    return 'changes_requested';
+  }
+  if (pr.reviewerUsers.some((user) => sameLogin(user, viewer.login))) {
+    return 'requested';
+  }
+  return isPrOwner(pr, viewer.login) ? 'own_pr' : null;
+}
+
 /** When the viewer approved and on which commit (null when unknown). */
 export interface ViewerApproval {
   at: IsoTime;

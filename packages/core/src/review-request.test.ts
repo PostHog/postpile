@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { at, makePr, makeReview, makeUserState, viewer } from './fixtures.ts';
-import { isApprovedByViewer, isPersonalRequest, newestVerdictBy, ownTeamRequests, viewerApproval, reviewPending, reviewRequest, teamRequestTakenBy, teamSlug } from './review-request.ts';
+import { isApprovedByViewer, isPersonalRequest, newestVerdictBy, ownTeamRequests, viewerApproval, reviewPending, reviewRequest, teamRequestTakenBy, teamSlug, viewerReviewStand } from './review-request.ts';
 import type { Viewer } from './types.ts';
 
 const me = viewer.login;
@@ -136,5 +136,23 @@ describe('ownTeamRequests and teamSlug', () => {
   it('turns "org/slug" into the slug GitHub takes', () => {
     expect(teamSlug('acme/team-platform')).toBe('team-platform');
     expect(teamSlug('team-platform')).toBe('team-platform');
+  });
+});
+
+describe('viewerReviewStand', () => {
+  const me = viewer.login;
+
+  it('puts a change request first, then a review request, then the own PR', () => {
+    const changes = makeReview({ author: me, state: 'CHANGES_REQUESTED', submittedAt: at(20) });
+    expect(viewerReviewStand(makePr({ reviews: [changes], reviewerUsers: [me] }), viewer)).toBe('changes_requested');
+    expect(viewerReviewStand(makePr({ reviewerUsers: [me.toUpperCase()] }), viewer)).toBe('requested');
+    expect(viewerReviewStand(makePr({ author: me }), viewer)).toBe('own_pr');
+    expect(viewerReviewStand(makePr(), viewer)).toBeNull();
+    expect(viewerReviewStand(makePr({ author: me }), null)).toBeNull();
+  });
+
+  it('lets a dismissal end the change request', () => {
+    const reviews = [makeReview({ author: me, state: 'CHANGES_REQUESTED', submittedAt: at(10) }), makeReview({ author: me, state: 'DISMISSED', submittedAt: at(20) })];
+    expect(viewerReviewStand(makePr({ reviews }), viewer)).toBeNull();
   });
 });

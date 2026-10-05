@@ -36,7 +36,7 @@ import type { TileGroup } from './tile-groups.ts';
 import type { Touch } from './last-touch.ts';
 import type { ReviewRequest } from './review-request.ts';
 import type { PrTier } from './pr-tier.ts';
-import type { ViewerApproval } from './review-request.ts';
+import type { ViewerApproval, ViewerReviewStand } from './review-request.ts';
 import type { PersonRelation, TopicPerson, TopicQueues } from './topic-queues.ts';
 import type { DriverKind } from './topic-driver.ts';
 import type { TopicSection } from './topic-sections.ts';
@@ -457,6 +457,8 @@ export interface PrDetail {
   userState: UserPrState | null;
   /** The viewer's standing approval (`viewerApproval`): app record or GitHub, any commit. Null when none. */
   viewerApproval: ViewerApproval | null;
+  /** Where the viewer's review stands besides an approval (`viewerReviewStand`), for the review row label. */
+  viewerReview: ViewerReviewStand;
   /**
    * Agent names ("reviewbot") when only agents approved, also on drafts;
    * empty once a person approved (`agentOnlyApprovers`). The detail says

@@ -2309,7 +2309,8 @@ thread, reading the diff.
   own controls: Recheck and "Tell the agent" (opens the topic's agent pane
   with "About #1907: " typed in).
 - The review row (`ReviewRow`), right after the glance, outside it: a label
-  with the review state from GitHub (`reviewRowLabel`: "You approved 2h
+  with the review state from GitHub (`reviewRowLabel` over core's
+  `viewerReviewStand` on `PrDetail.viewerReview`: "You approved 2h
   ago, commits since", "You requested changes", "Review requested from
   you", "... from team-devex", "Your PR", "Your review"), then Approve with
   its "+ note" half, Comment review, and "Ask <owner>" on the right. Same
@@ -2333,8 +2334,11 @@ thread, reading the diff.
   you, else a quiet link; "Reply in thread" on a code comment) and "Thumbs
   up" (a 👍 reaction on GitHub, said in its tooltip; "You: thumbs up" in a
   pressed pill once given; "React" alone did not say what it posts). An
-  approval without text only takes the thumbs up. Nothing for the viewer's own words, bots or pushes
-  (`replyTargetOf`).
+  approval without text only takes the thumbs up. Nothing for the viewer's own words, bots or pushes.
+  Core puts it on the line (`ActivityLine.reply`, filled by `activityList`
+  with the PR and the viewer); a comment on several lines (its event and an
+  edit, a review and a mention in it) gets it once, on the newest line. The
+  renderer only reads it: workspace imports there stay type-only.
 - "Back to top" floats at the pane's bottom while the review row has
   scrolled out above.
 
@@ -2362,9 +2366,10 @@ returns to the PR; any pick (tile, PR, topic) does too. A lasting point is
 one line: "Remember "..."? For this topic · For all topics"; leaving it
 alone means just this once (nothing logged). All topics still shows the
 instructions diff first. The tile chat is gone from the renderer. The
-point waiting for a pick is kept per topic while the app runs, so leaving
-the pane (also while the answer is still coming) and coming back shows it
-again; a new message replaces it.
+point waiting for a pick, and the instructions diff waiting for Accept or
+Reject, are kept per topic while the app runs, so leaving the pane (also
+while the answer is still coming) and coming back shows them again; a new
+message replaces them.
 
 Sending: the message shows right away as the user's bubble with a
 "Thinking…" bubble under it, and the input empties; the list keeps the

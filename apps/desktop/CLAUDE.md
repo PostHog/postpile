@@ -258,13 +258,14 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
 - Approve is final (GitHub has no un-approve). Keep it a deliberate click in
   the detail pane, in the review row right after the glance (DESIGN.md
   "The PR pane", 2026-10-05): its own row with a GitHub review-state label
-  (`reviewRowLabel`), never inside the glance, same order on every PR.
+  (`reviewRowLabel` over core's `PrDetail.viewerReview`), never inside the
+  glance, same order on every PR.
 - The pane's writes share one inline `Composer` (state per PR in `PrBody`
   through `ComposeProvider`, one open at a time, drafts kept per target):
   a header that says where it goes, one box with the agent's pill where the
   text starts ("✨ Draft with agent" / "✨ Rewrite with agent", never an
   automatic draft), Cancel and a button that names the target. Replies live in the activity list
-  (`replyTargetOf` in `lib/reply.ts`); "New since" only jumps there
+  (core's `ActivityLine.reply`, once per comment); "New since" only jumps there
   ("Reply ↓", `jumpToReply`). Housekeeping (`PaneHousekeeping`) is a quiet
   line right under the review row, never in `DetailContext` (that band is
   the stack/set PR picker); "Open on GitHub" (`OpenOnGitHub`) only on the

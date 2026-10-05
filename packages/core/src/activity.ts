@@ -2,14 +2,36 @@
 // bursts collapsed and bot / CI noise folded into one line. Rules only; the
 // engine and FakeEngine ship the result on `PrDetail.activity`.
 import { reviewRequestSubject } from './events.ts';
-import { PUSH_KINDS } from './kinds.ts';
+import { PERSONAL_ASK_KINDS, PUSH_KINDS } from './kinds.ts';
 import { isOwnTeam, sameLogin } from './mentions.ts';
+import { findComment, replyTarget } from './reply.ts';
 import { effectiveLoudness } from './loudness.ts';
 import type { EventDisplayState, EventKind, IsoTime, NotificationThread, Pr, Viewer } from './types.ts';
 import type { EventView } from './views.ts';
 
 /** About this many lines show before "Show all N". */
 export const ACTIVITY_LINE_CAP = 12;
+
+/**
+ * What a person's comment or review on a line can be answered with
+ * (2026-10-05): Reply, in its review thread for a code comment, else a new
+ * PR comment that quotes it, and a thumbs up.
+ */
+export interface LineReply {
+  /** The comment's or review's id: where the reply and the reaction go. */
+  commentId: string;
+  author: string;
+  /** A code comment: the reply goes into its review thread. */
+  inThread: boolean;
+  /** The file of a code comment, null otherwise. */
+  path: string | null;
+  /** A comment or a review with text. An approval without text only takes a reaction. */
+  canReply: boolean;
+  /** The viewer gave it a thumbs up already. */
+  viewerReacted: boolean;
+  /** One of its lines asks the viewer personally (mention, question, reply to them): Reply is the emphasized action. */
+  asksYou: boolean;
+}
 
 /** One line of the list: a single event, or a burst of pushes by one person. */
 export interface ActivityLine {
@@ -33,6 +55,13 @@ export interface ActivityLine {
   unseen: boolean;
   /** Newest first. */
   events: EventView[];
+  /**
+   * Reply and thumbs up for a person's comment or review, null for anything
+   * else (pushes, bots, lifecycle, the viewer's own words, a comment the
+   * snapshot no longer has). A comment on several lines gets it once, on
+   * the newest of them.
+   */
+  reply: LineReply | null;
 }
 
 export interface ActivityList {
@@ -165,7 +194,54 @@ function toLine(group: EventView[], pr: Pr | null): ActivityLine {
     isNew: loud,
     unseen: group.some((view) => view.unseen),
     events: newestFirst,
+    reply: null,
   };
+}
+
+/** The reply of one line on its own: its newest event's comment or review. */
+function lineReply(line: ActivityLine, pr: Pr, viewer: Viewer): LineReply | null {
+  const newest = line.events[0]?.event;
+  if (!newest || newest.isBot || !HUMAN_TALK.includes(newest.kind) || sameLogin(newest.actor, viewer.login)) {
+    return null;
+  }
+  const asksYou = line.events.some((view) => PERSONAL_ASK_KINDS.includes(view.event.kind));
+  const comment = findComment(pr, newest.sourceId);
+  if (comment) {
+    const inThread = replyTarget(comment).kind === 'thread';
+    return { commentId: comment.id, author: comment.author, inThread, path: inThread ? comment.path : null, canReply: true, viewerReacted: comment.viewerReacted ?? false, asksYou };
+  }
+  const review = pr.reviews.find((candidate) => candidate.id === newest.sourceId);
+  if (review) {
+    return { commentId: review.id, author: review.author, inThread: false, path: null, canReply: false, viewerReacted: review.viewerReacted ?? false, asksYou };
+  }
+  return null;
+}
+
+/**
+ * The lines, newest first, with their replies. A comment can show on more
+ * than one line (its event and a later edit, a review and the mention in its
+ * body); only the newest gets the reply, so one comment never has two Reply
+ * boxes, and it asks the viewer when any of its lines does.
+ */
+function withReplies(lines: ActivityLine[], pr: Pr | null, viewer: Viewer | null): ActivityLine[] {
+  if (!pr || !viewer) {
+    return lines;
+  }
+  const replies = lines.map((line) => lineReply(line, pr, viewer));
+  const owner = new Map<string, number>();
+  replies.forEach((reply, index) => {
+    if (reply && !owner.has(reply.commentId)) {
+      owner.set(reply.commentId, index);
+    }
+  });
+  return lines.map((line, index) => {
+    const reply = replies[index];
+    if (!reply || owner.get(reply.commentId) !== index) {
+      return line;
+    }
+    const asksYou = replies.some((other) => other?.commentId === reply.commentId && other.asksYou);
+    return { ...line, reply: { ...reply, asksYou } };
+  });
 }
 
 function byTime(a: EventView, b: EventView): number {
@@ -254,7 +330,13 @@ export function activityList(
   const sorted = events.toSorted(byTime);
   const meaningful = sorted.filter((view) => isMeaningful(view, viewer));
   const allNoise = sorted.filter((view) => !isMeaningful(view, viewer)).toReversed();
-  const lines = groupBursts(meaningful).map((group) => toLine(group, pr)).toReversed();
+  const lines = withReplies(
+    groupBursts(meaningful)
+      .map((group) => toLine(group, pr))
+      .toReversed(),
+    pr,
+    viewer,
+  );
   const fresh = lines.filter((line) => line.isNew);
   const isFreshNoise = (view: EventView) => fresh.length > 0 && view.display !== 'seen' && (since === null || view.event.at > since);
   const freshNoise = allNoise.filter(isFreshNoise);

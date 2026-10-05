@@ -54,7 +54,7 @@ export function ReviewRow(props: ReviewRowProps) {
   const { pr } = props.detail;
   const { offers } = props;
   const viewerLogin = viewer.data?.login ?? null;
-  const label = reviewRowLabel({ pr, viewerLogin, approval: props.detail.viewerApproval, askedTeams: offers.removeTeams, now });
+  const label = reviewRowLabel({ pr, approval: props.detail.viewerApproval, stand: props.detail.viewerReview, askedTeams: offers.removeTeams, now });
   const input: ApproveButtonInput = { isDraft: pr.isDraft, viewerLogin, reviews: pr.reviews, approval: props.detail.viewerApproval, headOid: pr.headOid };
   const look = approveButton(input);
   // The click shows the approval right away (lib/optimistic.ts); until the server confirmed, the button just says so.

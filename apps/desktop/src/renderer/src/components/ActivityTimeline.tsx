@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import type { ActivityLine, ActivityList, EventDisplayState, EventKind, EventView, Pr } from '@postpile/core';
+import type { ActivityLine, ActivityList, EventDisplayState, EventKind, EventView, LineReply } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { eventGlyph, splitActor, summaryLead } from '../lib/events.ts';
-import { replyCopy, replyTargetsOf, type ReplyTarget } from '../lib/reply.ts';
+import { replyCopy } from '../lib/reply.ts';
 import { ageLabel, clockLabel, whenLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
 import { Button } from './Button.tsx';
@@ -167,7 +167,7 @@ export const linkButton = 'self-start text-[11.5px] text-accent hover:underline'
  * asks the viewer something, else a quiet link; a thumbs up the viewer gave
  * shows as a pressed pill. Reply opens the pane's composer right here.
  */
-function TalkActions(props: { prKey: string; target: ReplyTarget }) {
+function TalkActions(props: { prKey: string; target: LineReply }) {
   const actions = useActions();
   const compose = useCompose();
   const { target } = props;
@@ -237,11 +237,11 @@ const FLASH_MS = 1600;
  * when "Reply ↓" in "New since" jumps to it, the line scrolls to the middle
  * of the pane and is tinted for a moment.
  */
-function TalkLine(props: { line: ActivityLine; last: boolean; pr: Pr; target: ReplyTarget | null }) {
+function TalkLine(props: { line: ActivityLine; last: boolean; prKey: string }) {
   const compose = useCompose();
   const root = useRef<HTMLDivElement>(null);
   const [flash, setFlash] = useState(false);
-  const { target } = props;
+  const target = props.line.reply;
   const jumpSeq = target && compose.jump?.commentId === target.commentId ? compose.jump.seq : null;
   useEffect(() => {
     if (jumpSeq === null) {
@@ -252,7 +252,7 @@ function TalkLine(props: { line: ActivityLine; last: boolean; pr: Pr; target: Re
     const timer = setTimeout(() => setFlash(false), FLASH_MS);
     return () => clearTimeout(timer);
   }, [jumpSeq]);
-  const below = target ? <TalkActions prKey={props.pr.key} target={target} /> : null;
+  const below = target ? <TalkActions prKey={props.prKey} target={target} /> : null;
   return (
     <div ref={root} className={`-mx-2 rounded-row px-2 transition-colors duration-700 motion-reduce:transition-none ${flash ? 'bg-accent-soft' : ''}`}>
       {lineRow(props.line, props.last, below)}
@@ -268,14 +268,13 @@ function TalkLine(props: { line: ActivityLine; last: boolean; pr: Pr; target: Re
  * line further down opens the rest. Bot and CI noise is one line that
  * expands.
  */
-export function ActivityTimeline(props: { activity: ActivityList; pr: Pr; viewerLogin: string | null }) {
+export function ActivityTimeline(props: { activity: ActivityList; prKey: string }) {
   const compose = useCompose();
   const [showAll, setShowAll] = useState(false);
   const [showNoise, setShowNoise] = useState(false);
   const { fresh, earlier, noise } = props.activity;
   const lines = [...fresh, ...earlier];
-  const targets = replyTargetsOf(lines, props.pr, props.viewerLogin);
-  const jumpIndex = compose.jump ? lines.findIndex((line) => targets.get(line.id)?.commentId === compose.jump?.commentId) : -1;
+  const jumpIndex = compose.jump ? lines.findIndex((line) => line.reply?.commentId === compose.jump?.commentId) : -1;
   const jumpSeq = compose.jump?.seq ?? null;
   const jumpFolded = jumpIndex >= props.activity.cap;
   // A jump to a folded line opens the list once; the line then scrolls itself into view. "Show fewer" still folds it after.
@@ -295,7 +294,7 @@ export function ActivityTimeline(props: { activity: ActivityList; pr: Pr; viewer
       {empty && <span className="text-xs text-hint">No activity yet.</span>}
       {threadChangedAt !== null && <ThreadChangeRow at={threadChangedAt} last={lines.length === 0 && noise.length === 0} />}
       {shown.map((line, index) => (
-        <TalkLine key={line.id} line={line} last={index === shown.length - 1} pr={props.pr} target={targets.get(line.id) ?? null} />
+        <TalkLine key={line.id} line={line} last={index === shown.length - 1} prKey={props.prKey} />
       ))}
       {lines.length > props.activity.cap && (
         <button type="button" className={linkButton} onClick={() => setShowAll(!showAll)}>

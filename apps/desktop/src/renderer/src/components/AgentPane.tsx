@@ -21,11 +21,22 @@ const linkButton = 'text-[11.5px] font-semibold text-accent hover:underline disa
 const bubble = 'max-w-[85%] rounded-row px-3 py-2 text-[12.5px] leading-normal whitespace-pre-wrap select-text';
 
 /**
- * The lasting point waiting for the user's pick, per topic, for as long as
- * the app runs. The pane closes on Back or any pick, also while an answer is
- * still coming; the point is then here when the topic's pane opens again.
+ * The lasting point and the instructions diff waiting for the user's pick,
+ * per topic, for as long as the app runs. The pane closes on Back or any
+ * pick, also while an answer or a proposal is still coming; they are then
+ * here when the topic's pane opens again.
  */
 const waitingPoints = new Map<string, LastingPointProposal>();
+const waitingInstructions = new Map<string, InstructionsProposal>();
+
+/** Keeps `value` for the topic, or drops what was kept when it is null. */
+function keepFor<T>(kept: Map<string, T>, topicId: string, value: T | null): void {
+  if (value) {
+    kept.set(topicId, value);
+  } else {
+    kept.delete(topicId);
+  }
+}
 
 /**
  * "Ask the agent": the topic's agent chat, in the right pane in place of the
@@ -38,16 +49,17 @@ const waitingPoints = new Map<string, LastingPointProposal>();
  * A sent message shows right away with a "Thinking…" bubble under it (an
  * answer takes a few seconds), and the list keeps the newest message in
  * view. When the call fails, the bubble goes and the text is back in the
- * input; the engine stores nothing for a failed turn. A lasting point
- * outlives the pane (`waitingPoints`): leaving it alone still means just this
- * once, but leaving the pane does not throw it away.
+ * input; the engine stores nothing for a failed turn. A lasting point and
+ * its instructions diff outlive the pane (`waitingPoints`,
+ * `waitingInstructions`): leaving them alone still means just this once, but
+ * leaving the pane does not throw them away.
  */
 export function AgentPane(props: AgentPaneProps) {
   const actions = useActions();
   const chat = useTopicChat(props.topicId);
   const [draft, setDraft] = useState(props.draft);
   const [point, setShownPoint] = useState<LastingPointProposal | null>(() => waitingPoints.get(props.topicId) ?? null);
-  const [instructions, setInstructions] = useState<InstructionsProposal | null>(null);
+  const [instructions, setShownInstructions] = useState<InstructionsProposal | null>(() => waitingInstructions.get(props.topicId) ?? null);
   /** The message on its way, with how many messages the chat had when it was sent. */
   const [pending, setPending] = useState<{ text: string; count: number } | null>(null);
   const list = useRef<HTMLDivElement>(null);
@@ -66,12 +78,14 @@ export function AgentPane(props: AgentPaneProps) {
 
   /** Shows the point and keeps it for the next time the pane opens; null drops it. */
   function setPoint(next: LastingPointProposal | null) {
-    if (next) {
-      waitingPoints.set(props.topicId, next);
-    } else {
-      waitingPoints.delete(props.topicId);
-    }
+    keepFor(waitingPoints, props.topicId, next);
     setShownPoint(next);
+  }
+
+  /** The same for the instructions diff, until it is accepted or rejected. */
+  function setInstructions(next: InstructionsProposal | null) {
+    keepFor(waitingInstructions, props.topicId, next);
+    setShownInstructions(next);
   }
 
   async function send() {

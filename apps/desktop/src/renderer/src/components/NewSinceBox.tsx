@@ -1,7 +1,5 @@
 import { useState } from 'react';
 import type { ActivityLine, PrDetail } from '@postpile/core';
-import { useViewer } from '../api/viewer.ts';
-import { replyTargetOf } from '../lib/reply.ts';
 import { whenLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
 import { newSinceAnchor } from '../lib/whats-new.ts';
@@ -22,9 +20,8 @@ const LINES_SHOWN = 3;
 export function NewSinceBox(props: { detail: PrDetail }) {
   const now = useNow();
   const compose = useCompose();
-  const viewerLogin = useViewer().data?.login ?? null;
   function replyLink(line: ActivityLine) {
-    const target = replyTargetOf(line, props.detail.pr, viewerLogin);
+    const target = line.reply;
     if (!target?.canReply) {
       return null;
     }

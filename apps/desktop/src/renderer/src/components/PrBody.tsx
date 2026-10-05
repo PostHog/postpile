@@ -210,7 +210,7 @@ export function PrBody(props: PrBodyProps) {
           <PrFacts pr={pr} agentApprovers={props.detail.agentApprovers} />
           <ReviewList pr={pr} />
           <AgentFacts facts={props.detail.facts} updating={updating} />
-          <ActivityTimeline activity={props.detail.activity} pr={pr} viewerLogin={viewerLogin} />
+          <ActivityTimeline activity={props.detail.activity} prKey={pr.key} />
         </div>
         {belowRow && (
           <Button

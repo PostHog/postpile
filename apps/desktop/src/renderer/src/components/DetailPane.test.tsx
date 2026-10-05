@@ -71,6 +71,7 @@ function detailOf(pr: Pr): PrDetail {
     memoryUpdating: false,
     userState: null,
     viewerApproval: null,
+    viewerReview: null,
     agentApprovers: [],
     topicId: 'topic-1',
     tileIds: ['stack:acme/app#11'],
