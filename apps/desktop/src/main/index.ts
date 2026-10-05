@@ -495,12 +495,12 @@ async function start(): Promise<void> {
       return;
     }
     // A database from a newer PostPile (someone went back to an older build):
-    // never migrated down, never touched. Updating is the only way on.
+    // never migrated down, its file and WAL never changed. Updating is the only way on.
     if (error instanceof NewerDatabaseError) {
       const { response } = await dialog.showMessageBox({
         type: 'warning',
         message: 'This database was written by a newer PostPile',
-        detail: `Update PostPile to open it. Nothing in it was changed.\n\nThis PostPile is ${app.getVersion()}. The database has schema version ${error.version}, this version knows up to ${error.knownVersion}.\n${error.path}`,
+        detail: `Update PostPile to open it. Its data was not changed.\n\nThis PostPile is ${app.getVersion()}. The database has schema version ${error.version}, this version knows up to ${error.knownVersion}.\n${error.path}`,
         buttons: ['Quit', 'Get the Latest Version'],
         defaultId: 1,
         cancelId: 0,

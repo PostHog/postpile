@@ -17,7 +17,7 @@ function tempDb(): string {
 /**
  * A file the way a build with one more migration leaves it, in SQLite's
  * default rollback journal: openDatabase would switch it to WAL, so any
- * write on open shows in the bytes, the journal mode and a -wal file.
+ * write to it on open shows in its bytes, the journal mode and a -wal file.
  */
 function seedDatabase(path: string, version: number): void {
   const db = new DatabaseSync(path);
@@ -40,7 +40,7 @@ afterEach(() => {
 });
 
 describe('a database from a newer PostPile', () => {
-  it('is refused by openDatabase with the versions, and nothing is written', () => {
+  it('is refused by openDatabase with the versions, and the database file is not changed', () => {
     const path = tempDb();
     seedDatabase(path, LATEST_VERSION + 1);
     const before = fileHash(path);

@@ -6,7 +6,7 @@ import { LATEST_VERSION, runMigrations } from './migrate.ts';
 /**
  * A database written by a newer PostPile: its schema has migrations this
  * build does not know, so this build's queries may not fit it. PostPile
- * never migrates down, and the file is left exactly as it was.
+ * never migrates down: the database file and its WAL are never changed.
  */
 export class NewerDatabaseError extends Error {
   constructor(
@@ -15,7 +15,7 @@ export class NewerDatabaseError extends Error {
     readonly knownVersion: number,
   ) {
     super(
-      `The database at ${path} was written by a newer PostPile (schema version ${version}, this build knows up to ${knownVersion}). Update PostPile to open it. Nothing in it was changed.`,
+      `The database at ${path} was written by a newer PostPile (schema version ${version}, this build knows up to ${knownVersion}). Update PostPile to open it. Its data was not changed.`,
     );
     this.name = 'NewerDatabaseError';
   }
@@ -35,8 +35,12 @@ export function recordedVersion(db: DatabaseSync): number {
  * Throws NewerDatabaseError when the file at `path` has a schema newer than
  * this build's. Reads through a read-only connection of its own: closing
  * the last read-write connection would checkpoint a WAL a newer build left
- * behind into the file, and that build's data must stay as it was. No file
- * yet is a new database.
+ * behind into the file, and the database file and its WAL must stay as
+ * they were. A read-only reader may still create or rebuild the `-shm`
+ * sidecar (SQLite's shared-memory index, no data); in a folder it cannot
+ * write, with the sidecars missing, the read fails with SQLite's error
+ * before the version is known: https://sqlite.org/wal.html#read_only_databases
+ * No file yet is a new database.
  */
 function refuseNewerSchema(path: string): void {
   if (path === ':memory:' || !existsSync(path)) {
