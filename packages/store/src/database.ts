@@ -131,3 +131,36 @@ export function openDatabaseReadOnly(path: string): DatabaseSync {
   }
   return db;
 }
+
+/** SQLITE_BUSY, with any extended code: another connection holds the lock that was asked for. */
+export function isBusyError(error: unknown): boolean {
+  const code = (error as { errcode?: unknown } | null)?.errcode;
+  return typeof code === 'number' && (code & 0xff) === 5;
+}
+
+/**
+ * Runs fn in a BEGIN IMMEDIATE transaction: the write lock comes first, so
+ * what fn reads is what it writes over, and no other connection can commit
+ * in between. Waits at most lockWaitMs for that lock (the connection's own
+ * busy timeout is put back right after) and then throws SQLITE_BUSY
+ * (isBusyError): background work tries again later instead of holding
+ * Electron's main thread for the 5 s default. https://sqlite.org/lang_transaction.html
+ * fn must be synchronous, and this cannot run inside another transaction.
+ */
+export function inImmediateTransaction<T>(db: DatabaseSync, lockWaitMs: number, fn: () => T): T {
+  const timeout = (db.prepare('PRAGMA busy_timeout').get() as { timeout: number }).timeout;
+  db.exec(`PRAGMA busy_timeout = ${lockWaitMs}`);
+  try {
+    db.exec('BEGIN IMMEDIATE');
+  } finally {
+    db.exec(`PRAGMA busy_timeout = ${timeout}`);
+  }
+  try {
+    const result = fn();
+    db.exec('COMMIT');
+    return result;
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+}

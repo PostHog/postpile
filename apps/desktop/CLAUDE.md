@@ -738,8 +738,9 @@ stays on screen and listed (`KeptView`).
   starts at the top of `index.ts` with `uploadToServer: false`, dumps under
   Electron's default `crashDumps` (`Crashpad/` in userData; never `setPath`
   it, the folder does not exist on a fresh install). `powerMonitor`
-  `suspend` calls `engine.noteSuspend()` (the auto sync's timer stops),
-  `resume` calls `engine.noteWake()` (it waits a few minutes); both are logged.
+  `suspend` calls `engine.noteSuspend()` (the auto sync's timer stops, a
+  storage job pauses), `resume` calls `engine.noteWake()` (it waits a few
+  minutes, a storage job 30 s); both are logged.
 - The last sync report (errors, timing) is stored in meta
   `last_sync_report` and shows in the footer's "last full sync" and the
   title bar's sync status tooltips (`lib/sync-report.ts`) and in the notifications

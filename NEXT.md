@@ -97,6 +97,26 @@ now".
   bot_comment, made no event new and left no seen event unseen. The file
   keeps its size (no VACUUM, 7 s on heavy) and reuses the freed pages. Not
   tried by hand: the app on a real heavy database.
+- Storage job runner (2026-10-05, for 0.20.0; DESIGN.md "Storage jobs";
+  step 2 of normalizing the PR snapshot, Later): one `StorageJobRunner`
+  runs one-time rewrites of stored data in order, with the bot body trim
+  ported as job 1 under its 0.19.0 meta keys (an install mid-trim resumes,
+  a finished one never runs it again). Slices are `BEGIN IMMEDIATE` with a
+  busy timeout of 0 for that call, rescheduled on SQLITE_BUSY, ~30 ms with
+  the expected commit set aside, 50 ms apart (was 20 ms); paused while a
+  sync, poll, consolidation or catch-up runs and while the Mac sleeps. A
+  job is done only when its check passes; a second failed check leaves it
+  incomplete and the jobs after it wait. `storage_job_done` reports each
+  finished job. `startBotBodyTrim` is now `startStorageJobs`. The final
+  WAL checkpoint the trim ran is gone, and with it `Store.checkpointWal`:
+  it could copy a large WAL on the main thread in one call; SQLite's
+  automatic checkpoint and the 64 MB journal size limit keep the WAL
+  small. Jobs may write any rows inside their slice; revisions move only
+  when a PR read changes (GPT-6.1 review). Measured on copies: normal 14
+  slices, longest 41 ms, 1.1 s wall; heavy 190 slices, p95 40 ms, longest
+  46 ms, 5.9 s of work, 16 s wall, peak WAL 10 MB (it stays that size and
+  is reused); a second pass on heavy wrote nothing and moved no revision.
+  Not tried by hand: the app on a real heavy database.
 - Calm wake and crash signals (2026-10-05, DESIGN.md "Memory on big
   boards"): after a wake the renderer no longer refetches every query
   (`refetchOnReconnect: false`; `networkMode: 'always'`, so no network

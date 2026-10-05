@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { inTransaction, openDatabase, openDatabaseReadOnly } from './database.ts';
+import { inImmediateTransaction, inTransaction, openDatabase, openDatabaseReadOnly } from './database.ts';
 import { one } from './sql.ts';
 import { ActionLogRepo } from './repos/action-log.ts';
 import { AgentCallRepo } from './repos/agent-calls.ts';
@@ -117,27 +117,18 @@ export class Store {
     return `${changes?.changes ?? 0}:${data?.data_version ?? 0}`;
   }
 
-  /**
-   * Copies the WAL into the database file and empties it, after a big
-   * rewrite, without waiting for anyone: the busy timeout is 0 for the
-   * call, so while another connection reads or writes (the CLI), it copies
-   * what it can and returns false; a later checkpoint does the rest.
-   * journal_size_limit only cuts the WAL back when a write resets it; this
-   * empties it now.
-   */
-  checkpointWal(): boolean {
-    const timeout = one<{ timeout: number }>(this.db, 'PRAGMA busy_timeout')?.timeout ?? 0;
-    this.db.exec('PRAGMA busy_timeout = 0');
-    try {
-      return one<{ busy: number }>(this.db, 'PRAGMA wal_checkpoint(TRUNCATE)')?.busy === 0;
-    } finally {
-      this.db.exec(`PRAGMA busy_timeout = ${timeout}`);
-    }
-  }
-
   /** Runs fn in one transaction across repositories. fn must be synchronous. */
   transaction<T>(fn: () => T): T {
     return inTransaction(this.db, fn);
+  }
+
+  /**
+   * Runs fn in one BEGIN IMMEDIATE transaction, waiting at most lockWaitMs
+   * for the write lock, else throwing SQLITE_BUSY (inImmediateTransaction):
+   * for background rewrites that read and write in one go.
+   */
+  immediateTransaction<T>(lockWaitMs: number, fn: () => T): T {
+    return inImmediateTransaction(this.db, lockWaitMs, fn);
   }
 
   close(): void {

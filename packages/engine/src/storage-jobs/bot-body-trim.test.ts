@@ -1,13 +1,14 @@
 // Bot bodies cut when saved (DESIGN.md "Bot bodies are cut when saved"):
-// the one-time job cuts what is stored, in small steps, and a deploy event
+// storage job 1 cuts what is stored, in small slices, and a deploy event
 // that a cut body no longer explains keeps its state wherever its PR's
 // events are derived again.
 import { deriveEvents, eventId, trimBotBodies, trimBotBody, UNDO_WINDOW_MS, type Pr } from '@postpile/core';
 import { at, FakeTimers, makeComment, makeEvent, makePr, makeReview, makeThread, makeThreadFor, viewer } from '@postpile/core/fixtures';
 import { Store } from '@postpile/store';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { BOT_BODY_TRIM_AFTER_KEY, BOT_BODY_TRIM_DONE_KEY, BotBodyTrim } from './bot-body-trim.ts';
-import { makeHarness, NOW, type Harness } from './testing/fakes.ts';
+import { makeHarness, NOW, type Harness } from '../testing/fakes.ts';
+import { BOT_BODY_TRIM_AFTER_KEY, BOT_BODY_TRIM_DONE_KEY, BotBodyTrimJob } from './bot-body-trim.ts';
+import { START_DELAY_MS, StorageJobRunner, type StorageJobReport } from './runner.ts';
 
 const BOT = 'github-actions[bot]';
 
@@ -45,25 +46,41 @@ function storeOldDeployEvent(store: Store, pr: Pr): string {
   return id;
 }
 
-describe('BotBodyTrim', () => {
+function revisionOf(store: Store, key: string): number {
+  return (store.db.prepare('SELECT snapshot_revision FROM pr WHERE key = ?').get(key) as { snapshot_revision: number }).snapshot_revision;
+}
+
+describe('the bot body trim job', () => {
   let store: Store;
   let timers: FakeTimers;
   let busy: boolean;
   let lines: string[];
+  let reports: StorageJobReport[];
 
   beforeEach(() => {
     store = Store.open(':memory:');
     timers = new FakeTimers();
     busy = false;
     lines = [];
+    reports = [];
   });
 
   afterEach(() => {
     store.close();
   });
 
-  function trimJob(): BotBodyTrim {
-    return new BotBodyTrim({ store, now: () => NOW, timers, busy: () => busy, log: (line) => lines.push(line), stepBudgetMs: 0 });
+  /** The runner with only the trim, one PR per slice. */
+  function trimRunner(): StorageJobRunner {
+    return new StorageJobRunner({
+      store,
+      jobs: [new BotBodyTrimJob()],
+      now: () => NOW,
+      timers,
+      busy: () => busy,
+      log: (line) => lines.push(line),
+      onDone: (report) => reports.push(report),
+      sliceBudgetMs: 0,
+    });
   }
 
   /** Runs timers until the job is done or `limit` ms passed. */
@@ -76,9 +93,8 @@ describe('BotBodyTrim', () => {
   it('cuts every stored copy of a bot body, keeps people, the description and fetched_at, and marks itself done', () => {
     const pr = reportPr(1);
     store.prs.upsert(pr, at(1));
-    const job = trimJob();
 
-    job.start();
+    trimRunner().start();
     runFor(60_000);
 
     const stored = store.prs.get(pr.key)!;
@@ -87,17 +103,16 @@ describe('BotBodyTrim', () => {
     expect(stored.reviews[0]!.body).toBe(CUT);
     expect(stored.body).toBe(LATE_DEPLOY);
     expect(store.prs.fetchedAt(pr.key)).toBe(at(1));
-    expect(job.isDone()).toBe(true);
     expect(store.meta.get(BOT_BODY_TRIM_DONE_KEY)).toBe(NOW.toISOString());
     expect(store.meta.get(BOT_BODY_TRIM_AFTER_KEY)).toBeNull();
-    expect(lines).toEqual([expect.stringMatching(/^bot body trim: cut 1 of 1 stored PRs in \d+ ms$/)]);
+    expect(lines).toEqual([expect.stringMatching(/^storage job bot_body_trim done: 1 of 1 units rewritten, work \d+ ms, longest slice \d+ ms, wall \d+ ms$/)]);
+    expect(reports).toMatchObject([{ name: 'bot_body_trim', units: 1, wrote: 1 }]);
   });
 
   it('waits after start, and while foreground work runs', () => {
     store.prs.upsert(reportPr(1), at(1));
-    const job = trimJob();
-    job.start();
-    timers.advance(29_000);
+    trimRunner().start();
+    timers.advance(START_DELAY_MS - 1_000);
     expect(store.prs.get('acme/app#1')!.comments[0]!.body).toBe(LATE_DEPLOY);
 
     busy = true;
@@ -109,43 +124,82 @@ describe('BotBodyTrim', () => {
     expect(store.prs.get('acme/app#1')!.comments[0]!.body).toBe(CUT);
   });
 
-  it('goes a PR per step within its budget, moving the cursor only past PRs done', () => {
-    for (const number of [1, 2, 3]) {
-      store.prs.upsert(reportPr(number), at(1));
-    }
-    const job = trimJob();
-    expect(job.step()).toBe(true);
+  it('goes a PR per unit, moving the cursor only past PRs done, and the revision only of PRs it cut', () => {
+    store.prs.upsert(reportPr(1), at(1));
+    store.prs.upsert(makePr({ number: 2, comments: [makeComment({ id: 'c2', author: BOT, body: 'short' })] }), at(1));
+    store.prs.upsert(reportPr(3), at(1));
+    const before = [1, 2, 3].map((number) => revisionOf(store, `acme/app#${number}`));
+    const runner = trimRunner();
+
+    expect(runner.slice()).toBe('worked');
     expect(store.meta.get(BOT_BODY_TRIM_AFTER_KEY)).toBe('acme/app#1');
-    expect(store.prs.get('acme/app#2')!.comments[0]!.body).toBe(LATE_DEPLOY);
-    expect(job.step()).toBe(true);
-    expect(job.step()).toBe(true);
+    expect(store.prs.get('acme/app#3')!.comments[0]!.body).toBe(LATE_DEPLOY);
+    expect(runner.slice()).toBe('worked');
+    expect(runner.slice()).toBe('worked');
     expect(store.meta.get(BOT_BODY_TRIM_AFTER_KEY)).toBe('acme/app#3');
-    expect(job.step()).toBe(false);
-    expect(job.isDone()).toBe(true);
+    expect(runner.slice()).toBe('worked');
+    expect(store.meta.get(BOT_BODY_TRIM_DONE_KEY)).not.toBeNull();
+    expect(runner.slice()).toBe('idle');
+
+    const after = [1, 2, 3].map((number) => revisionOf(store, `acme/app#${number}`));
+    expect(after[0]).toBeGreaterThan(before[2]!);
+    expect(after[1]).toBe(before[1]);
+    expect(after[2]).toBeGreaterThan(after[0]!);
+    expect(reports).toMatchObject([{ units: 3, wrote: 2 }]);
   });
 
-  it('resumes after the last step when stopped, and runs once', () => {
+  it('resumes after the last slice when stopped, and runs once', () => {
     for (const number of [1, 2, 3]) {
       store.prs.upsert(reportPr(number), at(1));
     }
-    const first = trimJob();
+    const first = trimRunner();
     first.start();
-    timers.advance(30_000);
+    timers.advance(START_DELAY_MS);
     first.stop();
     timers.advance(60_000);
     expect(store.meta.get(BOT_BODY_TRIM_AFTER_KEY)).toBe('acme/app#1');
     expect(store.prs.get('acme/app#3')!.comments[0]!.body).toBe(LATE_DEPLOY);
 
-    const second = trimJob();
-    second.start();
+    trimRunner().start();
     runFor(60_000);
     expect(store.prs.listAll().every((pr) => pr.comments[0]!.body === CUT)).toBe(true);
-    expect(lines.at(-1)).toMatch(/cut 2 of 2 stored PRs/);
+    expect(lines.at(-1)).toMatch(/done: 2 of 2 units rewritten/);
 
     store.prs.upsert(reportPr(4), at(5));
-    trimJob().start();
+    trimRunner().start();
     timers.advance(120_000);
     expect(store.prs.get('acme/app#4')!.comments[0]!.body).toBe(LATE_DEPLOY);
+  });
+
+  it('goes on from the cursor 0.19.0 left in meta, under the same keys', () => {
+    for (const number of [1, 2, 3]) {
+      store.prs.upsert(reportPr(number), at(1));
+    }
+    // 0.19.0's BotBodyTrim got through #1 and quit. (#1 stays uncut here, to show it is not read again.)
+    store.meta.set('bot_body_trim_after', 'acme/app#1');
+
+    trimRunner().start();
+    runFor(60_000);
+
+    expect(store.prs.get('acme/app#1')!.comments[0]!.body).toBe(LATE_DEPLOY);
+    expect(store.prs.get('acme/app#2')!.comments[0]!.body).toBe(CUT);
+    expect(store.prs.get('acme/app#3')!.comments[0]!.body).toBe(CUT);
+    expect(store.meta.get('bot_body_trim_done')).toBe(NOW.toISOString());
+    expect(store.meta.get('bot_body_trim_after')).toBeNull();
+    expect(reports).toMatchObject([{ units: 2, wrote: 2 }]);
+  });
+
+  it('never runs again on an install where 0.19.0 finished it', () => {
+    store.prs.upsert(reportPr(1), at(1));
+    store.meta.set('bot_body_trim_done', at(0));
+
+    const runner = trimRunner();
+    runner.start();
+    timers.advance(120_000);
+
+    expect(store.prs.get('acme/app#1')!.comments[0]!.body).toBe(LATE_DEPLOY);
+    expect(runner.slice()).toBe('idle');
+    expect(lines).toEqual([]);
   });
 
   it('leaves events as they are: the next derive moves them (EventRepo)', () => {
@@ -154,7 +208,7 @@ describe('BotBodyTrim', () => {
     const old = storeOldDeployEvent(store, pr);
     const before = store.events.listForPr(pr.key);
 
-    trimJob().start();
+    trimRunner().start();
     runFor(60_000);
 
     expect(store.events.listForPr(pr.key)).toEqual(before);
@@ -166,11 +220,11 @@ describe('BotBodyTrim', () => {
     const pr = makePr({ comments: [edited] });
     store.prs.upsert(pr, at(1));
 
-    trimJob().start();
+    trimRunner().start();
     runFor(60_000);
 
     expect(store.prs.get(pr.key)).toEqual(pr);
-    expect(lines.at(-1)).toMatch(/cut 0 of 1 stored PRs/);
+    expect(lines.at(-1)).toMatch(/done: 0 of 1 units rewritten/);
   });
 });
 
@@ -197,20 +251,44 @@ describe('a deploy event the cut body no longer explains', () => {
   });
 });
 
-describe('Engine.startBotBodyTrim', () => {
-  it('runs the job on the engine timers, and close stops it', async () => {
+describe('Engine.startStorageJobs', () => {
+  /** Advances the engine timers in pause-sized steps until the trim is done, at most `limit` steps. */
+  function runTrim(h: Harness, limit = 100): void {
+    for (let index = 0; index < limit && h.store.meta.get(BOT_BODY_TRIM_DONE_KEY) === null; index += 1) {
+      h.timers.advance(50);
+    }
+  }
+
+  it('runs the trim on the engine timers, sends storage_job_done, and close stops it', async () => {
     const h = makeHarness();
     h.store.prs.upsert(reportPr(1), at(1));
     h.store.prs.upsert(reportPr(2), at(1));
 
-    h.engine.startBotBodyTrim();
-    h.timers.advance(30_000);
-    for (let index = 0; index < 100 && h.store.meta.get(BOT_BODY_TRIM_DONE_KEY) === null; index += 1) {
-      h.timers.advance(20);
-    }
+    h.engine.startStorageJobs();
+    h.timers.advance(START_DELAY_MS);
+    runTrim(h);
 
     expect(h.store.meta.get(BOT_BODY_TRIM_DONE_KEY)).not.toBeNull();
     expect(h.store.prs.get('acme/app#2')!.comments[0]!.body).toBe(CUT);
+    expect(h.telemetry.events.filter((event) => event.event === 'storage_job_done')).toEqual([
+      { event: 'storage_job_done', props: { name: 'bot_body_trim', units: 2, work_ms: expect.any(Number), longest_slice_ms: expect.any(Number), wall_ms: expect.any(Number) } },
+    ]);
+    await h.engine.close();
+  });
+
+  it('pauses while the Mac sleeps and goes on after the wake', async () => {
+    const h = makeHarness();
+    h.store.prs.upsert(reportPr(1), at(1));
+
+    h.engine.startStorageJobs();
+    h.engine.noteSuspend();
+    h.timers.advance(10 * 60_000);
+    expect(h.store.prs.get('acme/app#1')!.comments[0]!.body).toBe(LATE_DEPLOY);
+
+    h.engine.noteWake();
+    h.timers.advance(START_DELAY_MS);
+    runTrim(h);
+    expect(h.store.prs.get('acme/app#1')!.comments[0]!.body).toBe(CUT);
     await h.engine.close();
   });
 });

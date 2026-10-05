@@ -68,6 +68,8 @@ const rateLimitWhere = z.enum(['sync', 'poll']);
 const quotaResource = z.enum(['core', 'graphql']);
 const quotaLevel = z.enum(['low', 'critical']);
 const percent = z.number().int().min(0).max(100);
+// packages/engine/src/storage-jobs: every background storage job by name. Append only.
+const storageJobName = z.enum(['bot_body_trim']);
 
 // -----------------------------------------------------------------------
 // 6. MCP server (postpile-mcp, a separate process that reads the database and asks the app for the rest)
@@ -192,6 +194,10 @@ export const TELEMETRY_EVENTS = {
   board_trimmed: z.object({ kept: count, dropped: count }).strict(),
   // PRs with news that syncs and polls left alone in the last hour because they are outside the hot slice. At most once an hour.
   work_shed: z.object({ skipped_prs: count }).strict(),
+  // A background storage job finished and its check passed. Numbers are this run's share (a job resumed after a quit
+  // counts only what was left): units gone through, main-thread time in its slices, the longest slice, and the time
+  // from its first slice to the end, pauses and waits included.
+  storage_job_done: z.object({ name: storageJobName, units: count, work_ms: durationMs, longest_slice_ms: durationMs, wall_ms: durationMs }).strict(),
 
   // 6. MCP server: another agent asked PostPile something. found is false when the PR, topic or search found nothing;
   // response_chars is the answer's length (are brief answers brief), error whether it was a tool error.
@@ -209,6 +215,9 @@ export const TELEMETRY_EVENTS = {
 export type TelemetryEventName = keyof typeof TELEMETRY_EVENTS;
 
 export type TelemetryEventProps<K extends TelemetryEventName> = z.infer<(typeof TELEMETRY_EVENTS)[K]>;
+
+/** The name of a background storage job (packages/engine/src/storage-jobs), as storage_job_done reports it. */
+export type StorageJobName = z.infer<typeof storageJobName>;
 
 /** Every event name PostPile may send. The renderer route and the Telemetry class both check against it. */
 export const TELEMETRY_EVENT_NAMES = Object.keys(TELEMETRY_EVENTS) as TelemetryEventName[];
