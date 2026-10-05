@@ -327,7 +327,7 @@ export class Engine implements EngineService {
   private readonly pingSummary: PingSummary;
   private readonly pingDelivery: PingDelivery;
   /** The live poll's onNotify, while it runs. */
-  private notifyMac: ((notifications: MacNotification[]) => void) | null = null;
+  private notifyMac: ((notifications: MacNotification[]) => boolean) | null = null;
   private interruptionsListener: ((mode: InterruptionsMode) => void) | null = null;
   private readonly quota: GitHubQuota;
   /** What the next poll cycle also looks at, set by refreshOnFocus. */
@@ -469,7 +469,7 @@ export class Engine implements EngineService {
     this.pingDelivery = new PingDelivery({
       hold: new StorePingHold(store),
       unreadPrKeys: () => this.reads.unreadPrKeys(),
-      onNotify: (notifications) => this.notifyMac?.(notifications),
+      onNotify: (notifications) => this.notifyMac?.(notifications) ?? false,
     });
     this.teamMembers = new TeamMembers(store, deps.reader, now);
     this.teamRoles = new TeamRoleKeeper(store, deps.reader, now, this.quota, deps.syncLog ?? ((line) => console.log(line)));

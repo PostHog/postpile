@@ -87,7 +87,7 @@ describe('GitHub quota in the engine', () => {
     const h = makeHarness();
     expect((await h.engine.livePollStatus()).githubQuota).toBeNull();
 
-    h.engine.startLivePoll({ intervalSeconds: 10, onNotify: () => {} });
+    h.engine.startLivePoll({ intervalSeconds: 10, onNotify: () => true });
     h.quota.note(reading(h));
     expect((await h.engine.livePollStatus()).githubQuota).toEqual({
       level: 'low',

@@ -352,9 +352,9 @@ export class FakeEngine implements EngineService {
   private readonly pingDelivery = new PingDelivery({
     hold: new MemoryPingHold(),
     unreadPrKeys: () => this.unreadKeysNow(),
-    onNotify: (notifications) => this.notifyMac?.(notifications),
+    onNotify: (notifications) => this.notifyMac?.(notifications) ?? false,
   });
-  private notifyMac: ((notifications: MacNotification[]) => void) | null = null;
+  private notifyMac: ((notifications: MacNotification[]) => boolean) | null = null;
   private interruptionsListener: ((mode: InterruptionsMode) => void) | null = null;
   private autoSync: AutoSyncSchedule | null = null;
   private readonly catchUp: FakeCatchUp;

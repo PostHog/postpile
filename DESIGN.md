@@ -5132,7 +5132,10 @@ notification; the poll, the tiles and the list work the same in every mode.
   "3 things need you", personal asks first). A roundup the Mac slept
   through goes out on wake. Rows are handled, and dropped, when the user
   opens a tile holding the PR (`postpile:tile-visited`) or the PR is not
-  held by an unread tile anymore (read on GitHub, marked read, done).
+  held by an unread tile anymore (read on GitHub, marked read, done). A
+  ping counts as shown only when the Mac showed it (`onNotify` answers
+  false with notifications off or unsupported); a roundup that could not
+  show is dropped, not retried every minute.
 - **Switching:** to Never drops every held row, so the Dock badge goes away;
   leaving batches drops the queue (those PRs are in the list anyway).
 - **Dock badge:** the number of tiles holding a PR PostPile showed a

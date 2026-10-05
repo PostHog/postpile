@@ -110,7 +110,8 @@ export interface PingDeliveryDeps {
   hold: PingHold;
   /** The PRs held by an unread tile now: a ping whose PR is not in it was handled. */
   unreadPrKeys: () => PrKey[];
-  onNotify: (notifications: MacNotification[]) => void;
+  /** Answers whether the notifications reached the Mac; only those count for the Dock badge. */
+  onNotify: (notifications: MacNotification[]) => boolean;
 }
 
 /**
@@ -157,11 +158,13 @@ export class PingDelivery {
     if (notifications.length === 0) {
       return 0;
     }
+    if (!this.deps.onNotify(notifications)) {
+      return 0;
+    }
     const shownKeys = new Set(notifications.flatMap((notification) => notification.prKeys));
     for (const ping of pings.filter((candidate) => shownKeys.has(candidate.target.prKey))) {
       this.deps.hold.putShown(ping, at);
     }
-    this.deps.onNotify(notifications);
     return notifications.length;
   }
 
@@ -174,8 +177,10 @@ export class PingDelivery {
   /**
    * In batches: when a roundup time passed after a queued ping came in,
    * shows one roundup for everything queued before it that is still not
-   * handled. A roundup the Mac slept through goes out on wake. Answers how
-   * many notifications went out (0 or 1).
+   * handled. A roundup the Mac slept through goes out on wake. One that
+   * could not show (notifications off or unsupported) is dropped, not
+   * retried every minute: its PRs are in the list. Answers how many
+   * notifications went out (0 or 1).
    */
   roundUp(nowMs: number): number {
     if (this.mode() !== 'batches') {
@@ -190,8 +195,11 @@ export class PingDelivery {
     if (due.length === 0) {
       return 0;
     }
+    if (!this.deps.onNotify([roundupNotification(due.map((record) => record.ping))])) {
+      this.deps.hold.remove(keysOf(due));
+      return 0;
+    }
     this.deps.hold.markShown(keysOf(due), new Date(nowMs).toISOString());
-    this.deps.onNotify([roundupNotification(due.map((record) => record.ping))]);
     return 1;
   }
 

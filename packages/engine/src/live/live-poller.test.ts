@@ -37,7 +37,10 @@ function setup(poll: ScriptedPoll, intervalSeconds = 60) {
   const shown: MacNotification[][] = [];
   const logs: string[] = [];
   const quota = new GitHubQuota(() => timers.now());
-  const onNotify = (notifications: MacNotification[]) => shown.push(notifications);
+  const onNotify = (notifications: MacNotification[]) => {
+    shown.push(notifications);
+    return true;
+  };
   // As soon as it matters: the throttle groups the pings, nothing is held.
   const delivery = new PingDelivery({ hold: new MemoryPingHold(), unreadPrKeys: () => [], onNotify });
   delivery.setMode('asap');

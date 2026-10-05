@@ -568,10 +568,13 @@ async function start(): Promise<void> {
   engine.startLivePoll({
     intervalSeconds: pollSecondsFromEnv(process.env.POSTPILE_POLL_SECONDS),
     onNotify: (notifications) => {
-      if (notifier.show(notifications) === 'shown') {
-        telemetry.capture('mac_ping_shown', { count: notifications.length });
-        void watcher.refresh();
+      if (notifier.show(notifications) !== 'shown') {
+        return false;
       }
+      telemetry.capture('mac_ping_shown', { count: notifications.length });
+      // Next tick: the engine records the pings for the Dock badge once this answers.
+      setImmediate(() => void watcher.refresh());
+      return true;
     },
   });
   // Agents on this Mac (Claude Code through postpile-mcp) leave requests in the

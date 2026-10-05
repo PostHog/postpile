@@ -14,11 +14,16 @@ function at(hour: number, minute = 0, day = 5): number {
 
 function setup(hold: PingHold = new MemoryPingHold()) {
   const shown: MacNotification[][] = [];
-  const state = { unread: new Set<PrKey>(['acme/app#1', 'acme/app#2', 'acme/app#3']) };
+  const state = { unread: new Set<PrKey>(['acme/app#1', 'acme/app#2', 'acme/app#3']), macShows: true };
   const delivery = new PingDelivery({
     hold,
     unreadPrKeys: () => [...state.unread],
-    onNotify: (notifications) => shown.push(notifications),
+    onNotify: (notifications) => {
+      if (state.macShows) {
+        shown.push(notifications);
+      }
+      return state.macShows;
+    },
   });
   return { delivery, shown, state };
 }
@@ -92,6 +97,21 @@ describe('PingDelivery', () => {
     expect(delivery.shownPrKeys()).toEqual(['acme/app#1']);
     delivery.setMode('never');
     expect(delivery.shownPrKeys()).toEqual([]);
+  });
+
+  it('holds nothing for the badge when the Mac shows nothing (notifications off or unsupported)', () => {
+    const { delivery, state } = setup();
+    state.macShows = false;
+    delivery.setMode('asap');
+    expect(delivery.deliver([ping(1)], at(10))).toBe(0);
+    expect(delivery.shownPrKeys()).toEqual([]);
+
+    delivery.setMode('batches');
+    delivery.deliver([ping(2)], at(11));
+    expect(delivery.roundUp(at(13, 30))).toBe(0);
+    expect(delivery.shownPrKeys()).toEqual([]);
+    state.macShows = true;
+    expect(delivery.roundUp(at(13, 31))).toBe(0);
   });
 
   it('keeps the pick and the held pings in the store', () => {
