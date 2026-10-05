@@ -64,10 +64,13 @@ function agoWords(iso: string, now: Date): string {
  * sync is the slower sweep behind it, with its whole report.
  */
 function freshnessDetail(live: LivePollStatus | undefined, report: SyncReport, now: Date): string {
-  const poll =
-    live && live.state !== 'off' && live.lastAnsweredAt
-      ? `Live poll: GitHub answered ${agoWords(live.lastAnsweredAt, now)}, every ${live.githubQuota?.pollSeconds ?? live.everySeconds}s.${live.note ? ` Now: ${live.note}.` : ''}`
-      : 'Live poll off: data is as fresh as the last full sync.';
+  let poll = 'Live poll off: data is as fresh as the last full sync.';
+  if (live && live.state !== 'off') {
+    const note = live.note ? ` Now: ${live.note}.` : '';
+    poll = live.lastAnsweredAt
+      ? `Live poll: GitHub answered ${agoWords(live.lastAnsweredAt, now)}, every ${live.githubQuota?.pollSeconds ?? live.everySeconds}s.${note}`
+      : `Live poll: waiting for its first check.${note}`;
+  }
   const sweep = `Last full sync ${agoWords(report.finishedAt, now)}. It sweeps the last 30 days, groups sets and stacks, folds quiet news (bots, CI) into dossiers and retires finished topics.`;
   return `${poll}\n\n${sweep}\n${syncReportDetail(report)}`;
 }
@@ -105,8 +108,11 @@ function SyncStatus() {
   const errors = report.errors.length;
   const pollOn = live !== undefined && live.state !== 'off';
   const fresh = pollIsFresh(live, now);
+  const paused = live !== undefined && (live.state === 'blocked' || live.state === 'backoff');
+  // Before its first answer the poll is starting, not behind: no amber.
+  const behind = pollOn && live.lastAnsweredAt !== null && !fresh;
   let dot: DotTone = 'open';
-  if (pollOn && !fresh) {
+  if (paused || behind) {
     dot = 'amber';
   }
   if (capped) {
@@ -115,7 +121,6 @@ function SyncStatus() {
   if (errors > 0) {
     dot = 'bad';
   }
-  const paused = live !== undefined && (live.state === 'blocked' || live.state === 'backoff');
   // A stale poll still counts from its last check; without a poll the full sync is the only clock.
   const lastAnsweredAt = pollOn ? live.lastAnsweredAt : null;
   const word = lastAnsweredAt ? 'checked' : 'synced';
