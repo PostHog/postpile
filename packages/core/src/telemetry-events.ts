@@ -164,12 +164,16 @@ export const TELEMETRY_EVENTS = {
       gh_requests: count,
       gh_core_remaining_pct: percent.optional(),
       gh_graphql_remaining_pct: percent.optional(),
+      // GitHub writes on when the sync ended (2026-10-05; absent before).
+      writes_on: z.boolean().optional(),
     })
     .strict(),
   sync_failed: z.object({ error_kind: syncErrorKind }).strict(),
   rate_limited: z.object({ source: rateLimitSource, where: rateLimitWhere }).strict(),
   // Once per drop into a worse level within one rate-limit window, not per request (DESIGN.md "GitHub quota").
   github_quota_low: z.object({ resource: quotaResource, level: quotaLevel }).strict(),
+  // The footer lock opened or closed. With writes locked PostPile cannot mark anything read, so a heavy inbox only grows (2026-10-05).
+  github_writes_changed: z.object({ enabled: z.boolean() }).strict(),
   consolidation_ran: z.object({ proposals_filed: count }).strict(),
   // The daily board snapshot, counts only: one per tile on the board. stacked_prs = members in a stack
   // (all of a stack tile, the stacks' members in a set, 0 for a single); pulled_in = layers fetched

@@ -134,6 +134,8 @@ export class SyncRun {
     private readonly log: (line: string) => void = (line) => console.log(line),
     /** Told after each sync that ran to the end, next to sync_completed (not for a crashed or blocked one). */
     private readonly onCompleted: () => void = () => {},
+    /** GitHub writes on, for sync_completed. */
+    private readonly writesOn: () => boolean = () => false,
   ) {}
 
   /**
@@ -445,6 +447,7 @@ export class SyncRun {
         cost_usd: Math.round(summary.costUsd * 100) / 100,
         stopped_at_cap: summary.stoppedAtCap,
         trigger,
+        writes_on: this.writesOn(),
         gh_requests: quota.requests,
         // Absent, not a made-up number, when no answer during the sync carried that limit.
         ...(quota.lowestPercent.core !== undefined ? { gh_core_remaining_pct: quota.lowestPercent.core } : {}),

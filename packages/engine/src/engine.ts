@@ -452,7 +452,17 @@ export class Engine implements EngineService {
       telemetry: this.telemetry,
       log: deps.syncLog ?? ((line) => console.log(line)),
     });
-    this.syncRun = new SyncRun(runDeps, github, deps.markReadQueue, this.quota, this.quietReads, this.cleanup, deps.syncLog, () => this.syncCompletedListener?.());
+    this.syncRun = new SyncRun(
+      runDeps,
+      github,
+      deps.markReadQueue,
+      this.quota,
+      this.quietReads,
+      this.cleanup,
+      deps.syncLog,
+      () => this.syncCompletedListener?.(),
+      () => deps.writes.enabled(),
+    );
     this.consolidationRun = new ConsolidationRun(runDeps);
     const lineLog = deps.syncLog ?? ((line: string) => console.log(line));
     this.catchUpCap = new CatchUpCap(deps.catchUpCallsPerDay ?? 0, now);
@@ -1118,6 +1128,9 @@ export class Engine implements EngineService {
 
   async setGitHubWrites(enabled: boolean): Promise<GitHubWritesChange> {
     const change = this.deps.writes.set(enabled);
+    if (change.ok) {
+      this.telemetry.capture('github_writes_changed', { enabled });
+    }
     return { ...change, status: this.writesStatus() };
   }
 
