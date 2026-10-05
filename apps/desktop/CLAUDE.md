@@ -111,7 +111,10 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   A new pane field goes into `prPaneView`, which both engines call. The
   Checks fact reads `pr.checks` (a `ChecksSummary`), "pushed" reads
   `pr.lastCommitAt`; comment text, Reply and Thumbs up come from
-  `PrDetail.activity`.
+  `PrDetail.activity`. Its rows are core's `ActivityEvent` (lines extend
+  it with body, `eventCount` and the reply): no raw events, and no
+  `PrDetail.events` either. A row needs a new field: add it to
+  `activityEvent` in core.
 - Derived UI values ("1 pinged · 2 pulled", check counts, review
   rows) are pure functions in `lib/`, unit tested. Components stay dumb.
   Rules are not display: facts (whose move, done, automation) and offers

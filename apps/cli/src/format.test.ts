@@ -14,8 +14,14 @@ describe('format over the fake engine', () => {
     expect(topicText).toContain('[unread] set: Four PRs change how Turbo caches');
     expect(topicText).toContain('! acme/app#1902: lyra mentioned you');
 
-    const pr = await engine.getPr('acme/app#1921');
-    expect(formatPr(pr!)).toContain('LOOKS_SAFE: Landing it apart from #1904');
+    const safe = await engine.getPr('acme/app#1921');
+    expect(formatPr(safe!, await engine.listPrEvents('acme/app#1921'))).toContain('LOOKS_SAFE: Landing it apart from #1904');
+
+    const pr = await engine.getPr('acme/app#1902');
+    const prText = formatPr(pr!, await engine.listPrEvents('acme/app#1902'));
+    // Every event, the folded bot ones too: the pane's activity groups and folds them.
+    expect(prText).toMatch(/\[loud\]  lyra mentioned you: does the warm-up job need a feature flag/);
+    expect(prText).toMatch(/\[quiet\]  deploy-bot deployed a preview/);
   });
 
   it('prints a poll cycle with its ping decisions', async () => {

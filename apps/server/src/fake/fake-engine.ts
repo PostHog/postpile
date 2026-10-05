@@ -1317,20 +1317,24 @@ export class FakeEngine implements EngineService {
     return this.writes.discardPending();
   }
 
+  /** A PR's sample events, newest first, with their display state. */
+  private eventViewsOf(prKey: PrKey): EventView[] {
+    return this.eventsOf(prKey)
+      .toSorted((a, b) => b.at.localeCompare(a.at))
+      .map(eventView);
+  }
+
   async getPr(prKey: PrKey): Promise<PrDetail | null> {
     const pr = this.data.prs.find((candidate) => candidate.key === prKey);
     if (!pr) {
       return null;
     }
-    const events: EventView[] = this.eventsOf(prKey)
-      .toSorted((a, b) => b.at.localeCompare(a.at))
-      .map(eventView);
+    const events = this.eventViewsOf(prKey);
     const news = whatsNew(pr, this.eventsOf(prKey), this.viewer());
     return {
       pr: prPaneView(pr),
       status: prStatus(pr),
       fetchedAt: this.fetchedAtOf(prKey),
-      events,
       activity: activityList(events, this.viewer(), news?.anchor.at ?? null, pr, this.prThreads().get(prKey) ?? null),
       whatsNew: news,
       glance: this.data.glances.find((glance) => glance.prKey === prKey) ?? null,
@@ -1348,6 +1352,10 @@ export class FakeEngine implements EngineService {
       tileIds: this.data.tiles.filter((tile) => tile.members.some((member) => member.prKey === prKey)).map((tile) => tile.id),
       facts: this.memory.prFacts(prKey),
     };
+  }
+
+  async listPrEvents(prKey: PrKey): Promise<EventView[]> {
+    return this.eventViewsOf(prKey);
   }
 
   // -------------------------------------------------------------------------

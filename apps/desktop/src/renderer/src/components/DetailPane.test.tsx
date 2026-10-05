@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { activityList, eventView, prPaneView, prStatus, type ActivityList, type Pr, type PrDetail, type PrSummary, type TileView } from '@postpile/core';
 import { at, makeComment, makeCommit, makeEvent, makePr, makeReview, NO_OPENED_READ, NO_PR_FACTS, viewer, withOffers } from '@postpile/core/fixtures';
@@ -61,7 +61,6 @@ function detailOf(pr: Pr, activity: ActivityList = activityList([], null)): PrDe
     pr: prPaneView(pr),
     status: prStatus(pr),
     fetchedAt: null,
-    events: [],
     activity,
     whatsNew: null,
     glance: null,
@@ -173,7 +172,10 @@ describe('DetailPane', () => {
       },
     });
     const comment = eventView(makeEvent({ id: 'acme/app#11:comment:c1', prKey: stored.key, actor: 'bob', sourceId: 'c1', summary: 'bob commented' }));
-    const detail = detailOf(stored, activityList([comment], viewer, null, stored));
+    const ci = eventView(
+      makeEvent({ id: 'acme/app#11:ci:head:FAILURE', prKey: stored.key, kind: 'ci', actor: '', isBot: true, summary: 'CI failed: test', ruleReason: 'bot activity', seenAt: at(50), at: at(45) }),
+    );
+    const detail = detailOf(stored, activityList([comment, ci], viewer, null, stored));
     expect(detail.pr).not.toHaveProperty('comments');
 
     renderCached(stored.key, detail);
@@ -185,5 +187,8 @@ describe('DetailPane', () => {
     // The reply target comes with the activity line, built from the stored PR on the server.
     expect(screen.getByText('Why one key for all jobs?')).toBeTruthy();
     expect(screen.getByRole('button', { name: /^Reply$/ })).toBeTruthy();
+    // The folded bot/CI rows draw from the slim items too: summary, and the reason in the hover title.
+    fireEvent.click(screen.getByRole('button', { name: 'Show 1 bot/CI event' }));
+    expect(screen.getByText('CI failed: test').closest('[title]')?.getAttribute('title')).toBe('seen: bot activity');
   });
 });

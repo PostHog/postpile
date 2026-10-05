@@ -438,9 +438,11 @@ export interface PrDetail {
   status: PrStatus;
   /** When the stored snapshot was fetched from GitHub; null when unknown (sample data before a fake fetch). */
   fetchedAt: IsoTime | null;
-  /** Every event, unfiltered (search, debug, chat context). */
-  events: EventView[];
-  /** The detail pane's list (`activityList`): meaningful events, new first, noise folded. */
+  /**
+   * The detail pane's list (`activityList`): meaningful events, new first,
+   * noise folded, each event cut to what its row draws. Every event of the
+   * PR is in it; the CLI's raw list is `listPrEvents`.
+   */
   activity: ActivityList;
   /** What changed since the viewer's last touch (`whatsNew`): the "New since you looked" box's anchor. */
   whatsNew: WhatsNew | null;

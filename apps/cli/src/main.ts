@@ -79,7 +79,7 @@ async function runCommand(engine: EngineService, command: Command): Promise<stri
     }
     case 'pr': {
       const detail = await engine.getPr(command.prKey);
-      return detail ? formatPr(detail) : `no PR ${command.prKey} in the store`;
+      return detail ? formatPr(detail, await engine.listPrEvents(command.prKey)) : `no PR ${command.prKey} in the store`;
     }
     case 'mcp':
     case 'simulate-start':

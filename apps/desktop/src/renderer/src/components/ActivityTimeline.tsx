@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import type { ActivityLine, ActivityList, EventDisplayState, EventKind, EventView, LineReply } from '@postpile/core';
+import type { ActivityEvent, ActivityLine, ActivityList, EventDisplayState, EventKind, LineReply } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { eventGlyph, splitActor, summaryLead } from '../lib/events.ts';
 import { replyCopy } from '../lib/reply.ts';
@@ -95,8 +95,7 @@ function ActivityRow(props: RowProps) {
 }
 
 export function lineRow(line: ActivityLine, last: boolean, below: ReactNode = null) {
-  const newest = line.events[0]!.event;
-  const reason = line.events.length > 1 ? `${line.events.length} events` : (newest.override?.reason ?? newest.ruleReason);
+  const reason = line.eventCount > 1 ? `${line.eventCount} events` : line.reason;
   return (
     <ActivityRow
       key={line.id}
@@ -115,21 +114,20 @@ export function lineRow(line: ActivityLine, last: boolean, below: ReactNode = nu
   );
 }
 
-export function eventRow(view: EventView, last: boolean) {
-  const { event } = view;
+export function eventRow(item: ActivityEvent, last: boolean) {
   return (
     <ActivityRow
-      key={event.id}
-      kind={event.kind}
-      actor={event.actor}
-      summary={event.summary}
+      key={item.id}
+      kind={item.kind}
+      actor={item.actor}
+      summary={item.summary}
       body={null}
-      at={event.at}
-      display={view.display}
-      unseen={view.unseen}
-      reason={event.override?.reason ?? event.ruleReason}
+      at={item.at}
+      display={item.display}
+      unseen={item.unseen}
+      reason={item.reason}
       last={last}
-      unmuteId={view.display === 'muted' ? event.id : null}
+      unmuteId={item.display === 'muted' ? item.id : null}
     />
   );
 }

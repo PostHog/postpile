@@ -49,6 +49,7 @@ import type {
   QuietReadView,
   PendingProposals,
   PingTarget,
+  EventView,
   PrDetail,
   PrKey,
   RepoOverview,
@@ -305,6 +306,11 @@ export interface EngineService {
   startAsUsual(): Promise<ActionResult>;
   /** Carries the active facts about the PR, verified at read time. */
   getPr(prKey: PrKey): Promise<PrDetail | null>;
+  /**
+   * Every event of a PR with its display state, unfiltered: the CLI's `pr`
+   * command. Not on the HTTP API; the PR pane reads `PrDetail.activity`.
+   */
+  listPrEvents(prKey: PrKey): Promise<EventView[]>;
   /** "Who is doing what" and "what changed since T", straight from the fact table. No agent call. */
   listFacts(query: FactQuery): Promise<FactView[]>;
   /** Topic and rule proposals waiting for the user, across all topics. */

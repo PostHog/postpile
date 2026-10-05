@@ -26,7 +26,7 @@ describe('activityList', () => {
     const merged = ev({ kind: 'merged', actor: 'ada', summary: 'ada merged', at: at(5) });
     const list = activityList([comment, review, ci, bot, merged], who);
     expect(list.earlier.map((line) => line.summary)).toEqual(['ada merged', 'ada approved', 'lyra commented']);
-    expect(list.noise.map((view) => view.event.summary)).toEqual(['greptile commented', 'CI passed']);
+    expect(list.noise.map((item) => item.summary)).toEqual(['greptile commented', 'CI passed']);
     expect(list.fresh).toEqual([]);
   });
 
@@ -36,8 +36,8 @@ describe('activityList', () => {
     const forSam = ev({ kind: 'review_requested', actor: 'rowan', summary: 'rowan requested a review from sol', at: at(3) });
     const list = activityList([forMe, forTeam, forSam], who);
     expect(list.earlier.map((line) => line.id)).toEqual([forTeam.event.id, forMe.event.id]);
-    expect(list.noise.map((view) => view.event.id)).toEqual([forSam.event.id]);
-    expect(noiseLabel(list.noise)).toBe('1 bot/CI and other event');
+    expect(list.noise.map((item) => item.id)).toEqual([forSam.event.id]);
+    expect(list.noiseLabel).toBe('1 bot/CI and other event');
   });
 
   it('collapses a burst of pushes by one person into one line', () => {
@@ -47,7 +47,7 @@ describe('activityList', () => {
     const list = activityList([...pushes, comment, later], who);
     expect(list.fresh.map((line) => line.summary)).toEqual(['rowan pushed: fix']);
     expect(list.earlier.map((line) => line.summary)).toEqual(['lyra commented', 'rowan pushed 3 commits']);
-    expect(list.earlier[1]?.events).toHaveLength(3);
+    expect(list.earlier[1]?.eventCount).toBe(3);
     expect(list.earlier[1]?.at).toBe(at(3));
   });
 
@@ -92,9 +92,9 @@ describe('activityList fresh noise', () => {
     const after = [bot(7), bot(8), ci(9)];
     const push = ev({ kind: 'commits_pushed', actor: 'pim', summary: 'pim pushed', at: at(10) }, 'loud');
     const list = activityList([before, seen, ...after, push], who, at(5));
-    expect(list.freshNoise.map((view) => view.event.id)).toEqual(after.map((view) => view.event.id).toReversed());
+    expect(list.freshNoise.map((item) => item.id)).toEqual(after.map((view) => view.event.id).toReversed());
     expect(list.freshNoiseLabel).toBe('2 bot comments, CI');
-    expect(list.noise.map((view) => view.event.id)).toEqual([seen.event.id, before.event.id]);
+    expect(list.noise.map((item) => item.id)).toEqual([seen.event.id, before.event.id]);
   });
 
   it('takes all unseen noise on a first look (no touch)', () => {
@@ -109,6 +109,29 @@ describe('activityList fresh noise', () => {
     expect(list.freshNoise).toEqual([]);
     expect(list.freshNoiseLabel).toBe('');
     expect(list.noise).toHaveLength(2);
+  });
+});
+
+describe('activityList items', () => {
+  it('ships each event as a row draws it: no url, source id, rule loudness or seen time', () => {
+    const bot = ev({ kind: 'bot_comment', actor: 'greptile[bot]', isBot: true, summary: 'greptile commented', url: 'https://github.com/acme/app/pull/1#c', at: at(1) }, 'quiet');
+    const list = activityList([bot], who);
+    expect(list.noise).toEqual([
+      { id: bot.event.id, kind: 'bot_comment', actor: 'greptile[bot]', summary: 'greptile commented', at: at(1), display: 'quiet', unseen: true, reason: 'comment' },
+    ]);
+  });
+
+  it("gives the agent's reason over the rule's", () => {
+    const muted = ev({ kind: 'comment', actor: 'lyra', summary: 'lyra commented', at: at(1), override: { loudness: 'muted', reason: 'small talk', by: 'agent' } }, 'muted');
+    expect(activityList([muted], who).noise[0]?.reason).toBe('small talk');
+  });
+
+  it("gives a line the newest event's fields, the loudest display and the count", () => {
+    const first = ev({ kind: 'commits_pushed', actor: 'rowan', summary: 'rowan pushed: a', at: at(1), ruleReason: 'push' });
+    const second = ev({ kind: 'commits_after_approval', actor: 'rowan', summary: 'rowan pushed: b', at: at(2), ruleReason: 'after your approval' }, 'loud');
+    const [line] = activityList([first, second], who).fresh;
+    expect(line).toMatchObject({ id: second.event.id, kind: 'commits_after_approval', at: at(2), display: 'loud', unseen: true, reason: 'after your approval', eventCount: 2 });
+    expect(line).not.toHaveProperty('events');
   });
 });
 
@@ -131,7 +154,7 @@ describe('activityList bodies', () => {
     expect(bodies.get('ada')).toBe('Please split this up.');
     expect(bodies.get('sol')).toBeNull();
     expect(bodies.get('rowan')).toBeNull();
-    expect(list.noise[0]?.event.actor).toBe('greptile[bot]');
+    expect(list.noise[0]?.actor).toBe('greptile[bot]');
   });
 
   it('has no body without the PR', () => {

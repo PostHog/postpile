@@ -2721,9 +2721,24 @@ open PR on a real copy went from 1.18 MB to 389 KB per open (its `pr` part
 opened detail for 5 minutes, so the renderer holds less too. The view's
 shape does not follow storage: the coming PR normalization feeds the same
 `prPaneView`. MCP `pr_context` and the CLI read the same view; every field
-they print is in it. A new pane field goes into `PrPaneView` first. What
-is left of a busy PR's response is `events` and `activity` (about 360 KB
-on the biggest), both untouched here.
+they print is in it. A new pane field goes into `PrPaneView` first.
+
+Then the events (same day). `PrDetail` had every event twice: raw in
+`events`, which no screen read (142 KB on the biggest PR), and again in
+`activity`, where each line also carried its events whole and each folded
+bot/CI row was a full `EventView` with url, source id, rule loudness and
+seen time. Now `events` is gone; the CLI's `pr` command, its one reader,
+has its own `listPrEvents` (not on the HTTP API). Every item of `activity`
+is an `ActivityEvent`, what a row draws: id (key, Unmute), kind, actor,
+summary, time, display, unseen and the reason for the hover title (the
+agent's override reason before the rule's); a line adds its body, isNew,
+`eventCount` (a push burst's "3 events") and its reply target. Nothing the
+pane shows was cut: every line, every body whole and every folded row is
+still sent, since "Show all N" and the noise fold expand on the client.
+Biggest open PR 389 KB to 158 KB per open (activity 217 to 127 KB), the
+average 72 KB to 28 KB. What is left on a busy PR is mostly the folded
+bot/CI rows (50 KB for 172 of them on the biggest) and human comment
+bodies; loading the fold on demand would be the next step, if it matters.
 
 ## PR ownership: bot PRs belong to their assignees (2026-09-30)
 

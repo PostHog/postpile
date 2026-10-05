@@ -1,4 +1,4 @@
-import { driverText, formatDossier, formatFacts, setChangeText, TILE_GROUP_LABELS, type PrDetail, type SyncReport, type TopicDetail, type TopicListItem } from '@postpile/core';
+import { driverText, formatDossier, formatFacts, setChangeText, TILE_GROUP_LABELS, type EventView, type PrDetail, type SyncReport, type TopicDetail, type TopicListItem } from '@postpile/core';
 import type { PollCycle } from '@postpile/engine';
 import { formatCallStats, formatFactCounts } from './format-memory.ts';
 
@@ -91,7 +91,8 @@ export function formatTopic(detail: TopicDetail): string {
   return lines.join('\n');
 }
 
-export function formatPr(detail: PrDetail): string {
+/** The PR with its glance, facts and every event (`listPrEvents`: the pane's activity folds and groups them). */
+export function formatPr(detail: PrDetail, events: EventView[]): string {
   const { pr } = detail;
   const lines = [
     `${pr.key}  ${pr.title}`,
@@ -123,7 +124,7 @@ export function formatPr(detail: PrDetail): string {
   if (facts.length > 0) {
     lines.push(...facts, '');
   }
-  for (const view of detail.events) {
+  for (const view of events) {
     lines.push(`${view.event.at}  [${view.display}]  ${view.event.summary}`);
   }
   return lines.join('\n');
