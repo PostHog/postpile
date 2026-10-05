@@ -41,6 +41,28 @@ now".
   PRs instead of 9,660; on a normal copy only the sidebar's counts of old
   settled tiles changed. Not tried by hand: the app on a real heavy
   database.
+- Bot bodies cut when saved (for 0.18.1; DESIGN.md "Bot bodies are cut
+  when saved"): a bot's comment, thread comment or review body is stored
+  cut to 3,072 code units with "… (trimmed by PostPile)", at normalize
+  time, so every fetch path stores it cut. People's, merge queue bots' and
+  person-edited bot bodies stay whole, so the rules read the same: no event
+  id, kind, loudness or summary changed between the stored and the cut
+  snapshots on a normal and a heavy copy. A machine comment's event that
+  flips between deploy and bot_comment is renamed in `upsertDerived`, with
+  its seen time, override and earliest event-log seq. `BotBodyTrim` cuts
+  what is stored once (desktop app, `startBotBodyTrim`): 30 s after start,
+  never during a sync, poll, consolidation or catch-up, ~30 ms steps 20 ms
+  apart, resumable, events left alone. Migration 029 adds
+  `pr.snapshot_revision`, moved by every snapshot write, which the parse
+  caches compare instead of fetched_at. The DB opens with
+  `journal_size_limit` 64 MB and the job empties the WAL at the end without
+  waiting. Measured on copies: JSON 66 → 51 MB (normal) and 925 → 712 MB
+  (heavy, 14x); the job took 0.6 s and 9 s (140 steps, longest 48 ms,
+  peak WAL 7 MB); the 1,500 newest PRs parsed 283 → 231 MB of heap. Deriving
+  every PR again afterwards moved 281 and 3,934 deploy events to
+  bot_comment, made no event new and left no seen event unseen. The file
+  keeps its size (no VACUUM, 7 s on heavy) and reuses the freed pages. Not
+  tried by hand: the app on a real heavy database.
 - Calm wake and crash signals (2026-10-05, DESIGN.md "Memory on big
   boards"): after a wake the renderer no longer refetches every query
   (`refetchOnReconnect: false`; `networkMode: 'always'`, so no network
@@ -1249,11 +1271,20 @@ the app meanwhile.
   completion separately from empty collections; switch reads and drop the
   JSON field atomically; use bounded, resumable transactions; read,
   transform and write in one transaction so a rewrite never overwrites
-  newer sync data; add a storage revision for local rewrites, because
-  cross-process cache invalidation today only goes through `fetched_at`. A
-  multi-day refactor of the store and of every place that builds a `Pr`.
+  newer sync data; move the storage revision (`pr.snapshot_revision`,
+  since 0.18.1) on every local rewrite, so other processes' caches see it.
+  A multi-day refactor of the store and of every place that builds a `Pr`.
   Together with the `utilityProcess` move it is the real fix for big
-  inboxes.
+  inboxes. Bot bodies are cut since 0.18.1 (Done). Researched for this, not
+  done yet:
+  - Store thread comments as ids into `comments`, not a second copy: about
+    21% less on top.
+  - A slim `PrDetail.pr` for the renderer, without comments, threads and
+    timeline: about 105 → 23.5 KB per open PR.
+  - A statement cache for `all`, `get` and `run` in store `sql.ts`, never
+    for `each()`: running a cached statement again resets an iterator
+    still in use.
+  - Text-free skeletons for old merged and closed PRs: disk about 74% less.
 - Move the engine and the server out of Electron main into a
   `utilityProcess` (after 0.18.0, in this order: after normalizing the PR
   snapshot above; a bigger refactor). Electron runs V8
