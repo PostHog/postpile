@@ -1,11 +1,12 @@
 // Storage job 2 (DESIGN.md "CI is not tracked"): removes the checks older
 // builds stored in the snapshot json, one snapshot per unit, without moving
-// a revision or changing a read, and is done only when the data says so.
+// a revision or changing a read, and is done only after a whole walk found
+// none left.
 import { at, FakeTimers, makePr } from '@postpile/core/fixtures';
 import { Store } from '@postpile/store';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { makeHarness, NOW } from '../testing/fakes.ts';
-import { CHECKS_STRIP_SINCE_KEY, ChecksStripJob } from './checks-strip.ts';
+import { CHECKS_STRIP_STRIPPED_KEY, ChecksStripJob } from './checks-strip.ts';
 import { storageJobs } from './jobs.ts';
 import { PAUSE_MS, START_DELAY_MS, StorageJobRunner, type StorageJobReport } from './runner.ts';
 
@@ -15,8 +16,13 @@ const OLD_CHECKS = { rollup: 'SUCCESS', contexts: [{ name: 'lint', conclusion: '
 function storedWithChecks(store: Store, number: number): string {
   const pr = makePr({ number });
   store.prs.upsert(pr, at(1));
-  store.db.prepare("UPDATE pr_snapshot SET json = json_set(json, '$.checks', json(?)) WHERE key = ?").run(JSON.stringify(OLD_CHECKS), pr.key);
+  addChecks(store, pr.key);
   return pr.key;
+}
+
+/** Checks put back into a stored json the way an older build writes them, its revision kept. */
+function addChecks(store: Store, key: string): void {
+  store.db.prepare("UPDATE pr_snapshot SET json = json_set(json, '$.checks', json(?)) WHERE key = ?").run(JSON.stringify(OLD_CHECKS), key);
 }
 
 function withChecks(store: Store): string[] {
@@ -55,60 +61,71 @@ describe('the checks_strip job', () => {
     });
   }
 
-  it('removes the checks from every stored snapshot, without a new revision or a different read', () => {
+  function runToEnd(jobs: StorageJobRunner): void {
+    for (let index = 0; index < 30 && jobs.slice() !== 'idle'; index += 1) {
+      // One snapshot per slice.
+    }
+  }
+
+  it('removes the checks from every stored snapshot, without a new revision or a different read, then walks once more to verify', () => {
     storedWithChecks(store, 1);
     storedWithChecks(store, 2);
     store.prs.upsert(makePr({ number: 3 }), at(1));
     const before = store.prs.listAll();
     const revisionsBefore = revisions(store);
-    const jobs = runner();
 
-    for (let index = 0; index < 10 && jobs.slice() !== 'idle'; index += 1) {
-      // One snapshot per slice.
-    }
+    runToEnd(runner());
 
     expect(withChecks(store)).toEqual([]);
     expect(store.prs.listAll()).toEqual(before);
     expect(revisions(store)).toEqual(revisionsBefore);
     expect(store.meta.get(new ChecksStripJob().doneKey)).toBe(NOW.toISOString());
-    expect(store.meta.get(CHECKS_STRIP_SINCE_KEY)).toBeNull();
-    // Three snapshots walked, two of them rewritten.
-    expect(reports).toMatchObject([{ name: 'checks_strip', units: 3, wrote: 2 }]);
+    expect(store.meta.get(CHECKS_STRIP_STRIPPED_KEY)).toBeNull();
+    // Two walks over three snapshots: the first rewrote two, the second found nothing.
+    expect(reports).toMatchObject([{ name: 'checks_strip', units: 6, wrote: 2 }]);
+    expect(lines).toEqual([expect.stringMatching(/^storage job checks_strip done:/)]);
   });
 
-  it('walks again when a snapshot with checks was written behind its cursor, and is done only once none is left', () => {
+  it('is done after one walk when nothing held checks', () => {
+    store.prs.upsert(makePr({ number: 1 }), at(1));
+    store.prs.upsert(makePr({ number: 2 }), at(1));
+
+    runToEnd(runner());
+
+    expect(reports).toMatchObject([{ units: 2, wrote: 0 }]);
+  });
+
+  it('catches checks an older build wrote back behind the cursor with its revision kept', () => {
     storedWithChecks(store, 1);
     storedWithChecks(store, 3);
     const jobs = runner();
     expect(jobs.slice()).toBe('worked');
     expect(jobs.slice()).toBe('worked');
-    // Something wrote old-style json behind the cursor meanwhile (this build never does): a newer revision.
-    storedWithChecks(store, 2);
+    // An unguarded 0.19.0 rewrote #1 meanwhile: checks back, revision as it was.
+    const revision = revisions(store);
+    addChecks(store, 'acme/app#1');
+    expect(revisions(store)).toEqual(revision);
 
-    for (let index = 0; index < 20 && jobs.slice() !== 'idle'; index += 1) {
-      // On to the end, the check, the second walk.
-    }
+    runToEnd(jobs);
 
-    expect(lines[0]).toMatch(/checks_strip: its check failed at the end, walking it once more/);
     expect(withChecks(store)).toEqual([]);
     expect(store.meta.get(new ChecksStripJob().doneKey)).not.toBeNull();
   });
 
-  it('is not held up by snapshots this build wrote while it walked', () => {
+  it('keeps walking while snapshots come back with checks, and is not done before a clean walk', () => {
     storedWithChecks(store, 1);
-    storedWithChecks(store, 3);
     const jobs = runner();
     expect(jobs.slice()).toBe('worked');
+    // The first walk ends here and the verifying walk starts at #1; an older build writes it back each time.
+    addChecks(store, 'acme/app#1');
     expect(jobs.slice()).toBe('worked');
-    // A fetch behind the cursor: this build writes no checks.
-    store.prs.upsert(makePr({ number: 2, title: 'fetched again' }), at(5));
+    expect(store.meta.get(new ChecksStripJob().doneKey)).toBeNull();
+    expect(store.meta.get(CHECKS_STRIP_STRIPPED_KEY)).toBe('1');
 
-    for (let index = 0; index < 10 && jobs.slice() !== 'idle'; index += 1) {
-      // On to the end.
-    }
+    runToEnd(jobs);
 
-    expect(lines).toEqual([expect.stringMatching(/^storage job checks_strip done:/)]);
     expect(withChecks(store)).toEqual([]);
+    expect(store.meta.get(new ChecksStripJob().doneKey)).not.toBeNull();
   });
 
   it('runs after the bot body trim', () => {

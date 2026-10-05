@@ -749,8 +749,11 @@ snooze and the CLI's rollup) did not pay for the fetch.
   rows whose event a newer head commit had already dropped. Every log reader
   joins `pr_event`, so nothing a reader showed changes but the CI lines
   themselves; rows only leave, so nothing turns unseen and no cursor moves
-  (on the copies: unseen non-CI events and the highest seq the same before
-  and after). Chosen over letting re-derivation drop them: merged and closed
+  (on the copies: unseen non-CI events the same before and after). The
+  log's high-water mark (`EventLogRepo.maxSeq`) reads SQLite's
+  AUTOINCREMENT counter, not `MAX(seq)`: deleting the newest rows must not
+  lower it, or a cursor already past it could never be marked seen again
+  (`CursorRepo.advance` only moves forward; found by GPT-6.1). Chosen over letting re-derivation drop them: merged and closed
   PRs are never fetched again, so their CI events would stay forever and
   the `ci` kind with them. A PR whose newest event was a CI result can fall
   out of the hot set's "active in the last 7 days" a little earlier. It took
@@ -763,13 +766,16 @@ snooze and the CLI's rollup) did not pay for the fetch.
   parse a snapshot (`PrRepo` `parsePr`), so they never reach memory or a
   rewrite. Storage job 2, `checks_strip`, removes them on disk: one unit is
   one snapshot in key order, `json_remove` in place inside the slice's
-  transaction, no revision (no read changes). Its check: the walk covered
-  every snapshot stored when it started, and the ones stored behind its
-  cursor since carry a newer revision; it is done only when none of those
-  holds `checks` (meta `storage_job:checks_strip:since`), else it walks
-  again. Migration 030 is also what keeps 0.20.0 off the stripped json.
-  Measured: heavy 93 MB of json freed in 138 slices (p95 37 ms, max 54 ms),
-  4.3 s of work, 11 s wall; normal 6.7 MB in 10 slices. Every snapshot
+  transaction, no revision (no read changes). Done means a whole walk,
+  unit by unit within the slice budget, found nothing to strip: a walk that
+  stripped something (meta `storage_job:checks_strip:stripped`) starts over
+  to verify. Revisions cannot prove it, since an unguarded older build
+  (0.19.0 and before) keeps them when it writes checks back. Such a
+  downgrade after the job finished leaves bytes behind, harmlessly: reads
+  drop them, and the next fetch of that PR writes them out. Migration 030 is also what keeps 0.20.0 off the stripped json.
+  Measured (one walk, before the verifying walk was added): heavy 93 MB of
+  json freed in 138 slices (p95 37 ms, max 54 ms), 4.3 s of work, 11 s
+  wall; normal 6.7 MB in 10 slices. Every snapshot
   equals the original but for its checks. Hot-set heap on heavy 283 MB (the
   0.20.0 read) → 264 MB (this build, before the strip) → 263 MB after.
 - **What stays.** `NO_CI_RULE` in every writing prompt: glances and
@@ -3780,9 +3786,9 @@ and detail start equally wide (2026-09-30, was a 420-480px tile clamp). At
   unseen noise after the viewer's last touch (`activityList(events,
   viewer, since)`) go to the box under the title (2026-09-29); the list,
   titled "Earlier activity" then, keeps only the rest. About 12 lines
-  (`ACTIVITY_LINE_CAP`) before "Show all N". Bots, CI, deploys, merge queue,
+  (`ACTIVITY_LINE_CAP`) before "Show all N". Bots, deploys, merge queue,
   agent-muted events and review requests between others fold into one "N
-  bot/CI events" line that expands (Unmute lives there).
+  bot events" line that expands (Unmute lives there).
   Comments and reviews from people show in full (2026-09-29): the event
   `summary` is one clipped line (100 chars, first line) for tiles, MCP and
   the agent, so `activityList(events, viewer, since, pr)` also puts the

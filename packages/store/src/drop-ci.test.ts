@@ -78,6 +78,53 @@ describe('migration 030', () => {
   });
 });
 
+describe('the event log high-water mark after migration 030', () => {
+  function logAt29(ids: string[]): DatabaseSync {
+    const db = new DatabaseSync(':memory:');
+    runMigrations(db, 29);
+    const insertEvent = db.prepare(
+      `INSERT INTO pr_event (id, pr_key, kind, actor, is_bot, at, summary, source_id, rule_loudness, rule_reason)
+       VALUES (?, 'acme/app#1', ?, '', 1, '2026-09-01T09:00:00.000Z', '', ?, 'quiet', '')`,
+    );
+    const log = db.prepare("INSERT INTO event_log (event_id, pr_key, logged_at) VALUES (?, 'acme/app#1', '2026-09-01T09:00:00.000Z')");
+    for (const id of ids) {
+      const [, kind, sourceId] = id.split(':');
+      insertEvent.run(id, kind!, sourceId!);
+      log.run(id);
+    }
+    return db;
+  }
+
+  it('stays where it was when the newest log rows were CI events, so a cursor there can still advance', () => {
+    const db = logAt29(['acme/app#1:comment:c1', 'acme/app#1:ci:a', 'acme/app#1:ci:b']);
+
+    runMigrations(db);
+
+    const store = new Store(db);
+    expect(store.db.prepare('SELECT max(seq) AS seq FROM event_log').get()).toEqual({ seq: 1 });
+    expect(store.eventLog.maxSeq()).toBe(3);
+    // The seen cursor was at 3 before the migration; marking seen again must still move its version and time.
+    store.cursors.advance({ kind: 'seen', scope: 'topic-1', seq: 3, dossierVersion: 1, updatedAt: '2026-09-01T10:00:00.000Z' });
+    store.cursors.advance({ kind: 'seen', scope: 'topic-1', seq: store.eventLog.maxSeq(), dossierVersion: 2, updatedAt: '2026-09-01T11:00:00.000Z' });
+    expect(store.cursors.get('seen', 'topic-1')).toMatchObject({ seq: 3, dossierVersion: 2, updatedAt: '2026-09-01T11:00:00.000Z' });
+    db.close();
+  });
+
+  it('stays where it was when the whole log was CI events', () => {
+    const db = logAt29(['acme/app#1:ci:a', 'acme/app#1:ci:b']);
+
+    runMigrations(db);
+
+    expect(db.prepare('SELECT count(*) AS n FROM event_log').get()).toEqual({ n: 0 });
+    expect(new Store(db).eventLog.maxSeq()).toBe(2);
+    db.close();
+  });
+
+  it('is 0 on a log that never had a row', () => {
+    expect(store.eventLog.maxSeq()).toBe(0);
+  });
+});
+
 describe('PrRepo and checks stored before 0.21.0', () => {
   it('never hands them out, and a rewrite of what it read does not store them again', () => {
     const key = storedWithChecks(1);
@@ -104,15 +151,9 @@ describe('PrRepo and checks stored before 0.21.0', () => {
     expect(store.prs.stripChecks(key)).toBe(false);
   });
 
-  it('counts the snapshots with checks written after a revision, and walks every snapshot key', () => {
+  it('walks every snapshot key', () => {
     storedWithChecks(1);
-    const since = store.prs.latestRevision();
-    const later = storedWithChecks(2);
-
-    expect(store.prs.countChecksWrittenSince(since)).toBe(1);
-    expect(store.prs.countChecksWrittenSince(store.prs.latestRevision())).toBe(0);
-    store.prs.stripChecks(later);
-    expect(store.prs.countChecksWrittenSince(since)).toBe(0);
+    storedWithChecks(2);
     expect(store.prs.nextSnapshotKey('')).toBe('acme/app#1');
     expect(store.prs.nextSnapshotKey('acme/app#1')).toBe('acme/app#2');
     expect(store.prs.nextSnapshotKey('acme/app#2')).toBeNull();

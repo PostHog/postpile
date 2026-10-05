@@ -54,7 +54,7 @@ async function post<T>(app: TestApp, path: string, body: unknown = {}): Promise<
   return { status: res.status, json: (await res.json()) as T };
 }
 
-/** Every row the PR pane can show, lines and folded bot/CI rows alike. */
+/** Every row the PR pane can show, lines and folded bot rows alike. */
 function activityItems(detail: PrDetail): ActivityEvent[] {
   const { fresh, earlier, noise, freshNoise } = detail.activity;
   return [...fresh, ...earlier, ...noise, ...freshNoise];

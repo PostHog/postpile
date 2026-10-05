@@ -178,8 +178,8 @@ describe('DetailPane', () => {
     // The reply target comes with the activity line, built from the stored PR on the server.
     expect(screen.getByText('Why one key for all jobs?')).toBeTruthy();
     expect(screen.getByRole('button', { name: /^Reply$/ })).toBeTruthy();
-    // The folded bot/CI rows draw from the slim items too: summary, and the reason in the hover title.
-    fireEvent.click(screen.getByRole('button', { name: 'Show 1 bot/CI event' }));
+    // The folded bot rows draw from the slim items too: summary, and the reason in the hover title.
+    fireEvent.click(screen.getByRole('button', { name: 'Show 1 bot event' }));
     expect(screen.getByText('Preview deployed').closest('[title]')?.getAttribute('title')).toBe('seen: bot activity');
   });
 });

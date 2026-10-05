@@ -385,11 +385,6 @@ export class PrRepo {
     return row === null ? null : { key: row.key, pr: parsePr(row.json), fetchedAt: row.fetched_at };
   }
 
-  /** The last snapshot revision handed out (the store-wide counter), 0 before the first. */
-  latestRevision(): number {
-    return Number(one<{ value: string }>(this.db, 'SELECT value FROM meta WHERE key = ?', SNAPSHOT_REVISION_KEY)?.value ?? 0);
-  }
-
   /** For the storage job checks_strip: the next stored snapshot's key after `afterKey` ('' for the first); null after the last. */
   nextSnapshotKey(afterKey: PrKey): PrKey | null {
     return one<{ key: string }>(this.db, 'SELECT key FROM pr_snapshot WHERE key > ? ORDER BY key LIMIT 1', afterKey)?.key ?? null;
@@ -403,21 +398,6 @@ export class PrRepo {
   stripChecks(key: PrKey): boolean {
     return (
       run(this.db, "UPDATE pr_snapshot SET json = json_remove(json, '$.checks') WHERE key = ? AND json_type(json, '$.checks') IS NOT NULL", key) > 0
-    );
-  }
-
-  /**
-   * Snapshots written after revision `since` (by a fetch or a local
-   * rewrite) whose json holds `checks`: the strip's check from the data for
-   * the PRs stored behind its cursor while it walked.
-   */
-  countChecksWrittenSince(since: number): number {
-    return (
-      one<{ n: number }>(
-        this.db,
-        "SELECT count(*) AS n FROM pr_snapshot WHERE key IN (SELECT key FROM pr WHERE snapshot_revision > ?) AND json_type(json, '$.checks') IS NOT NULL",
-        since,
-      )?.n ?? 0
     );
   }
 }
