@@ -1,4 +1,4 @@
-import type { Pr } from '@postpile/core';
+import type { PrPaneView } from '@postpile/core';
 import type { EventGlyph } from '../lib/events.ts';
 import { reviewRows, type ReviewStatus } from '../lib/pr.ts';
 import { isTeam } from '../lib/people.ts';
@@ -18,7 +18,7 @@ const STATUS: Record<ReviewStatus, { label: string; badge: string; glyph: EventG
 };
 
 /** Who reviewed, who still has to. */
-export function ReviewList(props: { pr: Pr }) {
+export function ReviewList(props: { pr: PrPaneView }) {
   const now = useNow();
   const rows = reviewRows(props.pr);
   return (

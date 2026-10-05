@@ -2,8 +2,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { activityList, prStatus, type Pr, type PrDetail, type PrSummary, type TileView } from '@postpile/core';
-import { at, makePr, NO_OPENED_READ, NO_PR_FACTS, withOffers } from '@postpile/core/fixtures';
+import { activityList, eventView, prPaneView, prStatus, type ActivityList, type Pr, type PrDetail, type PrSummary, type TileView } from '@postpile/core';
+import { at, makeComment, makeCommit, makeEvent, makePr, makeReview, NO_OPENED_READ, NO_PR_FACTS, viewer, withOffers } from '@postpile/core/fixtures';
 import { ActionsProvider } from '../api/actions.tsx';
 import { queryKeys } from '../api/keys.ts';
 import { DetailPane } from './DetailPane.tsx';
@@ -55,13 +55,14 @@ function summaryOf(pr: Pr): PrSummary {
   };
 }
 
-function detailOf(pr: Pr): PrDetail {
+/** What the server sends for `pr`: the slim view, the activity built from the stored PR before it. */
+function detailOf(pr: Pr, activity: ActivityList = activityList([], null)): PrDetail {
   return {
-    pr,
+    pr: prPaneView(pr),
     status: prStatus(pr),
     fetchedAt: null,
     events: [],
-    activity: activityList([], null),
+    activity,
     whatsNew: null,
     glance: null,
     glanceStale: false,
@@ -107,6 +108,28 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+/** The pane for one PR with its detail cached; every other read never answers. */
+function renderCached(prKey: string, detail: PrDetail) {
+  vi.stubGlobal('fetch', () => new Promise(() => {}));
+  // jsdom has no ResizeObserver; the description box measures itself with one.
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
+  const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } });
+  client.setQueryData(queryKeys.pr(prKey), detail);
+  return render(
+    <QueryClientProvider client={client}>
+      <ActionsProvider>
+        <DetailPane view={stackView} prKey={prKey} onSelectPr={() => {}} noSelectionText="" />
+      </ActionsProvider>
+    </QueryClientProvider>,
+  );
+}
+
 describe('DetailPane', () => {
   it('shows one state line after clicking through the layers of a stack', () => {
     // Every PR's detail is cached, as after a first visit; other reads never answer.
@@ -130,5 +153,37 @@ describe('DetailPane', () => {
 
     expect(screen.getAllByRole('link', { name: /Open on GitHub/ })).toHaveLength(1);
     expect(screen.getByRole('heading', { level: 2 }).textContent).toBe('Add the cache key');
+  });
+
+  it('shows facts, reviews and replies from the slim view', () => {
+    const stored = makePr({
+      number: 11,
+      title: 'Add the cache key',
+      body: 'One key for every job.',
+      commits: [makeCommit({ committedAt: at(30) })],
+      reviews: [makeReview({ id: 'r1', author: 'lyra', state: 'APPROVED', body: 'Ship it.' })],
+      comments: [makeComment({ id: 'c1', author: 'bob', body: 'Why one key for all jobs?', url: 'https://github.com/acme/app/pull/11#issuecomment-1' })],
+      checks: {
+        rollup: 'FAILURE',
+        contexts: [
+          { name: 'lint', conclusion: 'SUCCESS', completedAt: at(40) },
+          { name: 'test', conclusion: 'FAILURE', completedAt: at(45) },
+          { name: 'e2e', conclusion: null, completedAt: null },
+        ],
+      },
+    });
+    const comment = eventView(makeEvent({ id: 'acme/app#11:comment:c1', prKey: stored.key, actor: 'bob', sourceId: 'c1', summary: 'bob commented' }));
+    const detail = detailOf(stored, activityList([comment], viewer, null, stored));
+    expect(detail.pr).not.toHaveProperty('comments');
+
+    renderCached(stored.key, detail);
+
+    expect(screen.getByText('3 checks · 2 not passing')).toBeTruthy();
+    expect(screen.getByText(/^pushed /)).toBeTruthy();
+    expect(screen.getByText('One key for every job.')).toBeTruthy();
+    expect(screen.getByText('lyra').parentElement?.textContent).toContain('approved');
+    // The reply target comes with the activity line, built from the stored PR on the server.
+    expect(screen.getByText('Why one key for all jobs?')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Reply$/ })).toBeTruthy();
   });
 });

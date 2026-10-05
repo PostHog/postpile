@@ -1,41 +1,15 @@
-import type { Checks, MergeQueueStep, Pr, PrIcon, PrStatus, Review, TileStack } from '@postpile/core';
+import type { ChecksSummary, MergeQueueStep, PaneReview, PrIcon, PrPaneView, PrStatus, TileStack } from '@postpile/core';
 import { prNumber } from './tiles.ts';
 import { sinceLabel } from './time.ts';
-
-const PASSING = new Set(['SUCCESS', 'NEUTRAL', 'SKIPPED']);
-
-export interface CheckCounts {
-  ok: number;
-  failed: number;
-  /** Still running: no conclusion yet. */
-  pending: number;
-  total: number;
-}
-
-export function checkCounts(checks: Checks): CheckCounts {
-  let ok = 0;
-  let failed = 0;
-  let pending = 0;
-  for (const context of checks.contexts) {
-    if (context.conclusion === null) {
-      pending += 1;
-    } else if (PASSING.has(context.conclusion)) {
-      ok += 1;
-    } else {
-      failed += 1;
-    }
-  }
-  return { ok, failed, pending, total: checks.contexts.length };
-}
 
 /**
  * The Checks fact's note, "12 checks · 2 not passing" ("all passing" at
  * none). Neutral words: CI is not a signal here (2026-09-29), so failed and
  * still running both count as not passing, without a colour.
  */
-export function checksNote(counts: CheckCounts): string {
-  const total = `${counts.total} ${counts.total === 1 ? 'check' : 'checks'}`;
-  const notPassing = counts.failed + counts.pending;
+export function checksNote(checks: ChecksSummary): string {
+  const total = `${checks.total} ${checks.total === 1 ? 'check' : 'checks'}`;
+  const notPassing = checks.failed + checks.pending;
   return notPassing === 0 ? `${total} · all passing` : `${total} · ${notPassing} not passing`;
 }
 
@@ -48,7 +22,7 @@ export interface ReviewRow {
   at: string | null;
 }
 
-const REVIEW_STATUS: Record<Review['state'], ReviewStatus | null> = {
+const REVIEW_STATUS: Record<PaneReview['state'], ReviewStatus | null> = {
   APPROVED: 'approved',
   CHANGES_REQUESTED: 'changes_requested',
   COMMENTED: 'commented',
@@ -60,11 +34,11 @@ const REVIEW_STATUS: Record<Review['state'], ReviewStatus | null> = {
  * One row per reviewer. An approval or change request stands over later plain
  * comments, like on GitHub. Pending requests come first, teams last.
  */
-export function reviewRows(pr: Pr): ReviewRow[] {
+export function reviewRows(pr: Pick<PrPaneView, 'reviews' | 'reviewerUsers' | 'reviewerTeams'>): ReviewRow[] {
   const oldestFirst = pr.reviews
     .filter((review) => review.state !== 'PENDING')
     .sort((a, b) => (a.submittedAt < b.submittedAt ? -1 : 1));
-  const latest = new Map<string, Review>();
+  const latest = new Map<string, PaneReview>();
   for (const review of oldestFirst) {
     const current = latest.get(review.author);
     // A plain comment only replaces another plain comment.
@@ -103,7 +77,7 @@ export function capitalize(text: string): string {
 }
 
 /** What stands between the PR and a merge, in a few words. `agentApprovers` as in `approvedText`. */
-export function mergeStatus(pr: Pr, agentApprovers: string[]): string {
+export function mergeStatus(pr: Pick<PrPaneView, 'state' | 'mergedBy' | 'isDraft' | 'reviewDecision'>, agentApprovers: string[]): string {
   if (pr.state === 'MERGED') {
     return pr.mergedBy ? `merged by ${pr.mergedBy}` : 'merged';
   }
@@ -123,12 +97,6 @@ export function mergeStatus(pr: Pr, agentApprovers: string[]): string {
     return 'needs review';
   }
   return 'no review rule';
-}
-
-/** The last commit's time, or null for a PR without commits in the snapshot. */
-export function lastPushAt(pr: Pr): string | null {
-  const last = pr.commits[pr.commits.length - 1];
-  return last ? last.committedAt : null;
 }
 
 /** The state icon (core `PrStatus.icon`) in words, as the detail pane's state line and the icon's tooltip say it. */

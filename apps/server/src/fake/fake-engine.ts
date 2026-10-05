@@ -156,6 +156,7 @@ import {
   ownerRelation,
   pingedPrKeys,
   prTier,
+  prPaneView,
   prStatus,
   prWhoseTurn,
   isReReviewMove,
@@ -1326,7 +1327,7 @@ export class FakeEngine implements EngineService {
       .map(eventView);
     const news = whatsNew(pr, this.eventsOf(prKey), this.viewer());
     return {
-      pr,
+      pr: prPaneView(pr),
       status: prStatus(pr),
       fetchedAt: this.fetchedAtOf(prKey),
       events,
@@ -1752,6 +1753,22 @@ export class FakeEngine implements EngineService {
         : { ...base, body: quotedReplyBody(comment, body), kind: 'comment', url: pr.url, path: null, threadId: null };
     const threads = pr.threads.map((thread) => (thread.id === reply.threadId ? { ...thread, comments: [...thread.comments, reply] } : thread));
     this.data.prs[index] = { ...pr, comments: [...pr.comments, reply], threads };
+    // The real engine refetches the PR after a reply, and the activity then shows it; here it is one own event.
+    this.data.events.push({
+      id: `${prKey}:comment:${reply.id}`,
+      prKey,
+      kind: 'comment',
+      actor: this.data.viewer,
+      isBot: false,
+      at: reply.createdAt,
+      summary: `${this.data.viewer} replied to ${comment.author}: ${body.split('\n')[0] ?? ''}`,
+      url: reply.url,
+      sourceId: reply.id,
+      ruleLoudness: 'quiet',
+      ruleReason: 'own comment',
+      override: null,
+      seenAt: reply.createdAt,
+    });
     return ok('fake: reply kept locally, nothing sent to GitHub');
   }
 

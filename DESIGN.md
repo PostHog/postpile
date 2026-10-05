@@ -2707,6 +2707,24 @@ in the input (the toast says why). The input is a textarea that grows to
 about eight lines: Enter sends, Shift+Enter starts a new line, as in most
 chats.
 
+**What the pane loads** (2026-10-05). `PrDetail.pr` is core's slim
+`PrPaneView` (`prPaneView` in `pr-pane.ts`), not the stored `Pr`: header
+fields, the description whole, the files with their counts (key files read
+them), reviews as author, state and time (no text), the last commit's time
+and a checks summary (`summarizeChecks` in `checks.ts`: rollup, passed,
+failed, pending, newest finish, FAILURE names; the pane shows only the
+counts). No comments, threads, commits, timeline or check contexts: the
+activity list, its bodies and its reply and react targets come built on
+`PrDetail.activity`, made from the stored PR before the view. The biggest
+open PR on a real copy went from 1.18 MB to 389 KB per open (its `pr` part
+814 KB to 21 KB); the average from 171 KB to 72 KB. TanStack keeps each
+opened detail for 5 minutes, so the renderer holds less too. The view's
+shape does not follow storage: the coming PR normalization feeds the same
+`prPaneView`. MCP `pr_context` and the CLI read the same view; every field
+they print is in it. A new pane field goes into `PrPaneView` first. What
+is left of a busy PR's response is `events` and `activity` (about 360 KB
+on the biggest), both untouched here.
+
 ## PR ownership: bot PRs belong to their assignees (2026-09-30)
 
 Coding agents open PRs through a GitHub App on someone's behalf: the author
@@ -7117,7 +7135,7 @@ preflight and does not know the token, so CORS stays open.
 | `GET /api/debug/notifications?limit=` | `debugNotifications()` (default 200, max 1000) |
 | `POST /api/topics/:id/tailoring` `{text, keep}` | `decideTailoring()` |
 | `POST /api/proposals/:id` `{accept}` | `decideTopicProposal()` |
-| `GET /api/prs/:owner/:repo/:number` | `getPr()` |
+| `GET /api/prs/:owner/:repo/:number` | `getPr()` (`pr` is the slim `PrPaneView`, see "The PR pane") |
 | `POST /api/prs/:owner/:repo/:number/approve` `{headOid, body?}` | `approve()` (body: "Approve with comment") |
 | `POST /api/prs/:owner/:repo/:number/comment-review` `{headOid, body}` | `commentReview()` (event COMMENT; final; refused while locked) |
 | `POST /api/prs/:owner/:repo/:number/draft-ask` `{person, intent}` | `draftAsk()` |

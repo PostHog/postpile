@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
-import type { Pr } from '@postpile/core';
-import { checkCounts, checksNote, lastPushAt, mergeStatus } from '../lib/pr.ts';
+import type { PrPaneView } from '@postpile/core';
+import { checksNote, mergeStatus } from '../lib/pr.ts';
 import { ageLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
 import { SectionLabel } from './SectionLabel.tsx';
@@ -31,11 +31,11 @@ function Fact(props: { label: string; children: ReactNode }) {
 
 /** Size, checks, age and what stands between the PR and a merge. */
 /** `agentApprovers` (`PrDetail.agentApprovers`) lets "To merge" say "approved by reviewbot (agent)". */
-export function PrFacts(props: { pr: Pr; agentApprovers: string[] }) {
+export function PrFacts(props: { pr: PrPaneView; agentApprovers: string[] }) {
   const now = useNow();
   const { pr } = props;
-  const checks = checkCounts(pr.checks);
-  const pushedAt = lastPushAt(pr);
+  const { checks } = pr;
+  const pushedAt = pr.lastCommitAt;
   const age = pr.mergedAt ? `merged ${ageLabel(pr.mergedAt, now)}` : `opened ${ageLabel(pr.createdAt, now)}`;
   return (
     <div className="grid grid-cols-2 gap-x-6 gap-y-3.5 px-3">
@@ -58,7 +58,7 @@ export function PrFacts(props: { pr: Pr; agentApprovers: string[] }) {
         <span className="font-mono text-[11.5px] leading-[normal] text-hint tabular-nums">{checks.total === 0 ? 'none' : checksNote(checks)}</span>
         <SplitBar
           parts={[
-            { weight: checks.ok, tone: 'bg-dot-quiet' },
+            { weight: checks.passed, tone: 'bg-dot-quiet' },
             { weight: checks.failed + checks.pending, tone: 'bg-chip' },
           ]}
         />

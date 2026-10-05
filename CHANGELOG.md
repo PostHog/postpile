@@ -2,6 +2,12 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## 0.20.0 (unreleased)
+
+### Changed
+
+- Opening a PR loads less: the PR pane gets only what it shows (title, description, files, reviews, a checks summary) instead of every stored comment and check. A busy PR's pane loads about a third of what it did, and PRs opened in the last minutes take less memory. The pane looks the same.
+
 ## 0.19.0 (2026-10-05)
 
 ### Changed

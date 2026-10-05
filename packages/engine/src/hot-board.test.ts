@@ -1,4 +1,4 @@
-import type { Pr } from '@postpile/core';
+import { prPaneView, type Pr } from '@postpile/core';
 import { at, makeThreadFor } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { Board } from './board.ts';
@@ -71,7 +71,8 @@ describe('the hot board', () => {
     const search = await h.engine.search('#1', { allRepos: true });
     const snoozed = await h.engine.snooze(`pr:${old.key}`, { kind: 'someone_replies' });
 
-    expect(detail?.pr.key).toBe(old.key);
+    // The pane gets the slim view of the stored PR, not the PR itself.
+    expect(detail?.pr).toEqual(prPaneView(h.store.prs.get(old.key)!));
     expect(detail?.topicId).toBe('depot');
     expect(detail?.tileIds).toEqual([`pr:${old.key}`]);
     expect(search.topics).toEqual([{ topicId: 'depot', tileIds: [`pr:${old.key}`], prKeys: [old.key] }]);

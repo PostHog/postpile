@@ -32,6 +32,7 @@ import {
   ownerRelation,
   pingedPrKeys,
   prTier,
+  prPaneView,
   prStatus,
   prWhoseTurn,
   isReReviewMove,
@@ -699,7 +700,7 @@ export class ReadModels {
     const gap = this.glanceGap(key, glance !== null);
     const wanted = glanceTargetKeys(board);
     return {
-      pr,
+      pr: prPaneView(pr),
       status: prStatus(pr),
       fetchedAt: this.store.prs.fetchedAt(key),
       events,

@@ -6,7 +6,6 @@ import type {
   EventDisplayState,
   Glance,
   IsoTime,
-  Pr,
   PrEvent,
   PrKey,
   PrSet,
@@ -26,6 +25,7 @@ import type { TileAfterRead } from './after-read.ts';
 import type { GlanceRefreshBlock, GlanceState } from './glance-state.ts';
 import type { AgentCallStats, DossierStatus, TopicRelation } from './memory.ts';
 import type { DossierView, FactChangeCounts, FactView, MemoryTarget } from './memory-views.ts';
+import type { PrPaneView } from './pr-pane.ts';
 import type { PrStatus } from './pr-status.ts';
 import type { PrPrimaryAction } from './primary-action.ts';
 import type { TopicPrState, TopicPrStateCounts, TopicPrStateSummary } from './topic-pr-state.ts';
@@ -428,7 +428,12 @@ export interface EventView {
 }
 
 export interface PrDetail {
-  pr: Pr;
+  /**
+   * The PR as the pane reads it (`prPaneView`): header, description, files,
+   * reviews without text, a checks summary. No comments, threads, commits
+   * or timeline: the activity below is built from them on the server.
+   */
+  pr: PrPaneView;
   /** Lifecycle, review, the merge queue and the state icon (`prStatus`), as on the PR's rows: the header's state line. */
   status: PrStatus;
   /** When the stored snapshot was fetched from GitHub; null when unknown (sample data before a fake fetch). */
