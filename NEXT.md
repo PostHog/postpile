@@ -24,6 +24,12 @@ now".
   build with `POSTPILE_FAKE_BUSY=1`: footer on, locked, locked with one
   pending; busy card and Why? without the lock. Not tried: the default
   switch on a real database copy with a real backlog.
+- No "Not mine" on a Not yours tile (2026-10-05, for 0.21.0; DESIGN.md
+  Product model › "Action details"): core's `TileOffers.notMine` leaves it out of
+  the tile's ⋯ menu while the verdict pill says Not yours, read from
+  `tileVerdict` (now its own module, `tile-verdict.ts`). The menu was the
+  only place offering it. Sample #1940 (Desktop app release) carries a
+  Not yours glance for checking it in fake mode.
 - Newer-schema guard (2026-10-05, DESIGN.md "Safety while building"): a
   build refuses a database whose schema version is above its newest
   migration, before any pragma or migration writes; the desktop app shows a
@@ -1424,6 +1430,12 @@ the app meanwhile.
   code-manager folder migration (`legacy-data.ts`) once the move has run.
 
 ## Decided
+
+- **No "Not mine" where the tile already says Not yours** (2026-10-05, owner
+  report): the menu offered to teach the agent what its verdict already
+  said. Mark read is the way to clear such a tile. A stack or set counts as
+  Not yours only when its pill says so (every open tracked PR Not yours);
+  a stale Not yours counts, like the rules read it.
 
 - **Split pr into header + pr_snapshot; pr is the future model's parent**
   (2026-10-05, checked with Codex GPT-6.1; DESIGN.md "Big inboxes: what

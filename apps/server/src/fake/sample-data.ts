@@ -869,6 +869,14 @@ function buildGlances(clock: SampleClock): Glance[] {
       risk: 'People lose services silently.',
       othersSaid: 'None yet.',
     }),
+    // A subscribed thread the agent calls Not yours: its tile menu leaves out "Not mine".
+    sampleGlance(clock, 1940, {
+      verdict: 'NOT_YOURS',
+      forYou: 'A desktop release thread you follow. Nothing in it touches CI or runners.',
+      does: 'Bumps the desktop app to 2.3 and updates its changelog.',
+      risk: 'Low. A version bump, nothing platform owns.',
+      othersSaid: 'koa approved.',
+    }),
   ];
 }
 
