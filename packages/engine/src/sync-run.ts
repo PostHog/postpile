@@ -334,7 +334,6 @@ export class SyncRun {
       report.prsPulledIn = fetched.prsPulledIn;
       report.prsFound = fetched.prsFound;
       report.newEvents = fetched.newEventIds.length;
-      live.fromGitHub = { prsFetched: fetched.prsFetched + fetched.prsFound, newEvents: report.newEvents };
       errors.push(...fetched.errors);
       // A reply the sync stored first pings through the next poll cycle, once its thread is unread.
       if (!firstLook) {
@@ -343,6 +342,8 @@ export class SyncRun {
       // The start dialog is due: the agent work waits for its answer, which resumes the sync (fetching
       // again is cheap: unchanged PRs are skipped, and the bulk mark-reads show up in the inbox).
       const forDigest = withHeld(fetched, this.held);
+      // What the digest works on: a resumed sync also digests the fetch it was held after.
+      live.fromGitHub = { prsFetched: forDigest.fetchedPrKeys.length, newEvents: forDigest.newEventIds.length };
       held = this.catchUpGate.holds();
       this.held = held ? { fetched: forDigest, options } : null;
       if (held) {
