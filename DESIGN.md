@@ -504,7 +504,11 @@ back with its next news.
 **What a sync fetches** (core `selectSyncThreads`, then `hotSyncThreads`;
 2026-09-29, the hot slice since 2026-10-05). Every notification is stored,
 but only threads updated in the last 30 days (`SYNC_MAX_AGE_DAYS`) with
-activity after their PR's last fetch are candidates. Of those, a thread
+activity after their PR's last fetch are candidates. A PR on the board is
+always fetched, whatever its own rank or age: its tile shows the snapshot
+(a unit goes on by its best member, so the weakest kept unit ranks equal
+to itself and a stack layer may be of tier others; found by Codex review
+on #116). Of the others, a thread
 older than SETTLED_DAYS is fetched only when it is unread and aimed at the
 user (tier you), or it is their own open PR; while the inbox is busy only
 what would make the board (`wouldKeep`: tiers you and team, and past a

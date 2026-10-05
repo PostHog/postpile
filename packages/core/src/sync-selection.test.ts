@@ -41,7 +41,7 @@ describe('selectSyncThreads', () => {
 
 describe('hotSyncThreads', () => {
   const me: Viewer = { login: 'alice', teams: ['acme/team-devex'], homeTeams: ['acme/team-devex'], teamMembers: ['bob'] };
-  const calm = { busy: false, weakestKept: null };
+  const calm = { busy: false, weakestKept: null, keys: new Set<string>() };
 
   function candidate(key: string, updatedAt: string, unread: boolean, reason: NotificationReason, facts: Partial<HotFacts> = {}): HotSyncThread {
     return { key, unread, updatedAt, facts: { ...threadOnlyFacts(key, { unread, reason, updatedAt }, null), ...facts } };
@@ -69,9 +69,27 @@ describe('hotSyncThreads', () => {
         candidate('acme/app#2', '2026-09-28T00:00:00Z', false, 'subscribed', { author: 'bob', state: 'OPEN' }),
         candidate('acme/app#3', '2026-09-27T00:00:00Z', true, 'review_requested'),
       ],
-      { now: NOW, viewer: me, selection: { busy: true, weakestKept: null } },
+      { now: NOW, viewer: me, selection: { busy: true, weakestKept: null, keys: new Set<string>() } },
     );
     expect(picked.map((t) => t.key)).toEqual(['acme/app#3', 'acme/app#2']);
     expect(shed).toEqual(['acme/app#1']);
+  });
+
+  it('fetches every PR on a full board when its thread moved, whatever its own rank or age', () => {
+    const weakest = { key: 'acme/app#2', tier: 'team' as const, unread: false, activityAt: '2026-09-28T00:00:00Z' };
+    const selection = { busy: true, weakestKept: weakest, keys: new Set(['acme/app#1', 'acme/app#2', 'acme/app#3']) };
+    const { picked, shed } = hotSyncThreads(
+      [
+        // The weakest kept unit's own PR: ranks equal to the weakest.
+        candidate('acme/app#2', '2026-09-28T00:00:00Z', false, 'subscribed', { author: 'bob', state: 'OPEN' }),
+        // A layer of a kept stack, tier others, its thread unread and old.
+        candidate('acme/app#3', '2026-09-10T00:00:00Z', true, 'subscribed', { author: 'zoe', state: 'OPEN' }),
+        // Not on the board, same tier and time as the weakest, ranks after it by key.
+        candidate('acme/app#4', '2026-09-28T00:00:00Z', false, 'subscribed', { author: 'bob', state: 'OPEN' }),
+      ],
+      { now: NOW, viewer: me, selection },
+    );
+    expect(picked.map((t) => t.key).sort()).toEqual(['acme/app#2', 'acme/app#3']);
+    expect(shed).toEqual(['acme/app#4']);
   });
 });

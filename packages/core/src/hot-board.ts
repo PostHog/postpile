@@ -341,12 +341,16 @@ export function selectHotBoard(input: HotBoardInput): HotSelection {
 }
 
 /**
- * Whether a PR of this rank would make the board as it stands: anything
- * while the inbox is not busy; while busy only tiers you and team, and once
- * those filled the cap only what ranks before the weakest unit kept.
+ * Whether a PR of this rank would make the board as it stands. A PR on the
+ * board already is kept, whatever its own rank: a unit goes on by its best
+ * member, so the weakest kept unit ranks equal to itself and a stack layer
+ * or set mate may be of tier others. Any other PR: anything while the
+ * inbox is not busy; while busy only tiers you and team, and once those
+ * filled the cap only what ranks before the weakest unit kept (what ranks
+ * after it would be cut again by the next load, `selectHotBoard`).
  */
-export function wouldKeep(selection: Pick<HotSelection, 'busy' | 'weakestKept'>, rank: HotRank): boolean {
-  if (!selection.busy) {
+export function wouldKeep(selection: Pick<HotSelection, 'busy' | 'weakestKept' | 'keys'>, rank: HotRank): boolean {
+  if (!selection.busy || selection.keys.has(rank.key)) {
     return true;
   }
   return rank.tier !== 'others' && (selection.weakestKept === null || compareHotRank(rank, selection.weakestKept) < 0);

@@ -71,8 +71,8 @@ export interface HotSyncThread extends SyncThread {
 export interface HotSyncOptions {
   now: IsoTime;
   viewer: Viewer | null;
-  /** The hot set as the store stands, for the busy rule. */
-  selection: Pick<HotSelection, 'busy' | 'weakestKept'>;
+  /** The hot set as the store stands: what is on the board, and the busy rule. */
+  selection: Pick<HotSelection, 'busy' | 'weakestKept' | 'keys'>;
 }
 
 /**
@@ -89,11 +89,12 @@ function worthFetching(thread: HotSyncThread, rank: HotRank, since: IsoTime, vie
 
 /**
  * The hot slice of the candidates `selectSyncThreads` picked (DESIGN.md
- * "Big inboxes: what PostPile loads and works on"): only what would be hot
- * (`worthFetching`), and while the inbox is busy only what would make the
- * board (`wouldKeep`: tiers you and team, ranked). In board order: tier,
- * unread first, newest activity first. `shed` are the keys left out, for
- * the log and telemetry.
+ * "Big inboxes: what PostPile loads and works on"): every PR on the board
+ * (its tile shows the snapshot, so a moved thread is fetched), and of the
+ * others only what would be hot (`worthFetching`) and, while the inbox is
+ * busy, would make the board (`wouldKeep`: tiers you and team, ranked). In
+ * board order: tier, unread first, newest activity first. `shed` are the
+ * keys left out, for the log and telemetry.
  */
 export function hotSyncThreads<T extends HotSyncThread>(threads: T[], options: HotSyncOptions): { picked: T[]; shed: PrKey[] } {
   const since = settledSince(options.now);
@@ -102,7 +103,8 @@ export function hotSyncThreads<T extends HotSyncThread>(threads: T[], options: H
   for (const thread of threads) {
     const facts = { ...thread.facts, activityAt: thread.updatedAt > thread.facts.activityAt ? thread.updatedAt : thread.facts.activityAt };
     const rank = hotRank(facts, options.viewer);
-    if (worthFetching(thread, rank, since, options.viewer) && wouldKeep(options.selection, rank)) {
+    const onBoard = options.selection.keys.has(thread.key);
+    if (onBoard || (worthFetching(thread, rank, since, options.viewer) && wouldKeep(options.selection, rank))) {
       ranked.push({ thread, rank });
     } else {
       shed.push(thread.key);

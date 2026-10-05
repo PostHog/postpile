@@ -201,18 +201,42 @@ describe('withGroups', () => {
 });
 
 describe('wouldKeep', () => {
-  const rank = (tier: 'you' | 'team' | 'others', activityAt: string) => ({ key: 'acme/app#9', tier, unread: false, activityAt });
+  const rank = (tier: 'you' | 'team' | 'others', activityAt: string, key = 'acme/app#9') => ({ key, tier, unread: false, activityAt });
+  const none = new Set<string>();
 
   it('keeps anything while the inbox is not busy', () => {
-    expect(wouldKeep({ busy: false, weakestKept: null }, rank('others', OLD))).toBe(true);
+    expect(wouldKeep({ busy: false, weakestKept: null, keys: none }, rank('others', OLD))).toBe(true);
   });
 
   it('while busy keeps you and team, and past a full cap only what ranks before the weakest kept', () => {
-    expect(wouldKeep({ busy: true, weakestKept: null }, rank('others', RECENT))).toBe(false);
-    expect(wouldKeep({ busy: true, weakestKept: null }, rank('team', OLD))).toBe(true);
+    expect(wouldKeep({ busy: true, weakestKept: null, keys: none }, rank('others', RECENT))).toBe(false);
+    expect(wouldKeep({ busy: true, weakestKept: null, keys: none }, rank('team', OLD))).toBe(true);
     const weakest = { key: 'acme/app#1', tier: 'team' as const, unread: false, activityAt: RECENT };
-    expect(wouldKeep({ busy: true, weakestKept: weakest }, rank('team', OLD))).toBe(false);
-    expect(wouldKeep({ busy: true, weakestKept: weakest }, rank('you', OLD))).toBe(true);
+    expect(wouldKeep({ busy: true, weakestKept: weakest, keys: none }, rank('team', OLD))).toBe(false);
+    expect(wouldKeep({ busy: true, weakestKept: weakest, keys: none }, rank('you', OLD))).toBe(true);
+  });
+
+  it('keeps every PR on a full board: the weakest kept unit and a stack layer of tier others', () => {
+    const own = (key: string, activityAt: string) => facts(key, { author: 'alice', state: 'OPEN', found: 'own_open', activityAt });
+    const layer = facts('acme/app#3', { author: 'zoe', state: 'OPEN', thread: { unread: false, reason: 'subscribed' } });
+    const selection = selectHotBoard({
+      facts: [own('acme/app#1', '2026-10-05T10:00:00.000Z'), own('acme/app#2', '2026-10-05T09:00:00.000Z'), layer, own('acme/app#4', '2026-10-05T08:00:00.000Z')],
+      groups: [['acme/app#2', 'acme/app#3']],
+      viewer: me,
+      now: NOW,
+      max: 2,
+    });
+    expect(selection.busy).toBe(true);
+    expect(selection.weakestKept?.key).toBe('acme/app#2');
+
+    expect(wouldKeep(selection, hotRank(own('acme/app#2', '2026-10-05T09:00:00.000Z'), me))).toBe(true);
+    expect(wouldKeep(selection, hotRank(layer, me))).toBe(true);
+    expect(wouldKeep(selection, hotRank(own('acme/app#4', '2026-10-05T08:00:00.000Z'), me))).toBe(false);
+  });
+
+  it('sheds a new PR that ties the weakest kept on tier, unread and time: it ranks after it by key, and the next load would cut it', () => {
+    const weakest = { key: 'acme/app#1', tier: 'team' as const, unread: false, activityAt: RECENT };
+    expect(wouldKeep({ busy: true, weakestKept: weakest, keys: new Set(['acme/app#1']) }, rank('team', RECENT, 'acme/app#2'))).toBe(false);
   });
 });
 
