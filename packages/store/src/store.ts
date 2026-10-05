@@ -11,6 +11,7 @@ import { EventRepo } from './repos/events.ts';
 import { FactRepo } from './repos/facts.ts';
 import { FeedbackRepo } from './repos/feedback.ts';
 import { LessonRepo } from './repos/lessons.ts';
+import { MacPingRepo } from './repos/mac-pings.ts';
 import { GlanceRepo } from './repos/glances.ts';
 import { InstructionsRepo } from './repos/instructions.ts';
 import { TopicMembershipRepo } from './repos/memberships.ts';
@@ -56,6 +57,7 @@ export class Store {
   readonly pullIns: PullInRepo;
   readonly foundPrs: FoundPrRepo;
   readonly pingDecisions: PingDecisionRepo;
+  readonly macPings: MacPingRepo;
   readonly workContext: WorkContextRepo;
 
   readonly actionLog: ActionLogRepo;
@@ -87,6 +89,7 @@ export class Store {
     this.pullIns = new PullInRepo(db);
     this.foundPrs = new FoundPrRepo(db);
     this.pingDecisions = new PingDecisionRepo(db);
+    this.macPings = new MacPingRepo(db);
     this.actionLog = new ActionLogRepo(db);
     this.pendingWrites = new PendingWriteRepo(db);
     this.workContext = new WorkContextRepo(db);

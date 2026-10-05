@@ -164,6 +164,15 @@ describe('server routes over the fake engine', () => {
     expect((await post<RepoOverview>(app, '/api/repos/scope', { repo: null })).json.scope).toBeNull();
   });
 
+  it('keeps the interruptions pick, never by default', async () => {
+    const app = appWithFake();
+    expect(await (await app.request('/api/interruptions')).json()).toEqual({ mode: 'never', roundupTimes: ['9:30', '13:30', '16:30'] });
+    const put = (body: unknown) => app.request('/api/interruptions', { method: 'PUT', body: JSON.stringify(body), headers: { 'content-type': 'application/json' } });
+    expect(await (await put({ mode: 'batches' })).json()).toMatchObject({ mode: 'batches' });
+    expect(await (await app.request('/api/interruptions')).json()).toMatchObject({ mode: 'batches' });
+    expect((await put({ mode: 'loud' })).status).toBe(400);
+  });
+
   it('lists topics grouped by whether they need the user', async () => {
     const res = await appWithFake().request('/api/topics');
     const topics = (await res.json()) as TopicListItem[];

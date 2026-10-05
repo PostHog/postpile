@@ -77,16 +77,6 @@ export function StatusFooter(props: { topics: TopicListItem[]; detail: TopicDeta
         </span>
       </span>
     ),
-    <button
-      key="ping"
-      type="button"
-      onClick={() => void actions.sendTestNotification()}
-      disabled={!window.postpile?.sendTestNotification}
-      title={window.postpile?.sendTestNotification ? 'Send a test Mac notification' : 'Only in the desktop app'}
-      className="text-muted hover:text-ink disabled:opacity-50 disabled:hover:text-muted"
-    >
-      test ping
-    </button>,
     <span key="live" className={`flex items-center gap-[5px] ${live.warn ? 'text-amber-ink' : ''}`} title={live.title}>
       {liveOn && <span className={`size-[5px] rounded-full ring-2 ${live.warn ? 'bg-amber ring-amber/16' : 'bg-open ring-open/16'}`} />}
       {live.text}

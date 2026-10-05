@@ -4,6 +4,22 @@ Decisions from the design rounds, tidied. Open points are at the end.
 
 ## Product model
 
+**Inbox zero when PRs keep flying at you** (2026-10-05). Agents now open PRs
+alongside people, so a busy engineer gets more review traffic than anyone can
+read. PostPile is the way to still reach inbox zero and stay there. This is
+the pitch in docs, release notes and onboarding.
+
+**A helper, not an interrupter** (2026-10-05). PostPile takes noise away. It
+sorts, condenses and remembers, so there is less to read and fewer things that
+can interrupt you. The calm list you open when you choose to is the product.
+Mac pings are an opt-in side effect, off by default, and nothing in the app,
+its onboarding or its docs leads with them. Why: the team liked the digests
+and the agent layer, but when the pings were presented with enthusiasm, they
+filed PostPile as one more app that breaks up their day. When a feature could
+push PostPile toward demanding attention (badges, sounds, banners, Dock
+bounces, nudges to come back), the default is quiet and turning it on is the
+user's choice.
+
 **Topics** are agent-maintained clusters of PRs, e.g. "Move CI to Depot". Each
 has a stable id, a name, who drives it, the user's role, an agent-written
 summary, and *tailoring*: per-topic instructions the user gave through chat,
@@ -1658,12 +1674,17 @@ current ink, next quiet) and word chips, never symbols alone:
    untouched toggles follow the new draft (`picksAfterRefine` in the
    renderer's `lib/setup.ts`). On a re-run the whole draft shows as a diff against the current
    file.
-4. **Accept** (`POST /api/setup/accept`) lists what happens, shows the
+4. **Your day** (2026-10-05, see "Interruptions"): "Last thing: when should
+   PostPile tap you on the shoulder?" with three illustrated cards (Never,
+   In batches, As soon as it matters), each saying what you get. The stored
+   mode is preselected, Never while it loads. Nothing is written here; the
+   pick goes with Accept (`interruptions`, null leaves the stored mode).
+5. **Accept** (`POST /api/setup/accept`) lists what happens, shows the
    fit check (below) and the final diff and then: writes `instructions.md` as a new version with
    origin `setup` ("Written with setup" / "Rewritten with setup"; an
    unchanged text writes nothing), marks the chosen repos quiet (others
-   untouched), sets the repo scope to the main repo (or All repos), stores
-   `done`, then the renderer runs a normal sync with its progress and
+   untouched), sets the repo scope to the main repo (or All repos), keeps
+   the Your day pick, stores `done`, then the renderer runs a normal sync with its progress and
    lands on the topics. When the file changed since the draft was
    reviewed (base version mismatch) nothing is written and the answer
    carries the file as it is now; the review diffs against it again.
@@ -5077,9 +5098,64 @@ closed ones were not (2026-09-29). The exclusion was dropped on 2026-10-01.
 and sample ping decisions
 (`fake-quiet.ts`); the fake poll's decisions are kept too.
 
+## Interruptions
+
+Decided 2026-10-05 after team feedback (see "A helper, not an interrupter"
+under Product model). The user picks when PostPile may show a Mac
+notification; the poll, the tiles and the list work the same in every mode.
+
+| Mode | Label | What reaches the Mac |
+|---|---|---|
+| `never` (default) | Never: "I'll come to PostPile." | Nothing. No banner, no sound, no Dock badge, no permission prompt. |
+| `batches` | In batches: "A short roundup, three times a day." | One roundup at 9:30, 13:30 and 16:30 local time, Monday to Friday, only when something queued is still not handled. No Dock bounce. |
+| `asap` | As soon as it matters: "Tap me for the crucial things." | The live pings as before: throttle, summaries, the bounce for a personal ask. |
+
+- **Why batches:** a field study (Fitz, Kushlev and colleagues) found that
+  three batches a day left people more attentive and in control than
+  instant notifications, and less anxious than none. The times are fixed
+  for now (`ROUNDUP_TIMES` in core).
+- **Where it is picked:** setup step 4 "Your day" (three illustrated cards,
+  the stored mode or Never preselected, sent with Accept), and the
+  "Interruptions" row in the sidebar footer, a small menu with the same
+  three modes plus "Send a test notification". Kept in meta
+  `interruptions_mode`; `GET`/`PUT /api/interruptions`. Telemetry
+  `interruptions_changed` (mode, from setup or sidebar). Rejected: a bell
+  toggle in the title bar, it puts pings front and center.
+- **Rules** (`PingDelivery` in engine `live/`): the poll's pings go through
+  it. Never drops them (the ping decisions are still made and logged, the
+  notifications debug view shows them). As soon as it matters shows them
+  through `PingThrottle`. Batches queues them in `mac_ping` (one row per PR,
+  a newer ping replaces the older); the live poll looks every minute
+  (`ROUNDUP_CHECK_MS`) and, once a roundup time passed after a queued ping
+  came in (`latestRoundup`), shows one notification for every queued ping
+  still not handled (`roundupNotification`: one ping as it is, more as
+  "3 things need you", personal asks first). A roundup the Mac slept
+  through goes out on wake. Rows are handled, and dropped, when the user
+  opens a tile holding the PR (`postpile:tile-visited`) or the PR is not
+  held by an unread tile anymore (read on GitHub, marked read, done).
+- **Switching:** to Never drops every held row, so the Dock badge goes away;
+  leaving batches drops the queue (those PRs are in the list anyway).
+- **Dock badge:** the number of tiles holding a PR PostPile showed a
+  notification about that is not handled yet (`pingBadge`, PR keys mapped
+  to the tiles holding them now, a PR without a tile counts on its own).
+  Unread topics, merged PRs, FYIs and standing review requests never count:
+  the number only holds what PostPile raised, and it reaches 0 when every
+  ping is handled. Under Never there is no badge. Julian (2026-10-05): "just
+  making the notifications that actually ping me raise a number until I
+  clear them". Replaces the count of unread topics (2026-09-30), which kept
+  a number for unread merged PRs.
+- **Permission:** macOS asks on the first notification, so the welcome
+  notification (below) only comes once the user picks batches or as soon as
+  it matters, worded for that mode. `POSTPILE_MAC_NOTIFICATIONS=0` still
+  forces every notification off, whatever the pick.
+- **Kept across restarts:** the pick and the held pings (migration 27
+  `mac_ping`). The sample data keeps them in memory (`MemoryPingHold`).
+
 ## Live poll and Mac pings
 
-Near-real-time pings on the Mac, only when they matter. Runs while the desktop
+Near-real-time pings on the Mac, only when they matter. Whether and when
+they reach the Mac is the user's pick (see "Interruptions"); the poll itself
+runs in every mode, it keeps tiles fresh. Runs while the desktop
 app runs (window open or hidden); the CLI has `poll` for one cycle, the
 standalone server never starts it.
 
@@ -5323,14 +5399,20 @@ teammate even".
 - macOS asks for permission on the first notification. Electron cannot read
   that permission, so a denial only means nothing shows up; tiles still turn
   unread. `POSTPILE_MAC_NOTIFICATIONS=0` turns notifications off (the poll
-  still runs). A settings toggle and quiet hours are not built yet.
-- **Permission at a calm moment**: on the first launch (flag file
-  `welcome-notification.json` in userData) the app shows one welcome
-  notification ("PostPile will ping you here when something needs you") a
-  few seconds after the window shows, so macOS asks for the permission then
-  and not on the first real ping. Not stored while notifications are off
-  (`POSTPILE_MAC_NOTIFICATIONS=0`), so it comes once they work. "test ping"
-  next to the lock in the status footer sends a test notification over the
+  still runs). The user's pick is under "Interruptions"; quiet hours are
+  not built.
+- **Permission at a calm moment** (changed 2026-10-05): once the user picks
+  batches or as soon as it matters (setup or the sidebar), the app shows one
+  welcome notification saying what to expect ("PostPile will send a short
+  roundup here at 9:30, 13:30, 16:30 on weekdays…" or "PostPile will tap
+  you here when someone is waiting on you"), so macOS asks for the
+  permission then and not on the first real ping (flag file
+  `welcome-notification.json` in userData; also checked a few seconds after
+  start for an earlier pick). Under Never nothing asks. Not stored while
+  notifications are off (`POSTPILE_MAC_NOTIFICATIONS=0`), so it comes once
+  they work. Before, it came on every first launch. The first launch itself
+  is marked by `launched.json` (telemetry `first_launch`). "Send a test
+  notification" in the sidebar's Interruptions menu sends a test over the
   preload (`sendTestNotification`, IPC `postpile:test-notification`) and
   says in a toast whether it was shown, off or unsupported. Dev runs are the
   Electron binary and show up as "Electron" in System Settings ›
@@ -5368,14 +5450,12 @@ teammate even".
 **Dock badge, cleared pings and the bounce** (decided 2026-09-30, desktop
 main, `BoardWatcher`):
 
-- The Dock badge (`app.setBadgeCount`, 0 clears it) is the number of topics
-  with an unread tile, in every repo: the topics with a dot in the sidebar,
-  like unread channels in Slack. Julian (2026-09-30, was the count of
-  your-move tiles): "I see five topics with a dot, and that means these are
-  open ... It's still my move, maybe, but I've looked at it. This clears the
-  unread count in the app." Your move stays visible in the app, not on the
-  Dock. It is read from `listTopics({ allRepos: true })` (`unreadTiles`), no
-  rule is repeated in main. It is read at start, after each shown ping, when
+- The Dock badge (`app.setBadgeCount`, 0 clears it) counts the tiles
+  PostPile pinged about that are not handled yet (since 2026-10-05, see
+  "Interruptions"; from 2026-09-30 it counted topics with an unread tile,
+  before that your-move tiles). It is read from the engine's `pingBadge()`,
+  no rule is repeated in main. It is read at start, after each shown ping,
+  after a tile visit and a change of the pick, when
   the live status moves (`changeCount`, which also counts every ended sync,
   `catchUpChanges`, `syncRunning`; checked every 5s) and after every non-read API request, which covers local
   actions (mark read, done, snooze, approve). Fake mode shows it too.
@@ -5879,7 +5959,8 @@ topic names are never event props.
    `ask_sent` (the Ask popover's send), `reply_sent` (target `thread` or
    `comment`, 2026-10-05), `reaction_sent` (a thumbs up, 2026-10-05),
    `chat_message_sent` (tile and topic chat), `mac_ping_shown` /
-   `mac_ping_clicked`, `pings_summarized` (pinged, withheld_rules,
+   `mac_ping_clicked`, `interruptions_changed` (mode, from setup or
+   sidebar, 2026-10-05), `pings_summarized` (pinged, withheld_rules,
    withheld_agent, pinged_glance (Look closer on routed reviews),
    handled_quietly: counts since the last summary, from
    `ping_decision` and the action log's `quiet` mark-reads; the engine sends

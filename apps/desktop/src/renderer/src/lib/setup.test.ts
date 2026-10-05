@@ -1,6 +1,6 @@
 import type { SetupDraft, SetupFitNote } from '@postpile/core';
 import { describe, expect, it } from 'vitest';
-import { acceptPlan, applyFitFix, draftText, fitAfterAnswer, fitFixes, editsFromDraft, pickMainRepo, picksAfterRefine, picksFromDraft, repoChoices, repoCountText, sourcesFor, toggleQuiet } from './setup.ts';
+import { SETUP_STEPS, acceptPlan, applyFitFix, draftText, fitAfterAnswer, fitFixes, editsFromDraft, pickMainRepo, picksAfterRefine, picksFromDraft, repoChoices, repoCountText, sourcesFor, toggleQuiet } from './setup.ts';
 
 function repo(name: string, prs: number) {
   return { repo: name, prs, authored: prs > 2 ? 2 : 0, reviewed: prs > 2 ? prs - 2 : prs, requested: 0 };
@@ -77,21 +77,39 @@ describe('repoCountText', () => {
   });
 });
 
+describe('SETUP_STEPS', () => {
+  it('puts "Your day" between the review and Accept', () => {
+    expect(SETUP_STEPS.map((step) => step.label)).toEqual(['Check the basics', 'Sweep', 'Review the draft', 'Your day', 'Accept']);
+  });
+});
+
 describe('acceptPlan', () => {
+  const times = ['9:30', '13:30', '16:30'];
+
   it('says what Accept writes, in order', () => {
-    expect(acceptPlan({ baseVersion: null, changed: true, quietRepos: ['acme/rare'], mainRepo: 'acme/app' })).toEqual([
+    expect(acceptPlan({ baseVersion: null, changed: true, quietRepos: ['acme/rare'], mainRepo: 'acme/app', interruptions: 'batches', roundupTimes: times })).toEqual([
       'Writes instructions.md as version 1, author “setup”.',
       'Makes 1 repo quiet (still synced, never urgent, never pings): acme/rare.',
       'Sets the repo scope to acme/app; the title bar menu changes it back any time.',
+      'Sends a short roundup at 9:30, 13:30 and 16:30 when something needs you.',
       'Then syncs your GitHub notifications and opens your topics.',
     ]);
   });
 
   it('keeps the old version on a re-run and says when nothing changes', () => {
-    expect(acceptPlan({ baseVersion: 3, changed: true, quietRepos: [], mainRepo: null })[0]).toBe(
+    expect(acceptPlan({ baseVersion: 3, changed: true, quietRepos: [], mainRepo: null, interruptions: 'never', roundupTimes: times })[0]).toBe(
       'Writes instructions.md as version 4, author “setup” (version 3 stays in the history).',
     );
-    expect(acceptPlan({ baseVersion: 3, changed: false, quietRepos: [], mainRepo: null })).toEqual([
+    expect(acceptPlan({ baseVersion: 3, changed: false, quietRepos: [], mainRepo: null, interruptions: 'never', roundupTimes: times })).toEqual([
+      'Leaves instructions.md as it is: the draft says the same.',
+      'Keeps all repos in the sidebar.',
+      'Keeps Mac notifications off.',
+      'Then syncs your GitHub notifications and opens your topics.',
+    ]);
+  });
+
+  it('leaves out the interruptions line while the mode is unknown', () => {
+    expect(acceptPlan({ baseVersion: 3, changed: false, quietRepos: [], mainRepo: null, interruptions: null, roundupTimes: [] })).toEqual([
       'Leaves instructions.md as it is: the draft says the same.',
       'Keeps all repos in the sidebar.',
       'Then syncs your GitHub notifications and opens your topics.',

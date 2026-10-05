@@ -3,6 +3,7 @@
 // the work context digest. The user reviews and accepts; nothing is written
 // before that. These are the wire types; the rules live in setup-draft.ts.
 
+import type { InterruptionsMode } from './interruptions.ts';
 import type { TeamRolesView } from './team-roles.ts';
 import type { IsoTime, PrKey, PrState, Viewer } from './types.ts';
 import type { ActionResult } from './views.ts';
@@ -231,6 +232,8 @@ export interface SetupAcceptRequest {
   mainRepo: string | null;
   /** The instructions version the draft was reviewed against. A hand edit since then refuses the accept. */
   baseVersion: number | null;
+  /** The "Your day" step's pick; null leaves the stored mode as it is. */
+  interruptions: InterruptionsMode | null;
 }
 
 export interface SetupAcceptResult extends ActionResult {

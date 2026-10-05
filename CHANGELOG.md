@@ -2,6 +2,19 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## 0.18.0 (unreleased)
+
+### Added
+
+- Pick when PostPile may interrupt you: never, in batches, or as soon as it matters. Setup asks in a new step, "Your day", and the "Interruptions" row at the bottom of the sidebar changes it any time. In batches, one short roundup arrives at 9:30, 13:30 and 16:30 on weekdays, only when something still needs you. As soon as it matters works like the notifications so far.
+
+### Changed
+
+- Mac notifications are off by default, also after this update. To keep getting them, pick "As soon as it matters" (or "In batches") under Interruptions in the sidebar.
+- The Dock badge counts only what PostPile notified you about and you haven't opened yet. It no longer counts unread topics, so unread merged PRs and FYIs leave it alone. With notifications off there is no badge.
+- macOS asks for permission to show notifications only once you turn them on, not on the first launch.
+- "Send a test notification" moved from the status bar into the Interruptions menu.
+
 ## 0.17.0 (2026-10-05)
 
 ### Added

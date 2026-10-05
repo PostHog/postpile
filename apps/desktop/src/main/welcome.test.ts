@@ -1,8 +1,8 @@
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { WELCOME_FLAG_FILE, welcomeOnce } from './welcome.ts';
+import { firstLaunchOnce, LAUNCHED_FLAG_FILE, WELCOME_FLAG_FILE, welcomeOnce } from './welcome.ts';
 
 const dirs: string[] = [];
 
@@ -36,5 +36,20 @@ describe('welcomeOnce', () => {
     const dir = tempDir();
     expect(welcomeOnce(dir, () => 'off')).toBe(false);
     expect(existsSync(join(dir, WELCOME_FLAG_FILE))).toBe(false);
+  });
+});
+
+describe('firstLaunchOnce', () => {
+  it('says first launch once', () => {
+    const dir = tempDir();
+    expect(firstLaunchOnce(dir)).toBe(true);
+    expect(firstLaunchOnce(dir)).toBe(false);
+    expect(existsSync(join(dir, LAUNCHED_FLAG_FILE))).toBe(true);
+  });
+
+  it('counts an install from before 0.18, which only has the welcome flag, as launched', () => {
+    const dir = tempDir();
+    writeFileSync(join(dir, WELCOME_FLAG_FILE), '{}\n');
+    expect(firstLaunchOnce(dir)).toBe(false);
   });
 });

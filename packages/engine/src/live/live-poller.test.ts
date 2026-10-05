@@ -4,6 +4,7 @@ import { GitHubError } from '@postpile/github';
 import { describe, expect, it } from 'vitest';
 import { GitHubQuota } from '../github-quota.ts';
 import { FOCUS_DEBOUNCE_SECONDS, LivePoller, QUOTA_PAUSE_NOTE } from './live-poller.ts';
+import { MemoryPingHold, PingDelivery } from './ping-delivery.ts';
 import type { PollCycle } from './poll-cycle.ts';
 
 function done(overrides: Partial<Extract<PollCycle, { kind: 'done' }>> = {}): PollCycle {
@@ -36,16 +37,11 @@ function setup(poll: ScriptedPoll, intervalSeconds = 60) {
   const shown: MacNotification[][] = [];
   const logs: string[] = [];
   const quota = new GitHubQuota(() => timers.now());
-  const poller = new LivePoller(
-    poll.fn,
-    timers,
-    {
-      intervalSeconds,
-      onNotify: (notifications) => shown.push(notifications),
-      log: (message) => logs.push(message),
-    },
-    quota,
-  );
+  const onNotify = (notifications: MacNotification[]) => shown.push(notifications);
+  // As soon as it matters: the throttle groups the pings, nothing is held.
+  const delivery = new PingDelivery({ hold: new MemoryPingHold(), unreadPrKeys: () => [], onNotify });
+  delivery.setMode('asap');
+  const poller = new LivePoller(poll.fn, timers, { intervalSeconds, onNotify, log: (message) => logs.push(message) }, delivery, quota);
   return { timers, shown, logs, poller, quota };
 }
 

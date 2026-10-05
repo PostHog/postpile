@@ -1,15 +1,16 @@
 # PostPile
 
-A macOS app that turns your GitHub pull request notifications into a short list of what needs you, and why.
+A macOS app that turns your GitHub pull request notifications into a short list of what needs you, and why, so you get to inbox zero and stay there.
 
 > PostPile is an internal tool from PostHog's DevEx team, published as open source.
 > It is not a PostHog product, and it has nothing to do with the PostHog platform.
 > It is built for one DevEx workflow first: a busy monorepo, team review requests, and stacked pull requests.
 
-PostPile is for engineers who get dozens of GitHub notifications a day.
+PostPile is for engineers who get dozens of GitHub notifications a day, more now that agents open pull requests too.
 It reads what GitHub pings you about and uses Claude to group the pull requests into topics.
 Each pull request, stack, or set shows as a tile that answers four questions: for whom, why now, what state, and whose move.
 You work from that list and the GitHub inbox stays in sync.
+PostPile cuts down what you have to read and does not add interruptions of its own: Mac notifications stay off unless you turn them on.
 
 ![PostPile on sample data: topics on the left, the tiles of one topic in the middle, and the selected pull request with the agent's glance on the right](docs/screenshot.png)
 
@@ -18,6 +19,7 @@ You work from that list and the GitHub inbox stays in sync.
 - The GitHub inbox is a flat list sorted by time. A mention that needs your answer sits next to a bot comment on a pull request you merged last week.
 - Team review requests, pushes after your approval, and CI noise all look the same.
 - To find what is your move, you open each pull request and read its history.
+- Agents open pull requests too, so the review traffic keeps growing.
 
 ## Quick start
 
@@ -64,7 +66,9 @@ Approves, asks, or marks read from the detail pane. Writes (approve, comment, ma
 
 <img src="docs/images/approve.png" width="541" alt="The action bar with Approve">
 
-Uses GitHub as the source of truth for read and unread, and shows the unread count and the writes lock in the status bar. It sends Mac notifications only for the pings that an agent judged worth it, from a poll every minute, and right away when you switch to the app.
+Uses GitHub as the source of truth for read and unread, and shows the unread count and the writes lock in the status bar. It checks GitHub every minute and right away when you switch to the app.
+
+Mac notifications are off by default. In setup or under "Interruptions" in the sidebar you can pick a short roundup at 9:30, 13:30 and 16:30 on weekdays, or a notification as soon as someone is waiting on you. Either way only what an agent judged worth it reaches you, and the Dock badge counts what PostPile told you about that you haven't opened yet.
 
 <img src="docs/images/status-bar.png" width="538" alt="The status bar">
 
@@ -102,7 +106,7 @@ Since 0.2.0 the app is signed with PostHog's Apple Developer ID and notarized, s
 
 Coming from 0.1.0-alpha.0 (ad-hoc signed): run `brew upgrade --cask postpile` once, then `tccutil reset All com.posthog.postpile` to clear the permission entries macOS kept for the old builds.
 
-On the first launch, macOS asks for permission to show notifications. The first sync takes a few minutes while the agent sorts your PRs into topics.
+macOS asks for permission to show notifications only once you turn them on. The first sync takes a few minutes while the agent sorts your PRs into topics.
 
 ### Updating
 

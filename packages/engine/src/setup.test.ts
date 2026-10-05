@@ -320,13 +320,14 @@ describe('setup accept', () => {
   ];
 
   it('writes a setup version, the quiet repos, the scope and the done flag', async () => {
-    const result = await h.engine.acceptSetup({ sections, quietRepos: ['acme/docs'], mainRepo: 'acme/app', baseVersion: null });
+    const result = await h.engine.acceptSetup({ sections, quietRepos: ['acme/docs'], mainRepo: 'acme/app', baseVersion: null, interruptions: 'batches' });
 
     expect(result).toMatchObject({ ok: true, savedVersion: 1 });
     expect(readFileSync(file, 'utf8')).toBe('# About me\n- I am on acme/team-platform.\n');
     expect(h.store.instructions.latest()).toMatchObject({ version: 1, origin: 'setup', summary: 'Written with setup', sourceChatMessageId: null });
     expect(loadRepoSettings(h.store)).toEqual({ scope: 'acme/app', quiet: ['acme/docs'] });
     expect(await h.engine.setupStatus()).toMatchObject({ needed: false, flag: 'done' });
+    expect((await h.engine.interruptions()).mode).toBe('batches');
   });
 
   it('adds a new version on a re-run, never a silent overwrite', async () => {
@@ -334,7 +335,7 @@ describe('setup accept', () => {
     const before = await h.engine.getInstructions();
     expect(before.version).toBe(1);
 
-    const result = await h.engine.acceptSetup({ sections, quietRepos: [], mainRepo: null, baseVersion: 1 });
+    const result = await h.engine.acceptSetup({ sections, quietRepos: [], mainRepo: null, baseVersion: 1, interruptions: null });
 
     expect(result.savedVersion).toBe(2);
     expect(h.store.instructions.list(10).map((version) => [version.version, version.origin])).toEqual([
@@ -346,14 +347,15 @@ describe('setup accept', () => {
 
   it('refuses when the file changed since the review, and hands back the new text', async () => {
     writeFileSync(file, '# About me\n- Hand edit.\n');
-    const result = await h.engine.acceptSetup({ sections, quietRepos: [], mainRepo: null, baseVersion: null });
+    const result = await h.engine.acceptSetup({ sections, quietRepos: [], mainRepo: null, baseVersion: null, interruptions: null });
     expect(result).toMatchObject({ ok: false, savedVersion: null, current: { text: '# About me\n- Hand edit.\n', version: 1 } });
     expect(readFileSync(file, 'utf8')).toBe('# About me\n- Hand edit.\n');
     expect((await h.engine.setupStatus()).flag).toBeNull();
+    expect((await h.engine.interruptions()).mode).toBe('never');
   });
 
   it('refuses an empty draft and a bad repo name', async () => {
-    expect((await h.engine.acceptSetup({ sections: [{ heading: 'About me', body: ' ' }], quietRepos: [], mainRepo: null, baseVersion: null })).ok).toBe(false);
-    expect((await h.engine.acceptSetup({ sections, quietRepos: ['nope'], mainRepo: null, baseVersion: null })).message).toContain('"nope"');
+    expect((await h.engine.acceptSetup({ sections: [{ heading: 'About me', body: ' ' }], quietRepos: [], mainRepo: null, baseVersion: null, interruptions: null })).ok).toBe(false);
+    expect((await h.engine.acceptSetup({ sections, quietRepos: ['nope'], mainRepo: null, baseVersion: null, interruptions: null })).message).toContain('"nope"');
   });
 });

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { SetupCurrentInstructions, SetupFitNote, SetupSectionEdit } from '@postpile/core';
+import type { InterruptionsMode, SetupCurrentInstructions, SetupFitNote, SetupSectionEdit } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { useMcpConnection } from '../api/mcp.ts';
 import { useSyncProgress } from '../api/sync.ts';
@@ -47,9 +47,9 @@ function McpOfferBox() {
 }
 
 /**
- * Step 4: what Accept does, the agent's fit check with its fixes, the final
+ * Step 5: what Accept does, the agent's fit check with its fixes, the final
  * text (as a diff against the current file, or all new), then Accept: writes a new instructions version, quiet
- * repos, scope and the done flag, runs the first sync and hands over to the
+ * repos, scope, the "Your day" pick and the done flag, runs the first sync and hands over to the
  * topics. A file changed on disk meanwhile sends the user back to review.
  * Below it, the optional MCP offer (its own button, never part of Accept).
  */
@@ -58,6 +58,9 @@ export function SetupAcceptStep(props: {
   base: SetupCurrentInstructions;
   quiet: string[];
   mainRepo: string | null;
+  /** The "Your day" pick; null leaves the stored mode as it is. */
+  interruptions: InterruptionsMode | null;
+  roundupTimes: string[];
   fit: SetupFitState | null;
   onFitFix: (note: SetupFitNote, fix: SetupFitFix) => void;
   onFitKeep: (note: SetupFitNote) => void;
@@ -73,7 +76,7 @@ export function SetupAcceptStep(props: {
   const busy = actions.isBusy('setup:accept') || phase === 'syncing';
 
   async function accept() {
-    const result = await actions.acceptSetup({ sections: props.edits, quietRepos: props.quiet, mainRepo: props.mainRepo, baseVersion: props.base.version });
+    const result = await actions.acceptSetup({ sections: props.edits, quietRepos: props.quiet, mainRepo: props.mainRepo, baseVersion: props.base.version, interruptions: props.interruptions });
     if (result?.current) {
       props.onBaseChanged(result.current);
       return;
@@ -89,7 +92,14 @@ export function SetupAcceptStep(props: {
     <section className="flex max-w-[760px] flex-col gap-3 rounded-tile bg-surface p-4 shadow-tile">
       <h2 className="text-[15px] font-semibold text-ink">Accept</h2>
       <ol className="flex list-decimal flex-col gap-1 pl-5 text-xs text-ink-2">
-        {acceptPlan({ baseVersion: props.base.version, changed, quietRepos: props.quiet, mainRepo: props.mainRepo }).map((line) => (
+        {acceptPlan({
+          baseVersion: props.base.version,
+          changed,
+          quietRepos: props.quiet,
+          mainRepo: props.mainRepo,
+          interruptions: props.interruptions,
+          roundupTimes: props.roundupTimes,
+        }).map((line) => (
           <li key={line}>{line}</li>
         ))}
       </ol>
@@ -101,7 +111,7 @@ export function SetupAcceptStep(props: {
           {phase === 'syncing' ? 'Accepted' : actions.isBusy('setup:accept') ? 'Saving…' : 'Accept and sync'}
         </Button>
         <Button disabled={busy} onClick={props.onBack}>
-          Back to the draft
+          Back
         </Button>
       </div>
       <McpOfferBox />

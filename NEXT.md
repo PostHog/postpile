@@ -6,6 +6,20 @@ now".
 
 ## Done
 
+- Interruptions (2026-10-05, DESIGN.md "Interruptions"): Mac notifications
+  are opt-in. Three modes, kept in meta `interruptions_mode`: never (the
+  default, nothing reaches the Mac), in batches (a roundup at 9:30, 13:30
+  and 16:30 on weekdays for what is still not handled) and as soon as it
+  matters (the old live pings). Picked in a new setup step "Your day" and
+  in the sidebar footer's "Interruptions" menu, which also holds "Send a
+  test notification" (moved from the status footer). `PingDelivery` in the
+  engine routes the poll's pings; queued and shown pings sit in `mac_ping`
+  (migration 27). The Dock badge counts tiles with a ping not handled yet,
+  no badge under Never; it used to count unread topics. The welcome
+  notification, and with it the macOS permission prompt, comes only after
+  an opt-in. Checked in fake mode: the setup step, Accept storing the pick,
+  the sidebar menu switching it. Not tried by hand: a real roundup on the
+  Mac, the badge on the real Dock, the permission prompt after an opt-in.
 - Agent chat sending (2026-10-05, DESIGN.md "Topic chat", "Ask the
   agent"): the message shows at once with a "Thinking…" bubble, the list
   stays on the newest message, the input is a growing textarea (Enter
@@ -670,9 +684,10 @@ now".
   the inbox, before found PRs, nothing stored) with no trace; the exact GitHub
   error is unknown. A failed batch now only costs its own PRs. Reproduced on
   DB copies with the dist binary (408 PRs, launchd-like PATH): no error.
-- Notification permission at a calm moment: a welcome Mac notification on
-  the first launch (flag in userData) triggers the macOS prompt; "test ping"
-  next to the lock in the footer sends a test one. Dev runs register as
+- Notification permission at a calm moment: a welcome Mac notification
+  (flag in userData) triggers the macOS prompt; since 2026-10-05 only after
+  the user opts in to batches or as soon as it matters, and the test one is
+  "Send a test notification" in the sidebar's Interruptions menu. Dev runs register as
   "Electron" in System Settings › Notifications, the packaged app as
   "PostPile". The welcome with notifications on was not tried by hand (it
   would ping the real Mac); the off path and the IPC were.
@@ -814,8 +829,9 @@ now".
   cannot read the notification permission, so a denial is silent (tiles still
   turn unread). One real `ping_decision` call ran against a DB copy (2 items,
   $0.04, 4.4s) and `cli poll` against the real inbox (read-only copy).
-- No settings UI: "Mac notifications" on/off is `POSTPILE_MAC_NOTIFICATIONS=0`
-  and the interval is `POSTPILE_POLL_SECONDS`; quiet hours are not built.
+- Interruptions are picked in the app (setup, sidebar menu); the poll
+  interval is still `POSTPILE_POLL_SECONDS`, the roundup times are fixed
+  (9:30, 13:30, 16:30, weekdays), and quiet hours are not built.
 - The ping throttle and the poll's backoff live in memory; a restart forgets
   the 2-minute window.
 - A poll whose PR fetch fails after the inbox answered 200 leaves those PRs to
@@ -1164,6 +1180,27 @@ the app meanwhile.
 
 ## Decided
 
+- **A helper, not an interrupter** (2026-10-05, DESIGN.md Product model,
+  AGENTS.md focus): team feedback valued the digests and the agent layer,
+  but the excitement about pings made PostPile look like one more app that
+  interrupts. PostPile is framed around cutting noise. Mac pings become an
+  opt-in extra, off by default, never the pitch in docs, onboarding or UI
+  (built the same day, see Done "Interruptions"). Three modes: never (the default), in
+  batches (one roundup at set times, three a day, after a study where
+  three batches a day beat both instant and none), and as soon as it
+  matters (today's pings). Where the choice lives: its own setup step, three
+  illustrated cards that each say what you get, plus an "Interruptions"
+  row in the sidebar footer that opens a small menu with the same choices
+  (picked over a switch and a text line). Mockups decided the same day:
+  setup "A v3" (three cards with small animations, Never preselected) and
+  sidebar option 3. The Dock badge counts only pings not handled yet
+  (tiles), no badge under Never; rejected: a dot for "something new is your
+  move" and a count of your-move topics. Open: the roundup times (fixed for
+  now), and whether batches should be the default. A bell in the
+  title bar (proposed the same day) is out: it puts pings front and center.
+  Also from the same day: lead docs with "inbox zero when PRs keep flying
+  at you" (AGENTS.md, DESIGN.md Product model).
+
 - **Catch-up on every memory trigger** (2026-10-05, DESIGN.md "Glance
   catch-up"): the poll's per-topic catch-up fires on any event that starts
   a dossier update (`isMemoryTrigger`), not only loud ones, so a person's
@@ -1413,7 +1450,9 @@ the app meanwhile.
   selection and focus only. Replaces "Ink primary buttons" for Approve.
 - **Dock badge, cleared pings, bounce** (2026-09-30): the Dock badge is the
   number of topics with an unread tile, like unread channels in Slack
-  (changed later that day; it counted your-move tiles first). A ping leaves Notification Center once
+  (changed later that day; it counted your-move tiles first; replaced
+  2026-10-05 by the count of pings not handled yet, see "A helper, not an
+  interrupter"). A ping leaves Notification Center once
   its tile is read, done or snoozed. The Dock bounces once for a personal ask
   (mention, question, reply, review requested from you, answer to your
   changes request) while the window is not focused. See DESIGN.md "Live poll
@@ -1860,7 +1899,8 @@ Env switches:
   until GitHub sends its X-Poll-Interval (usually 60); the poll never runs
   faster than that. `POSTPILE_PING_CAP`: ping decision calls per 24h,
   default 200 (then rules only). `POSTPILE_MAC_NOTIFICATIONS=0`: no Mac
-  notifications, the poll still refreshes tiles.
+  notifications whatever the Interruptions pick, the poll still refreshes
+  tiles.
 - `POSTPILE_SETUP_MODEL`: model of the setup draft and refine calls,
   default `opus`. `POSTPILE_FAKE_SETUP=1` (with `POSTPILE_FAKE=1`): sample
   data starts with no instructions and the setup flow showing:

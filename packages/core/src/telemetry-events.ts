@@ -16,7 +16,9 @@ const count = z.number().int().min(0);
 // 1. Activation
 // -----------------------------------------------------------------------
 
-const setupStep = z.enum(['checks', 'sweep', 'review', 'accept']);
+const setupStep = z.enum(['checks', 'sweep', 'review', 'day', 'accept']);
+const interruptionsMode = z.enum(['never', 'batches', 'asap']);
+const interruptionsFrom = z.enum(['setup', 'sidebar']);
 const setupFitKind = z.enum(['no_effect', 'wrong_section', 'unclear']);
 const setupFitFix = z.enum(['remove', 'move', 'rewrite']);
 const toolName = z.enum(['gh', 'claude']);
@@ -110,6 +112,8 @@ export const TELEMETRY_EVENTS = {
   chat_message_sent: NO_PROPS,
   mac_ping_shown: z.object({ count }).strict(),
   mac_ping_clicked: NO_PROPS,
+  // The user picked when PostPile may show Mac notifications: in the setup step or the sidebar menu.
+  interruptions_changed: z.object({ mode: interruptionsMode, from: interruptionsFrom }).strict(),
   // At most hourly, only when a count is above 0: ping decisions since the last summary (pinged, or
   // withheld by the rules or the agent) and threads PostPile marked read itself ("Handled quietly").
   // pinged_glance: routed reviews whose glance said Look closer (their own source, not a poll decision).

@@ -1,12 +1,25 @@
-import type { SetupCheckState, SetupDraft, SetupFitKind, SetupFitNote, SetupFitResult, SetupLineState, SetupRepoCount, SetupSectionEdit, SetupSource } from '@postpile/core';
+import type {
+  InterruptionsMode,
+  SetupCheckState,
+  SetupDraft,
+  SetupFitKind,
+  SetupFitNote,
+  SetupFitResult,
+  SetupLineState,
+  SetupRepoCount,
+  SetupSectionEdit,
+  SetupSource,
+} from '@postpile/core';
+import { interruptionsAcceptLine } from './interruptions.ts';
 
-export type SetupStepKey = 'checks' | 'sweep' | 'review' | 'accept';
+export type SetupStepKey = 'checks' | 'sweep' | 'review' | 'day' | 'accept';
 
-/** The four screens in order, with the words the progress indicator shows. */
+/** The five screens in order, with the words the progress indicator shows. */
 export const SETUP_STEPS: { key: SetupStepKey; label: string }[] = [
   { key: 'checks', label: 'Check the basics' },
   { key: 'sweep', label: 'Sweep' },
   { key: 'review', label: 'Review the draft' },
+  { key: 'day', label: 'Your day' },
   { key: 'accept', label: 'Accept' },
 ];
 
@@ -251,6 +264,10 @@ export interface AcceptPlanInput {
   changed: boolean;
   quietRepos: string[];
   mainRepo: string | null;
+  /** The "Your day" pick; null while neither a pick nor the stored mode is known (Accept then leaves it as it is). */
+  interruptions: InterruptionsMode | null;
+  /** The roundup times from GET /api/interruptions, e.g. "9:30". */
+  roundupTimes: string[];
 }
 
 /** What Accept will do, one line each, in the order it happens. */
@@ -265,6 +282,9 @@ export function acceptPlan(input: AcceptPlanInput): string[] {
     lines.push(`Makes ${input.quietRepos.length === 1 ? '1 repo' : `${input.quietRepos.length} repos`} quiet (still synced, never urgent, never pings): ${input.quietRepos.join(', ')}.`);
   }
   lines.push(input.mainRepo ? `Sets the repo scope to ${input.mainRepo}; the title bar menu changes it back any time.` : 'Keeps all repos in the sidebar.');
+  if (input.interruptions) {
+    lines.push(interruptionsAcceptLine(input.interruptions, input.roundupTimes));
+  }
   lines.push('Then syncs your GitHub notifications and opens your topics.');
   return lines;
 }

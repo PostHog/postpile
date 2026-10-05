@@ -1,6 +1,6 @@
 import { SETUP_STEPS, type SetupStepKey } from '../lib/setup.ts';
 
-/** "1 Check the basics · 2 Sweep · 3 Review the draft · 4 Accept": done steps sea, the current one ink, the rest quiet. */
+/** "1 Check the basics · 2 Sweep · 3 Review the draft · 4 Your day · 5 Accept": done steps sea, the current one ink, the rest quiet. */
 export function SetupSteps(props: { current: SetupStepKey }) {
   const currentIndex = SETUP_STEPS.findIndex((step) => step.key === props.current);
   return (

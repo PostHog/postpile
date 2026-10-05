@@ -100,7 +100,7 @@ import { GlanceInputs, glanceTargetKeys } from './glance-inputs.ts';
 import { MemoryReads } from './memory/memory-reads.ts';
 import { placementOf } from './memory/placement.ts';
 import type { PromptContextSource } from './prompt-context.ts';
-import { pingClickTargetOnBoard } from './live/ping-target.ts';
+import { pingClickTargetOnBoard, placeOnBoard } from './live/ping-target.ts';
 import { loadRepoSettings } from './repo-settings.ts';
 import { loadViewer } from './viewer-meta.ts';
 import { OpenedReadInputs } from './writes/opened-read-inputs.ts';
@@ -385,6 +385,12 @@ export class ReadModels {
     const board = this.board();
     const unread = board.allTiles().filter((tile) => board.stateOf(tile).kind === 'unread');
     return [...new Set(unread.flatMap(memberKeys))];
+  }
+
+  /** Distinct tiles holding these PRs now (the Dock badge); a PR in no tile counts on its own. */
+  tilesHolding(prKeys: PrKey[]): number {
+    const board = this.board();
+    return new Set(prKeys.map((key) => placeOnBoard(board, key)?.tile?.id ?? `pr:${key}`)).size;
   }
 
   pingClickTarget(notification: Pick<MacNotification, 'target' | 'prKeys'>): PingTarget | null {

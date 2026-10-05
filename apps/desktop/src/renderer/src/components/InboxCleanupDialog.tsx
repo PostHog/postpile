@@ -23,7 +23,7 @@ import {
   timingText,
 } from '../lib/cleanup.ts';
 import { Button } from './Button.tsx';
-import { BellIcon, MergeIcon, TrashIcon } from './icons.tsx';
+import { ListIcon, MergeIcon, TrashIcon } from './icons.tsx';
 
 /** A merged card and a PR card hopping into a trash can whose lid tips. Still under prefers-reduced-motion. */
 function CleanupArt() {
@@ -239,7 +239,7 @@ export function InboxCleanupDialog(props: { mode: CleanupDialogMode; view: Inbox
             onToggle={setOlderOn}
             icon={
               <span className="text-muted">
-                <BellIcon />
+                <ListIcon />
               </span>
             }
             label="Everything else, no activity for"

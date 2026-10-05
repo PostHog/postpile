@@ -188,6 +188,9 @@ import {
   parsePrKey,
   pingDecisionsByThread,
   pingClickTarget,
+  interruptionsView,
+  type InterruptionsMode,
+  type InterruptionsView,
   type MacNotification,
   type PingDecision,
   type PingTarget,
@@ -195,7 +198,7 @@ import {
   type QuietReadView,
   withViewerReaction,
 } from '@postpile/core';
-import { AgentRefresher, AutoSyncSchedule, LivePoller, NEW_COMMITS_SINCE_LOOKED, topicChatId, UNSORTED_TOPIC_ID, type AutoSyncOptions, type EngineService, type GitHubQuota, type LivePollOptions, type PollCycle } from '@postpile/engine';
+import { AgentRefresher, AutoSyncSchedule, LivePoller, MemoryPingHold, NEW_COMMITS_SINCE_LOOKED, PingDelivery, topicChatId, UNSORTED_TOPIC_ID, type AutoSyncOptions, type EngineService, type GitHubQuota, type LivePollOptions, type PollCycle } from '@postpile/engine';
 import { FakeCatchUp } from './fake-catch-up.ts';
 import { FakeInstructions } from './fake-instructions.ts';
 import { FakeLessons } from './fake-lessons.ts';
@@ -345,6 +348,14 @@ export class FakeEngine implements EngineService {
   private readonly checkDelayMs: number;
   private lastSync: SyncReport | null = null;
   private livePoller: LivePoller | null = null;
+  /** The real interruptions rules over a memory hold: the pick and the Dock badge are forgotten on restart. */
+  private readonly pingDelivery = new PingDelivery({
+    hold: new MemoryPingHold(),
+    unreadPrKeys: () => this.unreadKeysNow(),
+    onNotify: (notifications) => this.notifyMac?.(notifications),
+  });
+  private notifyMac: ((notifications: MacNotification[]) => void) | null = null;
+  private interruptionsListener: ((mode: InterruptionsMode) => void) | null = null;
   private autoSync: AutoSyncSchedule | null = null;
   private readonly catchUp: FakeCatchUp;
   private readonly quota: GitHubQuota;
@@ -899,10 +910,39 @@ export class FakeEngine implements EngineService {
     return [];
   }
 
-  async unreadPrKeys(): Promise<PrKey[]> {
+  private unreadKeysNow(): PrKey[] {
     this.writes.settle();
     const unread = this.data.tiles.filter((tile) => this.tileState(tile).kind === 'unread');
     return [...new Set(unread.flatMap((tile) => tile.members.map((member) => member.prKey)))];
+  }
+
+  async unreadPrKeys(): Promise<PrKey[]> {
+    return this.unreadKeysNow();
+  }
+
+  async interruptions(): Promise<InterruptionsView> {
+    return interruptionsView(this.pingDelivery.mode());
+  }
+
+  async setInterruptions(mode: InterruptionsMode): Promise<InterruptionsView> {
+    this.pingDelivery.setMode(mode);
+    this.interruptionsListener?.(mode);
+    return interruptionsView(mode);
+  }
+
+  onInterruptionsChange(listener: (mode: InterruptionsMode) => void): void {
+    this.interruptionsListener = listener;
+  }
+
+  /** Like the engine: tiles holding a pinged PR not handled yet. */
+  async pingBadge(): Promise<number> {
+    const keys = this.pingDelivery.shownPrKeys();
+    const tileIds = keys.map((key) => this.data.tiles.find((tile) => tile.members.some((member) => member.prKey === key))?.id ?? `pr:${key}`);
+    return new Set(tileIds).size;
+  }
+
+  async pingsVisited(prKeys: PrKey[]): Promise<void> {
+    this.pingDelivery.visited(prKeys);
   }
 
   /** Same lookup as the engine, over the sample tiles. */
@@ -2108,7 +2148,8 @@ export class FakeEngine implements EngineService {
     if (this.livePoller) {
       return;
     }
-    this.livePoller = new LivePoller(() => this.pollOnce(), systemTimers, options, this.quota);
+    this.notifyMac = options.onNotify;
+    this.livePoller = new LivePoller(() => this.pollOnce(), systemTimers, options, this.pingDelivery, this.quota);
     this.livePoller.start();
   }
 
@@ -2245,7 +2286,11 @@ export class FakeEngine implements EngineService {
   }
 
   async acceptSetup(request: SetupAcceptRequest): Promise<SetupAcceptResult> {
-    return this.setup.accept(request);
+    const result = await this.setup.accept(request);
+    if (result.ok && request.interruptions !== null) {
+      await this.setInterruptions(request.interruptions);
+    }
+    return result;
   }
 
   async skipSetup(): Promise<ActionResult> {
