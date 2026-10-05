@@ -405,7 +405,7 @@ hot when any of these holds:
 
 Everything else is cold: not loaded, not parsed, no events in memory.
 Nothing is deleted, and the set is worked out again on every load from
-short rows, so a cold PR is back the moment it qualifies (a new comment,
+PR headers, so a cold PR is back the moment it qualifies (a new comment,
 its thread turning unread).
 
 **Tiers and the cap** (owner decision, 2026-10-05). PostPile works for the
@@ -426,7 +426,7 @@ stack is never cut), and tier others gets nothing at all, even when room
 is left: PostPile stops working for others while busy. Settled PRs going
 cold never make an inbox busy.
 
-What the tier rules read is cheap per PR: the `pr_light` row (owners,
+What the tier rules read is cheap per PR: the PR header (owners,
 pending reviewers), the thread's reason, how the sync found it, and
 whether a stored event is aimed at the user (`mention`, `reply_to_user`,
 `question_to_user`, rule reasons "review requested from you", "review
@@ -450,22 +450,49 @@ demand, for the request, and lets it go:
 - `Board.forTile`: actions on a cold tile the topic pane shows (mark read,
   snooze, feedback).
 - `Board.forPrs`: search hits on cold PRs of the listed topics (matched on
-  their short rows first, at most 200, `SEARCH_COLD_MAX`), the notifications
+  their headers first, at most 200, `SEARCH_COLD_MAX`), the notifications
   debug view and Handled quietly.
 
-Short rows (migration 028): `pr_light` holds title, author, assignees,
-pending reviewers and the stack fields beside each `pr` row, filled from
-the json once and then on every upsert (a table of its own: columns after
-the json sit behind its overflow pages, which made adding them take 10 s
-and reading them 300 ms on the heavy copy). `PrRepo.listLight` reads them
-with each PR's newest event time. Stacks over every stored PR come from
-these rows (`buildStacks` takes them), so a stack is the same on every
-Board and `movesWith` / `topicIdOf` work for cold PRs. The assignment
-prompt's topic counts, consolidation's counts, the sync's stack walk and
-freshness check, set grouping and the team-role re-derivation (in chunks)
-no longer parse every snapshot either.
+**PR header and snapshot** (migration 028, 2026-10-05; the split was
+checked with Codex GPT-6.1). The `pr` row used to hold the whole snapshot
+json next to a few short columns, so anything that wanted a title or a
+stack field parsed the PR (about 1 GB of json for 11k PRs on the heavy
+copy), and a column added after the json would sit behind its overflow
+pages. Now:
 
-**Retiring.** The retire step pre-checks each active topic from short rows
+- `pr` is the PR header: short columns only (repo and number, state, draft,
+  title, author, assignees, pending reviewers, base and head refs, head
+  oid, former base refs, fork, created, updated, merged and fetched
+  times; arrays as JSON text). It is the existence authority (a PR is
+  stored if and only if it has a header) and the parent of the normalized
+  model later (NEXT.md "Normalize the PR snapshot").
+- `pr_snapshot` is the old table renamed, the json being phased out. Its
+  own short columns are still written, for NOT NULL, but never read.
+- `PrRepo.upsert` writes the header, then the snapshot, in one
+  transaction, both as `ON CONFLICT (key) DO UPDATE` (a REPLACE would
+  delete the parent row). A delete removes both. Detail reads (`get`,
+  `getMany`, `keepParsed`) ignore a snapshot without its header. A header
+  without its snapshot is an integrity failure: the read leaves it out and
+  drops its cached copy, and `fetchedAtByKey` / `updatedAtByKey` leave it
+  out too, so the next sync fetches the PR again.
+- The migration renames the table (no copy of the blobs), creates the
+  header and fills it from the json with type guards (an array that is not
+  one becomes `[]`, a missing created time falls back to the updated time,
+  a missing title or head oid to empty), checks that both tables hold the
+  same keys, and rolls back whole on malformed json. It took 1.9 s on a
+  copy of the heavy database with a warm page cache (a cold one could not
+  be forced on the test machine; the json is read once).
+
+`PrRepo.listHeaders` reads `pr` alone, with each PR's newest event time
+from the `(pr_key, at, id)` index: 11k headers in about 60 ms. Stacks over
+every stored PR come from the headers (`buildStacks` takes them), so a
+stack is the same on every Board and `movesWith` / `topicIdOf` work for
+cold PRs. The assignment prompt's topic counts, consolidation's counts,
+the driver refresh, the sync's stack walk and freshness check, set
+grouping and the team-role re-derivation (in chunks) no longer parse every
+snapshot either.
+
+**Retiring.** The retire step pre-checks each active topic from PR headers
 (every member merged or closed, no member thread unread) and only then
 checks the gate on the whole topic (`topicRetireGate`, cold PRs included).
 Consolidation's retire and "Archive now" use the same. An active topic
@@ -536,7 +563,7 @@ hour.
 | boards held at once | 7, died at the 8th | 12 in 1.1 GB |
 
 On the normal copy a load went from 70 to 50 ms and the heap from 150 to
-86 MB. Migration 028 took 0.7 s on the 14x copy.
+86 MB. Migration 028 took 1.9 s on the 14x copy.
 
 **Memory on big boards** (2026-10-05, after an out-of-memory crash on a
 heavy install: about 5,000 tiles, 11k PRs, 485k events). The engine runs in

@@ -14,8 +14,8 @@ now".
   first, then the home team, and everyone else gets nothing. Cold topics
   and PRs are read on demand (`Board.forTopic`, `forPr`, `forTile`,
   `forPrs`) for the topic pane, the PR pane, MCP reads, search, ping
-  clicks, retiring and the debug views. Migration 028 adds `pr_light`
-  (short rows beside each snapshot) and a partial index for events aimed at
+  clicks, retiring and the debug views. Migration 028 splits `pr` into the
+  PR header and `pr_snapshot` (the json) and adds a partial index for events aimed at
   the user. `GET /api/busy-inbox` carries the numbers for a busy inbox card
   (UI to follow; `POSTPILE_FAKE_BUSY=1` in fake mode), and
   `board_trimmed` goes out at most hourly while busy. Work follows the
@@ -1222,19 +1222,26 @@ the app meanwhile.
 ## Later
 
 - Normalize the PR snapshot (after 0.18.0, in this order: first this, then
-  the `utilityProcess` move below). Each PR is stored as one JSON blob in
-  `pr.json` (~80 KB on average; on a normal install 95% of the comment text
-  is bot comments, 6.4 MB is check contexts the rules ignore, and 89% of
-  stored PRs are merged or closed), so every board build parses whole PRs
-  to read a few fields, and nothing inside can be queried or indexed.
-  Target: real columns on `pr` for what the rules read (author, draft,
-  review decision, merged time, head oid) and rows for comments, reviews,
+  the `utilityProcess` move below). Since 0.18.0 the short columns live in
+  the PR header (`pr`, migration 028) and the whole PR is still one JSON
+  blob in `pr_snapshot.json` (~80 KB on average; on a normal install 95% of
+  the comment text is bot comments, 6.4 MB is check contexts the rules
+  ignore, and 89% of stored PRs are merged or closed), so a hot board still
+  parses whole PRs to read a few fields, and nothing inside can be queried
+  or indexed. Target: rows under the `pr` header for comments, reviews,
   threads and thread comments, commits, files and a slim check summary; bot
-  comment bodies trimmed at write time; the board loads only the columns
-  and rows it needs for hot PRs, the PR pane one PR in full; `pr_event`
-  derivation reads the rows. A multi-day refactor of the store and of every
-  place that builds a `Pr`, plus a data migration. Together with the
-  `utilityProcess` move it is the real fix for big inboxes.
+  comment bodies trimmed at write time; the board loads only the rows it
+  needs for hot PRs, the PR pane one PR in full; `pr_event` derivation reads
+  the rows; `pr_snapshot` goes away. Transition protocol (checked with
+  Codex GPT-6.1): for each collection, dual-write before backfilling; track
+  completion separately from empty collections; switch reads and drop the
+  JSON field atomically; use bounded, resumable transactions; read,
+  transform and write in one transaction so a rewrite never overwrites
+  newer sync data; add a storage revision for local rewrites, because
+  cross-process cache invalidation today only goes through `fetched_at`. A
+  multi-day refactor of the store and of every place that builds a `Pr`.
+  Together with the `utilityProcess` move it is the real fix for big
+  inboxes.
 - Move the engine and the server out of Electron main into a
   `utilityProcess` (after 0.18.0, in this order: after normalizing the PR
   snapshot above; a bigger refactor). Electron runs V8
@@ -1262,6 +1269,14 @@ the app meanwhile.
   code-manager folder migration (`legacy-data.ts`) once the move has run.
 
 ## Decided
+
+- **Split pr into header + pr_snapshot; pr is the future model's parent**
+  (2026-10-05, checked with Codex GPT-6.1; DESIGN.md "Big inboxes: what
+  PostPile loads and works on" › PR header and snapshot). A side table of
+  short columns (`pr_light`) was built first and replaced before shipping:
+  the user wants a table the normalized model keeps using. `pr` holds the
+  header and is the existence authority; `pr_snapshot` is the renamed old
+  table, the json being phased out; both are written in one transaction.
 
 - **The hot set decides what PostPile loads and works on** (2026-10-05,
   DESIGN.md "Big inboxes: what PostPile loads and works on"): PostPile
