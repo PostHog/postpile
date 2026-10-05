@@ -106,6 +106,12 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
 - No OpenAPI codegen. When a screen needs a new field, add it to the core view
   type (`views.ts`), fill it in the engine's `read-models.ts` and in
   `FakeEngine`, then read it here.
+- `PrDetail.pr` is core's slim `PrPaneView` (`pr-pane.ts`), never the
+  stored `Pr`: no comments, threads, commits, timeline or check contexts.
+  A new pane field goes into `prPaneView`, which both engines call. The
+  Checks fact reads `pr.checks` (a `ChecksSummary`), "pushed" reads
+  `pr.lastCommitAt`; comment text, Reply and Thumbs up come from
+  `PrDetail.activity`.
 - Derived UI values ("1 pinged · 2 pulled", check counts, review
   rows) are pure functions in `lib/`, unit tested. Components stay dumb.
   Rules are not display: facts (whose move, done, automation) and offers

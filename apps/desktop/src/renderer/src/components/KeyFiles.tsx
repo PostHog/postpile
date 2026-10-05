@@ -1,4 +1,4 @@
-import type { KeyFile, Pr } from '@postpile/core';
+import type { KeyFile, PrPaneView } from '@postpile/core';
 import { filesTabUrl, keyFileRows } from '../lib/key-files.ts';
 import { FileIcon } from './icons.tsx';
 import { SectionLabel } from './SectionLabel.tsx';
@@ -8,7 +8,7 @@ import { SectionLabel } from './SectionLabel.tsx';
  * open first, with why and their +/- counts. Each opens the PR's files tab
  * on GitHub. Nothing when the glance names none (trivial PRs, old glances).
  */
-export function KeyFiles(props: { keyFiles: KeyFile[]; pr: Pr }) {
+export function KeyFiles(props: { keyFiles: KeyFile[]; pr: PrPaneView }) {
   if (props.keyFiles.length === 0) {
     return null;
   }

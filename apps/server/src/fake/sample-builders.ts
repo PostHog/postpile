@@ -1,7 +1,7 @@
 // Small builders that keep sample-data.ts readable. Everything here fills in
 // the fields a fake does not care about with plain defaults.
 import { prKey } from '@postpile/core';
-import type { CheckRollup, Comment, EventKind, Glance, KeyFile, Loudness, Pr, PrEvent, PrKey, Provenance, PrState, Review, ReviewDecision, ReviewState, ReviewThread, Tile, TileKind, TileMember, Topic, TopicKind, UserRole, Verdict } from '@postpile/core';
+import type { CheckContext, CheckRollup, Comment, EventKind, Glance, KeyFile, Loudness, Pr, PrEvent, PrKey, Provenance, PrState, Review, ReviewDecision, ReviewState, ReviewThread, Tile, TileKind, TileMember, Topic, TopicKind, UserRole, Verdict } from '@postpile/core';
 
 export const SAMPLE_REPO = 'acme/app';
 export const SAMPLE_VIEWER = 'you';
@@ -102,6 +102,25 @@ function sampleReviewDecision(reviews: [string, ReviewState, string?, string?, n
   return reviews.some(([, state]) => state === 'APPROVED') ? 'APPROVED' : 'REVIEW_REQUIRED';
 }
 
+/**
+ * A few check runs that match the rollup, so the pane's Checks fact has
+ * something to count: five on a finished run, one failing on FAILURE, one
+ * still running on PENDING, none for NONE.
+ */
+function sampleCheckContexts(rollup: CheckRollup, finishedAt: string): CheckContext[] {
+  if (rollup === 'NONE') {
+    return [];
+  }
+  const passed = (name: string): CheckContext => ({ name, conclusion: 'SUCCESS', completedAt: finishedAt });
+  const last: CheckContext =
+    rollup === 'FAILURE'
+      ? { name: 'test (backend)', conclusion: 'FAILURE', completedAt: finishedAt }
+      : rollup === 'PENDING'
+        ? { name: 'test (backend)', conclusion: null, completedAt: null }
+        : passed('test (backend)');
+  return [passed('lint'), passed('typecheck'), { name: 'storybook', conclusion: 'SKIPPED', completedAt: finishedAt }, passed('test (frontend)'), last];
+}
+
 /** Review bodies with text, as comments, like the GitHub reader adds them to `pr.comments`. */
 function reviewBodyComments(reviews: Review[], url: string): Comment[] {
   return reviews
@@ -188,7 +207,8 @@ export function samplePr(clock: SampleClock, input: SamplePrInput): Pr {
     timeline: input.queued
       ? [{ id: `queue-${input.number}`, kind: 'added_to_merge_queue' as const, actor: 'mergify[bot]', at: clock.hoursAgo(1), subject: null }]
       : [],
-    checks: { rollup: input.checks, contexts: [] },
+    // Checks finish half an hour after the PR opened; no rule in sample mode reads the time.
+    checks: { rollup: input.checks, contexts: sampleCheckContexts(input.checks, clock.hoursAgo(Math.max(0, input.openedHoursAgo - 0.5))) },
     headOid,
     createdAt: clock.hoursAgo(input.openedHoursAgo),
     updatedAt: clock.hoursAgo(input.mergedHoursAgo ?? 0),

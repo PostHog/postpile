@@ -1,6 +1,6 @@
 // The label that opens the detail pane's review row: where the review
 // stands for the viewer, from GitHub's data, never from the agent's glance.
-import type { Pr, ViewerApproval, ViewerReviewStand } from '@postpile/core';
+import type { PrPaneView, ViewerApproval, ViewerReviewStand } from '@postpile/core';
 import { ageLabel } from './time.ts';
 
 export type ReviewRowTone = 'approved' | 'changes' | 'asked' | 'plain';
@@ -11,7 +11,7 @@ export interface ReviewRowLabel {
 }
 
 export interface ReviewRowInput {
-  pr: Pick<Pr, 'headOid'>;
+  pr: Pick<PrPaneView, 'headOid'>;
   approval: ViewerApproval | null;
   /** Core's `viewerReviewStand`: changes requested, requested from the viewer, their own PR. */
   stand: ViewerReviewStand;

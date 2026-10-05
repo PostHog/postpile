@@ -1,4 +1,4 @@
-import type { KeyFile, Pr } from '@postpile/core';
+import type { KeyFile, PrPaneView } from '@postpile/core';
 
 export interface KeyFileRow {
   path: string;
@@ -28,7 +28,7 @@ export function middleTruncate(path: string, max: number): string {
 }
 
 /** The glance's "look at first" files with their +/- counts from the PR. */
-export function keyFileRows(keyFiles: KeyFile[], pr: Pr, max = 46): KeyFileRow[] {
+export function keyFileRows(keyFiles: KeyFile[], pr: Pick<PrPaneView, 'files'>, max = 46): KeyFileRow[] {
   const counts = new Map(pr.files.map((file) => [file.path, file]));
   return keyFiles.map((file) => {
     const count = counts.get(file.path);

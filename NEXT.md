@@ -6,6 +6,24 @@ now".
 
 ## Done
 
+- Slim PR pane (2026-10-05, DESIGN.md "The PR pane" › "What the pane
+  loads"): `PrDetail.pr` is core's `PrPaneView` (`prPaneView`), with a
+  checks summary from `summarizeChecks` (`checks.ts`, for the coming
+  checks-summary storage step too). No comments, threads, commits,
+  timeline or check contexts go to the renderer any more; activity, replies
+  and reactions keep working from `PrDetail.activity`. Measured on a
+  migrated copy of a real database (87 open PRs, bot bodies not yet
+  trimmed): average response 171 KB to 72 KB, biggest 1.18 MB to 389 KB;
+  the `pr` part 106 KB to 7 KB on average, 814 KB to 24 KB at most. MCP
+  `pr_context` and the CLI read the same view, unchanged output. Sample
+  PRs now carry five check runs so the Checks fact shows counts in fake
+  mode, and a fake reply shows in the activity like after the real
+  engine's refetch. Checked in the static renderer build: the pane renders
+  pixel-identical before and after (#1902: glance, key files, review row,
+  description, facts, reviews, activity), the pane text matches on 26
+  sample PRs, and reply, thumbs up and approve go through. Next: the
+  biggest response is now mostly `events` and `activity` (about 360 KB on
+  the biggest PR); the renderer never reads `events`.
 - Busy inbox card (2026-10-05, DESIGN.md "Big inboxes" › "The busy inbox
   card"): while the board cap cuts the inbox, the sidebar shows a calm amber
   card right above the topics, with the aching robot, the quiet PR count,
@@ -1281,8 +1299,8 @@ the app meanwhile.
   done yet:
   - Store thread comments as ids into `comments`, not a second copy: about
     21% less on top.
-  - A slim `PrDetail.pr` for the renderer, without comments, threads and
-    timeline: about 105 → 23.5 KB per open PR.
+  - A slim `PrDetail.pr` for the renderer: done (Done, "Slim PR pane";
+    the `pr` part about 106 → 7 KB per open PR).
   - A statement cache for `all`, `get` and `run` in store `sql.ts`, never
     for `each()`: running a cached statement again resets an iterator
     still in use.

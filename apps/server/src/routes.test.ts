@@ -343,6 +343,44 @@ describe('server routes over the fake engine', () => {
     expect(detail.events[0]?.display).toBe('loud');
   });
 
+  it('sends the slim PR view: no comments, threads, commits, timeline or check contexts', async () => {
+    const detail = (await (await appWithFake().request('/api/prs/acme/app/1902')).json()) as PrDetail;
+    expect(Object.keys(detail.pr).sort()).toEqual([
+      'additions',
+      'assignees',
+      'author',
+      'baseRef',
+      'body',
+      'changedFiles',
+      'checks',
+      'createdAt',
+      'deletions',
+      'files',
+      'headOid',
+      'headRef',
+      'isDraft',
+      'key',
+      'lastCommitAt',
+      'mergedAt',
+      'mergedBy',
+      'ref',
+      'reviewDecision',
+      'reviewerTeams',
+      'reviewerUsers',
+      'reviews',
+      'state',
+      'title',
+      'updatedAt',
+      'url',
+    ]);
+    expect(Object.keys(detail.pr.reviews[0] ?? {}).sort()).toEqual(['author', 'state', 'submittedAt']);
+    expect(detail.pr.checks).toMatchObject({ rollup: 'FAILURE', total: 5, passed: 4, failed: 1, pending: 0, failedNames: ['test (backend)'] });
+    expect(detail.pr.files.map((file) => file.path)).toContain('turbo.json');
+    // Replies and reactions still find their comment: the activity line carries it.
+    const lines = [...detail.activity.fresh, ...detail.activity.earlier];
+    expect(lines.find((line) => line.reply?.commentId === 'issuecomment-2')?.reply).toMatchObject({ author: 'lyra', canReply: true });
+  });
+
   it('rejects bad input with 400', async () => {
     const app = appWithFake();
     expect((await app.request('/api/prs/acme/app/abc')).status).toBe(400);
@@ -524,9 +562,14 @@ describe('server routes over the fake engine', () => {
     const inThread = await post<ActionResult>(app, '/api/prs/acme/app/1902/reply', { commentId: 'thread-1902-1-0', body: 'Yes, next layer.' });
     const quoting = await post<ActionResult>(app, '/api/prs/acme/app/1902/reply', { commentId: 'issuecomment-2', body: 'One cold hour is fine.' });
     expect([inThread.json.ok, quoting.json.ok]).toEqual([true, true]);
-    const pr = ((await (await app.request('/api/prs/acme/app/1902')).json()) as PrDetail).pr;
-    expect(pr.threads.find((thread) => thread.id === 'thread-1902-1')?.comments.map((comment) => comment.author)).toEqual(['nell', 'rowan', 'you']);
-    expect(pr.comments.at(-1)?.body).toMatch(/^> @you does the warm-up job need a feature flag[^\n]*\n\n@lyra One cold hour is fine\.$/);
+    // The pane sees the replies in the activity: one in the code thread, one as a new PR comment.
+    const detail = (await (await app.request('/api/prs/acme/app/1902')).json()) as PrDetail;
+    const replies = detail.events.filter((view) => view.event.actor === 'you' && view.event.kind === 'comment').map((view) => view.event);
+    // Newest first, and both may share a millisecond: compare sorted.
+    expect(replies.map((event) => [event.summary, event.url]).sort()).toEqual([
+      ['you replied to lyra: One cold hour is fine.', detail.pr.url],
+      ['you replied to nell: Yes, next layer.', 'https://github.com/acme/app/pull/1902#discussion_thread-1902-1'],
+    ]);
     expect((await post<ActionResult>(app, '/api/prs/acme/app/1902/reply', { commentId: 'nope', body: 'x' })).json.ok).toBe(false);
     expect((await post(app, '/api/prs/acme/app/1902/reply', { commentId: 'issuecomment-2', body: '' })).status).not.toBe(200);
   });
@@ -536,9 +579,10 @@ describe('server routes over the fake engine', () => {
     await post(app, '/api/github-writes', { enabled: true });
     expect((await post<ActionResult>(app, '/api/prs/acme/app/1902/react', { commentId: 'issuecomment-2' })).json.ok).toBe(true);
     expect((await post<ActionResult>(app, '/api/prs/acme/app/1902/react', { commentId: 'review-1902-0' })).json.ok).toBe(true);
-    const pr = ((await (await app.request('/api/prs/acme/app/1902')).json()) as PrDetail).pr;
-    expect(pr.comments.find((comment) => comment.id === 'issuecomment-2')?.viewerReacted).toBe(true);
-    expect(pr.reviews.find((review) => review.id === 'review-1902-0')?.viewerReacted).toBe(true);
+    // The pane reads the reaction on the comment's activity line, not on the PR.
+    const { activity } = (await (await app.request('/api/prs/acme/app/1902')).json()) as PrDetail;
+    const lines = [...activity.fresh, ...activity.earlier];
+    expect(lines.find((line) => line.reply?.commentId === 'issuecomment-2')?.reply?.viewerReacted).toBe(true);
     expect((await post<ActionResult>(app, '/api/prs/acme/app/1902/react', { commentId: 'nope' })).json.ok).toBe(false);
   });
 
