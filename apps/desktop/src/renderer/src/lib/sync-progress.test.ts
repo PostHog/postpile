@@ -1,11 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import type { SyncProgress } from '@postpile/core';
+import { emptyAgentCallStats, type SyncProgress } from '@postpile/core';
 import { elapsedLabel, syncProgressDetail, syncProgressText } from './sync-progress.ts';
 
 const STARTED = '2026-09-28T10:00:00.000Z';
 
 function progress(overrides: Partial<SyncProgress>): SyncProgress {
-  return { startedAt: STARTED, running: ['dossiers', 'glances'], agentCallsDone: 34, agentCallsPlanned: 82, ...overrides };
+  return {
+    startedAt: STARTED,
+    running: ['dossiers', 'glances'],
+    agentCallsDone: 34,
+    agentCallsPlanned: 82,
+    fromGitHub: { prsFetched: 3, newEvents: 8 },
+    agentCallStats: emptyAgentCallStats(),
+    ...overrides,
+  };
 }
 
 describe('elapsedLabel', () => {
@@ -20,12 +28,18 @@ describe('elapsedLabel', () => {
 describe('syncProgressText', () => {
   const now = new Date('2026-09-28T10:02:10.000Z');
 
-  it('shows calls done over calls planned so far, and the time', () => {
-    expect(syncProgressText(progress({}), now)).toBe('syncing · agent 34/82 · 2m');
+  it('says what GitHub brought, then calls done over calls planned so far, and the time', () => {
+    expect(syncProgressText(progress({}), now)).toBe('syncing · 8 new on GitHub · agent calls 34/82 · 2m');
+  });
+
+  it('says nothing new on GitHub when the poll already stored everything', () => {
+    expect(syncProgressText(progress({ fromGitHub: { prsFetched: 0, newEvents: 0 } }), now)).toBe(
+      'syncing · nothing new on GitHub · agent calls 34/82 · 2m',
+    );
   });
 
   it('names the phase before any call is planned', () => {
-    expect(syncProgressText(progress({ running: ['fetch'], agentCallsDone: 0, agentCallsPlanned: 0 }), now)).toBe(
+    expect(syncProgressText(progress({ running: ['fetch'], agentCallsDone: 0, agentCallsPlanned: 0, fromGitHub: null }), now)).toBe(
       'syncing · fetching GitHub · 2m',
     );
   });
@@ -41,5 +55,19 @@ describe('syncProgressDetail', () => {
     const detail = syncProgressDetail(progress({}));
     expect(detail).toContain('Running: dossiers, glances');
     expect(detail).toContain('34 done of 82 planned so far');
+    expect(detail).toContain('GitHub: 8 new events on 3 PRs.');
+  });
+
+  it('explains agent work without news, and lists the calls per kind', () => {
+    const stats = emptyAgentCallStats();
+    stats.total = 5;
+    stats.byKind.dossier_update = { calls: 5, failed: 0, retries: 0, skippedUnchanged: 0, skippedByBudget: 0, durationMs: 0, costUsd: 0 };
+    const detail = syncProgressDetail(progress({ fromGitHub: { prsFetched: 0, newEvents: 0 }, agentCallStats: stats }));
+    expect(detail).toContain('GitHub: nothing new. The agent works on what the live poll already stored');
+    expect(detail).toContain('dossier_update: 5 calls');
+  });
+
+  it('says GitHub is still being fetched', () => {
+    expect(syncProgressDetail(progress({ fromGitHub: null }))).toContain('GitHub: fetching');
   });
 });

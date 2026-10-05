@@ -104,6 +104,7 @@ interface LiveSync {
   phases: PhaseClock;
   budget: AgentBudget;
   stats: AgentCallStats;
+  fromGitHub: SyncProgress['fromGitHub'];
 }
 
 /**
@@ -284,6 +285,8 @@ export class SyncRun {
       running: this.live.phases.running(),
       agentCallsDone: this.live.stats.total,
       agentCallsPlanned: this.live.budget.granted(),
+      fromGitHub: this.live.fromGitHub,
+      agentCallStats: this.live.stats,
     };
   }
 
@@ -317,7 +320,8 @@ export class SyncRun {
     this.quota.startRun();
     const phases = new PhaseClock(now);
     const budget = new AgentBudget(options.maxAgentCalls ?? Number.POSITIVE_INFINITY, report.agentCallStats);
-    this.live = { startedAt, phases, budget, stats: report.agentCallStats };
+    const live: LiveSync = { startedAt, phases, budget, stats: report.agentCallStats, fromGitHub: null };
+    this.live = live;
     try {
       const tidyTried = await this.tidyFirst(options.agentJobs, { phases, budget, tally, errors });
       // The first sync into an empty store is a baseline: none of it is news to ping about.
@@ -330,6 +334,7 @@ export class SyncRun {
       report.prsPulledIn = fetched.prsPulledIn;
       report.prsFound = fetched.prsFound;
       report.newEvents = fetched.newEventIds.length;
+      live.fromGitHub = { prsFetched: fetched.prsFetched + fetched.prsFound, newEvents: report.newEvents };
       errors.push(...fetched.errors);
       // A reply the sync stored first pings through the next poll cycle, once its thread is unread.
       if (!firstLook) {

@@ -516,6 +516,10 @@ export interface SyncProgress {
    * glances are only planned once their topic's dossier landed.
    */
   agentCallsPlanned: number;
+  /** What the fetch brought from GitHub; null until it finished. Nothing new means the agent works on what the poll already stored. */
+  fromGitHub: { prsFetched: number; newEvents: number } | null;
+  /** The calls done so far, per kind, for the tooltip. */
+  agentCallStats: AgentCallStats;
 }
 
 export interface SyncReport {

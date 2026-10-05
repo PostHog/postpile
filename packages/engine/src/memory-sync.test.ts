@@ -248,7 +248,13 @@ describe('scheduling', () => {
     const syncing = h.engine.sync({ agentJobs: ['dossiers', 'glances'] });
     await vi.waitFor(() => expect(h.agent.glanceInputs).toHaveLength(1));
     // Both dossiers and depot's glance are planned; billing's glance is not yet.
-    expect(await h.engine.syncProgress()).toMatchObject({ running: ['dossiers', 'glances'], agentCallsDone: 2, agentCallsPlanned: 3 });
+    expect(await h.engine.syncProgress()).toMatchObject({
+      running: ['dossiers', 'glances'],
+      agentCallsDone: 2,
+      agentCallsPlanned: 3,
+      fromGitHub: { prsFetched: expect.any(Number), newEvents: expect.any(Number) },
+      agentCallStats: { total: 2, byKind: { dossier_update: expect.objectContaining({ calls: 1 }), glance_batch: expect.objectContaining({ calls: 1 }) } },
+    });
     release();
     await syncing;
 
