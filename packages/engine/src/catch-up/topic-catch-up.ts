@@ -1,4 +1,4 @@
-import { effectiveLoudness, emptyAgentCallStats, isMemoryTrigger, GLANCE_BATCH_SIZE, type AgentCallStats, type PrKey, type Viewer } from '@postpile/core';
+import { effectiveLoudness, emptyAgentCallStats, isMemoryNoise, isMemoryTrigger, PUSH_KINDS, GLANCE_BATCH_SIZE, type AgentCallStats, type PrKey, type Viewer } from '@postpile/core';
 import { AgentBudget } from '../budget.ts';
 import { Board } from '../board.ts';
 import type { DigestDeps } from '../digest/deps.ts';
@@ -25,8 +25,9 @@ export interface CatchUpTopics {
 /**
  * Topics a poll cycle's PRs need a catch-up run for: a PR with a new event
  * that starts a dossier update (`isMemoryTrigger`: anything loud, anything a
- * person did, a bot changing the PR itself), or a PR that should have a
- * glance and has none yet (new to the app). Bot comments wait for the next
+ * person did, a bot changing the PR's state), a push (no dossier update, but
+ * the PR's glance is behind), or a PR that should have a glance and has none
+ * yet (new to the app). Bot comments wait for the next
  * update and noise (CI, bot edits, deploys) never counts, as in the full
  * sync. Loud news and missing glances run now, the rest is quiet. Null is
  * the virtual Unsorted topic.
@@ -39,7 +40,8 @@ export function topicsToCatchUp(board: Board, fetched: PrKey[], newEventIds: str
   for (const key of fetched) {
     const events = (board.events.get(key) ?? []).filter((event) => fresh.has(event.id));
     const loud = events.some((event) => effectiveLoudness(event) === 'loud');
-    const triggered = events.some(isMemoryTrigger);
+    // A push rides along for the dossier but changes the PR's own glance (its head is in the glance hash).
+    const triggered = events.some((event) => isMemoryTrigger(event) || (PUSH_KINDS.includes(event.kind) && !isMemoryNoise(event)));
     const missing = wanted.has(key) && !hasGlance(key);
     const topicId = board.memberships.get(key)?.topicId ?? null;
     if (loud || missing) {
@@ -170,7 +172,7 @@ export class TopicCatchUp {
     if (!target) {
       return false;
     }
-    return this.deps.store.glances.get(prKey)?.inputHash !== inputs.itemHash(this.deps.agent, target);
+    return !inputs.isCurrent(this.deps.agent, target, this.deps.store.glances.get(prKey)?.inputHash);
   }
 
   /**
