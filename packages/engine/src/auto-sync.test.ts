@@ -171,6 +171,56 @@ describe('AutoSyncSchedule', () => {
     expect(syncs).toEqual([150]);
   });
 
+  it('fires nothing while suspended, even when the due time passes on the timer clock', async () => {
+    const { timers, syncs, auto } = schedule(60);
+    auto.start();
+    timers.advance(50 * MINUTE);
+
+    auto.suspend();
+    // The due time passes during sleep, and here the timer clock runs on (as it may right at the wake).
+    timers.advance(30 * MINUTE);
+    await Promise.resolve();
+    expect(syncs).toEqual([]);
+
+    auto.wake();
+    expect(auto.nextSyncAt()).toBe(new Date(timers.now() + WAKE_SYNC_DELAY_MINUTES * MINUTE).toISOString());
+    timers.advance(WAKE_SYNC_DELAY_MINUTES * MINUTE);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(syncs).toEqual([150]);
+  });
+
+  it('keeps a due time that is still ahead after a suspend and wake', () => {
+    const { timers, syncs, auto } = schedule(60);
+    auto.start();
+    timers.advance(10 * MINUTE);
+
+    auto.suspend();
+    timers.sleep(20 * MINUTE);
+    auto.wake();
+
+    expect(auto.nextSyncAt()).toBe(new Date(timers.now() + 30 * MINUTE).toISOString());
+    timers.advance(30 * MINUTE - 1);
+    expect(syncs).toEqual([]);
+    timers.advance(1);
+    expect(syncs).toEqual([150]);
+  });
+
+  it('keeps a due time set during sleep and arms it only on the wake', () => {
+    const { timers, syncs, auto } = schedule(60);
+    auto.start();
+
+    auto.suspend();
+    // A sync that ran into the sleep ends: the next due time is set, no timer yet.
+    auto.reschedule(true);
+    expect(auto.nextSyncAt()).toBe(new Date(timers.now() + 2 * MINUTE).toISOString());
+    timers.advance(10 * MINUTE);
+    expect(syncs).toEqual([]);
+
+    auto.wake();
+    expect(auto.nextSyncAt()).toBe(new Date(timers.now() + WAKE_SYNC_DELAY_MINUTES * MINUTE).toISOString());
+  });
+
   it('leaves a stopped schedule alone on a wake', () => {
     const { auto, lines } = schedule(60);
     auto.start();

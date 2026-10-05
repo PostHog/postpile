@@ -347,12 +347,17 @@ woke from sleep, when everything catches up at once. The renderer's
 QueryClient no longer refetches on reconnect (`refetchOnReconnect: false`):
 the browser's `online` after a wake refetched every query, all stale by then,
 though the local API's data does not change because the network came back;
-the live poll's news refetches what changed. On Electron's `powerMonitor`
-`resume`, main calls `Engine.noteWake()`: the live poll keeps its own cycle
-(cheap, and it brings the news), and the next background auto sync is set
-again from the wall clock but at least 3 minutes out
-(`WAKE_SYNC_DELAY_MINUTES`, `AutoSyncSchedule.wake`), so an overdue one does
-not land in the burst. Main logs the sleep, the wake and the new due time.
+the live poll's news refetches what changed. Its `networkMode: 'always'`
+keeps queries and mutations running while macOS reports no network: the API
+is on 127.0.0.1. On Electron's `powerMonitor` `suspend`, main calls
+`Engine.noteSuspend()`: the auto sync's timer stops and its due time is kept
+(`AutoSyncSchedule.suspend`), so a due time that passes during sleep cannot
+fire before the wake is noted. On `resume`, `Engine.noteWake()`: the live
+poll keeps its own cycle (cheap, and it brings the news), and the next
+background auto sync is set again from the kept due time on the wall clock
+but at least 3 minutes out (`WAKE_SYNC_DELAY_MINUTES`,
+`AutoSyncSchedule.wake`), so an overdue one does not land in the burst. Main
+logs the sleep, the wake and the new due time.
 
 *Seeing the next one* (2026-10-05; this crash was only known from Slack).
 Main writes `running.json` (pid, version, start time) to the data folder at
@@ -361,8 +366,9 @@ to update", all through `shutdownOnce`). A marker still there at the next
 start sends `app_crashed_last_run` (`RunMarker` in `apps/desktop/src/main`).
 `sync_completed` carries the heap (`heap_used_mb`, `heap_limit_mb`), so a heap
 creeping up to the limit shows before it dies. Electron's `crashReporter`
-runs with `uploadToServer: false`: Crashpad keeps minidumps under `Crashpad/`
-in the data folder for debugging by hand. Whether a V8 out-of-memory abort
+runs with `uploadToServer: false`: Crashpad keeps minidumps in Electron's
+default `crashDumps` folder, `Crashpad/` in the data folder, for debugging by
+hand. Whether a V8 out-of-memory abort
 leaves one is not documented, so the marker is the signal to count on. The
 real fix is a process of its own for the engine (NEXT.md "Later").
 

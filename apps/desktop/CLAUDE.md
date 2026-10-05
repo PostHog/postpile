@@ -91,7 +91,9 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   Each hook wraps `useQuery` with a key from `api/keys.ts`.
 - QueryClient defaults (`main.tsx`): no refetch on window focus and none on
   reconnect (`refetchOnReconnect: false`: after a wake the browser's `online`
-  refetched every query at once against the local API), one retry, 30s
+  refetched every query at once against the local API), `networkMode:
+  'always'` for queries and mutations (the default paused them while macOS
+  reported no network, but the API is on 127.0.0.1), one retry, 30s
   `staleTime`. Data moves through invalidation (actions, `useLivePoll`), not
   through browser events; a hook that needs one sets it itself (`useMcpConnection`).
 - Wire types come from `@postpile/core` as `import type` only. The
@@ -700,8 +702,10 @@ stays on screen and listed (`KeptView`).
   Every deliberate quit must go through `shutdownOnce` (or clear the marker,
   like the install fallback), else it counts as a crash. `crashReporter`
   starts at the top of `index.ts` with `uploadToServer: false`, dumps under
-  `<userData>/Crashpad`. `powerMonitor` `resume` calls `engine.noteWake()`
-  (the auto sync waits a few minutes) and logs the sleep and the wake.
+  Electron's default `crashDumps` (`Crashpad/` in userData; never `setPath`
+  it, the folder does not exist on a fresh install). `powerMonitor`
+  `suspend` calls `engine.noteSuspend()` (the auto sync's timer stops),
+  `resume` calls `engine.noteWake()` (it waits a few minutes); both are logged.
 - The last sync report (errors, timing) is stored in meta
   `last_sync_report` and shows in the footer's "last full sync" and the
   title bar's sync status tooltips (`lib/sync-report.ts`) and in the notifications

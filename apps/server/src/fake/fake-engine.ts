@@ -2187,6 +2187,10 @@ export class FakeEngine implements EngineService {
     this.autoSync = null;
   }
 
+  noteSuspend(): void {
+    this.autoSync?.suspend();
+  }
+
   noteWake(): void {
     this.autoSync?.wake();
   }

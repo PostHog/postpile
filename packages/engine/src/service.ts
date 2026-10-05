@@ -119,6 +119,12 @@ export interface EngineService {
   startAutoSync(options: AutoSyncOptions): void;
   stopAutoSync(): void;
   /**
+   * The Mac goes to sleep (desktop main, powerMonitor 'suspend'): the auto
+   * sync's timer stops until noteWake(), so a due time that passes during
+   * sleep cannot fire before the wake is noted.
+   */
+  noteSuspend(): void;
+  /**
    * The Mac woke from sleep (desktop main, powerMonitor 'resume'): the next
    * auto sync waits at least WAKE_SYNC_DELAY_MINUTES, so it does not land in
    * the wake burst. The live poll keeps its own cycle.

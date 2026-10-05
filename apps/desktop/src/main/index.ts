@@ -94,10 +94,11 @@ if (profileFromEnv(process.env) === 'dev') {
   app.setPath('userData', process.env.POSTPILE_DATA_DIR || dataDirs().dataDir);
 }
 // Crash dumps stay on this Mac: when a process of the app crashes, Crashpad
-// writes a minidump under Crashpad/ in the data folder, and nothing is
-// uploaded (docs/development.md). Early, so the window's renderer is covered
-// too, and after userData is set, which the folder hangs off.
-app.setPath('crashDumps', join(app.getPath('userData'), 'Crashpad'));
+// writes a minidump to Electron's default crashDumps folder (Crashpad/ in
+// userData, so after the dev switch above it follows the dev data folder),
+// and nothing is uploaded (docs/development.md). Early, so the window's
+// renderer is covered too. No setPath for crashDumps: it wants the folder to
+// exist, and a fresh install has none yet.
 crashReporter.start({ uploadToServer: false });
 
 // A second launch of the same app (same userData) only focuses the first
@@ -615,7 +616,12 @@ async function start(): Promise<void> {
   // After a wake (DESIGN.md "Memory on big boards"): the live poll keeps its
   // cycle and brings the news; the background auto sync waits a few minutes,
   // so it does not land on top of the poll, its catch-ups and the window's refetches.
-  powerMonitor.on('suspend', () => console.log('the Mac is going to sleep'));
+  // On suspend the auto sync's timer is cleared, so a due time that passes
+  // during sleep cannot fire before 'resume' arrives.
+  powerMonitor.on('suspend', () => {
+    console.log('the Mac is going to sleep');
+    service.noteSuspend();
+  });
   powerMonitor.on('resume', () => {
     console.log('the Mac woke from sleep');
     service.noteWake();

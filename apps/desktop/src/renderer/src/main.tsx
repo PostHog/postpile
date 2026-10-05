@@ -18,12 +18,16 @@ watchWindowErrors(window, errorReporter);
 // this Mac, and the browser's "online" after a wake from sleep would refetch
 // every query at once (all are stale by then) on top of the wake's poll and
 // catch-ups (DESIGN.md "Memory on big boards"); the live poll's news refetches
-// what changed. The 30s staleTime stops a refetch of the topic and PR on
-// every revisit (back / forward, clicking between two topics); the cap keeps
-// time-based state such as expired snoozes from going stale for long.
+// what changed. For the same reason networkMode 'always': TanStack's default
+// pauses every query and mutation while macOS reports no network (a plane),
+// but 127.0.0.1 is always there. The 30s staleTime stops a refetch of the
+// topic and PR on every revisit (back / forward, clicking between two
+// topics); the cap keeps time-based state such as expired snoozes from going
+// stale for long.
 const queryClient = new QueryClient({
   defaultOptions: {
-    queries: { refetchOnWindowFocus: false, refetchOnReconnect: false, retry: 1, staleTime: 30_000 },
+    queries: { networkMode: 'always', refetchOnWindowFocus: false, refetchOnReconnect: false, retry: 1, staleTime: 30_000 },
+    mutations: { networkMode: 'always' },
   },
 });
 
