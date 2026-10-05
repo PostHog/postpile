@@ -62,12 +62,14 @@ export function quotaLabel(status: LivePollStatus | undefined): LiveLabel | null
 const STALE_AFTER_CYCLES = 3;
 
 /**
- * Whether the live poll keeps the data current: it is on and asked GitHub
- * within the last few cycles. False while it is off, before its first
- * cycle, and once it fell behind (backoff, a paused quota, a sleeping Mac).
+ * Whether the live poll keeps the data current: it runs normally and asked
+ * GitHub within the last few cycles. False while it is off, before its
+ * first cycle, while blocked or backing off (both stamp lastPollAt without
+ * a successful answer), and once it fell behind (a paused quota, a
+ * sleeping Mac).
  */
 export function pollIsFresh(status: LivePollStatus | undefined, now: Date): boolean {
-  if (!status || status.state === 'off' || status.lastPollAt === null) {
+  if (!status || (status.state !== 'waiting' && status.state !== 'polling') || status.lastPollAt === null) {
     return false;
   }
   const every = status.githubQuota?.pollSeconds ?? status.everySeconds;

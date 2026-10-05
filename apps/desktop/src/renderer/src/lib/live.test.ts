@@ -70,6 +70,11 @@ describe('pollIsFresh', () => {
     expect(pollIsFresh({ ...running, lastPollAt: '2026-09-28T09:57:00Z' }, now)).toBe(true);
   });
 
+  it('is false while blocked or backing off, though those stamp lastPollAt', () => {
+    expect(pollIsFresh({ ...running, state: 'blocked', lastPollAt: '2026-09-28T09:59:30Z', note: 'consolidating' }, now)).toBe(false);
+    expect(pollIsFresh({ ...running, state: 'backoff', lastPollAt: '2026-09-28T09:59:30Z', backoffUntil: '2026-09-28T10:01:00Z' }, now)).toBe(false);
+  });
+
   it('is false once the poll fell behind', () => {
     expect(pollIsFresh({ ...running, lastPollAt: '2026-09-28T09:56:59Z' }, now)).toBe(false);
   });

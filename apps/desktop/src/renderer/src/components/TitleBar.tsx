@@ -66,7 +66,7 @@ function agoWords(iso: string, now: Date): string {
 function freshnessDetail(live: LivePollStatus | undefined, report: SyncReport, now: Date): string {
   const poll =
     live && live.state !== 'off' && live.lastPollAt
-      ? `Live poll: checked GitHub ${agoWords(live.lastPollAt, now)}, every ${live.githubQuota?.pollSeconds ?? live.everySeconds}s.`
+      ? `Live poll: checked GitHub ${agoWords(live.lastPollAt, now)}, every ${live.githubQuota?.pollSeconds ?? live.everySeconds}s.${live.note ? ` Now: ${live.note}.` : ''}`
       : 'Live poll off: data is as fresh as the last full sync.';
   const sweep = `Last full sync ${agoWords(report.finishedAt, now)}. It sweeps the last 30 days, groups sets and stacks, folds quiet news (bots, CI) into dossiers and retires finished topics.`;
   return `${poll}\n\n${sweep}\n${syncReportDetail(report)}`;
@@ -115,18 +115,29 @@ function SyncStatus() {
   if (errors > 0) {
     dot = 'bad';
   }
+  const paused = live !== undefined && (live.state === 'blocked' || live.state === 'backoff');
   // A stale poll still counts from its last check; without a poll the full sync is the only clock.
-  const checkedAt = pollOn && live.lastPollAt ? live.lastPollAt : report.finishedAt;
-  const age = ageLabel(checkedAt, now);
+  const lastPollAt = pollOn ? live.lastPollAt : null;
+  const word = lastPollAt ? 'checked' : 'synced';
+  const age = ageLabel(lastPollAt ?? report.finishedAt, now);
+  let headline: ReactNode;
+  if (fresh) {
+    headline = 'up to date';
+  } else if (paused) {
+    // The footer and the tooltip say why: backing off, catching up, consolidating.
+    headline = 'updates paused';
+  } else if (age === 'now') {
+    headline = `${word} just now`;
+  } else {
+    headline = (
+      <>
+        {word} <Num>{age}</Num> ago
+      </>
+    );
+  }
   return (
     <StatusText dot={dot} detail={freshnessDetail(live, report, now)}>
-      {fresh || age === 'now' ? (
-        <span>up to date</span>
-      ) : (
-        <span>
-          {pollOn ? 'checked' : 'synced'} <Num>{age}</Num> ago
-        </span>
-      )}
+      <span>{headline}</span>
       {errors > 0 && (
         <>
           <Sep />
