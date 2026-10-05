@@ -157,6 +157,24 @@ describe('LivePoller', () => {
     expect(status.lastPollAt).not.toBe(answeredAt);
   });
 
+  it('stamps lastAnsweredAt with the cycle start, so slow agent work after the fetch does not look fresh', async () => {
+    const poll = new ScriptedPoll();
+    const { timers, poller } = setup(poll);
+    poll.then(() => {
+      const startedAt = timers.now();
+      timers.advance(180_000);
+      return Promise.resolve(done({ notModified: false })).then((cycle) => {
+        expect(poller.currentStatus().state).toBe('polling');
+        expect(timers.now() - startedAt).toBe(180_000);
+        return cycle;
+      });
+    });
+    poller.start();
+    await tick(timers, poller, 60_000);
+    const status = poller.currentStatus();
+    expect(Date.parse(status.lastPollAt!) - Date.parse(status.lastAnsweredAt!)).toBe(180_000);
+  });
+
   it('backs off for Retry-After on a secondary rate limit', async () => {
     const limited = new GitHubError('secondary rate limit', 403, { rateLimited: true, retryAfterSeconds: 90 });
     const poll = new ScriptedPoll().then(() => Promise.reject(limited));

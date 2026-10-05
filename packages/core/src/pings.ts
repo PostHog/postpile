@@ -128,7 +128,7 @@ export interface LivePollStatus {
   everySeconds: number;
   /** Last cycle start that ended, blocked and failed ones included. */
   lastPollAt: IsoTime | null;
-  /** Last cycle GitHub answered (a 304 counts); blocked and failed cycles leave it. The title bar's "up to date" reads it. */
+  /** Start of the last cycle GitHub answered (a 304 counts); blocked and failed cycles leave it. The start, since agent work after the fetch can take minutes. The title bar's "up to date" reads it. */
   lastAnsweredAt: IsoTime | null;
   /** Last cycle whose inbox answer was not a 304. */
   lastChangeAt: IsoTime | null;
