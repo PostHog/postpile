@@ -1459,7 +1459,23 @@ its tiles (newest first, at most 60 in the prompt with a line for the
 rest), the history and the topic's prompt context; `ChatInput.tile` is null
 for it. Unsorted works too; its lasting point comes back with `topicId:
 null`, like a tile chat there. Lasting points work exactly as in the tile
-chat. The tile chat endpoints stay for now.
+chat. The tile chat endpoints stay for now. A turn's two messages are stored
+together once the answer is in: a failed call stores nothing, so the
+history never holds an unanswered message.
+
+Each turn is a fresh `claude -p` call with the whole prompt rebuilt, not a
+kept-open session (`--resume` or a long-lived stream-json process). Checked
+2026-10-05: prompt caching already works across separate calls (a second
+call with the same ~28k-token prefix read all of it from cache and wrote
+none), and spawning the process adds about 0.25s; chat answers averaged
+about 4.5s, most of it the answer being written. The prompt keeps the
+stable part first (topic, PRs) and the history and new message last, so
+the cache holds between turns, and nothing in it is relative to now. A
+session would save almost nothing and cost: PR data frozen at the first
+turn, transcripts on disk (`--no-session-persistence` is on for that
+reason), a second copy of the history next to `chat_message`, and a
+process per topic to keep alive. Streaming is left out for the same
+reason: answers are short by design.
 
 **Instructions changes via chat.** Tile chat returns a lasting point
 without a scope; the user picks it: "Keep for this topic" stores tailoring,
@@ -2345,6 +2361,13 @@ returns to the PR; any pick (tile, PR, topic) does too. A lasting point is
 one line: "Remember "..."? For this topic · For all topics"; leaving it
 alone means just this once (nothing logged). All topics still shows the
 instructions diff first. The tile chat is gone from the renderer.
+
+Sending: the message shows right away as the user's bubble with a
+"Thinking…" bubble under it, and the input empties; the list keeps the
+newest message in view. A failed call removes both and puts the text back
+in the input (the toast says why). The input is a textarea that grows to
+about eight lines: Enter sends, Shift+Enter starts a new line, as in most
+chats.
 
 ## PR ownership: bot PRs belong to their assignees (2026-09-30)
 

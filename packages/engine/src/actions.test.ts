@@ -343,6 +343,16 @@ describe('chat and tailoring', () => {
     expect(h.store.topics.get('depot')?.tailoring).toBe('Ignore preview deploys.');
     expect(h.store.feedback.recentForTopic('depot', 1)[0]?.kind).toBe('tailoring_kept');
   });
+
+  it('stores nothing when the agent call fails, so no unanswered message stays in the history', async () => {
+    const h = await synced();
+    h.store.topics.create(topic('depot'));
+    h.store.memberships.assign({ prKey: pr.key, topicId: 'depot', assignedBy: 'agent', reason: '', createdAt: at(0) });
+
+    await expect(h.engine.topicChat('depot', 'what is left here?')).rejects.toThrow();
+
+    expect(await h.engine.getTopicChat('depot')).toEqual([]);
+  });
 });
 
 describe('topic proposals', () => {

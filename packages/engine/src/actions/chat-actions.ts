@@ -35,11 +35,13 @@ export class ChatActions {
 
   /**
    * One turn of a chat stored under `chatId`: the user's message, the
-   * agent's answer, and the lasting point it spotted, if any.
+   * agent's answer, and the lasting point it spotted, if any. Both are
+   * stored only once the answer is in, so a failed call leaves no
+   * unanswered message behind; the renderer puts the text back in the input.
    */
   private async converse(chatId: string, topic: Topic, tile: Tile | null, prs: Pr[], message: string): Promise<ChatReply> {
     const history = this.store.chat.listForTile(chatId);
-    const userMessage = this.store.chat.add({ tileId: chatId, topicId: topic.id, role: 'user', text: message, createdAt: this.now().toISOString() });
+    const sentAt = this.now().toISOString();
     const isUnsorted = topic.id === UNSORTED_TOPIC_ID;
     const answer = await this.agent.chat({
       topic,
@@ -49,13 +51,10 @@ export class ChatActions {
       message,
       context: this.contexts.forTopic(isUnsorted ? null : topic.id),
     });
-    const reply = this.store.chat.add({
-      tileId: chatId,
-      topicId: topic.id,
-      role: 'agent',
-      text: answer.reply,
-      createdAt: this.now().toISOString(),
-    });
+    const { userMessage, reply } = this.store.transaction(() => ({
+      userMessage: this.store.chat.add({ tileId: chatId, topicId: topic.id, role: 'user', text: message, createdAt: sentAt }),
+      reply: this.store.chat.add({ tileId: chatId, topicId: topic.id, role: 'agent', text: answer.reply, createdAt: this.now().toISOString() }),
+    }));
     if (!answer.lasting) {
       return { message: reply, lastingPoint: null };
     }

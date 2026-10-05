@@ -6,6 +6,13 @@ now".
 
 ## Done
 
+- Agent chat sending (2026-10-05, DESIGN.md "Topic chat", "Ask the
+  agent"): the message shows at once with a "Thinking…" bubble, the list
+  stays on the newest message, the input is a growing textarea (Enter
+  sends), and a failed turn stores nothing and puts the text back.
+  Kept-open CLI sessions and streaming were checked and left out: prompt
+  caching already works across one-off calls and the process start is
+  about 0.25s of a ~4.5s answer.
 - PR pane actions (2026-10-05, DESIGN.md "The PR pane"): review row
   (`ReviewRow`) right after the glance with a GitHub review-state label,
   housekeeping as a quiet line under it (`PaneHousekeeping`), one "Open on

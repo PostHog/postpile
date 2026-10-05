@@ -21,6 +21,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - Mark read, Snooze and "Remove <team>" sit in a quieter line right under the review row. "Open on GitHub" sits once, next to the PR number, with a menu for Files changed, Commits and Checks.
 - One way to write: approving with a note, a comment review, asking the author and replying all open the same box in place, which says where the text goes. The agent drafts only when you click "✨ Draft with agent" at the start of the box, or "✨ Rewrite with agent" once you typed something.
 - Recheck moved onto the assessment's title line.
+- The agent chat shows your message right away with a "Thinking…" bubble, scrolls to the newest message, and takes several lines (Enter sends, Shift+Enter for a new line). A failed message goes back into the input instead of staying in the chat unanswered.
 
 ## 0.16.0 (2026-10-03)
 
