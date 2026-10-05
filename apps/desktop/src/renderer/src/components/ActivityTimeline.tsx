@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { ActivityLine, ActivityList, EventDisplayState, EventKind, EventView, Pr } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { eventGlyph, splitActor, summaryLead } from '../lib/events.ts';
-import { replyCopy, replyTargetOf, type ReplyTarget } from '../lib/reply.ts';
+import { replyCopy, replyTargetsOf, type ReplyTarget } from '../lib/reply.ts';
 import { ageLabel, clockLabel, whenLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
 import { Button } from './Button.tsx';
@@ -237,11 +237,11 @@ const FLASH_MS = 1600;
  * when "Reply ↓" in "New since" jumps to it, the line scrolls to the middle
  * of the pane and is tinted for a moment.
  */
-function TalkLine(props: { line: ActivityLine; last: boolean; pr: Pr; viewerLogin: string | null }) {
+function TalkLine(props: { line: ActivityLine; last: boolean; pr: Pr; target: ReplyTarget | null }) {
   const compose = useCompose();
   const root = useRef<HTMLDivElement>(null);
   const [flash, setFlash] = useState(false);
-  const target = replyTargetOf(props.line, props.pr, props.viewerLogin);
+  const { target } = props;
   const jumpSeq = target && compose.jump?.commentId === target.commentId ? compose.jump.seq : null;
   useEffect(() => {
     if (jumpSeq === null) {
@@ -274,7 +274,8 @@ export function ActivityTimeline(props: { activity: ActivityList; pr: Pr; viewer
   const [showNoise, setShowNoise] = useState(false);
   const { fresh, earlier, noise } = props.activity;
   const lines = [...fresh, ...earlier];
-  const jumpIndex = compose.jump ? lines.findIndex((line) => replyTargetOf(line, props.pr, props.viewerLogin)?.commentId === compose.jump?.commentId) : -1;
+  const targets = replyTargetsOf(lines, props.pr, props.viewerLogin);
+  const jumpIndex = compose.jump ? lines.findIndex((line) => targets.get(line.id)?.commentId === compose.jump?.commentId) : -1;
   const jumpSeq = compose.jump?.seq ?? null;
   const jumpFolded = jumpIndex >= props.activity.cap;
   // A jump to a folded line opens the list once; the line then scrolls itself into view. "Show fewer" still folds it after.
@@ -294,7 +295,7 @@ export function ActivityTimeline(props: { activity: ActivityList; pr: Pr; viewer
       {empty && <span className="text-xs text-hint">No activity yet.</span>}
       {threadChangedAt !== null && <ThreadChangeRow at={threadChangedAt} last={lines.length === 0 && noise.length === 0} />}
       {shown.map((line, index) => (
-        <TalkLine key={line.id} line={line} last={index === shown.length - 1} pr={props.pr} viewerLogin={props.viewerLogin} />
+        <TalkLine key={line.id} line={line} last={index === shown.length - 1} pr={props.pr} target={targets.get(line.id) ?? null} />
       ))}
       {lines.length > props.activity.cap && (
         <button type="button" className={linkButton} onClick={() => setShowAll(!showAll)}>

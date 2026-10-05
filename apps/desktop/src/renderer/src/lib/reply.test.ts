@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ActivityLine, PrEvent } from '@postpile/core';
 import { makeComment, makeEvent, makePr, makeReview, makeThread } from '@postpile/core/fixtures';
-import { replyCopy, replyTargetOf } from './reply.ts';
+import { replyCopy, replyTargetOf, replyTargetsOf } from './reply.ts';
 
 function line(...events: PrEvent[]): ActivityLine {
   const newest = events[0]!;
@@ -57,6 +57,21 @@ describe('replyTargetOf', () => {
     expect(replyTargetOf(line(makeEvent({ actor: 'ci[bot]', isBot: true, sourceId: 'c1' })), pr, 'viewer')).toBeNull();
     expect(replyTargetOf(line(makeEvent({ kind: 'commits_pushed', actor: 'alice', sourceId: 'head' })), pr, 'viewer')).toBeNull();
     expect(replyTargetOf(line(makeEvent({ actor: 'alice', sourceId: 'gone' })), pr, 'viewer')).toBeNull();
+  });
+});
+
+describe('replyTargetsOf', () => {
+  it('gives a comment on two lines its actions once, on the newest line, asking when either line asks', () => {
+    const pr = makePr({ comments: [makeComment({ id: 'c1', author: 'alice' }), makeComment({ id: 'c2', author: 'bob' })] });
+    const edited = line(makeEvent({ id: 'e3', kind: 'comment_edited', actor: 'alice', sourceId: 'c1' }));
+    const other = line(makeEvent({ id: 'e2', actor: 'bob', sourceId: 'c2' }));
+    const mention = line(makeEvent({ id: 'e1', kind: 'mention', actor: 'alice', sourceId: 'c1' }));
+
+    const targets = replyTargetsOf([edited, other, mention], pr, 'viewer');
+
+    expect([...targets.keys()]).toEqual(['e3', 'e2']);
+    expect(targets.get('e3')).toMatchObject({ commentId: 'c1', asksYou: true });
+    expect(targets.get('e2')).toMatchObject({ commentId: 'c2', asksYou: false });
   });
 });
 

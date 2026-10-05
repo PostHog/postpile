@@ -43,6 +43,8 @@ export function AgentPane(props: AgentPaneProps) {
   const [pending, setPending] = useState<{ text: string; count: number } | null>(null);
   const list = useRef<HTMLDivElement>(null);
   const messageCount = chat.data?.length ?? 0;
+  // A turn sent before the pane was closed and opened again is still running in the provider: no second send meanwhile.
+  const running = actions.isBusy(`chat:${props.topicId}`);
   // Gone as soon as the stored chat has the turn, even before send() clears it: no doubled bubble.
   const waiting = pending !== null && pending.count === messageCount ? pending.text : null;
 
@@ -55,7 +57,7 @@ export function AgentPane(props: AgentPaneProps) {
 
   async function send() {
     const text = draft.trim();
-    if (text === '' || pending !== null) {
+    if (text === '' || pending !== null || running) {
       return;
     }
     setPending({ text, count: messageCount });
@@ -113,13 +115,11 @@ export function AgentPane(props: AgentPaneProps) {
             {message.text}
           </p>
         ))}
-        {waiting !== null && (
-          <>
-            <p className={`${bubble} self-end bg-accent-row`}>{waiting}</p>
-            <p className={`${bubble} self-start bg-subtle text-hint inset-ring inset-ring-hairline`}>
-              <span className="animate-pulse">Thinking…</span>
-            </p>
-          </>
+        {waiting !== null && <p className={`${bubble} self-end bg-accent-row`}>{waiting}</p>}
+        {(waiting !== null || running) && (
+          <p className={`${bubble} self-start bg-subtle text-hint inset-ring inset-ring-hairline`}>
+            <span className="animate-pulse">Thinking…</span>
+          </p>
         )}
         {point && (
           <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 px-3 text-[11.5px] text-hint">
@@ -172,7 +172,7 @@ export function AgentPane(props: AgentPaneProps) {
           aria-label="Message to the agent"
           autoFocus
         />
-        <Button type="submit" variant="primary" size="md" disabled={pending !== null || draft.trim() === ''}>
+        <Button type="submit" variant="primary" size="md" disabled={pending !== null || running || draft.trim() === ''}>
           Send
         </Button>
       </form>

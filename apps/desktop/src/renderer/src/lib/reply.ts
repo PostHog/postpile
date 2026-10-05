@@ -55,6 +55,32 @@ export function replyTargetOf(line: ActivityLine, pr: Pr, viewerLogin: string | 
   return null;
 }
 
+/**
+ * The reply targets of a list of activity lines, newest first, keyed by line
+ * id. A comment can show on more than one line (its event and a later edit,
+ * a review and the mention in its body); only the newest of them gets the
+ * actions, so one comment never has two Reply boxes. It asks the viewer when
+ * any of its lines does.
+ */
+export function replyTargetsOf(lines: ActivityLine[], pr: Pr, viewerLogin: string | null): Map<string, ReplyTarget> {
+  const byLine = new Map<string, ReplyTarget>();
+  const byComment = new Map<string, ReplyTarget>();
+  for (const line of lines) {
+    const target = replyTargetOf(line, pr, viewerLogin);
+    if (!target) {
+      continue;
+    }
+    const first = byComment.get(target.commentId);
+    if (first) {
+      first.asksYou = first.asksYou || target.asksYou;
+      continue;
+    }
+    byComment.set(target.commentId, target);
+    byLine.set(line.id, target);
+  }
+  return byLine;
+}
+
 /** "ci.yml" from ".github/workflows/ci.yml". */
 function fileName(path: string): string {
   return path.split('/').pop() ?? path;
