@@ -30,6 +30,7 @@ import { Avatar } from './Avatar.tsx';
 import { CheckIcon, ChevronIcon, InboxIcon, InstructionsIcon, ListIcon, PeopleIcon, PrStateIcon } from './icons.tsx';
 import { QueueFilters } from './QueueFilters.tsx';
 import { YourMoveChip } from './YourMoveChip.tsx';
+import { BusyInboxCard } from './BusyInboxCard.tsx';
 import { InboxCleanupLine } from './InboxCleanupLine.tsx';
 import { InterruptionsMenu } from './InterruptionsMenu.tsx';
 
@@ -401,6 +402,8 @@ interface TopicSidebarProps {
   onQueueFilter: (filter: QueueFilter | null) => void;
   filterCounts: Record<QueueFilter, number>;
   viewer: ViewerView | undefined;
+  /** The busy inbox card's "Unlock writes": opens the footer lock's popover. */
+  onUnlockWrites: () => void;
 }
 
 /** Plain lines in the list (filter, hidden topics, errors) start on the topic names' x: a row's 8px padding plus its 14px leading slot. */
@@ -530,7 +533,9 @@ export function TopicSidebar(props: TopicSidebarProps) {
     <nav ref={navRef} aria-label="Topics" className="pane-scroll flex min-h-0 flex-col gap-3.5 overflow-auto bg-sidebar pl-2.5 pr-0 pt-3 pb-2.5 shadow-[inset_-1px_0_0_var(--hairline-strong)]">
       <QueueFilters counts={props.filterCounts} active={props.queueFilter} viewer={props.viewer} onChange={props.onQueueFilter} />
       <InboxItem count={props.inboxCount} active={props.inboxOpen} onSelect={props.onOpenInbox} />
-      {filter && <FilterHint topics={props.shown.length} tiles={filter.tileCount} onClear={props.onClearFilter} />}
+      {/* Right above the topics: a busy inbox is where topics go missing. Renders nothing unless busy. */}
+      <BusyInboxCard onUnlockWrites={props.onUnlockWrites} />
+      {filter &&<FilterHint topics={props.shown.length} tiles={filter.tileCount} onClear={props.onClearFilter} />}
       {props.error && <p className={`text-xs text-status-bad ${TEXT_COLUMN}`}>Could not load topics: {props.error}</p>}
       {narrowed && props.shown.length === 0 && props.topics.length > 0 && (
         <p className={`text-xs leading-relaxed text-muted ${TEXT_COLUMN}`}>No topic has a PR that matches.</p>

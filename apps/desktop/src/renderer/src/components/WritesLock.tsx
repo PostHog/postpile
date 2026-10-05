@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import type { GitHubWritesStatus, PendingWriteView } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { pendingBadgeTitle, pendingHeadline, pendingList } from '../lib/pending.ts';
@@ -41,11 +41,12 @@ function PendingList(props: { pending: PendingWriteView[] }) {
  * while locked (pending writes) and offers to send or discard them; locking
  * is instant unless pending writes are left. The count badge shows how many
  * wait. With POSTPILE_READ_ONLY=1 it cannot unlock; the popover then only
- * offers to discard.
+ * offers to discard. Whether the popover is open lives in App, so the busy
+ * inbox card's "Unlock writes" can open it too.
  */
-export function WritesLock() {
+export function WritesLock(props: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const actions = useActions();
-  const [open, setOpen] = useState(false);
+  const { open, onOpenChange: setOpen } = props;
   const root = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -68,7 +69,7 @@ export function WritesLock() {
       document.removeEventListener('pointerdown', onPointerDown);
       document.removeEventListener('keydown', onKeyDown);
     };
-  }, [open]);
+  }, [open, setOpen]);
 
   const writes = actions.writes;
   if (!writes) {

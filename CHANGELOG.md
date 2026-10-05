@@ -7,6 +7,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 ### Added
 
 - Pick when PostPile may interrupt you: never, in batches, or as soon as it matters. Setup asks in a new step, "Your day", and the "Interruptions" row at the bottom of the sidebar changes it any time. In batches, one short roundup arrives at 9:30, 13:30 and 16:30 on weekdays, only when something still needs you. As soon as it matters works like the notifications so far.
+- On a very busy inbox, a "Busy inbox" card at the top of the sidebar says that PostPile is focusing on what is aimed at you: how many PRs it keeps for you, for your team and for others, and how many quiet PRs wait for news. "Why?" explains what PostPile does meanwhile, "Clean up" opens the inbox cleanup, and "Unlock writes" shows up while GitHub writes are locked. The card folds to one line until you quit.
 
 ### Changed
 
