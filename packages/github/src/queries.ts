@@ -62,11 +62,18 @@ const REVIEWER_FRAGMENT = `fragment reviewer on RequestedReviewer {
 
 const COMMENT_FRAGMENT = 'fragment comment on Comment { author { ...actor } body createdAt lastEditedAt updatedAt editor { ...actor } }';
 
+/**
+ * Whether the viewer already reacted, per reaction kind. Only THUMBS_UP is
+ * read (the detail pane's thumbs up); reactionGroups lists every kind without
+ * paging, so it stays cheap. Not on the Comment interface, hence per node.
+ */
+const REACTIONS = 'reactionGroups { content viewerHasReacted }';
+
 // The node selections of the capped lists, shared by the PR query and the
 // older-page queries (cap-fill.ts), so paged-in items normalize the same.
-const REVIEW_NODE = 'id state url submittedAt createdAt ...comment commit { oid }';
-const COMMENT_NODE = 'id url ...comment';
-const THREAD_COMMENT_NODE = 'id url state ...comment';
+const REVIEW_NODE = `id state url submittedAt createdAt ...comment commit { oid } ${REACTIONS}`;
+const COMMENT_NODE = `id url ...comment ${REACTIONS}`;
+const THREAD_COMMENT_NODE = `id url state ...comment ${REACTIONS}`;
 /** A thread's first comments; the end cursor lets cap-fill.ts page on past the cap. */
 const THREAD_COMMENTS = `comments(first: ${QUERY_CAPS.threadComments}) { totalCount pageInfo { hasNextPage endCursor } nodes { ${THREAD_COMMENT_NODE} } }`;
 const THREAD_NODE = `id path isResolved ${THREAD_COMMENTS}`;

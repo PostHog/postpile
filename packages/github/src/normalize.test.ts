@@ -271,3 +271,37 @@ describe('toPr: comment edits', () => {
     ]);
   });
 });
+
+describe('toPr: viewer reactions', () => {
+  it('marks comments, review bodies, thread comments and reviews the viewer gave a thumbs up', () => {
+    const raw = rawPr();
+    const thumbsUp = [
+      { content: 'THUMBS_UP', viewerHasReacted: true },
+      { content: 'HEART', viewerHasReacted: false },
+    ];
+    const heartOnly = [
+      { content: 'HEART', viewerHasReacted: true },
+      { content: 'THUMBS_UP', viewerHasReacted: false },
+    ];
+    Object.assign(raw.comments.nodes[0]!, { reactionGroups: thumbsUp });
+    Object.assign(raw.comments.nodes[1]!, { reactionGroups: heartOnly });
+    Object.assign(raw.reviews.nodes[0]!, { reactionGroups: thumbsUp });
+    Object.assign(raw.reviews.nodes[1]!, { reactionGroups: thumbsUp });
+    Object.assign(raw.reviewThreads.nodes[0]!.comments.nodes[0]!, { reactionGroups: thumbsUp });
+    const pr = toPr(ref, raw);
+    const byId = (id: string) => pr.comments.find((comment) => comment.id === id);
+    expect(byId('IC1')?.viewerReacted).toBe(true);
+    expect(byId('IC2')?.viewerReacted).toBe(false);
+    expect(byId('R1')?.viewerReacted).toBe(true);
+    expect(byId('RC1')?.viewerReacted).toBe(true);
+    expect(pr.threads[0]?.comments[0]?.viewerReacted).toBe(true);
+    // R2 has a blank body, so it is no comment, but the review still carries the reaction.
+    expect(pr.reviews.find((review) => review.id === 'R2')?.viewerReacted).toBe(true);
+  });
+
+  it('leaves viewerReacted out when GitHub sent no reaction groups (older fixtures)', () => {
+    const pr = toPr(ref, rawPr());
+    expect(pr.comments.every((comment) => comment.viewerReacted === undefined)).toBe(true);
+    expect(pr.reviews.every((review) => review.viewerReacted === undefined)).toBe(true);
+  });
+});

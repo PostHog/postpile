@@ -320,6 +320,14 @@ export class FakeWriter implements GitHubWriter {
     this.calls.push(`commentOnPr ${ref.repo}#${ref.number} ${body}`);
   }
 
+  async replyInThread(threadId: string, body: string): Promise<void> {
+    this.calls.push(`replyInThread ${threadId} ${body}`);
+  }
+
+  async addThumbsUp(subjectId: string): Promise<void> {
+    this.calls.push(`addThumbsUp ${subjectId}`);
+  }
+
   async removeTeamReviewRequest(ref: PrRef, teamSlug: string): Promise<void> {
     if (this.failRemoveTeamRequest) {
       throw new Error('boom: remove team request');

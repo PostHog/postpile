@@ -41,7 +41,17 @@ export interface RawEdit {
   editor?: RawActor | null;
 }
 
-export interface RawComment extends RawEdit {
+export interface RawReactionGroup {
+  content: string;
+  viewerHasReacted: boolean;
+}
+
+/** Reactions per kind on a comment or review. Missing in fixtures written before it was asked for. */
+export interface RawReactions {
+  reactionGroups?: RawReactionGroup[];
+}
+
+export interface RawComment extends RawEdit, RawReactions {
   id: string;
   author: RawActor | null;
   body: string;
@@ -51,7 +61,7 @@ export interface RawComment extends RawEdit {
   state?: string;
 }
 
-export interface RawReview extends RawEdit {
+export interface RawReview extends RawEdit, RawReactions {
   id: string;
   author: RawActor | null;
   state: string;

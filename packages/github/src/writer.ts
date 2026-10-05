@@ -21,6 +21,10 @@ export interface GitHubWriter {
   /** A review with event COMMENT on exactly `commitOid`: a review without an approval. `body` is required. */
   commentReviewPr(ref: PrRef, body: string, commitOid: string): Promise<void>;
   commentOnPr(ref: PrRef, body: string): Promise<void>;
+  /** A reply in an inline review thread (`threadId` is the thread's GraphQL node id). */
+  replyInThread(threadId: string, body: string): Promise<void>;
+  /** A thumbs up on an issue comment, inline review comment or review (`subjectId` is its GraphQL node id). */
+  addThumbsUp(subjectId: string): Promise<void>;
   /** Removes the review request of one team (`teamSlug`, no org) from the PR. Everyone on the team stops being asked. */
   removeTeamReviewRequest(ref: PrRef, teamSlug: string): Promise<void>;
   /** Mutes the notification thread until the viewer comments or is mentioned (DELETE its subscription). */
