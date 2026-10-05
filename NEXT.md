@@ -28,8 +28,8 @@ now".
   `forPrs`) for the topic pane, the PR pane, MCP reads, search, ping
   clicks, retiring and the debug views. Migration 028 splits `pr` into the
   PR header and `pr_snapshot` (the json) and adds a partial index for events aimed at
-  the user. `GET /api/busy-inbox` carries the numbers for a busy inbox card
-  (UI to follow; `POSTPILE_FAKE_BUSY=1` in fake mode), and
+  the user. `GET /api/busy-inbox` carries the numbers for the busy inbox
+  card (above; `POSTPILE_FAKE_BUSY=1` in fake mode), and
   `board_trimmed` goes out at most hourly while busy. Work follows the
   same slice: a sync fetches threads older than a week only when unread
   and aimed at the user or on their own open PR, nothing for others while
@@ -1305,7 +1305,7 @@ the app meanwhile.
   inbox is busy and PostPile works for the user first (own PRs, personal
   asks), then the home team (requests to it, teammates' PRs), and stops
   working for everyone else, even with room left. A visible "busy inbox"
-  card shows it (data built, UI to follow).
+  card in the sidebar shows it (see the entry above).
 
 - **GitHub writes on by default; locked writes choke PostPile** (2026-10-05,
   not built yet): PostPile can only shed load by marking things read on
