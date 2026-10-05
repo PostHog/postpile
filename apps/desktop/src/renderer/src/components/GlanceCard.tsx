@@ -1,14 +1,16 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { PrDetail, PrSummary, TileView, Verdict } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { useNextAutoSyncAt } from '../api/live.ts';
 import { assessment, type AssessmentLine, type AssessmentMark } from '../lib/assessment.ts';
-import { glanceStateText } from '../lib/glance.ts';
+import { glanceClaim, glanceStateText } from '../lib/glance.ts';
 import { staleGlanceNote, staleWord, updatingNow } from '../lib/staleness.ts';
 import { useNow } from '../lib/use-now.ts';
 import { Button } from './Button.tsx';
 import { SpinnerIcon } from './icons.tsx';
 import { KeyFiles } from './KeyFiles.tsx';
+import { RecheckDialog } from './RecheckDialog.tsx';
+import { useTellAgent } from './TellAgent.tsx';
 import { TeachLesson } from './TeachLesson.tsx';
 
 interface GlanceCardProps {
@@ -49,21 +51,25 @@ function MarkedLine(props: { line: AssessmentLine; tone: string }) {
 }
 
 /** "LOOK CLOSER · for you": small wide-tracked caps on the box's first line. */
-function BoxTitle(props: { title: string; tag: string }) {
+function BoxTitle(props: { title: string; tag: string; tools?: ReactNode }) {
   return (
     <span className={`${MARK_GRID} items-baseline leading-[normal]`}>
       <span className="col-span-2 flex items-baseline gap-1.5">
         <span className="text-[10px] font-extrabold tracking-[0.08em]">{props.title}</span>
         {props.tag && <span className="text-[10.5px] opacity-80">{props.tag}</span>}
+        {props.tools && <span className="ml-auto flex items-baseline gap-2.5">{props.tools}</span>}
       </span>
     </span>
   );
 }
 
-function Box(props: { title: string; tag: string; look: { box: string; mark: string }; lines: AssessmentLine[] }) {
+/** The glance's own controls on its title line, in the box's colour: they act on the glance, not on the PR. */
+const toolButton = 'text-[11px] font-medium opacity-80 hover:underline hover:opacity-100';
+
+function Box(props: { title: string; tag: string; look: { box: string; mark: string }; lines: AssessmentLine[]; tools?: ReactNode }) {
   return (
     <div className={`flex flex-col gap-2 rounded-box px-3 pt-[11px] pb-3 ${props.look.box}`}>
-      <BoxTitle title={props.title} tag={props.tag} />
+      <BoxTitle title={props.title} tag={props.tag} tools={props.tools} />
       {props.lines.map((line) => (
         <MarkedLine key={`${line.mark}${line.text}`} line={line} tone={props.look.mark} />
       ))}
@@ -90,10 +96,18 @@ function PlainLine(props: { mark: '→' | '“'; label: string; text: string }) 
  * dashed, the verdict word with "out of date" (or "updating"), one line
  * saying so, and the old advice folded behind "Show old assessment".
  */
-function StaleVerdictBox(props: { title: string; lines: AssessmentLine[]; updating: boolean; waitsForSync: boolean; showOld: boolean; onToggle: () => void }) {
+function StaleVerdictBox(props: {
+  title: string;
+  lines: AssessmentLine[];
+  updating: boolean;
+  waitsForSync: boolean;
+  showOld: boolean;
+  onToggle: () => void;
+  tools: ReactNode;
+}) {
   return (
     <div className={`flex flex-col gap-2 rounded-box px-3 pt-[11px] pb-3 ${STALE_BOX.box}`}>
-      <BoxTitle title={props.title} tag={`· ${staleWord(props.updating)}`} />
+      <BoxTitle title={props.title} tag={`· ${staleWord(props.updating)}`} tools={props.tools} />
       <span className="text-[12.5px] leading-[1.45] text-ink-2">{staleGlanceNote(props.updating, props.waitsForSync)}</span>
       {props.showOld && props.lines.map((line) => <MarkedLine key={`${line.mark}${line.text}`} line={line} tone={STALE_BOX.mark} />)}
       <button type="button" aria-expanded={props.showOld} onClick={props.onToggle} className="self-start text-[11.5px] text-accent hover:underline">
@@ -139,10 +153,15 @@ function MissingGlance(props: { detail: PrDetail }) {
  * `StaleVerdictBox` instead and folds the rest away. "Teach future
  * assessments" (`TeachLesson`) sits right under the verdict explanation,
  * only when there is a glance. Pulled-in stack layers
- * get no glance; the card says so.
+ * get no glance; the card says so. The verdict box's title line carries the
+ * glance's own controls: Recheck (the whole glance, `RecheckDialog`) and
+ * "Tell the agent", which opens the topic's agent pane with this PR named.
+ * The card holds no PR actions: it is advice, and it can be missing.
  */
 export function GlanceCard(props: GlanceCardProps) {
   const actions = useActions();
+  const tellAgent = useTellAgent();
+  const [recheckOpen, setRecheckOpen] = useState(false);
   const { glance, glanceStale } = props.detail;
   // The detail pane remounts the body per PR, so this starts folded on every PR.
   const [showOld, setShowOld] = useState(false);
@@ -155,6 +174,27 @@ export function GlanceCard(props: GlanceCardProps) {
   // A stale glance folds its advice away; "Show old assessment" brings it back.
   const folded = glanceStale && !showOld;
   const updating = updatingNow({ syncing: actions.syncing, writing: props.detail.glanceState === 'writing' });
+  const tools = (
+    <>
+      <button
+        type="button"
+        title="Recheck this assessment: the agent reads the whole glance against the PR, its activity and the topic dossier"
+        onClick={() => setRecheckOpen(true)}
+        className={toolButton}
+      >
+        Recheck
+      </button>
+      <button
+        type="button"
+        disabled={!tellAgent.available}
+        title="Opens the topic's agent with this PR named, to say what is off"
+        onClick={() => tellAgent.tell(`About #${props.detail.pr.ref.number}: `)}
+        className={toolButton}
+      >
+        Tell the agent
+      </button>
+    </>
+  );
   return (
     <div className="flex flex-col gap-4">
       {view && (
@@ -167,9 +207,10 @@ export function GlanceCard(props: GlanceCardProps) {
               waitsForSync={props.detail.glanceRefreshBlock !== null}
               showOld={showOld}
               onToggle={() => setShowOld(!showOld)}
+              tools={tools}
             />
           ) : (
-            <Box title={view.title} tag={view.tag} look={VERDICT_BOX[view.verdict]} lines={view.lines} />
+            <Box title={view.title} tag={view.tag} look={VERDICT_BOX[view.verdict]} lines={view.lines} tools={tools} />
           )}
           {!folded && view.risk && <Box title="RISK" tag={view.risk.level ? `· ${view.risk.level}` : ''} look={RISK_BOX} lines={view.risk.lines} />}
           {!folded && (view.does || view.others) && (
@@ -198,6 +239,12 @@ export function GlanceCard(props: GlanceCardProps) {
             Not related to this set
           </Button>
         </div>
+      )}
+      {recheckOpen && glance && (
+        <RecheckDialog
+          request={{ factId: null, topicId: props.detail.topicId, text: glanceClaim(glance), target: null, prKey }}
+          onClose={() => setRecheckOpen(false)}
+        />
       )}
     </div>
   );

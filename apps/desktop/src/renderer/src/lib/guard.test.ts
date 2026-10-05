@@ -12,6 +12,12 @@ describe('writeBlockedReason', () => {
     expect(writeBlockedReason('approve', ON)).toBeNull();
   });
 
+  it('blocks replies and reactions while locked: they have no pending queue', () => {
+    expect(writeBlockedReason('reply', OFF)).toMatch(/Sending a reply writes to GitHub/);
+    expect(writeBlockedReason('react', OFF)).toMatch(/Reacting writes to GitHub/);
+    expect(writeBlockedReason('reply', ON)).toBeNull();
+  });
+
   it('lets mark-reads run while locked, they become pending writes', () => {
     expect(writeBlockedReason('markRead', OFF)).toBeNull();
     expect(writeBlockedReason('notMine', FORCED)).toBeNull();

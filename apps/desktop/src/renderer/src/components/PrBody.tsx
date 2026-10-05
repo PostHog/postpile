@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
-import type { PrDetail, PrIcon, PrStatus, PrSummary, TileView } from '@postpile/core';
+import { useEffect, useRef, useState, type RefObject } from 'react';
+import type { PaneOffers, PrDetail, PrIcon, PrStatus, PrSummary, TileView } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { useViewer } from '../api/viewer.ts';
 import { assigneeLine } from '../lib/assignees.ts';
@@ -14,7 +14,11 @@ import { GlanceCard } from './GlanceCard.tsx';
 import { NewSinceBox } from './NewSinceBox.tsx';
 import { ICON_WORDS, mergeQueueWord, reviewWord, stackQueueWord, type StateWord } from '../lib/pr.ts';
 import { type StackPlace, stackPlaces } from '../lib/stacks.ts';
-import { BranchArrowIcon, ExternalIcon, PrStateIcon } from './icons.tsx';
+import { Button } from './Button.tsx';
+import { ComposeProvider, useComposeState } from './Composer.tsx';
+import { BranchArrowIcon, PrStateIcon } from './icons.tsx';
+import { OpenOnGitHub } from './OpenOnGitHub.tsx';
+import { ReviewRow } from './ReviewRow.tsx';
 import { StackMark, StateWordLabel } from './pills.tsx';
 import { PrDescription } from './PrDescription.tsx';
 import { PrFacts } from './PrFacts.tsx';
@@ -24,8 +28,8 @@ interface PrBodyProps {
   detail: PrDetail;
   summary: PrSummary | null;
   view: TileView;
-  /** The action bar (and the ask composer), right under the assessment. */
-  actions: ReactNode;
+  /** Core's offers for this PR (`paneOffersFor`): which writes show and what leads. */
+  offers: PaneOffers;
 }
 
 /** "head → base", plus the layer for a stack layer, also inside a set (bottom layer is 1). */
@@ -70,9 +74,10 @@ const ICON_TEXT_TONES: Record<PrIcon, string> = {
  * word, the PR key, and the GitHub link. A PR in the merge queue says where
  * it stands there instead of the review ("Merge queue: Testing"), and since
  * when; the reason of a failure gets its own line (`QueueFailure`). No CI
- * (only in the facts).
+ * (only in the facts). "Open on GitHub" lives here, next to the PR's
+ * identity, and nowhere else in the pane.
  */
-function StateLine(props: { pr: PrBodyProps['detail']['pr']; status: PrStatus; stackQueue: StateWord | null }) {
+function StateLine(props: { pr: PrBodyProps['detail']['pr']; status: PrStatus; stackQueue: StateWord | null; openLeads: boolean }) {
   const { pr, status } = props;
   const now = useNow();
   const queue = mergeQueueWord(status, now);
@@ -88,16 +93,9 @@ function StateLine(props: { pr: PrBodyProps['detail']['pr']; status: PrStatus; s
       {status.mergeQueue && <span className="shrink-0 text-[11px] text-hint">since {sinceLabel(status.mergeQueue.since, now)}</span>}
       {review && <StateWordLabel word={review} size="md" />}
       <RepoRef prKey={pr.key} />
-      <a
-        href={pr.url}
-        target="_blank"
-        rel="noreferrer"
-        aria-label="Open on GitHub"
-        title="Open on GitHub"
-        className="ml-auto flex size-7 shrink-0 items-center justify-center rounded-control bg-surface text-ink-2 shadow-control inset-ring inset-ring-edge-control-soft hover:bg-subtle"
-      >
-        <ExternalIcon />
-      </a>
+      <span className="ml-auto">
+        <OpenOnGitHub url={pr.url} leads={props.openLeads} />
+      </span>
     </div>
   );
 }
@@ -117,50 +115,110 @@ function QueueFailure(props: { status: PrStatus }) {
   );
 }
 
-/** The scrolling part of the detail pane for one PR. */
+/**
+ * "Back to top" while the review row has scrolled out above: after a jump
+ * down to a comment, the way back to the verdict is one click.
+ */
+function useBelowRow(scroller: RefObject<HTMLDivElement | null>, row: RefObject<HTMLDivElement | null>): boolean {
+  const [below, setBelow] = useState(false);
+  useEffect(() => {
+    const element = scroller.current;
+    if (!element) {
+      return;
+    }
+    function onScroll() {
+      const top = element!.getBoundingClientRect().top;
+      const anchor = row.current;
+      setBelow(anchor ? anchor.getBoundingClientRect().bottom < top : element!.scrollTop > 400);
+    }
+    element.addEventListener('scroll', onScroll, { passive: true });
+    return () => element.removeEventListener('scroll', onScroll);
+  }, [scroller, row]);
+  return below;
+}
+
+/**
+ * The scrolling part of the detail pane for one PR, top down: state line
+ * (with Open on GitHub), title, "New since you looked" (a digest; its
+ * "Reply ↓" jumps to the comment), the agent's glance (advice, on its own),
+ * the review row (its own row right after the glance: the shortest pointer
+ * path from the tile), then description, facts and the activity, where
+ * every person's comment takes Reply and React. One composer is open at a
+ * time; its state lives here, so it starts fresh per PR.
+ */
 export function PrBody(props: PrBodyProps) {
   const { syncing } = useActions();
   const { pr } = props.detail;
+  const { offers } = props;
+  const compose = useComposeState();
+  const scroller = useRef<HTMLDivElement>(null);
+  const reviewRow = useRef<HTMLDivElement>(null);
+  const belowRow = useBelowRow(scroller, reviewRow);
   const place = stackPlaces(props.view.tile.stacks).get(pr.key) ?? null;
   const viewerLogin = useViewer().data?.login ?? null;
   const assigned = assigneeLine(pr.author, pr.assignees ?? [], viewerLogin);
   // A whole-topic catch-up rewrites the facts; a glance-only refresh on look does not (server decides).
   const updating = updatingNow({ syncing, writing: props.detail.memoryUpdating });
+  const row = props.view.prs.find((candidate) => candidate.key === pr.key);
+  // The PR's owner: its author, or the person a bot opened it for.
+  const askPerson = row?.facts.owners[0] ?? pr.author;
   return (
-    // 22px pane edge: boxes and rows run from here; lines of text start 12px in (px-3), at 34.
-    <div className="pane-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-auto pl-[22px] pr-[12px] pt-[18px] pb-6">
-      <div className="flex flex-col gap-[5px] px-3">
-        <StateLine pr={pr} status={props.detail.status} stackQueue={stackQueueWord(pr.key, props.view.prs, props.view.tile.stacks, new Date())} />
-        <div className="flex items-start gap-2">
-          {/* The mark sits on the title's first line: 18px tag, nudged to its center. */}
-          {place && (
-            <span className="mt-px">
-              <StackMark place={place} />
-            </span>
+    <ComposeProvider value={compose}>
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        {/* 22px pane edge: boxes and rows run from here; lines of text start 12px in (px-3), at 34. */}
+        <div ref={scroller} className="pane-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-auto pl-[22px] pr-[12px] pt-[18px] pb-6">
+          <div className="flex flex-col gap-[5px] px-3">
+            <StateLine
+              pr={pr}
+              status={props.detail.status}
+              stackQueue={stackQueueWord(pr.key, props.view.prs, props.view.tile.stacks, new Date())}
+              openLeads={offers.lead === 'open_on_github'}
+            />
+            <div className="flex items-start gap-2">
+              {/* The mark sits on the title's first line: 18px tag, nudged to its center. */}
+              {place && (
+                <span className="mt-px">
+                  <StackMark place={place} />
+                </span>
+              )}
+              <h2 className="min-w-0 text-[16px] leading-[1.3] font-[650] tracking-[-0.016em] text-balance select-text">{pr.title}</h2>
+            </div>
+            <BranchLine pr={pr} place={place} />
+            <QueueFailure status={props.detail.status} />
+            {assigned && (
+              // Only when someone other than the author is assigned: whose agent PR it is.
+              <span className="flex min-w-0 items-center gap-1 text-[11px] text-hint">
+                opened by
+                <Avatar login={pr.author} />
+                <span className="truncate">{pr.author}</span>
+                <span className="text-faint">·</span>
+                <AssignedTo line={assigned} />
+              </span>
+            )}
+          </div>
+          <NewSinceBox detail={props.detail} />
+          <GlanceCard detail={props.detail} summary={props.summary} view={props.view} />
+          {(offers.approve || offers.ask) && (
+            <div ref={reviewRow}>
+              <ReviewRow detail={props.detail} offers={offers} askPerson={askPerson} />
+            </div>
           )}
-          <h2 className="min-w-0 text-[16px] leading-[1.3] font-[650] tracking-[-0.016em] text-balance select-text">{pr.title}</h2>
+          <PrDescription body={pr.body} />
+          <PrFacts pr={pr} agentApprovers={props.detail.agentApprovers} />
+          <ReviewList pr={pr} />
+          <AgentFacts facts={props.detail.facts} updating={updating} />
+          <ActivityTimeline activity={props.detail.activity} pr={pr} viewerLogin={viewerLogin} />
         </div>
-        <BranchLine pr={pr} place={place} />
-        <QueueFailure status={props.detail.status} />
-        {assigned && (
-          // Only when someone other than the author is assigned: whose agent PR it is.
-          <span className="flex min-w-0 items-center gap-1 text-[11px] text-hint">
-            opened by
-            <Avatar login={pr.author} />
-            <span className="truncate">{pr.author}</span>
-            <span className="text-faint">·</span>
-            <AssignedTo line={assigned} />
-          </span>
+        {belowRow && (
+          <Button
+            className="absolute bottom-4 left-1/2 -translate-x-1/2 shadow-menu"
+            title="Back to the top of the PR, where the review row is"
+            onClick={() => scroller.current?.scrollTo({ top: 0, behavior: 'smooth' })}
+          >
+            ↑ Back to top
+          </Button>
         )}
       </div>
-      <NewSinceBox detail={props.detail} />
-      <GlanceCard detail={props.detail} summary={props.summary} view={props.view} />
-      {props.actions}
-      <PrDescription body={pr.body} />
-      <PrFacts pr={pr} agentApprovers={props.detail.agentApprovers} />
-      <ReviewList pr={pr} />
-      <AgentFacts facts={props.detail.facts} updating={updating} />
-      <ActivityTimeline activity={props.detail.activity} />
-    </div>
+    </ComposeProvider>
   );
 }

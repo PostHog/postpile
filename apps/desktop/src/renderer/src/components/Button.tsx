@@ -1,6 +1,6 @@
 import { Children, Fragment, isValidElement, type ButtonHTMLAttributes, type ReactNode } from 'react';
 
-export type ButtonVariant = 'primary' | 'safe' | 'secondary' | 'move' | 'safe-soft' | 'joined';
+export type ButtonVariant = 'primary' | 'safe' | 'secondary' | 'move' | 'safe-soft' | 'joined' | 'quiet';
 export type ButtonSize = 'sm' | 'md' | 'icon' | 'icon-md';
 
 const VARIANTS: Record<ButtonVariant, string> = {
@@ -15,6 +15,8 @@ const VARIANTS: Record<ButtonVariant, string> = {
   'safe-soft': 'bg-safe-soft font-medium text-safe shadow-control inset-ring inset-ring-safe/40 hover:inset-ring-safe/60',
   // One segment of JoinedButtons: the group draws the fill, the outline and the dividers.
   joined: 'bg-transparent text-ink-2 hover:bg-subtle',
+  // Housekeeping in the detail pane's header: text until hovered, so it never competes with the review row.
+  quiet: 'bg-transparent text-hint hover:bg-subtle hover:text-ink',
 };
 
 // Solid buttons get a pixel more side padding than outlined ones, as in the mockup.

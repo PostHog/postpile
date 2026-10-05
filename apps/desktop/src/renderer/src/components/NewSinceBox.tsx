@@ -1,9 +1,12 @@
 import { useState } from 'react';
-import type { PrDetail } from '@postpile/core';
+import type { ActivityLine, PrDetail } from '@postpile/core';
+import { useViewer } from '../api/viewer.ts';
+import { replyTargetOf } from '../lib/reply.ts';
 import { whenLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
 import { newSinceAnchor } from '../lib/whats-new.ts';
 import { eventRow, lineRow, linkButton } from './ActivityTimeline.tsx';
+import { useCompose } from './Composer.tsx';
 
 /** Loud lines shown before "N more". */
 const LINES_SHOWN = 3;
@@ -13,9 +16,29 @@ const LINES_SHOWN = 3;
  * viewer's last touch (same rows as the activity list), anchored to that
  * touch ("since your changes request yesterday"), and the quiet bot and CI
  * events of that stretch folded into one line. Only while something loud is new.
+ * A digest you read: a person's comment that can take a reply gets "Reply ↓",
+ * which scrolls to it in the activity list and opens the reply there.
  */
 export function NewSinceBox(props: { detail: PrDetail }) {
   const now = useNow();
+  const compose = useCompose();
+  const viewerLogin = useViewer().data?.login ?? null;
+  function replyLink(line: ActivityLine) {
+    const target = replyTargetOf(line, props.detail.pr, viewerLogin);
+    if (!target?.canReply) {
+      return null;
+    }
+    return (
+      <button
+        type="button"
+        title="Scrolls to the comment in Activity and opens the reply there"
+        onClick={() => compose.jumpToReply(target.commentId)}
+        className="mt-0.5 block text-[11.5px] font-medium text-accent hover:underline"
+      >
+        Reply ↓
+      </button>
+    );
+  }
   const [showAll, setShowAll] = useState(false);
   const [showNoise, setShowNoise] = useState(false);
   const { fresh, freshNoise, freshNoiseLabel } = props.detail.activity;
@@ -32,7 +55,7 @@ export function NewSinceBox(props: { detail: PrDetail }) {
         <span className="tracking-[0.04em] uppercase">New since you looked</span>
         {anchor && <span className="font-medium"> · {anchor}</span>}
       </span>
-      {shown.map((line, index) => lineRow(line, index === shown.length - 1))}
+      {shown.map((line, index) => lineRow(line, index === shown.length - 1, replyLink(line)))}
       {hidden > 0 && (
         <button type="button" className={linkButton} onClick={() => setShowAll(true)}>
           {hidden} more

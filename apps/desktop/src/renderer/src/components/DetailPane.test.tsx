@@ -106,7 +106,7 @@ afterEach(() => {
 });
 
 describe('DetailPane', () => {
-  it('shows one action bar after clicking through the layers of a stack', () => {
+  it('shows one state line after clicking through the layers of a stack', () => {
     // Every PR's detail is cached, as after a first visit; other reads never answer.
     vi.stubGlobal('fetch', () => new Promise(() => {}));
     const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } });
@@ -116,7 +116,7 @@ describe('DetailPane', () => {
     const wrap = (prKey: string) => (
       <QueryClientProvider client={client}>
         <ActionsProvider>
-          <DetailPane view={stackView} prKey={prKey} onSelectPr={() => {}} chatRequest={null} noSelectionText="" />
+          <DetailPane view={stackView} prKey={prKey} onSelectPr={() => {}} noSelectionText="" />
         </ActionsProvider>
       </QueryClientProvider>
     );
@@ -126,7 +126,7 @@ describe('DetailPane', () => {
     rerender(wrap('acme/app#13'));
     rerender(wrap('acme/app#11'));
 
-    expect(screen.getAllByRole('button', { name: 'Chat about this tile' })).toHaveLength(1);
+    expect(screen.getAllByRole('link', { name: /Open on GitHub/ })).toHaveLength(1);
     expect(screen.getByRole('heading', { level: 2 }).textContent).toBe('Add the cache key');
   });
 });

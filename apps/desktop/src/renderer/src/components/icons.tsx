@@ -95,6 +95,35 @@ export function ChatIcon() {
   );
 }
 
+/** Reply: the curved arrow back, for "Reply" on a comment. */
+export function ReplyIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M6 4L2 8l4 4M2 8h7.5A4.5 4.5 0 0 1 14 12.5V13" />
+    </svg>
+  );
+}
+
+/** Thumbs up: GitHub's +1 reaction. */
+export function ThumbsUpIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" aria-hidden="true">
+      <path d="M5 7v6H2.5V7zM5 7l2.6-4.6c.9 0 1.6.8 1.4 1.7L8.6 6h3.6c.8 0 1.4.8 1.2 1.6l-1 4.4c-.2.6-.7 1-1.3 1H5" />
+    </svg>
+  );
+}
+
+/** Three dots: a menu of the less used actions. */
+export function MoreIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+      <circle cx="3.5" cy="8" r="1.3" />
+      <circle cx="8" cy="8" r="1.3" />
+      <circle cx="12.5" cy="8" r="1.3" />
+    </svg>
+  );
+}
+
 export function InstructionsIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">

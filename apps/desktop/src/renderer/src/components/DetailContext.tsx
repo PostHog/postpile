@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { TileView } from '@postpile/core';
 import { stackQueueWord } from '../lib/pr.ts';
 import { stackPlaces } from '../lib/stacks.ts';
@@ -9,6 +10,8 @@ interface DetailContextProps {
   view: TileView;
   prKey: string;
   onSelectPr: (prKey: string) => void;
+  /** Mark read, Snooze and ⋯ for the selected PR, quiet at the end of the first line (`PaneHousekeeping`). */
+  housekeeping: ReactNode;
 }
 
 function NavButton(props: { back: boolean; ariaLabel: string; onClick: () => void }) {
@@ -63,7 +66,7 @@ export function DetailContext(props: DetailContextProps) {
   return (
     <div className="flex shrink-0 flex-col gap-2 bg-detail-context px-[22px] pt-3.5 pb-3 shadow-[inset_0_-1px_0_var(--line-detail-context),inset_1px_0_0_var(--hairline-strong)]">
       {/* Starts on the 34px text line; the kind icon sits centered in a 20px slot. */}
-      <div className="flex min-w-0 items-center gap-2 px-3">
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 px-3">
         <span className="flex shrink-0 items-center gap-2 text-[12.5px] font-semibold whitespace-nowrap text-accent">
           <KindIcon kind={view.tile.kind} size={14} className="mx-[3px] shrink-0" />
           {kind.word}
@@ -84,6 +87,7 @@ export function DetailContext(props: DetailContextProps) {
             </span>
           </>
         )}
+        <span className={several ? 'ml-1' : 'ml-auto'}>{props.housekeeping}</span>
       </div>
       {several && (
         // A container, so PrRow can drop its least needed facts when the pane is narrow.

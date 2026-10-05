@@ -1347,7 +1347,8 @@ until the user accepts in the dialog, through `correctMemory`:
   writes it in.
 - drop -> `wrong`: as before, the fact closes, the line logs `memory_wrong`.
 - Every outcome and errors (failed call, cap, gone fact) also offer "Tell
-  the agent what's wrong": the tile chat opens with the line quoted.
+  the agent what's wrong": the topic's agent pane opens with the line
+  quoted (the tile chat until 2026-10-05, see "The PR pane").
 
 **Recheck only on big claims** (2026-09-28, Recheck on every line was noise).
 Every line keeps "Why?"; Recheck (and Forget) only show on:
@@ -1360,8 +1361,8 @@ Every line keeps "Why?"; Recheck (and Forget) only show on:
   `decided` (decisions), `blocked_by` (risks), `user_cares`. Trivial and
   never rechecked: `reviews` (reviewer assigned), `works_on`, `part_of`,
   `depends_on` (stack relations), `status` (short state notes), `note`.
-- The PR's glance as a whole: "Recheck" in the detail pane's action bar
-  ("Recheck this assessment") sends the joined glance as the claim with
+- The PR's glance as a whole: "Recheck" on the glance's title line (the
+  action bar until 2026-10-05) ("Recheck this assessment") sends the joined glance as the claim with
   `MemoryRecheckRequest.prKey`; the engine reads it against that PR, its
   newest events and its topic's dossier (`recordedIn`: "Glance: ..."). A
   glance is not memory, so the dialog has no Accept: it shows the outcome,
@@ -2223,6 +2224,121 @@ happened when it did. Chosen from a clickable mockup:
   write (`detailPendingWrite`), not the tile's, so a locked mark-read of
   one PR does not block its neighbours (Codex review on PR #15).
 
+## The PR pane (2026-10-05)
+
+Decided 2026-10-05 from a design round on a canvas (use cases, today
+annotated, proposed pane, writing states, agent pane). The old pane had
+one wrapping bar under the glance with up to nine controls for four
+audiences (formal review, public comment, private agent, housekeeping),
+a lead that jumped to the front per PR, one speech-bubble icon for both
+"approve with comment" and the agent chat, three writes sharing one
+popover, a two-step Ask, no way to answer a person's comment, and a tile
+chat that replaced the whole PR. Telemetry over 30 days: opening on
+GitHub and approving are the real jobs in the pane; explicit mark-read
+happens almost only from the tile footer (the pane's count includes the
+automatic mark on open); Ask and the chat were barely used.
+
+**Use cases** of the pane, by who hears it: go deeper on GitHub (leaves the
+app), give a review verdict (approve, approve with a note, comment review:
+public, formal), reply to a person (public, on that comment), ask the
+author something new (public), acknowledge a reply with a thumbs up
+(public, no text), talk to the agent (private: moved out, see below) and
+housekeeping (mark read or done, snooze, remove team: no message). Out of
+scope here: request changes, merge, re-request a reviewer, resolve a
+thread, reading the diff.
+
+**Rules** (each grounded in an established principle):
+
+1. Act where you read: review buttons sit with the PR's review state, a
+   reply on the comment it answers (Gestalt proximity, recognition over
+   recall).
+2. One surface, one audience: the PR pane talks to GitHub, the agent talks
+   to you about a topic; they never share a button, an icon or a box
+   (Norman's mode errors).
+3. Fixed spots: every action keeps its place in the order on every PR;
+   whose move it is shows through emphasis (the fill), never by reordering
+   (spatial memory, consistency).
+4. Prominence follows use, and the pointer: Open and Approve sit where the
+   pointer already is, close to the tile just clicked; housekeeping is
+   quiet (Fitts's and Hick's laws, progressive disclosure).
+5. Say where it goes: every write names its target on the button ("Post
+   reply to alice"); nothing posts without that press (error prevention).
+6. One way to write: reply, new comment, approve with a note and comment
+   review use the same composer, opened in place, one at a time; the agent
+   can draft, as a link, not a step (no modes).
+7. Leave depth to GitHub: code, diffs and long threads are one click away
+   (Jakob's law, Tesler's law).
+8. The agent advises, it holds no controls: a glance can be missing, out of
+   date or wrong and changes its look by verdict, so the user's actions
+   never live inside it and the layout never depends on it (Guidelines for
+   Human-AI Interaction G2, G8, G9; graceful degradation).
+
+**Layout, top down:**
+
+- Header band (`DetailContext`): kind, and for a stack or set the title,
+  counter, arrows and PR list as before. At the end of its first line the
+  housekeeping (`PaneHousekeeping`): Mark read / Done for now, Snooze
+  (single-PR tiles only) and ⋯ with "Remove <team>" (its one-sentence
+  confirm inside the menu), in the quiet look (text until hovered). When
+  core's lead is the mark or Snooze (nothing else to do), that one is
+  outlined. The opened mark's note ("✓ Marked read · Undo") takes the mark
+  button's place, as before.
+- State line: state, review word, repo#number and "Open on GitHub" with an
+  arrow menu (Files changed, Commits, Checks): the pane's only link to
+  github.com. Ink when core's lead is Open (own PR, done PR), else outlined.
+- Title, branch line, then "New since you looked": a digest you read. A
+  person's comment that can take a reply gets "Reply ↓", which scrolls the
+  pane to that comment in the activity list, tints it for a moment and
+  opens the reply there with the thread around it. Rejected: a composer
+  inside the digest (no context, bloats the box, two homes for Reply).
+- The glance (`GlanceCard`), on its own. Its title line carries only its
+  own controls: Recheck and "Tell the agent" (opens the topic's agent pane
+  with "About #1907: " typed in).
+- The review row (`ReviewRow`), right after the glance, outside it: a label
+  with the review state from GitHub (`reviewRowLabel`: "You approved 2h
+  ago, commits since", "You requested changes", "Review requested from
+  you", "... from team-devex", "Your PR", "Your review"), then Approve with
+  its "+ note" half, Comment review, and "Ask <owner>" on the right. Same
+  order on every PR; Approve fills green when it is core's lead, else
+  outlined. Shown when core offers Approve or Ask. Rejected 2026-10-05:
+  welding the buttons into the glance's footer (the glance is agent output
+  and may be missing or change its look), and a row in the PR header above
+  the glance (longer pointer path from the tile, buttons before the
+  reasons). Its place follows the glance's height; its order never changes.
+- Description, facts, reviews, what the agent knows, then the activity
+  (`ActivityTimeline`, label "Activity"): every line, new first, then
+  earlier. A person's comment or review gets Reply (a button when it asks
+  you, else a quiet link; "Reply in thread" on a code comment) and React (a
+  thumbs up; "You" in a pressed pill once given). An approval without text
+  only takes React. Nothing for the viewer's own words, bots or pushes
+  (`replyTargetOf`).
+- "Back to top" floats at the pane's bottom while the review row has
+  scrolled out above.
+
+**One composer** (`Composer`, state per PR in `PrBody`): opens in place
+under what it answers (the review row or the comment), one at a time;
+drafts stay per target until sent or cancelled. A header says where it
+goes ("Reply to alice · new PR comment, quotes their line", "Reply in
+thread · on ci.yml", "Approve with a note · on a1b2c3d, cannot be undone",
+"Comment review · on a1b2c3d, does not approve", "Ask alice · new PR
+comment"); one text box; "Let the agent draft" on an empty box (from the PR
+and its topic), "Rewrite with the agent" once there is text (from the
+user's words; replaces the old person field, gist field and Draft step);
+Cancel; and a button that names the target ("Post reply to alice",
+"Approve with note" in green, every other post in ink). No agent draft
+starts by itself. Escape closes it and keeps the draft.
+
+**Ask the agent** (`AgentPane`): the agent chat's scope is the topic, and
+it takes over the right pane. Entry: "Ask the agent" in the topic header,
+and "Tell the agent" from the glance or a memory line's recheck (with the
+PR or line typed in). Private and it looks it: a grey band with a lock
+("Agent · <topic>", "Only you see this. Nothing here goes to GitHub.")
+instead of the blue PR band, no Approve or Post buttons. "‹ Back to #1907"
+returns to the PR; any pick (tile, PR, topic) does too. A lasting point is
+one line: "Remember "..."? For this topic · For all topics"; leaving it
+alone means just this once (nothing logged). All topics still shows the
+instructions diff first. The tile chat is gone from the renderer.
+
 ## PR ownership: bot PRs belong to their assignees (2026-09-30)
 
 Coding agents open PRs through a GitHub App on someone's behalf: the author
@@ -2785,7 +2901,7 @@ any review ask; on top of that:
   Empty gist: the most useful reply from the conversation. Non-empty: the
   reply written from the user's words, nothing added they did not say. The
   draft never quotes or @mentions: the reply path adds both where needed.
-- One compose popover (2026-10-02, `ComposePopover`): Approve with comment,
+- Superseded 2026-10-05 by one inline composer (see "The PR pane"). One compose popover (2026-10-02, `ComposePopover`): Approve with comment,
   Comment review and "Ask <owner>" share one popover under the button that
   opened it (surface, rounded-tile, shadow-menu; title, one-line hint,
   textarea, Cancel and the primary action), one open at a time. Ask keeps its
@@ -6229,7 +6345,7 @@ ask) next to the existing `turn`, `done` and `afterRead`; Board caches tile
 state and whose turn per snapshot (`stateOf`, `turnOf`). Offers are
 `tileOffers` / `paneOffers` in `core/offers.ts`, shipped as
 `TileView.offers` (footer action and label, GitHub link, lead PR, and the
-pane's buttons per PR key); `ActionBar` and `Tile` only lay them out. A done
+pane's buttons per PR key); the pane (`PaneHousekeeping`, `ReviewRow`, `OpenOnGitHub`) and `Tile` only lay them out. A done
 PR (or one on a done tile) gets no Approve, Ask or Remove team; a done PR
 whose news keeps its tile unread keeps Mark read. The renderer's tier order
 is typed with core's `PrTierOrder`, so a drift fails to compile. The fake

@@ -22,6 +22,7 @@ const FILLS: Record<ButtonVariant, string> = {
   move: 'bg-ink/10',
   'safe-soft': 'bg-safe/10',
   joined: 'bg-ink/10',
+  quiet: 'bg-ink/10',
 };
 
 /** What the button said, in the past tense. */

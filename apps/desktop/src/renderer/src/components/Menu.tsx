@@ -24,6 +24,8 @@ interface MenuProps {
   disabled?: boolean;
   /** Hover text for the button, e.g. when the label is a glyph. */
   title?: string;
+  /** Extra classes for the button, e.g. the joined edge of a split button. */
+  buttonClassName?: string;
 }
 
 /** A button with a small popover list. Closes on pick, outside click or Escape. */
@@ -68,7 +70,7 @@ export function Menu(props: MenuProps) {
   const position = `${props.up ? 'bottom-full mb-1' : 'top-full mt-1'} ${props.align === 'right' ? 'right-0' : 'left-0'}`;
   return (
     <div ref={root} className="relative">
-      <Button variant={props.variant} size={props.size} disabled={props.disabled} title={props.title} aria-label={props.title} aria-expanded={open} onClick={() => (open ? close() : setOpen(true))}>
+      <Button variant={props.variant} size={props.size} className={props.buttonClassName} disabled={props.disabled} title={props.title} aria-label={props.title} aria-expanded={open} onClick={() => (open ? close() : setOpen(true))}>
         {props.label}
       </Button>
       {open && (

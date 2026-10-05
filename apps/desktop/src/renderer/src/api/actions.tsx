@@ -235,11 +235,25 @@ export interface Actions {
   setTopicDriver(topicId: string, driver: string | null): Promise<void>;
   /** Returns the agent's draft, or null when drafting failed. */
   draftAsk(prKey: PrKey, person: string, intent: string): Promise<string | null>;
-  /** The agent's draft for "Approve with comment" or "Comment review", or null when drafting failed. */
-  draftReviewNote(prKey: PrKey, kind: ReviewNoteKind): Promise<string | null>;
+  /**
+   * The agent's draft for "Approve with a note" or "Comment review", or null
+   * when drafting failed. `gist`: the user's words to write it from ("Rewrite
+   * with the agent"); empty drafts from the PR alone.
+   */
+  draftReviewNote(prKey: PrKey, kind: ReviewNoteKind, gist?: string): Promise<string | null>;
+  /** The agent's draft of a reply to one comment, from its thread and `gist` (empty: from the thread alone). Null when drafting failed. */
+  draftReply(prKey: PrKey, commentId: string, gist: string): Promise<string | null>;
   /** Returns true when the comment went out. */
   sendComment(prKey: PrKey, body: string): Promise<boolean>;
-  chat(tileId: string, message: string): Promise<ChatReply | null>;
+  /**
+   * Reply to one human comment: in its thread for a code comment, else a new
+   * PR comment that quotes it. Final, blocked while locked. True when it went out.
+   */
+  replyToComment(prKey: PrKey, commentId: string, body: string): Promise<boolean>;
+  /** A thumbs up on a comment or review. Blocked while locked. True when it went out. */
+  react(prKey: PrKey, commentId: string): Promise<boolean>;
+  /** A message in the topic's agent chat ("Ask the agent"). Local, not a GitHub write. */
+  topicChat(topicId: string, message: string): Promise<ChatReply | null>;
   /** A message in the "Your instructions" chat. Local, not a GitHub write. */
   instructionsChat(message: string): Promise<InstructionsChatReply | null>;
   /** "Keep for all topics": the user's chat message asked as an instructions change. Null when it changes nothing. */
@@ -724,10 +738,11 @@ export function ActionsProvider(props: { children: ReactNode }) {
     }
   }
 
-  async function chat(tileId: string, message: string): Promise<ChatReply | null> {
+  async function topicChat(topicId: string, message: string): Promise<ChatReply | null> {
     try {
-      const reply = await withBusy(`chat:${tileId}`, () => request<ChatReply>('POST', `${tilePath(tileId)}/chat`, { message }));
-      await queryClient.invalidateQueries({ queryKey: queryKeys.chat(tileId) });
+      const path = `/api/topics/${encodeURIComponent(topicId)}/chat`;
+      const reply = await withBusy(`chat:${topicId}`, () => request<ChatReply>('POST', path, { message }));
+      await queryClient.invalidateQueries({ queryKey: queryKeys.topicChat(topicId) });
       return reply;
     } catch (error) {
       show('error', `Chat failed: ${errorText(error)}`);
@@ -963,9 +978,13 @@ export function ActionsProvider(props: { children: ReactNode }) {
     markOpenedRead,
     refreshGlanceOnLook,
     draftAsk: (prKey, person, intent) => draft(`ask:${prKey}`, `${prPath(prKey)}/draft-ask`, { person, intent }),
-    draftReviewNote: (prKey, kind) => draft(`reviewNote:${prKey}`, `${prPath(prKey)}/draft-review-note`, { kind }),
+    draftReviewNote: (prKey, kind, gist = '') => draft(`reviewNote:${prKey}`, `${prPath(prKey)}/draft-review-note`, { kind, gist }),
+    draftReply: (prKey, commentId, gist) => draft(`reply:${prKey}:${commentId}`, `${prPath(prKey)}/draft-reply`, { commentId, gist }),
     sendComment: (prKey, body) => run(`comment:${prKey}`, 'comment', () => request('POST', `${prPath(prKey)}/comment`, { body })),
-    chat,
+    replyToComment: (prKey, commentId, body) =>
+      run(`replySend:${prKey}:${commentId}`, 'reply', () => request('POST', `${prPath(prKey)}/reply`, { commentId, body })),
+    react: (prKey, commentId) => run(`react:${prKey}:${commentId}`, 'react', () => request('POST', `${prPath(prKey)}/react`, { commentId })),
+    topicChat,
     instructionsChat,
     proposeInstructions,
     saveInstructions,

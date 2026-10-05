@@ -1,10 +1,13 @@
-import { useState } from 'react';
-import type { ActivityLine, ActivityList, EventDisplayState, EventKind, EventView } from '@postpile/core';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import type { ActivityLine, ActivityList, EventDisplayState, EventKind, EventView, Pr } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { eventGlyph, splitActor, summaryLead } from '../lib/events.ts';
+import { replyCopy, replyTargetOf, type ReplyTarget } from '../lib/reply.ts';
 import { ageLabel, clockLabel, whenLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
-import { Glyph } from './icons.tsx';
+import { Button } from './Button.tsx';
+import { Composer, useCompose } from './Composer.tsx';
+import { Glyph, ReplyIcon, ThumbsUpIcon } from './icons.tsx';
 import { SectionLabel } from './SectionLabel.tsx';
 import { MarkdownText } from './MarkdownText.tsx';
 
@@ -52,6 +55,8 @@ interface RowProps {
   last: boolean;
   /** The event id to unmute, on agent-muted events. */
   unmuteId: string | null;
+  /** Under the text: Reply and React on a person's comment, or "Reply ↓" in "New since". */
+  below?: ReactNode;
 }
 
 function UnseenDot() {
@@ -74,6 +79,7 @@ function ActivityRow(props: RowProps) {
         {props.body && <div className="mt-0.5 font-normal break-words [overflow-wrap:anywhere]">
             <MarkdownText text={props.body} compact />
           </div>}
+        {props.below}
         {props.unmuteId && (
           <button type="button" onClick={() => void actions.unmute(props.unmuteId!)} className="ml-2 text-[11.5px] text-muted underline hover:text-ink">
             Unmute
@@ -88,10 +94,25 @@ function ActivityRow(props: RowProps) {
   );
 }
 
-export function lineRow(line: ActivityLine, last: boolean) {
+export function lineRow(line: ActivityLine, last: boolean, below: ReactNode = null) {
   const newest = line.events[0]!.event;
   const reason = line.events.length > 1 ? `${line.events.length} events` : (newest.override?.reason ?? newest.ruleReason);
-  return <ActivityRow key={line.id} kind={line.kind} actor={line.actor} summary={line.summary} body={line.body} at={line.at} display={line.display} unseen={line.unseen} reason={reason} last={last} unmuteId={null} />;
+  return (
+    <ActivityRow
+      key={line.id}
+      kind={line.kind}
+      actor={line.actor}
+      summary={line.summary}
+      body={line.body}
+      at={line.at}
+      display={line.display}
+      unseen={line.unseen}
+      reason={reason}
+      last={last}
+      unmuteId={null}
+      below={below}
+    />
+  );
 }
 
 export function eventRow(view: EventView, last: boolean) {
@@ -142,29 +163,136 @@ function ThreadChangeRow(props: { at: string; last: boolean }) {
 export const linkButton = 'self-start text-[11.5px] text-accent hover:underline';
 
 /**
- * The PR's earlier activity from core (`PrDetail.activity`); what is new
- * since you looked sits in `NewSinceBox` under the title, not here again.
- * About a dozen lines before "Show all N". Bot and CI noise is one line
- * that expands.
+ * Reply and React under a person's comment. Reply is a button when the line
+ * asks the viewer something, else a quiet link; a thumbs up the viewer gave
+ * shows as a pressed pill. Reply opens the pane's composer right here.
  */
-export function ActivityTimeline(props: { activity: ActivityList }) {
+function TalkActions(props: { prKey: string; target: ReplyTarget }) {
+  const actions = useActions();
+  const compose = useCompose();
+  const { target } = props;
+  const replyOpen = compose.open?.kind === 'reply' && compose.open.commentId === target.commentId;
+  const replyBlocked = actions.blockedReason('reply');
+  const reactBlocked = actions.blockedReason('react');
+  const copy = replyCopy(target);
+  const replyLabel = target.inThread ? 'Reply in thread' : 'Reply';
+  return (
+    <div className="mt-1.5 flex flex-col gap-2 font-normal">
+      <span className="flex items-center gap-1">
+        {target.canReply && (
+          <Button
+            variant={target.asksYou ? 'secondary' : 'quiet'}
+            className={target.asksYou ? '' : '-ml-2.5'}
+            disabled={replyBlocked !== null}
+            aria-expanded={replyOpen}
+            title={replyBlocked ?? `${copy.title}: ${copy.hint}`}
+            onClick={() => compose.openTarget({ kind: 'reply', commentId: target.commentId })}
+          >
+            <ReplyIcon />
+            {replyLabel}
+          </Button>
+        )}
+        {target.viewerReacted ? (
+          <span role="status" title="You gave it a thumbs up on GitHub" className="flex h-6 items-center gap-1 rounded-full bg-accent-soft px-2 text-[11px] font-semibold text-accent">
+            <ThumbsUpIcon />
+            You
+          </span>
+        ) : (
+          <Button
+            variant="quiet"
+            className={target.canReply ? '' : '-ml-2.5'}
+            disabled={reactBlocked !== null || actions.isBusy(`react:${props.prKey}:${target.commentId}`)}
+            title={reactBlocked ?? `A thumbs up for ${target.author} on GitHub: seen, nothing to add`}
+            onClick={() => void actions.react(props.prKey, target.commentId)}
+          >
+            <ThumbsUpIcon />
+            React
+          </Button>
+        )}
+      </span>
+      {replyOpen && (
+        <Composer
+          target={{ kind: 'reply', commentId: target.commentId }}
+          title={copy.title}
+          hint={copy.hint}
+          submit={copy.submit}
+          variant="primary"
+          write="reply"
+          submitTitle={target.inThread ? 'Posts the reply in this thread on GitHub' : 'Posts a PR comment that quotes this one'}
+          sending={actions.isBusy(`replySend:${props.prKey}:${target.commentId}`)}
+          drafting={actions.isBusy(`reply:${props.prKey}:${target.commentId}`)}
+          draft={(gist) => actions.draftReply(props.prKey, target.commentId, gist)}
+          send={(body) => actions.replyToComment(props.prKey, target.commentId, body)}
+        />
+      )}
+    </div>
+  );
+}
+
+/** How long a line stays tinted after "Reply ↓" scrolled to it. */
+const FLASH_MS = 1600;
+
+/**
+ * One line of the activity list. A person's comment gets Reply and React;
+ * when "Reply ↓" in "New since" jumps to it, the line scrolls to the middle
+ * of the pane and is tinted for a moment.
+ */
+function TalkLine(props: { line: ActivityLine; last: boolean; pr: Pr; viewerLogin: string | null }) {
+  const compose = useCompose();
+  const root = useRef<HTMLDivElement>(null);
+  const [flash, setFlash] = useState(false);
+  const target = replyTargetOf(props.line, props.pr, props.viewerLogin);
+  const jumpSeq = target && compose.jump?.commentId === target.commentId ? compose.jump.seq : null;
+  useEffect(() => {
+    if (jumpSeq === null) {
+      return;
+    }
+    root.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    setFlash(true);
+    const timer = setTimeout(() => setFlash(false), FLASH_MS);
+    return () => clearTimeout(timer);
+  }, [jumpSeq]);
+  const below = target ? <TalkActions prKey={props.pr.key} target={target} /> : null;
+  return (
+    <div ref={root} className={`-mx-2 rounded-row px-2 transition-colors duration-700 motion-reduce:transition-none ${flash ? 'bg-accent-soft' : ''}`}>
+      {lineRow(props.line, props.last, below)}
+    </div>
+  );
+}
+
+/**
+ * The PR's activity from core (`PrDetail.activity`), newest first: what is
+ * new since you looked first, then the rest. "New since you looked" under
+ * the title is the digest; replies happen here, on the comment, with the
+ * thread around it. About a dozen lines before "Show all N"; a jump to a
+ * line further down opens the rest. Bot and CI noise is one line that
+ * expands.
+ */
+export function ActivityTimeline(props: { activity: ActivityList; pr: Pr; viewerLogin: string | null }) {
+  const compose = useCompose();
   const [showAll, setShowAll] = useState(false);
   const [showNoise, setShowNoise] = useState(false);
   const { fresh, earlier, noise } = props.activity;
-  const shown = showAll ? earlier : earlier.slice(0, props.activity.cap);
+  const lines = [...fresh, ...earlier];
+  const jumpIndex = compose.jump ? lines.findIndex((line) => replyTargetOf(line, props.pr, props.viewerLogin)?.commentId === compose.jump?.commentId) : -1;
+  // A jump to a folded line opens the list first; the line then scrolls itself into view.
+  const opened = showAll || jumpIndex >= props.activity.cap;
+  const shown = opened ? lines : lines.slice(0, props.activity.cap);
   const { threadChangedAt } = props.activity;
-  const empty = earlier.length === 0 && noise.length === 0 && threadChangedAt === null;
+  const empty = lines.length === 0 && noise.length === 0 && threadChangedAt === null;
   return (
     <div className="flex flex-col px-3">
       <span className="pb-2">
-        <SectionLabel>{fresh.length > 0 ? 'Earlier activity' : 'Activity'}</SectionLabel>
+        <SectionLabel>Activity</SectionLabel>
       </span>
-      {empty && <span className="text-xs text-hint">{fresh.length > 0 ? 'Nothing before that.' : 'No activity yet.'}</span>}
-      {threadChangedAt !== null && <ThreadChangeRow at={threadChangedAt} last={earlier.length === 0 && noise.length === 0} />}
-      {shown.map((line, index) => lineRow(line, index === shown.length - 1))}
-      {earlier.length > props.activity.cap && (
-        <button type="button" className={linkButton} onClick={() => setShowAll(!showAll)}>
-          {showAll ? 'Show fewer' : `Show all ${earlier.length}`}
+      {empty && <span className="text-xs text-hint">No activity yet.</span>}
+      {threadChangedAt !== null && <ThreadChangeRow at={threadChangedAt} last={lines.length === 0 && noise.length === 0} />}
+      {shown.map((line, index) => (
+        <TalkLine key={line.id} line={line} last={index === shown.length - 1} pr={props.pr} viewerLogin={props.viewerLogin} />
+      ))}
+      {lines.length > props.activity.cap && (
+        <button type="button" className={linkButton} onClick={() => setShowAll(!opened)}>
+          {opened ? 'Show fewer' : `Show all ${lines.length}`}
         </button>
       )}
       {noise.length > 0 && (

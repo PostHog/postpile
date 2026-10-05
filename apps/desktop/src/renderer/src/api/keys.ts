@@ -21,7 +21,7 @@ export const queryKeys = {
   lesson: (id: number) => ['lessons', 'one', id] as const,
   search: (query: string) => ['search', query] as const,
   pr: (prKey: string) => ['pr', prKey] as const,
-  chat: (tileId: string) => ['chat', tileId] as const,
+  topicChat: (topicId: string) => ['topic-chat', topicId] as const,
   proposals: ['proposals'] as const,
   instructions: ['instructions'] as const,
   instructionsChat: ['instructions-chat'] as const,
