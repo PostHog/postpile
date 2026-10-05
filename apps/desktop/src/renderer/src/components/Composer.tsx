@@ -18,7 +18,8 @@ export interface ComposeState {
   openTarget(target: ComposeTarget): void;
   /** Opens the reply to a comment and asks the activity list to scroll to it. */
   jumpToReply(commentId: string): void;
-  close(): void;
+  /** Closes the composer of `key`, and only that one: a send that finishes late never closes a composer opened since. */
+  close(key: string): void;
   /** The kept draft of a target, for a composer that opens again. */
   draftOf(key: string): string;
   /** Keeps a draft without re-rendering anything: the composer holds the live text itself. */
@@ -55,7 +56,7 @@ export function useComposeState(): ComposeState {
         setOpen({ kind: 'reply', commentId });
         setJump((current) => ({ commentId, seq: (current?.seq ?? 0) + 1 }));
       },
-      close: () => setOpen(null),
+      close: (key: string) => setOpen((current) => (current !== null && composeKey(current) === key ? null : current)),
       draftOf: (key: string) => drafts.current.get(key) ?? '',
       setDraft: (key: string, text: string) => drafts.current.set(key, text),
     }),
@@ -120,7 +121,7 @@ export function Composer(props: ComposerProps) {
 
   function cancel() {
     changeText('');
-    compose.close();
+    compose.close(key);
   }
 
   async function draft() {
@@ -132,11 +133,11 @@ export function Composer(props: ComposerProps) {
 
   async function submit() {
     if (props.closesOnClick) {
-      compose.close();
+      compose.close(key);
     }
     if (await props.send(text)) {
       changeText('');
-      compose.close();
+      compose.close(key);
     }
   }
 
@@ -163,7 +164,7 @@ export function Composer(props: ComposerProps) {
           onChange={(event) => changeText(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === 'Escape') {
-              compose.close();
+              compose.close(key);
             }
           }}
           aria-label={props.title}

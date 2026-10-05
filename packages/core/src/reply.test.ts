@@ -18,6 +18,10 @@ describe('quotedReplyBody', () => {
     expect(quotedReplyBody(comment, 'Agreed.')).toBe('> Not before the migration runs.\n\n@bob Agreed.');
   });
 
+  it('mentions nobody when the author was deleted', () => {
+    expect(quotedReplyBody({ author: '', body: 'Is it done?' }, 'Yes.')).toBe('> Is it done?\n\nYes.');
+  });
+
   it('still mentions the author when the text only mentions a longer login', () => {
     expect(quotedReplyBody({ author: 'bob', body: 'Is it done?' }, '@bob-helper confirmed it.')).toBe('> Is it done?\n\n@bob @bob-helper confirmed it.');
   });

@@ -60,8 +60,14 @@ function keepFor<T>(kept: Map<string, T>, topicId: string, value: T | null): voi
 export function AgentPane(props: AgentPaneProps) {
   const actions = useActions();
   const chat = useTopicChat(props.topicId);
-  // "Tell the agent" opens with its own start ("About #1907: "); the header's button brings back what was left unsent.
-  const [draft, setShownDraft] = useState(() => (props.draft !== '' ? props.draft : (waitingDrafts.get(props.topicId) ?? '')));
+  // "Tell the agent" opens with its own start ("About #1907: "), kept like typed text; the header's button brings back what was left unsent.
+  const [draft, setShownDraft] = useState(() => {
+    if (props.draft === '') {
+      return waitingDrafts.get(props.topicId) ?? '';
+    }
+    waitingDrafts.set(props.topicId, props.draft);
+    return props.draft;
+  });
   const [point, setShownPoint] = useState<LastingPointProposal | null>(() => waitingPoints.get(props.topicId) ?? null);
   const [instructions, setShownInstructions] = useState<InstructionsProposal | null>(() => waitingInstructions.get(props.topicId) ?? null);
   /** The message on its way, with how many messages the chat had when it was sent. */

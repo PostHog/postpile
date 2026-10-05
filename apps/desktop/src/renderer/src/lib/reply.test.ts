@@ -12,6 +12,10 @@ describe('replyCopy', () => {
     });
   });
 
+  it('says deleted user for a deleted account', () => {
+    expect(replyCopy({ ...base, author: '', inThread: false, path: null }).title).toBe('Reply to deleted user');
+  });
+
   it('names the person for a PR comment', () => {
     expect(replyCopy({ ...base, inThread: false, path: null }).submit).toBe('Post reply to alice');
   });

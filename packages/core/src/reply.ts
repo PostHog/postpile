@@ -39,11 +39,12 @@ function clipLine(line: string, max: number): string {
 /**
  * The body of a reply to an issue comment or review body, posted as a new PR
  * comment: GitHub has no threads there, so it quotes the first line of the
- * comment and mentions its author, unless the user's text already does.
+ * comment and mentions its author, unless the user's text already does. A
+ * deleted author ('' after normalizing) gets no mention, never a bare "@".
  */
 export function quotedReplyBody(comment: Pick<Comment, 'author' | 'body'>, text: string): string {
   const reply = text.trim();
-  const addressed = mentionsUser(reply, comment.author) ? reply : `@${comment.author} ${reply}`;
+  const addressed = comment.author === '' || mentionsUser(reply, comment.author) ? reply : `@${comment.author} ${reply}`;
   const quote = clipLine(firstQuotableLine(comment.body), REPLY_QUOTE_MAX);
   return quote === '' ? addressed : `> ${quote}\n\n${addressed}`;
 }
