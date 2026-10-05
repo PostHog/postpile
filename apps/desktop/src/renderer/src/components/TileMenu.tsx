@@ -25,12 +25,18 @@ export function TileMenu(props: TileMenuProps) {
     void actions.feedback({ kind: 'wrong_topic', tileId: tile.id, prKey: props.prKey, targetTopicId, pickedFrom, note: '' });
   }
 
+  // Core leaves "Not mine" out while the tile already reads Not yours (`TileOffers.notMine`); Mark read clears it then.
+  const notMine: MenuItem[] = props.view.offers.notMine
+    ? [
+        {
+          label: 'Not mine',
+          title: actions.blockedReason('notMine') ?? markReadNote(actions.writes) ?? 'Clears the tile and marks the GitHub notification read after 6s',
+          onSelect: () => void actions.feedback({ kind: 'not_mine', tileId: tile.id, prKey: null, targetTopicId: null, note: '' }),
+        },
+      ]
+    : [];
   const items: MenuItem[] = [
-    {
-      label: 'Not mine',
-      title: actions.blockedReason('notMine') ?? markReadNote(actions.writes) ?? 'Clears the tile and marks the GitHub notification read after 6s',
-      onSelect: () => void actions.feedback({ kind: 'not_mine', tileId: tile.id, prKey: null, targetTopicId: null, note: '' }),
-    },
+    ...notMine,
     { label: `Wrong topic: re-sort ${which}on next sync`, onSelect: () => wrongTopic(null) },
     {
       label: `Move ${which}to topic…`,

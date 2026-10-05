@@ -371,7 +371,13 @@ Action details:
 - wrong topic: moved as a user assignment when a target is given, otherwise
   membership removed so the next sync re-sorts it with the feedback in the
   prompt. The tile's ⋯ menu stays short (Not mine, Wrong topic, "Move to
-  topic…"); the last one swaps the menu for a filter field over a scrolling
+  topic…"). Not mine is left out while the tile's verdict pill already says
+  Not yours, stale or not (2026-10-05, core `TileOffers.notMine`): the agent
+  agrees, nothing is left to teach, and Mark read clears the tile. The pill
+  is the worst glance among the open tracked PRs, so a stack or set loses
+  Not mine only when every open PR it tracks reads Not yours. Who thinks a
+  Not yours PR is theirs says so with the glance's Recheck, Tell the agent
+  or Teach future assessments. "Move to topic…" swaps the menu for a filter field over a scrolling
   list. `moveTargets` (renderer `lib/`, a pure helper with a test) ranks it: with no query, topics that share
   people with the tile (you left out), then the most recently updated ones,
   five in all; with a query, active topics by name, then retired ones marked
