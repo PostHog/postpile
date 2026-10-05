@@ -190,6 +190,8 @@ export const TELEMETRY_EVENTS = {
   catch_up_ran: z.object({ topics: z.literal(1), agent_calls: count, duration_ms: durationMs, ok: z.boolean() }).strict(),
   // The board cap cut the hot set (the inbox is busy): PRs kept on the board and PRs left quiet. At most once an hour.
   board_trimmed: z.object({ kept: count, dropped: count }).strict(),
+  // PRs with news that syncs and polls left alone in the last hour because they are outside the hot slice. At most once an hour.
+  work_shed: z.object({ skipped_prs: count }).strict(),
 
   // 6. MCP server: another agent asked PostPile something. found is false when the PR, topic or search found nothing;
   // response_chars is the answer's length (are brief answers brief), error whether it was a tool error.

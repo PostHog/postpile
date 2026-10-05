@@ -1,5 +1,6 @@
 import type { TopicAssignment, TopicChoice } from '@postpile/agent';
 import { buildStacks, cleanTopicName, dossierBrief, lastJoinAt, newTopic, stackByPrKey, stackTopicId, takesNewPrs, type Pr, type PrKey, type Topic, type TopicKind } from '@postpile/core';
+import { Board } from '../board.ts';
 import { newTopicId } from '../ids.ts';
 import { errorText } from '../errors.ts';
 import { chunk } from '../lists.ts';
@@ -59,13 +60,18 @@ export class TopicAssigner {
 
   constructor(private readonly deps: DigestDeps) {}
 
-  /** Pinged or found PRs without a topic; a pulled-in stack layer gets no topic of its own. */
+  /**
+   * Pinged or found PRs without a topic, on the hot board: a pulled-in
+   * stack layer gets no topic of its own, and a cold PR none until it turns
+   * hot (DESIGN.md "Big inboxes: what PostPile loads and works on").
+   */
   private unassignedKeys(): PrKey[] {
     const { store } = this.deps;
     const keys = store.memberships.listUnassignedPrKeys();
     const threads = store.notifications.getByPrKeys(keys);
     const found = store.foundPrs.listAll();
-    return keys.filter((key) => threads.has(key) || found.has(key));
+    const hot = Board.load(store, this.deps.now().toISOString()).prs;
+    return keys.filter((key) => (threads.has(key) || found.has(key)) && hot.has(key));
   }
 
   /**

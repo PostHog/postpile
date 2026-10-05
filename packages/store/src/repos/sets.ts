@@ -138,7 +138,9 @@ export class PrSetRepo {
     );
     const groups = new Map<string, PrKey[]>();
     for (const row of rows) {
-      groups.set(row.set_id, [...(groups.get(row.set_id) ?? []), row.pr_key]);
+      const members = groups.get(row.set_id) ?? [];
+      members.push(row.pr_key);
+      groups.set(row.set_id, members);
     }
     return [...groups.values()];
   }

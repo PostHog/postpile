@@ -179,13 +179,6 @@ export class PrRepo {
     return this.parse(this.fetchedAtRows(keys), (key) => wanted.has(key));
   }
 
-  /** Ordered by number. */
-  listByRepo(repo: string): Pr[] {
-    return all<{ json: string }>(this.db, 'SELECT json FROM pr WHERE repo = ? ORDER BY number', repo).map(
-      (row) => JSON.parse(row.json) as Pr,
-    );
-  }
-
   /**
    * Every stored snapshot, parsed for this call. Tests and dev tools only:
    * on a heavy install this is about 2 GB. App code reads `listLight`, or

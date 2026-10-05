@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { selectSyncThreads, syncCutoff, type SyncThread } from './sync-selection.ts';
+import type { HotFacts } from './hot-board.ts';
+import { threadOnlyFacts } from './hot-board.ts';
+import { hotSyncThreads, selectSyncThreads, syncCutoff, type HotSyncThread, type SyncThread } from './sync-selection.ts';
+import type { NotificationReason, Viewer } from './types.ts';
 
 const NOW = '2026-09-29T12:00:00.000Z';
 
@@ -33,5 +36,42 @@ describe('selectSyncThreads', () => {
 
   it('cuts off exactly 30 days back', () => {
     expect(syncCutoff(NOW)).toBe('2026-08-30T12:00:00.000Z');
+  });
+});
+
+describe('hotSyncThreads', () => {
+  const me: Viewer = { login: 'alice', teams: ['acme/team-devex'], homeTeams: ['acme/team-devex'], teamMembers: ['bob'] };
+  const calm = { busy: false, weakestKept: null };
+
+  function candidate(key: string, updatedAt: string, unread: boolean, reason: NotificationReason, facts: Partial<HotFacts> = {}): HotSyncThread {
+    return { key, unread, updatedAt, facts: { ...threadOnlyFacts(key, { unread, reason, updatedAt }, null), ...facts } };
+  }
+
+  it('fetches what is recent, and older threads only when unread and aimed at the user or the user own open PR', () => {
+    const { picked, shed } = hotSyncThreads(
+      [
+        candidate('acme/app#1', '2026-09-28T00:00:00Z', false, 'subscribed'),
+        candidate('acme/app#2', '2026-09-10T00:00:00Z', false, 'subscribed'),
+        candidate('acme/app#3', '2026-09-10T00:00:00Z', true, 'mention'),
+        candidate('acme/app#4', '2026-09-10T00:00:00Z', true, 'subscribed'),
+        candidate('acme/app#5', '2026-09-10T00:00:00Z', false, 'author', { author: 'alice' }),
+      ],
+      { now: NOW, viewer: me, selection: calm },
+    );
+    expect(picked.map((t) => t.key)).toEqual(['acme/app#3', 'acme/app#5', 'acme/app#1']);
+    expect(shed).toEqual(['acme/app#2', 'acme/app#4']);
+  });
+
+  it('while busy fetches nothing for others, even when recent and unread', () => {
+    const { picked, shed } = hotSyncThreads(
+      [
+        candidate('acme/app#1', '2026-09-28T00:00:00Z', true, 'subscribed'),
+        candidate('acme/app#2', '2026-09-28T00:00:00Z', false, 'subscribed', { author: 'bob', state: 'OPEN' }),
+        candidate('acme/app#3', '2026-09-27T00:00:00Z', true, 'review_requested'),
+      ],
+      { now: NOW, viewer: me, selection: { busy: true, weakestKept: null } },
+    );
+    expect(picked.map((t) => t.key)).toEqual(['acme/app#3', 'acme/app#2']);
+    expect(shed).toEqual(['acme/app#1']);
   });
 });

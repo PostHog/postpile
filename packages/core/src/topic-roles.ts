@@ -3,7 +3,7 @@ import { prOwners } from './pr-owners.ts';
 import type { NotificationReason, Pr, UserRole } from './types.ts';
 
 /** Whoever owns most of the topic's PRs (`prOwners`). Ties go to the owner seen first. */
-export function topicDriver(prs: Pr[]): string | null {
+export function topicDriver(prs: Array<Pick<Pr, 'author' | 'assignees'>>): string | null {
   const counts = new Map<string, number>();
   for (const owner of prs.flatMap((pr) => prOwners(pr))) {
     if (owner === '') {

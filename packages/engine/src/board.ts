@@ -26,7 +26,7 @@ import {
   type WhoseTurn,
 } from '@postpile/core';
 import type { Store } from '@postpile/store';
-import { readHotSet, readStoreShape, threadsByPrKey } from './hot-set.ts';
+import { readHotSet, readStoreShape, threadsByPrKey, type StoreShape } from './hot-set.ts';
 import { loadViewer } from './viewer-meta.ts';
 
 /** PRs the agent has not placed yet. Not stored: it is whatever has no membership. */
@@ -86,8 +86,8 @@ export class Board {
   /** Tile state and whose turn by tile id, worked out once per Board (one snapshot). */
   private readonly stateCache = new Map<string, TileState>();
   private readonly turnCache = new Map<string, WhoseTurn>();
-  /** The member PRs on this board, by topic; built on first use (one pass over the memberships, not one per topic). */
-  private membersByTopic: Map<string, PrKey[]> | null = null;
+  /** Every member PR by topic, on this board or not; built on first use (one pass over the memberships, not one per topic). */
+  private keysByTopic: Map<string, PrKey[]> | null = null;
   /** Why each pulled-in layer is here, by PR; built on first use. */
   private pullInReasonsByKey: Map<PrKey, string> | null = null;
 
@@ -108,6 +108,8 @@ export class Board {
     readonly notYours: Set<PrKey>,
     /** Every stored stack (`readStoreShape`). */
     allStacks: Stack[],
+    /** Every stored PR's key, on this board or not. */
+    private readonly stored: ReadonlySet<PrKey>,
   ) {
     this.allStacks = allStacks;
     this.stacks = allStacks.filter((stack) => prs.has(stack.prKeys[0]!));
@@ -157,7 +159,7 @@ export class Board {
     return this.stackKeysOf(key).filter((layer) => layer === key || this.memberships.has(layer) || this.isTracked(layer));
   }
 
-  private static assemble(store: Store, now: string, prs: Map<PrKey, Pr>, threads: Map<PrKey, NotificationThread>, stacks: Stack[]): Board {
+  private static assemble(store: Store, now: string, prs: Map<PrKey, Pr>, threads: Map<PrKey, NotificationThread>, shape: StoreShape): Board {
     const keys = [...prs.keys()];
     return new Board(
       store,
@@ -172,7 +174,8 @@ export class Board {
       store.pullIns.listAll(),
       store.foundPrs.listAll(),
       notYoursKeys(store, keys),
-      stacks,
+      shape.stacks,
+      new Set(shape.light.map((pr) => pr.key)),
     );
   }
 
@@ -181,7 +184,7 @@ export class Board {
     const hot = readHotSet(store, now, threads);
     lastSelection.set(store, hot.selection);
     const prs = store.prs.keepParsed([...hot.selection.keys]);
-    return Board.assemble(store, now, prs, threads, hot.shape.stacks);
+    return Board.assemble(store, now, prs, threads, hot.shape);
   }
 
   /**
@@ -218,7 +221,7 @@ export class Board {
   static forPrs(store: Store, now: string, seeds: PrKey[]): Board {
     const shape = readStoreShape(store);
     const prs = store.prs.getMany([...withGroups(seeds, shape.groups)]);
-    return Board.assemble(store, now, prs, threadsByPrKey(store.notifications.list()), shape.stacks);
+    return Board.assemble(store, now, prs, threadsByPrKey(store.notifications.list()), shape);
   }
 
   /**
@@ -266,19 +269,34 @@ export class Board {
     );
   }
 
+  private topicKeys(topicId: string): PrKey[] {
+    if (this.keysByTopic === null) {
+      this.keysByTopic = new Map();
+      for (const membership of this.memberships.values()) {
+        const keys = this.keysByTopic.get(membership.topicId) ?? [];
+        keys.push(membership.prKey);
+        this.keysByTopic.set(membership.topicId, keys);
+      }
+    }
+    return this.keysByTopic.get(topicId) ?? [];
+  }
+
   private memberKeys(topicId: string): PrKey[] {
     if (topicId === UNSORTED_TOPIC_ID) {
       return this.unsortedKeys();
     }
-    if (this.membersByTopic === null) {
-      this.membersByTopic = new Map();
-      for (const membership of this.memberships.values()) {
-        if (this.prs.has(membership.prKey)) {
-          this.membersByTopic.set(membership.topicId, [...(this.membersByTopic.get(membership.topicId) ?? []), membership.prKey]);
-        }
-      }
-    }
-    return this.membersByTopic.get(topicId) ?? [];
+    return this.topicKeys(topicId).filter((key) => this.prs.has(key));
+  }
+
+
+  /**
+   * The topic has PRs, all stored and none on this board: on the hot board,
+   * a topic that went cold as a whole. It gets no agent work until one of
+   * its PRs turns hot again. A topic whose PRs are not stored yet is not.
+   */
+  wentCold(topicId: string): boolean {
+    const keys = this.topicKeys(topicId);
+    return keys.length > 0 && keys.every((key) => this.stored.has(key) && !this.prs.has(key));
   }
 
   /** Active topics, plus the Unsorted topic when anything is waiting for a topic. */

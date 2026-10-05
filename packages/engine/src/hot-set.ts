@@ -3,6 +3,7 @@ import {
   hotFactsOf,
   prKey,
   selectHotBoard,
+  type HotFacts,
   type HotSelection,
   type LightPr,
   type NotificationThread,
@@ -49,6 +50,8 @@ export function readStoreShape(store: Store): StoreShape {
 export interface HotSet {
   selection: HotSelection;
   shape: StoreShape;
+  /** What the hot rules read of each stored PR, by key. */
+  facts: Map<PrKey, HotFacts>;
 }
 
 /** The hot PRs as the store stands (`selectHotBoard`), from light rows, threads, found PRs and personal asks. */
@@ -60,5 +63,5 @@ export function readHotSet(store: Store, now: string, threads: Map<PrKey, Notifi
     hotFactsOf(pr, { thread: threads.get(pr.key) ?? null, found: found.get(pr.key)?.via ?? null, personalAsk: asks.has(pr.key) }),
   );
   const selection = selectHotBoard({ facts, groups: shape.groups, viewer: loadViewer(store), now });
-  return { selection, shape };
+  return { selection, shape, facts: new Map(facts.map((entry) => [entry.key, entry])) };
 }

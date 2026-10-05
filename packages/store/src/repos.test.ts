@@ -92,14 +92,13 @@ describe('NotificationRepo', () => {
 });
 
 describe('PrRepo', () => {
-  it('round-trips the full snapshot and lists by repo', () => {
+  it('round-trips the full snapshot', () => {
     const pr = makePr({ number: 2, labels: ['devex'], checks: { rollup: 'SUCCESS', contexts: [] } });
     store.prs.upsert(pr, at(1));
     store.prs.upsert(makePr({ number: 1 }), at(1));
     store.prs.upsert(makePr({ number: 9, repo: 'acme/other' }), at(1));
     expect(store.prs.get(pr.key)).toEqual(pr);
     expect(store.prs.get('nope/nope#1')).toBeNull();
-    expect(store.prs.listByRepo('acme/app').map((p) => p.ref.number)).toEqual([1, 2]);
     expect(store.prs.getMany([pr.key, 'acme/other#9']).size).toBe(2);
     expect(store.prs.listAll()).toHaveLength(3);
   });

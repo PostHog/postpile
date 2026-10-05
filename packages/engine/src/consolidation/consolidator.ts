@@ -178,7 +178,10 @@ export class Consolidator {
     const applier = new ConsolidationApplier(store, this.deps.facts, (topicId) => topicRetireGate(store, this.deps.now().toISOString(), topicId), counts, this.deps.now);
 
     const light = new Map(store.prs.listLight().map((pr) => [pr.key, pr]));
-    const offered = topics.map((topic) => this.consolidationTopic(topic, dossiers.get(topic.id) ?? null, board, light));
+    // A topic whose PRs all went cold is settled: the retire step handles it, consolidation leaves it out.
+    const offered = topics
+      .filter((topic) => !board.wentCold(topic.id))
+      .map((topic) => this.consolidationTopic(topic, dossiers.get(topic.id) ?? null, board, light));
     const complete = offered.length === 0 || (await this.askAgent(this.inputs(offered), applier));
     this.retireFinished(dossiers, applier);
     if (complete) {

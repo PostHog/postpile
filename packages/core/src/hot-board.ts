@@ -93,6 +93,31 @@ export function hotFactsOf(
   };
 }
 
+/**
+ * A PR the sync has not stored yet, known from its thread (and the finder)
+ * only: open, owners and reviewers unknown. A review request on it counts
+ * as aimed at the user until the fetch says whether it was theirs or a
+ * team's: missing a personal request costs more than one fetch too many.
+ */
+export function threadOnlyFacts(
+  key: PrKey,
+  thread: Pick<NotificationThread, 'unread' | 'reason' | 'updatedAt'>,
+  found: FoundVia | null,
+): HotFacts {
+  return {
+    key,
+    state: 'OPEN',
+    author: '',
+    assignees: [],
+    reviewerUsers: [],
+    reviewerTeams: [],
+    thread: { unread: thread.unread, reason: thread.reason },
+    found,
+    personalAsk: thread.reason === 'review_requested',
+    activityAt: thread.updatedAt,
+  };
+}
+
 /** The oldest activity a settled PR may have and still be hot. */
 export function settledSince(now: IsoTime): IsoTime {
   return new Date(new Date(now).getTime() - SETTLED_DAYS * DAY_MS).toISOString();
@@ -211,7 +236,9 @@ function unitsOf(keys: PrKey[], groups: PrKey[][]): Map<PrKey, PrKey[]> {
   const members = new Map<PrKey, PrKey[]>();
   for (const key of keys) {
     const top = root(key);
-    members.set(top, [...(members.get(top) ?? []), key]);
+    const unit = members.get(top) ?? [];
+    unit.push(key);
+    members.set(top, unit);
   }
   const result = new Map<PrKey, PrKey[]>();
   for (const unit of members.values()) {
@@ -231,7 +258,9 @@ export function withGroups(seeds: PrKey[], groups: PrKey[][]): Set<PrKey> {
   const groupsOf = new Map<PrKey, PrKey[][]>();
   for (const group of groups) {
     for (const key of group) {
-      groupsOf.set(key, [...(groupsOf.get(key) ?? []), group]);
+      const of = groupsOf.get(key) ?? [];
+      of.push(group);
+      groupsOf.set(key, of);
     }
   }
   const result = new Set<PrKey>();
@@ -318,6 +347,11 @@ export function wouldKeep(selection: Pick<HotSelection, 'busy' | 'weakestKept'>,
     return true;
   }
   return rank.tier !== 'others' && (selection.weakestKept === null || compareHotRank(rank, selection.weakestKept) < 0);
+}
+
+/** The board holds as many PRs as it may: a sync's backlog drain stops here, the rest would be cut. */
+export function isBoardFull(selection: Pick<HotSelection, 'keys'>, max: number = HOT_BOARD_MAX_PRS): boolean {
+  return selection.keys.size >= max;
 }
 
 /**
