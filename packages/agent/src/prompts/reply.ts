@@ -10,10 +10,10 @@ function conversationLine(comment: Comment, repliedToId: string): string {
   return `@${comment.author}${marker}: ${clip(comment.body, CONVERSATION_COMMENT_MAX)}`;
 }
 
-/** Where the comment sits: an inline thread on a file, or the PR conversation. */
+/** Where the comment sits: an inline thread on a file, or the PR conversation. The file path is GitHub text (it can hold anything, newlines too), so it is fenced. */
 function whereLine(comment: Comment): string {
   if (replyTarget(comment).kind === 'thread') {
-    return `It is an inline review comment on ${comment.path ?? 'a file'}; the reply goes into its review thread.`;
+    return `It is an inline review comment on a file; the reply goes into its review thread.\n${githubData(`File: ${comment.path ?? '(unknown)'}`)}`;
   }
   return 'It is in the PR conversation; the reply is posted as a new PR comment below it, quoting it.';
 }

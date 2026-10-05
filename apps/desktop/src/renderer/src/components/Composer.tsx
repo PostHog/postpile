@@ -99,6 +99,14 @@ export function Composer(props: ComposerProps) {
   const key = composeKey(props.target);
   const [text, setText] = useState(() => compose.draftOf(key));
   const box = useRef<HTMLDivElement>(null);
+  // An agent draft that comes back after Cancel or Escape is dropped, not written into the kept draft.
+  const open = useRef(true);
+  useEffect(() => {
+    open.current = true;
+    return () => {
+      open.current = false;
+    };
+  }, []);
 
   function changeText(next: string) {
     setText(next);
@@ -117,7 +125,7 @@ export function Composer(props: ComposerProps) {
 
   async function draft() {
     const result = await props.draft(text);
-    if (result !== null) {
+    if (result !== null && open.current) {
       changeText(result);
     }
   }

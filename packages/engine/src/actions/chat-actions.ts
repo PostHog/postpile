@@ -49,12 +49,14 @@ export class ChatActions {
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     const chatId = topicChatId(topicId);
     const history = this.store.chat.listForTile(chatId);
-    const sentAt = this.now().toISOString();
     const isUnsorted = topicId === UNSORTED_TOPIC_ID;
     const answer = await this.agent.chat({ topic, prs, history, message, context: this.contexts.forTopic(isUnsorted ? null : topicId) });
+    // Stamped when stored, not when sent: a dossier saved while the agent answered must not end up newer
+    // than the turn, or the next dossier update (which reads turns since the last version) never sees it.
+    const storedAt = this.now().toISOString();
     const { userMessage, reply } = this.store.transaction(() => ({
-      userMessage: this.store.chat.add({ tileId: chatId, topicId, role: 'user', text: message, createdAt: sentAt }),
-      reply: this.store.chat.add({ tileId: chatId, topicId, role: 'agent', text: answer.reply, createdAt: this.now().toISOString() }),
+      userMessage: this.store.chat.add({ tileId: chatId, topicId, role: 'user', text: message, createdAt: storedAt }),
+      reply: this.store.chat.add({ tileId: chatId, topicId, role: 'agent', text: answer.reply, createdAt: storedAt }),
     }));
     if (!answer.lasting) {
       return { message: reply, lastingPoint: null };
