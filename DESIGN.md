@@ -576,7 +576,7 @@ and only recomputes on change.
 | what | where | invalidated when |
 |---|---|---|
 | general instructions | `~/.config/postpile/instructions.md`, in every prompt; absent = none | file edited (part of every input hash) |
-| glance | `pr_glance`, latest per PR + `input_hash`, `model`, `dossier_version` | PR snapshot moves (not CI: checks are in no prompt and no hash), dossier version, instructions, tailoring, standing rules or feedback on that PR change. Reads recompute the hash and flag a mismatch as `glanceStale` |
+| glance | `pr_glance`, latest per PR + `input_hash`, `model`, `dossier_version` | PR snapshot moves (not CI: checks are in no prompt and no hash), instructions, tailoring, standing rules or feedback on that PR change. Not the dossier version since 2026-10-05 ("Glance hash" below). Reads recompute the hash and flag a mismatch as `glanceStale` |
 | topic | `topic`: name, summary, tailoring, driver, user_role, status | summary mirrors the latest `dossier.summary` |
 | topic membership | `topic_membership`: pr -> topic, `assigned_by` agent/user, reason | never automatically; a user assignment is never replaced by the agent |
 | topic proposals | `topic_proposal`: new_topic / rename / merge, pending until the user decides; `source` consolidation or agent (migration 017, see "propose_topic_change") | - |
@@ -834,8 +834,8 @@ a batch can create a topic the next one needs). After that every job runs
 side by side and waits only for the output it reads:
 
 - dossier updates all start at once;
-- a topic's glances start when that topic's own dossier update settled (the
-  glance hash carries the dossier version), then its retry batch right
+- a topic's glances start when that topic's own dossier update settled (a
+  glance written now reads the new dossier), then its retry batch right
   after, not after every other topic;
 - fact reconcile (batches side by side) and the driver/role refresh wait
   for all dossiers;
@@ -906,8 +906,9 @@ core `event-roles.ts`), first match wins:
 | --- | --- |
 | effective loudness loud (incl. the app's Look closer, an event the agent raised) | trigger |
 | muted (by rule, agent or user), CI result | noise |
+| a push (commits pushed, after approval, force push), from a person or a bot | ride_along (since 2026-10-05; a loud push, answering the viewer's changes request, is a trigger by the first row) |
 | anything a person did, the viewer included | trigger |
-| a state change, whoever did it: merged, merged without review, closed, reopened, ready for review, back to draft, review requested or removed, a bot's approval, pushes; Look closer even when turned down | trigger |
+| a state change, whoever did it: merged, merged without review, closed, reopened, ready for review, back to draft, review requested or removed, a bot's approval; Look closer even when turned down | trigger |
 | automation: deploy, merge queue add/remove, a comment edit (the original already counted; edits are status refreshes) | noise |
 | a merge queue bot's comment (`isMergeQueueBot`: trunk-io, mergify): "managed by Trunk", submitted, testing, merged, kicked out, test badges | noise (kicked out of the queue on the viewer's own PR is loud, so the first row makes it a trigger; see "Merge queue") |
 | any other automation, a bot's approval aside: review bots (coderabbitai, chatgpt-codex-connector, greptile-apps, copilot-pull-request-reviewer, stamphog, veria-ai, posthog-security-review-bot), github-actions comments, dependabot comments | ride_along |
@@ -919,6 +920,16 @@ core `event-roles.ts`), first match wins:
   than `DELTA_LIMITS.maxEvents` of them waiting does start one, so they
   cannot pile up without bound.
 - *trigger*: starts an update, counts as a newer event.
+
+**Pushes ride along** (2026-10-05). A push changes one PR's code, not the
+topic's story. As a trigger it rewrote the dossier on every push: an agent
+account pushing 27 times an hour kept one topic's dossier churning, and
+(while the glance hash carried the dossier version) left every glance in
+the topic out of date. Now a push refreshes only its own PR's glance (the
+head is in the glance hash; the poll's catch-up still runs for it), the
+dossier reads it at its next real update, and it never counts toward
+"N newer events". Facts tied to the old head still go stale
+(`head_moved`): those claims may really be wrong after a push.
 
 Loudness and quiet reads are untouched: roles answer what memory reads,
 loudness answers what needs the viewer.
@@ -1149,10 +1160,20 @@ stored and before a dossier goes into a glance prompt
   JSON does not parse counts all its PRs as missing; so does a runner failure
   (timeout, process error), which the engine catches per batch.
 - `glanceItemInputHash` per PR: v1 snapshot fields, provenance, topic name,
-  **dossier version**, instructions, tailoring, standing rules, feedback on
-  that PR, model, and `GLANCE_PROMPT_VERSION` (g2 since key files, so every
-  glance regenerates once; sets and topic summaries keep their hashes).
-  Never the other PRs in the batch. Stored glances get `dossierVersion`.
+  instructions, tailoring, standing rules, feedback on that PR, model, and
+  `GLANCE_PROMPT_VERSION` (g2 since key files, so every glance regenerates
+  once; sets and topic summaries keep their hashes). Never the other PRs in
+  the batch. Stored glances get `dossierVersion`.
+- **Glance hash** (2026-10-05): the dossier version is out. With it, every
+  dossier rewrite left every glance in the topic out of date, though the
+  news was on one PR; browsing showed "out of date" all over and the next
+  catch-up or sync re-glanced the whole topic. A glance picks up the newer
+  dossier when its own PR changes or on a look. `legacyGlanceItemInputHash`
+  (the old shape, with the version) still counts as current
+  (`GlanceInputs.isCurrent`) while that dossier is the latest, so the
+  update regenerates no glance; the next rewrite stores the new shape.
+  Trade-off: a glance can lag topic context ("the PR below this one
+  merged") until its own PR moves.
 - Model: the glance model (`claude-sonnet-5-5` by default, `POSTPILE_GLANCE_MODEL`).
 
 ### Consolidation ("sleep-time")
@@ -4325,9 +4346,8 @@ GLANCE_BATCH_SIZE:
   rules word for word, `dossierUpdateInstructions`, `glanceRules`).
 - **Only when both are due.** A topic with no dossier delta keeps its plain
   glance batches; a dossier update with no glance target stays a plain
-  `dossier_update`. A new dossier version re-glances every target of the
-  topic anyway (the version is in the glance hash), so "both due" is the
-  common case.
+  `dossier_update`. The digest still writes the topic's first glances with
+  the dossier, so "both due" is the common case for a new topic.
 - **Hashes stay as they are.** The engine stamps the glances again once the
   new dossier version is stored (`DossierUpdater.saveGlances`), the way the
   glance batches compute them, so the batches count them as current. Only
@@ -6547,7 +6567,7 @@ preflight and does not know the token, so CORS stays open.
     are not written from outdated userCares]
   - glance hash includes the dossier version, so every dossier update regenerates the glances
     of that topic (one or two batch calls). Alternative: hash only the glance-relevant parts
-    (goal, status, userCares, people) [version, as decided]
+    (goal, status, userCares, people) [version, as decided; dropped 2026-10-05, see "Glance hash"]
   - when "seen" moves: explicit `markTopicSeen` when leaving a topic, or on opening it
     [explicit, the UI calls it when the user leaves the topic]
   - retiring finished topics: automatic behind the deterministic gate (all PRs merged/closed,

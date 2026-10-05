@@ -1146,6 +1146,11 @@ the app meanwhile.
   brought ("nothing new on GitHub · agent calls 12/19"). Rejected: a
   timed trickle of all quiet news (same work, less batching), and skipping
   bot-only dossier updates (bot comments already never start one).
+  Same day: pushes ride along instead of rewriting the dossier (they
+  refresh their own PR's glance), and the glance hash drops the dossier
+  version, so one PR's news no longer leaves every glance in the topic out
+  of date. Old glance hashes stay accepted, so the update regenerates
+  nothing. DESIGN.md "Event roles" and "Glance hash".
 - **Title bar says "up to date"** (2026-10-05, DESIGN.md "Auto sync"): the
   live poll checks GitHub every minute, so "synced 40m ago" (the last full
   sync) suggested stale data that wasn't. The title bar reads the poll:
