@@ -600,12 +600,16 @@ export class Engine implements EngineService {
     this.quietCatchUps.add(this.startCatchUps(this.quietCatchUps.due()));
   }
 
-  /** Topics the poll brought news for: loud ones run now, quiet ones once their wait is over. Off with a cap of 0. */
+  /**
+   * Topics the poll brought news for: loud ones run now, quiet ones once their wait is over. A loud one the
+   * queue skips (the agent is off) waits with the quiet ones: its events are stored, so no later poll reports
+   * them again. Off with a cap of 0.
+   */
   private requestCatchUps(topics: CatchUpTopics): void {
     if (this.catchUpCap.perDay === 0) {
       return;
     }
-    this.startCatchUps(topics.now);
+    this.quietCatchUps.add(this.startCatchUps(topics.now));
     this.quietCatchUps.add(topics.quiet);
     this.startDueQuietCatchUps();
   }

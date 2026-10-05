@@ -207,6 +207,22 @@ describe('glance catch-up after a poll', () => {
     expect(h.store.dossiers.latest('depot')?.version).toBe(1);
   });
 
+  it('catches up on news the poll fetched while claude was off, once claude is back', async () => {
+    const { h, pr } = await syncedTopic();
+    h.commands.missing.add('claude');
+    await h.engine.checkTools();
+    askViewer(h, pr, 'c7', 'etag-off');
+    await h.engine.pollOnce();
+    expect(catchUpRunIds(h)).toEqual([]);
+
+    h.commands.missing.delete('claude');
+    await h.engine.checkTools();
+    // GitHub answers 304 now: the news is stored, so only the kept topic can bring the run.
+    await h.engine.pollOnce();
+    await vi.waitFor(() => expect(h.store.dossiers.latest('depot')?.version).toBe(2));
+    expect(catchUpRunIds(h)).toEqual([expect.stringMatching(/^catchup:depot:/)]);
+  });
+
   it('leaves a bot comment for the next full sync', async () => {
     const { h, pr } = await syncedTopic();
     const next = { ...pr, updatedAt: LATER, comments: [makeComment({ id: 'c3', author: 'github-actions[bot]', body: 'Bundle size: +2 KB', createdAt: FRESH })] };

@@ -5412,8 +5412,9 @@ topic; only Retry on a glance that failed. Before this, a new PR showed
 "no glance yet, the next sync picks it up" until the user pressed Sync now.
 
 **Trigger** (`topicsToCatchUp`, called by `PollRun` after topic assignment
-and the ping decisions, never on the first look at an empty store, not while
-the agent is off): a fetched PR with a new event whose effective loudness is
+and the ping decisions, never on the first look at an empty store; while
+the agent is off the queue skips the topics and they wait with the quiet ones
+until it is back, since no later poll reports their events as new): a fetched PR with a new event whose effective loudness is
 loud, or a PR that should have a glance (open, pinged or found, in a tile)
 and has none. Since 2026-10-05 any memory trigger counts, not only loud
 events (`isMemoryTrigger`, "Event roles"): a person's push, comment,

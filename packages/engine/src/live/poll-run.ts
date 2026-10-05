@@ -142,8 +142,9 @@ export class PollRun {
         return { ...done, prsUpdated: inbox.fetchedPrKeys.length, decisions: [], pings: [], errors };
       }
       const decided = await this.decider.decide(inbox.fetchedPrKeys, inbox.newEventIds, viewer);
-      // After the pings: they are the time-critical part and go first in the agent queue.
-      if (fetchedAny && this.deps.agentOff() === null) {
+      // After the pings: they are the time-critical part and go first in the agent queue. Also while the
+      // agent is off: the engine keeps what the queue skips and runs it once claude is back.
+      if (fetchedAny) {
         this.requestCatchUps(inbox.fetchedPrKeys, inbox.newEventIds);
       }
       return {
