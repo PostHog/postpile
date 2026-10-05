@@ -6,7 +6,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ### Changed
 
-- Opening a PR loads less: the PR pane gets only what it shows (title, description, files, reviews, a checks summary) instead of every stored comment and check. A busy PR's pane loads about a third of what it did, and PRs opened in the last minutes take less memory. The pane looks the same.
+- Opening a PR loads less: the PR pane gets only what it shows (title, description, files, reviews, a checks summary, and its activity cut to what each row draws) instead of every stored comment, check and event. A busy PR's pane loads about an eighth of what it did, and PRs opened in the last minutes take less memory. The pane looks the same.
 
 ## 0.19.0 (2026-10-05)
 

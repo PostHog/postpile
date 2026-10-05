@@ -65,6 +65,7 @@ function fakeEngine(overrides: Partial<EngineService>): EngineService {
     getTopic: notImplemented,
     search: notImplemented,
     getPr: notImplemented,
+    listPrEvents: notImplemented,
     debugNotifications: notImplemented,
     handledQuietly: notImplemented,
     actionLog: notImplemented,

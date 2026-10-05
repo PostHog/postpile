@@ -114,8 +114,8 @@ describe('Engine.sync without the agent', () => {
 
     await h.engine.sync({ maxAgentCalls: 0 });
 
-    const detail = await h.engine.getPr(pr.key);
-    expect(detail?.events.map((e) => e.display)).toEqual(['seen']);
+    const events = await h.engine.listPrEvents(pr.key);
+    expect(events.map((view) => view.display)).toEqual(['seen']);
   });
 
   it('marks threads that left the inbox as read locally', async () => {

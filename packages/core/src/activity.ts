@@ -1,6 +1,7 @@
 // The detail pane's activity list: the meaningful events of a PR, with push
 // bursts collapsed and bot / CI noise folded into one line. Rules only; the
-// engine and FakeEngine ship the result on `PrDetail.activity`.
+// engine and FakeEngine ship the result on `PrDetail.activity`, with each
+// event cut down to what a row draws (`ActivityEvent`).
 import { reviewRequestSubject } from './events.ts';
 import { PERSONAL_ASK_KINDS, PUSH_KINDS } from './kinds.ts';
 import { isOwnTeam, sameLogin } from './mentions.ts';
@@ -33,28 +34,41 @@ export interface LineReply {
   asksYou: boolean;
 }
 
-/** One line of the list: a single event, or a burst of pushes by one person. */
-export interface ActivityLine {
-  /** The newest event's id. */
+/**
+ * One event as a row of the pane draws it: glyph by kind, the actor in bold,
+ * the summary, its age, the unread dot and why it is loud or quiet in the
+ * hover title. The folded bot / CI rows are these; a line adds to it.
+ */
+export interface ActivityEvent {
+  /** The event's id: the row's key, and what Unmute sends for an agent-muted one. */
   id: string;
   kind: EventKind;
   actor: string;
   summary: string;
+  at: IsoTime;
+  display: EventDisplayState;
+  /** The event's own seen state is unseen (`EventView.unseen`): the unread dot. */
+  unseen: boolean;
+  /** Why the rules, or the agent's override, classed it so. */
+  reason: string;
+}
+
+/**
+ * One line of the list: a single event, or a burst of pushes by one person.
+ * Its event fields are the newest event's, except `summary` (a burst says
+ * "pushed 3 commits"), `display` (loud when any of them is, else the
+ * newest's) and `unseen` (any of them is).
+ */
+export interface ActivityLine extends ActivityEvent {
   /**
    * The full text of a human comment or review, which `summary` clips to one
    * short line. Null for bots, pushes and everything else.
    */
   body: string | null;
-  /** When the newest event of the line happened. */
-  at: IsoTime;
-  /** The loudest state among its events (loud wins, then the newest event's). */
-  display: EventDisplayState;
   /** New since you looked: an unseen loud event is in it. */
   isNew: boolean;
-  /** Any event of the line is unseen (`EventView.unseen`): the line wears the unread dot. */
-  unseen: boolean;
-  /** Newest first. */
-  events: EventView[];
+  /** How many events the line stands for: more than one for a push burst. */
+  eventCount: number;
   /**
    * Reply and thumbs up for a person's comment or review, null for anything
    * else (pushes, bots, lifecycle, the viewer's own words, a comment the
@@ -70,14 +84,14 @@ export interface ActivityList {
   /** Everything else that matters, newest first. */
   earlier: ActivityLine[];
   /** Bot and CI events, agent-muted ones and review requests between others, newest first. Without `freshNoise`. */
-  noise: EventView[];
+  noise: ActivityEvent[];
   /** The folded noise line: "4 bot/CI events". */
   noiseLabel: string;
   /**
    * The unseen part of the noise since the viewer's last touch, newest first,
    * for the "New since you looked" box. Empty while nothing loud is new.
    */
-  freshNoise: EventView[];
+  freshNoise: ActivityEvent[];
   /** The box's folded noise line: "10 bot comments, CI". */
   freshNoiseLabel: string;
   /** Lines to show before "Show all N" (ACTIVITY_LINE_CAP). */
@@ -178,33 +192,51 @@ function fullBody(view: EventView, pr: Pr | null): string | null {
   return body === '' ? null : body;
 }
 
-function toLine(group: EventView[], pr: Pr | null): ActivityLine {
-  const newestFirst = group.toReversed();
-  const newest = newestFirst[0]!;
-  const loud = group.some((view) => view.display === 'loud');
-  const summary = group.length > 1 ? burstSummary(newest.event.actor, group) : newest.event.summary;
+/** An event as a row draws it, without what no row reads (url, source id, rule loudness, seen time). */
+export function activityEvent(view: EventView): ActivityEvent {
+  const { event } = view;
   return {
-    id: newest.event.id,
-    kind: newest.event.kind,
-    actor: newest.event.actor,
-    summary,
-    body: group.length > 1 ? null : fullBody(newest, pr),
-    at: newest.event.at,
-    display: loud ? 'loud' : newest.display,
-    isNew: loud,
-    unseen: group.some((view) => view.unseen),
-    events: newestFirst,
-    reply: null,
+    id: event.id,
+    kind: event.kind,
+    actor: event.actor,
+    summary: event.summary,
+    at: event.at,
+    display: view.display,
+    unseen: view.unseen,
+    reason: event.override?.reason ?? event.ruleReason,
   };
 }
 
+/** A line while the list is built: the line, and its events newest first for the reply rules. */
+interface LineDraft {
+  line: ActivityLine;
+  events: EventView[];
+}
+
+function toDraft(group: EventView[], pr: Pr | null): LineDraft {
+  const newestFirst = group.toReversed();
+  const newest = newestFirst[0]!;
+  const loud = group.some((view) => view.display === 'loud');
+  const line: ActivityLine = {
+    ...activityEvent(newest),
+    summary: group.length > 1 ? burstSummary(newest.event.actor, group) : newest.event.summary,
+    display: loud ? 'loud' : newest.display,
+    unseen: group.some((view) => view.unseen),
+    body: group.length > 1 ? null : fullBody(newest, pr),
+    isNew: loud,
+    eventCount: group.length,
+    reply: null,
+  };
+  return { line, events: newestFirst };
+}
+
 /** The reply of one line on its own: its newest event's comment or review. */
-function lineReply(line: ActivityLine, pr: Pr, viewer: Viewer): LineReply | null {
-  const newest = line.events[0]?.event;
+function lineReply(draft: LineDraft, pr: Pr, viewer: Viewer): LineReply | null {
+  const newest = draft.events[0]?.event;
   if (!newest || newest.isBot || !HUMAN_TALK.includes(newest.kind) || sameLogin(newest.actor, viewer.login)) {
     return null;
   }
-  const asksYou = line.events.some((view) => PERSONAL_ASK_KINDS.includes(view.event.kind));
+  const asksYou = draft.events.some((view) => PERSONAL_ASK_KINDS.includes(view.event.kind));
   const comment = findComment(pr, newest.sourceId);
   if (comment) {
     const inThread = replyTarget(comment).kind === 'thread';
@@ -223,11 +255,12 @@ function lineReply(line: ActivityLine, pr: Pr, viewer: Viewer): LineReply | null
  * body); only the newest gets the reply, so one comment never has two Reply
  * boxes, and it asks the viewer when any of its lines does.
  */
-function withReplies(lines: ActivityLine[], pr: Pr | null, viewer: Viewer | null): ActivityLine[] {
+function withReplies(drafts: LineDraft[], pr: Pr | null, viewer: Viewer | null): ActivityLine[] {
+  const lines = drafts.map((draft) => draft.line);
   if (!pr || !viewer) {
     return lines;
   }
-  const replies = lines.map((line) => lineReply(line, pr, viewer));
+  const replies = drafts.map((draft) => lineReply(draft, pr, viewer));
   const owner = new Map<string, number>();
   replies.forEach((reply, index) => {
     if (reply && !owner.has(reply.commentId)) {
@@ -332,7 +365,7 @@ export function activityList(
   const allNoise = sorted.filter((view) => !isMeaningful(view, viewer)).toReversed();
   const lines = withReplies(
     groupBursts(meaningful)
-      .map((group) => toLine(group, pr))
+      .map((group) => toDraft(group, pr))
       .toReversed(),
     pr,
     viewer,
@@ -344,9 +377,9 @@ export function activityList(
   return {
     fresh,
     earlier: lines.filter((line) => !line.isNew),
-    noise,
+    noise: noise.map(activityEvent),
     noiseLabel: noiseLabel(noise),
-    freshNoise,
+    freshNoise: freshNoise.map(activityEvent),
     freshNoiseLabel: noiseSummary(freshNoise),
     cap: ACTIVITY_LINE_CAP,
     threadChangedAt: threadChangedAt(thread, events),

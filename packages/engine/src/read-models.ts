@@ -63,6 +63,7 @@ import {
   pingDecisionsByThread,
   type QuietReadView,
   type Pr,
+  type EventView,
   type PrDetail,
   type PrKey,
   type MacNotification,
@@ -703,7 +704,6 @@ export class ReadModels {
       pr: prPaneView(pr),
       status: prStatus(pr),
       fetchedAt: this.store.prs.fetchedAt(key),
-      events,
       activity: activityList(events, viewer, news?.anchor.at ?? null, pr, board.threads.get(key) ?? null),
       whatsNew: news,
       glance,
@@ -721,6 +721,11 @@ export class ReadModels {
       tileIds: [...tileIds],
       facts: this.memory.prFacts(key),
     };
+  }
+
+  /** Every stored event of a PR, oldest first, with its display state: the CLI's `pr` command. The pane reads `activity`. */
+  listPrEvents(key: PrKey): EventView[] {
+    return this.store.events.listForPr(key).map(eventView);
   }
 
   listFacts(query: FactQuery): FactView[] {

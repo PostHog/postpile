@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type {
   ActionLogEntry,
+  ActivityEvent,
   ActionResult,
   BusyInboxView,
   ChatReply,
@@ -51,6 +52,12 @@ function appWithFake(engine: FakeEngine = new FakeEngine({ syncStepMs: 0 })): Te
 async function post<T>(app: TestApp, path: string, body: unknown = {}): Promise<{ status: number; json: T }> {
   const res = await app.request(path, { method: 'POST', body: JSON.stringify(body), headers: { 'content-type': 'application/json' } });
   return { status: res.status, json: (await res.json()) as T };
+}
+
+/** Every row the PR pane can show, lines and folded bot/CI rows alike. */
+function activityItems(detail: PrDetail): ActivityEvent[] {
+  const { fresh, earlier, noise, freshNoise } = detail.activity;
+  return [...fresh, ...earlier, ...noise, ...freshNoise];
 }
 
 /** Every PR row of every sample topic. */
@@ -334,13 +341,18 @@ describe('server routes over the fake engine', () => {
     expect((await app.request('/api/prs/acme/app/1')).status).toBe(404);
   });
 
-  it('returns a PR with glance and events', async () => {
+  it('returns a PR with glance and activity', async () => {
     const res = await appWithFake().request('/api/prs/acme/app/1902');
     const detail = (await res.json()) as PrDetail;
     expect(detail.glance?.verdict).toBe('LOOK_CLOSER');
     // One unit per PR: #1902 is a stack layer, so it is in the stack tile only.
     expect(detail.tileIds).toEqual(['stack:acme/app#1851']);
-    expect(detail.events[0]?.display).toBe('loud');
+    expect(detail.activity.fresh[0]).toMatchObject({ actor: 'lyra', display: 'loud' });
+    // Every event is in the activity, cut to what a row draws; there is no second, raw list.
+    expect(detail).not.toHaveProperty('events');
+    const deploy = activityItems(detail).find((item) => item.kind === 'deploy');
+    expect(Object.keys(deploy ?? {}).sort()).toEqual(['actor', 'at', 'display', 'id', 'kind', 'reason', 'summary', 'unseen']);
+    expect(detail.activity.fresh[0]).not.toHaveProperty('events');
   });
 
   it('sends the slim PR view: no comments, threads, commits, timeline or check contexts', async () => {
@@ -562,13 +574,13 @@ describe('server routes over the fake engine', () => {
     const inThread = await post<ActionResult>(app, '/api/prs/acme/app/1902/reply', { commentId: 'thread-1902-1-0', body: 'Yes, next layer.' });
     const quoting = await post<ActionResult>(app, '/api/prs/acme/app/1902/reply', { commentId: 'issuecomment-2', body: 'One cold hour is fine.' });
     expect([inThread.json.ok, quoting.json.ok]).toEqual([true, true]);
-    // The pane sees the replies in the activity: one in the code thread, one as a new PR comment.
+    // The pane sees the replies in the activity: one in the code thread as typed, one as a new PR comment quoting lyra.
     const detail = (await (await app.request('/api/prs/acme/app/1902')).json()) as PrDetail;
-    const replies = detail.events.filter((view) => view.event.actor === 'you' && view.event.kind === 'comment').map((view) => view.event);
+    const replies = [...detail.activity.fresh, ...detail.activity.earlier].filter((line) => line.actor === 'you' && line.kind === 'comment');
     // Newest first, and both may share a millisecond: compare sorted.
-    expect(replies.map((event) => [event.summary, event.url]).sort()).toEqual([
-      ['you replied to lyra: One cold hour is fine.', detail.pr.url],
-      ['you replied to nell: Yes, next layer.', 'https://github.com/acme/app/pull/1902#discussion_thread-1902-1'],
+    expect(replies.map((line) => [line.summary, line.body]).sort()).toEqual([
+      ['you replied to lyra: One cold hour is fine.', expect.stringMatching(/^> @you does the warm-up job need a feature flag[^\n]*\n\n@lyra One cold hour is fine\.$/)],
+      ['you replied to nell: Yes, next layer.', 'Yes, next layer.'],
     ]);
     expect((await post<ActionResult>(app, '/api/prs/acme/app/1902/reply', { commentId: 'nope', body: 'x' })).json.ok).toBe(false);
     expect((await post(app, '/api/prs/acme/app/1902/reply', { commentId: 'issuecomment-2', body: '' })).status).not.toBe(200);
@@ -615,11 +627,11 @@ describe('server routes over the fake engine', () => {
   it('unmutes an event and decides a proposal', async () => {
     const app = appWithFake();
     const pr = (await (await app.request('/api/prs/acme/app/1899')).json()) as PrDetail;
-    const muted = pr.events.find((view) => view.display === 'muted');
+    const muted = activityItems(pr).find((item) => item.display === 'muted');
     expect(muted).toBeDefined();
-    await post(app, `/api/events/${encodeURIComponent(muted?.event.id ?? '')}/unmute`);
+    await post(app, `/api/events/${encodeURIComponent(muted?.id ?? '')}/unmute`);
     const after = (await (await app.request('/api/prs/acme/app/1899')).json()) as PrDetail;
-    expect(after.events.find((view) => view.event.id === muted?.event.id)?.display).toBe('quiet');
+    expect(activityItems(after).find((item) => item.id === muted?.id)?.display).toBe('quiet');
 
     const decided = await post<ActionResult>(app, '/api/proposals/proposal-rename-dev-env', { accept: true });
     expect(decided.json.ok).toBe(true);

@@ -50,6 +50,7 @@ import type {
   MemoryTarget,
   PendingProposals,
   PingTarget,
+  EventView,
   PrDetail,
   PrKey,
   RepoOverview,
@@ -1145,6 +1146,10 @@ export class Engine implements EngineService {
 
   async getPr(prKey: PrKey): Promise<PrDetail | null> {
     return this.reads.getPr(prKey);
+  }
+
+  async listPrEvents(prKey: PrKey): Promise<EventView[]> {
+    return this.reads.listPrEvents(prKey);
   }
 
   async debugNotifications(limit: number): Promise<NotificationDebugRow[]> {

@@ -21,9 +21,18 @@ now".
   engine's refetch. Checked in the static renderer build: the pane renders
   pixel-identical before and after (#1902: glance, key files, review row,
   description, facts, reviews, activity), the pane text matches on 26
-  sample PRs, and reply, thumbs up and approve go through. Next: the
-  biggest response is now mostly `events` and `activity` (about 360 KB on
-  the biggest PR); the renderer never reads `events`.
+  sample PRs, and reply, thumbs up and approve go through.
+- PR detail without the raw events (2026-10-05, DESIGN.md "The PR pane" ›
+  "What the pane loads"): `PrDetail.events` is gone (only the CLI read it;
+  it now has `listPrEvents`), and every `activity` item is an
+  `ActivityEvent` cut to what a row draws. Nothing shown was cut. On the
+  same copy: average response 72 KB to 28 KB, biggest 389 KB to 158 KB;
+  every open PR keeps its lines, bodies and folded rows, and the CLI still
+  prints all 272 events of the biggest. Checked in the static renderer
+  build: #1902 pixel-identical to main, pane text the same on 26 sample
+  PRs, folded bot rows with their reasons, Unmute, Reply and thumbs up go
+  through. Possible next step: load the bot/CI fold on demand (50 KB on
+  the biggest PR).
 - Busy inbox card (2026-10-05, DESIGN.md "Big inboxes" › "The busy inbox
   card"): while the board cap cuts the inbox, the sidebar shows a calm amber
   card right above the topics, with the aching robot, the quiet PR count,
