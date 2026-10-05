@@ -15,6 +15,10 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - macOS asks for permission to show notifications only once you turn them on, not on the first launch.
 - "Send a test notification" moved from the status bar into the Interruptions menu.
 
+### Fixed
+
+- PostPile could crash out of memory on a very busy inbox (thousands of tracked PRs), often a few minutes after the Mac woke from sleep. Views now share one loaded copy of your PRs instead of each reading its own, the big database reads stream instead of loading at once, and at most two topics catch up at the same time.
+
 ## 0.17.0 (2026-10-05)
 
 ### Added

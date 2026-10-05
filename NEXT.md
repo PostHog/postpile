@@ -6,6 +6,15 @@ now".
 
 ## Done
 
+- Memory on big boards (2026-10-05, DESIGN.md "Memory on big boards"): a
+  heavy install (about 5,000 tiles, 11k PRs, 485k events, on 0.16) crashed
+  out of memory in the main process. Boards are now shared per data change
+  (5 s at most), the PR parse cache fills in chunks, events are iterated,
+  and at most two catch-up runs go at once. Telemetry gained
+  `github_writes_changed` and `writes_on` on `sync_completed`. Reproduced
+  and measured on a 14x copy of a normal database. Still open: nothing
+  stored ages out, so the board keeps growing (see Decided "GitHub writes
+  on by default").
 - Interruptions (2026-10-05, DESIGN.md "Interruptions"): Mac notifications
   are opt-in. Three modes, kept in meta `interruptions_mode`: never (the
   default, nothing reaches the Mac), in batches (a roundup at 9:30, 13:30
