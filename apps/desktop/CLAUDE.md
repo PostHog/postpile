@@ -649,9 +649,14 @@ stays on screen and listed (`KeptView`).
   rotated at 5 MB, 3 files (`main/file-log.ts`). Help › Reveal Logs shows it
   in Finder. The sync logs its start, a summary and each error.
 - The last sync report (errors, timing) is stored in meta
-  `last_sync_report` and shows in the footer's "last sync" and the title
-  bar's sync status tooltips (`lib/sync-report.ts`) and in the notifications
+  `last_sync_report` and shows in the footer's "last full sync" and the
+  title bar's sync status tooltips (`lib/sync-report.ts`) and in the notifications
   debug pane. Title bar elements with a `title` are no-drag, so tooltips work.
+- The title bar's sync status headline follows the live poll
+  (`useLiveStatus`, `lib/live.ts` `pollIsFresh`): "up to date" while it
+  keeps up, an age only once it fell behind or is off. Don't put the full
+  sync's age back in the headline: it reads as stale data while the poll
+  runs.
 - Sync runs once on app start, on "Sync now", and every
   `AppConfig.autoSyncMinutes` (default 60) in the background (the engine's
   `AutoSyncSchedule`, started by main). `POSTPILE_SYNC_ON_START=0`

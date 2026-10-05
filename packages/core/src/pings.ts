@@ -126,7 +126,10 @@ export interface LivePollStatus {
    * A low quota slows it further (githubQuota.pollSeconds).
    */
   everySeconds: number;
+  /** Last cycle start that ended, blocked and failed ones included. */
   lastPollAt: IsoTime | null;
+  /** Start of the last cycle GitHub answered (a 304 counts); blocked and failed cycles leave it. The start, since agent work after the fetch can take minutes. The title bar's "up to date" reads it. */
+  lastAnsweredAt: IsoTime | null;
   /** Last cycle whose inbox answer was not a 304. */
   lastChangeAt: IsoTime | null;
   nextPollAt: IsoTime | null;
@@ -168,6 +171,7 @@ export const OFF_POLL_STATUS: LivePollStatus = {
   githubPollIntervalSeconds: null,
   everySeconds: 0,
   lastPollAt: null,
+  lastAnsweredAt: null,
   lastChangeAt: null,
   nextPollAt: null,
   backoffUntil: null,

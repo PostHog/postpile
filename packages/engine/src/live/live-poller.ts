@@ -158,10 +158,11 @@ export class LivePoller {
     }
     this.status.state = 'polling';
     this.status.nextPollAt = null;
-    this.lastStartMs = this.timers.now();
+    const startedMs = this.timers.now();
+    this.lastStartMs = startedMs;
     let delay: number;
     try {
-      this.record(await this.poll());
+      this.record(await this.poll(), startedMs);
       delay = this.nextDelay();
     } catch (error) {
       delay = this.backOff(error);
@@ -173,7 +174,7 @@ export class LivePoller {
     }
   }
 
-  private record(result: PollCycle): void {
+  private record(result: PollCycle, startedMs: number): void {
     const now = this.timers.now();
     this.status.lastPollAt = isoAt(now);
     if (result.kind === 'blocked') {
@@ -182,6 +183,8 @@ export class LivePoller {
       return;
     }
     this.failures = 0;
+    // The cycle's start, not its end: agent work after the fetch can take minutes, and the data is as old as the request.
+    this.status.lastAnsweredAt = isoAt(startedMs);
     this.status.state = 'waiting';
     this.status.backoffUntil = null;
     this.status.note = null;

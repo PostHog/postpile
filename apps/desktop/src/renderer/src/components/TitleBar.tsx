@@ -1,9 +1,11 @@
 import type { ReactNode } from 'react';
-import type { SyncProgress } from '@postpile/core';
+import type { LivePollStatus, SyncProgress, SyncReport } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
+import { useLiveStatus } from '../api/live.ts';
 import { useSyncProgress } from '../api/sync.ts';
 import { useTools } from '../api/tools.ts';
 import { capNote } from '../lib/agent-stats.ts';
+import { pollIsFresh } from '../lib/live.ts';
 import { syncProgressDetail, syncProgressText } from '../lib/sync-progress.ts';
 import { syncReportDetail } from '../lib/sync-report.ts';
 import { ageLabel } from '../lib/time.ts';
@@ -51,11 +53,39 @@ function SyncProgressStatus(props: { progress: SyncProgress | null | undefined }
   );
 }
 
+/** "now" or "12m ago", for the sync status tooltip. */
+function agoWords(iso: string, now: Date): string {
+  const age = ageLabel(iso, now);
+  return age === 'now' ? 'just now' : `${age} ago`;
+}
+
+/**
+ * The sync status tooltip: the live poll keeps the data current, the full
+ * sync is the slower sweep behind it, with its whole report.
+ */
+function freshnessDetail(live: LivePollStatus | undefined, report: SyncReport, now: Date): string {
+  let poll = 'Live poll off: data is as fresh as the last full sync.';
+  if (live && live.state !== 'off') {
+    const note = live.note ? ` Now: ${live.note}.` : '';
+    poll = live.lastAnsweredAt
+      ? `Live poll: GitHub answered ${agoWords(live.lastAnsweredAt, now)}, every ${live.githubQuota?.pollSeconds ?? live.everySeconds}s.${note}`
+      : `Live poll: waiting for its first check.${note}`;
+  }
+  const sweep = `Last full sync ${agoWords(report.finishedAt, now)}. It sweeps the last 30 days, groups sets and stacks, folds quiet news (bots, CI) into dossiers and retires finished topics.`;
+  return `${poll}\n\n${sweep}\n${syncReportDetail(report)}`;
+}
+
+/**
+ * The live poll checks GitHub every minute, so the headline is "up to date"
+ * while it keeps up, and an age only once it fell behind or is off. The
+ * full sync's time and counts live in the tooltip and the footer.
+ */
 function SyncStatus() {
   const actions = useActions();
   const now = useNow();
   const progress = useSyncProgress(actions.syncing).data;
   const tools = useTools().data;
+  const live = useLiveStatus().data;
   if (actions.syncing) {
     return <SyncProgressStatus progress={progress} />;
   }
@@ -74,31 +104,53 @@ function SyncStatus() {
       </StatusText>
     );
   }
-  const age = ageLabel(report.finishedAt, now);
   const capped = capNote(report.agentCallStats, actions.config?.autoSyncMinutes ?? 0);
-  let dot: DotTone = report.errors.length > 0 ? 'bad' : 'open';
+  const errors = report.errors.length;
+  const pollOn = live !== undefined && live.state !== 'off';
+  const fresh = pollIsFresh(live, now);
+  const paused = live !== undefined && (live.state === 'blocked' || live.state === 'backoff');
+  // Before its first answer the poll is starting, not behind: no amber.
+  const behind = pollOn && live.lastAnsweredAt !== null && !fresh;
+  let dot: DotTone = 'open';
+  if (paused || behind) {
+    dot = 'amber';
+  }
   if (capped) {
     dot = 'amber';
   }
+  if (errors > 0) {
+    dot = 'bad';
+  }
+  // A stale poll still counts from its last check; without a poll the full sync is the only clock.
+  const lastAnsweredAt = pollOn ? live.lastAnsweredAt : null;
+  const word = lastAnsweredAt ? 'checked' : 'synced';
+  const age = ageLabel(lastAnsweredAt ?? report.finishedAt, now);
+  let headline: ReactNode;
+  if (fresh) {
+    headline = 'up to date';
+  } else if (paused) {
+    // The footer and the tooltip say why: backing off, catching up, consolidating.
+    headline = 'updates paused';
+  } else if (age === 'now') {
+    headline = `${word} just now`;
+  } else {
+    headline = (
+      <>
+        {word} <Num>{age}</Num> ago
+      </>
+    );
+  }
   return (
-    <StatusText dot={dot} detail={syncReportDetail(report)}>
-      <span>
-        {age === 'now' ? (
-          'synced just now'
-        ) : (
-          <>
-            synced <Num>{age}</Num> ago
-          </>
-        )}
-      </span>
-      <Sep />
-      <span>
-        <Num>{report.prsFetched}</Num> PRs fetched
-      </span>
-      <Sep />
-      <span>
-        <Num>{report.newEvents}</Num> new events
-      </span>
+    <StatusText dot={dot} detail={freshnessDetail(live, report, now)}>
+      <span>{headline}</span>
+      {errors > 0 && (
+        <>
+          <Sep />
+          <span>
+            <Num>{errors}</Num> sync {errors === 1 ? 'error' : 'errors'}
+          </span>
+        </>
+      )}
       {capped && (
         <>
           <Sep />
