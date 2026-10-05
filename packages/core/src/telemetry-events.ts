@@ -18,7 +18,7 @@ const count = z.number().int().min(0);
 
 const setupStep = z.enum(['checks', 'sweep', 'review', 'day', 'accept']);
 const interruptionsMode = z.enum(['never', 'batches', 'asap']);
-const interruptionsFrom = z.enum(['setup', 'sidebar']);
+const interruptionsFrom = z.enum(['setup', 'sidebar', 'prompt']);
 const setupFitKind = z.enum(['no_effect', 'wrong_section', 'unclear']);
 const setupFitFix = z.enum(['remove', 'move', 'rewrite']);
 const toolName = z.enum(['gh', 'claude']);
@@ -112,7 +112,7 @@ export const TELEMETRY_EVENTS = {
   chat_message_sent: NO_PROPS,
   mac_ping_shown: z.object({ count }).strict(),
   mac_ping_clicked: NO_PROPS,
-  // The user picked when PostPile may show Mac notifications: in the setup step or the sidebar menu.
+  // The user picked when PostPile may show Mac notifications: in the setup step, the sidebar menu, or the one-time prompt for installs that never chose.
   interruptions_changed: z.object({ mode: interruptionsMode, from: interruptionsFrom }).strict(),
   // At most hourly, only when a count is above 0: ping decisions since the last summary (pinged, or
   // withheld by the rules or the agent) and threads PostPile marked read itself ("Handled quietly").

@@ -32,6 +32,7 @@ describe('PingDelivery', () => {
   it('shows nothing and holds nothing under never, the default', () => {
     const { delivery, shown } = setup();
     expect(delivery.mode()).toBe('never');
+    expect(delivery.chosen()).toBe(false);
     expect(delivery.deliver([ping(1)], at(10))).toBe(0);
     expect(shown).toEqual([]);
     expect(delivery.shownPrKeys()).toEqual([]);
@@ -121,6 +122,7 @@ describe('PingDelivery', () => {
     first.delivery.deliver([ping(1)], at(10));
     const again = setup(new StorePingHold(store));
     expect(again.delivery.mode()).toBe('batches');
+    expect(again.delivery.chosen()).toBe(true);
     expect(again.delivery.roundUp(at(13, 30))).toBe(1);
     expect(again.delivery.shownPrKeys()).toEqual(['acme/app#1']);
     store.close();

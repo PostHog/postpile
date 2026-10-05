@@ -308,8 +308,9 @@ export function createApp(
   // When PostPile may show a Mac notification: never, in batches or as soon as it matters. Kept in meta; local, never a GitHub write.
   app.get('/api/interruptions', async (c) => c.json(await engine.interruptions()));
   app.put('/api/interruptions', async (c) => {
-    const body = z.object({ mode: interruptionsMode }).parse(await c.req.json());
-    return c.json(await engine.setInterruptions(body.mode, 'sidebar'));
+    // from: the sidebar menu, or the one-time prompt for installs from before 0.18 that never chose.
+    const body = z.object({ mode: interruptionsMode, from: z.enum(['sidebar', 'prompt']).default('sidebar') }).parse(await c.req.json());
+    return c.json(await engine.setInterruptions(body.mode, body.from));
   });
   // Search bar filter: ?q= is matched term by term (AND); a missing or empty q matches nothing.
   app.get('/api/search', async (c) => c.json(await engine.search(c.req.query('q') ?? '')));

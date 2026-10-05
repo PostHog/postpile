@@ -229,11 +229,12 @@ export interface Actions {
   /** "Not now" on the footer's MCP offer. Local, kept by the server. */
   hideMcpConnect(): Promise<boolean>;
   /**
-   * The sidebar's Interruptions menu: when PostPile may show a Mac
+   * The sidebar's Interruptions menu, or the one-time prompt for installs
+   * that never chose (`from` 'prompt'): when PostPile may show a Mac
    * notification. Local, quiet (no toast); the row shows the new mode right
    * away and goes back on a failure.
    */
-  setInterruptions(mode: InterruptionsMode): Promise<void>;
+  setInterruptions(mode: InterruptionsMode, from?: 'sidebar' | 'prompt'): Promise<void>;
   /** "Send a test notification" (desktop app only, over the preload). Says in a toast what happened. */
   sendTestNotification(): Promise<void>;
   /** Quiet: no toast. Called when the user leaves a topic. */
@@ -715,10 +716,10 @@ export function ActionsProvider(props: { children: ReactNode }) {
     }
   }
 
-  async function setInterruptions(mode: InterruptionsMode): Promise<void> {
-    const rollback = await changeCache<InterruptionsView>(queryKeys.interruptions, (view) => ({ ...view, mode }));
+  async function setInterruptions(mode: InterruptionsMode, from: 'sidebar' | 'prompt' = 'sidebar'): Promise<void> {
+    const rollback = await changeCache<InterruptionsView>(queryKeys.interruptions, (view) => ({ ...view, mode, chosen: true }));
     try {
-      const view = await withBusy('interruptions', () => request<InterruptionsView>('PUT', '/api/interruptions', { mode }));
+      const view = await withBusy('interruptions', () => request<InterruptionsView>('PUT', '/api/interruptions', { mode, from }));
       queryClient.setQueryData(queryKeys.interruptions, view);
     } catch (error) {
       rollback();

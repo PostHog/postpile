@@ -12,6 +12,9 @@ export type InterruptionsMode = 'never' | 'batches' | 'asap';
 
 export const INTERRUPTIONS_MODES: readonly InterruptionsMode[] = ['never', 'batches', 'asap'];
 
+/** Where the user picked: the setup step, the sidebar menu, or the one-time prompt for installs that never chose. */
+export type InterruptionsFrom = 'setup' | 'sidebar' | 'prompt';
+
 /** Nothing pops up until the user picks otherwise, in setup or in the sidebar. */
 export const DEFAULT_INTERRUPTIONS: InterruptionsMode = 'never';
 
@@ -46,6 +49,13 @@ export interface MacPingRecord {
 
 export interface InterruptionsView {
   mode: InterruptionsMode;
+  /**
+   * The user picked a mode (setup, the sidebar or the one-time prompt).
+   * False on installs from before 0.18 that never chose: they got pings
+   * by default, so the app asks them once instead of turning pings off
+   * without a word.
+   */
+  chosen: boolean;
   /** The roundup times as the UI shows them, e.g. "9:30". */
   roundupTimes: string[];
 }
@@ -63,8 +73,8 @@ export function roundupTimeLabel(time: RoundupTime): string {
   return `${time.hour}:${String(time.minute).padStart(2, '0')}`;
 }
 
-export function interruptionsView(mode: InterruptionsMode): InterruptionsView {
-  return { mode, roundupTimes: ROUNDUP_TIMES.map(roundupTimeLabel) };
+export function interruptionsView(mode: InterruptionsMode, chosen: boolean): InterruptionsView {
+  return { mode, chosen, roundupTimes: ROUNDUP_TIMES.map(roundupTimeLabel) };
 }
 
 function isWeekday(day: Date): boolean {

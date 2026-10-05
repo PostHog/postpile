@@ -327,7 +327,7 @@ describe('setup accept', () => {
     expect(h.store.instructions.latest()).toMatchObject({ version: 1, origin: 'setup', summary: 'Written with setup', sourceChatMessageId: null });
     expect(loadRepoSettings(h.store)).toEqual({ scope: 'acme/app', quiet: ['acme/docs'] });
     expect(await h.engine.setupStatus()).toMatchObject({ needed: false, flag: 'done' });
-    expect((await h.engine.interruptions()).mode).toBe('batches');
+    expect(await h.engine.interruptions()).toMatchObject({ mode: 'batches', chosen: true });
   });
 
   it('adds a new version on a re-run, never a silent overwrite', async () => {
@@ -351,7 +351,7 @@ describe('setup accept', () => {
     expect(result).toMatchObject({ ok: false, savedVersion: null, current: { text: '# About me\n- Hand edit.\n', version: 1 } });
     expect(readFileSync(file, 'utf8')).toBe('# About me\n- Hand edit.\n');
     expect((await h.engine.setupStatus()).flag).toBeNull();
-    expect((await h.engine.interruptions()).mode).toBe('never');
+    expect(await h.engine.interruptions()).toMatchObject({ mode: 'never', chosen: false });
   });
 
   it('refuses an empty draft and a bad repo name', async () => {

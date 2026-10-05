@@ -5148,8 +5148,21 @@ notification; the poll, the tiles and the list work the same in every mode.
   "Interruptions" row in the sidebar footer, a small menu with the same
   three modes plus "Send a test notification". Kept in meta
   `interruptions_mode`; `GET`/`PUT /api/interruptions`. Telemetry
-  `interruptions_changed` (mode, from setup or sidebar). Rejected: a bell
+  `interruptions_changed` (mode, from setup, sidebar or prompt). Rejected: a bell
   toggle in the title bar, it puts pings front and center.
+- **Installs that never chose** (2026-10-05): before 0.18 the pings were on
+  by default, so an update would turn them off without a word. When no mode
+  was ever stored (`InterruptionsView.chosen` false), the app asks once in a
+  dialog (`InterruptionsPrompt`): "When should PostPile tap you on the
+  shoulder?", the same three cards with Never preselected, a lead that names
+  "As soon as it matters" as the old behavior, and Save. It waits until the
+  setup status and the inbox cleanup view have loaded and never shows on top
+  of setup or the inbox cleanup start dialog. Saving or closing (Esc, a
+  click outside) counts as a choice: closing stores the current mode
+  (Never) and says so next to Save, so the dialog never comes back. The PUT
+  carries `from: 'prompt'`, and so does `interruptions_changed`. A new
+  install that skips setup has not chosen either, so it gets the same
+  question once after skipping.
 - **Rules** (`PingDelivery` in engine `live/`): the poll's pings go through
   it. Never drops them (the ping decisions are still made and logged, the
   notifications debug view shows them). As soon as it matters shows them
@@ -5999,8 +6012,8 @@ topic names are never event props.
    `ask_sent` (the Ask popover's send), `reply_sent` (target `thread` or
    `comment`, 2026-10-05), `reaction_sent` (a thumbs up, 2026-10-05),
    `chat_message_sent` (tile and topic chat), `mac_ping_shown` /
-   `mac_ping_clicked`, `interruptions_changed` (mode, from setup or
-   sidebar, 2026-10-05), `pings_summarized` (pinged, withheld_rules,
+   `mac_ping_clicked`, `interruptions_changed` (mode, from setup,
+   sidebar or the one-time prompt, 2026-10-05), `pings_summarized` (pinged, withheld_rules,
    withheld_agent, pinged_glance (Look closer on routed reviews),
    handled_quietly: counts since the last summary, from
    `ping_decision` and the action log's `quiet` mark-reads; the engine sends

@@ -10,7 +10,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ### Changed
 
-- Mac notifications are off by default, also after this update. To keep getting them, pick "As soon as it matters" (or "In batches") under Interruptions in the sidebar.
+- Mac notifications are off by default. After this update PostPile asks once which mode you want, with Never preselected; "As soon as it matters" keeps the notifications you had. Closing the question keeps Never, and Interruptions in the sidebar changes it any time.
 - The Dock badge counts only what PostPile notified you about and you haven't opened yet. It no longer counts unread topics, so unread merged PRs and FYIs leave it alone. With notifications off there is no badge.
 - macOS asks for permission to show notifications only once you turn them on, not on the first launch.
 - "Send a test notification" moved from the status bar into the Interruptions menu.
