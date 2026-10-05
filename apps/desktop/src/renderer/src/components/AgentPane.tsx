@@ -110,7 +110,8 @@ export function AgentPane(props: AgentPaneProps) {
     if (reply) {
       setPoint(reply.lastingPoint);
       setInstructions(null);
-    } else {
+    } else if ((waitingDrafts.get(props.topicId) ?? '') === '') {
+      // Back only into an empty input: text typed meanwhile, here or in a pane opened since, wins.
       setDraft(text);
     }
   }
