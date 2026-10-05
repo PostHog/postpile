@@ -1,11 +1,12 @@
 import { splitAgentOffErrors, type AgentCallStats, type PrKey, type Viewer } from '@postpile/core';
 import { Board } from '../board.ts';
 import { AgentBudget } from '../budget.ts';
-import { topicsToCatchUp } from '../catch-up/topic-catch-up.ts';
+import { topicsToCatchUp, type CatchUpTopics } from '../catch-up/topic-catch-up.ts';
 import { reviveRetiredTopics, reviveUnreadTopics } from '../consolidation/revive.ts';
 import { TopicAssigner } from '../digest/topic-assignment.ts';
 import { errorText } from '../errors.ts';
 import { NO_FOCUS, type GitHubSync, type PollFocus } from '../github-sync.ts';
+import { pendingGlanceKeys } from '../glance-inputs.ts';
 import { emptyFactCounts } from '../memory/fact-writer.ts';
 import { advanceSeenFromGitHub } from '../memory/seen-from-github.ts';
 import type { RunDeps } from '../run-deps.ts';
@@ -23,9 +24,10 @@ export const POLL_TOPIC_CALLS = 1;
 /**
  * One cycle of the fast poll: conditional inbox and read-threads reads, a
  * freshness check once a minute; on a change, fetch the PRs that moved, log their events with rule loudness, give new PRs
- * a topic, and decide pings. The topics whose PRs brought loud news or have
- * no glance yet go to onCatchUp, which runs their dossier and glances right
- * away (TopicCatchUp) instead of waiting for the next full sync. Sets and
+ * a topic, and decide pings. The topics whose PRs brought news that starts
+ * a dossier update or have no glance yet go to onCatchUp, which runs their
+ * dossier and glances (TopicCatchUp) instead of waiting for the next full
+ * sync: loud news right away, the rest spaced out per topic. Sets and
  * stack layers stay with the full sync. A cycle that stored a change ends
  * with the quiet reads ("Handled quietly"), the only GitHub writes it makes.
  */
@@ -35,7 +37,7 @@ export class PollRun {
     private readonly github: GitHubSync,
     private readonly decider: PingDecider,
     private readonly quietReads: QuietReads,
-    private readonly onCatchUp: (topicIds: (string | null)[]) => void = () => {},
+    private readonly onCatchUp: (topics: CatchUpTopics) => void = () => {},
     /** GitHub writes are on: a thread the quiet reads clear by rule brings no finished topic back. */
     private readonly writesOn: () => boolean = () => false,
   ) {}
@@ -45,8 +47,16 @@ export class PollRun {
     const { store, now } = this.deps;
     const board = Board.load(store, now().toISOString());
     const glances = store.glances.getMany(fetchedPrKeys);
-    const topics = topicsToCatchUp(board, fetchedPrKeys, newEventIds, (key) => glances.has(key));
-    if (topics.length > 0) {
+    const viewer = loadViewer(store);
+    const pending = viewer ? pendingGlanceKeys(store, board, viewer, this.deps.contexts, this.deps.agent) : new Set<PrKey>();
+    const topics = topicsToCatchUp(
+      board,
+      fetchedPrKeys,
+      newEventIds,
+      (key) => glances.has(key),
+      (key) => pending.has(key),
+    );
+    if (topics.now.length > 0 || topics.quiet.length > 0) {
       this.onCatchUp(topics);
     }
   }
@@ -132,8 +142,9 @@ export class PollRun {
         return { ...done, prsUpdated: inbox.fetchedPrKeys.length, decisions: [], pings: [], errors };
       }
       const decided = await this.decider.decide(inbox.fetchedPrKeys, inbox.newEventIds, viewer);
-      // After the pings: they are the time-critical part and go first in the agent queue.
-      if (fetchedAny && this.deps.agentOff() === null) {
+      // After the pings: they are the time-critical part and go first in the agent queue. Also while the
+      // agent is off: the engine keeps what the queue skips and runs it once claude is back.
+      if (fetchedAny) {
         this.requestCatchUps(inbox.fetchedPrKeys, inbox.newEventIds);
       }
       return {

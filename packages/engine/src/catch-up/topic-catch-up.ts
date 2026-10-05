@@ -1,4 +1,4 @@
-import { effectiveLoudness, emptyAgentCallStats, GLANCE_BATCH_SIZE, type AgentCallStats, type PrKey, type Viewer } from '@postpile/core';
+import { effectiveLoudness, emptyAgentCallStats, isMemoryNoise, isMemoryTrigger, PUSH_KINDS, GLANCE_BATCH_SIZE, type AgentCallStats, type PrKey, type Viewer } from '@postpile/core';
 import { AgentBudget } from '../budget.ts';
 import { Board } from '../board.ts';
 import type { DigestDeps } from '../digest/deps.ts';
@@ -14,24 +14,51 @@ import { loadViewer } from '../viewer-meta.ts';
 import { errorText } from '../errors.ts';
 import type { CatchUpCap } from './catch-up-cap.ts';
 
+/** Topics a poll cycle brought news for, split by how soon their catch-up runs. */
+export interface CatchUpTopics {
+  /** Loud news, or a PR that should have a glance and has none: run right away. */
+  now: (string | null)[];
+  /** Only other memory triggers: spaced out per topic (`QuietCatchUps`). */
+  quiet: (string | null)[];
+}
+
 /**
- * Topics a poll cycle's PRs need a catch-up run for: a PR with a new loud
- * event (its dossier is behind), or a PR that should have a glance and has
- * none yet (new to the app). Quiet news (a bot comment, CI) waits for the
- * next full sync. Null is the virtual Unsorted topic.
+ * Topics a poll cycle's PRs need a catch-up run for: a PR with a new event
+ * that starts a dossier update (`isMemoryTrigger`: anything loud, anything a
+ * person did, a bot changing the PR's state), a push (no dossier update, but
+ * the PR's glance is behind), a fetched PR whose glance no longer matches
+ * without any event (an edited title, description or labels), or a PR that
+ * should have a glance and has none yet (new to the app). Bot comments wait for the next
+ * update and noise (CI, bot edits, deploys) never counts, as in the full
+ * sync. Loud news and missing glances run now, the rest is quiet. Null is
+ * the virtual Unsorted topic.
  */
-export function topicsToCatchUp(board: Board, fetched: PrKey[], newEventIds: string[], hasGlance: (key: PrKey) => boolean): (string | null)[] {
+export function topicsToCatchUp(
+  board: Board,
+  fetched: PrKey[],
+  newEventIds: string[],
+  hasGlance: (key: PrKey) => boolean,
+  glanceStale: (key: PrKey) => boolean,
+): CatchUpTopics {
   const fresh = new Set(newEventIds);
   const wanted = glanceTargetKeys(board);
-  const topics = new Set<string | null>();
+  const now = new Set<string | null>();
+  const quiet = new Set<string | null>();
   for (const key of fetched) {
-    const loud = (board.events.get(key) ?? []).some((event) => fresh.has(event.id) && effectiveLoudness(event) === 'loud');
+    const events = (board.events.get(key) ?? []).filter((event) => fresh.has(event.id));
+    const loud = events.some((event) => effectiveLoudness(event) === 'loud');
+    // A push rides along for the dossier but changes the PR's own glance (its head is in the glance hash).
+    const triggered = events.some((event) => isMemoryTrigger(event) || (PUSH_KINDS.includes(event.kind) && !isMemoryNoise(event)));
     const missing = wanted.has(key) && !hasGlance(key);
+    const topicId = board.memberships.get(key)?.topicId ?? null;
     if (loud || missing) {
-      topics.add(board.memberships.get(key)?.topicId ?? null);
+      now.add(topicId);
+    } else if (triggered || glanceStale(key)) {
+      // A title, description or label change brings no event but can leave the glance stale.
+      quiet.add(topicId);
     }
   }
-  return [...topics];
+  return { now: [...now], quiet: [...quiet].filter((topicId) => !now.has(topicId)) };
 }
 
 /**
@@ -138,11 +165,11 @@ export class TopicCatchUp {
 
   /**
    * The PR should have a glance and its stored one is missing or no longer
-   * matches its input (the PR, the topic's dossier, instructions, feedback):
-   * the same hash check as the glance writer's, so an up-to-date glance
-   * never costs a call.
+   * matches its input (the PR, instructions, feedback): the same hash check
+   * as the glance writer's, so an up-to-date glance never costs a call. On a
+   * look, also one written against an older dossier of its topic.
    */
-  needsGlance(prKey: PrKey): boolean {
+  needsGlance(prKey: PrKey, onLook = false): boolean {
     const viewer = loadViewer(this.deps.store);
     if (!viewer) {
       return false;
@@ -153,7 +180,8 @@ export class TopicCatchUp {
     if (!target) {
       return false;
     }
-    return this.deps.store.glances.get(prKey)?.inputHash !== inputs.itemHash(this.deps.agent, target);
+    const stored = this.deps.store.glances.get(prKey);
+    return !inputs.isCurrent(this.deps.agent, target, stored) || (onLook && inputs.behindDossier(target, stored));
   }
 
   /**

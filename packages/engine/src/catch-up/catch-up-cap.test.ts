@@ -45,10 +45,10 @@ describe('AgentBudget with a daily allowance', () => {
 
 describe('catchUpCapFromEnv', () => {
   it('reads POSTPILE_CATCHUP_CAP, and stays off when a dev session allows no agent calls', () => {
-    expect(catchUpCapFromEnv(undefined, undefined)).toBe(300);
+    expect(catchUpCapFromEnv(undefined, undefined)).toBe(600);
     expect(catchUpCapFromEnv('40', undefined)).toBe(40);
     expect(catchUpCapFromEnv('0', undefined)).toBe(0);
-    expect(catchUpCapFromEnv('lots', '150')).toBe(300);
+    expect(catchUpCapFromEnv('lots', '150')).toBe(600);
     expect(catchUpCapFromEnv(undefined, '0')).toBe(0);
     expect(catchUpCapFromEnv('20', '0')).toBe(20);
   });

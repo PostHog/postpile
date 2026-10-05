@@ -677,8 +677,10 @@ export interface AgentService {
   topicDigest(input: TopicDigestInput): Promise<TopicDigestResult>;
   /** At most one action per item; items the answer skipped are left out. */
   reconcileFacts(input: FactReconcileInput): Promise<ReconcileAction[]>;
-  /** Per PR, independent of the other PRs in the batch. Covers the dossier version. */
+  /** Per PR, independent of the other PRs in the batch. Not the dossier version (2026-10-05). */
   glanceItemInputHash(input: GlanceBatchInput, item: GlanceBatchItem): string;
+  /** The hash glances carried before 2026-10-05, with the dossier version: still accepted as current. */
+  legacyGlanceItemInputHash(input: GlanceBatchInput, item: GlanceBatchItem): string;
   glanceBatch(input: GlanceBatchInput): Promise<GlanceBatchResult>;
   classifyEventBatch(input: EventBatchInput): Promise<EventOverrideProposal[]>;
   consolidate(input: ConsolidationInput): Promise<ConsolidationResult>;

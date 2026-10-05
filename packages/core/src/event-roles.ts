@@ -16,11 +16,11 @@ import type { EventKind, PrEvent } from './types.ts';
 export type MemoryRole = 'noise' | 'ride_along' | 'trigger';
 
 /**
- * Changes to the PR itself start an update whoever made them, a bot
- * included: trunk merging, a bot asking a team for review, dependabot
- * pushing, a bot approving (the review state changes: approved, ready to
- * merge). The app's Look closer stays a trigger even when the events agent
- * turned it down from loud.
+ * Changes to the PR's state start an update whoever made them, a bot
+ * included: trunk merging, a bot asking a team for review, a bot approving
+ * (the review state changes: approved, ready to merge). The app's Look
+ * closer stays a trigger even when the events agent turned it down from
+ * loud. Pushes are not here: see memoryRole.
  */
 const ALWAYS_TRIGGER_KINDS: readonly EventKind[] = [
   'merged',
@@ -32,7 +32,6 @@ const ALWAYS_TRIGGER_KINDS: readonly EventKind[] = [
   'review_requested',
   'review_request_removed',
   'review_approved',
-  ...PUSH_KINDS,
   'look_closer',
 ];
 
@@ -45,8 +44,13 @@ const STATUS_KINDS: readonly EventKind[] = ['deploy', 'merge_queue', 'comment_ed
 
 /**
  * The role of one event, first match wins: loud is always a trigger, muted
- * and CI are always noise, a person's event is a trigger, then a bot's
- * event by what it is. Other bot reviews and comments (review bots,
+ * and CI are always noise, a push rides along whoever made it, a person's
+ * event is a trigger, then a bot's event by what it is. A push changes one
+ * PR's code, not the topic's story (2026-10-05): it refreshes that PR's
+ * glance (its head is in the glance hash) and the dossier reads it at its
+ * next real update. Before, an agent pushing 27 times an hour rewrote the
+ * dossier and left every glance in the topic out of date. A push aimed at
+ * the viewer (answering their changes request) is loud and still a trigger. Other bot reviews and comments (review bots,
  * github-actions) ride along: their findings feed the glance, and the dossier reads them
  * once something real happens. "Made by automation" is the actor half of
  * `isAutomation`; the review request half does not matter here, since every
@@ -59,6 +63,9 @@ export function memoryRole(event: PrEvent): MemoryRole {
   }
   if (loudness === 'muted' || event.kind === 'ci') {
     return 'noise';
+  }
+  if (PUSH_KINDS.includes(event.kind)) {
+    return 'ride_along';
   }
   if (!isMadeByAutomation(event) || ALWAYS_TRIGGER_KINDS.includes(event.kind)) {
     return 'trigger';

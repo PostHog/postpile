@@ -41,13 +41,19 @@ function openTimer(wanted = true): { timer: GlanceLookTimer; clock: FakeClock; f
 
 describe('wantsGlanceRefresh', () => {
   it('asks only for a stale glance the server can refresh and nobody writes yet', () => {
-    const stale = { glanceStale: true, glanceRefreshBlock: null, glanceState: 'ready' as const };
+    const stale = { glanceStale: true, glanceBehindDossier: false, glanceRefreshBlock: null, glanceState: 'ready' as const };
     expect(wantsGlanceRefresh(stale)).toBe(true);
     expect(wantsGlanceRefresh({ ...stale, glanceStale: false })).toBe(false);
     expect(wantsGlanceRefresh({ ...stale, glanceRefreshBlock: 'daily_cap' })).toBe(false);
     expect(wantsGlanceRefresh({ ...stale, glanceState: 'writing' })).toBe(false);
     expect(wantsGlanceRefresh({ ...stale, glanceState: 'queued' })).toBe(false);
     expect(wantsGlanceRefresh(null)).toBe(false);
+  });
+
+  it('also asks for a current glance written against an older dossier', () => {
+    const behind = { glanceStale: false, glanceBehindDossier: true, glanceRefreshBlock: null, glanceState: 'ready' as const };
+    expect(wantsGlanceRefresh(behind)).toBe(true);
+    expect(wantsGlanceRefresh({ ...behind, glanceRefreshBlock: 'daily_cap' })).toBe(false);
   });
 });
 

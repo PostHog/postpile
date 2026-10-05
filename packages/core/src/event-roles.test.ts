@@ -99,17 +99,17 @@ const ROWS: Row[] = [
 
   // Requests, bot-authored PRs and CI.
   { scenario: 'dependabot', entry: 'assignerRequestsTeam', kind: 'review_requested', automation: false, loudness: 'loud', role: 'trigger', alone: true, withTrigger: true, newer: true, quietRead: 'human_activity' },
-  { scenario: 'dependabot', entry: 'dependabotRebases', kind: 'force_pushed', automation: true, loudness: 'quiet', role: 'trigger', alone: true, withTrigger: true, newer: true, quietRead: 'mark' },
+  { scenario: 'dependabot', entry: 'dependabotRebases', kind: 'force_pushed', automation: true, loudness: 'quiet', role: 'ride_along', alone: false, withTrigger: true, newer: false, quietRead: 'mark' },
   { scenario: 'dependabot', entry: 'dependabotComment', kind: 'bot_comment', automation: true, loudness: 'quiet', role: 'ride_along', alone: false, withTrigger: true, newer: false, quietRead: 'mark' },
   { scenario: 'agentForViewer', entry: 'agentPushes', kind: 'commits_pushed', automation: true, loudness: 'muted', role: 'noise', alone: false, withTrigger: false, newer: false, quietRead: 'mark' },
-  { scenario: 'teamRouted', entry: 'agentPushes', kind: 'commits_pushed', automation: true, loudness: 'quiet', role: 'trigger', alone: true, withTrigger: true, newer: true, quietRead: 'mark' },
+  { scenario: 'teamRouted', entry: 'agentPushes', kind: 'commits_pushed', automation: true, loudness: 'quiet', role: 'ride_along', alone: false, withTrigger: true, newer: false, quietRead: 'mark' },
   { scenario: 'agentForViewer', entry: 'agentMarksReady', kind: 'ready_for_review', automation: true, loudness: 'quiet', role: 'trigger', alone: true, withTrigger: true, newer: true, quietRead: 'mark' },
   { scenario: 'ownOpen', entry: 'ciFails', kind: 'ci', automation: true, loudness: 'quiet', role: 'noise', alone: false, withTrigger: false, newer: false, quietRead: 'mark' },
   { scenario: 'dependabot', entry: 'ciFails', kind: 'ci', automation: true, loudness: 'quiet', role: 'noise', alone: false, withTrigger: false, newer: false, quietRead: 'mark' },
 
   // The viewer: always a trigger (as today), never someone else's activity for a quiet read.
   { scenario: 'ownOpen', entry: 'viewerComments', kind: 'comment', automation: false, loudness: 'quiet', role: 'trigger', alone: true, withTrigger: true, newer: true, quietRead: 'human_activity' },
-  { scenario: 'ownOpen', entry: 'viewerPushes', kind: 'commits_pushed', automation: false, loudness: 'quiet', role: 'trigger', alone: true, withTrigger: true, newer: true, quietRead: 'human_activity' },
+  { scenario: 'ownOpen', entry: 'viewerPushes', kind: 'commits_pushed', automation: false, loudness: 'quiet', role: 'ride_along', alone: false, withTrigger: true, newer: false, quietRead: 'human_activity' },
   { scenario: 'reviewing', entry: 'viewerApproves', kind: 'review_approved', automation: false, loudness: 'quiet', role: 'trigger', alone: true, withTrigger: true, newer: true, quietRead: 'human_activity' },
   { scenario: 'ownOpen', entry: 'viewerMerges', kind: 'merged', automation: false, loudness: 'quiet', role: 'trigger', alone: true, withTrigger: true, newer: true, quietRead: 'human_activity' },
 
@@ -128,8 +128,8 @@ const ROWS: Row[] = [
   { scenario: 'ownOpen', entry: 'reviewerApproves', kind: 'review_approved', automation: false, loudness: 'loud', role: 'trigger', alone: true, withTrigger: true, newer: true, quietRead: 'human_activity' },
   { scenario: 'ownOpen', entry: 'reviewerRequestsChanges', kind: 'review_changes_requested', automation: false, loudness: 'loud', role: 'trigger', alone: true, withTrigger: true, newer: true, quietRead: 'human_activity' },
   { scenario: 'reviewing', entry: 'reviewerComments', kind: 'review_commented', automation: false, loudness: 'quiet', role: 'trigger', alone: true, withTrigger: true, newer: true, quietRead: 'human_activity' },
-  { scenario: 'reviewing', entry: 'authorPushes', kind: 'commits_after_approval', automation: false, loudness: 'quiet', role: 'trigger', alone: true, withTrigger: true, newer: true, quietRead: 'human_activity' },
-  { scenario: 'teamRouted', entry: 'authorPushes', kind: 'commits_pushed', automation: false, loudness: 'quiet', role: 'trigger', alone: true, withTrigger: true, newer: true, quietRead: 'human_activity' },
+  { scenario: 'reviewing', entry: 'authorPushes', kind: 'commits_after_approval', automation: false, loudness: 'quiet', role: 'ride_along', alone: false, withTrigger: true, newer: false, quietRead: 'human_activity' },
+  { scenario: 'teamRouted', entry: 'authorPushes', kind: 'commits_pushed', automation: false, loudness: 'quiet', role: 'ride_along', alone: false, withTrigger: true, newer: false, quietRead: 'human_activity' },
   { scenario: 'reviewing', entry: 'authorConvertsToDraft', kind: 'converted_to_draft', automation: false, loudness: 'quiet', role: 'trigger', alone: true, withTrigger: true, newer: true, quietRead: 'human_activity' },
   { scenario: 'reviewing', entry: 'authorRemovesRequest', kind: 'review_request_removed', automation: false, loudness: 'quiet', role: 'trigger', alone: true, withTrigger: true, newer: true, quietRead: 'human_activity' },
   { scenario: 'ownOpen', entry: 'personReopens', kind: 'reopened', automation: false, loudness: 'quiet', role: 'trigger', alone: true, withTrigger: true, newer: true, quietRead: 'human_activity' },
@@ -251,6 +251,15 @@ describe('the event corpus through the pipeline', () => {
 
 describe('memoryRole', () => {
   const pr = makePr({ number: 7 });
+
+  it('lets a push ride along, from a person or a bot, unless it is loud', () => {
+    const push = makeEvent({ id: 'acme/app#7:push:p1', kind: 'commits_pushed', actor: 'alice', summary: 'alice pushed 2 commits' });
+    expect(memoryRole(push)).toBe('ride_along');
+    expect(memoryRole({ ...push, kind: 'force_pushed', actor: 'renovate[bot]', isBot: true })).toBe('ride_along');
+    // The author answering the viewer's changes request is loud: aimed at them, so it still starts an update.
+    expect(memoryRole({ ...push, ruleLoudness: 'loud', ruleReason: 'answered your changes request' })).toBe('trigger');
+    expect(isMemoryTrigger(push)).toBe(false);
+  });
 
   it("makes the app's Look closer a trigger, even after the events agent turned it down", () => {
     const event = lookCloserEvent(pr, 'acme/team-platform', 'rr-1', CORPUS_AT);

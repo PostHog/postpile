@@ -1,7 +1,7 @@
 import type { CallAllowance } from '../budget.ts';
 
 /** Catch-up agent calls per rolling 24 hours, unless POSTPILE_CATCHUP_CAP says otherwise. */
-export const CATCH_UP_CALLS_PER_DAY = 300;
+export const CATCH_UP_CALLS_PER_DAY = 600;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 

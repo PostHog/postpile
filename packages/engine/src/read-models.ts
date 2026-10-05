@@ -52,6 +52,7 @@ import {
   type FinishedTopic,
   type CatchUpRunState,
   type CleanupGlance,
+  type Glance,
   type GlanceGap,
   type GlanceRefreshBlock,
   type GlanceState,
@@ -138,6 +139,16 @@ export interface GlanceStatusSource {
 const NO_GLANCE_STATUS: GlanceStatusSource = { agentOff: () => false, catchUp: () => null, catchUpCap: () => ({ off: true, spent: false }) };
 
 /** Builds the API read models. Every call loads a fresh Board, so state is always derived. */
+/**
+ * The glance was written against an older dossier of its topic: current,
+ * but a look rewrites it with the newer one (`GlanceInputs.behindDossier`).
+ * Unsorted has no dossier, so never.
+ */
+function glanceBehindDossier(store: Store, topicId: string | null, glance: Glance | null): boolean {
+  const latest = topicId === null ? null : (store.dossiers.latest(topicId)?.version ?? null);
+  return glance !== null && latest !== null && (glance.dossierVersion ?? 0) < latest;
+}
+
 export class ReadModels {
   private readonly memory: MemoryReads;
 
@@ -201,7 +212,7 @@ export class ReadModels {
     const stale = new Set<PrKey>();
     for (const [key, glance] of glances) {
       const target = targets.get(key);
-      if (!target || glance.inputHash !== inputs.itemHash(this.agent, target)) {
+      if (!target || !inputs.isCurrent(this.agent, target, glance)) {
         stale.add(key);
       }
     }
@@ -618,6 +629,7 @@ export class ReadModels {
       whatsNew: news,
       glance,
       glanceStale: stale,
+      glanceBehindDossier: glanceBehindDossier(this.store, board.memberships.get(key)?.topicId ?? null, glance),
       glanceGap: gap,
       glanceState: this.glanceState(board, key, { hasGlance: glance !== null, stale, gap, wanted }),
       glanceRefreshBlock: this.glanceRefreshBlock(key, wanted),

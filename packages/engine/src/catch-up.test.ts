@@ -1,5 +1,5 @@
 import type { GlanceGap, Pr, PrKey } from '@postpile/core';
-import { makeComment, makeThreadFor, viewer } from '@postpile/core/fixtures';
+import { makeComment, makeCommit, makeThreadFor, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it, vi } from 'vitest';
 import { glanceGapKey } from './digest/glance-batches.ts';
 import { makeHarness, NOW, type Harness, type HarnessOptions } from './testing/fakes.ts';
@@ -60,6 +60,180 @@ describe('glance catch-up after a poll', () => {
     const ran = h.telemetry.events.find((e) => e.event === 'catch_up_ran');
     expect(ran?.props).toMatchObject({ topics: 1, ok: true, agent_calls: expect.any(Number) });
     expect((ran?.props as { agent_calls: number } | undefined)?.agent_calls).toBeGreaterThan(0);
+  });
+
+  it('catches up on quiet news a person made, not only on loud news', async () => {
+    const { h, pr } = await syncedTopic();
+    const next = { ...pr, updatedAt: LATER, comments: [makeComment({ id: 'c2', author: 'bob', body: 'Bumped the cache size.', createdAt: FRESH })] };
+    h.reader.addPr(next, makeThreadFor(next, { updatedAt: LATER }));
+    h.reader.etag = 'etag-2';
+    h.runner.answer('ping_decision', { decisions: [] });
+
+    await h.engine.pollOnce();
+
+    expect(h.store.events.listForPr(pr.key).find((event) => event.actor === 'bob')?.ruleLoudness).toBe('quiet');
+    await vi.waitFor(() => expect(h.store.dossiers.latest('depot')?.version).toBe(2));
+    expect(catchUpRunIds(h)).toEqual([expect.stringMatching(/^catchup:depot:/)]);
+  });
+
+  it('spaces out quiet news per topic: a second push within 15 minutes waits for a later poll cycle', async () => {
+    let at = new Date(NOW).getTime();
+    const { h, pr } = await syncedTopic({ now: () => new Date(at) });
+    const quietComment = (id: string, minute: string) => {
+      const updatedAt = `2026-09-02T12:${minute}:00.000Z`;
+      const next = { ...pr, updatedAt, comments: [makeComment({ id, author: 'bob', body: `Note ${id}.`, createdAt: updatedAt })] };
+      h.reader.addPr(next, makeThreadFor(next, { updatedAt }));
+      h.reader.etag = `etag-${id}`;
+      h.runner.answer('ping_decision', { decisions: [] });
+    };
+
+    quietComment('q1', '01');
+    await h.engine.pollOnce();
+    await vi.waitFor(() => expect(catchUpRunIds(h)).toHaveLength(1));
+
+    at += 5 * 60_000;
+    quietComment('q2', '05');
+    await h.engine.pollOnce();
+    await h.engine.pollOnce();
+    expect(catchUpRunIds(h)).toHaveLength(1);
+
+    at += 10 * 60_000;
+    await h.engine.pollOnce();
+    await vi.waitFor(() => expect(catchUpRunIds(h)).toHaveLength(2));
+  });
+
+  it('refreshes only the pushed PR\'s glance: no dossier rewrite, nothing out of date', async () => {
+    const h = makeHarness({ catchUpCallsPerDay: 300 });
+    const first = reviewRequestedPr(1);
+    const second = reviewRequestedPr(2);
+    topicWithPrs(h, 'depot', [first, second]);
+    await h.engine.sync({ maxAgentCalls: 50 });
+    const secondGlance = h.store.glances.get(second.key);
+
+    const pushed = { ...first, updatedAt: LATER, headOid: 'pushed', commits: [...first.commits, makeCommit({ oid: 'pushed', author: first.author, committedAt: FRESH })] };
+    h.reader.addPr(pushed, makeThreadFor(pushed, { updatedAt: LATER }));
+    h.reader.etag = 'etag-push';
+    h.runner.answer('ping_decision', { decisions: [] });
+
+    await h.engine.pollOnce();
+
+    await vi.waitFor(() => expect(h.store.glances.get(first.key)?.inputHash).not.toBe(undefined));
+    await vi.waitFor(async () => expect((await h.engine.getPr(first.key))?.glanceStale).toBe(false));
+    expect(h.store.dossiers.latest('depot')?.version).toBe(1);
+    expect((await h.engine.getTopic('depot'))?.dossier?.eventsBehind).toBe(0);
+    expect(h.store.glances.get(second.key)).toEqual(secondGlance);
+    expect((await h.engine.getPr(second.key))?.glanceStale).toBe(false);
+  });
+
+  it('keeps the other PRs\' glances current when a comment rewrites the dossier', async () => {
+    const h = makeHarness({ catchUpCallsPerDay: 300 });
+    const first = reviewRequestedPr(1);
+    const second = reviewRequestedPr(2);
+    topicWithPrs(h, 'depot', [first, second]);
+    await h.engine.sync({ maxAgentCalls: 50 });
+    const secondGlance = h.store.glances.get(second.key);
+    askViewer(h, first, 'c9', 'etag-2');
+
+    await h.engine.pollOnce();
+
+    await vi.waitFor(() => expect(h.store.dossiers.latest('depot')?.version).toBe(2));
+    await vi.waitFor(async () => expect((await h.engine.getPr(first.key))?.glanceState).toBe('ready'));
+    expect(h.store.glances.get(second.key)).toEqual(secondGlance);
+    expect((await h.engine.getPr(second.key))?.glanceStale).toBe(false);
+  });
+
+  it('counts a glance stored with the old hash, which had the dossier version, as current', async () => {
+    const { h, pr } = await syncedTopic();
+    const stored = h.store.glances.get(pr.key)!;
+    // The input the sync wrote the glance from: same PR, same dossier (version 1) as now.
+    const input = h.agent.glanceInputs.at(-1)!;
+    const item = input.items.find((candidate) => candidate.pr.key === pr.key)!;
+    const legacy = h.agent.legacyGlanceItemInputHash(input, item);
+    expect(legacy).not.toBe(stored.inputHash);
+    h.store.glances.put({ ...stored, inputHash: legacy });
+
+    expect((await h.engine.getPr(pr.key))?.glanceStale).toBe(false);
+
+    // The old shape held comment ids only: a person editing a comment after the glance makes it stale.
+    const edited = makeComment({ id: 'e1', author: 'bob', body: 'Blocker: wrong cache key.', createdAt: FRESH, lastEditedAt: LATER });
+    h.store.prs.upsert({ ...pr, comments: [{ ...edited, lastEditedAt: null }] }, LATER);
+    const withComment = h.agent.legacyGlanceItemInputHash(input, { ...item, pr: { ...pr, comments: [{ ...edited, lastEditedAt: null }] } });
+    h.store.glances.put({ ...stored, inputHash: withComment });
+    expect((await h.engine.getPr(pr.key))?.glanceStale).toBe(false);
+    h.store.prs.upsert({ ...pr, comments: [edited] }, LATER);
+    expect((await h.engine.getPr(pr.key))?.glanceStale).toBe(true);
+  });
+
+  it('keeps a due quiet topic waiting while claude is off, and runs it once claude is back', async () => {
+    let at = new Date(NOW).getTime();
+    const { h, pr } = await syncedTopic({ now: () => new Date(at) });
+    const quietComment = (id: string, minute: string) => {
+      const updatedAt = `2026-09-02T12:${minute}:00.000Z`;
+      const next = { ...pr, updatedAt, comments: [makeComment({ id, author: 'bob', body: `Note ${id}.`, createdAt: updatedAt })] };
+      h.reader.addPr(next, makeThreadFor(next, { updatedAt }));
+      h.reader.etag = `etag-${id}`;
+      h.runner.answer('ping_decision', { decisions: [] });
+    };
+    quietComment('q1', '01');
+    await h.engine.pollOnce();
+    await vi.waitFor(() => expect(catchUpRunIds(h)).toHaveLength(1));
+    at += 5 * 60_000;
+    quietComment('q2', '05');
+    await h.engine.pollOnce();
+
+    at += 10 * 60_000;
+    h.commands.missing.add('claude');
+    await h.engine.checkTools();
+    await h.engine.pollOnce();
+    expect(catchUpRunIds(h)).toHaveLength(1);
+
+    h.commands.missing.delete('claude');
+    await h.engine.checkTools();
+    await h.engine.pollOnce();
+    await vi.waitFor(() => expect(catchUpRunIds(h)).toHaveLength(2));
+  });
+
+  it('catches up a glance that a title change left stale, though no event came with it', async () => {
+    const { h, pr } = await syncedTopic();
+    const renamed = { ...pr, updatedAt: LATER, title: 'Cache runner images per arch' };
+    h.reader.addPr(renamed, makeThreadFor(renamed, { updatedAt: LATER }));
+    h.reader.etag = 'etag-title';
+    h.runner.answer('ping_decision', { decisions: [] });
+
+    await h.engine.pollOnce();
+
+    await vi.waitFor(() => expect(catchUpRunIds(h)).toEqual([expect.stringMatching(/^catchup:depot:/)]));
+    await vi.waitFor(async () => expect((await h.engine.getPr(pr.key))?.glanceStale).toBe(false));
+    expect(h.store.dossiers.latest('depot')?.version).toBe(1);
+  });
+
+  it('catches up on news the poll fetched while claude was off, once claude is back', async () => {
+    const { h, pr } = await syncedTopic();
+    h.commands.missing.add('claude');
+    await h.engine.checkTools();
+    askViewer(h, pr, 'c7', 'etag-off');
+    await h.engine.pollOnce();
+    expect(catchUpRunIds(h)).toEqual([]);
+
+    h.commands.missing.delete('claude');
+    await h.engine.checkTools();
+    // GitHub answers 304 now: the news is stored, so only the kept topic can bring the run.
+    await h.engine.pollOnce();
+    await vi.waitFor(() => expect(h.store.dossiers.latest('depot')?.version).toBe(2));
+    expect(catchUpRunIds(h)).toEqual([expect.stringMatching(/^catchup:depot:/)]);
+  });
+
+  it('leaves a bot comment for the next full sync', async () => {
+    const { h, pr } = await syncedTopic();
+    const next = { ...pr, updatedAt: LATER, comments: [makeComment({ id: 'c3', author: 'github-actions[bot]', body: 'Bundle size: +2 KB', createdAt: FRESH })] };
+    h.reader.addPr(next, makeThreadFor(next, { updatedAt: LATER }));
+    h.reader.etag = 'etag-2';
+    h.runner.answer('ping_decision', { decisions: [] });
+
+    await h.engine.pollOnce();
+
+    expect(catchUpRunIds(h)).toEqual([]);
+    expect(h.store.dossiers.latest('depot')?.version).toBe(1);
   });
 
   it('writes the first glance of a PR new to the app in its new topic', async () => {
@@ -189,6 +363,25 @@ describe('Engine.refreshGlanceOnLook', () => {
     expect(h.agent.dossierInputs.length).toBe(dossierCalls);
     expect(h.store.dossiers.latest('depot')?.version).toBe(1);
     expect(catchUpRunIds(h)).toEqual([expect.stringMatching(/^catchup:depot:glance:/)]);
+  });
+
+  it('rewrites a current glance written against an older dossier, without calling it stale', async () => {
+    const h = makeHarness({ catchUpCallsPerDay: 300 });
+    const first = reviewRequestedPr(1);
+    const second = reviewRequestedPr(2);
+    topicWithPrs(h, 'depot', [first, second]);
+    await h.engine.sync({ maxAgentCalls: 50 });
+    askViewer(h, first, 'c9', 'etag-2');
+    await h.engine.pollOnce();
+    await vi.waitFor(() => expect(h.store.dossiers.latest('depot')?.version).toBe(2));
+    await vi.waitFor(async () => expect((await h.engine.getPr(first.key))?.glanceState).toBe('ready'));
+
+    const before = await h.engine.getPr(second.key);
+    expect(before).toMatchObject({ glanceStale: false, glanceBehindDossier: true });
+    // Started, or queued behind the topic's catch-up run that is still finishing.
+    expect(['started', 'queued']).toContain((await h.engine.refreshGlanceOnLook(second.key)).outcome);
+    await vi.waitFor(() => expect(h.store.glances.get(second.key)?.dossierVersion).toBe(2));
+    expect(await h.engine.getPr(second.key)).toMatchObject({ glanceStale: false, glanceBehindDossier: false });
   });
 
   it('makes no call for an up-to-date glance', async () => {

@@ -147,12 +147,44 @@ export function dossierInputHash(input: DossierUpdateInput): string {
 }
 
 /**
- * Per PR inside a batch: prGlanceSnapshot, provenance, topic name, dossier
- * version, instructions, tailoring, standing rules, feedback on this PR,
- * model. Never the other PRs in the batch, so batch composition cannot
- * invalidate a glance.
+ * Per PR inside a batch: prGlanceSnapshot, provenance, topic name,
+ * instructions, tailoring, standing rules, feedback on this PR, when a
+ * human comment was last edited, model.
+ * Never the other PRs in the batch, so batch composition cannot invalidate
+ * a glance. Not the dossier version (2026-10-05): a dossier rewrite for
+ * news on another PR left every glance in the topic out of date. A glance
+ * picks up the newer dossier when its own PR changes or on a look.
  */
 export function glanceItemInputHash(input: GlanceBatchInput, item: GlanceBatchItem): string {
+  const ownFeedback = input.context.recentFeedback.filter((f) => f.prKey === item.pr.key).map((f) => f.id);
+  // An edited comment's new body is in the prompt. The dossier version used to cover it (a person's edit
+  // rewrote the dossier); without it the edit time does. Not in prGlanceSnapshot: the legacy hash must stay as it was.
+  const commentEdits = humanComments(item.pr)
+    .filter((comment) => comment.lastEditedAt)
+    .map((comment) => [comment.id, comment.lastEditedAt]);
+  return inputHash(
+    'glance_batch',
+    GLANCE_PROMPT_VERSION,
+    modelFor('glance_batch'),
+    prGlanceSnapshot(item.pr),
+    input.viewer,
+    item.provenance,
+    input.topic?.name ?? null,
+    input.context.instructions,
+    input.context.tailoring,
+    input.context.standingRules,
+    ownFeedback,
+    commentEdits,
+  );
+}
+
+/**
+ * The hash glances carried before 2026-10-05, with the dossier version. A
+ * stored glance with it still counts as current while that dossier is the
+ * latest, so the update regenerates nothing; its next rewrite stores the
+ * new shape.
+ */
+export function legacyGlanceItemInputHash(input: GlanceBatchInput, item: GlanceBatchItem): string {
   const ownFeedback = input.context.recentFeedback.filter((f) => f.prKey === item.pr.key).map((f) => f.id);
   const dossier = input.dossier ? [input.dossier.topicId, input.dossier.version] : null;
   return inputHash(

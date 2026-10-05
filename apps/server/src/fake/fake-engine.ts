@@ -815,7 +815,7 @@ export class FakeEngine implements EngineService {
 
   private async runFakeSync(): Promise<SyncReport> {
     const startedAt = this.timestamp();
-    const progress: SyncProgress = { startedAt, running: [], agentCallsDone: 0, agentCallsPlanned: 0 };
+    const progress: SyncProgress = { startedAt, running: [], agentCallsDone: 0, agentCallsPlanned: 0, fromGitHub: null, agentCallStats: emptyAgentCallStats() };
     this.progress = progress;
     // Without claude only the fetch runs, like the engine skipping its agent jobs.
     const agentOff = this.toolStatus.agentOff();
@@ -832,6 +832,10 @@ export class FakeEngine implements EngineService {
       progress.agentCallsPlanned += step.plan;
       await new Promise((resolve) => setTimeout(resolve, this.syncStepMs));
       progress.agentCallsDone += step.done;
+      if (step.running.includes('fetch')) {
+        // Sample data never changes, like a sync right after the live poll caught up.
+        progress.fromGitHub = { prsFetched: 0, newEvents: 0 };
+      }
       // Like the engine: after the fetch the start dialog may hold the agent work until it is answered.
       if (step.running.includes('fetch') && this.catchUpGate && this.cleanup.holds(this.cleanupThreads())) {
         this.heldSync = true;
@@ -1255,6 +1259,7 @@ export class FakeEngine implements EngineService {
       whatsNew: news,
       glance: this.data.glances.find((glance) => glance.prKey === prKey) ?? null,
       glanceStale: this.isGlanceStale(prKey),
+      glanceBehindDossier: false,
       glanceGap: this.glanceGapOf(prKey),
       glanceState: this.glanceStateOfPr(prKey),
       glanceRefreshBlock: this.glanceRefreshBlockOfPr(prKey),

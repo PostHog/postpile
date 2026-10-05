@@ -10,11 +10,12 @@ export const GLANCE_LOOK_DELAY_MS = OPENED_READ_DELAY_MS;
 
 /**
  * Whether looking at the PR should ask for a new glance: the glance is
- * stale, the server says a refresh can run (`glanceRefreshBlock`), and no
- * run for it is queued or writing already.
+ * stale or was written against an older dossier of its topic, the server
+ * says a refresh can run (`glanceRefreshBlock`), and no run for it is queued
+ * or writing already.
  */
-export function wantsGlanceRefresh(detail: Pick<PrDetail, 'glanceStale' | 'glanceRefreshBlock' | 'glanceState'> | null): boolean {
-  if (detail === null || !detail.glanceStale || detail.glanceRefreshBlock !== null) {
+export function wantsGlanceRefresh(detail: Pick<PrDetail, 'glanceStale' | 'glanceBehindDossier' | 'glanceRefreshBlock' | 'glanceState'> | null): boolean {
+  if (detail === null || !(detail.glanceStale || detail.glanceBehindDossier) || detail.glanceRefreshBlock !== null) {
     return false;
   }
   return detail.glanceState !== 'writing' && detail.glanceState !== 'queued';
