@@ -536,7 +536,7 @@ export class GitHubSync {
     const tracked = this.trackedPrKeys();
     const seeds = new Map<PrKey, LayerShape & { key: PrKey }>();
     const hot = Board.load(this.store, this.now().toISOString()).prs;
-    for (const pr of [...fetched, ...this.store.prs.listLight().filter((stored) => stored.state === 'OPEN' && hot.has(stored.key))]) {
+    for (const pr of [...fetched, ...this.store.prs.listHeaders().filter((stored) => stored.state === 'OPEN' && hot.has(stored.key))]) {
       if (tracked.has(pr.key) && !seeds.has(pr.key)) {
         seeds.set(pr.key, pr);
       }
@@ -595,7 +595,7 @@ export class GitHubSync {
     const tracked = new Set<PrKey>([...this.trackedPrKeys(), ...this.store.pullIns.listAll().keys()].filter((key) => hot.has(key)));
     const cutoff = new Date(this.now().getTime() - FRESHNESS_CLOSED_WINDOW_MS).toISOString();
     return this.store.prs
-      .listLight()
+      .listHeaders()
       .filter((pr) => tracked.has(pr.key) && !skip.has(pr.key))
       .filter((pr) => pr.state === 'OPEN' || pr.updatedAt >= cutoff)
       .map((pr) => pr.ref);

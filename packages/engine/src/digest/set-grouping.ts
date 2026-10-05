@@ -110,11 +110,11 @@ export class SetGrouper {
     this.deps.store.sets.recordChange({ setId, topicId, prKey, kind, reason, by, at: this.deps.now().toISOString() });
   }
 
-  /** Stacks over every stored PR, read once per grouper: the light rows of a heavy install take tens of milliseconds. */
+  /** Stacks over every stored PR, read once per grouper: the headers of a heavy install take tens of milliseconds. */
   private stackOf: Map<PrKey, Stack> | null = null;
 
   private stacks(): Map<PrKey, Stack> {
-    this.stackOf ??= stackByPrKey(buildStacks(this.deps.store.prs.listLight()));
+    this.stackOf ??= stackByPrKey(buildStacks(this.deps.store.prs.listHeaders()));
     return this.stackOf;
   }
 

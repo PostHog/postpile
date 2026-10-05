@@ -58,6 +58,8 @@ describe('hotFactsOf', () => {
       assignees: [],
       reviewerUsers: [],
       reviewerTeams: [],
+      isDraft: false,
+      headOid: 'abc123',
       lastEventAt: '2026-09-20T12:00:00.000Z',
     };
     const thread = { unread: false, reason: 'author' as const, updatedAt: RECENT };

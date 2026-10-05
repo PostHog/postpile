@@ -5,7 +5,7 @@ import {
   topicDriver,
   userRoleFor,
   type DossierVersion,
-  type LightPr,
+  type PrHeader,
   type NotificationReason,
   type Pr,
   type PrKey,
@@ -27,16 +27,16 @@ function driverOf(dossier: DossierVersion | undefined, prs: Array<Pick<Pr, 'auth
   return fromDossier ?? topicDriver(prs);
 }
 
-/** Every stored PR's light row by key: owners without parsing a snapshot. */
-function lightByKey(store: Store): Map<PrKey, LightPr> {
-  return new Map(store.prs.listLight().map((pr) => [pr.key, pr]));
+/** Every stored PR's header by key: owners without parsing a snapshot. */
+function headersByKey(store: Store): Map<PrKey, PrHeader> {
+  return new Map(store.prs.listHeaders().map((pr) => [pr.key, pr]));
 }
 
 /**
  * Stores the topic's automatic driver and the user's role in it. The
  * user's driver pick (`pick`, its own table) is never written here; the
  * role reads it, so "You" makes the user the driver. Owners come from the
- * light rows (`light`), so a sync does not parse every topic's snapshots.
+ * PR headers (`headers`), so a sync does not parse every topic's snapshots.
  */
 export function refreshTopicDriverAndRole(
   store: Store,
@@ -45,13 +45,13 @@ export function refreshTopicDriverAndRole(
   dossier: DossierVersion | undefined,
   pick: string | null,
   at: string,
-  light: Map<PrKey, LightPr> = lightByKey(store),
+  headers: Map<PrKey, PrHeader> = headersByKey(store),
 ): void {
   const keys = store.memberships.listForTopic(topic.id).map((m) => m.prKey);
   if (keys.length === 0) {
     return;
   }
-  const prs = keys.flatMap((key) => light.get(key) ?? []);
+  const prs = keys.flatMap((key) => headers.get(key) ?? []);
   const reasons: NotificationReason[] = [...store.notifications.getByPrKeys(keys).values()].map((t) => t.reason);
   const driver = driverOf(dossier, prs);
   const role = userRoleFor(viewerLogin, driverLogin(pick ?? driver), reasons);
@@ -67,10 +67,10 @@ export function refreshDriversAndRoles(deps: DigestDeps): void {
   const topics = store.topics.listActive();
   const dossiers = store.dossiers.latestMany(topics.map((t) => t.id));
   const picks = store.driverPicks.all();
-  const light = lightByKey(store);
+  const headers = headersByKey(store);
   store.transaction(() => {
     for (const topic of topics) {
-      refreshTopicDriverAndRole(store, deps.viewer.login, topic, dossiers.get(topic.id), picks.get(topic.id) ?? null, at, light);
+      refreshTopicDriverAndRole(store, deps.viewer.login, topic, dossiers.get(topic.id), picks.get(topic.id) ?? null, at, headers);
     }
   });
 }

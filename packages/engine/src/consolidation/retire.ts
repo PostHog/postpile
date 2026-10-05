@@ -11,7 +11,7 @@ export function topicRetireGate(store: Store, at: string, topicId: string): Reti
 }
 
 /**
- * Could pass the gate at all, from short rows only: every member PR merged
+ * Could pass the gate at all, from PR headers only: every member PR merged
  * or closed and none with a thread unread on GitHub. Only these topics get
  * a Board of their own, so the step does not read every cold PR each sync.
  */

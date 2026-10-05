@@ -16,9 +16,9 @@ export interface LayerShape {
 }
 
 /**
- * A stored PR as stack detection reads it: a full snapshot, or the light
- * row the store keeps beside it (`PrRepo.listLight`), so stacks over every
- * stored PR never parse the snapshots.
+ * A stored PR as stack detection reads it: a full snapshot, or its header
+ * (`PrRepo.listHeaders`), so stacks over every stored PR never parse the
+ * snapshots.
  */
 export interface StackLayer extends LayerShape {
   key: PrKey;

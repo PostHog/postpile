@@ -6,7 +6,7 @@ import {
   type DossierVersion,
   type EntityRef,
   type Fact,
-  type LightPr,
+  type PrHeader,
   type PrKey,
   type Topic,
 } from '@postpile/core';
@@ -102,10 +102,10 @@ export class Consolidator {
     return this.deps.now() >= dueAt && dossiers.some((dossier) => dossier.createdAt > cursor.updatedAt);
   }
 
-  /** Counts from the light rows (`light`, by key): reading every topic's snapshots cost a heavy install seconds and gigabytes. */
-  private consolidationTopic(topic: Topic, dossier: DossierVersion | null, board: Board, light: Map<PrKey, LightPr>): ConsolidationTopic {
+  /** Counts from the PR headers (`headers`, by key): reading every topic's snapshots cost a heavy install seconds and gigabytes. */
+  private consolidationTopic(topic: Topic, dossier: DossierVersion | null, board: Board, headers: Map<PrKey, PrHeader>): ConsolidationTopic {
     const keys = this.deps.store.memberships.listForTopic(topic.id).map((m) => m.prKey);
-    const prs = keys.flatMap((key) => light.get(key) ?? []);
+    const prs = keys.flatMap((key) => headers.get(key) ?? []);
     const lastActivityAt = prs.map((pr) => pr.updatedAt).sort().at(-1) ?? null;
     return {
       topic,
@@ -177,11 +177,11 @@ export class Consolidator {
     const counts: ConsolidationCounts = report;
     const applier = new ConsolidationApplier(store, this.deps.facts, (topicId) => topicRetireGate(store, this.deps.now().toISOString(), topicId), counts, this.deps.now);
 
-    const light = new Map(store.prs.listLight().map((pr) => [pr.key, pr]));
+    const headers = new Map(store.prs.listHeaders().map((pr) => [pr.key, pr]));
     // A topic whose PRs all went cold is settled: the retire step handles it, consolidation leaves it out.
     const offered = topics
       .filter((topic) => !board.wentCold(topic.id))
-      .map((topic) => this.consolidationTopic(topic, dossiers.get(topic.id) ?? null, board, light));
+      .map((topic) => this.consolidationTopic(topic, dossiers.get(topic.id) ?? null, board, headers));
     const complete = offered.length === 0 || (await this.askAgent(this.inputs(offered), applier));
     this.retireFinished(dossiers, applier);
     if (complete) {

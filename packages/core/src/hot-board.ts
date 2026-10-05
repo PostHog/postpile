@@ -27,16 +27,19 @@ export type HotTier = 'you' | 'team' | 'others';
 const TIER_ORDER: Record<HotTier, number> = { you: 0, team: 1, others: 2 };
 
 /**
- * A stored PR without its snapshot: the columns the store keeps beside the
- * json (`PrRepo.listLight`). Enough for stacks over every stored PR, the
- * hot rules and the search, without parsing a snapshot.
+ * A stored PR's header (the `pr` row, migration 028): its short columns,
+ * without the snapshot in `pr_snapshot` (`PrRepo.listHeaders`). Enough for
+ * stacks over every stored PR, the hot rules and the search, without
+ * parsing a snapshot.
  */
-export interface LightPr extends StackLayer {
+export interface PrHeader extends StackLayer {
   title: string;
   author: string;
   assignees: string[];
   reviewerUsers: string[];
   reviewerTeams: string[];
+  isDraft: boolean;
+  headOid: string;
   /** When its newest stored event happened; null without events. */
   lastEventAt: IsoTime | null;
 }
@@ -73,9 +76,9 @@ export interface HotRank {
   activityAt: IsoTime;
 }
 
-/** The hot facts of a stored PR, from its light row and what sits beside it. */
+/** The hot facts of a stored PR, from its header and what sits beside it. */
 export function hotFactsOf(
-  pr: LightPr,
+  pr: PrHeader,
   parts: { thread: Pick<NotificationThread, 'unread' | 'reason' | 'updatedAt'> | null; found: FoundVia | null; personalAsk: boolean },
 ): HotFacts {
   const times = [pr.updatedAt, pr.lastEventAt, parts.thread?.updatedAt ?? null].filter((time): time is IsoTime => time !== null);

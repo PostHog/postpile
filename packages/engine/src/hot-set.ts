@@ -5,7 +5,7 @@ import {
   selectHotBoard,
   type HotFacts,
   type HotSelection,
-  type LightPr,
+  type PrHeader,
   type NotificationThread,
   type PrKey,
   type Stack,
@@ -35,16 +35,16 @@ export function threadsByPrKey(threads: NotificationThread[]): Map<PrKey, Notifi
  * 11k PRs, where parsing their snapshots took seconds.
  */
 export interface StoreShape {
-  light: LightPr[];
+  headers: PrHeader[];
   stacks: Stack[];
   /** Each stack's layers and each active set's members. */
   groups: PrKey[][];
 }
 
 export function readStoreShape(store: Store): StoreShape {
-  const light = store.prs.listLight();
-  const stacks = buildStacks(light);
-  return { light, stacks, groups: [...stacks.map((stack) => stack.prKeys), ...store.sets.activeMemberGroups()] };
+  const headers = store.prs.listHeaders();
+  const stacks = buildStacks(headers);
+  return { headers, stacks, groups: [...stacks.map((stack) => stack.prKeys), ...store.sets.activeMemberGroups()] };
 }
 
 export interface HotSet {
@@ -54,12 +54,12 @@ export interface HotSet {
   facts: Map<PrKey, HotFacts>;
 }
 
-/** The hot PRs as the store stands (`selectHotBoard`), from light rows, threads, found PRs and personal asks. */
+/** The hot PRs as the store stands (`selectHotBoard`), from PR headers, threads, found PRs and personal asks. */
 export function readHotSet(store: Store, now: string, threads: Map<PrKey, NotificationThread>): HotSet {
   const shape = readStoreShape(store);
   const found = store.foundPrs.listAll();
   const asks = store.events.prKeysWithPersonalAsks();
-  const facts = shape.light.map((pr) =>
+  const facts = shape.headers.map((pr) =>
     hotFactsOf(pr, { thread: threads.get(pr.key) ?? null, found: found.get(pr.key)?.via ?? null, personalAsk: asks.has(pr.key) }),
   );
   const selection = selectHotBoard({ facts, groups: shape.groups, viewer: loadViewer(store), now });

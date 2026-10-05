@@ -97,7 +97,7 @@ export class FeedbackActions {
         }
         // Ends by units, like an agent change: one stack and nothing else is just that stack.
         const left = this.store.sets.get(setId);
-        if (left?.status === 'active' && setUnitCount(left.members, stackByPrKey(buildStacks(this.store.prs.listLight()))) < 2) {
+        if (left?.status === 'active' && setUnitCount(left.members, stackByPrKey(buildStacks(this.store.prs.listHeaders()))) < 2) {
           this.store.sets.dissolve(setId, at);
         }
         const change = { setId, topicId: tile.topicId, by: 'user' as const, at };

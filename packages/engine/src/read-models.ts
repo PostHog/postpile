@@ -94,7 +94,7 @@ import {
   searchTerms,
   type BoardShapeEvent,
   type BusyInboxView,
-  type LightPr,
+  type PrHeader,
 } from '@postpile/core';
 import type { AgentService } from '@postpile/agent';
 import type { Store } from '@postpile/store';
@@ -625,14 +625,14 @@ export class ReadModels {
 
   /**
    * The listed topics' PRs that went cold and match every term, matched on
-   * their light rows; at most SEARCH_COLD_MAX, newest first.
+   * their headers; at most SEARCH_COLD_MAX, newest first.
    */
   private coldMatches(board: Board, listed: Topic[], terms: string[]): PrKey[] {
-    const light = new Map<PrKey, LightPr>(this.store.prs.listLight().map((pr) => [pr.key, pr]));
-    const matches: LightPr[] = [];
+    const headers = new Map<PrKey, PrHeader>(this.store.prs.listHeaders().map((pr) => [pr.key, pr]));
+    const matches: PrHeader[] = [];
     for (const topic of listed) {
       for (const membership of topic.id === UNSORTED_TOPIC_ID ? [] : this.store.memberships.listForTopic(topic.id)) {
-        const pr = light.get(membership.prKey);
+        const pr = headers.get(membership.prKey);
         if (pr && !board.prs.has(pr.key) && prMatchesTerms(topic, pr, terms)) {
           matches.push(pr);
         }

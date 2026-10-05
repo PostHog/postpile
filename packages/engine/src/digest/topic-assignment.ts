@@ -81,7 +81,7 @@ export class TopicAssigner {
    */
   private splitByStack(keys: PrKey[]): StackSplit {
     const { store } = this.deps;
-    const stackOf = stackByPrKey(buildStacks(store.prs.listLight()));
+    const stackOf = stackByPrKey(buildStacks(store.prs.listHeaders()));
     const memberships = new Map(store.memberships.listAll().map((m) => [m.prKey, m]));
     const activeTopicIds = new Set(store.topics.listActive().map((topic) => topic.id));
     const split: StackSplit = { join: [], ask: [], followers: new Map() };
@@ -131,15 +131,15 @@ export class TopicAssigner {
     return store.topics.list().filter((t) => takesNewPrs(t, lastJoinAt(store.memberships.listForTopic(t.id)), now));
   }
 
-  /** Counts from the light rows: reading every offered topic's snapshots cost a heavy install seconds and gigabytes. */
+  /** Counts from the PR headers: reading every offered topic's snapshots cost a heavy install seconds and gigabytes. */
   private topicChoices(): TopicChoice[] {
     const topics = this.offeredTopics();
     const dossiers = this.deps.store.dossiers.latestMany(topics.map((t) => t.id));
-    const light = new Map(this.deps.store.prs.listLight().map((pr) => [pr.key, pr]));
+    const headers = new Map(this.deps.store.prs.listHeaders().map((pr) => [pr.key, pr]));
     return topics.map((t) => {
       const dossier = dossiers.get(t.id);
       const brief = dossier ? dossierBrief(dossier.dossier) : '';
-      const prs = this.deps.store.memberships.listForTopic(t.id).flatMap((m) => light.get(m.prKey) ?? []);
+      const prs = this.deps.store.memberships.listForTopic(t.id).flatMap((m) => headers.get(m.prKey) ?? []);
       return {
         id: t.id,
         name: t.name,

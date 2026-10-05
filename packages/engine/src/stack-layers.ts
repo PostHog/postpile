@@ -53,7 +53,7 @@ function layersFor(step: Step, answers: BranchPr[]): BranchPr[] {
   return direct ? [direct] : candidates.slice(0, 1);
 }
 
-/** A seed of the walk: a stored PR as the stack rules read it, a full snapshot or a light row. */
+/** A seed of the walk: a stored PR as the stack rules read it, a full snapshot or its header. */
 type Seed = LayerShape & { key: PrKey };
 
 function firstSteps(seed: Seed): Step[] {

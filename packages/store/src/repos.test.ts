@@ -129,7 +129,7 @@ describe('PrRepo', () => {
     expect(store.prs.getMany(['acme/app#1']).get('acme/app#1')).not.toBe(hot);
   });
 
-  it('lists every PR light, with the columns copied out of the snapshot and its newest event', () => {
+  it('lists every PR header, with the columns copied out of the snapshot and its newest event', () => {
     const merged = makePr({
       number: 2,
       title: 'Move CI to Depot',
@@ -138,6 +138,8 @@ describe('PrRepo', () => {
       reviewerUsers: ['bob'],
       reviewerTeams: ['acme/team-devex'],
       state: 'MERGED',
+      isDraft: true,
+      headOid: 'abc123',
       mergedAt: at(5),
       previousBaseRefs: ['feat/base'],
       isCrossRepository: true,
@@ -145,14 +147,16 @@ describe('PrRepo', () => {
     store.prs.upsert(merged, at(6));
     store.prs.upsert(makePr({ number: 1 }), at(6));
     store.events.upsertDerived(merged.key, [makeEvent({ id: 'e1', prKey: merged.key, at: at(3) }), makeEvent({ id: 'e2', prKey: merged.key, at: at(4) })]);
-    const light = store.prs.listLight();
-    expect(light.map((pr) => pr.key)).toEqual(['acme/app#1', 'acme/app#2']);
-    expect(light[1]).toEqual({
+    const headers = store.prs.listHeaders();
+    expect(headers.map((pr) => pr.key)).toEqual(['acme/app#1', 'acme/app#2']);
+    expect(headers[1]).toEqual({
       key: merged.key,
       ref: merged.ref,
       state: 'MERGED',
+      isDraft: true,
       baseRef: merged.baseRef,
       headRef: merged.headRef,
+      headOid: 'abc123',
       createdAt: merged.createdAt,
       updatedAt: merged.updatedAt,
       mergedAt: at(5),
@@ -165,7 +169,64 @@ describe('PrRepo', () => {
       reviewerTeams: ['acme/team-devex'],
       lastEventAt: at(4),
     });
-    expect(light[0]?.lastEventAt).toBeNull();
+    expect(headers[0]?.lastEventAt).toBeNull();
+  });
+
+  it('writes header and snapshot together: a failed snapshot write rolls the header back', () => {
+    store.prs.upsert(makePr({ title: 'Before' }), at(1));
+    store.db.exec("CREATE TRIGGER fail_snapshot BEFORE UPDATE ON pr_snapshot BEGIN SELECT RAISE(ABORT, 'disk full'); END");
+
+    expect(() => store.prs.upsert(makePr({ title: 'After' }), at(2))).toThrow('disk full');
+
+    expect(store.prs.listHeaders()[0]?.title).toBe('Before');
+    expect(store.prs.fetchedAt('acme/app#1')).toBe(at(1));
+    expect(store.prs.get('acme/app#1')?.title).toBe('Before');
+  });
+
+  it('takes a header without its snapshot for not stored, so the sync fetches it again', () => {
+    store.prs.upsert(makePr({ number: 1 }), at(1));
+    store.prs.upsert(makePr({ number: 2 }), at(1));
+    const cached = store.prs.keepParsed(['acme/app#1', 'acme/app#2']);
+    expect(cached.size).toBe(2);
+    store.db.exec("DELETE FROM pr_snapshot WHERE key = 'acme/app#1'");
+
+    expect(store.prs.get('acme/app#1')).toBeNull();
+    expect([...store.prs.keepParsed(['acme/app#1', 'acme/app#2']).keys()]).toEqual(['acme/app#2']);
+    expect([...store.prs.getMany(['acme/app#1']).keys()]).toEqual([]);
+    expect(store.prs.fetchedAt('acme/app#1')).toBeNull();
+    expect([...store.prs.fetchedAtByKey().keys()]).toEqual(['acme/app#2']);
+    expect([...store.prs.updatedAtByKey().keys()]).toEqual(['acme/app#2']);
+  });
+
+  it('ignores a snapshot without its header', () => {
+    store.prs.upsert(makePr({ number: 1 }), at(1));
+    store.db.exec("DELETE FROM pr WHERE key = 'acme/app#1'");
+
+    expect(store.prs.get('acme/app#1')).toBeNull();
+    expect(store.prs.getMany(['acme/app#1']).size).toBe(0);
+    expect(store.prs.keys()).toEqual([]);
+    expect(store.prs.listHeaders()).toEqual([]);
+    expect(store.prs.fetchedAtByKey().size).toBe(0);
+  });
+
+  it('deletes header, snapshot and the cached copy together', () => {
+    store.prs.upsert(makePr({ number: 1 }), at(1));
+    store.prs.keepParsed(['acme/app#1']);
+
+    store.prs.delete('acme/app#1');
+
+    expect(store.prs.keepParsed(['acme/app#1']).size).toBe(0);
+    expect(store.db.prepare('SELECT COUNT(*) AS n FROM pr_snapshot').get()).toEqual({ n: 0 });
+    expect(store.prs.keys()).toEqual([]);
+  });
+
+  it('reads the newest event time per header from the (pr_key, at, id) index', () => {
+    const plan = store.db
+      .prepare('EXPLAIN QUERY PLAN SELECT key, (SELECT max(at) FROM pr_event WHERE pr_event.pr_key = pr.key) AS last_event_at FROM pr ORDER BY repo, number')
+      .all() as Array<{ detail: string }>;
+    const details = plan.map((row) => row.detail).join('\n');
+    expect(details).toContain('pr_event_pr_key_at_id');
+    expect(details).not.toContain('pr_snapshot');
   });
 
   it('lists every snapshot when the cache fills in several chunks', () => {

@@ -175,7 +175,7 @@ export class Board {
       store.foundPrs.listAll(),
       notYoursKeys(store, keys),
       shape.stacks,
-      new Set(shape.light.map((pr) => pr.key)),
+      new Set(shape.headers.map((pr) => pr.key)),
     );
   }
 
