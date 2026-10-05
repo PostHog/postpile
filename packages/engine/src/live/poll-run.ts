@@ -6,6 +6,7 @@ import { reviveRetiredTopics, reviveUnreadTopics } from '../consolidation/revive
 import { TopicAssigner } from '../digest/topic-assignment.ts';
 import { errorText } from '../errors.ts';
 import { NO_FOCUS, type GitHubSync, type PollFocus } from '../github-sync.ts';
+import { pendingGlanceKeys } from '../glance-inputs.ts';
 import { emptyFactCounts } from '../memory/fact-writer.ts';
 import { advanceSeenFromGitHub } from '../memory/seen-from-github.ts';
 import type { RunDeps } from '../run-deps.ts';
@@ -46,7 +47,15 @@ export class PollRun {
     const { store, now } = this.deps;
     const board = Board.load(store, now().toISOString());
     const glances = store.glances.getMany(fetchedPrKeys);
-    const topics = topicsToCatchUp(board, fetchedPrKeys, newEventIds, (key) => glances.has(key));
+    const viewer = loadViewer(store);
+    const pending = viewer ? pendingGlanceKeys(store, board, viewer, this.deps.contexts, this.deps.agent) : new Set<PrKey>();
+    const topics = topicsToCatchUp(
+      board,
+      fetchedPrKeys,
+      newEventIds,
+      (key) => glances.has(key),
+      (key) => pending.has(key),
+    );
     if (topics.now.length > 0 || topics.quiet.length > 0) {
       this.onCatchUp(topics);
     }

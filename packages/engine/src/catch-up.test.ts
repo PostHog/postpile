@@ -193,6 +193,20 @@ describe('glance catch-up after a poll', () => {
     await vi.waitFor(() => expect(catchUpRunIds(h)).toHaveLength(2));
   });
 
+  it('catches up a glance that a title change left stale, though no event came with it', async () => {
+    const { h, pr } = await syncedTopic();
+    const renamed = { ...pr, updatedAt: LATER, title: 'Cache runner images per arch' };
+    h.reader.addPr(renamed, makeThreadFor(renamed, { updatedAt: LATER }));
+    h.reader.etag = 'etag-title';
+    h.runner.answer('ping_decision', { decisions: [] });
+
+    await h.engine.pollOnce();
+
+    await vi.waitFor(() => expect(catchUpRunIds(h)).toEqual([expect.stringMatching(/^catchup:depot:/)]));
+    await vi.waitFor(async () => expect((await h.engine.getPr(pr.key))?.glanceStale).toBe(false));
+    expect(h.store.dossiers.latest('depot')?.version).toBe(1);
+  });
+
   it('leaves a bot comment for the next full sync', async () => {
     const { h, pr } = await syncedTopic();
     const next = { ...pr, updatedAt: LATER, comments: [makeComment({ id: 'c3', author: 'github-actions[bot]', body: 'Bundle size: +2 KB', createdAt: FRESH })] };

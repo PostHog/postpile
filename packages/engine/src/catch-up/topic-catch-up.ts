@@ -26,13 +26,20 @@ export interface CatchUpTopics {
  * Topics a poll cycle's PRs need a catch-up run for: a PR with a new event
  * that starts a dossier update (`isMemoryTrigger`: anything loud, anything a
  * person did, a bot changing the PR's state), a push (no dossier update, but
- * the PR's glance is behind), or a PR that should have a glance and has none
- * yet (new to the app). Bot comments wait for the next
+ * the PR's glance is behind), a fetched PR whose glance no longer matches
+ * without any event (an edited title, description or labels), or a PR that
+ * should have a glance and has none yet (new to the app). Bot comments wait for the next
  * update and noise (CI, bot edits, deploys) never counts, as in the full
  * sync. Loud news and missing glances run now, the rest is quiet. Null is
  * the virtual Unsorted topic.
  */
-export function topicsToCatchUp(board: Board, fetched: PrKey[], newEventIds: string[], hasGlance: (key: PrKey) => boolean): CatchUpTopics {
+export function topicsToCatchUp(
+  board: Board,
+  fetched: PrKey[],
+  newEventIds: string[],
+  hasGlance: (key: PrKey) => boolean,
+  glanceStale: (key: PrKey) => boolean,
+): CatchUpTopics {
   const fresh = new Set(newEventIds);
   const wanted = glanceTargetKeys(board);
   const now = new Set<string | null>();
@@ -46,7 +53,8 @@ export function topicsToCatchUp(board: Board, fetched: PrKey[], newEventIds: str
     const topicId = board.memberships.get(key)?.topicId ?? null;
     if (loud || missing) {
       now.add(topicId);
-    } else if (triggered) {
+    } else if (triggered || glanceStale(key)) {
+      // A title, description or label change brings no event but can leave the glance stale.
       quiet.add(topicId);
     }
   }
