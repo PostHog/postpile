@@ -121,11 +121,13 @@ export class GlanceBatchWriter {
   }
 
   /** Called once the topic's dossier is final, so a glance written now reads it. */
-  private needingGlance(group: GlanceTarget[], inputs: GlanceInputs): GlanceTarget[] {
+  private needingGlance(group: GlanceTarget[], inputs: GlanceInputs, onLook: boolean): GlanceTarget[] {
     const { store, agent, budget } = this.deps;
     const stored = store.glances.getMany(group.map((target) => target.item.pr.key));
     return group.filter((target) => {
-      if (inputs.isCurrent(agent, target, stored.get(target.item.pr.key)?.inputHash)) {
+      const glance = stored.get(target.item.pr.key);
+      // A look also rewrites a glance written against an older dossier; nothing else does.
+      if (inputs.isCurrent(agent, target, glance) && !(onLook && inputs.behindDossier(target, glance))) {
         budget.skipUnchanged('glance_batch');
         return false;
       }
@@ -143,9 +145,10 @@ export class GlanceBatchWriter {
     inputs: GlanceInputs,
     byKey: Map<PrKey, GlanceTarget>,
     dossierSettled: Promise<void>,
+    onLook: boolean,
   ): Promise<PrKey[]> {
     await dossierSettled;
-    const needing = this.needingGlance(group, inputs);
+    const needing = this.needingGlance(group, inputs, onLook);
     for (const target of needing) {
       byKey.set(target.item.pr.key, target);
     }
@@ -170,7 +173,8 @@ export class GlanceBatchWriter {
     const byKey = new Map<PrKey, GlanceTarget>();
 
     const topics = [...groupByTopic(targets)].map(([topicId, group]) =>
-      this.glanceTopic(topicId, group, inputs, byKey, dossiers.settled(topicId)),
+      // scope.prKeys is the refresh on look.
+      this.glanceTopic(topicId, group, inputs, byKey, dossiers.settled(topicId), scope?.prKeys !== undefined),
     );
     const stillMissing = (await Promise.all(topics)).flat();
     for (const key of stillMissing) {

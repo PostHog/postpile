@@ -1,10 +1,12 @@
 import type { AgentService, GlanceBatchInput, GlanceBatchItem, PromptContext } from '@postpile/agent';
 import {
+  isMachineComment,
   isTracked,
   isUnseenMergeWithoutReview,
   TILE_STATE_ORDER,
   withoutStaleClaims,
   type DossierVersion,
+  type Glance,
   type Pr,
   type PrEvent,
   type PrKey,
@@ -133,18 +135,34 @@ export class GlanceInputs {
   /**
    * Whether a stored glance still matches its input. Never depends on the
    * other PRs in a batch. The hash from before 2026-10-05, with the dossier
-   * version, still counts while that dossier is the latest, so updating
-   * the app regenerates no glance.
+   * version, still counts while that dossier is the latest, so updating the
+   * app regenerates no glance, unless a person edited a comment after the
+   * glance was written: the old shape holds comment ids only, and the
+   * dossier version that used to cover an edit may never move (Unsorted).
    */
-  isCurrent(agent: AgentService, target: GlanceTarget, storedHash: string | undefined): boolean {
-    if (storedHash === undefined) {
+  isCurrent(agent: AgentService, target: GlanceTarget, stored: Pick<Glance, 'inputHash' | 'createdAt'> | null | undefined): boolean {
+    if (!stored) {
       return false;
     }
-    if (storedHash === this.itemHash(agent, target)) {
+    if (stored.inputHash === this.itemHash(agent, target)) {
       return true;
     }
-    return storedHash === agent.legacyGlanceItemInputHash(this.batchInput(target.topicId, [target.item], 1), target.item);
+    if (stored.inputHash !== agent.legacyGlanceItemInputHash(this.batchInput(target.topicId, [target.item], 1), target.item)) {
+      return false;
+    }
+    return !target.item.pr.comments.some((comment) => !isMachineComment(comment) && comment.lastEditedAt && comment.lastEditedAt > stored.createdAt);
   }
+
+  /**
+   * Written against an older dossier of its topic. Still current (the hash
+   * leaves the version out), but a look at the PR rewrites it with the
+   * newer dossier.
+   */
+  behindDossier(target: GlanceTarget, stored: Pick<Glance, 'dossierVersion'> | null | undefined): boolean {
+    const latest = this.dossierVersion(target.topicId);
+    return stored !== null && stored !== undefined && latest !== null && (stored.dossierVersion ?? 0) < latest;
+  }
+
 }
 
 /**
@@ -157,5 +175,5 @@ export function pendingGlanceKeys(store: Store, board: Board, viewer: Viewer, co
   const inputs = new GlanceInputs(store, board, viewer, contexts);
   const targets = inputs.targets();
   const stored = store.glances.getMany(targets.map((target) => target.item.pr.key));
-  return new Set(targets.filter((target) => !inputs.isCurrent(agent, target, stored.get(target.item.pr.key)?.inputHash)).map((target) => target.item.pr.key));
+  return new Set(targets.filter((target) => !inputs.isCurrent(agent, target, stored.get(target.item.pr.key))).map((target) => target.item.pr.key));
 }

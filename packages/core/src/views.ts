@@ -442,6 +442,8 @@ export interface PrDetail {
   glance: Glance | null;
   /** True when the glance was made for an older state of the PR or of the instructions. */
   glanceStale: boolean;
+  /** The glance was written against an older dossier of its topic: not stale, but a look rewrites it. */
+  glanceBehindDossier: boolean;
   /** Set while there is no glance and the last sync said why. */
   glanceGap: GlanceGap | null;
   /** Where the glance stands (`glanceStateOf`); failed offers Retry. */

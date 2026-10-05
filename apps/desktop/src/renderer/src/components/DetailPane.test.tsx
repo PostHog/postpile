@@ -65,6 +65,7 @@ function detailOf(pr: Pr): PrDetail {
     whatsNew: null,
     glance: null,
     glanceStale: false,
+    glanceBehindDossier: false,
     glanceGap: null,
     glanceState: 'none',
     glanceRefreshBlock: null,

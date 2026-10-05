@@ -153,6 +153,15 @@ describe('glance catch-up after a poll', () => {
     h.store.glances.put({ ...stored, inputHash: legacy });
 
     expect((await h.engine.getPr(pr.key))?.glanceStale).toBe(false);
+
+    // The old shape held comment ids only: a person editing a comment after the glance makes it stale.
+    const edited = makeComment({ id: 'e1', author: 'bob', body: 'Blocker: wrong cache key.', createdAt: FRESH, lastEditedAt: LATER });
+    h.store.prs.upsert({ ...pr, comments: [{ ...edited, lastEditedAt: null }] }, LATER);
+    const withComment = h.agent.legacyGlanceItemInputHash(input, { ...item, pr: { ...pr, comments: [{ ...edited, lastEditedAt: null }] } });
+    h.store.glances.put({ ...stored, inputHash: withComment });
+    expect((await h.engine.getPr(pr.key))?.glanceStale).toBe(false);
+    h.store.prs.upsert({ ...pr, comments: [edited] }, LATER);
+    expect((await h.engine.getPr(pr.key))?.glanceStale).toBe(true);
   });
 
   it('leaves a bot comment for the next full sync', async () => {
@@ -295,6 +304,25 @@ describe('Engine.refreshGlanceOnLook', () => {
     expect(h.agent.dossierInputs.length).toBe(dossierCalls);
     expect(h.store.dossiers.latest('depot')?.version).toBe(1);
     expect(catchUpRunIds(h)).toEqual([expect.stringMatching(/^catchup:depot:glance:/)]);
+  });
+
+  it('rewrites a current glance written against an older dossier, without calling it stale', async () => {
+    const h = makeHarness({ catchUpCallsPerDay: 300 });
+    const first = reviewRequestedPr(1);
+    const second = reviewRequestedPr(2);
+    topicWithPrs(h, 'depot', [first, second]);
+    await h.engine.sync({ maxAgentCalls: 50 });
+    askViewer(h, first, 'c9', 'etag-2');
+    await h.engine.pollOnce();
+    await vi.waitFor(() => expect(h.store.dossiers.latest('depot')?.version).toBe(2));
+    await vi.waitFor(async () => expect((await h.engine.getPr(first.key))?.glanceState).toBe('ready'));
+
+    const before = await h.engine.getPr(second.key);
+    expect(before).toMatchObject({ glanceStale: false, glanceBehindDossier: true });
+    // Started, or queued behind the topic's catch-up run that is still finishing.
+    expect(['started', 'queued']).toContain((await h.engine.refreshGlanceOnLook(second.key)).outcome);
+    await vi.waitFor(() => expect(h.store.glances.get(second.key)?.dossierVersion).toBe(2));
+    expect(await h.engine.getPr(second.key)).toMatchObject({ glanceStale: false, glanceBehindDossier: false });
   });
 
   it('makes no call for an up-to-date glance', async () => {

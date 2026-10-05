@@ -879,7 +879,7 @@ export class Engine implements EngineService {
       this.deferredLooks.add(prKey);
       return { outcome: 'deferred' };
     }
-    if (!this.topicCatchUp.needsGlance(prKey)) {
+    if (!this.topicCatchUp.needsGlance(prKey, true)) {
       return { outcome: 'current' };
     }
     const topicId = Board.load(store, now().toISOString()).memberships.get(prKey)?.topicId ?? null;

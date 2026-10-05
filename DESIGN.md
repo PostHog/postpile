@@ -1172,8 +1172,15 @@ stored and before a dossier goes into a glance prompt
   counts through its edit time in the new hash (the dossier version used to
   cover it). `legacyGlanceItemInputHash`
   (the old shape, with the version) still counts as current
-  (`GlanceInputs.isCurrent`) while that dossier is the latest, so the
-  update regenerates no glance; the next rewrite stores the new shape.
+  (`GlanceInputs.isCurrent`) while that dossier is the latest and no
+  person edited a comment after the glance was written (the old shape held
+  comment ids only, and in Unsorted no dossier version moves), so the
+  update regenerates no glance; the next rewrite stores the new shape. A
+  glance written against an older dossier (`PrDetail.glanceBehindDossier`,
+  `GlanceInputs.behindDossier`) is not stale and shows no "out of date",
+  but a look at the PR rewrites it with the newer dossier (the on-look
+  refresh: `wantsGlanceRefresh`, `needsGlance(prKey, true)`, the writer's
+  scope with `prKeys`).
   Trade-off: a glance can lag topic context ("the PR below this one
   merged") until its own PR moves.
 - Model: the glance model (`claude-sonnet-5-5` by default, `POSTPILE_GLANCE_MODEL`).
@@ -5312,7 +5319,8 @@ manual refresh per PR or topic" (2026-09-29) still holds.
 **Trigger** (renderer, `useGlanceLook` in `DetailPane`, `GlanceLookTimer`):
 the PR stays in the detail pane for the opened-mark dwell
 (`OPENED_READ_DELAY_MS`, 1.5s) while the window is visible, and
-`wantsGlanceRefresh` holds: `glanceStale`, no `glanceRefreshBlock`, and
+`wantsGlanceRefresh` holds: `glanceStale` or `glanceBehindDossier`
+(2026-10-05), no `glanceRefreshBlock`, and
 `glanceState` not `writing` or `queued`. Clicking through PRs asks nothing.
 Once per open: re-renders and refetches ask nothing more; a glance that
 turns stale later in the same open asks then. The renderer only asks

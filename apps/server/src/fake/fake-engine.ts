@@ -1245,6 +1245,7 @@ export class FakeEngine implements EngineService {
       whatsNew: news,
       glance: this.data.glances.find((glance) => glance.prKey === prKey) ?? null,
       glanceStale: this.isGlanceStale(prKey),
+      glanceBehindDossier: false,
       glanceGap: this.glanceGapOf(prKey),
       glanceState: this.glanceStateOfPr(prKey),
       glanceRefreshBlock: this.glanceRefreshBlockOfPr(prKey),

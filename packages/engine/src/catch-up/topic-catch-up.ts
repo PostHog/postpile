@@ -157,11 +157,11 @@ export class TopicCatchUp {
 
   /**
    * The PR should have a glance and its stored one is missing or no longer
-   * matches its input (the PR, the topic's dossier, instructions, feedback):
-   * the same hash check as the glance writer's, so an up-to-date glance
-   * never costs a call.
+   * matches its input (the PR, instructions, feedback): the same hash check
+   * as the glance writer's, so an up-to-date glance never costs a call. On a
+   * look, also one written against an older dossier of its topic.
    */
-  needsGlance(prKey: PrKey): boolean {
+  needsGlance(prKey: PrKey, onLook = false): boolean {
     const viewer = loadViewer(this.deps.store);
     if (!viewer) {
       return false;
@@ -172,7 +172,8 @@ export class TopicCatchUp {
     if (!target) {
       return false;
     }
-    return !inputs.isCurrent(this.deps.agent, target, this.deps.store.glances.get(prKey)?.inputHash);
+    const stored = this.deps.store.glances.get(prKey);
+    return !inputs.isCurrent(this.deps.agent, target, stored) || (onLook && inputs.behindDossier(target, stored));
   }
 
   /**
