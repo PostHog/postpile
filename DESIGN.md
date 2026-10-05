@@ -2321,7 +2321,7 @@ thread, reading the diff.
 - "Back to top" floats at the pane's bottom while the review row has
   scrolled out above.
 
-**One composer** (`Composer`, state per PR in `PrBody`): opens in place
+**One composer** (`Composer`, state per PR in `PrBody`): no frame of its own (a label, the app's plain text field, the buttons, like Teach future assessments; an accent frame with a halo read as too bordery, 2026-10-05); opens in place
 under what it answers (the review row or the comment), one at a time;
 drafts stay per target until sent or cancelled. A header says where it
 goes ("Reply to alice · new PR comment, quotes their line", "Reply in

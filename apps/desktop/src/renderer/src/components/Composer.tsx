@@ -124,10 +124,11 @@ export function Composer(props: ComposerProps) {
       ref={box}
       role="group"
       aria-label={props.title}
-      className="flex flex-col gap-2 rounded-row bg-surface p-2.5 inset-ring inset-ring-accent shadow-[0_0_0_3px_var(--accent-soft)]"
+      // No frame of its own: a label, the field and the buttons, like the pane's other text boxes (Teach future assessments).
+      className="flex flex-col gap-1.5"
     >
-      <div className="flex min-w-0 items-baseline gap-1.5 text-xs leading-[normal]">
-        <span className="shrink-0 font-semibold text-ink">{props.title}</span>
+      <div className="flex min-w-0 items-baseline gap-1.5 text-[11.5px] leading-[normal]">
+        <span className="shrink-0 font-medium text-ink-2">{props.title}</span>
         <span className="truncate text-hint">· {props.hint}</span>
       </div>
       {/* The agent's pill sits where the text starts, the first thing to click; the text starts under it. */}
