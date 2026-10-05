@@ -642,6 +642,8 @@ export class Engine implements EngineService {
     if (this.catchUpCap.perDay === 0 || this.syncing || this.consolidating) {
       return;
     }
+    // Catch-ups that waited for a free slot or for the agent to come back go first.
+    this.catchUps.resume();
     this.startDueQuietCatchUps();
   }
 
@@ -784,6 +786,8 @@ export class Engine implements EngineService {
         .finally(() => {
           this.consolidating = null;
           this.askDeferredLooks();
+          // Catch-ups that waited while it ran.
+          this.catchUps.resume();
         });
     }
     return this.consolidating;

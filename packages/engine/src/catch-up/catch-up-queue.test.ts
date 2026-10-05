@@ -85,6 +85,28 @@ describe('CatchUpQueue', () => {
     expect(runs.map((run) => run.topicId)).toEqual(['depot', 'billing', 'ingest', 'replay', 'depot']);
   });
 
+  it('keeps the waiting line while runs may not start, and resumes it after', async () => {
+    let consolidating = false;
+    const { queue, runs } = heldQueue(() => !consolidating);
+
+    queue.request('depot');
+    queue.request('billing');
+    queue.request('ingest');
+    queue.request('depot');
+    consolidating = true;
+    runs[0]!.finish();
+    runs[1]!.finish();
+    await settle();
+    // Nothing starts, and nothing is lost.
+    expect(runs).toHaveLength(2);
+    expect(queue.stateOf('ingest')).toBe('queued');
+    expect(queue.stateOf('depot')).toBe('queued');
+
+    consolidating = false;
+    queue.resume();
+    expect(runs.slice(2).map((run) => run.topicId)).toEqual(['ingest', 'depot']);
+  });
+
   it('drops the waiting line when a sync takes over', async () => {
     let syncing = false;
     const { queue, runs } = heldQueue(() => !syncing);

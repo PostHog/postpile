@@ -5569,8 +5569,12 @@ side by side, at most two at once (`MAX_RUNNING_CATCH_UPS`, 2026-10-05:
 each run holds boards across its agent calls, and a poll with news in many
 topics ran a heavy install out of memory). A request beyond that waits its
 turn, first come first served; a topic's follow-up goes to the back of the
-line, so one busy topic cannot keep the others waiting. The runner's
-limiter (`POSTPILE_AGENT_CONCURRENCY`) caps the calls.
+line, so one busy topic cannot keep the others waiting. While runs may not
+start (a consolidation, the agent off) the line keeps them, their events
+are stored and no later poll asks again; the queue resumes when a
+consolidation ends and on every poll cycle. Only a full sync drops it, as
+it covers every topic. The runner's limiter (`POSTPILE_AGENT_CONCURRENCY`)
+caps the calls.
 
 **Never beside a full sync or consolidation**: a request while one runs is
 skipped (the sync covers every topic; the poll is blocked then anyway). A

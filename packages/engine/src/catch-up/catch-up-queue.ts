@@ -103,24 +103,26 @@ export class CatchUpQueue {
     this.running.set(key, { topicId, prKeys, done });
   }
 
-  /** Fills the free slots from the line of waiting topics. */
+  /**
+   * Fills the free slots from the line of waiting topics. While runs may
+   * not start (a consolidation, the agent off) the line keeps them: their
+   * events are stored, so no later poll asks for them again. resume() picks
+   * them up; only a full sync drops them (dropQueued), as it covers them.
+   */
   private startWaiting(): void {
-    while (!this.isFull() && this.waiting.size > 0) {
+    while (!this.isFull() && this.waiting.size > 0 && this.canStart()) {
       const [key, topicId] = this.waiting.entries().next().value!;
       this.waiting.delete(key);
-      this.startFollowUp(topicId);
+      this.startQueued(topicId);
     }
   }
 
-  /** The queued follow-up, if any: a whole-topic run wins over (and covers) queued glances. */
-  private startFollowUp(topicId: string | null): void {
+  /** The topic's queued run: a whole-topic run wins over (and covers) queued glances. */
+  private startQueued(topicId: string | null): void {
     const key = keyOf(topicId);
     const whole = this.queued.delete(key);
     const glances = this.queuedGlances.get(key);
     this.queuedGlances.delete(key);
-    if (!this.canStart()) {
-      return;
-    }
     if (whole) {
       this.start(topicId, null);
     } else if (glances) {
@@ -128,9 +130,16 @@ export class CatchUpQueue {
     }
   }
 
+  /** Starts what waited while runs could not start (a consolidation ended, a poll cycle with the agent back). */
+  resume(): void {
+    this.startWaiting();
+  }
+
   request(topicId: string | null): CatchUpRequest {
     const key = keyOf(topicId);
-    if (this.running.has(key)) {
+    // Topics already waiting go first.
+    this.startWaiting();
+    if (this.running.has(key) || this.waiting.has(key)) {
       if (!this.queued.has(key)) {
         this.queued.add(key);
         this.changeCount += 1;
@@ -141,10 +150,8 @@ export class CatchUpQueue {
       return 'skipped';
     }
     if (this.isFull()) {
-      if (!this.queued.has(key)) {
-        this.queued.add(key);
-        this.changeCount += 1;
-      }
+      this.queued.add(key);
+      this.changeCount += 1;
       this.wait(topicId);
       return 'queued';
     }
@@ -162,10 +169,11 @@ export class CatchUpQueue {
    */
   requestGlance(topicId: string | null, prKey: PrKey): GlanceRequest {
     const key = keyOf(topicId);
+    this.startWaiting();
     if (this.queued.has(key) || this.queuedGlances.get(key)?.has(prKey)) {
       return 'covered';
     }
-    if (this.running.has(key)) {
+    if (this.running.has(key) || this.waiting.has(key)) {
       this.queueGlance(key, prKey);
       return 'queued';
     }
