@@ -267,9 +267,9 @@ describe('server routes over the fake engine', () => {
     const app = appWithFake();
     const quiet = (await (await app.request('/api/handled-quietly')).json()) as QuietReadView[];
     expect(quiet.map((item) => item.prKey)).toEqual(['acme/app#1899', 'acme/app#1904', 'acme/app#1911', 'acme/app#1934', 'acme/app#1960', 'acme/app#1921', 'acme/app#1963']);
-    expect(quiet[1]).toMatchObject({ repo: 'acme/app', number: 1904, title: 'Hash Turbo inputs by lockfile only', reason: 'bots', bots: ['trunk-io[bot]', 'CI'] });
+    expect(quiet[1]).toMatchObject({ repo: 'acme/app', number: 1904, title: 'Hash Turbo inputs by lockfile only', reason: 'bots', bots: ['trunk-io[bot]', 'vercel[bot]'] });
     expect(quiet[2]).toMatchObject({ number: 1911, reason: 'approved', bots: [] });
-    expect(quiet[3]).toMatchObject({ number: 1934, reason: 'judged', bots: ['lyra', 'CI'] });
+    expect(quiet[3]).toMatchObject({ number: 1934, reason: 'judged', bots: ['lyra', 'vercel[bot]'] });
 
     const rows = (await (await app.request('/api/debug/notifications')).json()) as NotificationDebugRow[];
     expect(rows.find((row) => row.prKey === 'acme/app#1904')?.lastAction).toMatchObject({ origin: 'quiet', outcome: 'github' });
@@ -355,7 +355,7 @@ describe('server routes over the fake engine', () => {
     expect(detail.activity.fresh[0]).not.toHaveProperty('events');
   });
 
-  it('sends the slim PR view: no comments, threads, commits, timeline or check contexts', async () => {
+  it('sends the slim PR view: no comments, threads, commits, timeline or checks', async () => {
     const detail = (await (await appWithFake().request('/api/prs/acme/app/1902')).json()) as PrDetail;
     expect(Object.keys(detail.pr).sort()).toEqual([
       'additions',
@@ -364,7 +364,6 @@ describe('server routes over the fake engine', () => {
       'baseRef',
       'body',
       'changedFiles',
-      'checks',
       'createdAt',
       'deletions',
       'files',
@@ -386,7 +385,6 @@ describe('server routes over the fake engine', () => {
       'url',
     ]);
     expect(Object.keys(detail.pr.reviews[0] ?? {}).sort()).toEqual(['author', 'state', 'submittedAt']);
-    expect(detail.pr.checks).toMatchObject({ rollup: 'FAILURE', total: 5, passed: 4, failed: 1, pending: 0, failedNames: ['test (backend)'] });
     expect(detail.pr.files.map((file) => file.path)).toContain('turbo.json');
     // Replies and reactions still find their comment: the activity line carries it.
     const lines = [...detail.activity.fresh, ...detail.activity.earlier];

@@ -107,9 +107,9 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   type (`views.ts`), fill it in the engine's `read-models.ts` and in
   `FakeEngine`, then read it here.
 - `PrDetail.pr` is core's slim `PrPaneView` (`pr-pane.ts`), never the
-  stored `Pr`: no comments, threads, commits, timeline or check contexts.
-  A new pane field goes into `prPaneView`, which both engines call. The
-  Checks fact reads `pr.checks` (a `ChecksSummary`), "pushed" reads
+  stored `Pr`: no comments, threads, commits or timeline, and no checks at
+  all (PostPile does not fetch CI since 0.21.0). A new pane field goes into
+  `prPaneView`, which both engines call. "Pushed" reads
   `pr.lastCommitAt`; comment text, Reply and Thumbs up come from
   `PrDetail.activity`. Its rows are core's `ActivityEvent` (lines extend
   it with body, `eventCount` and the reply): no raw events, and no
@@ -340,7 +340,8 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   actions). `text-faint` (2.3-2.6:1) is decoration only: separators,
   chevrons, ages next to a louder line, done tiles.
 - **Diff red**: `--diff-red` for deletions in the Size fact. Coral
-  (`unread`) is never a diff or CI colour; the Checks fact is grey.
+  (`unread`) is never a diff colour. There is no CI anywhere (DESIGN.md "CI
+  is not tracked").
 - **One colour per meaning** (2026-10-01, DESIGN.md "Colour per
   meaning"): `closer` only for the agent's Look closer; `status-bad` the
   one red for bad (closed, changes requested, risk, errors); `safe` the one
@@ -500,7 +501,7 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   stack (`stackQueueWord`, "Merge queue: with 3/3"): the top branch holds
   their commits, so they merge with it. Review state: `StateWordLabel` with a
   `StateWord` from `reviewWord` / `rowStateWord` (`lib/pr.ts`). Never a CI
-  icon or word outside `PrFacts`.
+  icon or word: PostPile has no CI data.
 - Icons carry words: a lone icon gets a `title` (and `aria-label` when it
   is the only content of a control).
 
@@ -543,9 +544,8 @@ tints (`lib/why.ts`, `lib/events.ts`, `reviewWord` / `rowStateWord` in `lib/pr.t
   state keeps its color on done tiles; title and counts go grey. When only
   agents approved (`PrStatus.agentApprovers`) the word reads "Approved by
   agent", names in the tooltip; the detail uses `PrDetail.agentApprovers`
-  with `approvedText` in `lib/pr.ts`. **No CI on rows, tiles, the detail
-  state line, the RISK box or the your-move chip**: checks only show in
-  `PrFacts` (DESIGN.md "CI is not a signal"; `PrStatus` has no checks).
+  with `approvedText` in `lib/pr.ts`. **No CI anywhere**: PostPile fetches no
+  checks (DESIGN.md "CI is not tracked"; `PrStatus` and `PrPaneView` have none).
 - PR rows: a single-PR tile's row has no title (`PrRow` `showTitle`
   false; the heading is the title). The author's avatar is who opened it
   (`PrSummary.author`, a bot for agent PRs); when someone else is assigned,

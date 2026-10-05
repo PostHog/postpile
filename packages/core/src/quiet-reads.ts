@@ -1,5 +1,5 @@
 // "Handled quietly": a PR thread the user had read that turned unread again
-// only because of bots (CI, merge queue, review bots, deploys). PostPile marks
+// only because of bots (merge queue, review bots, deploys). PostPile marks
 // it read on GitHub by itself when nothing is asked of the user. A second
 // reason: the user acted on the PR after every unread event ("You already
 // dealt with it"); a third: everything since they last looked is automation
@@ -37,8 +37,8 @@ export const HANDLED_QUIETLY_DAYS = 7;
 /** Threads one run marks read at most; the rest wait for the next run. */
 export const QUIET_READS_PER_RUN = 50;
 
-/** Name shown for bot activity without an actor (a CI result). */
-export const CI_ACTOR = 'CI';
+/** Name shown for activity without an actor (GitHub itself; CI results had none until 0.21.0). */
+export const NO_ACTOR_NAME = 'GitHub';
 
 /**
  * Automation by the shared rule (`isAutomation`): a bot-made review request
@@ -63,9 +63,9 @@ export function botOnlySinceRead(pr: Pr, events: PrEvent[], lastReadAt: IsoTime,
   return since;
 }
 
-/** The bots behind the events, in order of first appearance, "CI" for actor-less ones. */
+/** The bots behind the events, in order of first appearance, "GitHub" for actor-less ones. */
 export function botNames(events: PrEvent[]): string[] {
-  return [...new Set(events.map((event) => (event.actor === '' ? CI_ACTOR : event.actor)))];
+  return [...new Set(events.map((event) => (event.actor === '' ? NO_ACTOR_NAME : event.actor)))];
 }
 
 /**
@@ -335,7 +335,7 @@ export type JudgedSkip =
   | 'unseen_merge'
   | 'your_move';
 
-/** `actors`: everyone since the user last looked, in order of first appearance, "CI" for actor-less events. */
+/** `actors`: everyone since the user last looked, in order of first appearance, "GitHub" for actor-less events. */
 export type JudgedReadCheck = { kind: 'mark'; actors: string[] } | { kind: 'skip'; why: JudgedSkip };
 
 /**
@@ -415,7 +415,7 @@ export type RequestGoneSkip =
   | 'unseen_merge'
   | 'your_move';
 
-/** `actors`: everyone since the request, in order of first appearance, "CI" for actor-less events. */
+/** `actors`: everyone since the request, in order of first appearance, "GitHub" for actor-less events. */
 export type RequestGoneReadCheck = { kind: 'mark'; actors: string[] } | { kind: 'skip'; why: RequestGoneSkip };
 
 /** When the newest review request of the viewer or one of their teams was made; null when there is none. */
@@ -590,7 +590,7 @@ function newsWords(news: PrEvent[]): string {
     return 'activity';
   }
   const more = news.length > 1 ? ` and ${news.length - 1} more` : '';
-  return `${newsNoun(newest.kind)} from ${newest.actor === '' ? CI_ACTOR : newest.actor}${more}`;
+  return `${newsNoun(newest.kind)} from ${newest.actor === '' ? NO_ACTOR_NAME : newest.actor}${more}`;
 }
 
 /** Why a clicked mark-read stays unread, for the sync report and the pending-send result: "new review from alice". */

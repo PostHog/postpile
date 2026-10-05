@@ -4,12 +4,12 @@ import { isQueued, openThreadCount, prStatus } from './pr-status.ts';
 
 describe('prStatus', () => {
   it('has lifecycle and review for an open PR', () => {
-    const pr = makePr({ reviewDecision: 'APPROVED', checks: { rollup: 'SUCCESS', contexts: [] } });
+    const pr = makePr({ reviewDecision: 'APPROVED' });
     expect(prStatus(pr)).toEqual({ lifecycle: 'open', review: 'approved', agentApprovers: [], mergeQueue: null, icon: 'open' });
   });
 
-  it('maps changes and never carries checks: CI is not a signal', () => {
-    expect(prStatus(makePr({ reviewDecision: 'CHANGES_REQUESTED', checks: { rollup: 'FAILURE', contexts: [] } }))).toEqual({
+  it('maps changes', () => {
+    expect(prStatus(makePr({ reviewDecision: 'CHANGES_REQUESTED' }))).toEqual({
       lifecycle: 'open',
       review: 'changes',
       agentApprovers: [],
@@ -20,7 +20,7 @@ describe('prStatus', () => {
 
   it('leaves out parts that do not apply', () => {
     expect(prStatus(makePr({ reviewDecision: 'NONE' }))).toEqual({ lifecycle: 'open', review: null, agentApprovers: [], mergeQueue: null, icon: 'open' });
-    expect(prStatus(makePr({ isDraft: true, checks: { rollup: 'SUCCESS', contexts: [] } }))).toEqual({
+    expect(prStatus(makePr({ isDraft: true }))).toEqual({
       lifecycle: 'draft',
       review: null,
       agentApprovers: [],

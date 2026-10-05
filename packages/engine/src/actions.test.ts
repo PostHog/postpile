@@ -253,6 +253,17 @@ describe('snooze', () => {
     await h.engine.unsnooze(tileId);
     expect(await tileState(h)).toBe('done');
   });
+
+  it('wakes a stored "Until CI is green" snooze from before 0.21.0 like an expired one', async () => {
+    const h = await synced();
+    await h.engine.markRead(tileId);
+    await h.engine.snooze(tileId, { kind: 'until_time', until: '2099-01-01T00:00:00.000Z' });
+    expect(await tileState(h)).toBe('snoozed');
+
+    h.store.db.prepare(`UPDATE pr_snooze SET condition_json = '{"kind":"ci_green"}'`).run();
+
+    expect(await tileState(h)).toBe('done');
+  });
 });
 
 describe('feedback', () => {

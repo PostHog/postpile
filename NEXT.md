@@ -6,6 +6,17 @@ now".
 
 ## Done
 
+- No CI (2026-10-05, for 0.21.0; DESIGN.md "CI is not tracked"; step 3 of
+  normalizing the PR snapshot, Later): the PR query asks for no checks,
+  `Pr` has none, the CI event, the pane's Checks fact, the CLI rollup and
+  the "Until CI is green" snooze are gone (a stored one ends like an
+  expired snooze). Migration 030 deletes the CI events and their log rows;
+  the storage job `checks_strip` removes the old checks from the stored
+  JSON; reads drop them meanwhile; every PR read runs in one read
+  transaction. Measured: on 12 PostHog PRs the batch response 621 → 471
+  KB and 5.3–8.1 → 3.7–4.3 s; heavy copy 93 MB of JSON freed in 138 slices
+  (max 54 ms), migration 0.5 s; hot-set heap 283 → 264 MB. Not tried by
+  hand: the app on a real database.
 - No "Not mine" on a Not yours tile (2026-10-05, for 0.21.0; DESIGN.md
   Product model › "Action details"): core's `TileOffers.notMine` leaves it out of
   the tile's ⋯ menu while the verdict pill says Not yours, read from
@@ -1320,15 +1331,14 @@ the app meanwhile.
   (`pr`, migration 028), the rest of each PR is one JSON blob in
   `pr_snapshot.json`: comments are half of it (95% of their text from
   bots, cut since 0.19.0), thread comments and review bodies are second
-  copies of comments, and check contexts are 10% that no rule reads. So a
+  copies of comments, and check contexts were 10% (dropped in step 3). So a
   hot board parses whole PRs to read a few fields. Design checked with
   Codex GPT-6.1 (2026-10-05); its review points win where they differ from
   the first draft. Estimate from prototyped tables, hot set of 1,500 PRs on
   the heavy copy: 284 MB of heap today, about 140 MB with comment rows,
   about 60 MB with the board diet. The plan, one PR each, in this order:
   1. Newer-schema guard: `openDatabase` refuses a database from a newer
-     PostPile (DESIGN.md "Safety while building"). Ships before anything
-     destructive.
+     PostPile (DESIGN.md "Safety while building"). Done, 0.20.0.
   2. One storage job runner (`packages/engine/src/storage-jobs/`), with the
      bot body trim ported as its first job under the trim's existing meta
      keys. Fails closed (never `done` unless the job's check passes),
@@ -1336,14 +1346,17 @@ the app meanwhile.
      reschedule on SQLITE_BUSY, ~30 ms slices 50 ms apart, pauses while
      sync, poll, consolidation or catch-up run and while the Mac sleeps,
      cursor and done flag in the unit's transaction, telemetry
-     `storage_job_done`.
-  3. Checks summary pilot (migration 030): `pr.rows_version` and `check_*`
-     header columns (rollup, passed / failed / pending / total, newest
-     finish, FAILURE names), dual-write, a backfill job, the read switch.
-     Next, after the runner.
+     `storage_job_done`. Done, 0.20.0.
+  3. Drop CI checks (decided 2026-10-05, replacing the checks summary
+     pilot): no checks fetched or stored, CI events deleted (migration
+     030), the old checks stripped from the stored JSON by the storage job
+     `checks_strip`, every PR read in one read transaction (DESIGN.md "CI is
+     not tracked"). Built for 0.21.0. `rows_version` waits for step 4.
   4. Comments, reviews and threads as rows (`pr_comment`, `pr_thread`,
-     `pr_review`, header `mentioned_teams`), shipped in one release together
-     with the strip of the switched fields from the stored JSON.
+     `pr_review`, header `mentioned_teams`, `rows_version`), shipped in one
+     release together with the strip of the switched fields from the stored
+     JSON. The first phase that runs the dual-write, backfill and read
+     switch protocol.
   5. Board diet: board reads leave out bot bodies no rule reads
      (`isBodyReadByRules`), `FullPr` for the readers that need every body
      (event derivation, write actions, lessons, "Why?" excerpts).
@@ -1411,6 +1424,17 @@ the app meanwhile.
   code-manager folder migration (`legacy-data.ts`) once the move has run.
 
 ## Decided
+
+- **Drop CI checks: costly to fetch, usually stale, deprioritized**
+  (2026-10-05, DESIGN.md "CI is not tracked"). PostPile fetches no
+  checks, keeps no CI event, shows no Checks fact and offers no "Until CI
+  is green" snooze. Replaces the checks summary pilot (a summary on the PR
+  header with a backfill; built, not shipped). Fetching the checks was the
+  costliest part of a PR fetch (on PostHog PRs with 100 checks: a quarter of
+  the response, and the query ran in about 60% of the time without them),
+  and CI had been off everything that ranks or speaks since 2026-09-29. The
+  stored CI events go in migration 030 rather than with the next
+  re-derivation, which never comes for merged and closed PRs.
 
 - **No "Not mine" where the tile already says Not yours** (2026-10-05, owner
   report): the menu offered to teach the agent what its verdict already

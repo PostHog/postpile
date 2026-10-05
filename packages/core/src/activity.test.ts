@@ -18,15 +18,15 @@ function ev(overrides: Partial<PrEvent>, display: EventDisplayState = 'seen'): E
 }
 
 describe('activityList', () => {
-  it('keeps human talk and lifecycle, folds bots and CI into noise', () => {
+  it('keeps human talk and lifecycle, folds bots into noise', () => {
     const comment = ev({ kind: 'comment', actor: 'lyra', summary: 'lyra commented', at: at(1) });
     const review = ev({ kind: 'review_approved', actor: 'ada', summary: 'ada approved', at: at(2) });
-    const ci = ev({ kind: 'ci', actor: '', isBot: true, summary: 'CI passed', at: at(3) });
+    const deploy = ev({ kind: 'deploy', actor: 'vercel', isBot: true, summary: 'vercel deployed', at: at(3) });
     const bot = ev({ kind: 'bot_comment', actor: 'greptile-apps[bot]', isBot: true, summary: 'greptile commented', at: at(4) });
     const merged = ev({ kind: 'merged', actor: 'ada', summary: 'ada merged', at: at(5) });
-    const list = activityList([comment, review, ci, bot, merged], who);
+    const list = activityList([comment, review, deploy, bot, merged], who);
     expect(list.earlier.map((line) => line.summary)).toEqual(['ada merged', 'ada approved', 'lyra commented']);
-    expect(list.noise.map((item) => item.summary)).toEqual(['greptile commented', 'CI passed']);
+    expect(list.noise.map((item) => item.summary)).toEqual(['greptile commented', 'vercel deployed']);
     expect(list.fresh).toEqual([]);
   });
 
@@ -75,25 +75,25 @@ describe('activityList', () => {
   });
 
   it('labels machine-only noise as bot/CI events', () => {
-    const ci = ev({ kind: 'ci', actor: '', isBot: true, summary: 'CI passed' });
+    const queue = ev({ kind: 'merge_queue', actor: '', isBot: true, summary: 'queued' });
     const deploy = ev({ kind: 'deploy', actor: 'vercel', isBot: true, summary: 'vercel deploy' });
-    expect(noiseLabel([ci, deploy])).toBe('2 bot/CI events');
+    expect(noiseLabel([queue, deploy])).toBe('2 bot/CI events');
   });
 });
 
 describe('activityList fresh noise', () => {
   const bot = (minutes: number, display: EventDisplayState = 'quiet') =>
     ev({ kind: 'bot_comment', actor: 'greptile[bot]', isBot: true, summary: 'greptile commented', at: at(minutes) }, display);
-  const ci = (minutes: number) => ev({ kind: 'ci', actor: '', isBot: true, summary: 'CI passed', at: at(minutes) }, 'quiet');
+  const deploy = (minutes: number) => ev({ kind: 'deploy', actor: 'vercel', isBot: true, summary: 'vercel deployed', at: at(minutes) }, 'quiet');
 
   it('moves unseen noise after the last touch into freshNoise while something loud is new', () => {
     const before = bot(1);
     const seen = bot(6, 'seen');
-    const after = [bot(7), bot(8), ci(9)];
+    const after = [bot(7), bot(8), deploy(9)];
     const push = ev({ kind: 'commits_pushed', actor: 'pim', summary: 'pim pushed', at: at(10) }, 'loud');
     const list = activityList([before, seen, ...after, push], who, at(5));
     expect(list.freshNoise.map((item) => item.id)).toEqual(after.map((view) => view.event.id).toReversed());
-    expect(list.freshNoiseLabel).toBe('2 bot comments, CI');
+    expect(list.freshNoiseLabel).toBe('2 bot comments, a deploy');
     expect(list.noise.map((item) => item.id)).toEqual([seen.event.id, before.event.id]);
   });
 
@@ -105,7 +105,7 @@ describe('activityList fresh noise', () => {
   });
 
   it('keeps all noise in the list while nothing loud is new', () => {
-    const list = activityList([bot(1), ci(2)], who, at(0));
+    const list = activityList([bot(1), deploy(2)], who, at(0));
     expect(list.freshNoise).toEqual([]);
     expect(list.freshNoiseLabel).toBe('');
     expect(list.noise).toHaveLength(2);
@@ -210,8 +210,7 @@ describe('threadChangedAt', () => {
 describe('noiseSummary', () => {
   it('says what the noise is', () => {
     const comments = Array.from({ length: 10 }, (_, n) => ev({ kind: 'bot_comment', actor: 'greptile[bot]', isBot: true, at: at(n) }));
-    const ci = ev({ kind: 'ci', actor: '', isBot: true });
-    expect(noiseSummary([...comments, ci, ci])).toBe('10 bot comments, CI');
+    expect(noiseSummary(comments)).toBe('10 bot comments');
   });
 
   it('names bot pushes, deploys, the merge queue and the rest', () => {

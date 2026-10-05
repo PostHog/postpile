@@ -4,6 +4,10 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ## 0.21.0 (unreleased)
 
+### Removed
+
+- PostPile no longer shows CI status: the PR pane's Checks fact, the CI lines in a PR's activity and the "Until CI is green" snooze are gone. A snooze set that way ends after the update, like one whose time is up. CI results go stale fast and bringing a PR to green is its author's job, so they never drove anything in PostPile; now it doesn't fetch them either. That makes each PR fetch from GitHub smaller and faster (on PRs with many checks about a quarter less data), and the checks already stored are removed once in the background a little after the update.
+
 ### Fixed
 
 - A tile that already says "Not yours" no longer offers "Not mine" in its ⋯ menu. Mark read clears it. A stack or set only counts when its verdict says Not yours, so one PR the agent calls Not yours next to one that needs a look keeps the option.

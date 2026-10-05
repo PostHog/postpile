@@ -533,7 +533,7 @@ describe('FakeEngine addressed your changes', () => {
 });
 
 describe('FakeEngine what is new on a revisit', () => {
-  it('summarises the pushes since your changes request on #1960, bots and CI left out', async () => {
+  it('summarises the pushes since your changes request on #1960, bots left out', async () => {
     const engine = new FakeEngine();
     const devEnv = (await engine.getTopic('topic-dev-env'))?.tiles ?? [];
     const view = devEnv.find((item) => item.tile.id === 'pr:acme/app#1960');
@@ -541,7 +541,7 @@ describe('FakeEngine what is new on a revisit', () => {
     const detail = await engine.getPr('acme/app#1960');
     expect(detail?.whatsNew?.anchor.kind).toBe('changes_request');
     expect(detail?.activity.fresh.map((line) => line.summary)).toEqual(['pim pushed 3 commits']);
-    expect(detail?.activity.freshNoiseLabel).toBe('2 bot comments, CI');
+    expect(detail?.activity.freshNoiseLabel).toBe('2 bot comments');
     expect(detail?.activity.earlier.map((line) => line.summary)).toEqual(['you requested changes']);
     expect(detail?.activity.noise).toEqual([]);
   });

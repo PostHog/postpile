@@ -106,7 +106,6 @@ function prLabels(board: PropertyBoard, key: PrKey, pr: Pr): string[] {
   if (viewerHeadReview(pr, board.viewer)) {
     labels.push('viewer reviewed head');
   }
-  labels.push(`ci:${pr.checks.rollup}`);
   const thread = board.threads.get(key);
   if (thread) {
     labels.push(thread.unread ? 'thread:unread' : 'thread:read', thread.lastReadAt === null ? 'thread:never read' : 'thread:read once');
@@ -484,10 +483,6 @@ export const REQUIRED_LABELS: readonly string[] = [
   'viewer-review:CHANGES_REQUESTED:head',
   'viewer-review:CHANGES_REQUESTED:older',
   'viewer-review:COMMENTED:head',
-  'ci:NONE',
-  'ci:PENDING',
-  'ci:SUCCESS',
-  'ci:FAILURE',
   'thread:unread',
   'thread:read',
   'thread:never read',
@@ -500,7 +495,6 @@ export const REQUIRED_LABELS: readonly string[] = [
   'approved in app',
   'snooze:someone_replies',
   'snooze:new_push',
-  'snooze:ci_green',
   'snooze:until_time',
   'snooze-phase:active',
   'snooze-phase:broken',

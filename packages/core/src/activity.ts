@@ -283,7 +283,7 @@ function byTime(a: EventView, b: EventView): number {
 
 /** "4 bot/CI events", or "4 bot/CI and other events" when review requests between others are in it. */
 export function noiseLabel(noise: EventView[]): string {
-  const machineKinds: EventKind[] = ['ci', 'deploy', 'merge_queue', 'bot_comment'];
+  const machineKinds: EventKind[] = ['deploy', 'merge_queue', 'bot_comment'];
   const machine = noise.every((view) => view.event.isBot || machineKinds.includes(view.event.kind));
   const events = noise.length === 1 ? 'event' : 'events';
   return machine ? `${noise.length} bot/CI ${events}` : `${noise.length} bot/CI and other ${events}`;
@@ -295,21 +295,19 @@ function countWord(count: number, word: string, plural = `${word}s`): string {
 
 /**
  * The noise by what it is, for the "New since you looked" box: "10 bot
- * comments, CI", "2 bot pushes, a deploy, merge queue, 1 other".
+ * comments", "2 bot pushes, a deploy, merge queue, 1 other".
  */
 export function noiseSummary(noise: EventView[]): string {
   const count = (test: (view: EventView) => boolean) => noise.filter(test).length;
   const isKind = (kinds: EventKind[]) => (view: EventView) => kinds.includes(view.event.kind);
   const comments = count((view) => view.event.kind === 'bot_comment' || (view.event.isBot && HUMAN_TALK.includes(view.event.kind)));
   const pushes = count((view) => view.event.isBot && PUSH_KINDS.includes(view.event.kind));
-  const ci = count(isKind(['ci']));
   const deploys = count(isKind(['deploy']));
   const queue = count(isKind(['merge_queue']));
-  const other = noise.length - comments - pushes - ci - deploys - queue;
+  const other = noise.length - comments - pushes - deploys - queue;
   const parts = [
     comments > 0 ? countWord(comments, 'bot comment') : '',
     pushes > 0 ? countWord(pushes, 'bot push', 'bot pushes') : '',
-    ci > 0 ? 'CI' : '',
     deploys > 0 ? (deploys === 1 ? 'a deploy' : `${deploys} deploys`) : '',
     queue > 0 ? 'merge queue' : '',
     other > 0 ? `${other} other` : '',

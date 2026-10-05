@@ -32,7 +32,6 @@ export function makePr(overrides: Partial<Pr> = {}): Pr {
     comments: [],
     threads: [],
     timeline: [],
-    checks: { rollup: 'SUCCESS', contexts: [] },
     headOid: 'abc',
     createdAt: '2026-09-01T10:00:00Z',
     updatedAt: '2026-09-02T10:00:00Z',

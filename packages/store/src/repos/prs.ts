@@ -42,6 +42,22 @@ interface HeaderRow {
   last_event_at: string | null;
 }
 
+/**
+ * A stored snapshot, parsed, without the `checks` builds before 0.21.0
+ * wrote (DESIGN.md "CI is not tracked"). Until the storage job checks_strip
+ * has reached a PR its json still holds them; dropping them here keeps them
+ * out of memory and out of anything written back (a local rewrite stores
+ * what it read).
+ */
+function parsePr(text: string): Pr {
+  const parsed = JSON.parse(text) as Pr & { checks?: unknown };
+  if (!('checks' in parsed)) {
+    return parsed;
+  }
+  const { checks: _checks, ...pr } = parsed;
+  return pr;
+}
+
 /** A JSON list column; most are empty, which needs no parse. */
 function listOf(text: string): string[] {
   return text === '[]' ? [] : (JSON.parse(text) as string[]);
@@ -75,6 +91,10 @@ function toHeader(row: HeaderRow): PrHeader {
  * existence authority: a PR is stored if and only if it has one) and the
  * snapshot json in `pr_snapshot` (the blob being phased out). Both are
  * written together; reads of the json ignore a snapshot without a header.
+ *
+ * Every read of PRs runs in one read transaction, so the header revisions
+ * and the snapshots it takes come from the same commit, also on a read-only
+ * connection next to the app's writes (checked with Codex GPT-6.1).
  */
 export class PrRepo {
   /**
@@ -118,7 +138,7 @@ export class PrRepo {
           this.parsed.delete(row.key);
           continue;
         }
-        const pr = JSON.parse(text) as Pr;
+        const pr = parsePr(text);
         fresh.set(row.key, pr);
         if (keep(row.key)) {
           this.parsed.set(row.key, { revision: row.snapshot_revision, pr });
@@ -258,12 +278,12 @@ export class PrRepo {
   /** The stored snapshot; null without a header (a snapshot alone is not a stored PR) or without a snapshot. */
   get(key: PrKey): Pr | null {
     const row = one<{ json: string }>(this.db, 'SELECT s.json FROM pr p JOIN pr_snapshot s ON s.key = p.key WHERE p.key = ?', key);
-    return row ? (JSON.parse(row.json) as Pr) : null;
+    return row ? parsePr(row.json) : null;
   }
 
   /** Stored PRs by key. A hot PR comes from the cache; any other is parsed for this call only and not kept. */
   getMany(keys: PrKey[]): Map<PrKey, Pr> {
-    return keys.length === 0 ? new Map() : this.parse(this.revisionRows(keys), () => false);
+    return keys.length === 0 ? new Map() : inTransaction(this.db, () => this.parse(this.revisionRows(keys), () => false));
   }
 
   /**
@@ -278,7 +298,7 @@ export class PrRepo {
         this.parsed.delete(key);
       }
     }
-    return this.parse(this.revisionRows(keys), (key) => wanted.has(key));
+    return inTransaction(this.db, () => this.parse(this.revisionRows(keys), (key) => wanted.has(key)));
   }
 
   /**
@@ -287,8 +307,10 @@ export class PrRepo {
    * `getMany` for the PRs it needs.
    */
   listAll(): Pr[] {
-    const rows = all<RevisionRow>(this.db, 'SELECT key, snapshot_revision FROM pr ORDER BY repo, number');
-    return [...this.parse(rows, () => false).values()];
+    return inTransaction(this.db, () => {
+      const rows = all<RevisionRow>(this.db, 'SELECT key, snapshot_revision FROM pr ORDER BY repo, number');
+      return [...this.parse(rows, () => false).values()];
+    });
   }
 
   /** Every stored key. */
@@ -360,6 +382,42 @@ export class PrRepo {
       'SELECT p.key, p.fetched_at, s.json FROM pr p JOIN pr_snapshot s ON s.key = p.key WHERE p.key > ? ORDER BY p.key LIMIT 1',
       afterKey,
     );
-    return row === null ? null : { key: row.key, pr: JSON.parse(row.json) as Pr, fetchedAt: row.fetched_at };
+    return row === null ? null : { key: row.key, pr: parsePr(row.json), fetchedAt: row.fetched_at };
+  }
+
+  /** The last snapshot revision handed out (the store-wide counter), 0 before the first. */
+  latestRevision(): number {
+    return Number(one<{ value: string }>(this.db, 'SELECT value FROM meta WHERE key = ?', SNAPSHOT_REVISION_KEY)?.value ?? 0);
+  }
+
+  /** For the storage job checks_strip: the next stored snapshot's key after `afterKey` ('' for the first); null after the last. */
+  nextSnapshotKey(afterKey: PrKey): PrKey | null {
+    return one<{ key: string }>(this.db, 'SELECT key FROM pr_snapshot WHERE key > ? ORDER BY key LIMIT 1', afterKey)?.key ?? null;
+  }
+
+  /**
+   * Removes `checks` from one stored snapshot's json, in SQL, when it holds
+   * them; true when it did. No new revision: reads drop them anyway
+   * (`parsePr`), so no read changes.
+   */
+  stripChecks(key: PrKey): boolean {
+    return (
+      run(this.db, "UPDATE pr_snapshot SET json = json_remove(json, '$.checks') WHERE key = ? AND json_type(json, '$.checks') IS NOT NULL", key) > 0
+    );
+  }
+
+  /**
+   * Snapshots written after revision `since` (by a fetch or a local
+   * rewrite) whose json holds `checks`: the strip's check from the data for
+   * the PRs stored behind its cursor while it walked.
+   */
+  countChecksWrittenSince(since: number): number {
+    return (
+      one<{ n: number }>(
+        this.db,
+        "SELECT count(*) AS n FROM pr_snapshot WHERE key IN (SELECT key FROM pr WHERE snapshot_revision > ?) AND json_type(json, '$.checks') IS NOT NULL",
+        since,
+      )?.n ?? 0
+    );
   }
 }

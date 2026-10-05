@@ -162,25 +162,16 @@ describe('DetailPane', () => {
       commits: [makeCommit({ committedAt: at(30) })],
       reviews: [makeReview({ id: 'r1', author: 'lyra', state: 'APPROVED', body: 'Ship it.' })],
       comments: [makeComment({ id: 'c1', author: 'bob', body: 'Why one key for all jobs?', url: 'https://github.com/acme/app/pull/11#issuecomment-1' })],
-      checks: {
-        rollup: 'FAILURE',
-        contexts: [
-          { name: 'lint', conclusion: 'SUCCESS', completedAt: at(40) },
-          { name: 'test', conclusion: 'FAILURE', completedAt: at(45) },
-          { name: 'e2e', conclusion: null, completedAt: null },
-        ],
-      },
     });
     const comment = eventView(makeEvent({ id: 'acme/app#11:comment:c1', prKey: stored.key, actor: 'bob', sourceId: 'c1', summary: 'bob commented' }));
-    const ci = eventView(
-      makeEvent({ id: 'acme/app#11:ci:head:FAILURE', prKey: stored.key, kind: 'ci', actor: '', isBot: true, summary: 'CI failed: test', ruleReason: 'bot activity', seenAt: at(50), at: at(45) }),
+    const deploy = eventView(
+      makeEvent({ id: 'acme/app#11:deploy:d1', prKey: stored.key, kind: 'deploy', actor: 'vercel[bot]', isBot: true, summary: 'Preview deployed', ruleReason: 'bot activity', seenAt: at(50), at: at(45) }),
     );
-    const detail = detailOf(stored, activityList([comment, ci], viewer, null, stored));
+    const detail = detailOf(stored, activityList([comment, deploy], viewer, null, stored));
     expect(detail.pr).not.toHaveProperty('comments');
 
     renderCached(stored.key, detail);
 
-    expect(screen.getByText('3 checks · 2 not passing')).toBeTruthy();
     expect(screen.getByText(/^pushed /)).toBeTruthy();
     expect(screen.getByText('One key for every job.')).toBeTruthy();
     expect(screen.getByText('lyra').parentElement?.textContent).toContain('approved');
@@ -189,6 +180,6 @@ describe('DetailPane', () => {
     expect(screen.getByRole('button', { name: /^Reply$/ })).toBeTruthy();
     // The folded bot/CI rows draw from the slim items too: summary, and the reason in the hover title.
     fireEvent.click(screen.getByRole('button', { name: 'Show 1 bot/CI event' }));
-    expect(screen.getByText('CI failed: test').closest('[title]')?.getAttribute('title')).toBe('seen: bot activity');
+    expect(screen.getByText('Preview deployed').closest('[title]')?.getAttribute('title')).toBe('seen: bot activity');
   });
 });

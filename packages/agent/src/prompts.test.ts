@@ -31,10 +31,8 @@ describe('contextBlock', () => {
 });
 
 describe('no prompt carries CI status (DESIGN.md "CI is not a signal")', () => {
-  const failing = makePr({
-    checks: { rollup: 'FAILURE', contexts: [{ name: 'backend-tests', conclusion: 'FAILURE', completedAt: '2026-09-02T09:30:00Z' }] },
-  });
-  const ciEvent = makeEvent({ id: 'acme/app#1:ci:x', kind: 'ci', actor: '', isBot: true, summary: 'CI failed: backend-tests', sourceId: 'abc:FAILURE' });
+  // PostPile fetches no checks since 0.21.0; stored notes from before can still talk about CI.
+  const failing = makePr();
   const mention = makeEvent({ kind: 'mention', summary: 'bob: can you look at the cache key?', ruleLoudness: 'loud', ruleReason: 'mentions you' });
   const topic = makeTopic();
   const prompts: Record<string, string> = {
@@ -71,7 +69,7 @@ describe('no prompt carries CI status (DESIGN.md "CI is not a signal")', () => {
             model: 'm',
             createdAt: '2026-09-02T09:00:00Z',
           },
-          events: [ciEvent, mention],
+          events: [mention],
           rule: { loudness: 'loud', reason: 'mentions you', whoseTurn: { kind: 'you', move: 'reply', who: null, what: 'Reply to bob', prKey: failing.key }, why: '@', conversation: false },
           template: { title: 'bob mentioned you', body: 'can you look at the cache key?' },
         },
@@ -86,7 +84,7 @@ describe('no prompt carries CI status (DESIGN.md "CI is not a signal")', () => {
       dossier: null,
       sources: [],
       prs: [failing],
-      events: [ciEvent, mention],
+      events: [mention],
       viewer,
       context: fullContext,
     }),

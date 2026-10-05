@@ -2,9 +2,6 @@ import {
   prKey,
   trimBotBody,
   type CapHit,
-  type CheckContext,
-  type CheckRollup,
-  type Checks,
   type Comment,
   type Commit,
   type Pr,
@@ -23,7 +20,6 @@ import type {
   RawActor,
   RawBaseRefChanges,
   RawBranchPr,
-  RawCheckContext,
   RawComment,
   RawCommit,
   RawConnection,
@@ -33,7 +29,6 @@ import type {
   RawRequestedReviewer,
   RawReview,
   RawReviewThread,
-  RawStatusCheckRollup,
   RawTimelineItem,
 } from './raw.ts';
 
@@ -289,40 +284,6 @@ function toTimelineItem(raw: RawTimelineItem): TimelineItem | null {
   };
 }
 
-function toCheckRollup(state: string | undefined): CheckRollup {
-  switch (state) {
-    case 'SUCCESS':
-      return 'SUCCESS';
-    case 'FAILURE':
-    case 'ERROR':
-      return 'FAILURE';
-    case 'PENDING':
-    case 'EXPECTED':
-      return 'PENDING';
-    default:
-      return 'NONE';
-  }
-}
-
-/** Old-style commit statuses have a state instead of a conclusion; map them onto check-run terms. */
-function toCheckContext(raw: RawCheckContext): CheckContext {
-  if (raw.__typename === 'CheckRun') {
-    return { name: raw.name ?? '', conclusion: raw.conclusion ?? null, completedAt: isoTimeOrNull(raw.completedAt ?? null) };
-  }
-  const rollup = toCheckRollup(raw.state);
-  if (rollup === 'PENDING' || rollup === 'NONE') {
-    return { name: raw.context ?? '', conclusion: null, completedAt: null };
-  }
-  return { name: raw.context ?? '', conclusion: rollup, completedAt: isoTimeOrNull(raw.createdAt ?? null) };
-}
-
-function toChecks(raw: RawStatusCheckRollup | null | undefined): Checks {
-  if (!raw) {
-    return { rollup: 'NONE', contexts: [] };
-  }
-  return { rollup: toCheckRollup(raw.state), contexts: raw.contexts.nodes.map(toCheckContext) };
-}
-
 function pendingReviewers(raw: RawPullRequest): { users: string[]; teams: string[] } {
   const users: string[] = [];
   const teams: string[] = [];
@@ -450,7 +411,6 @@ export function toPr(ref: PrRef, raw: RawPullRequest): Pr {
     comments: allComments(raw, threads),
     threads,
     timeline,
-    checks: toChecks(raw.headCommit.nodes[0]?.commit.statusCheckRollup),
     headOid: raw.headRefOid,
     createdAt: isoTime(raw.createdAt),
     updatedAt: isoTime(raw.updatedAt),
