@@ -315,6 +315,33 @@ minutes later instead of an hour (`BACKLOG_SYNC_MINUTES`), so a backlog
 already show. Before, a year of unread notifications kept the first sync
 running for 20+ minutes.
 
+**Memory on big boards** (2026-10-05, after an out-of-memory crash on a
+heavy install: about 5,000 tiles, 11k PRs, 485k events). The engine runs in
+Electron's main process, whose V8 heap stops at about 4 GB (pointer
+compression; `--max-old-space-size` cannot raise it). `Board.load` reads
+every stored PR and every event, and nothing stored ever ages out (the
+30-day window above only picks what gets fetched), so one board on that
+install held about 350 MB once built and allocated about 800 MB on the way.
+The renderer's refetch, the Dock badge, the poll, catch-ups and the sync
+each built their own, several stayed alive across agent calls, and the
+pr_event `.all()` of the seventh died in `v8::Object::New`. Now:
+
+- `Board.load` hands out the last Board again while the store's change
+  version (`Store.changeVersion`: `total_changes()` plus `PRAGMA
+  data_version`, so a CLI write counts) is the same and it is at most 5 s
+  old (`BOARD_REUSE_MS`; tile rules read minutes). The old Board is let go
+  before a new read. A Board is read-only, so sharing is safe.
+- The PR parse cache fills 200 rows at a time (`PARSE_CHUNK`), and
+  `listForPrs` iterates rows (`each` in store `sql.ts`) instead of one array.
+- At most two glance catch-up runs go at once (`MAX_RUNNING_CATCH_UPS`, see
+  "Glance catch-up"): each holds boards across its agent calls.
+
+Measured on a 14x copy of a normal database: a refetch storm went from 6
+boards and 8 s to one, a cold start fits in 1.7 GB (needed 3.4), and 20
+readers without writes between stay at 1.9 GB (died at the seventh). Still
+open: what is stored never shrinks, so a board keeps growing with the inbox
+(NEXT.md "GitHub writes on by default", and the bound on the board).
+
 **Reconciling with GitHub's read time.** Every event on a thread from before
 that thread's `last_read_at` counts as seen, stamped with that time, whenever
 the app learns it (core `eventsReadOnGitHub`), not only on a PR's first
@@ -3625,7 +3652,9 @@ is still subscribed.
 **The lock.** GitHub writes are a runtime switch (`WriteSwitch` in
 engine `writes/`), off (read-only) on first run, flipped by the lock in the
 status footer (`POST /api/github-writes {enabled}`), kept in meta
-`github_writes` so it survives restarts. While off the switch hands out the
+`github_writes` so it survives restarts (decided 2026-10-05, not built yet:
+on by default, and a locked heavy inbox stops PostPile at thresholds, see
+NEXT.md "GitHub writes on by default"). While off the switch hands out the
 `ReadOnlyWriter`, so a path that forgets to ask still cannot write.
 `POSTPILE_READ_ONLY=1` never builds the real write client; the lock
 then shows disabled with the reason and turning it on answers `ok: false`.
@@ -5536,8 +5565,16 @@ still use begin/end, they never overlap).
 request for a topic whose run is going marks exactly one follow-up; more
 requests in the meantime change nothing. The follow-up starts when the run
 ends, so it sees everything that arrived meanwhile. Different topics run
-side by side; the runner's limiter (`POSTPILE_AGENT_CONCURRENCY`) caps the
-calls.
+side by side, at most two at once (`MAX_RUNNING_CATCH_UPS`, 2026-10-05:
+each run holds boards across its agent calls, and a poll with news in many
+topics ran a heavy install out of memory). A request beyond that waits its
+turn, first come first served; a topic's follow-up goes to the back of the
+line, so one busy topic cannot keep the others waiting. While runs may not
+start (a consolidation, the agent off) the line keeps them, their events
+are stored and no later poll asks again; the queue resumes when a
+consolidation ends and on every poll cycle. Only a full sync drops it, as
+it covers every topic. The runner's limiter (`POSTPILE_AGENT_CONCURRENCY`)
+caps the calls.
 
 **Never beside a full sync or consolidation**: a request while one runs is
 skipped (the sync covers every topic; the poll is blocked then anyway). A
@@ -5989,7 +6026,10 @@ topic names are never event props.
    trigger `start`/`manual`/`auto`, auto = the hourly background sync,
    gh_requests = GitHub requests made while it ran, gh_core_remaining_pct and
    gh_graphql_remaining_pct = the lowest whole percent of that limit left
-   during the sync, absent when no answer carried it),
+   during the sync, absent when no answer carried it, writes_on = GitHub
+   writes on when it ended, since 2026-10-05), `github_writes_changed`
+   (enabled: the footer lock opened or closed, 2026-10-05; with writes
+   locked PostPile cannot mark anything read, so a heavy inbox only grows),
    `catch_up_ran` (topics, always 1; agent_calls, duration_ms, ok: one glance
    catch-up run after the poll), `sync_failed` (error_kind, currently only
    `gh_unavailable`: a blocked sync never runs), `rate_limited` (source

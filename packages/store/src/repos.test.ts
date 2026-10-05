@@ -119,6 +119,13 @@ describe('PrRepo', () => {
     expect(store.prs.getMany(['acme/app#1']).get('acme/app#1')?.title).toBe('second');
   });
 
+  it('lists every snapshot when the cache fills in several chunks', () => {
+    for (let number = 1; number <= 450; number++) {
+      store.prs.upsert(makePr({ number }), at(1));
+    }
+    expect(store.prs.listAll().map((pr) => pr.ref.number)).toEqual(Array.from({ length: 450 }, (_, index) => index + 1));
+  });
+
   it('sees snapshots written by another connection', () => {
     const dir = mkdtempSync(join(tmpdir(), 'postpile-prs-'));
     const reader = Store.open(join(dir, 'db.sqlite'));
@@ -523,6 +530,35 @@ describe('Store.transaction', () => {
     });
     expect(value).toBe(42);
     expect(store.meta.get('a')).toBe('1');
+  });
+});
+
+describe('Store.changeVersion', () => {
+  it('stays put on reads and moves on every changed row', () => {
+    const start = store.changeVersion();
+    store.prs.listAll();
+    store.meta.get('a');
+    expect(store.changeVersion()).toBe(start);
+    store.meta.set('a', '1');
+    const afterWrite = store.changeVersion();
+    expect(afterWrite).not.toBe(start);
+    store.prs.upsert(makePr(), at(0));
+    expect(store.changeVersion()).not.toBe(afterWrite);
+  });
+
+  it('moves when another connection commits', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'postpile-version-'));
+    const reader = Store.open(join(dir, 'db.sqlite'));
+    const writer = Store.open(join(dir, 'db.sqlite'));
+    try {
+      const start = reader.changeVersion();
+      writer.meta.set('a', '1');
+      expect(reader.changeVersion()).not.toBe(start);
+    } finally {
+      reader.close();
+      writer.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

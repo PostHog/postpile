@@ -6,6 +6,15 @@ now".
 
 ## Done
 
+- Memory on big boards (2026-10-05, DESIGN.md "Memory on big boards"): a
+  heavy install (about 5,000 tiles, 11k PRs, 485k events, on 0.16) crashed
+  out of memory in the main process. Boards are now shared per data change
+  (5 s at most), the PR parse cache fills in chunks, events are iterated,
+  and at most two catch-up runs go at once. Telemetry gained
+  `github_writes_changed` and `writes_on` on `sync_completed`. Reproduced
+  and measured on a 14x copy of a normal database. Still open: nothing
+  stored ages out, so the board keeps growing (see Decided "GitHub writes
+  on by default").
 - Interruptions (2026-10-05, DESIGN.md "Interruptions"): Mac notifications
   are opt-in. Three modes, kept in meta `interruptions_mode`: never (the
   default, nothing reaches the Mac), in batches (a roundup at 9:30, 13:30
@@ -1179,6 +1188,24 @@ the app meanwhile.
   code-manager folder migration (`legacy-data.ts`) once the move has run.
 
 ## Decided
+
+- **GitHub writes on by default; locked writes choke PostPile** (2026-10-05,
+  not built yet): PostPile can only shed load by marking things read on
+  GitHub (quiet reads, the inbox cleanup, mark read), so with the lock
+  closed a heavy inbox only grows. Telemetry the same day: only 2 of 14
+  installs show writes on (approvals, quiet reads); the two heavy installs
+  (150 to 300 PR updates an hour, one with about 6,000 PRs on the board,
+  which crashed out of memory on 0.16) show none, and the one heavy board
+  that shrank (1,254 to 362 tiles) had writes on. Decided: writes are on by
+  default; the lock stays as an opt-out, and `POSTPILE_READ_ONLY=1` still
+  forces read-only (dev sessions keep using it). With writes locked,
+  PostPile stops taking on more work once it runs into thresholds (defined
+  later: board size, tracked PRs, activity rate), says why, and offers the
+  inbox cleanup or a fresh start instead of growing until it runs out of
+  memory. Open: the thresholds, what stopping means exactly, what existing
+  locked installs get (switched on, or asked once), and telemetry for the
+  lock state (a `github_writes_changed` event, `writes_on` on
+  `sync_completed`; today it can only be inferred).
 
 - **A helper, not an interrupter** (2026-10-05, DESIGN.md Product model,
   AGENTS.md focus): team feedback valued the digests and the agent layer,

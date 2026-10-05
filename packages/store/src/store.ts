@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { inTransaction, openDatabase, openDatabaseReadOnly } from './database.ts';
+import { one } from './sql.ts';
 import { ActionLogRepo } from './repos/action-log.ts';
 import { AgentCallRepo } from './repos/agent-calls.ts';
 import { ChatRepo } from './repos/chat.ts';
@@ -102,6 +103,18 @@ export class Store {
   /** An existing database, read-only and without migrations (see openDatabaseReadOnly). */
   static openReadOnly(path: string): Store {
     return new Store(openDatabaseReadOnly(path));
+  }
+
+  /**
+   * Moves whenever a row may have changed: on this connection
+   * (total_changes counts every inserted, updated or deleted row) or on
+   * another one, like the CLI's (data_version). Equal values mean the same
+   * data, so a result read from it can be reused.
+   */
+  changeVersion(): string {
+    const changes = one<{ changes: number }>(this.db, 'SELECT total_changes() AS changes');
+    const data = one<{ data_version: number }>(this.db, 'PRAGMA data_version');
+    return `${changes?.changes ?? 0}:${data?.data_version ?? 0}`;
   }
 
   /** Runs fn in one transaction across repositories. fn must be synchronous. */

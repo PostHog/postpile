@@ -9,6 +9,11 @@ export function all<T>(db: DatabaseSync, sql: string, ...params: SqlValue[]): T[
   return db.prepare(sql).all(...params) as unknown as T[];
 }
 
+/** Rows one at a time, for big reads: the rows never sit in memory as one array next to what they are mapped to. */
+export function each<T>(db: DatabaseSync, sql: string, ...params: SqlValue[]): Iterable<T> {
+  return db.prepare(sql).iterate(...params) as unknown as Iterable<T>;
+}
+
 export function one<T>(db: DatabaseSync, sql: string, ...params: SqlValue[]): T | null {
   const row = db.prepare(sql).get(...params) as unknown as T | undefined;
   return row ?? null;

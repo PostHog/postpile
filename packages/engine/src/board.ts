@@ -62,6 +62,23 @@ function notYoursKeys(store: Store, keys: PrKey[]): Set<PrKey> {
   return result;
 }
 
+/** How long a loaded Board answers later loads of unchanged data. Tile state reads times in minutes and up. */
+export const BOARD_REUSE_MS = 5_000;
+
+/** A Board loaded at `loadedAt` can stand in for one at `now`: not earlier, and not more than BOARD_REUSE_MS later. */
+function isReusableAt(loadedAt: string, now: string): boolean {
+  const age = Date.parse(now) - Date.parse(loadedAt);
+  return age >= 0 && age <= BOARD_REUSE_MS;
+}
+
+interface LoadedBoard {
+  version: string;
+  board: Board;
+}
+
+/** The last Board loaded per store (`Board.load`). */
+const lastLoaded = new WeakMap<Store, LoadedBoard>();
+
 export class Board {
   readonly stacks: Stack[];
   /** The one topic each stack shows in, by stack id. */
@@ -135,7 +152,28 @@ export class Board {
     return this.stackKeysOf(key).filter((layer) => layer === key || this.memberships.has(layer) || this.isTracked(layer));
   }
 
+  /**
+   * The Board of the store as it is now. A Board loaded from the same data
+   * (`Store.changeVersion`) at most BOARD_REUSE_MS earlier is handed out
+   * again: on a busy install one load holds hundreds of MB, and a refetch
+   * after a poll, the Dock badge and a catch-up each loading their own went
+   * past the main process's 4 GB heap. A Board is read-only, so sharing it
+   * is safe; its `now` is then up to BOARD_REUSE_MS behind the caller's.
+   */
   static load(store: Store, now: string): Board {
+    const version = store.changeVersion();
+    const last = lastLoaded.get(store);
+    if (last && last.version === version && isReusableAt(last.board.now, now)) {
+      return last.board;
+    }
+    // Let go of the old Board before reading the new one, so both never sit in memory for the cache's sake.
+    lastLoaded.delete(store);
+    const board = Board.read(store, now);
+    lastLoaded.set(store, { version, board });
+    return board;
+  }
+
+  private static read(store: Store, now: string): Board {
     const prs = new Map(store.prs.listAll().map((pr) => [pr.key, pr]));
     const keys = [...prs.keys()];
     const events = store.events.listForPrs(keys);

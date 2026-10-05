@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CatchUpQueue } from './catch-up-queue.ts';
+import { CatchUpQueue, MAX_RUNNING_CATCH_UPS } from './catch-up-queue.ts';
 
 /** A run the test ends by hand. */
 interface HeldRun {
@@ -53,11 +53,73 @@ describe('CatchUpQueue', () => {
     const { queue, runs } = heldQueue();
 
     queue.request('depot');
-    queue.request('billing');
     queue.request(null);
 
-    expect(runs.map((run) => run.topicId)).toEqual(['depot', 'billing', null]);
+    expect(runs.map((run) => run.topicId)).toEqual(['depot', null]);
     expect(queue.stateOf(null)).toBe('running');
+  });
+
+  it('runs at most two topics at once; the others wait their turn, first come first served', async () => {
+    const { queue, runs } = heldQueue();
+    expect(MAX_RUNNING_CATCH_UPS).toBe(2);
+
+    expect(queue.request('depot')).toBe('started');
+    expect(queue.request('billing')).toBe('started');
+    expect(queue.request('ingest')).toBe('queued');
+    expect(queue.requestGlance('replay', 'acme/app#7')).toBe('queued');
+    expect(queue.requestGlance('replay', 'acme/app#8')).toBe('queued');
+    expect(queue.request('ingest')).toBe('queued');
+    expect(queue.stateOf('ingest')).toBe('queued');
+    // A follow-up for a running topic goes to the back of the line.
+    expect(queue.request('depot')).toBe('queued');
+    expect(runs).toHaveLength(2);
+
+    runs[0]!.finish();
+    await settle();
+    expect(runs.map((run) => run.topicId)).toEqual(['depot', 'billing', 'ingest']);
+    runs[1]!.finish();
+    await settle();
+    expect(runs[3]).toMatchObject({ topicId: 'replay', prKeys: ['acme/app#7', 'acme/app#8'] });
+    runs[2]!.finish();
+    await settle();
+    expect(runs.map((run) => run.topicId)).toEqual(['depot', 'billing', 'ingest', 'replay', 'depot']);
+  });
+
+  it('keeps the waiting line while runs may not start, and resumes it after', async () => {
+    let consolidating = false;
+    const { queue, runs } = heldQueue(() => !consolidating);
+
+    queue.request('depot');
+    queue.request('billing');
+    queue.request('ingest');
+    queue.request('depot');
+    consolidating = true;
+    runs[0]!.finish();
+    runs[1]!.finish();
+    await settle();
+    // Nothing starts, and nothing is lost.
+    expect(runs).toHaveLength(2);
+    expect(queue.stateOf('ingest')).toBe('queued');
+    expect(queue.stateOf('depot')).toBe('queued');
+
+    consolidating = false;
+    queue.resume();
+    expect(runs.slice(2).map((run) => run.topicId)).toEqual(['ingest', 'depot']);
+  });
+
+  it('drops the waiting line when a sync takes over', async () => {
+    let syncing = false;
+    const { queue, runs } = heldQueue(() => !syncing);
+
+    queue.request('depot');
+    queue.request('billing');
+    queue.request('ingest');
+    syncing = true;
+    queue.dropQueued();
+    runs[0]!.finish();
+    await settle();
+    expect(runs).toHaveLength(2);
+    expect(queue.stateOf('ingest')).toBeNull();
   });
 
   it('skips requests while it may not start, and drops the follow-up when a sync takes over', async () => {

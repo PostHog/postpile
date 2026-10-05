@@ -21,6 +21,14 @@ interface RunningTopic {
   done: Promise<void>;
 }
 
+/**
+ * Catch-up runs going at once, across topics. Each run holds a board (all
+ * PRs and events, hundreds of MB on a heavy install) across its agent
+ * calls; a poll with news in many topics started a run per topic and ran
+ * the main process out of memory (2026-10-05).
+ */
+export const MAX_RUNNING_CATCH_UPS = 2;
+
 /** Map key for a topic; Unsorted gets one no real topic id can have. */
 function keyOf(topicId: string | null): string {
   return topicId ?? '\u0000unsorted';
@@ -35,20 +43,46 @@ function keyOf(topicId: string | null): string {
  * everything that arrived meanwhile; a whole-topic follow-up also covers
  * the queued glances. canStart() says no while a full sync or a
  * consolidation runs: the request is skipped, the sync covers it.
- * changes() grows on every queue, start and end, so the renderer knows
- * when to refetch.
+ * At most MAX_RUNNING_CATCH_UPS runs go at once: a request for another
+ * topic beyond that waits its turn, first come first served, and a topic's
+ * follow-up goes to the back of that line so one busy topic cannot keep
+ * the others waiting. changes() grows on every queue, start and end, so
+ * the renderer knows when to refetch.
  */
 export class CatchUpQueue {
   private readonly running = new Map<string, RunningTopic>();
   private readonly queued = new Set<string>();
   private readonly queuedGlances = new Map<string, Set<PrKey>>();
+  /** Topics with a queued run and no run going, in the order they get a free slot. */
+  private readonly waiting = new Map<string, string | null>();
   private changeCount = 0;
 
   constructor(
     private readonly runners: CatchUpRunners,
     private readonly canStart: () => boolean,
     private readonly log: (line: string) => void = (line) => console.log(line),
+    private readonly maxRunning: number = MAX_RUNNING_CATCH_UPS,
   ) {}
+
+  private isFull(): boolean {
+    return this.running.size >= this.maxRunning;
+  }
+
+  /** A topic's queued run waits for a free slot, behind the ones already waiting; one already waiting keeps its place. */
+  private wait(topicId: string | null): void {
+    const key = keyOf(topicId);
+    if (!this.waiting.has(key)) {
+      this.waiting.set(key, topicId);
+    }
+  }
+
+  /** Queues the PR's glance for the topic's next run. */
+  private queueGlance(key: string, prKey: PrKey): void {
+    const glances = this.queuedGlances.get(key) ?? new Set<PrKey>();
+    glances.add(prKey);
+    this.queuedGlances.set(key, glances);
+    this.changeCount += 1;
+  }
 
   private start(topicId: string | null, prKeys: PrKey[] | null): void {
     const key = keyOf(topicId);
@@ -61,20 +95,34 @@ export class CatchUpQueue {
       .finally(() => {
         this.running.delete(key);
         this.changeCount += 1;
-        this.startFollowUp(topicId);
+        if (this.queued.has(key) || this.queuedGlances.has(key)) {
+          this.wait(topicId);
+        }
+        this.startWaiting();
       });
     this.running.set(key, { topicId, prKeys, done });
   }
 
-  /** The queued follow-up, if any: a whole-topic run wins over (and covers) queued glances. */
-  private startFollowUp(topicId: string | null): void {
+  /**
+   * Fills the free slots from the line of waiting topics. While runs may
+   * not start (a consolidation, the agent off) the line keeps them: their
+   * events are stored, so no later poll asks for them again. resume() picks
+   * them up; only a full sync drops them (dropQueued), as it covers them.
+   */
+  private startWaiting(): void {
+    while (!this.isFull() && this.waiting.size > 0 && this.canStart()) {
+      const [key, topicId] = this.waiting.entries().next().value!;
+      this.waiting.delete(key);
+      this.startQueued(topicId);
+    }
+  }
+
+  /** The topic's queued run: a whole-topic run wins over (and covers) queued glances. */
+  private startQueued(topicId: string | null): void {
     const key = keyOf(topicId);
     const whole = this.queued.delete(key);
     const glances = this.queuedGlances.get(key);
     this.queuedGlances.delete(key);
-    if (!this.canStart()) {
-      return;
-    }
     if (whole) {
       this.start(topicId, null);
     } else if (glances) {
@@ -82,9 +130,16 @@ export class CatchUpQueue {
     }
   }
 
+  /** Starts what waited while runs could not start (a consolidation ended, a poll cycle with the agent back). */
+  resume(): void {
+    this.startWaiting();
+  }
+
   request(topicId: string | null): CatchUpRequest {
     const key = keyOf(topicId);
-    if (this.running.has(key)) {
+    // Topics already waiting go first.
+    this.startWaiting();
+    if (this.running.has(key) || this.waiting.has(key)) {
       if (!this.queued.has(key)) {
         this.queued.add(key);
         this.changeCount += 1;
@@ -93,6 +148,12 @@ export class CatchUpQueue {
     }
     if (!this.canStart()) {
       return 'skipped';
+    }
+    if (this.isFull()) {
+      this.queued.add(key);
+      this.changeCount += 1;
+      this.wait(topicId);
+      return 'queued';
     }
     this.start(topicId, null);
     return 'started';
@@ -108,18 +169,21 @@ export class CatchUpQueue {
    */
   requestGlance(topicId: string | null, prKey: PrKey): GlanceRequest {
     const key = keyOf(topicId);
+    this.startWaiting();
     if (this.queued.has(key) || this.queuedGlances.get(key)?.has(prKey)) {
       return 'covered';
     }
-    if (this.running.has(key)) {
-      const glances = this.queuedGlances.get(key) ?? new Set<PrKey>();
-      glances.add(prKey);
-      this.queuedGlances.set(key, glances);
-      this.changeCount += 1;
+    if (this.running.has(key) || this.waiting.has(key)) {
+      this.queueGlance(key, prKey);
       return 'queued';
     }
     if (!this.canStart()) {
       return 'skipped';
+    }
+    if (this.isFull()) {
+      this.queueGlance(key, prKey);
+      this.wait(topicId);
+      return 'queued';
     }
     this.start(topicId, [prKey]);
     return 'started';
@@ -152,6 +216,7 @@ export class CatchUpQueue {
     if (this.queued.size > 0 || this.queuedGlances.size > 0) {
       this.queued.clear();
       this.queuedGlances.clear();
+      this.waiting.clear();
       this.changeCount += 1;
     }
   }

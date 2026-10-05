@@ -48,6 +48,19 @@ describe('engine telemetry', () => {
     expect(h.telemetry.events.map((e) => e.event)).not.toContain('first_sync_completed');
   });
 
+  it('says when the writes lock opens or closes, and whether writes were on at the end of a sync', async () => {
+    const h = makeHarness({ writesEnabled: false });
+    h.reader.addPr(pr, makeThreadFor(pr));
+    await h.engine.sync({ maxAgentCalls: 0 });
+    expect(h.telemetry.events.find((e) => e.event === 'sync_completed')?.props).toMatchObject({ writes_on: false });
+
+    h.telemetry.events.length = 0;
+    await h.engine.setGitHubWrites(true);
+    await h.engine.sync({ maxAgentCalls: 0 });
+    expect(h.telemetry.events.find((e) => e.event === 'github_writes_changed')?.props).toEqual({ enabled: true });
+    expect(h.telemetry.events.find((e) => e.event === 'sync_completed')?.props).toMatchObject({ writes_on: true });
+  });
+
   it('reports a sync that throws halfway as sync_failed, not sync_completed', async () => {
     const h = makeHarness();
     h.reader.addPr(pr, makeThreadFor(pr));

@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { EventKind, Loudness, LoudnessOverride, PrEvent, PrKey } from '@postpile/core';
 import { inTransaction } from '../database.ts';
-import { all, fromBool, placeholders, run, toBool } from '../sql.ts';
+import { all, each, fromBool, placeholders, run, toBool } from '../sql.ts';
 
 export interface EventRow {
   id: string;
@@ -144,7 +144,7 @@ export class EventRepo {
     if (prKeys.length === 0) {
       return result;
     }
-    const rows = all<EventRow>(
+    const rows = each<EventRow>(
       this.db,
       // pr_key first so the rows come straight from the (pr_key, at, id) index, no sort.
       `SELECT * FROM pr_event WHERE pr_key IN (${placeholders(prKeys.length)}) ORDER BY pr_key, at, id`,
