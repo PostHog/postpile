@@ -379,6 +379,34 @@ describe('topic proposals', () => {
     expect(h.store.topics.get('depot')?.name).toBe('Depot runners');
     expect((await h.engine.decideTopicProposal('p1', true)).ok).toBe(false);
   });
+  it('carries the merged topic\'s chat into the target on an accepted merge', async () => {
+    const h = await synced();
+    h.store.topics.create(topic('depot'));
+    h.store.topics.create(topic('runners'));
+    h.store.memberships.assign({ prKey: pr.key, topicId: 'depot', assignedBy: 'agent', reason: '', createdAt: at(0) });
+    h.runner.answer('chat', { reply: 'Noted.', lasting: null });
+    await h.engine.topicChat('depot', 'cache keys matter here');
+    h.store.proposals.add({
+      id: 'p2',
+      kind: 'merge',
+      topicId: 'depot',
+      name: null,
+      intoTopicId: 'runners',
+      fromArea: null,
+      prKeys: [],
+      reason: 'same work',
+      status: 'pending',
+      createdAt: at(1),
+      decidedAt: null,
+      source: 'consolidation',
+      client: null,
+    });
+
+    expect((await h.engine.decideTopicProposal('p2', true)).ok).toBe(true);
+
+    expect((await h.engine.getTopicChat('runners')).map((m) => m.text)).toEqual(['cache keys matter here', 'Noted.']);
+    expect(await h.engine.getTopicChat('depot')).toEqual([]);
+  });
 });
 
 describe('comments', () => {

@@ -115,7 +115,16 @@ export function App() {
   const finishedIds = new Set((finished.data ?? []).map((entry) => entry.id));
   // Navigation is a back / forward history; the current entry is what the user picked.
   const nav = useNavHistory(new Set([...items.map((item) => item.topic.id), ...finishedIds]));
-  useNavShortcuts(nav.back, nav.forward);
+  // Back and forward pick another entry like any pick: the agent pane closes first, as in go().
+  const back = () => {
+    setAgentRequest(null);
+    nav.back();
+  };
+  const forward = () => {
+    setAgentRequest(null);
+    nav.forward();
+  };
+  useNavShortcuts(back, forward);
   const pane = nav.current.pane;
   // A blank query filters nothing, even while react-query still holds the last answer.
   const filter = searchFilter(query.trim() === '' ? undefined : search.data);
@@ -359,8 +368,8 @@ export function App() {
           <TitleBar
             canBack={nav.canBack}
             canForward={nav.canForward}
-            onBack={nav.back}
-            onForward={nav.forward}
+            onBack={back}
+            onForward={forward}
             search={<SearchField value={query} onChange={setQuery} />}
             repoScope={<RepoScopeMenu />}
           />

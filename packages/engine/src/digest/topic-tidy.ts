@@ -1,5 +1,6 @@
 import type { TidyDestination, TidyTopic, TopicTidyResult } from '@postpile/agent';
 import { cleanTopicName, lastJoinAt, newTopic, takesNewPrs, type PrKey, type Topic, type TopicProposal } from '@postpile/core';
+import { moveTopicChat } from '../actions/chat-actions.ts';
 import { Board, UNSORTED_TOPIC_ID } from '../board.ts';
 import { errorText } from '../errors.ts';
 import { newProposalId, newTopicId } from '../ids.ts';
@@ -122,6 +123,7 @@ export class TopicTidy {
         for (const membership of store.memberships.listForTopic(from)) {
           store.memberships.assign({ ...membership, topicId: merge.intoTopicId, assignedBy: 'agent', reason: merge.reason, createdAt: at });
         }
+        moveTopicChat(store, from, merge.intoTopicId);
         changeTopicStatus(store, from, 'archive', at);
         this.record({ kind: 'merge', topicId: from, name: null, intoTopicId: merge.intoTopicId, reason: merge.reason }, at);
       }

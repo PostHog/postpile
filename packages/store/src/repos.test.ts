@@ -454,6 +454,18 @@ describe('ChatRepo', () => {
     expect(store.chat.get(999)).toBeNull();
   });
 
+  it('moves a merged topic\'s messages and its topic chat to the target', () => {
+    store.chat.add({ tileId: 'topic:old', topicId: 'old', role: 'user', text: 'first', createdAt: at(0) });
+    store.chat.add({ tileId: 'topic:new', topicId: 'new', role: 'user', text: 'second', createdAt: at(1) });
+    store.chat.add({ tileId: 'pr:a/b#1', topicId: 'old', role: 'user', text: 'tile', createdAt: at(2) });
+
+    store.chat.moveTopic('old', 'new', 'topic:old', 'topic:new');
+
+    expect(store.chat.listForTile('topic:new').map((m) => m.text)).toEqual(['first', 'second']);
+    expect(store.chat.listForTile('topic:old')).toEqual([]);
+    expect(store.chat.listUserForTopicSince('new', '', 10).map((m) => m.text)).toEqual(['first', 'second', 'tile']);
+  });
+
   it('lists the own messages of the user in a topic after a time, newest ones, oldest first', () => {
     store.chat.add({ tileId: 't1', topicId: 'topic-1', role: 'user', text: 'old', createdAt: at(0) });
     store.chat.add({ tileId: 't1', topicId: 'topic-1', role: 'agent', text: 'reply', createdAt: at(2) });

@@ -10,6 +10,11 @@ export function topicChatId(topicId: string): string {
   return `topic:${topicId}`;
 }
 
+/** A topic merge carries its chat along: the history shows in the target's agent pane and feeds its dossier. */
+export function moveTopicChat(store: Store, from: string, to: string): void {
+  store.chat.moveTopic(from, to, topicChatId(from), topicChatId(to));
+}
+
 /**
  * The topic's agent chat ("Ask the agent" on the topic header, 2026-10-05).
  * A lasting point comes back for the user to place; nothing is stored until

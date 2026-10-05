@@ -1460,7 +1460,9 @@ rest), the history and the topic's prompt context. Unsorted works too; its
 lasting point comes back with `topicId: null`. It is the only chat on a
 topic: the tile chat (routes, engine, the prompt's tile mode) was removed
 once the renderer stopped using it; old tile chat rows stay in
-`chat_message` and still reach the dossier through `topic_id`. A turn's
+`chat_message` and still reach the dossier through `topic_id`. A topic
+merge (accepted proposal or the topic tidy) moves the merged topic's
+messages and its chat to the target (`moveTopicChat`). A turn's
 two messages are stored together once the answer is in: a failed call
 stores nothing, so the history never holds an unanswered message.
 
