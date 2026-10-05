@@ -579,12 +579,25 @@ export class Engine implements EngineService {
     await this.refreshAfterWrite(key);
   }
 
-  /** One catch-up run for each topic, coalesced by the queue; the quiet wait counts from here. */
-  private startCatchUps(topicIds: (string | null)[]): void {
+  /** One catch-up run for each topic, coalesced by the queue; the quiet wait counts from here. Returns the topics the queue skipped. */
+  private startCatchUps(topicIds: (string | null)[]): (string | null)[] {
+    const skipped: (string | null)[] = [];
     for (const topicId of topicIds) {
-      this.catchUps.request(topicId);
-      this.quietCatchUps.noteRun(topicId);
+      if (this.catchUps.request(topicId) === 'skipped') {
+        skipped.push(topicId);
+      } else {
+        this.quietCatchUps.noteRun(topicId);
+      }
     }
+    return skipped;
+  }
+
+  /**
+   * Quiet topics whose wait ended. One the queue skips (the agent is off) goes
+   * back on the list: its events are stored, so no later poll reports them again.
+   */
+  private startDueQuietCatchUps(): void {
+    this.quietCatchUps.add(this.startCatchUps(this.quietCatchUps.due()));
   }
 
   /** Topics the poll brought news for: loud ones run now, quiet ones once their wait is over. Off with a cap of 0. */
@@ -594,15 +607,15 @@ export class Engine implements EngineService {
     }
     this.startCatchUps(topics.now);
     this.quietCatchUps.add(topics.quiet);
-    this.startCatchUps(this.quietCatchUps.due());
+    this.startDueQuietCatchUps();
   }
 
-  /** Every poll cycle, news or not: quiet topics whose wait ended. Not while a sync or consolidation runs (the queue skips them). */
-  private startDueQuietCatchUps(): void {
+  /** Every poll cycle, news or not. Not while a sync or consolidation runs: the list waits for the next cycle. */
+  private startDueQuietCatchUpsAfterPoll(): void {
     if (this.catchUpCap.perDay === 0 || this.syncing || this.consolidating) {
       return;
     }
-    this.startCatchUps(this.quietCatchUps.due());
+    this.startDueQuietCatchUps();
   }
 
   /** The poll hit GitHub's rate limit: the same event a sync sends, marked as the poll's. Never throws. */
@@ -783,7 +796,7 @@ export class Engine implements EngineService {
         .run(focus)
         .then((cycle) => {
           this.summarizePings();
-          this.startDueQuietCatchUps();
+          this.startDueQuietCatchUpsAfterPoll();
           return cycle;
         })
         .catch((error: unknown) => {

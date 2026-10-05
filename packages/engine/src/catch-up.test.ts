@@ -164,6 +164,35 @@ describe('glance catch-up after a poll', () => {
     expect((await h.engine.getPr(pr.key))?.glanceStale).toBe(true);
   });
 
+  it('keeps a due quiet topic waiting while claude is off, and runs it once claude is back', async () => {
+    let at = new Date(NOW).getTime();
+    const { h, pr } = await syncedTopic({ now: () => new Date(at) });
+    const quietComment = (id: string, minute: string) => {
+      const updatedAt = `2026-09-02T12:${minute}:00.000Z`;
+      const next = { ...pr, updatedAt, comments: [makeComment({ id, author: 'bob', body: `Note ${id}.`, createdAt: updatedAt })] };
+      h.reader.addPr(next, makeThreadFor(next, { updatedAt }));
+      h.reader.etag = `etag-${id}`;
+      h.runner.answer('ping_decision', { decisions: [] });
+    };
+    quietComment('q1', '01');
+    await h.engine.pollOnce();
+    await vi.waitFor(() => expect(catchUpRunIds(h)).toHaveLength(1));
+    at += 5 * 60_000;
+    quietComment('q2', '05');
+    await h.engine.pollOnce();
+
+    at += 10 * 60_000;
+    h.commands.missing.add('claude');
+    await h.engine.checkTools();
+    await h.engine.pollOnce();
+    expect(catchUpRunIds(h)).toHaveLength(1);
+
+    h.commands.missing.delete('claude');
+    await h.engine.checkTools();
+    await h.engine.pollOnce();
+    await vi.waitFor(() => expect(catchUpRunIds(h)).toHaveLength(2));
+  });
+
   it('leaves a bot comment for the next full sync', async () => {
     const { h, pr } = await syncedTopic();
     const next = { ...pr, updatedAt: LATER, comments: [makeComment({ id: 'c3', author: 'github-actions[bot]', body: 'Bundle size: +2 KB', createdAt: FRESH })] };
