@@ -39,8 +39,8 @@ function noiseComment(pr: FullPr, id: string, author: string, body: string, at: 
 }
 
 /**
- * The PR with bot talk by `person` (a person's login, never the viewer's:
- * the viewer speaking counts as their touch, which is a different rule).
+ * The PR with bot talk by `person`, a person's login, the viewer's
+ * included: their own bot talk is no touch either (2026-10-06).
  */
 export function withBotTalk(pr: FullPr, person: string): FullPr {
   const start = newestTime(pr);

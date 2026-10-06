@@ -159,6 +159,11 @@ export class LessonRepo {
     );
   }
 
+  /** The same review with replies to bots dropped (`reviewNow` trimmed): the line, its status and its join stay. */
+  setReview(id: number, review: LessonReview): void {
+    run(this.db, 'UPDATE lesson SET review_json = ? WHERE id = ?', JSON.stringify(review), id);
+  }
+
   setTopic(id: number, topicId: string): void {
     run(this.db, 'UPDATE lesson SET topic_id = ? WHERE id = ?', topicId, id);
   }

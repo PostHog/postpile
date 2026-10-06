@@ -115,6 +115,29 @@ describe('lessons from change requests', () => {
   });
 });
 
+describe('lessons stored with replies to bots', () => {
+  it('drop the reply and keep the written line', async () => {
+    const { h, pr, reviewed, setClock } = await requestChangesAfter((p) => glance(p));
+    const [first] = lessonsFor(h, pr.key);
+    h.store.lessons.setWritten(first!.id, { text: LINE, why: 'stated inline', status: 'open', joinedId: null });
+    // Stored before replies to bots left the lesson context: the viewer's "fixed" to greptile rides along.
+    const opener = makeComment({ id: 'g1', author: 'greptile-apps[bot]', kind: 'review_comment', path: 'core/y.ts', body: 'Possible null dereference', createdAt: '2026-09-02T11:40:00.000Z', threadId: 'th-bot' });
+    const fixed = makeComment({ id: 'c-fixed', author: viewer.login, kind: 'review_comment', path: 'core/y.ts', body: 'fixed', createdAt: '2026-09-02T11:43:00.000Z', threadId: 'th-bot' });
+    h.store.lessons.setReview(first!.id, { ...first!.review!, comments: [...first!.review!.comments, { id: 'c-fixed', path: 'core/y.ts', body: 'fixed' }] });
+
+    setClock('2026-09-02T12:10:00.000Z');
+    const withBot: FullPr = {
+      ...reviewed,
+      updatedAt: '2026-09-02T12:05:00.000Z',
+      comments: [opener, fixed, inline],
+      threads: [{ id: 'th-bot', path: 'core/y.ts', isResolved: false, comments: [opener, fixed] }],
+    };
+    await onGitHub(h, withBot, '2026-09-02T12:05:00.000Z');
+    expect(h.store.lessons.get(first!.id)).toMatchObject({ status: 'open', text: LINE, review: { comments: [{ id: 'c-me' }] } });
+    expect(h.store.lessons.get(first!.id)!.review!.comments).toHaveLength(1);
+  });
+});
+
 describe('joined lessons follow their review', () => {
   it('restarts a joined lesson whose review was edited, and withdraws one whose review is gone', async () => {
     const { h, pr, reviewed, setClock } = await requestChangesAfter((p) => glance(p));

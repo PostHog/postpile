@@ -553,7 +553,8 @@ export function expectedSnoozePhase(input: { pr: Pr; events: PrEvent[]; viewer: 
   const condition = snooze.condition;
   switch (condition.kind) {
     case 'someone_replies':
-      return after.some((event) => REPLY_KINDS.includes(event.kind) && !isBotThreadAnswer(pr, event) && !isAutomationEvent(pr, viewer, event) && !isViewerLogin(viewer, event.actor))
+      // Bot talk answers nobody (2026-10-06): chatter is the event's data, eventsMatchTheSnapshot checks it.
+      return after.some((event) => REPLY_KINDS.includes(event.kind) && !event.chatter && !isBotThreadAnswer(pr, event) && !isAutomationEvent(pr, viewer, event) && !isViewerLogin(viewer, event.actor))
         ? 'over'
         : 'active';
     case 'new_push':

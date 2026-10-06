@@ -11,8 +11,8 @@ import type { Pr, PrEvent, Viewer } from './types.ts';
 
 /**
  * Most important first: asks, merged or closed without review, verdicts,
- * comments, other people's events (a reply to a bot in a review thread
- * and the empty review GitHub wraps a thread reply in among them), automation.
+ * comments, other people's events (bot talk and the empty review GitHub
+ * wraps a thread reply in among them), automation.
  */
 export type HeadlineClass = 0 | 1 | 2 | 3 | 4 | 5;
 
@@ -53,9 +53,10 @@ export function headlineClass(event: PrEvent, pr: Pr, viewer: Viewer | null): He
   if (VERDICT_KINDS.includes(event.kind)) {
     return 2;
   }
-  // "fixed" to a review bot, and the empty review GitHub wraps any thread reply in, are housekeeping:
-  // they never lead over a person's comment (bot-threads.ts, carrier-reviews.ts).
-  if (botThreadOf(event, pr) !== null || isCarrierReviewEvent(event, pr)) {
+  // Bot talk ("fixed" to a review bot, "@codex review", an edit of either) and the empty review GitHub
+  // wraps any thread reply in are housekeeping: they never lead over a person's comment (`PrEvent.chatter`).
+  // The snapshot checks cover rows stored before chatter was, until their PR's next fetch.
+  if (event.chatter || botThreadOf(event, pr) !== null || isCarrierReviewEvent(event, pr)) {
     return 4;
   }
   return COMMENT_KINDS.includes(event.kind) ? 3 : 4;
