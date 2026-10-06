@@ -4,6 +4,10 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ## 0.23.0 (unreleased)
 
+### Changed
+
+- PostPile now stores every part of a PR in its own small tables and no longer keeps the big per-PR copy it read before. On a heavy test inbox the stored PR data takes about 20 MB less space and the old 110 MB table is gone. The move runs once in the background a little after the update; nothing you see changes.
+
 ### Fixed
 
 - Typing a bot command like `@codex review` or answering a review bot no longer counts as replying to a person: their question stays on your list.
