@@ -6,6 +6,22 @@ now".
 
 ## Done
 
+- Discussion as rows (2026-10-06, for 0.22.0; DESIGN.md "Big inboxes" ›
+  PR storage: the discussion as rows, and "Storage jobs"; step 4 of
+  normalizing the PR snapshot, Later): migration 031 adds `pr_comment`,
+  `pr_thread`, `pr_review`, `pr.rows_version` and `pr.mentioned_teams`.
+  Every upsert dual-writes the rows; storage job `discussion_rows`
+  backfills older PRs from the json and switches reads (meta
+  `rows_ready:discussion`) once every PR has rows; `snapshot_strip` then
+  removes comments, threads and reviews from the json and ends with a
+  non-waiting WAL checkpoint. The PR query now fetches each inline
+  comment's review (`Comment.reviewId`, column `review_id`); older rows
+  have none. Measured on copies upgraded from 0.21.0: every PR, its
+  events and its glance hash identical; hot set heap 212 → 137 MB on
+  heavy; backfill 6 s of work over 16 s; used space 979 → 873 MB while
+  the file grows 1,284 → 1,403 MB (freed pages stay inside). Not tried by
+  hand: the app on a real heavy database.
+
 - Quiet bot threads (2026-10-06, for 0.22.0; DESIGN.md "The PR pane" ›
   Thread context and replies to bots): core `bot-threads.ts`
   (`threadReplyOf`, `isBotThreadReply`, `carriedBotThreadReplies`,
@@ -1441,10 +1457,18 @@ the app meanwhile.
      `pr_review`, header `mentioned_teams`, `rows_version`), shipped in one
      release together with the strip of the switched fields from the stored
      JSON. The first phase that runs the dual-write, backfill and read
-     switch protocol.
+     switch protocol. Built for 0.22.0 (Done), with `review_id`.
   5. Board diet: board reads leave out bot bodies no rule reads
      (`isBodyReadByRules`), `FullPr` for the readers that need every body
      (event derivation, write actions, lessons, "Why?" excerpts).
+     `for-whom.ts` then reads `pr.mentioned_teams` instead of scanning
+     bodies.
+  6. Activity view: fold a review's inline comments under that review in
+     the PR pane, by `Comment.reviewId` (fetched since 0.22.0; rows filled
+     from older json have none, so those keep today's lines until a
+     refetch). Bot reviews first. `bot-threads.ts` matches empty carrier
+     reviews to thread replies by author and time today; it switches to
+     the id here.
 
   Rules for every phase:
   - A global read switch per collection (meta `rows_ready:<collection>`).
@@ -1509,6 +1533,13 @@ the app meanwhile.
   code-manager folder migration (`legacy-data.ts`) once the move has run.
 
 ## Decided
+
+- **Inline comments carry their review** (2026-10-06, owner): the PR
+  query fetches `pullRequestReview { id }` for every inline comment, kept
+  as `Comment.reviewId` and `pr_comment.review_id`. It cannot be
+  backfilled from stored json, so it is fetched now, ahead of the
+  activity view that folds a review's inline comments under it. Never
+  inferred from author or time.
 
 - **Replies to bots in review threads are quiet, one line per thread**
   (2026-10-06, owner report "an author answering a bot shows as the author
