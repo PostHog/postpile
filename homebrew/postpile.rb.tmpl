@@ -28,6 +28,13 @@ cask "postpile" do
   # Read-only MCP server for other agents; the script follows this symlink back into the app.
   binary "#{appdir}/PostPile.app/Contents/Resources/postpile-mcp"
 
+  # brew runs the uninstall stanza of the cask that is already installed, so the
+  # first upgrade from a cask without it would keep the waiting job. This
+  # removes it before the new app is moved in; it is fine if no job exists.
+  preflight_steps do
+    run "/bin/launchctl", args: ["remove", "com.posthog.postpile.ShipIt"], must_succeed: false
+  end
+
   # After the app stages a self-update, Squirrel's ShipIt waits as a launchd job
   # and installs the staged bundle when PostPile quits. It checks only the
   # bundle ID and the code signature, not the version, so a `brew upgrade` with
