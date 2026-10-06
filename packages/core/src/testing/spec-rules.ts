@@ -23,6 +23,7 @@ import {
   changesAnswer,
   inGitHubQueue,
   isAutomationLogin,
+  isBotThreadAnswer,
   isHomeTeam,
   isOwner,
   isRoutedTeam,
@@ -506,7 +507,7 @@ export function expectedTileForWhom(chips: ForWhom[]): ForWhom {
 // Snoozes
 // ---------------------------------------------------------------------------
 
-/** Kinds that end a "someone replies" snooze: any person's comment or review. */
+/** Kinds that end a "someone replies" snooze: any person's comment or review, except an answer to a bot in its thread. */
 const REPLY_KINDS: readonly EventKind[] = [...SPEC_ADDRESSED_KINDS, 'comment', 'review_approved', 'review_changes_requested', 'review_commented'];
 
 /** Made loud by an override, the agent's or the user's. The app's Look closer event is never raised. */
@@ -551,7 +552,9 @@ export function expectedSnoozePhase(input: { pr: Pr; events: PrEvent[]; viewer: 
   const condition = snooze.condition;
   switch (condition.kind) {
     case 'someone_replies':
-      return after.some((event) => REPLY_KINDS.includes(event.kind) && !isAutomationEvent(pr, viewer, event) && !isViewerLogin(viewer, event.actor)) ? 'over' : 'active';
+      return after.some((event) => REPLY_KINDS.includes(event.kind) && !isBotThreadAnswer(pr, event) && !isAutomationEvent(pr, viewer, event) && !isViewerLogin(viewer, event.actor))
+        ? 'over'
+        : 'active';
     case 'new_push':
       return after.some((event) => SPEC_PUSH_KINDS.includes(event.kind)) ? 'over' : 'active';
     case 'until_time':

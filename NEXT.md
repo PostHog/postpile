@@ -6,6 +6,19 @@ now".
 
 ## Done
 
+- Quiet bot threads (2026-10-06, for 0.22.0; DESIGN.md "The PR pane" ›
+  Thread context and replies to bots): core `bot-threads.ts`
+  (`threadReplyOf`, `isBotThreadReply`, `carriedBotThreadReplies`,
+  `botThreadOf`). Thread replies say whom they answer and the file; a
+  person's replies to a bot fold into one quiet line per thread
+  (`ActivityLine.folded`, renderer `BotThreadLine`), quiet by rule, ranked
+  below comments in the headline, and they no longer end a "someone
+  replies" snooze. Spec restated in `testing/spec-facts.ts`
+  (`isBotThreadAnswer`), new property `activityFoldsBotAnswers`. Sample:
+  #1857 in fake mode. Gaps: the empty review of a reply in a thread
+  between people still shows as "alice reviewed" in the activity and in
+  the pane's Reviews list; whose turn still counts the author's reply to
+  a bot as an answer to your changes request (`changesAnswered.replied`).
 - Mute until I'm mentioned (2026-10-05, for 0.21.0; DESIGN.md "Mute until
   I'm mentioned"): the Snooze menu's last item. A `muted` snooze per
   tracked PR that only a personal ask ends (`isPersonalAsk`, split out of
@@ -1391,6 +1404,13 @@ the app meanwhile.
 
 ## Later
 
+- Fold a bot's review with its inline comments into one line,
+  "greptile-apps[bot] reviewed · 6 inline comments", once the thread
+  comments carry their review id (`Comment.reviewId`, PR
+  feat/devex-discussion-rows): a review key in `foldKeyOf`
+  (`activity.ts`), and `carriedBotThreadReplies` matches by id instead of
+  author and time. The same id can drop the empty "alice reviewed" next to
+  any thread reply, in the activity and the Reviews list.
 - Normalize the PR snapshot (started after 0.19.0; first this, then the
   `utilityProcess` move below). The short fields live in the PR header
   (`pr`, migration 028), the rest of each PR is one JSON blob in
@@ -1490,6 +1510,15 @@ the app meanwhile.
 
 ## Decided
 
+- **Replies to bots in review threads are quiet, one line per thread**
+  (2026-10-06, owner report "an author answering a bot shows as the author
+  commenting, noisy"): rules in core, not an agent call. A reply counts as
+  bot talk when everyone else who spoke before it in the thread is a bot;
+  asks (mention, question, reply to you) stay normal loud lines. The
+  activity line is a chevron disclosure ("alice replied to
+  greptile-apps[bot] · 2 replies on src/x.ts"), picked over a rail row
+  with a "Show N replies" link and a bare dotted link. GitHub read state
+  is not touched.
 - **Mute a PR until someone asks you in person** (2026-10-05, owner report
   "no way to snooze/dismiss forever"): a snooze kind, not a new screen.
   Personal asks only (mention, question, reply, a review request naming

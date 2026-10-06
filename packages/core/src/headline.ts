@@ -2,12 +2,17 @@
 // most important news wins, the newest within its class. A deploy bot that
 // posted last must not lead a tile that also holds a merge without review or
 // a teammate's approval. DESIGN.md "Tile faces" › Why it's here.
+import { botThreadOf } from './bot-threads.ts';
 import { isAutomation } from './bots.ts';
 import { editMentionOf, isRoutingTeamMention } from './events.ts';
 import { requestsOfViewer, reviewRequestTarget } from './review-request.ts';
 import type { Pr, PrEvent, Viewer } from './types.ts';
 
-/** Most important first: asks, merged or closed without review, verdicts, comments, other people's events, automation. */
+/**
+ * Most important first: asks, merged or closed without review, verdicts,
+ * comments, other people's events (a reply to a bot in a review thread
+ * among them), automation.
+ */
 export type HeadlineClass = 0 | 1 | 2 | 3 | 4 | 5;
 
 const ASK_KINDS = ['mention', 'question_to_user', 'reply_to_user'];
@@ -46,6 +51,10 @@ export function headlineClass(event: PrEvent, pr: Pr, viewer: Viewer | null): He
   }
   if (VERDICT_KINDS.includes(event.kind)) {
     return 2;
+  }
+  // "fixed" to a review bot is housekeeping: it never leads over a person's comment (bot-threads.ts).
+  if (botThreadOf(event, pr) !== null) {
+    return 4;
   }
   return COMMENT_KINDS.includes(event.kind) ? 3 : 4;
 }

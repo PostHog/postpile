@@ -2,6 +2,12 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## 0.22.0 (unreleased)
+
+### Changed
+
+- Replies to bots in review threads no longer show up as new comments in a PR's activity; they collapse into one quiet line per thread that opens to the replies. A reply there that mentions or asks you still shows as its own line, and these replies no longer make a tile loud or lead it.
+
 ## 0.21.0 (2026-10-06)
 
 ### Added

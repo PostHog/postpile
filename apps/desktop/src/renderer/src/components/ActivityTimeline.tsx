@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import type { ActivityEvent, ActivityLine, ActivityList, EventDisplayState, EventKind, LineReply } from '@postpile/core';
+import type { ActivityEvent, ActivityLine, ActivityList, EventDisplayState, EventKind, FoldedReply, LineReply } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
-import { eventGlyph, splitActor, summaryLead } from '../lib/events.ts';
+import { eventGlyph, splitActor, splitPath, summaryLead } from '../lib/events.ts';
 import { replyCopy } from '../lib/reply.ts';
 import { ageLabel, clockLabel, whenLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
 import { Button } from './Button.tsx';
 import { Composer, useCompose } from './Composer.tsx';
-import { Glyph, ReplyIcon, ThumbsUpIcon } from './icons.tsx';
+import { ChevronIcon, Glyph, ReplyIcon, ThumbsUpIcon } from './icons.tsx';
 import { SectionLabel } from './SectionLabel.tsx';
 import { MarkdownText } from './MarkdownText.tsx';
 
@@ -26,18 +26,33 @@ const TEXT: Record<EventDisplayState, string> = {
   seen: 'text-muted',
 };
 
-/** Summaries start with the actor ("lyra mentioned you"); that part is drawn bold. */
-function LineText(props: { summary: string; actor: string }) {
+/** A thread line's file, in mono: "... on <vite.config.ts>". */
+function WithPath(props: { text: string; path: string | null }) {
+  const split = props.path === null ? null : splitPath(props.text, props.path);
+  if (!split) {
+    return <>{props.text}</>;
+  }
+  return (
+    <>
+      {split.before}
+      <span className="font-mono text-[11.5px]">{split.path}</span>
+    </>
+  );
+}
+
+/** Summaries start with the actor ("lyra mentioned you"); that part is drawn bold. A thread reply's file is drawn in mono. */
+function LineText(props: { summary: string; actor: string; path?: string | null; actorClass?: string }) {
   const split = splitActor(props.summary, props.actor);
+  const path = props.path ?? null;
   if (split) {
     return (
       <>
-        <span className="font-semibold text-ink">{split.actor}</span>
-        {split.rest}
+        <span className={props.actorClass ?? 'font-semibold text-ink'}>{split.actor}</span>
+        <WithPath text={split.rest} path={path} />
       </>
     );
   }
-  return <>{props.summary}</>;
+  return <WithPath text={props.summary} path={path} />;
 }
 
 interface RowProps {
@@ -57,6 +72,8 @@ interface RowProps {
   unmuteId: string | null;
   /** Under the text: Reply and React on a person's comment, or "Reply ↓" in "New since". */
   below?: ReactNode;
+  /** A thread reply's file, drawn in mono in the line. */
+  path?: string | null;
 }
 
 function UnseenDot() {
@@ -75,7 +92,7 @@ function ActivityRow(props: RowProps) {
         {!props.last && <span className="w-px flex-1 bg-hairline" />}
       </span>
       <span className={`pb-2.5 text-[12.5px] leading-[1.45] select-text ${TEXT[props.display]}`}>
-        <LineText summary={props.body ? summaryLead(props.summary) : props.summary} actor={props.actor} />
+        <LineText summary={props.body ? summaryLead(props.summary) : props.summary} actor={props.actor} path={props.path} />
         {props.body && <div className="mt-0.5 font-normal break-words [overflow-wrap:anywhere]">
             <MarkdownText text={props.body} compact />
           </div>}
@@ -110,6 +127,7 @@ export function lineRow(line: ActivityLine, last: boolean, below: ReactNode = nu
       last={last}
       unmuteId={null}
       below={below}
+      path={line.thread?.path ?? null}
     />
   );
 }
@@ -258,6 +276,58 @@ function TalkLine(props: { line: ActivityLine; last: boolean; prKey: string }) {
   );
 }
 
+/** The replies a bot-thread line folds, each with its author and age, under the line. */
+function FoldedReplies(props: { replies: FoldedReply[] }) {
+  const now = useNow();
+  return (
+    <div className="mt-1.5 flex flex-col gap-2 border-l border-hairline pl-2.5 font-normal select-text">
+      {props.replies.map((reply) => (
+        <div key={reply.id} className="flex flex-col">
+          <span className="text-[11.5px] text-muted">
+            <span className="font-medium text-ink-2">{reply.actor}</span> · {ageLabel(reply.at, now)}
+          </span>
+          <div className="break-words text-ink-2 [overflow-wrap:anywhere]">
+            <MarkdownText text={reply.body} compact />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * A person's replies to a bot in one review thread, folded into one quiet
+ * line (core `ActivityLine.folded`, DESIGN.md "The PR pane"): a chevron in
+ * the badge's spot, muted words, the file in mono, no unread dot, never in
+ * "New since you looked". The whole line opens it to the replies.
+ * Picked 2026-10-06 over a rail row with a "Show 2 replies" link (two lines
+ * per thread) and a bare dotted link (no hint that it opens).
+ */
+function BotThreadLine(props: { line: ActivityLine; last: boolean }) {
+  const now = useNow();
+  const [open, setOpen] = useState(false);
+  const { line } = props;
+  return (
+    <div className="grid grid-cols-[20px_minmax(0,1fr)_auto] gap-x-2" title={`${line.display}: ${line.reason}`}>
+      <span className="flex flex-col items-center">
+        <span className={`mt-px flex size-4 items-center justify-center rounded-full text-faint ${BADGES.seen}`}>
+          <span className={`flex transition-transform motion-reduce:transition-none ${open ? '' : '-rotate-90'}`}>
+            <ChevronIcon size={8} />
+          </span>
+        </span>
+        {!props.last && <span className="w-px flex-1 bg-hairline" />}
+      </span>
+      <span className="pb-2.5 text-[12.5px] leading-[1.45] text-muted">
+        <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="text-left hover:text-ink-2">
+          <LineText summary={line.summary} actor={line.actor} path={line.thread?.path ?? null} actorClass="font-medium text-ink-2" />
+        </button>
+        {open && <FoldedReplies replies={line.folded} />}
+      </span>
+      <span className="self-start pt-px font-mono text-[10.5px] text-faint">{ageLabel(line.at, now)}</span>
+    </div>
+  );
+}
+
 /**
  * The PR's activity from core (`PrDetail.activity`), newest first: what is
  * new since you looked first, then the rest. "New since you looked" under
@@ -291,9 +361,13 @@ export function ActivityTimeline(props: { activity: ActivityList; prKey: string 
       </span>
       {empty && <span className="text-xs text-hint">No activity yet.</span>}
       {threadChangedAt !== null && <ThreadChangeRow at={threadChangedAt} last={lines.length === 0 && noise.length === 0} />}
-      {shown.map((line, index) => (
-        <TalkLine key={line.id} line={line} last={index === shown.length - 1} prKey={props.prKey} />
-      ))}
+      {shown.map((line, index) =>
+        line.folded.length > 0 ? (
+          <BotThreadLine key={line.id} line={line} last={index === shown.length - 1} />
+        ) : (
+          <TalkLine key={line.id} line={line} last={index === shown.length - 1} prKey={props.prKey} />
+        ),
+      )}
       {lines.length > props.activity.cap && (
         <button type="button" className={linkButton} onClick={() => setShowAll(!showAll)}>
           {showAll ? 'Show fewer' : `Show all ${lines.length}`}

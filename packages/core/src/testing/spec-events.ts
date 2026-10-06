@@ -12,6 +12,7 @@ import {
   asksViewer,
   changesAnswer,
   isAutomationLogin,
+  isBotThreadAnswer,
   isHomeTeam,
   isMachineComment,
   isOwner,
@@ -40,8 +41,8 @@ export interface ExpectedEvent {
   reason: string;
 }
 
-/** An event before its loudness: what happened, by whom, when; `body` for a comment's event. */
-type RawExpected = Omit<ExpectedEvent, 'loudness' | 'reason'> & { body?: string };
+/** An event before its loudness: what happened, by whom, when; `body` for a comment's event; `sourceId` for a comment's or review's. */
+type RawExpected = Omit<ExpectedEvent, 'loudness' | 'reason'> & { body?: string; sourceId?: string };
 
 /** A human speaking to the viewer directly. */
 export const SPEC_ADDRESSED_KINDS: readonly EventKind[] = ['mention', 'team_mention', 'reply_to_user', 'question_to_user'];
@@ -173,7 +174,7 @@ function rawEvents(pr: Pr, viewer: Viewer, userState: UserPrState | null): RawEx
   for (const comment of pr.comments) {
     const kind = commentKind(pr, comment, viewer);
     if (kind !== null) {
-      events.push({ id: `${pr.key}:${kind}:${comment.id}`, kind, actor: comment.author, at: comment.createdAt, isBot: isMachineComment(comment), subject: null, body: comment.body });
+      events.push({ id: `${pr.key}:${kind}:${comment.id}`, kind, actor: comment.author, at: comment.createdAt, isBot: isMachineComment(comment), subject: null, body: comment.body, sourceId: comment.id });
     }
     const edit = editExpected(pr, comment);
     if (edit !== null) {
@@ -183,7 +184,7 @@ function rawEvents(pr: Pr, viewer: Viewer, userState: UserPrState | null): RawEx
   for (const review of pr.reviews) {
     const kind = REVIEW_KINDS[review.state];
     if (kind) {
-      add(kind, review.id, review.author, review.submittedAt, isAutomationLogin(review.author));
+      events.push({ id: `${pr.key}:${kind}:${review.id}`, kind, actor: review.author, at: review.submittedAt, isBot: isAutomationLogin(review.author), subject: null, sourceId: review.id });
     }
   }
   const afterApproval = commitsAfterApproval(pr, viewer, userState);
@@ -274,6 +275,10 @@ function loudnessOf(pr: Pr, viewer: Viewer, event: RawExpected): { loudness: Lou
       return quiet('mentions a team that only routes reviews to you');
     }
     return loud(LOUD_ADDRESSED[event.kind]!);
+  }
+  // Answering a review bot in its thread is housekeeping, even on the viewer's PR or as an answer to their changes request (2026-10-06).
+  if ((event.kind === 'comment' || event.kind === 'review_commented') && event.sourceId !== undefined && isBotThreadAnswer(pr, { kind: event.kind, sourceId: event.sourceId })) {
+    return quiet('replied to a bot in a review thread');
   }
   if (answersChanges(pr, viewer, event)) {
     return loud('addressed your changes');

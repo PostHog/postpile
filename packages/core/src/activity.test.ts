@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { activityList, noiseLabel, noiseSummary, threadChangedAt } from './activity.ts';
-import { reviewRequestSubject } from './events.ts';
-import { at, makeComment, makeEvent, makePr, makeReview, makeThreadFor, viewer } from './fixtures.ts';
-import type { EventDisplayState, PrEvent } from './types.ts';
+import { deriveEvents, reviewRequestSubject } from './events.ts';
+import { at, makeComment, makeEvent, makePr, makeReview, makeThread, makeThreadFor, viewer } from './fixtures.ts';
+import { eventView } from './loudness.ts';
+import type { Comment, EventDisplayState, Pr, PrEvent } from './types.ts';
 import type { EventView } from './views.ts';
 
 const me = viewer.login;
@@ -278,5 +279,130 @@ describe('activityList replies', () => {
     const view = ev({ actor: 'alice', sourceId: 'c1', at: at(1) });
     expect(activityList([view], null, null, makePr({ comments: [makeComment({ id: 'c1', author: 'alice' })] })).earlier[0]?.reply).toBeNull();
     expect(activityList([view], who).earlier[0]?.reply).toBeNull();
+  });
+});
+
+describe('activityList bot threads', () => {
+  const BOT = 'greptile-apps[bot]';
+  const say = (id: string, author: string, minute: number, body = 'fixed') => makeComment({ id, author, body, createdAt: at(minute) });
+  /** The empty review GitHub makes for each thread reply, the same second. */
+  const carrier = (id: string, author: string, minute: number) => makeReview({ id, author, state: 'COMMENTED', body: '', submittedAt: at(minute) });
+
+  function prWith(threads: Record<string, Comment[]>, extra: Partial<Pr> = {}): Pr {
+    const built = Object.entries(threads).map(([id, comments]) => makeThread(id, comments));
+    const comments = [...(extra.comments ?? []), ...built.flatMap((thread) => thread.comments)].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    return makePr({ ...extra, threads: built, comments });
+  }
+
+  /** The PR's events as the store derives them, unseen unless listed. */
+  function list(pr: Pr, seen: string[] = []) {
+    const views = deriveEvents(pr, who, null).map((event) => eventView(seen.includes(event.sourceId) ? { ...event, seenAt: at(100) } : event));
+    return activityList(views, who, null, pr);
+  }
+
+  const lines = (pr: Pr, seen: string[] = []) => {
+    const built = list(pr, seen);
+    return [...built.fresh, ...built.earlier];
+  };
+
+  it("folds a person's replies in one bot thread, and the reviews GitHub made for them, into one quiet line", () => {
+    const pr = prWith(
+      { t1: [say('g1', BOT, 1, 'Possible null dereference'), say('a1', 'alice', 5), say('g2', BOT, 6, 'Thanks'), say('a2', 'alice', 8, 'also renamed it')] },
+      { reviews: [carrier('r1', 'alice', 5), carrier('r2', 'alice', 8)] },
+    );
+    const [line, ...rest] = lines(pr);
+    expect(rest).toEqual([]);
+    expect(line).toMatchObject({
+      kind: 'comment',
+      actor: 'alice',
+      summary: `alice replied to ${BOT} · 2 replies on a.ts`,
+      display: 'quiet',
+      unseen: false,
+      isNew: false,
+      body: null,
+      reply: null,
+      eventCount: 4,
+      thread: { to: BOT, path: 'a.ts' },
+      at: at(8),
+    });
+    expect(line?.folded).toEqual([
+      { id: 'a1', actor: 'alice', at: at(5), body: 'fixed' },
+      { id: 'a2', actor: 'alice', at: at(8), body: 'also renamed it' },
+    ]);
+  });
+
+  it('says one reply without a count, and makes one line per thread', () => {
+    const pr = prWith({
+      t1: [say('g1', BOT, 1, 'nit'), say('a1', 'alice', 2)],
+      t2: [say('g2', BOT, 1, 'nit'), say('a2', 'alice', 3), say('a3', 'alice', 4, 'and here')],
+    });
+    expect(lines(pr).map((line) => line.summary)).toEqual([`alice replied to ${BOT} · 2 replies on a.ts`, `alice replied to ${BOT} on a.ts`]);
+  });
+
+  it('places the line at its newest reply, between the other lines', () => {
+    const pr = prWith({ t1: [say('g1', BOT, 1, 'nit'), say('a1', 'alice', 2), say('a2', 'alice', 6, 'and the test')] }, { comments: [say('c1', 'bob', 4, 'ship it'), say('c2', 'bob', 8, 'thanks')] });
+    expect(lines(pr).map((line) => line.summary)).toEqual(['bob commented: thanks', `alice replied to ${BOT} · 2 replies on a.ts`, 'bob commented: ship it']);
+  });
+
+  it('keeps a reply that mentions, asks or answers the viewer a loud line of its own, with its thread', () => {
+    const pr = prWith({ t1: [say('g1', BOT, 1, 'nit'), say('a1', 'alice', 2), say('a2', 'alice', 3, `@${me} is this real?`)] });
+    const built = list(pr);
+    expect(built.fresh.map((line) => [line.kind, line.thread])).toEqual([['question_to_user', { to: BOT, path: 'a.ts' }]]);
+    expect(built.fresh[0]?.reply).toMatchObject({ commentId: 'a2', asksYou: true });
+    expect(built.earlier.map((line) => line.summary)).toEqual([`alice replied to ${BOT} on a.ts`]);
+  });
+
+  it("folds the viewer's own replies to a bot too", () => {
+    const pr = prWith({ t1: [say('g1', BOT, 1, 'nit'), say('v1', me, 2, 'done')] }, { author: me });
+    expect(lines(pr).map((line) => line.summary)).toEqual([`${me} replied to ${BOT} on a.ts`]);
+  });
+
+  it('keeps an agent-raised reply on a line of its own', () => {
+    const pr = prWith({ t1: [say('g1', BOT, 1, 'nit'), say('a1', 'alice', 2, 'reverted the whole thing')] });
+    const views = deriveEvents(pr, who, null).map((event) =>
+      eventView(event.sourceId === 'a1' && event.kind === 'comment' ? { ...event, override: { loudness: 'loud', reason: 'reverts the feature', by: 'agent' } } : event),
+    );
+    const built = activityList(views, who, null, pr);
+    expect(built.fresh.map((line) => line.summary)).toEqual([`alice replied to ${BOT} on a.ts: reverted the whole thing`]);
+    expect(built.earlier).toEqual([]);
+  });
+
+  it('shows a reply in a person\'s thread as a normal line that says whom it answers', () => {
+    const pr = prWith({ t1: [say('b1', 'bob', 1, 'why the retry?'), say('g1', BOT, 2, 'agreed'), say('a1', 'alice', 3, 'flaky upload')] });
+    const [reply, opener] = lines(pr);
+    expect(reply).toMatchObject({ summary: 'alice replied to bob on a.ts: flaky upload', thread: { to: 'bob', path: 'a.ts' }, folded: [] });
+    expect(reply?.reply).toMatchObject({ commentId: 'a1', inThread: true });
+    expect(opener).toMatchObject({ summary: 'bob commented: why the retry?', thread: null });
+  });
+
+  it('starts a new line where a person joins the thread; earlier replies stay folded', () => {
+    const pr = prWith({ t1: [say('g1', BOT, 1, 'nit'), say('a1', 'alice', 2), say('b1', 'bob', 3, 'not fixed yet'), say('a2', 'alice', 4, 'now it is')] });
+    expect(lines(pr).map((line) => line.summary)).toEqual([
+      'alice replied to bob on a.ts: now it is',
+      'bob replied to alice on a.ts: not fixed yet',
+      `alice replied to ${BOT} on a.ts`,
+    ]);
+  });
+
+  it('is seen once every reply is, and never new since you looked', () => {
+    const pr = prWith({ t1: [say('g1', BOT, 1, 'nit'), say('a1', 'alice', 2)] }, { reviews: [carrier('r1', 'alice', 2)] });
+    expect(lines(pr, ['a1'])[0]?.display).toBe('seen');
+    expect(lines(pr, ['r1'])[0]?.display).toBe('quiet');
+  });
+
+  it('keeps a carrier review the agent raised to loud on a new line of its own', () => {
+    const pr = prWith({ t1: [say('g1', BOT, 1, 'nit'), say('a1', 'alice', 2)] }, { reviews: [carrier('r1', 'alice', 2)] });
+    const views = deriveEvents(pr, who, null).map((event) =>
+      eventView(event.sourceId === 'r1' ? { ...event, override: { loudness: 'loud', reason: 'approves in all but name', by: 'agent' } } : event),
+    );
+    const built = activityList(views, who, null, pr);
+    expect(built.fresh.map((line) => [line.kind, line.isNew])).toEqual([['review_commented', true]]);
+    expect(built.earlier.map((line) => [line.summary, line.eventCount])).toEqual([[`alice replied to ${BOT} on a.ts`, 1]]);
+  });
+
+  it("puts the review GitHub made for an ask on the ask's line, not a second \"reviewed\" line", () => {
+    const pr = prWith({ t1: [say('g1', BOT, 1, 'nit'), say('a1', 'alice', 2, `@${me} is this real?`)] }, { reviews: [carrier('r1', 'alice', 2)] });
+    const built = list(pr);
+    expect([...built.fresh, ...built.earlier].map((line) => [line.kind, line.eventCount])).toEqual([['question_to_user', 2]]);
   });
 });

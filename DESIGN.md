@@ -2740,6 +2740,46 @@ thread, reading the diff.
   with the PR and the viewer); a comment on several lines (its event and an
   edit, a review and a mention in it) gets it once, on the newest line. The
   renderer only reads it: workspace imports there stay type-only.
+- Thread context and replies to bots (2026-10-06, `bot-threads.ts`). A
+  comment in a review thread says whom it answers and where: "alice
+  replied to bob on src/x.ts" (the last other person before it, or the
+  opener when only bots spoke), in the event summary too, so tiles, MCP and
+  the agent read the same words. A review bot (greptile, coderabbit) opens
+  inline threads and the author answers each ("fixed"); each answer showed
+  as "alice commented" plus "alice reviewed" (GitHub wraps every thread
+  reply in an empty COMMENTED review of its own), which read as new human
+  discussion. Rule: a person's reply in a thread where everyone else who
+  spoke before it is a bot (`isMachineComment`) is a bot conversation
+  (`isBotThreadReply`). Judged at the reply, from what came before it: a
+  person who joins later starts normal lines and nothing earlier turns
+  loud after the fact. Asks keep their own kinds and lines: a reply there
+  that mentions you, asks you or answers you is never folded. Then:
+  - Activity: the replies of one person in one bot thread, their edits and
+    the empty reviews GitHub made for them fold into one quiet line,
+    "alice replied to greptile-apps[bot] · 2 replies on src/x.ts"
+    (`ActivityLine.folded`, `thread`), placed at its newest reply. A
+    chevron in the badge spot, muted words, the file in mono, no unread
+    dot, never in "New since you looked", no Reply (the thread is on
+    GitHub); the whole line opens to the bodies. Picked on the fake board
+    over a rail row with a "Show 2 replies" link (two lines per thread)
+    and a bare dotted link (no hint that it opens). An agent-raised reply
+    keeps a line of its own. The empty review of an ask joins the ask's
+    line instead of a second "reviewed" line.
+  - Loudness: quiet by rule ("replied to a bot in a review thread", row
+    before "addressed your changes" and the "comment / review on your PR"
+    rows), the empty review too. So no coral, no ping, no snooze break
+    from it; the author's push still answers your changes request.
+  - Headline: ranks with other people's events (class 4), below a person's
+    comment, so it never leads a tile over real talk.
+  - "Someone replies" snoozes: a reply to a bot does not end them.
+  - GitHub read state is untouched: an unread thread stays unread, and the
+    tile names the reply as its quiet reason when nothing else is new.
+  The empty review is matched to its reply by author and time (same
+  second, 2 s window) until the snapshot has the comment's review id.
+  Next, once that id lands: a bot's review and its inline comments fold
+  into one line, "greptile-apps[bot] reviewed · 6 inline comments"
+  (`foldKeyOf` in `activity.ts` takes a review key), and the review match
+  uses the id.
 - "Back to top" floats at the pane's bottom while the review row has
   scrolled out above.
 

@@ -10,6 +10,7 @@ import type { TileView } from '../views.ts';
 import { tileViewOf, tileViewsOf, type PropertyBoard } from './build-board.ts';
 import { describeTurn, ensure, eventsOf, expectedUnreadRows, isNews, prOf, sameMove, trackedMembers, trackedRows, type Invariant } from './invariant.ts';
 import { editAsks } from './spec-events.ts';
+import { isBotThreadAnswer } from './spec-facts.ts';
 import { expectedFooter, expectedGitHubLink, expectedLeadPr, expectedMarkLabel, expectedPane, expectedPrimaryAction } from './spec-offers.ts';
 import { expectedDone, expectedSnoozePhase, isUnseenMergeWithoutViewer } from './spec-rules.ts';
 
@@ -108,6 +109,10 @@ function headlineRank(event: PrEvent, pr: Pr, board: PropertyBoard): number {
   }
   if (event.kind === 'review_approved' || event.kind === 'review_changes_requested') {
     return 2;
+  }
+  // A person answering a bot in its thread ranks with other people's events, below comments (2026-10-06).
+  if (isBotThreadAnswer(pr, event)) {
+    return 4;
   }
   return event.kind === 'comment' || event.kind === 'review_commented' || event.kind === 'comment_edited' ? 3 : 4;
 }
