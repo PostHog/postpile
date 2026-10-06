@@ -9,7 +9,7 @@ import { snoozeWrites } from '../snooze.ts';
 import { setIdFromTileId } from '../tiles.ts';
 import type { PrEvent, PrKey } from '../types.ts';
 import type { PropertyBoard } from './build-board.ts';
-import { ensure, eventsOf, prOf, type Invariant } from './invariant.ts';
+import { ensure, eventsOf, fullPrOf, type Invariant } from './invariant.ts';
 import { expectedEvents, type ExpectedEvent } from './spec-events.ts';
 import { isViewerLogin, newestTouch } from './spec-facts.ts';
 import { expectedSnoozes, expectedTiles } from './spec-layout.ts';
@@ -23,7 +23,7 @@ function describeEvent(event: Pick<ExpectedEvent, 'kind' | 'actor' | 'at' | 'isB
 export const eventsMatchTheSnapshot: Invariant = {
   name: 'each comment, review, commit, timeline item and CI run gives its event, kind and rule loudness',
   check(board) {
-    for (const [key, pr] of board.prs) {
+    for (const [key, pr] of board.fullPrs) {
       const userState = board.userStates.get(key) ?? null;
       const expected = new Map(expectedEvents(pr, board.viewer, userState).map((event) => [event.id, event]));
       const times = deriveEvents(pr, board.viewer, userState).map((event) => event.at);
@@ -53,7 +53,7 @@ export const eventsMatchTheSnapshot: Invariant = {
 export const seenAndHandledFollowTheRecipe: Invariant = {
   name: 'seen and handled are exactly what the reads, touches and clicks of the recipe make them',
   check(board) {
-    for (const [key, pr] of board.prs) {
+    for (const [key, pr] of board.fullPrs) {
       const thread = board.threads.get(key) ?? null;
       const touch = newestTouch(pr, board.viewer);
       const approvedAt = board.userStates.get(key)?.approvedAt ?? null;
@@ -122,7 +122,7 @@ export const lookCloserEventFollowsTheRecipe: Invariant = {
   name: 'a Look closer event is there exactly when the recipe fired the ping and the spec allows it',
   check(board) {
     for (const [key, spec] of board.prSpecs) {
-      const pr = prOf(board, key);
+      const pr = fullPrOf(board, key);
       const check = expectedLookCloser({ pr, viewer: board.viewer, verdict: 'LOOK_CLOSER', userState: board.userStates.get(key) ?? null, snoozed: false, pingedRequestId: null });
       const fired = spec.lookCloser && spec.glance === 'LOOK_CLOSER' && check.kind === 'ping';
       const events = lookCloserEvents(board, key);

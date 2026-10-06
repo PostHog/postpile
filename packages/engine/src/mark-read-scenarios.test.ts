@@ -1,4 +1,4 @@
-import { UNDO_WINDOW_MS, type NotificationThread, type Pr } from '@postpile/core';
+import { UNDO_WINDOW_MS, type NotificationThread, type FullPr } from '@postpile/core';
 import { at, makeComment, makeCommit, makePr, makeReview, makeThreadFor, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { UNSORTED_TOPIC_ID } from './board.ts';
@@ -30,15 +30,15 @@ async function synced(): Promise<Harness> {
 }
 
 /** GitHub moves on after the click: the PR as `next`, its thread updated then, a new inbox ETag. */
-function movesOn(h: Harness, next: Pr): void {
+function movesOn(h: Harness, next: FullPr): void {
   h.reader.prs.set(next.key, next);
   h.reader.threads = [{ ...thread, updatedAt: next.updatedAt }];
   h.reader.etag = `etag-${next.updatedAt}`;
 }
 
-const bobComments: Pr = { ...ownPr, comments: [makeComment({ id: 'c-bob', author: 'bob', createdAt: at(30) })], updatedAt: at(30) };
+const bobComments: FullPr = { ...ownPr, comments: [makeComment({ id: 'c-bob', author: 'bob', createdAt: at(30) })], updatedAt: at(30) };
 
-const ownPushAndBot: Pr = {
+const ownPushAndBot: FullPr = {
   ...ownPr,
   commits: [...ownPr.commits, makeCommit({ oid: 'c2', author: viewer.login, committedAt: at(30) })],
   reviews: [makeReview({ id: 'r-bot', author: 'review-bot[bot]', state: 'COMMENTED', submittedAt: at(31), commitOid: 'c2' })],

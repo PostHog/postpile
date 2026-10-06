@@ -7,10 +7,15 @@
 // pick one of two answers: a comment twice in a list, a thread copy that
 // differs from the flat copy, a position used twice, a review whose body
 // points at a comment that is not there.
-import type { Comment, CommentKind, IsoTime, Pr, Review, ReviewState, ReviewThread } from './types.ts';
+import { isBodyReadByRules } from './bot-bodies.ts';
+import { prTeamMentions } from './team-mentions.ts';
+import type { Comment, CommentKind, FullComment, FullPr, FullReview, FullReviewThread, IsoTime, Pr, Review, ReviewState, ReviewThread } from './types.ts';
 
-/** The parts of a PR that live in the discussion rows. */
+/** The parts of a PR that live in the discussion rows, as a read gives them (a board read leaves some bodies out). */
 export type Discussion = Pick<Pr, 'comments' | 'threads' | 'reviews'>;
+
+/** The discussion with every stored body: what a write splits. */
+export type FullDiscussion = Pick<FullPr, 'comments' | 'threads' | 'reviews'>;
 
 /** One GitHub comment: an issue comment, a review's body or an inline comment. */
 export interface CommentPart {
@@ -33,7 +38,8 @@ export interface CommentPart {
   updatedAt: IsoTime | null;
   /** Null: not recorded (older snapshots); read back as missing. */
   viewerReacted: boolean | null;
-  body: string;
+  /** Null: left out of a board read (`isBodyReadByRules`). A split always has it. */
+  body: string | null;
 }
 
 export interface ThreadPart {
@@ -75,7 +81,7 @@ export class DiscussionError extends Error {
   }
 }
 
-function commentPart(comment: Comment, ord: number | null, threadOrd: number | null): CommentPart {
+function commentPart(comment: FullComment, ord: number | null, threadOrd: number | null): CommentPart {
   if (comment.kind !== 'review_comment' && (comment.path !== null || comment.threadId !== null || comment.reviewId !== undefined)) {
     throw new DiscussionError(`comment ${comment.id} of kind ${comment.kind} has an inline comment's path, thread or review`);
   }
@@ -117,7 +123,7 @@ function sameComment(a: CommentPart, b: CommentPart): boolean {
 }
 
 /** Adds a thread's comments to `parts`: as a position in the thread of the flat copy, or as a comment only the thread holds. */
-function addThreadComments(parts: Map<string, CommentPart>, thread: ReviewThread): void {
+function addThreadComments(parts: Map<string, CommentPart>, thread: FullReviewThread): void {
   thread.comments.forEach((comment, threadOrd) => {
     if (comment.threadId !== thread.id) {
       throw new DiscussionError(`comment ${comment.id} in thread ${thread.id} names thread ${comment.threadId}`);
@@ -138,7 +144,7 @@ function addThreadComments(parts: Map<string, CommentPart>, thread: ReviewThread
   });
 }
 
-function reviewPart(review: Review, ord: number, parts: Map<string, CommentPart>): ReviewPart {
+function reviewPart(review: FullReview, ord: number, parts: Map<string, CommentPart>): ReviewPart {
   const linked = parts.get(review.id);
   const shared = linked !== undefined && linked.kind === 'review' && linked.body === review.body;
   return {
@@ -168,7 +174,7 @@ function requireUnique(ids: string[], what: string): void {
  * same comment as the flat list), each thread and each review. A review's
  * body is left to its comment when the two are identical.
  */
-export function splitDiscussion(discussion: Discussion): DiscussionParts {
+export function splitDiscussion(discussion: FullDiscussion): DiscussionParts {
   const parts = new Map<string, CommentPart>();
   discussion.comments.forEach((comment, ord) => {
     if (parts.has(comment.id)) {
@@ -230,7 +236,7 @@ function inOrder<T>(placed: Array<{ position: number; item: T }>, what: string):
   return sorted.map((entry) => entry.item);
 }
 
-function reviewBody(part: ReviewPart, comments: Map<string, Comment>): string {
+function reviewBody(part: ReviewPart, comments: Map<string, Comment>): string | null {
   if (part.ownBody !== null) {
     return part.ownBody;
   }
@@ -329,5 +335,55 @@ export function canonicalPr<T extends Discussion>(pr: T): T {
     comments: pr.comments.map(canonicalComment),
     threads: pr.threads.map((thread) => ({ ...thread, comments: thread.comments.map(canonicalComment) })),
     reviews: pr.reviews.map((review) => ({ ...review, commitOid: review.commitOid ?? null })),
+  };
+}
+
+/**
+ * A body stays on a board read when a board rule reads it
+ * (`isBodyReadByRules`), and when it is empty or whitespace: whether a
+ * bot's review has text decides whether it only carries thread replies
+ * (`carriedReplies`), and an empty body costs nothing. So a body left out
+ * (null) always had text.
+ */
+function staysOnBoard(author: string, editor: string | null, body: string): boolean {
+  return isBodyReadByRules({ author, editor }) || body.trim() === '';
+}
+
+/**
+ * The reviews as a board read gives them: a body left out (null) unless it
+ * stays on the board (`staysOnBoard`), judged like the cut on save, with
+ * the editor of its review comment. The store applies this to the reviews
+ * it joined from rows; `boardShape` to a whole PR.
+ */
+export function boardReviews(reviews: Review[], comments: Comment[]): Review[] {
+  const editors = new Map(comments.map((comment) => [comment.id, comment.editor ?? null]));
+  return reviews.map((review) => {
+    if (review.body === null || staysOnBoard(review.author, editors.get(review.id) ?? null, review.body)) {
+      return review;
+    }
+    return { ...review, body: null };
+  });
+}
+
+function boardComment(comment: Comment): Comment {
+  return comment.body === null || staysOnBoard(comment.author, comment.editor ?? null, comment.body) ? comment : { ...comment, body: null };
+}
+
+/**
+ * What a board read returns for a stored PR (DESIGN.md "The board diet"):
+ * every comment and review body with text no board rule reads left out
+ * (null), and
+ * `mentionedTeams` from the bodies as stored. The store reads this shape
+ * from rows (SQL `postpile_reads_body`) and from the json before the
+ * switch alike, so a cached board copy never changes shape; tests hold the
+ * store to it.
+ */
+export function boardShape(pr: FullPr): Pr {
+  return {
+    ...pr,
+    comments: pr.comments.map(boardComment),
+    threads: pr.threads.map((thread) => ({ ...thread, comments: thread.comments.map(boardComment) })),
+    reviews: boardReviews(pr.reviews, pr.comments),
+    mentionedTeams: prTeamMentions(pr),
   };
 }

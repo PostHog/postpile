@@ -1,4 +1,4 @@
-import { UNDO_WINDOW_MS, type Pr } from '@postpile/core';
+import { UNDO_WINDOW_MS, type FullPr } from '@postpile/core';
 import { at, makeComment, makeThreadFor, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { UNSORTED_TOPIC_ID } from './board.ts';
@@ -31,7 +31,7 @@ async function afterUndoWindow(h: Harness): Promise<void> {
 }
 
 /** Puts `pr` and `other` in topic `depot` as set `s1`, so they share one tile. */
-function pairInSet(h: Harness, other: Pr): void {
+function pairInSet(h: Harness, other: FullPr): void {
   h.store.topics.create({ id: 'depot', name: 'depot', summary: '', summaryInputHash: null, area: null, tailoring: '', driver: null, userRole: 'reviewer', status: 'active', kind: 'project', retiredAt: null, createdAt: at(0), updatedAt: at(0) });
   for (const key of [pr.key, other.key]) {
     h.store.memberships.assign({ prKey: key, topicId: 'depot', assignedBy: 'agent', reason: '', createdAt: at(0) });
@@ -123,7 +123,7 @@ describe('Mute until I am mentioned', () => {
     await h.engine.snooze(tileId, MUTED);
 
     const mention = makeComment({ id: 'c1', author: 'rogue', body: `@${viewer.login} one question`, createdAt: at(1690) });
-    const asked: Pr = { ...pr, updatedAt: at(1700), comments: [mention] };
+    const asked: FullPr = { ...pr, updatedAt: at(1700), comments: [mention] };
     h.reader.addPr(asked, makeThreadFor(asked));
     h.reader.etag = 'etag-2';
     now = new Date(at(1705));
@@ -247,7 +247,7 @@ describe('Mute until I am mentioned', () => {
     await h.engine.setGitHubWrites(false);
     await h.engine.unsnooze(tileId);
     const mention = makeComment({ id: 'c1', author: 'rogue', body: `@${viewer.login} one question`, createdAt: at(1690) });
-    const asked: Pr = { ...pr, updatedAt: at(1700), comments: [mention] };
+    const asked: FullPr = { ...pr, updatedAt: at(1700), comments: [mention] };
     h.reader.addPr(asked, makeThreadFor(asked));
     h.reader.etag = 'etag-2';
     now = new Date(at(1705));
@@ -325,7 +325,7 @@ describe('Mute until I am mentioned', () => {
     expect((await setTile())?.state).toMatchObject({ kind: 'snoozed', muted: true });
 
     const mention = makeComment({ id: 'c1', author: 'rogue', body: `@${viewer.login} one question`, createdAt: at(1690) });
-    const asked: Pr = { ...pr, updatedAt: at(1700), comments: [mention] };
+    const asked: FullPr = { ...pr, updatedAt: at(1700), comments: [mention] };
     h.reader.addPr(asked, makeThreadFor(asked));
     h.reader.etag = 'etag-2';
     now = new Date(at(1705));
@@ -346,7 +346,7 @@ describe('Mute until I am mentioned', () => {
     await h.engine.snooze(tileId, MUTED);
     await afterUndoWindow(h);
 
-    const rogue: Pr = { ...pr, updatedAt: at(1700), comments: [makeComment({ id: 'c1', author: 'rogue', body: 'ping ping ping', createdAt: at(1690) })] };
+    const rogue: FullPr = { ...pr, updatedAt: at(1700), comments: [makeComment({ id: 'c1', author: 'rogue', body: 'ping ping ping', createdAt: at(1690) })] };
     h.reader.addPr(rogue, makeThreadFor(rogue));
     h.reader.etag = 'etag-2';
     now = new Date(at(1705));
@@ -354,7 +354,7 @@ describe('Mute until I am mentioned', () => {
     expect((await tile(h))?.state).toMatchObject({ kind: 'snoozed', muted: true });
 
     const mention = makeComment({ id: 'c2', author: 'rogue', body: `@${viewer.login} please look`, createdAt: at(1790) });
-    const asked: Pr = { ...rogue, updatedAt: at(1800), comments: [...rogue.comments, mention] };
+    const asked: FullPr = { ...rogue, updatedAt: at(1800), comments: [...rogue.comments, mention] };
     h.reader.addPr(asked, makeThreadFor(asked));
     h.reader.etag = 'etag-3';
     now = new Date(at(1805));

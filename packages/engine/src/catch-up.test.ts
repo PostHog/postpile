@@ -1,4 +1,4 @@
-import type { GlanceGap, Pr, PrKey } from '@postpile/core';
+import type { GlanceGap, FullPr, PrKey } from '@postpile/core';
 import { makeComment, makeCommit, makeThreadFor, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it, vi } from 'vitest';
 import { glanceGapKey } from './digest/glance-batches.ts';
@@ -12,7 +12,7 @@ const FRESH = '2026-09-02T11:55:00.000Z';
 const LATER = '2026-09-02T12:01:00.000Z';
 
 /** A topic with one PR, synced with the agent: dossier v1 and a glance. */
-async function syncedTopic(options: HarnessOptions = {}): Promise<{ h: Harness; pr: Pr }> {
+async function syncedTopic(options: HarnessOptions = {}): Promise<{ h: Harness; pr: FullPr }> {
   const h = makeHarness({ catchUpCallsPerDay: 300, ...options });
   const pr = reviewRequestedPr(1);
   topicWithPrs(h, 'depot', [pr]);
@@ -21,7 +21,7 @@ async function syncedTopic(options: HarnessOptions = {}): Promise<{ h: Harness; 
 }
 
 /** A fresh question to the viewer on GitHub, which the next poll fetches. */
-function askViewer(h: Harness, pr: Pr, id: string, etag: string): void {
+function askViewer(h: Harness, pr: FullPr, id: string, etag: string): void {
   const next = {
     ...pr,
     updatedAt: LATER,
@@ -431,7 +431,7 @@ describe('Engine.refreshGlanceOnLook', () => {
     expect((await h.engine.getTopic('depot'))?.memoryUpdating).toBe(true);
     expect((await h.engine.getPr(pr.key))?.memoryUpdating).toBe(true);
     // An author push lands meanwhile: the run's snapshot is behind it.
-    const current = h.store.prs.get(pr.key)!;
+    const current = h.store.prs.getFull(pr.key)!;
     h.store.prs.upsert({ ...current, headOid: 'pushed-after-the-run-started' }, NOW.toISOString());
     expect(await h.engine.refreshGlanceOnLook(pr.key)).toEqual({ outcome: 'queued' });
 

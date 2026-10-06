@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { PrSet, Topic } from '@postpile/core';
+import { boardShape, type PrSet, type Topic } from '@postpile/core';
 import { at, makeEvent, makePr, makeThreadFor } from '@postpile/core/fixtures';
 import { Store } from './index.ts';
 
@@ -97,8 +97,10 @@ describe('PrRepo', () => {
     store.prs.upsert(pr, at(1));
     store.prs.upsert(makePr({ number: 1 }), at(1));
     store.prs.upsert(makePr({ number: 9, repo: 'acme/other' }), at(1));
-    expect(store.prs.get(pr.key)).toEqual(pr);
+    expect(store.prs.getFull(pr.key)).toEqual(pr);
+    expect(store.prs.get(pr.key)).toEqual(boardShape(pr));
     expect(store.prs.get('nope/nope#1')).toBeNull();
+    expect(store.prs.getFull('nope/nope#1')).toBeNull();
     expect(store.prs.getMany([pr.key, 'acme/other#9']).size).toBe(2);
     expect(store.prs.listAll()).toHaveLength(3);
   });

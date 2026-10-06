@@ -8,7 +8,7 @@ import { reviewPending, reviewRequest } from './review-request.ts';
 import { tilePeople } from './tile-people.ts';
 import { ownerRelation, topicPeople } from './topic-queues.ts';
 import { topicDriver } from './topic-roles.ts';
-import type { Pr, Viewer } from './types.ts';
+import type { FullPr as Pr, Viewer } from './types.ts';
 import { whoseTurn } from './whose-turn.ts';
 import { whyHere } from './why-here.ts';
 

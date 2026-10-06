@@ -19,9 +19,9 @@ const REDERIVE_CHUNK = 200;
 export function rederiveStoredEvents(store: Store, viewer: Viewer, at: IsoTime): void {
   const keys = store.prs.keys();
   store.transaction(() => {
-    // A chunk of snapshots at a time: all of them at once is gigabytes on a heavy install.
+    // A chunk of snapshots at a time: all of them at once is gigabytes on a heavy install. Every body: kinds (mention, deploy) and so ids depend on them.
     for (let start = 0; start < keys.length; start += REDERIVE_CHUNK) {
-      for (const pr of store.prs.getMany(keys.slice(start, start + REDERIVE_CHUNK)).values()) {
+      for (const pr of store.prs.getFullMany(keys.slice(start, start + REDERIVE_CHUNK)).values()) {
         const events = deriveEvents(pr, viewer, store.userPrStates.get(pr.key));
         const created = store.events.upsertDerived(pr.key, events);
         store.eventLog.append(

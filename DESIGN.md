@@ -545,8 +545,8 @@ comments, threads and reviews are child rows of the header
   k). `pr.mentioned_teams`: every "org/slug" the PR body or a comment of
   the flat list mentions, from the stored (cut) bodies and with
   `mentionsTeam`'s exact matching (core `teamMentions`, property-tested).
-  Nothing reads it yet; the board diet will, once bot bodies leave the
-  board.
+  The board reads it since the board diet (below): `for-whom.ts` names
+  the tile's team from it, since a board read no longer holds bot bodies.
 - Split and join check the data and throw `DiscussionError` instead of
   picking a side: a comment twice in a list or in two threads, a thread
   copy that differs from the flat copy, a thread comment naming another
@@ -597,6 +597,94 @@ The rows are written before the strip frees the json, so the file grows
 by about the rows' size not covered by free pages already in it (heavy:
 rows ~424 MB, 304 MB free before, 530 MB free after). No VACUUM: SQLite
 reuses the pages.
+
+**The board diet** (2026-10-06, for 0.22.0; step 5 of normalizing the PR
+snapshot). Bots write most of the comment text PostPile stores, and the
+board's rules read almost none of it. A board read now leaves out every
+comment and review body no board rule reads; the readers that need every
+body ask for it.
+
+- **Two read shapes.** `Pr` is the board shape: `Comment.body` and
+  `Review.body` are `string | null`, null meaning "left out of this read".
+  `FullPr` (core `types.ts`) has every stored body and is what a fetch
+  builds. `PrRepo.get` / `getMany` / `keepParsed` (the hot board's cached
+  read) give the board shape; `getFull` / `getFullMany` give `FullPr`,
+  read per call, never cached. `listAll` and `nextAfter` (dev tools, the
+  trim job) give `FullPr`; `upsert` takes only `FullPr`, so a board read
+  can never be written back without its bodies.
+- **What the board loads**: a body some board rule reads, by one rule,
+  `isBodyReadByRules({ author, editor })` (core `bot-bodies.ts`). It is
+  #117's "kept whole" rule exported: a person's body, a deleted author's,
+  a merge queue bot's and one a person edited last. So the cut on save and
+  the board read never disagree. Empty and whitespace bodies stay too: a
+  carrier review (#135) is one without text, so null always means "had
+  text". A review's body follows the same rule, with the editor of its
+  review comment. The PR description stays whole (the glance hash reads
+  it).
+- **`mentionedTeams`**: every board read sets `Pr.mentionedTeams` (from
+  `pr.mentioned_teams` after the switch, from the json bodies before it),
+  and `for-whom.ts` matches the viewer's teams against it, lowercased, the
+  same as `mentionsTeam` (`teamMentions` is property-tested against it). A
+  PR built in memory (a fetch, a test) has no `mentionedTeams` and its
+  bodies are read instead.
+- **In SQL after the switch.** The comment read selects
+  `CASE WHEN postpile_reads_body(author, editor) OR trim(body, ?) = ''
+  THEN body END` (the parameter is every character JS's `trim()` removes,
+  tested against the whole BMP; SQLite's own trim takes spaces only), a SQL
+  function `PrRepo` registers on every connection it opens (read-only CLI
+  and MCP ones too). The bodies stay in SQLite and never become JS
+  strings. It is evaluated with the build's bot list at read time, so no
+  stored flag can go stale when `bots.ts` changes.
+- **Before the switch** the board reads the json and applies the same
+  projection in JS (`boardShape`, core `pr-parts.ts`), so a cached board
+  copy has the same shape on both sides of the switch (GPT-6.1's review
+  point on #134: a cache must never hold full bodies a later read leaves
+  out). An install that skips straight to this release keeps that: its
+  first board read, from the json, is already the board shape.
+- **Full-body readers** (the compiler finds them: a body passed where a
+  `string` goes): event derivation at fetch and the team-role re-derive
+  (`getFullMany`), the write actions (mirror review, drop team request,
+  react, reply, reply and comment drafts: `getFull`), lessons, "Why?"
+  excerpts (`memory-sources-reads.ts`), the bot body trim (`nextAfter`).
+- **The PR pane's activity list reads its PR whole.** The bot-review fold
+  (#135) shows each folded bot comment's first line and keeps a review
+  that mentions the viewer unfolded, so `activityList` and `bot-reviews.ts`
+  take `FullPr` and `getPr` reads that one PR with `getFull`. The rest of
+  the pane (`prPaneView`, status, tiles) reads the board shape. The
+  payload did not change.
+- **Null-safe board rules**: `isMachineComment` (a bot account is
+  automation without its body), `editMentionOf` and the routing team
+  mention (a person's comment or edit, so the body is there), the merge
+  queue's Trunk lines (kept whole), carrier reviews (null is "has text"),
+  `humanComments` in prompts (a type guard: bots drop out first).
+- **Checked**: rule outputs on `boardShape(pr)` equal those on `pr` for
+  every generated board and every event corpus PR (tile views, whose turn,
+  headline, pings, quiet reads, for-whom, PR status, merge queue, carrier
+  reviews, the bot-thread fold, the pane's Reviews list, look-closer
+  pings); prompt text and every
+  glance hash are byte-identical (agent `board-diet.test.ts`); the core
+  invariants run on board shapes (`PropertyBoard.prs`, with `fullPrs` for
+  the oracles).
+
+Measured on `.backup` copies brought to 0.21.0, then to 0.22.0 by #134's
+code (Node 24.21, SQLite 3.53.4; hot set = the 1,500 most recently
+updated PRs, all 809 on normal; median of 5):
+
+| copy | hot set heap | hot set read | bodies left out |
+|---|---|---|---|
+| normal, rows | 53 → 24 MB | 75 → 69 ms | 12,435 of 21,401 |
+| heavy (14x), rows | 137 → 58 MB | 185 → 185 ms | 174,090 of 299,614 |
+| normal, json (before the switch) | 77 → 28 MB | 85 → 91 ms | |
+| heavy, json (before the switch) | 212 → 72 MB | 224 → 244 ms | |
+
+On both copies, before and after the switch: every PR's board read equals
+`boardShape` of its full read; glance input hashes and `prDetails` prompt
+text are identical to #134's build; every topic, the Archive, search,
+unread keys and every open PR's detail read the same (against #135's
+build). The PR pane's detail is unchanged: it was slimmed in #122 and
+#124 (biggest open PR: 148 KB, 18 KB of it the PR). Before the switch the
+json is still parsed whole and projected after, so the read takes a
+little longer while the retained heap drops the same way.
 
 `PrRepo.listHeaders` reads `pr` alone, with each PR's newest event time
 from the `(pr_key, at, id)` index: 11k headers in about 60 ms. Stacks over
@@ -3039,7 +3127,9 @@ open and never splits a character.
   part. So the cut changes no event id, kind or loudness: the tests compare
   the rules on both, and so did the measurements on a normal and a heavy
   copy. What it gives up: a team named only past the cut of a bot comment
-  no longer picks which of the viewer's teams the tile chip names.
+  no longer picks which of the viewer's teams the tile chip names. The
+  same rule (`isBodyReadByRules`) decides which bodies a board read loads
+  at all ("The board diet").
 - **Events keep their state** (`EventRepo.upsertDerived`): a machine
   comment's event that flips between deploy and bot_comment is renamed,
   not replaced. It keeps its seen time, override and event-log seq (the
@@ -3209,7 +3299,11 @@ GPT-6.1 (2026-10-05).
   what depends on it. Only then is it done. A failed check walks the job
   once more from the start; a second failure leaves it incomplete (meta
   `storage_job_incomplete:<name>`, a log line), never done, and the jobs
-  after it wait. The next start tries again. The trim's walk is its own
+  after it wait. The next start tries again. The runner reports it once
+  per app run as `storage_job_blocked` (name, `blocked_units`: what the
+  job's check still finds undone, `blockedUnits()`; for
+  `discussion_rows` the PRs whose json could not be split). Counts only,
+  never keys. The trim's walk is its own
   check: a PR stored behind the cursor meanwhile came from a fetch, which
   cuts on save.
 - **What a job may write, and revisions.** A unit may issue any SQL or
@@ -6874,10 +6968,13 @@ topic names are never event props.
    in the last hour because they are outside the hot slice; at most hourly,
    since 0.18.0, see "Big inboxes: what PostPile loads and works on"),
    `storage_job_done` (name, one of the known jobs (`bot_body_trim`,
-   `checks_strip`);
+   `checks_strip`, `discussion_rows`, `snapshot_strip`);
    units, work_ms, longest_slice_ms, wall_ms: a background storage job
    finished and its check passed, this run's share of it, see "Storage
-   jobs"; since 0.20.0),
+   jobs"; since 0.20.0), `storage_job_blocked` (name, blocked_units: a
+   job ended its walk incomplete, its check failed twice, and how many
+   units it still finds undone; at most once per job per app run, counts
+   only, never keys; since 0.22.0),
    `update_check_finished` (trigger `launch` / `interval` / `wake` /
    `menu`, result `none` / `available` / `error`, available_version when
    one was found: one per self-update check the packaged app ran),

@@ -68,6 +68,12 @@ export interface StorageJob {
    */
   complete(store: Store, at: IsoTime): 'done' | 'again';
   /**
+   * For a job whose check can fail: how many units it still finds undone,
+   * in the transaction that left it incomplete (telemetry
+   * storage_job_blocked). Counts only.
+   */
+  blockedUnits?(store: Store): number;
+  /**
    * After the transaction that marked it done committed, outside any
    * transaction: work SQLite cannot do inside one, like snapshot_strip's
    * WAL checkpoint. Must not throw.
@@ -99,8 +105,20 @@ export interface StorageJobRunnerDeps {
   log: (line: string) => void;
   /** A job finished and its check passed (telemetry storage_job_done). */
   onDone: (report: StorageJobReport) => void;
+  /**
+   * A job ended its walk incomplete (its check failed twice), with the
+   * units its check still finds undone: telemetry storage_job_blocked. At
+   * most once per job per runner, so once per app run.
+   */
+  onBlocked?: (blocked: StorageJobBlocked) => void;
   /** Tests pass 0: one unit per slice. */
   sliceBudgetMs?: number;
+}
+
+/** A job left incomplete, and how many units its check still finds undone (null: the job does not say). */
+export interface StorageJobBlocked {
+  name: StorageJobName;
+  blockedUnits: number | null;
 }
 
 /**
@@ -117,6 +135,8 @@ interface SliceWork {
   units: number;
   wrote: number;
   end: SliceEnd;
+  /** When the end is 'incomplete': the units its check still finds undone, read in the same transaction. */
+  blockedUnits?: number | null;
 }
 
 interface Progress {
@@ -145,6 +165,8 @@ export class StorageJobRunner {
   private suspended = false;
   /** Jobs that took their one more walk in this run. */
   private readonly walkedAgain = new Set<StorageJobName>();
+  /** Jobs whose being blocked was reported (onBlocked): never twice for the life of the runner. */
+  private readonly reportedBlocked = new Set<StorageJobName>();
   /** This run's numbers for the job under way. */
   private progress: Progress | null = null;
   /**
@@ -198,7 +220,8 @@ export class StorageJobRunner {
     do {
       const unit = job.step(store, after);
       if (unit === null) {
-        return { units, wrote, end: this.complete(job) };
+        const end = this.complete(job);
+        return end === 'incomplete' ? { units, wrote, end, blockedUnits: job.blockedUnits?.(store) ?? null } : { units, wrote, end };
       }
       units += 1;
       wrote += unit.wrote ? 1 : 0;
@@ -236,6 +259,14 @@ export class StorageJobRunner {
     this.deps.onDone(report);
   }
 
+  private reportBlocked(name: StorageJobName, blockedUnits: number | null): void {
+    if (this.reportedBlocked.has(name)) {
+      return;
+    }
+    this.reportedBlocked.add(name);
+    this.deps.onBlocked?.({ name, blockedUnits });
+  }
+
   /** One slice of this job. Throws what the job threw, after the rollback. */
   private runSlice(job: StorageJob): SliceOutcome {
     const { store, timers } = this.deps;
@@ -268,7 +299,11 @@ export class StorageJobRunner {
       this.walkedAgain.add(job.name);
       this.deps.log(`storage job ${job.name}: its check failed at the end, walking it once more`);
     } else if (work.end === 'incomplete') {
-      this.deps.log(`storage job ${job.name} is incomplete: its check failed again after a second walk. Not marked done, the jobs after it wait; the next start tries again.`);
+      const blocked = work.blockedUnits ?? null;
+      this.deps.log(
+        `storage job ${job.name} is incomplete: its check failed again after a second walk${blocked === null ? '' : `, ${blocked} units left undone`}. Not marked done, the jobs after it wait; the next start tries again.`,
+      );
+      this.reportBlocked(job.name, blocked);
       return 'incomplete';
     }
     return 'worked';

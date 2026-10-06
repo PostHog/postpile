@@ -1,4 +1,4 @@
-import { prPaneView, type Pr } from '@postpile/core';
+import { prPaneView, type FullPr } from '@postpile/core';
 import { at, makeThreadFor } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { Board } from './board.ts';
@@ -10,7 +10,7 @@ import { readThreadsOnGitHub, topicWithPrs } from './testing/topics.ts';
 const LATER = new Date('2026-09-20T12:00:00Z');
 const RECENT = '2026-09-18T12:00:00.000Z';
 
-function mergedPr(number: number, overrides: Partial<Pr> = {}): Pr {
+function mergedPr(number: number, overrides: Partial<FullPr> = {}): FullPr {
   return reviewRequestedPr(number, { state: 'MERGED', mergedAt: at(5), mergedBy: 'alice', ...overrides });
 }
 
@@ -20,7 +20,7 @@ function inboxMoved(h: Harness): void {
 }
 
 /** Synced once, every event seen and every thread read: what stays hot is hot by state or time alone. */
-async function syncedAndRead(h: Harness, topicId: string, prs: Pr[]): Promise<void> {
+async function syncedAndRead(h: Harness, topicId: string, prs: FullPr[]): Promise<void> {
   topicWithPrs(h, topicId, prs);
   inboxMoved(h);
   await h.engine.sync({ maxAgentCalls: 0 });

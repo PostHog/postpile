@@ -1,4 +1,4 @@
-import type { Pr } from '@postpile/core';
+import type { FullPr } from '@postpile/core';
 import { at, makeComment, makeThreadFor, makeTimelineItem, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness, type Harness } from './testing/fakes.ts';
@@ -10,12 +10,12 @@ const FOUR_DAYS_LATER = new Date('2026-09-05T12:00:00Z');
 const TWO_DAYS_LATER = new Date('2026-09-03T12:00:00Z');
 const ONE_DAY_LATER = new Date('2026-09-02T12:00:00Z');
 
-function mergedPr(number: number): Pr {
+function mergedPr(number: number): FullPr {
   return reviewRequestedPr(number, { state: 'MERGED', mergedAt: at(5), mergedBy: 'alice' });
 }
 
 /** Synced once, then every event marked seen and every thread read on GitHub: nothing left to read. */
-async function syncedAndRead(h: Harness, prs: Pr[]): Promise<void> {
+async function syncedAndRead(h: Harness, prs: FullPr[]): Promise<void> {
   topicWithPrs(h, 'depot', prs);
   await h.engine.sync({ maxAgentCalls: 0 });
   const eventIds = prs.flatMap((pr) => h.store.events.listForPr(pr.key).map((e) => e.id));

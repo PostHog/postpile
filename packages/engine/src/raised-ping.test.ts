@@ -1,4 +1,4 @@
-import type { Pr } from '@postpile/core';
+import type { FullPr } from '@postpile/core';
 import { at, makeCommit, makePr, makeReview, makeThreadFor, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness, NOW, type Harness } from './testing/fakes.ts';
@@ -9,7 +9,7 @@ const PUSHED = '2026-09-02T12:02:00.000Z';
 const THREAD_MOVED = '2026-09-02T12:03:00.000Z';
 
 /** alice's PR, approved by the viewer on its first commit. */
-function approvedPr(): Pr {
+function approvedPr(): FullPr {
   return makePr({
     number: 1,
     commits: [makeCommit({ oid: 'c1', committedAt: at(5) })],
@@ -19,8 +19,8 @@ function approvedPr(): Pr {
 }
 
 /** A bot pushes after the viewer's approval (quiet by rule), and no person says a word: the news is bot-only. */
-function botPushAfterApproval(h: Harness, pr: Pr): void {
-  const next: Pr = {
+function botPushAfterApproval(h: Harness, pr: FullPr): void {
+  const next: FullPr = {
     ...pr,
     commits: [...pr.commits, makeCommit({ oid: 'c2', author: 'renovate[bot]', headline: 'bump the runner image', committedAt: PUSHED })],
     updatedAt: THREAD_MOVED,
@@ -29,7 +29,7 @@ function botPushAfterApproval(h: Harness, pr: Pr): void {
   h.reader.etag = 'etag-2';
 }
 
-function pushEventId(h: Harness, pr: Pr): string {
+function pushEventId(h: Harness, pr: FullPr): string {
   return h.store.events.listForPr(pr.key).find((event) => event.kind === 'commits_after_approval')!.id;
 }
 

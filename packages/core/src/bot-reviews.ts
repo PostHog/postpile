@@ -9,7 +9,7 @@
 import { isBot } from './bots.ts';
 import { inlineCommentsOf, opensThread } from './carrier-reviews.ts';
 import { mentionsUser } from './mentions.ts';
-import type { Comment, EventKind, Pr, PrEvent, Review, Viewer } from './types.ts';
+import type { EventKind, FullComment, FullPr, FullReview, PrEvent, Viewer } from './types.ts';
 
 function mentionsViewer(body: string, viewer: Viewer | null): boolean {
   return viewer !== null && mentionsUser(body, viewer.login);
@@ -23,7 +23,7 @@ function mentionsViewer(body: string, viewer: Viewer | null): boolean {
  * threads, and one whose text or comments mention the viewer, which keeps
  * its normal line.
  */
-export function foldedBotReviewComments(review: Review, pr: Pr, viewer: Viewer | null): Comment[] {
+export function foldedBotReviewComments(review: FullReview, pr: FullPr, viewer: Viewer | null): FullComment[] {
   if (review.author === '' || !isBot(review.author) || review.state !== 'COMMENTED' || mentionsViewer(review.body, viewer)) {
     return [];
   }
@@ -36,7 +36,7 @@ export function foldedBotReviewComments(review: Review, pr: Pr, viewer: Viewer |
 const BOT_REVIEW_KINDS: readonly EventKind[] = ['review_commented', 'bot_comment', 'deploy', 'comment_edited'];
 
 /** The review an event's source belongs to: the review itself, its text, or one of its inline comments. */
-function reviewOfSource(sourceId: string, pr: Pr): Review | null {
+function reviewOfSource(sourceId: string, pr: FullPr): FullReview | null {
   const review = pr.reviews.find((candidate) => candidate.id === sourceId);
   if (review !== undefined) {
     return review;
@@ -51,7 +51,7 @@ function reviewOfSource(sourceId: string, pr: Pr): Review | null {
  * that holds its text (same id), one of its inline comments, or an edit of
  * one of them. Null for every other event, a person's among them.
  */
-export function botReviewOf(event: Pick<PrEvent, 'kind' | 'sourceId' | 'isBot'>, pr: Pr, viewer: Viewer | null): Review | null {
+export function botReviewOf(event: Pick<PrEvent, 'kind' | 'sourceId' | 'isBot'>, pr: FullPr, viewer: Viewer | null): FullReview | null {
   if (!event.isBot || !BOT_REVIEW_KINDS.includes(event.kind)) {
     return null;
   }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { botReviewOf, foldedBotReviewComments } from './bot-reviews.ts';
 import { at, makeComment, makePr, makeReview, viewer } from './fixtures.ts';
-import type { Comment, Pr, Review, ReviewThread } from './types.ts';
+import type { FullComment as Comment, FullPr as Pr, FullReview as Review, FullReviewThread as ReviewThread } from './types.ts';
 
 const BOT = 'greptile-apps[bot]';
 const me = viewer.login;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { at, makeComment, makeEvent, makePr, makeReview, viewer } from './fixtures.ts';
 import { lessonMismatch, normalizeLessonText, onlyAddsLesson, possibleMisses, repeatsDismissed, reviewNow } from './lessons.ts';
-import type { Glance, Pr, PrEvent } from './types.ts';
+import type { Glance, FullPr as Pr, PrEvent } from './types.ts';
 
 function glance(overrides: Partial<Glance> = {}): Glance {
   return {

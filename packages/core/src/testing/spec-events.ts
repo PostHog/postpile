@@ -6,7 +6,8 @@
 // invariant compares the board's events against this list, so `deriveEvents`
 // and `ruleLoudness` are checked against the recipe, not against themselves.
 import { sameLogin } from '../mentions.ts';
-import type { Comment, EventKind, IsoTime, Loudness, Pr, UserPrState, Viewer } from '../types.ts';
+// The oracles read the raw snapshot, every stored body (`FullPr`); the rules under test read the board shape.
+import type { FullComment as Comment, EventKind, IsoTime, Loudness, FullPr as Pr, UserPrState, Viewer } from '../types.ts';
 import {
   answersBotInThread,
   asksQuestion,

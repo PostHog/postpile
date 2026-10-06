@@ -1,4 +1,4 @@
-import type { Pr } from '@postpile/core';
+import type { FullPr } from '@postpile/core';
 import { at, makePr, makeThreadFor } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness, type Harness } from './testing/fakes.ts';
@@ -10,7 +10,7 @@ import { changeTopicStatus } from './topic-status.ts';
  * #1 (master <- s1) and #2 (s1 <- s2) are pinged, #3 (s2 <- s3) is a draft
  * nobody pinged, so the sync pulls it in. #4 is a lone pinged PR.
  */
-function stackOfThree(): { bottom: Pr; middle: Pr; top: Pr; lone: Pr; stackId: string } {
+function stackOfThree(): { bottom: FullPr; middle: FullPr; top: FullPr; lone: FullPr; stackId: string } {
   const bottom = reviewRequestedPr(1, { baseRef: 'master', headRef: 's1' });
   const middle = reviewRequestedPr(2, { baseRef: 's1', headRef: 's2' });
   const top = makePr({ number: 3, baseRef: 's2', headRef: 's3', isDraft: true });

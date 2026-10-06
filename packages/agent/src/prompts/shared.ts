@@ -1,5 +1,5 @@
 import { homeTeamsOf, humanDiscussion, humanReviews, isPrOwner, prOwners, sameLogin, standingApprovals } from '@postpile/core';
-import type { Comment, EntityRef, Feedback, FeedbackKind, Pr, Provenance, Viewer } from '@postpile/core';
+import type { EntityRef, Feedback, FeedbackKind, FullComment, Pr, Provenance, Viewer } from '@postpile/core';
 import type { PromptContext } from '../service.ts';
 
 /** Trims a body to keep prompts bounded without losing the point. */
@@ -186,10 +186,12 @@ export function jsonOnly(shape: string): string {
 /**
  * Human comments across the PR, oldest first. Bot talk is most of the
  * volume and none of the signal: bots' comments, and since 2026-10-06 also
- * people's replies to bots and bot commands (`humanDiscussion`).
+ * people's replies to bots and bot commands (`humanDiscussion`). A board
+ * read leaves out only bodies no rule reads (`isBodyReadByRules`), never a
+ * person's, so every comment kept has its body.
  */
-export function humanComments(pr: Pr): Comment[] {
-  return humanDiscussion(pr);
+export function humanComments(pr: Pr): FullComment[] {
+  return humanDiscussion(pr).filter((comment): comment is FullComment => comment.body !== null);
 }
 
 export interface PrDetailLimits {

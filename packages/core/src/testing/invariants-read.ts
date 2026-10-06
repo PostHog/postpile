@@ -2,11 +2,13 @@
 // handled survives new activity (DESIGN.md "Reading a PR is one planner",
 // "Handled is not reset by new activity").
 import { deriveEvents } from '../events.ts';
+import { boardShape } from '../pr-parts.ts';
 import { openedReadCheck } from '../quiet-reads.ts';
 import { applyReadPlan, planRead, prReadScope, tileReadScope, type ReadCause, type ReadScope } from '../read-plan.ts';
-import type { IsoTime, Pr, PrKey, Tile, UserPrState } from '../types.ts';
+// Test helpers over the raw snapshot: every stored body (`FullPr`).
+import type { IsoTime, FullPr as Pr, PrKey, Tile, UserPrState } from '../types.ts';
 import { tileViewOf, tileStateOf, withReadState, type PropertyBoard } from './build-board.ts';
-import { describeTurn, ensure, eventsOf, isTrackedHere, prOf, sameMove, trackedRows, type Invariant } from './invariant.ts';
+import { describeTurn, ensure, eventsOf, isTrackedHere, fullPrOf, sameMove, trackedRows, type Invariant } from './invariant.ts';
 import { pendingRequest } from './spec-facts.ts';
 import { expectedOpenedRead, expectedReadPlan } from './spec-rules.ts';
 
@@ -166,7 +168,7 @@ export const openedReadLeavesDone: Invariant = {
         const thread = board.threads.get(row.key) ?? null;
         const holding = board.tiles.filter((tile) => tile.members.some((member) => member.prKey === row.key));
         const tilesSnoozed = holding.map((tile) => tileStateOf(board, tile).kind === 'snoozed');
-        const input = { thread, prFetchedAt: board.prFetchedAt.get(row.key) ?? null, pr: prOf(board, row.key), tilesSnoozed, doneAfterRead: row.afterRead.done };
+        const input = { thread, prFetchedAt: board.prFetchedAt.get(row.key) ?? null, pr: fullPrOf(board, row.key), tilesSnoozed, doneAfterRead: row.afterRead.done };
         const check = openedReadCheck({ ...input, tiles: tilesSnoozed.map((snoozed) => ({ snoozed })) });
         // Also as if no tile held it, or it had no thread: nothing to mirror then.
         for (const variant of [input, { ...input, tilesSnoozed: [] }, { ...input, thread: null }]) {
@@ -198,9 +200,11 @@ export function resync(board: PropertyBoard, pr: Pr): PropertyBoard {
   const appMade = eventsOf(board, pr.key).filter((event) => event.kind === 'look_closer');
   const events = new Map(board.events);
   events.set(pr.key, [...derived, ...appMade]);
+  const fullPrs = new Map(board.fullPrs);
+  fullPrs.set(pr.key, pr);
   const prs = new Map(board.prs);
-  prs.set(pr.key, pr);
-  return { ...board, prs, events };
+  prs.set(pr.key, boardShape(pr));
+  return { ...board, prs, fullPrs, events };
 }
 
 /** ada mentions the viewer now, after everything else. */
@@ -219,7 +223,7 @@ export const handledSurvivesNewActivity: Invariant = {
         if (!state?.handledAt || row.provenance.kind === 'found') {
           continue;
         }
-        const next = withThreadUnread(resync(board, withNewMention(prOf(board, row.key), board.now)), row.key, board.now);
+        const next = withThreadUnread(resync(board, withNewMention(fullPrOf(board, row.key), board.now)), row.key, board.now);
         ensure(next.userStates.get(row.key)?.handledAt === state.handledAt, `${row.key}: handled time moved`);
         const nextState = tileStateOf(next, view.tile);
         ensure(nextState.kind === 'unread', `${row.key}: a new mention leaves the tile ${nextState.kind}`);
@@ -246,7 +250,7 @@ export const answeringClearsTheAsk: Invariant = {
   check(board, views) {
     for (const view of views) {
       for (const row of trackedRows(view)) {
-        const pr = withViewerComment(prOf(board, row.key), board.now);
+        const pr = withViewerComment(fullPrOf(board, row.key), board.now);
         const next = tileViewOf(resync(board, pr), view.tile).prs.find((candidate) => candidate.key === row.key)!;
         const move = next.turn.kind === 'you' ? next.turn.move : null;
         const request = pendingRequest(pr, board.viewer);

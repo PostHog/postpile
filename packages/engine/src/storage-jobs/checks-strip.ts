@@ -51,4 +51,9 @@ export class ChecksStripJob implements StorageJob {
   complete(store: Store): 'done' | 'again' {
     return store.meta.get(CHECKS_STRIP_STRIPPED_KEY) === null ? 'done' : 'again';
   }
+
+  /** Snapshots that still hold checks: written back behind the walks by an older build. */
+  blockedUnits(store: Store): number {
+    return store.prs.countWithChecks();
+  }
 }

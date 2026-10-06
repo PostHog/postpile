@@ -25,7 +25,7 @@ import {
   type QuietReadInput,
   type TouchedReadInput,
 } from './quiet-reads.ts';
-import type { Pr, PrEvent, Viewer } from './types.ts';
+import type { FullPr as Pr, PrEvent, Viewer } from './types.ts';
 import { prWhoseTurn } from './whose-turn.ts';
 
 const pr = makePr({ number: 7, author: 'alice' });

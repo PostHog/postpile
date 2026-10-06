@@ -14,13 +14,14 @@ import { isDraftTile } from './topic-pr-state.ts';
 import type { PrFacts, TileView } from './views.ts';
 import type { DossierVersion, Fact, FactCandidate, FactRef } from './memory.ts';
 import type {
-  Comment,
   Commit,
+  FullComment,
+  FullPr,
+  FullReview,
+  FullReviewThread,
   NotificationThread,
   Pr,
   PrEvent,
-  Review,
-  ReviewThread,
   Tile,
   TimelineItem,
   UserPrState,
@@ -34,7 +35,7 @@ export function at(minutes: number): string {
   return new Date(Date.UTC(2026, 8, 1, 9, 0) + minutes * 60_000).toISOString();
 }
 
-export function makePr(overrides: Partial<Pr> & { number?: number; repo?: string } = {}): Pr {
+export function makePr(overrides: Partial<FullPr> & { number?: number; repo?: string } = {}): FullPr {
   const { number = 1, repo = 'acme/app', ...rest } = overrides;
   const ref = { repo, number };
   return {
@@ -72,7 +73,7 @@ export function makePr(overrides: Partial<Pr> & { number?: number; repo?: string
   };
 }
 
-export function makeComment(overrides: Partial<Comment> = {}): Comment {
+export function makeComment(overrides: Partial<FullComment> = {}): FullComment {
   return {
     id: 'c1',
     author: 'bob',
@@ -86,7 +87,7 @@ export function makeComment(overrides: Partial<Comment> = {}): Comment {
   };
 }
 
-export function makeThread(id: string, comments: Comment[]): ReviewThread {
+export function makeThread(id: string, comments: FullComment[]): FullReviewThread {
   return {
     id,
     path: 'a.ts',
@@ -95,7 +96,7 @@ export function makeThread(id: string, comments: Comment[]): ReviewThread {
   };
 }
 
-export function makeReview(overrides: Partial<Review> = {}): Review {
+export function makeReview(overrides: Partial<FullReview> = {}): FullReview {
   return {
     id: 'r1',
     author: 'bob',

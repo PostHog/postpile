@@ -45,11 +45,16 @@ const TEST_ANALYTICS_MARKER = '<!-- Trunk Test Analytics -->';
  */
 const NOT_STATUS = [/^This PR is already queued/, /An error occurred while handling your Trunk command/];
 
+/** A merge queue bot's body is always on a board read (`isBodyReadByRules`); '' stands in for one left out. */
+function bodyOf(comment: Comment): string {
+  return comment.body ?? '';
+}
+
 function isStatusComment(comment: Comment): boolean {
-  if (!isTrunkBot(comment.author) || comment.body.includes(TEST_ANALYTICS_MARKER)) {
+  if (!isTrunkBot(comment.author) || bodyOf(comment).includes(TEST_ANALYTICS_MARKER)) {
     return false;
   }
-  return !NOT_STATUS.some((pattern) => pattern.test(comment.body));
+  return !NOT_STATUS.some((pattern) => pattern.test(bodyOf(comment)));
 }
 
 /**
@@ -164,7 +169,7 @@ function trunkLine(body: string): TrunkLine {
 function statusComments(pr: Pr): StatusComment[] {
   return pr.comments
     .filter(isStatusComment)
-    .map((comment) => ({ at: comment.lastEditedAt ?? comment.createdAt, line: trunkLine(comment.body) }))
+    .map((comment) => ({ at: comment.lastEditedAt ?? comment.createdAt, line: trunkLine(bodyOf(comment)) }))
     .toSorted((a, b) => a.at.localeCompare(b.at));
 }
 

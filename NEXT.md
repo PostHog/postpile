@@ -12,8 +12,9 @@ now".
   (migration 032, `pr_event.chatter`). Replies in bot-only threads, bot
   commands ("@codex review", "/trunk merge") and carrier reviews leave the
   prompts' human discussion, the glance hash, topic memory (noise: no
-  dossier trigger, not in the delta) and the events agent (never awaiting judgement; the judged and
-  request-gone quiet reads count them as needing nothing). A bot command
+  dossier trigger, not in the delta) and the events agent (never
+  awaiting judgement; the judged and request-gone quiet reads count them
+  as needing nothing). A bot command
   is quiet by rule ("a command for a bot"). Stored glances stay current
   through `glanceItemInputHashWithBotTalk` (old shape with the bot talk as
   of the glance's createdAt). Spec: `isBotCommandBody`, chatter in
@@ -29,7 +30,23 @@ now".
   treat a bot command like a comment; the viewer's own command counts as
   them speaking on the PR (an older ask turns "you already replied");
   lesson context can include the viewer's own replies to bots.
-
+- Board diet (2026-10-06, for 0.22.0; DESIGN.md "Big inboxes" › The board
+  diet; step 5 of normalizing the PR snapshot, Later): board reads
+  (`get`, `getMany`, `keepParsed`) leave out comment and review bodies no
+  board rule reads (`isBodyReadByRules`, #117's kept-whole rule): in SQL
+  after the switch (`postpile_reads_body`), by the same projection on the
+  json before it, so a cached copy never changes shape. `FullPr` with
+  `getFull` / `getFullMany` for event derivation, the team-role
+  re-derive, write actions, drafts, lessons and "Why?" excerpts; `upsert`
+  takes only `FullPr`. `for-whom.ts` reads `Pr.mentionedTeams`. Telemetry
+  `storage_job_blocked` (once per job per app run) for a job left
+  incomplete. Empty bodies stay on the board (carrier reviews read them);
+  the PR pane's activity list reads its PR whole (`getFull`: #135's bot
+  review fold shows bot comments' first lines). Measured on copies: hot
+  set heap 137 → 58 MB on heavy and 53 → 24 MB on normal, read time about
+  the same; board, PR details, prompts and glance hashes identical. The
+  PR pane was already slim (#122, #124), so its payload did not change.
+  Not tried by hand: the app on a real heavy database.
 - Discussion as rows (2026-10-06, for 0.22.0; DESIGN.md "Big inboxes" ›
   PR storage: the discussion as rows, and "Storage jobs"; step 4 of
   normalizing the PR snapshot, Later): migration 031 adds `pr_comment`,
@@ -1498,7 +1515,7 @@ the app meanwhile.
      (`isBodyReadByRules`), `FullPr` for the readers that need every body
      (event derivation, write actions, lessons, "Why?" excerpts).
      `for-whom.ts` then reads `pr.mentioned_teams` instead of scanning
-     bodies.
+     bodies. Built for 0.22.0 (Done).
   6. Activity view: fold a review's inline comments under that review in
      the PR pane, by `Comment.reviewId` (fetched since 0.22.0; rows filled
      from older json have none, so those keep today's lines until a

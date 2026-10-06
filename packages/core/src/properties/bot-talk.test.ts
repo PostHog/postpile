@@ -12,7 +12,7 @@ import { PERSONAL_ASK_KINDS } from '../kinds.ts';
 import { isBot } from '../bots.ts';
 import { awaitsJudgement } from '../quiet-reads.ts';
 import { boardSpecArb, buildBoard, LOGINS, PROPERTY_TIMEOUT_MS, propertyRuns, withBotTalk } from '../testing/index.ts';
-import type { Pr, PrEvent } from '../types.ts';
+import type { FullPr, PrEvent } from '../types.ts';
 
 /** What an event is to the rules, without the per-board seen state. */
 function ruled(event: PrEvent): unknown {
@@ -20,7 +20,7 @@ function ruled(event: PrEvent): unknown {
 }
 
 /** People who can talk to bots on this PR: its author when a person, and someone from outside. Never the viewer. */
-function talkers(pr: Pr): string[] {
+function talkers(pr: FullPr): string[] {
   const author = pr.author !== '' && !isBot(pr.author) && pr.author !== LOGINS.viewer ? [pr.author] : [];
   return [...author, LOGINS.outsider];
 }
@@ -30,7 +30,7 @@ describe('bot talk changes no agent work', () => {
     fc.assert(
       fc.property(boardSpecArb, (spec) => {
         const board = buildBoard(spec);
-        for (const [key, pr] of board.prs) {
+        for (const [key, pr] of board.fullPrs) {
           const userState = board.userStates.get(key) ?? null;
           const before = deriveEvents(pr, board.viewer, userState);
           for (const person of talkers(pr)) {

@@ -1,4 +1,4 @@
-import { possibleMisses, reviewNow, type IsoTime, type Pr, type Viewer } from '@postpile/core';
+import { possibleMisses, reviewNow, type FullPr, type IsoTime, type Viewer } from '@postpile/core';
 import type { Store } from '@postpile/store';
 
 /**
@@ -19,7 +19,7 @@ export class LessonKeeper {
    * glance is written again, which replaces the verdict the user pushed
    * back on. One lesson per review: a review seen again is skipped.
    */
-  afterStorePr(pr: Pr, createdIds: string[], viewer: Viewer): void {
+  afterStorePr(pr: FullPr, createdIds: string[], viewer: Viewer): void {
     const at = this.now().toISOString();
     this.revalidate(pr, viewer, at);
     if (createdIds.length === 0) {
@@ -57,7 +57,7 @@ export class LessonKeeper {
    * new text, a deleted or dismissed review withdraws it. What the user
    * already decided stays as it is.
    */
-  private revalidate(pr: Pr, viewer: Viewer, at: IsoTime): void {
+  private revalidate(pr: FullPr, viewer: Viewer, at: IsoTime): void {
     for (const lesson of this.store.lessons.listFollowingReviewForPr(pr.key)) {
       if (lesson.review === null) {
         continue;

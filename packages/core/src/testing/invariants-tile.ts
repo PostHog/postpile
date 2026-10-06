@@ -4,11 +4,12 @@
 import type { WhoseTurn, WhoseTurnKind } from '../whose-turn.ts';
 import type { PaneOffers } from '../offers.ts';
 import type { PrTier } from '../pr-tier.ts';
-import type { Pr, PrEvent } from '../types.ts';
+// Test helpers over the raw snapshot: every stored body (`FullPr`).
+import type { FullPr as Pr, PrEvent } from '../types.ts';
 import { tileListRank } from '../tile-view.ts';
 import type { TileView } from '../views.ts';
 import { tileViewOf, tileViewsOf, type PropertyBoard } from './build-board.ts';
-import { describeTurn, ensure, eventsOf, expectedUnreadRows, isNews, prOf, sameMove, trackedMembers, trackedRows, type Invariant } from './invariant.ts';
+import { describeTurn, ensure, eventsOf, expectedUnreadRows, isNews, fullPrOf, sameMove, trackedMembers, trackedRows, type Invariant } from './invariant.ts';
 import { editAsks } from './spec-events.ts';
 import { isBotThreadAnswer, isCarrierEvent } from './spec-facts.ts';
 import { expectedFooter, expectedGitHubLink, expectedLeadPr, expectedMarkLabel, expectedPane, expectedPrimaryAction } from './spec-offers.ts';
@@ -25,7 +26,7 @@ export function isSnoozedByRule(board: PropertyBoard, view: TileView): boolean {
       if (!snooze) {
         return false;
       }
-      return expectedSnoozePhase({ pr: prOf(board, member.prKey), events: eventsOf(board, member.prKey), viewer: board.viewer, snooze, now: board.now }) === 'active';
+      return expectedSnoozePhase({ pr: fullPrOf(board, member.prKey), events: eventsOf(board, member.prKey), viewer: board.viewer, snooze, now: board.now }) === 'active';
     })
   );
 }
@@ -36,12 +37,12 @@ function isMutedByRule(board: PropertyBoard, key: string): boolean {
   if (!snooze || snooze.condition.kind !== 'muted') {
     return false;
   }
-  return expectedSnoozePhase({ pr: prOf(board, key), events: eventsOf(board, key), viewer: board.viewer, snooze, now: board.now }) === 'active';
+  return expectedSnoozePhase({ pr: fullPrOf(board, key), events: eventsOf(board, key), viewer: board.viewer, snooze, now: board.now }) === 'active';
 }
 
 /** Done by the spec (spec-rules.ts `expectedDone`), not by `isPrDone`. */
 export function prDone(board: PropertyBoard, key: string): boolean {
-  return expectedDone({ pr: prOf(board, key), events: eventsOf(board, key), viewer: board.viewer, userState: board.userStates.get(key) ?? null, notYours: board.notYours.has(key), lastReadAt: board.threads.get(key)?.lastReadAt ?? null });
+  return expectedDone({ pr: fullPrOf(board, key), events: eventsOf(board, key), viewer: board.viewer, userState: board.userStates.get(key) ?? null, notYours: board.notYours.has(key), lastReadAt: board.threads.get(key)?.lastReadAt ?? null });
 }
 
 /**
@@ -134,7 +135,7 @@ function expectedReasonIds(board: PropertyBoard, key: string): string[] {
     const loudness = event.override ? event.override.loudness : event.ruleLoudness;
     return event.seenAt === null && loudness === 'quiet' && (thread.lastReadAt === null || event.at > thread.lastReadAt);
   });
-  const headline = expectedHeadline(quiet, prOf(board, key), board);
+  const headline = expectedHeadline(quiet, fullPrOf(board, key), board);
   return headline ? [headline.id] : [`thread:${thread.id}`];
 }
 
@@ -177,7 +178,7 @@ export const unreadWhileAThreadIsUnread: Invariant = {
         // Least important first, oldest first within a class: the last reason is the tile's headline.
         const order = view.state.unreadBecause.map((reason) => {
           const event = eventsOf(board, reason.prKey).find((candidate) => candidate.id === reason.eventId);
-          return { rank: event ? headlineRank(event, prOf(board, reason.prKey), board) : 4, at: reason.at };
+          return { rank: event ? headlineRank(event, fullPrOf(board, reason.prKey), board) : 4, at: reason.at };
         });
         ensure(
           order.every((item, index) => index === 0 || order[index - 1]!.rank > item.rank || (order[index - 1]!.rank === item.rank && order[index - 1]!.at <= item.at)),
@@ -275,7 +276,7 @@ export const tileTurnIsAPrTurn: Invariant = {
       const row = rows.find((candidate) => candidate.key === view.turn.prKey);
       ensure(row !== undefined, `${view.tile.id}: tile turn names ${view.turn.prKey}, no tracked row`);
       ensure(sameMove(row!.turn, view.turn), `${view.tile.id}: tile turn ${describeTurn(view.turn)}, row turn ${describeTurn(row!.turn)}`);
-      const what = tileWords(row!.turn, view.tile.members.length > 1 ? `on #${prOf(board, row!.key).ref.number}` : '');
+      const what = tileWords(row!.turn, view.tile.members.length > 1 ? `on #${fullPrOf(board, row!.key).ref.number}` : '');
       ensure(view.turn.what === what, `${view.tile.id}: tile says "${view.turn.what}", expected "${what}"`);
     }
   },
@@ -332,7 +333,7 @@ export const tileVerdictIsWorstOpenTracked: Invariant = {
   name: 'the tile verdict is the worst glance among open tracked PRs, else the lead PR\'s',
   check(board, views) {
     for (const view of views) {
-      const open = trackedMembers(view).filter((member) => prOf(board, member.prKey).state === 'OPEN');
+      const open = trackedMembers(view).filter((member) => fullPrOf(board, member.prKey).state === 'OPEN');
       if (open.length === 0) {
         ensure((view.verdict?.prKey ?? null) === view.offers.leadPrKey, `${view.tile.id}: nothing open, verdict of ${view.verdict?.prKey}, lead ${view.offers.leadPrKey}`);
         continue;
@@ -533,10 +534,10 @@ export const offersFollowTheSpec: Invariant = {
       ensure(offers.footer === footer && offers.markLabel === expectedMarkLabel(footer), `${view.tile.id}: footer ${offers.footer} (${offers.markLabel}), expected ${footer}`);
       ensure(offers.snooze === (view.state.kind !== 'done'), `${view.tile.id}: Snooze ${offers.snooze} on a ${view.state.kind} tile`);
       ensure(offers.leadPrKey === expectedLeadPr(view), `${view.tile.id}: lead ${offers.leadPrKey}, expected ${expectedLeadPr(view)}`);
-      const link = footer === 'snooze' ? expectedGitHubLink(view, board.viewer, board.prs) : null;
+      const link = footer === 'snooze' ? expectedGitHubLink(view, board.viewer, board.fullPrs) : null;
       ensure(JSON.stringify(offers.github) === JSON.stringify(link), `${view.tile.id}: GitHub link ${JSON.stringify(offers.github)}, expected ${JSON.stringify(link)}`);
       for (const row of view.prs) {
-        const pr = prOf(board, row.key);
+        const pr = fullPrOf(board, row.key);
         const primary = expectedPrimaryAction(pr, board.viewer, board.userStates.get(row.key) ?? null, view.state.kind === 'unread');
         ensure(row.primaryAction === primary, `${row.key}: primary ${row.primaryAction}, expected ${primary}`);
         const pane = offers.pane[row.key]!;
@@ -564,7 +565,7 @@ export const noViewerAsksNothing: Invariant = {
         ensure(row.turn.kind === 'none' && row.tier === 'rest', `${row.key}: ${describeTurn(row.turn)}, tier ${row.tier} without a viewer`);
         const facts = row.facts;
         ensure(facts.reviewRequest === null && facts.lastTouch === null && facts.openAsk === null && row.ownTeamRequests.length === 0, `${row.key}: facts without a viewer`);
-        const done = expectedDone({ pr: prOf(board, row.key), events: eventsOf(board, row.key), viewer: null, userState: board.userStates.get(row.key) ?? null, notYours: board.notYours.has(row.key), lastReadAt: null });
+        const done = expectedDone({ pr: fullPrOf(board, row.key), events: eventsOf(board, row.key), viewer: null, userState: board.userStates.get(row.key) ?? null, notYours: board.notYours.has(row.key), lastReadAt: null });
         ensure(row.done === done, `${row.key}: done ${row.done} without a viewer, expected ${done}`);
       }
     }

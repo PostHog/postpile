@@ -1,4 +1,4 @@
-import { BOT_BODY_MAX, snapshotCoversSince, deriveEvents, quietReadCheck, touchedReadCheck, trimBotBody, type Pr } from '@postpile/core';
+import { BOT_BODY_MAX, snapshotCoversSince, deriveEvents, quietReadCheck, touchedReadCheck, trimBotBody, type FullPr } from '@postpile/core';
 import { viewer } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { loadFixture } from './fake-fetch.ts';
@@ -80,7 +80,7 @@ describe('toPr: pending reviews', () => {
   it('never lets a pending review mark the thread read as a touch', () => {
     const raw = rawPr();
     raw.reviews.nodes.push(pendingReview('Will check the cache keys'));
-    const pr: Pr = toPr(ref, raw);
+    const pr: FullPr = toPr(ref, raw);
     const events = deriveEvents(pr, viewer, null);
     const check = touchedReadCheck({
       thread: {
@@ -148,7 +148,7 @@ describe('toPr: truncation', () => {
     // The human comment GitHub has but the query left out.
     raw.comments.totalCount = 61;
     const pr = toPr(ref, raw);
-    const check = (snapshot: Pr) =>
+    const check = (snapshot: FullPr) =>
       quietReadCheck({
         thread: {
           id: 'thread-42',

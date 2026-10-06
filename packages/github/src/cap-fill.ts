@@ -6,7 +6,7 @@
 // has no more, one GraphQL request per page, and merges the items in
 // normalized like the PR query.
 
-import { capHitCoversSince, type CapHit, type IsoTime, type Pr, type PrRef } from '@postpile/core';
+import { capHitCoversSince, type CapHit, type IsoTime, type FullPr, type PrRef } from '@postpile/core';
 import { graphqlFailure, type GitHubHttp } from './http.ts';
 import { addOlderPage, type OlderPage } from './normalize.ts';
 import { buildOlderPageQuery, OLDER_LIST_ORDER, THREAD_COMMENTS_PAGE_QUERY, type OlderList } from './queries.ts';
@@ -34,7 +34,7 @@ async function fetchThreadComments(http: GitHubHttp, threadId: string, cursor: s
 }
 
 /** The next thread whose comments still need paging, with its id; old snapshots without a thread id cannot be paged. */
-function threadToPage(pr: Pr, since: IsoTime | null, gone: Set<string>): { hit: CapHit; threadId: string } | undefined {
+function threadToPage(pr: FullPr, since: IsoTime | null, gone: Set<string>): { hit: CapHit; threadId: string } | undefined {
   for (const hit of pr.capHits ?? []) {
     if (hit.list === 'thread_comments' && hit.threadId !== undefined && !gone.has(hit.threadId) && !capHitCoversSince(hit, since)) {
       return { hit, threadId: hit.threadId };
@@ -45,7 +45,7 @@ function threadToPage(pr: Pr, since: IsoTime | null, gone: Set<string>): { hit: 
 
 /** Progress of one fill: the snapshot so far and the pages it took. */
 interface Filling {
-  pr: Pr;
+  pr: FullPr;
   pages: number;
 }
 
@@ -90,7 +90,7 @@ async function fillThreadComments(http: GitHubHttp, filling: Filling, since: Iso
  * cover `since` this time, so the rest is not paged. A failed request
  * throws; the caller keeps the snapshot it had.
  */
-export async function fillCappedLists(http: GitHubHttp, pr: Pr, since: IsoTime | null, maxPages: number): Promise<CapFill> {
+export async function fillCappedLists(http: GitHubHttp, pr: FullPr, since: IsoTime | null, maxPages: number): Promise<CapFill> {
   const filling: Filling = { pr, pages: 0 };
   for (const list of OLDER_LIST_ORDER) {
     if (!(await fillList(http, filling, list, since, maxPages))) {

@@ -4,7 +4,7 @@ import { deriveEvents } from './events.ts';
 import { at, makeComment, makePr, makeReview, makeThread, viewer } from './fixtures.ts';
 import { headlineClass } from './headline.ts';
 import { isSnoozeOver } from './snooze.ts';
-import type { Comment, Pr, Review } from './types.ts';
+import type { FullComment as Comment, FullPr as Pr, FullReview as Review } from './types.ts';
 
 const BOT = 'greptile-apps[bot]';
 

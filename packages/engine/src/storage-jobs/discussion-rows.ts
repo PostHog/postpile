@@ -39,4 +39,9 @@ export class DiscussionRowsJob implements StorageJob {
     store.meta.set(DISCUSSION_READY_KEY, at);
     return 'done';
   }
+
+  /** The stored PRs still without rows: a snapshot that is missing, malformed or does not split. */
+  blockedUnits(store: Store): number {
+    return store.prs.countWithoutDiscussionRows();
+  }
 }

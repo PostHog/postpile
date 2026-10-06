@@ -79,7 +79,7 @@ import type {
   ApprovePrRequest,
   BatchApproveResult,
   PrApproveResult,
-  Comment,
+  FullComment,
   ReviewNoteKind,
   ToolsView,
   Topic,
@@ -177,7 +177,7 @@ import {
   topicYourMoves,
   yourMovesByGroup,
   type AgentCallStats,
-  type Pr,
+  type FullPr,
   type PrTier,
   type TileMember,
   type SearchableTopic,
@@ -567,7 +567,7 @@ export class FakeEngine implements EngineService {
     return { login: this.data.viewer, teams: this.data.viewerTeams, homeTeams: this.data.viewerHomeTeams, teamMembers: this.data.viewerTeamMembers };
   }
 
-  private prsByKey(): Map<PrKey, Pr> {
+  private prsByKey(): Map<PrKey, FullPr> {
     return new Map(this.data.prs.map((pr) => [pr.key, pr]));
   }
 
@@ -612,14 +612,14 @@ export class FakeEngine implements EngineService {
   }
 
   /** Same tier rule as the engine; the sample has no threads, so a pinged member's reason stands in. */
-  private tierOf(pr: Pr, member: TileMember | undefined): PrTier {
+  private tierOf(pr: FullPr, member: TileMember | undefined): PrTier {
     const reason = member?.provenance.kind === 'pinged' ? member.provenance.reason : null;
     const userState = this.data.userStates.find((entry) => entry.prKey === pr.key) ?? null;
     return prTier({ pr, events: this.eventsOf(pr.key), viewer: this.viewer(), userState, reason });
   }
 
   /** Same as the engine: the PR's move is a re-review, which sorts it first under Changes you requested. */
-  private isReReview(pr: Pr): boolean {
+  private isReReview(pr: FullPr): boolean {
     const userState = this.data.userStates.find((entry) => entry.prKey === pr.key) ?? null;
     const turn = prWhoseTurn({ pr, events: this.eventsOf(pr.key), userState, viewer: this.viewer(), notYours: this.notYours().has(pr.key) });
     return isReReviewMove(turn);
@@ -911,8 +911,8 @@ export class FakeEngine implements EngineService {
     );
   }
 
-  private topicPrs(tiles: Tile[]): { pr: Pr; member: TileMember }[] {
-    const found = new Map<PrKey, { pr: Pr; member: TileMember }>();
+  private topicPrs(tiles: Tile[]): { pr: FullPr; member: TileMember }[] {
+    const found = new Map<PrKey, { pr: FullPr; member: TileMember }>();
     for (const member of tiles.flatMap((tile) => tile.members)) {
       const pr = this.data.prs.find((candidate) => candidate.key === member.prKey);
       if (pr && !found.has(pr.key)) {
@@ -1811,7 +1811,7 @@ export class FakeEngine implements EngineService {
     this.writes.record({ action: 'reply', origin: 'detail', outcome: 'github', prKey, detail: `${detail}: sample data, nothing left the process` });
     const target = replyTarget(comment);
     const base = { id: `local-reply-${this.newId()}`, author: this.data.viewer, createdAt: this.timestamp() };
-    const reply: Comment =
+    const reply: FullComment =
       target.kind === 'thread'
         ? { ...base, body, kind: 'review_comment', url: comment.url, path: comment.path, threadId: target.threadId }
         : { ...base, body: quotedReplyBody(comment, body), kind: 'comment', url: pr.url, path: null, threadId: null };

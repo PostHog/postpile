@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { deriveEvents } from './events.ts';
 import { at, makeComment, makeCommit, makePr, makeThreadFor, makeTimelineItem, makeUserState, singleTile, viewer } from './fixtures.ts';
 import { deriveTileState } from './tiles.ts';
-import type { Pr, UserPrState } from './types.ts';
+import type { FullPr as Pr, UserPrState } from './types.ts';
 
 /** `unreadOnGitHub`: the PR's thread is unread on GitHub; read otherwise (GitHub or PostPile's quiet reads cleared it). */
 function tileState(pr: Pr, userState: UserPrState | null, unreadOnGitHub = false) {

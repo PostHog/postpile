@@ -3,7 +3,7 @@ import { humanDiscussion, humanReviews, isBotCommand, isBotTalk } from './bot-ta
 import { memoryRole } from './event-roles.ts';
 import { deriveEvents } from './events.ts';
 import { at, makeComment, makePr, makeReview, makeThread, viewer } from './fixtures.ts';
-import type { Comment, Pr, PrEvent } from './types.ts';
+import type { Comment, FullPr, PrEvent } from './types.ts';
 
 const BOT = 'greptile-apps[bot]';
 
@@ -40,7 +40,7 @@ describe('isBotCommand', () => {
 });
 
 /** greptile opened a thread on a.ts and alice answered "fixed"; bob asks alice something in a second thread. */
-function busyPr(): Pr {
+function busyPr(): FullPr {
   const botThread = makeThread('t1', [
     makeComment({ id: 'g1', author: BOT, body: 'Possible null dereference', createdAt: at(1) }),
     makeComment({ id: 'a1', author: 'alice', body: 'fixed', createdAt: at(2), reviewId: 'r-a1' }),

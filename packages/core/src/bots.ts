@@ -38,8 +38,14 @@ export function isTrunkBot(login: string): boolean {
   return isMergeQueueBot(login) && login.toLowerCase().startsWith('trunk-io');
 }
 
+/**
+ * Automation: a bot account, or a body that says so. A board read leaves
+ * out only bot bodies (`isBodyReadByRules`), and a bot account is
+ * automation without reading the body, so a left-out body gives the same
+ * answer.
+ */
 export function isMachineComment(comment: Pick<Comment, 'author' | 'body'>): boolean {
-  return isBot(comment.author) || botBody.test(comment.body);
+  return isBot(comment.author) || (comment.body !== null && botBody.test(comment.body));
 }
 
 /** What `isAutomation` reads of an event. */

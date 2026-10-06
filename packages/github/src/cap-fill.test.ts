@@ -1,5 +1,5 @@
 import { at, makePr, makeReview } from '@postpile/core/fixtures';
-import { snapshotCoversSince, type Pr } from '@postpile/core';
+import { snapshotCoversSince, type FullPr } from '@postpile/core';
 import { describe, expect, it } from 'vitest';
 import { GitHubClient } from './client.ts';
 import { FakeFetch, fakeTokens } from './fake-fetch.ts';
@@ -7,7 +7,7 @@ import type { RawReview, RawReviewThread } from './raw.ts';
 
 // A bot-heavy PR: the query kept the newest 50 reviews (from minute 40 on) and the newest 50
 // threads; the viewer last read it at minute 20, so neither list reaches back to the read.
-function cappedPr(): Pr {
+function cappedPr(): FullPr {
   return makePr({
     number: 9,
     reviews: [makeReview({ id: 'R-kept', author: 'review-bot[bot]', state: 'COMMENTED', submittedAt: at(40) })],

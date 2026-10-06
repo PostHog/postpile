@@ -24,7 +24,7 @@ describe('bot talk in the agent layer', () => {
     fc.assert(
       fc.property(boardSpecArb, (spec) => {
         const board = buildBoard(spec);
-        for (const pr of board.prs.values()) {
+        for (const pr of board.fullPrs.values()) {
           const people = pr.author !== '' && !isBot(pr.author) && pr.author !== LOGINS.viewer ? [pr.author, LOGINS.outsider] : [LOGINS.outsider];
           for (const person of people) {
             expect(agentView(withBotTalk(pr, person), board.viewer)).toEqual(agentView(pr, board.viewer));

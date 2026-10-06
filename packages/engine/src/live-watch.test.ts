@@ -1,4 +1,4 @@
-import { UNDO_WINDOW_MS, type Pr } from '@postpile/core';
+import { UNDO_WINDOW_MS, type FullPr } from '@postpile/core';
 import { makeComment, makeReview, makeThreadFor, makeTimelineItem, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness, NOW, type Harness } from './testing/fakes.ts';
@@ -10,14 +10,14 @@ const MERGED_AT = '2026-09-02T12:03:00.000Z';
 const THREAD_MOVED = '2026-09-02T12:04:00.000Z';
 
 /** The viewer's own PR, synced, with its thread read on github.com and the inbox answering 304 from here on. */
-async function ownReadPr(h: Harness): Promise<Pr> {
+async function ownReadPr(h: Harness): Promise<FullPr> {
   const pr = reviewRequestedPr(1, { author: viewer.login });
   h.reader.addPr(pr, makeThreadFor(pr, { reason: 'author', unread: false, lastReadAt: READ_AT }));
   await h.engine.sync({ maxAgentCalls: 0 });
   return pr;
 }
 
-function mergedByViewer(pr: Pr): Pr {
+function mergedByViewer(pr: FullPr): FullPr {
   return {
     ...pr,
     state: 'MERGED',
@@ -175,7 +175,7 @@ describe('how a read elsewhere was noticed', () => {
 });
 
 describe('freshness check', () => {
-  function approvedByBob(pr: Pr): Pr {
+  function approvedByBob(pr: FullPr): FullPr {
     return { ...pr, updatedAt: '2026-09-02T12:30:00.000Z', reviewDecision: 'APPROVED', reviews: [makeReview({ id: 'r-bob', author: 'bob', state: 'APPROVED' })] };
   }
 

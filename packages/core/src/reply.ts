@@ -1,6 +1,6 @@
 import { isBotTalk } from './bot-talk.ts';
 import { mentionsUser } from './mentions.ts';
-import type { Comment, Pr, Review } from './types.ts';
+import type { Comment, FullComment, FullPr, Pr } from './types.ts';
 
 /** How much of the replied-to comment the quote keeps. */
 export const REPLY_QUOTE_MAX = 200;
@@ -42,14 +42,15 @@ function clipLine(line: string, max: number): string {
  * comment and mentions its author, unless the user's text already does. A
  * deleted author ('' after normalizing) gets no mention, never a bare "@".
  */
-export function quotedReplyBody(comment: Pick<Comment, 'author' | 'body'>, text: string): string {
+export function quotedReplyBody(comment: Pick<FullComment, 'author' | 'body'>, text: string): string {
   const reply = text.trim();
   const addressed = comment.author === '' || mentionsUser(reply, comment.author) ? reply : `@${comment.author} ${reply}`;
   const quote = clipLine(firstQuotableLine(comment.body), REPLY_QUOTE_MAX);
   return quote === '' ? addressed : `> ${quote}\n\n${addressed}`;
 }
 
-export function findComment(pr: Pr, commentId: string): Comment | null {
+/** The comment of `Pr.comments` with this id; a `FullPr` gives it with its body. */
+export function findComment<P extends Pr>(pr: P, commentId: string): P['comments'][number] | null {
   return pr.comments.find((comment) => comment.id === commentId) ?? null;
 }
 
@@ -58,12 +59,12 @@ export function findComment(pr: Pr, commentId: string): Comment | null {
  * comment) or a review. An approval without a body is no comment, but still
  * a review node GitHub takes a reaction on.
  */
-export function findReactable(pr: Pr, id: string): Comment | Review | null {
+export function findReactable<P extends Pr>(pr: P, id: string): P['comments'][number] | P['reviews'][number] | null {
   return findComment(pr, id) ?? pr.reviews.find((review) => review.id === id) ?? null;
 }
 
 /** The PR with the viewer's thumbs up on comment or review `id`, everywhere it shows: comments, reviews and thread comments. */
-export function withViewerReaction(pr: Pr, id: string): Pr {
+export function withViewerReaction(pr: FullPr, id: string): FullPr {
   const mark = <T extends { id: string }>(item: T): T => (item.id === id ? { ...item, viewerReacted: true } : item);
   return {
     ...pr,
@@ -79,7 +80,7 @@ export function withViewerReaction(pr: Pr, id: string): Pr {
  * comment, else the human conversation around it (a few before, a few after),
  * without bot talk ("@codex review", `isBotTalk`).
  */
-export function replyConversation(pr: Pr, comment: Comment): Comment[] {
+export function replyConversation(pr: FullPr, comment: FullComment): FullComment[] {
   const target = replyTarget(comment);
   if (target.kind === 'thread') {
     const thread = pr.threads.find((candidate) => candidate.id === target.threadId);

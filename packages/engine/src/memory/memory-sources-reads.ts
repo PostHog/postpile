@@ -34,9 +34,12 @@ export class MemorySourcesReads {
       return null;
     }
     const world = verifyWorldFor(this.store, [fact], this.now().toISOString());
-    const events = this.eventsOf([...new Set(fact.refs.map((ref) => ref.prKey))]);
+    const refKeys = [...new Set(fact.refs.map((ref) => ref.prKey))];
+    const events = this.eventsOf(refKeys);
+    // Excerpts quote any body, a bot's too: every stored body.
+    const full = this.store.prs.getFullMany(refKeys);
     const sources = fact.refs
-      .map((ref) => describeFactRef(ref, world.prs.get(ref.prKey), events.get(ref.prKey) ?? []))
+      .map((ref) => describeFactRef(ref, full.get(ref.prKey), events.get(ref.prKey) ?? []))
       .sort((a, b) => a.at.localeCompare(b.at));
     return { target, claim: fact.text, recordedIn: 'Fact', recordedAt: fact.recordedAt, sources, check: factCheck(fact, verifyFact(fact, world)) };
   }
@@ -49,7 +52,8 @@ export class MemorySourcesReads {
     }
     const memberKeys = this.store.memberships.listForTopic(target.topicId).map((membership) => membership.prKey);
     const refKeys = [...new Set(line.sources.refs.map((ref) => ref.prKey))];
-    const prs = this.store.prs.getMany([...new Set([...memberKeys, ...refKeys])]);
+    // Every stored body: the sources' excerpts quote any of them.
+    const prs = this.store.prs.getFullMany([...new Set([...memberKeys, ...refKeys])]);
     const world = { prs, memberKeys: new Set(memberKeys), now: this.now().toISOString() };
     const issue = dossierLineIssue(version.dossier, target.path, world);
     return {

@@ -3,7 +3,7 @@
 // sync. Only a person or a real state change makes a dossier call; review
 // bot findings ride along with it; status refreshes never reach the prompt
 // and never make the dossier look out of date (DESIGN.md "Event roles").
-import type { Pr } from '@postpile/core';
+import type { FullPr } from '@postpile/core';
 import { makeThreadFor } from '@postpile/core/fixtures';
 import { CORPUS, CORPUS_SCENARIOS, corpusPrAfter, type CorpusEntry } from '@postpile/core/testing';
 import { describe, expect, it } from 'vitest';
@@ -31,7 +31,7 @@ function editedAt(entry: CorpusEntry, time: string): CorpusEntry {
 describe('bot noise and topic memory', () => {
   it('updates the dossier only for people and real changes, with review bots riding along', async () => {
     const { h, nextHour } = hourlyHarness();
-    let pr: Pr = CORPUS_SCENARIOS.ownOpen.pr;
+    let pr: FullPr = CORPUS_SCENARIOS.ownOpen.pr;
     topicWithPrs(h, 'runners', [pr]);
     let etag = 0;
     const land = async (...entries: CorpusEntry[]) => {
@@ -86,7 +86,7 @@ describe('bot noise and topic memory', () => {
 
   it('counts only trigger events as newer while the dossier waits', async () => {
     const { h, nextHour } = hourlyHarness();
-    let pr: Pr = CORPUS_SCENARIOS.ownOpen.pr;
+    let pr: FullPr = CORPUS_SCENARIOS.ownOpen.pr;
     topicWithPrs(h, 'runners', [pr]);
     await h.engine.sync({ agentJobs: ['dossiers'] });
 

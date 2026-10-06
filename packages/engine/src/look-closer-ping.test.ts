@@ -1,4 +1,4 @@
-import type { Glance, Pr } from '@postpile/core';
+import type { Glance, FullPr } from '@postpile/core';
 import { at, makePr, makeReview, makeThreadFor, makeTimelineItem } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { GlancePings, lookCloserMetaKey } from './live/glance-pings.ts';
@@ -8,7 +8,7 @@ import { topicWithPrs } from './testing/topics.ts';
 const TEAM = 'acme/team-platform';
 
 /** rowan's PR from outside the team; a reviewer-assigning bot routed the review to the viewer's team. */
-function routedPr(overrides: Partial<Pr> = {}): Pr {
+function routedPr(overrides: Partial<FullPr> = {}): FullPr {
   return makePr({
     number: 31,
     author: 'rowan',
@@ -19,7 +19,7 @@ function routedPr(overrides: Partial<Pr> = {}): Pr {
   });
 }
 
-function glance(pr: Pr, verdict: Glance['verdict'], forYou = 'The cache key change touches the runner image. Check the salt.'): Glance {
+function glance(pr: FullPr, verdict: Glance['verdict'], forYou = 'The cache key change touches the runner image. Check the salt.'): Glance {
   return {
     prKey: pr.key,
     verdict,
@@ -36,7 +36,7 @@ function glance(pr: Pr, verdict: Glance['verdict'], forYou = 'The cache key chan
   };
 }
 
-async function synced(pr: Pr): Promise<{ h: Harness; pings: GlancePings }> {
+async function synced(pr: FullPr): Promise<{ h: Harness; pings: GlancePings }> {
   const h = makeHarness();
   topicWithPrs(h, 'depot', [pr]);
   await h.engine.sync({ maxAgentCalls: 0 });
