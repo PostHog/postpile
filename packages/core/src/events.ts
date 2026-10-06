@@ -389,30 +389,6 @@ function timelineEvents(pr: Pr, viewer: Viewer): RawEvent[] {
   }));
 }
 
-/** One line for the latest finished CI result on the head commit. */
-function ciEvent(pr: Pr): RawEvent | null {
-  const { rollup, contexts } = pr.checks;
-  if (rollup !== 'SUCCESS' && rollup !== 'FAILURE') {
-    return null;
-  }
-  const finished = contexts.map((c) => c.completedAt).filter((at): at is string => at !== null);
-  if (finished.length === 0) {
-    return null;
-  }
-  const failed = contexts.filter((c) => c.conclusion === 'FAILURE').map((c) => c.name);
-  const summary = failed.length > 0 ? `CI failed: ${failed.join(', ')}` : 'CI passed';
-  return {
-    kind: 'ci',
-    actor: '',
-    isBot: true,
-    at: finished.sort().at(-1) as string,
-    summary,
-    url: null,
-    sourceId: `${pr.headOid}:${rollup}`,
-    subject: null,
-  };
-}
-
 function collectRawEvents(pr: Pr, viewer: Viewer, userState: UserPrState | null): RawEvent[] {
   const raw: RawEvent[] = [];
   for (const comment of pr.comments) {
@@ -428,10 +404,6 @@ function collectRawEvents(pr: Pr, viewer: Viewer, userState: UserPrState | null)
   raw.push(...reviewEvents(pr));
   raw.push(...commitEvents(pr, viewer, userState));
   raw.push(...timelineEvents(pr, viewer));
-  const ci = ciEvent(pr);
-  if (ci) {
-    raw.push(ci);
-  }
   return raw;
 }
 

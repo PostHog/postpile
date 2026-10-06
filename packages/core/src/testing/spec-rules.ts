@@ -554,8 +554,6 @@ export function expectedSnoozePhase(input: { pr: Pr; events: PrEvent[]; viewer: 
       return after.some((event) => REPLY_KINDS.includes(event.kind) && !isAutomationEvent(pr, viewer, event) && !isViewerLogin(viewer, event.actor)) ? 'over' : 'active';
     case 'new_push':
       return after.some((event) => SPEC_PUSH_KINDS.includes(event.kind)) ? 'over' : 'active';
-    case 'ci_green':
-      return pr.checks.rollup === 'SUCCESS' ? 'over' : 'active';
     case 'until_time':
       return input.now >= condition.until ? 'over' : 'active';
     case 'muted':
@@ -818,9 +816,9 @@ function isUnseenLoudEvent(event: PrEvent): boolean {
   return event.seenAt === null && effectiveLoudnessOf(event) === 'loud';
 }
 
-/** Who acted, in order of first appearance, "CI" for actor-less events. */
+/** Who acted, in order of first appearance, "GitHub" for actor-less events. */
 function actorNames(events: PrEvent[]): string[] {
-  return [...new Set(events.map((event) => (event.actor === '' ? 'CI' : event.actor)))];
+  return [...new Set(events.map((event) => (event.actor === '' ? 'GitHub' : event.actor)))];
 }
 
 /**

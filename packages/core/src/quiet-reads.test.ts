@@ -34,8 +34,8 @@ function botComment(minute: number, actor = 'trunk-io[bot]'): PrEvent {
   return makeEvent({ id: `bot-${minute}`, prKey: pr.key, kind: 'bot_comment', actor, isBot: true, at: at(minute), summary: `${actor} commented` });
 }
 
-function ciResult(minute: number): PrEvent {
-  return makeEvent({ id: `ci-${minute}`, prKey: pr.key, kind: 'ci', actor: '', isBot: true, at: at(minute), summary: 'CI passed' });
+function deployResult(minute: number): PrEvent {
+  return makeEvent({ id: `deploy-${minute}`, prKey: pr.key, kind: 'deploy', actor: 'vercel[bot]', isBot: true, at: at(minute), summary: 'vercel[bot] deployed' });
 }
 
 function botReview(minute: number, actor = 'coderabbitai[bot]'): PrEvent {
@@ -50,7 +50,7 @@ function input(overrides: Partial<QuietReadInput> = {}): QuietReadInput {
   return {
     thread: makeThreadFor(pr, { lastReadAt: at(20), updatedAt: at(31), unread: true, reason: 'subscribed' }),
     pr,
-    events: [humanComment(5), botComment(30), ciResult(31)],
+    events: [humanComment(5), botComment(30), deployResult(31)],
     userState: null,
     viewer,
     notYours: false,
@@ -60,9 +60,9 @@ function input(overrides: Partial<QuietReadInput> = {}): QuietReadInput {
 }
 
 describe('botOnlySinceRead', () => {
-  it('returns the events after the read when every one is a bot, CI results without an actor included', () => {
-    const events = [humanComment(5), botComment(30), ciResult(31)];
-    expect(botOnlySinceRead(makePr(), events, at(20), viewer)?.map((event) => event.id)).toEqual(['bot-30', 'ci-31']);
+  it('returns the events after the read when every one is a bot', () => {
+    const events = [humanComment(5), botComment(30), deployResult(31)];
+    expect(botOnlySinceRead(makePr(), events, at(20), viewer)?.map((event) => event.id)).toEqual(['bot-30', 'deploy-31']);
   });
 
   it('is null once a person took part after the read', () => {
@@ -97,13 +97,13 @@ describe('botOnlySinceRead', () => {
 
 describe('botNames', () => {
   it('lists each bot once, CI for actor-less events', () => {
-    expect(botNames([botComment(30), ciResult(31), botComment(32)])).toEqual(['trunk-io[bot]', 'CI']);
+    expect(botNames([botComment(30), deployResult(31), botComment(32)])).toEqual(['trunk-io[bot]', 'vercel[bot]']);
   });
 });
 
 describe('quietReadCheck', () => {
   it('marks a read thread that turned unread only because of bots, naming them', () => {
-    expect(quietReadCheck(input())).toEqual({ kind: 'mark', bots: ['trunk-io[bot]', 'CI'] });
+    expect(quietReadCheck(input())).toEqual({ kind: 'mark', bots: ['trunk-io[bot]', 'vercel[bot]'] });
   });
 
   it('leaves threads alone that GitHub has read or the user never read', () => {
@@ -137,27 +137,27 @@ describe('quietReadCheck', () => {
 
   it('marks the user own open PR after a bot review or inline comment too (2026-10-01)', () => {
     const own = { ...pr, author: viewer.login };
-    expect(quietReadCheck(input({ pr: own, events: [humanComment(5), botReview(30), ciResult(31)] })).kind).toBe('mark');
+    expect(quietReadCheck(input({ pr: own, events: [humanComment(5), botReview(30), deployResult(31)] })).kind).toBe('mark');
     const inline = makeComment({ id: 'rc9', kind: 'review_comment', threadId: 't1', path: 'a.ts', author: 'coderabbitai[bot]', createdAt: at(30) });
     const inlineEvent = makeEvent({ id: 'inline', prKey: pr.key, kind: 'bot_comment', actor: 'coderabbitai[bot]', isBot: true, at: at(30), sourceId: 'rc9' });
-    expect(quietReadCheck(input({ pr: { ...own, comments: [inline] }, events: [humanComment(5), inlineEvent, ciResult(31)] })).kind).toBe('mark');
+    expect(quietReadCheck(input({ pr: { ...own, comments: [inline] }, events: [humanComment(5), inlineEvent, deployResult(31)] })).kind).toBe('mark');
   });
 
   it('marks the user own open PR when the bots only commented, ran CI or deployed (2026-09-30)', () => {
     const own = { ...pr, author: viewer.login };
-    expect(quietReadCheck(input({ pr: own }))).toEqual({ kind: 'mark', bots: ['trunk-io[bot]', 'CI'] });
+    expect(quietReadCheck(input({ pr: own }))).toEqual({ kind: 'mark', bots: ['trunk-io[bot]', 'vercel[bot]'] });
   });
 
   it('marks the user own merged or closed PR when only bots came after the read', () => {
     const merged = { ...pr, author: viewer.login, state: 'MERGED' as const, mergedAt: at(30) };
-    expect(quietReadCheck(input({ pr: merged }))).toEqual({ kind: 'mark', bots: ['trunk-io[bot]', 'CI'] });
+    expect(quietReadCheck(input({ pr: merged }))).toEqual({ kind: 'mark', bots: ['trunk-io[bot]', 'vercel[bot]'] });
     const closed = { ...pr, author: viewer.login, state: 'CLOSED' as const };
     expect(quietReadCheck(input({ pr: closed })).kind).toBe('mark');
   });
 
   it('does not take the viewer own review after the read for a person', () => {
     const ownReview = makeEvent({ id: 'own-review', prKey: pr.key, kind: 'review_approved', actor: viewer.login, at: at(25), seenAt: at(25) });
-    expect(quietReadCheck(input({ events: [humanComment(5), ownReview, botComment(30), ciResult(31)] }))).toEqual({ kind: 'mark', bots: ['trunk-io[bot]', 'CI'] });
+    expect(quietReadCheck(input({ events: [humanComment(5), ownReview, botComment(30), deployResult(31)] }))).toEqual({ kind: 'mark', bots: ['trunk-io[bot]', 'vercel[bot]'] });
   });
 
   it('never marks a PR with an unseen merge without the user review, even when a bot merged it', () => {
@@ -168,7 +168,7 @@ describe('quietReadCheck', () => {
 
   it('marks although the tile is unread (its thread is), but leaves it while the PR has unseen loud news', () => {
     const raised = { ...botComment(30), override: { loudness: 'loud' as const, reason: 'the finding needs a look', by: 'agent' as const } };
-    expect(quietReadCheck(input({ events: [humanComment(5), raised, ciResult(31)] }))).toEqual({ kind: 'skip', why: 'unseen_loud' });
+    expect(quietReadCheck(input({ events: [humanComment(5), raised, deployResult(31)] }))).toEqual({ kind: 'skip', why: 'unseen_loud' });
   });
 
   it('leaves it while the user move is new since the read, not for a move that stood before it', () => {
@@ -176,7 +176,7 @@ describe('quietReadCheck', () => {
     // A bot marked the draft ready after the read: the review asked before is a move only now.
     const readied = makePr({ number: 7, author: 'alice', reviewerUsers: [viewer.login], timeline: [request, makeTimelineItem({ id: 'rd', kind: 'ready_for_review', actor: 'readybot[bot]', subject: null, at: at(30) })] });
     const readyEvent = makeEvent({ id: 'ready', prKey: pr.key, kind: 'ready_for_review', actor: 'readybot[bot]', isBot: true, at: at(30), sourceId: 'rd' });
-    expect(quietReadCheck(input({ pr: readied, events: [readyEvent, ciResult(31)] }))).toEqual({ kind: 'skip', why: 'your_move' });
+    expect(quietReadCheck(input({ pr: readied, events: [readyEvent, deployResult(31)] }))).toEqual({ kind: 'skip', why: 'your_move' });
     // Asked before the read and still owed: the move stood when the user read it.
     const asked = makePr({ number: 7, author: 'alice', reviewerUsers: [viewer.login], timeline: [request] });
     expect(quietReadCheck(input({ pr: asked })).kind).toBe('mark');
@@ -244,13 +244,13 @@ describe('touchedReadCheck', () => {
   it('includes the user own PR, a bot review after the touch included', () => {
     const ownPr = { ...pr, author: viewer.login };
     expect(touchedReadCheck(touched({ pr: ownPr, events: [humanComment(25), own('comment', 30)] }))).toEqual({ kind: 'mark', reason: 'replied' });
-    expect(touchedReadCheck(touched({ pr: ownPr, events: [humanComment(25), own('comment', 30), ciResult(35)] }))).toEqual({ kind: 'mark', reason: 'replied' });
+    expect(touchedReadCheck(touched({ pr: ownPr, events: [humanComment(25), own('comment', 30), deployResult(35)] }))).toEqual({ kind: 'mark', reason: 'replied' });
     expect(touchedReadCheck(touched({ pr: ownPr, events: [humanComment(25), own('comment', 30), botReview(35)] })).kind).toBe('mark');
   });
 
   it('lets bots after the touch pass on the user own PR once it is merged', () => {
     const merged = { ...pr, author: viewer.login, state: 'MERGED' as const, mergedAt: at(36) };
-    const events = [humanComment(25), own('comment', 30), ciResult(35), botComment(36, 'trunk-io[bot]')];
+    const events = [humanComment(25), own('comment', 30), deployResult(35), botComment(36, 'trunk-io[bot]')];
     expect(touchedReadCheck(touched({ pr: merged, events }))).toEqual({ kind: 'mark', reason: 'replied' });
   });
 
@@ -291,14 +291,14 @@ describe('judgedReadCheck', () => {
 
   // Read at 20; lyra commented at 30 and the agent judged it quiet; CI at 31.
   function judged(overrides: Partial<QuietReadInput> = {}): QuietReadInput {
-    return input({ events: [humanComment(5), teammate(30, { override: judgedQuiet }), ciResult(31)], ...overrides });
+    return input({ events: [humanComment(5), teammate(30, { override: judgedQuiet }), deployResult(31)], ...overrides });
   }
 
   it('marks when everything since the read is automation or a person the agent judged as not needing you', () => {
-    expect(judgedReadCheck(judged())).toEqual({ kind: 'mark', actors: ['lyra', 'CI'] });
-    expect(judgedReadDetail(['lyra', 'CI'])).toBe('nothing that needs you since you last looked: lyra, CI');
-    expect(quietReasonFromDetail(judgedReadDetail(['lyra', 'CI']))).toBe('judged');
-    expect(actorsFromQuietDetail(judgedReadDetail(['lyra', 'CI']))).toEqual(['lyra', 'CI']);
+    expect(judgedReadCheck(judged())).toEqual({ kind: 'mark', actors: ['lyra', 'vercel[bot]'] });
+    expect(judgedReadDetail(['lyra', 'vercel[bot]'])).toBe('nothing that needs you since you last looked: lyra, vercel[bot]');
+    expect(quietReasonFromDetail(judgedReadDetail(['lyra', 'vercel[bot]']))).toBe('judged');
+    expect(actorsFromQuietDetail(judgedReadDetail(['lyra', 'vercel[bot]']))).toEqual(['lyra', 'vercel[bot]']);
   });
 
   it('counts from the newer of the read and the viewer review or comment', () => {
@@ -310,7 +310,7 @@ describe('judgedReadCheck', () => {
   });
 
   it('waits for the agent: a person not judged yet, or judged as needing you, keeps it unread', () => {
-    expect(judgedReadCheck(judged({ events: [teammate(30), ciResult(31)] }))).toEqual({ kind: 'skip', why: 'not_judged' });
+    expect(judgedReadCheck(judged({ events: [teammate(30), deployResult(31)] }))).toEqual({ kind: 'skip', why: 'not_judged' });
     const raised = teammate(30, { override: { loudness: 'loud', reason: 'asks for a decision', by: 'agent' } });
     expect(judgedReadCheck(judged({ events: [raised] }))).toEqual({ kind: 'skip', why: 'unseen_loud' });
   });
@@ -328,10 +328,10 @@ describe('judgedReadCheck', () => {
   });
 
   it('leaves bots-only threads to the other rules, a bot review on your own open PR included', () => {
-    expect(judgedReadCheck(judged({ events: [ciResult(31)] }))).toEqual({ kind: 'skip', why: 'no_people' });
+    expect(judgedReadCheck(judged({ events: [deployResult(31)] }))).toEqual({ kind: 'skip', why: 'no_people' });
     const own = { ...pr, author: viewer.login };
     expect(judgedReadCheck(judged({ pr: own, events: [teammate(30, { override: judgedQuiet }), botReview(31)] }))).toEqual({ kind: 'mark', actors: ['lyra', 'coderabbitai[bot]'] });
-    expect(judgedReadCheck(judged({ pr: own }))).toEqual({ kind: 'mark', actors: ['lyra', 'CI'] });
+    expect(judgedReadCheck(judged({ pr: own }))).toEqual({ kind: 'mark', actors: ['lyra', 'vercel[bot]'] });
   });
 
   it('keeps the safety checks: snapshot, a new move', () => {
@@ -348,9 +348,9 @@ describe('judgedReadCheck', () => {
 
 describe('quiet read detail', () => {
   it('round-trips the bot names through the action log detail', () => {
-    const detail = quietReadDetail(['trunk-io[bot]', 'CI']);
-    expect(detail).toBe('only bot activity since your last read: trunk-io[bot], CI');
-    expect(botsFromQuietDetail(detail)).toEqual(['trunk-io[bot]', 'CI']);
+    const detail = quietReadDetail(['trunk-io[bot]', 'vercel[bot]']);
+    expect(detail).toBe('only bot activity since your last read: trunk-io[bot], vercel[bot]');
+    expect(botsFromQuietDetail(detail)).toEqual(['trunk-io[bot]', 'vercel[bot]']);
     expect(botsFromQuietDetail('already read on GitHub')).toEqual([]);
   });
 
@@ -360,7 +360,7 @@ describe('quiet read detail', () => {
     expect(quietReasonDetail('opened')).toBe('opened in PostPile');
     expect(quietReasonFromDetail(quietReasonDetail('changes_requested'))).toBe('changes_requested');
     expect(quietReasonFromDetail(quietReasonDetail('opened'))).toBe('opened');
-    expect(quietReasonFromDetail(quietReadDetail(['CI']))).toBe('bots');
+    expect(quietReasonFromDetail(quietReadDetail(['vercel[bot]']))).toBe('bots');
   });
 });
 
@@ -442,9 +442,9 @@ describe('clickedReadCheck', () => {
 
   it('marks a bot review on the viewer own open PR: the click was explicit, unlike the quiet reads', () => {
     const botReview = makeEvent({ id: 'bot-review', prKey: ownPr.key, kind: 'review_commented', actor: 'codex[bot]', isBot: true, at: at(38) });
-    const check = clickedReadCheck(clicked({ events: [ownPush(35), botReview, ciResult(39)] }));
-    expect(check).toEqual({ kind: 'mark', bots: ['codex[bot]', 'CI'] });
-    expect(clickedReadDetail(check)).toBe('marked after refresh: only your own activity and automation (codex[bot], CI)');
+    const check = clickedReadCheck(clicked({ events: [ownPush(35), botReview, deployResult(39)] }));
+    expect(check).toEqual({ kind: 'mark', bots: ['codex[bot]', 'vercel[bot]'] });
+    expect(clickedReadDetail(check)).toBe('marked after refresh: only your own activity and automation (codex[bot], vercel[bot])');
   });
 
   it('keeps it unread when a person did something after the click, naming the newest', () => {
@@ -492,7 +492,6 @@ describe('scenario: own approved PR, only old moves and bot nudges since the rea
         makeTimelineItem({ id: 'rm', kind: 'review_request_removed', actor: 'rowan', subject: 'acme/team-infra', at: day(22) }),
       ],
       comments: [makeComment({ id: 'nudge', author: 'stale-nudge[bot]', body: 'This PR has been open for 14 days', createdAt: day(30, 10) })],
-      checks: { rollup: 'SUCCESS', contexts: [{ name: 'ci', conclusion: 'SUCCESS', completedAt: day(30, 11) }] },
       updatedAt: day(30, 11),
       ...extra,
     });
@@ -508,21 +507,21 @@ describe('scenario: own approved PR, only old moves and bot nudges since the rea
     return { thread, pr: realPr, events, userState: null, viewer, notYours: false, prFetchedAt: day(30, 12) };
   }
 
-  it('clears it: a new merge move asks nothing, and a stale nudge and CI are no finding', () => {
+  it('clears it: a new merge move asks nothing, and a stale nudge is no finding', () => {
     const input = caseInput(agentPr());
     expect(prWhoseTurn({ pr: input.pr, events: input.events, userState: null, viewer })).toMatchObject({ kind: 'you', move: 'merge' });
     expect(isNewYourMove(input, lastReadAt)).toBe(false);
-    expect(judgedReadCheck(input)).toEqual({ kind: 'mark', actors: ['rowan', 'stale-nudge[bot]', 'CI'] });
+    expect(judgedReadCheck(input)).toEqual({ kind: 'mark', actors: ['rowan', 'stale-nudge[bot]'] });
   });
 
-  it('clears it when the merge move stood at the read: a stale nudge and CI are no finding', () => {
+  it('clears it when the merge move stood at the read: a stale nudge is no finding', () => {
     // The team request was removed before the read, so the PR was already waiting on the viewer to merge.
     const base = agentPr();
     const earlyRemoval = base.timeline.map((item) => (item.id === 'rm' ? { ...item, at: day(17) } : item));
     const input = caseInput(agentPr({ timeline: earlyRemoval }));
     expect(isNewYourMove(input, lastReadAt)).toBe(false);
     // Only bots since the read now: the bots-only rule clears it.
-    expect(quietReadCheck(input)).toEqual({ kind: 'mark', bots: ['stale-nudge[bot]', 'CI'] });
+    expect(quietReadCheck(input)).toEqual({ kind: 'mark', bots: ['stale-nudge[bot]'] });
   });
 
   it('clears it after a bot reopens the approved PR: the new move is only a merge', () => {

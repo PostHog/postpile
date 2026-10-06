@@ -6,6 +6,7 @@ import { errorText } from '../errors.ts';
 import { newProposalId, newTopicId } from '../ids.ts';
 import { changeTopicStatus } from '../topic-status.ts';
 import type { DigestDeps } from './deps.ts';
+import { TopicExclusions } from './topic-exclusions.ts';
 
 /**
  * The topic grain this build cuts at. Raise it when a change to the topic
@@ -103,22 +104,34 @@ export class TopicTidy {
   }
 
   /**
+   * Folding `from` into `into` would put a PR together with work the user
+   * took it out of ("Wrong topic"): a PR of `from` kept out of `into`, or a
+   * PR of `into` kept out of `from`, since the folded topic holds both. Read
+   * again per fold, so a merge earlier in this tidy counts.
+   */
+  private foldUndoesWrongTopic(from: string, into: string): boolean {
+    const { store } = this.deps;
+    const exclusions = TopicExclusions.load(store);
+    const keysOf = (topicId: string): PrKey[] => store.memberships.listForTopic(topicId).map((m) => m.prKey);
+    return exclusions.forKeys(keysOf(from)).has(into) || exclusions.forKeys(keysOf(into)).has(from);
+  }
+
+  /**
    * Folds topics into the one that names their project. A topic holding a PR
    * the user placed ("Wrong topic") is never folded away: the tidy never
    * sees who placed what, and folding would move and archive their call.
+   * Nor is one folded when that would bring a PR back together with the
+   * work the user took it out of.
    */
   private applyMerges(result: TopicTidyResult, at: string): void {
     const { store } = this.deps;
     const holdsUserPlacement = (topicId: string): boolean => store.memberships.listForTopic(topicId).some((m) => m.assignedBy === 'user');
     for (const merge of result.merges) {
-      const folding = merge.fromTopicIds.filter((from) => !holdsUserPlacement(from));
-      if (folding.length === 0) {
-        continue;
-      }
-      if (merge.name) {
-        store.topics.rename(merge.intoTopicId, cleanTopicName(merge.name), at);
-      }
-      for (const from of folding) {
+      let folded = false;
+      for (const from of merge.fromTopicIds) {
+        if (holdsUserPlacement(from) || this.foldUndoesWrongTopic(from, merge.intoTopicId)) {
+          continue;
+        }
         // A new created_at marks them as joined, so the target's next dossier update introduces them.
         for (const membership of store.memberships.listForTopic(from)) {
           store.memberships.assign({ ...membership, topicId: merge.intoTopicId, assignedBy: 'agent', reason: merge.reason, createdAt: at });
@@ -126,6 +139,13 @@ export class TopicTidy {
         moveTopicChat(store, from, merge.intoTopicId);
         changeTopicStatus(store, from, 'archive', at);
         this.record({ kind: 'merge', topicId: from, name: null, intoTopicId: merge.intoTopicId, reason: merge.reason }, at);
+        folded = true;
+      }
+      if (!folded) {
+        continue;
+      }
+      if (merge.name) {
+        store.topics.rename(merge.intoTopicId, cleanTopicName(merge.name), at);
       }
       // PRs joined it; the retire step at the end of the sync sends it back if nothing in it is open.
       changeTopicStatus(store, merge.intoTopicId, 'revive', at);
@@ -160,12 +180,14 @@ export class TopicTidy {
    * topic assignment instead could put them straight back. A stack moves
    * whole, like everywhere else. A PR the user placed ("Wrong topic") stays
    * where they put it, and so does its whole stack: the tidy never sees who
-   * placed what. A topic whose splits, stacks expanded, would take every PR
-   * out keeps them all.
+   * placed what. Nor does a stack move into a topic the user took one of its
+   * layers out of. A topic whose splits, stacks expanded, would take every
+   * PR out keeps them all.
    */
   private applySplits(result: TopicTidyResult, at: string): void {
     const { store } = this.deps;
     const board = Board.load(store, at);
+    const exclusions = TopicExclusions.load(store);
     const placedByUser = (key: PrKey): boolean => store.memberships.get(key)?.assignedBy === 'user';
     const leavingByTopic = new Map<string, Set<PrKey>>();
     for (const split of result.splits) {
@@ -179,7 +201,11 @@ export class TopicTidy {
       if (target === null || target === split.topicId) {
         continue;
       }
-      for (const key of units.flat()) {
+      const moving = units.filter((unit) => !exclusions.forKeys(unit).has(target)).flat();
+      if (moving.length === 0) {
+        continue;
+      }
+      for (const key of moving) {
         leaving.add(key);
         store.memberships.assign({ prKey: key, topicId: target, assignedBy: 'agent', reason: split.reason, createdAt: at });
       }

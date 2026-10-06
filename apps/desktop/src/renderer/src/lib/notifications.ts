@@ -74,10 +74,15 @@ export function readByApp(row: NotificationDebugRow): boolean {
   return last !== null && last.action === 'mark_read' && (last.outcome === 'github' || (last.outcome === 'queued' && last.detail === ''));
 }
 
+/** Origins that send pending writes: the user from the lock, or PostPile once when writes went on by default. A failure there stays pending. */
+function sendsPending(origin: ActionOrigin): boolean {
+  return origin === 'footer' || origin === 'default';
+}
+
 /** A mark-read of this thread waits for the writes lock. */
 export function pendingWrite(row: NotificationDebugRow): boolean {
   const last = row.lastAction;
-  return last !== null && last.action === 'mark_read' && (last.outcome === 'pending' || (last.outcome === 'failed' && last.origin === 'footer'));
+  return last !== null && last.action === 'mark_read' && (last.outcome === 'pending' || (last.outcome === 'failed' && sendsPending(last.origin)));
 }
 
 /** Rows that pass every filter; keeps the server's order (newest first). */
@@ -102,6 +107,7 @@ const WHO: Record<ActionOrigin, string> = {
   sync: 'sync',
   poll: 'the live poll',
   footer: 'you from the lock',
+  default: 'PostPile when GitHub writes went on by default',
   cleanup: 'you in the inbox cleanup',
   quiet: 'PostPile',
   agent: 'an outside agent',
@@ -160,7 +166,7 @@ function markReadText(last: ActionLogEntry, decidedBy: ActionLogEntry | null): {
       }
       return { text: `left unread by ${who}: ${last.detail}`, tone: 'problem' };
     case 'failed':
-      if (last.origin === 'footer') {
+      if (sendsPending(last.origin)) {
         return { text: 'pending mark-read failed to send, still pending', tone: 'problem' };
       }
       if (last.detail.startsWith(NOT_TAKEN_PREFIX)) {

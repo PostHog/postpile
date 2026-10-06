@@ -8,9 +8,20 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 - Mute a PR for good: "Mute until I'm mentioned" at the end of the Snooze menu. The tile leaves your inbox and stays out whatever others or bots do, and comes back only when someone mentions you, asks you, replies to you or requests your review. Muting marks it read and unsubscribes you from the PR's GitHub notifications, so GitHub stays quiet too. Unmute, where Unsnooze is, subscribes you again. If you watch the repo, GitHub still notifies you about it.
 
+### Changed
+
+- PostPile now marks handled notifications read on GitHub by default, so a busy inbox goes down instead of piling up. Installs that never touched the GitHub writes lock get writes on with this update; installs that locked writes on purpose stay locked. Mark-reads that waited while writes were locked go to GitHub only where nothing happened on the thread since you clicked; the rest stay unread, and anything that fails stays in the footer to send or discard.
+- The GitHub writes lock now lives only in the footer: a small lock icon while writes are on, a quiet "read-only" while they are locked. The busy inbox card no longer asks you to unlock writes.
+
+### Removed
+
+- PostPile no longer shows CI status: the PR pane's Checks fact, the CI lines in a PR's activity and the "Until CI is green" snooze are gone. A snooze set that way ends after the update, like one whose time is up. CI results go stale fast and bringing a PR to green is its author's job, so they never drove anything in PostPile; now it doesn't fetch them either. That makes each PR fetch from GitHub smaller and faster (on PRs with many checks about a quarter less data), and the checks already stored are removed once in the background a little after the update.
+
 ### Fixed
 
 - A tile that already says "Not yours" no longer offers "Not mine" in its ⋯ menu. Mark read clears it. A stack or set only counts when its verdict says Not yours, so one PR the agent calls Not yours next to one that needs a look keeps the option.
+- "Wrong topic" no longer puts a PR back into the topic you took it out of. The next sort keeps it out of there, also when the rest of its stack sits in that topic or the topic was merged into another one. It goes back only when you pick that topic yourself.
+- A topic you pick for a PR while a sync is sorting PRs is no longer replaced by the sync's own pick.
 
 ## 0.20.0 (2026-10-05)
 

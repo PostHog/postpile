@@ -71,17 +71,6 @@
           { "commit": { "oid": "c2", "messageHeadline": "Fix cache", "committedDate": "2026-09-20T09:00:00Z",
             "author": { "name": "Alice Laptop", "user": null }, "committer": { "name": "GitHub", "user": { "login": "web-flow" } } } }
         ] },
-        "headCommit": { "nodes": [
-          { "commit": { "statusCheckRollup": {
-            "state": "PENDING",
-            "contexts": { "nodes": [
-              { "__typename": "CheckRun", "name": "test", "conclusion": "SUCCESS", "completedAt": "2026-09-20T09:10:00Z" },
-              { "__typename": "CheckRun", "name": "lint", "conclusion": null, "completedAt": null },
-              { "__typename": "StatusContext", "context": "deploy/preview", "state": "ERROR", "createdAt": "2026-09-20T09:05:00Z" },
-              { "__typename": "StatusContext", "context": "ci/legacy", "state": "PENDING", "createdAt": "2026-09-20T09:01:00Z" }
-            ] }
-          } } }
-        ] },
         "timelineItems": { "nodes": [
           { "__typename": "ReviewRequestedEvent", "id": "E1", "createdAt": "2026-09-18T09:05:00Z",
             "actor": { "__typename": "User", "login": "alice" },
@@ -123,7 +112,6 @@
         "comments": { "nodes": [] },
         "reviewThreads": { "nodes": [] },
         "commits": { "nodes": [] },
-        "headCommit": { "nodes": [{ "commit": { "statusCheckRollup": null } }] },
         "timelineItems": { "nodes": [
           { "__typename": "MergedEvent", "id": "M1", "createdAt": "2026-09-17T10:00:00Z", "actor": { "__typename": "User", "login": "bob" } }
         ] }

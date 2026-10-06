@@ -107,9 +107,9 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   type (`views.ts`), fill it in the engine's `read-models.ts` and in
   `FakeEngine`, then read it here.
 - `PrDetail.pr` is core's slim `PrPaneView` (`pr-pane.ts`), never the
-  stored `Pr`: no comments, threads, commits, timeline or check contexts.
-  A new pane field goes into `prPaneView`, which both engines call. The
-  Checks fact reads `pr.checks` (a `ChecksSummary`), "pushed" reads
+  stored `Pr`: no comments, threads, commits or timeline, and no checks at
+  all (PostPile does not fetch CI since 0.21.0). A new pane field goes into
+  `prPaneView`, which both engines call. "Pushed" reads
   `pr.lastCommitAt`; comment text, Reply and Thumbs up come from
   `PrDetail.activity`. Its rows are core's `ActivityEvent` (lines extend
   it with body, `eventCount` and the reply): no raw events, and no
@@ -145,7 +145,8 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   `SnoozeMenu`) and "Remove <team>" pass through `writeBlockedReason` in
   `lib/guard.ts`, which reads the footer lock (`useGitHubWrites`, `GET
   /api/github-writes`, changes at runtime). With the lock closed
-  (read-only, the default) approve and comment are blocked with a clear
+  (read-only; on by default in the packaged app, locked by default in dev
+  runs) approve and comment are blocked with a clear
   toast (so is "Remove <team>", `removeTeam`: final, never a pending
   write); mark read and "not mine" still run but change nothing in the app:
   after the undo window they become pending writes (buttons carry
@@ -161,15 +162,24 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   never GitHub, so it is not on the `GithubWrite` list. Fire it only from a
   click, never from an effect or along with Accept: the app never installs
   the MCP server by itself. `hideMcpConnect` is the footer's "Not now".
-- **The lock** (`WritesLock` in the footer): locked = read-only. Opening it
-  (from the lock, or the busy inbox card's "Unlock writes", which sets the
-  popover state `App` holds) asks in a small popover ("Mark-read and approvals will reach GitHub")
+- **The lock** (`WritesLock` in the footer, its popover state its own):
+  locked = read-only. **The footer is the only place to lock or unlock**
+  (2026-10-05, DESIGN.md "GitHub writes: lock, action log"): writes are on
+  by default, so no banner, card, setup step, toast or title bar item
+  offers to unlock. A blocked write may say in its tooltip or toast that
+  the lock in the footer is closed; that is all. On, the lock is a faint
+  open-lock icon (`text-faint` on purpose, hover shows it; a click locks);
+  locked, a quiet "read-only" in the footer's own `text-muted`, never
+  `amber-*`, `status-bad`, coral or honey. Opening it asks in a small
+  popover ("Mark-read and approvals will reach GitHub")
   that also lists the pending writes (`lib/pending.ts`) with "Send N to
   GitHub" / "Discard" / "Cancel" and "Discard pending, stay locked"; the
-  count badge sits on the lock. Closing it is instant unless something is
-  pending. With `POSTPILE_READ_ONLY=1` it cannot unlock, only discard. The
-  server keeps the choice and the pending writes; the renderer never
-  stores them.
+  count badge sits on the lock, also while writes are on (a failed send,
+  or mark-reads from the locked days the default switch left). Closing it
+  is instant unless something is pending. With `POSTPILE_READ_ONLY=1` it
+  cannot unlock, only discard. The server keeps the choice and the pending
+  writes; the renderer never stores them. States are checked in
+  `WritesLock.test.tsx`.
 - Buttons for guarded actions carry the blocked reason as their `title`.
 - The notifications debug pane has "Mark read" (thread level, same queue,
   undo, lock and action log as a tile). There is no "bring back": GitHub has
@@ -345,7 +355,8 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   actions). `text-faint` (2.3-2.6:1) is decoration only: separators,
   chevrons, ages next to a louder line, done tiles.
 - **Diff red**: `--diff-red` for deletions in the Size fact. Coral
-  (`unread`) is never a diff or CI colour; the Checks fact is grey.
+  (`unread`) is never a diff colour. There is no CI anywhere (DESIGN.md "CI
+  is not tracked").
 - **One colour per meaning** (2026-10-01, DESIGN.md "Colour per
   meaning"): `closer` only for the agent's Look closer; `status-bad` the
   one red for bad (closed, changes requested, risk, errors); `safe` the one
@@ -433,11 +444,10 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   `busy-*` keyframes, only under `motion-safe:`; calm `amber-*` tokens,
   never coral or honey, the sweat drop `--drop` the one blue; words and
   per-tier counts in `lib/busy-inbox.ts`. Clean up opens
-  `InboxCleanupDialog` in sidebar mode, Unlock writes (only while
-  `writesLocked`) opens the footer lock's popover: `WritesLock`'s open
-  state lives in `App` for that. Why? folds out inline. It folds to one
-  line for the session, sessionStorage `postpile.busyInbox.folded`; wiring
-  test in `BusyInboxCard.test.tsx`),
+  `InboxCleanupDialog` in sidebar mode, Why? folds out inline. No writes
+  lock and no writes line here: the lock lives in the footer only. It
+  folds to one line for the session, sessionStorage
+  `postpile.busyInbox.folded`; wiring test in `BusyInboxCard.test.tsx`),
   `UpdatePill` (title bar update reminder, self-contained so it can move;
   neutral, never coral; under 24h behind; "Update ready" once staged) +
   `UpdateNextStep` (the offer both share: ink "Restart to update", the
@@ -505,7 +515,7 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   stack (`stackQueueWord`, "Merge queue: with 3/3"): the top branch holds
   their commits, so they merge with it. Review state: `StateWordLabel` with a
   `StateWord` from `reviewWord` / `rowStateWord` (`lib/pr.ts`). Never a CI
-  icon or word outside `PrFacts`.
+  icon or word: PostPile has no CI data.
 - Icons carry words: a lone icon gets a `title` (and `aria-label` when it
   is the only content of a control).
 
@@ -548,9 +558,8 @@ tints (`lib/why.ts`, `lib/events.ts`, `reviewWord` / `rowStateWord` in `lib/pr.t
   state keeps its color on done tiles; title and counts go grey. When only
   agents approved (`PrStatus.agentApprovers`) the word reads "Approved by
   agent", names in the tooltip; the detail uses `PrDetail.agentApprovers`
-  with `approvedText` in `lib/pr.ts`. **No CI on rows, tiles, the detail
-  state line, the RISK box or the your-move chip**: checks only show in
-  `PrFacts` (DESIGN.md "CI is not a signal"; `PrStatus` has no checks).
+  with `approvedText` in `lib/pr.ts`. **No CI anywhere**: PostPile fetches no
+  checks (DESIGN.md "CI is not tracked"; `PrStatus` and `PrPaneView` have none).
 - PR rows: a single-PR tile's row has no title (`PrRow` `showTitle`
   false; the heading is the title). The author's avatar is who opened it
   (`PrSummary.author`, a bot for agent PRs); when someone else is assigned,

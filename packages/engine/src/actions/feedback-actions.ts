@@ -41,7 +41,9 @@ export class FeedbackActions {
   /**
    * "Wrong topic": move it when the user said where, otherwise let the next
    * sync re-sort it. A stack moves as one: every layer with a topic or a
-   * thread goes along (`keys`), pulled-in layers follow on their own.
+   * thread goes along (`keys`), pulled-in layers follow on their own. The
+   * logged feedback keeps every moved layer out of the old topic for good
+   * (`TopicExclusions`); a pick puts it where the user said, as theirs.
    */
   private wrongTopic(keys: PrKey[], targetTopicId: string | null, note: string): ActionResult {
     if (targetTopicId !== null) {
@@ -65,6 +67,22 @@ export class FeedbackActions {
     return ok('Will be re-sorted on the next sync');
   }
 
+  /**
+   * The PRs a correction is logged about. Glances only pick up feedback
+   * about their own PR, so "not mine" on a whole stack or set is logged once
+   * per member. "Wrong topic" is logged once per layer that moves, so each
+   * one stays out of the topic it left, also when it is sorted alone later.
+   */
+  private aboutKeys(input: FeedbackInput, key: PrKey | null, tile: Tile, board: Board): Array<PrKey | null> {
+    if (input.kind === 'not_mine' && !key) {
+      return tile.members.map((m) => m.prKey);
+    }
+    if (input.kind === 'wrong_topic' && key) {
+      return board.movesWith(key);
+    }
+    return [key];
+  }
+
   giveFeedback(input: FeedbackInput): ActionResult {
     const board = Board.forTile(this.store, this.now().toISOString(), input.tileId);
     const tile = board.findTile(input.tileId);
@@ -76,10 +94,7 @@ export class FeedbackActions {
     const topicId = this.realTopicId(key ? board.topicIdOf(key) : tile.topicId);
 
     return this.store.transaction(() => {
-      // Glances only pick up feedback about their own PR, so "not mine" on a
-      // whole stack or set is logged once per member.
-      const aboutKeys = !key && input.kind === 'not_mine' ? tile.members.map((m) => m.prKey) : [key];
-      for (const about of aboutKeys) {
+      for (const about of this.aboutKeys(input, key, tile, board)) {
         this.log({ kind: input.kind, topicId, tileId: input.tileId, prKey: about, setId, eventId: null, note: input.note });
       }
       if (input.kind === 'not_mine') {

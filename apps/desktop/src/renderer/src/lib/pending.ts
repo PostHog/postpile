@@ -17,5 +17,5 @@ export function pendingHeadline(pending: PendingWriteView[]): string {
 
 /** Hover text for the lock's count badge. */
 export function pendingBadgeTitle(pending: PendingWriteView[]): string {
-  return `${pendingHeadline(pending)}: made while GitHub writes were locked. They reach GitHub only when you unlock and send them; until then the tiles stay unread.`;
+  return `${pendingHeadline(pending)}: made while GitHub writes were locked. They reach GitHub only once you send them from here; until then the tiles stay unread.`;
 }

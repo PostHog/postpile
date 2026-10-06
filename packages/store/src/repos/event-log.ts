@@ -31,9 +31,19 @@ export class EventLogRepo {
     });
   }
 
-  /** Highest seq so far, 0 on an empty log. */
+  /**
+   * The log's high-water mark: every row so far has a seq at or below it,
+   * every later one above it; 0 on a log that never had a row. Read from
+   * SQLite's AUTOINCREMENT counter (`sqlite_sequence`), not `MAX(seq)`: rows
+   * can leave (migration 030 deleted the CI events' rows, maybe the newest),
+   * and a cursor already past the remaining maximum must never be asked to
+   * move back (`CursorRepo.advance` refuses that).
+   */
   maxSeq(): number {
-    const row = one<{ seq: number | null }>(this.db, 'SELECT MAX(seq) AS seq FROM event_log');
+    const row = one<{ seq: number | null }>(
+      this.db,
+      "SELECT max(coalesce((SELECT seq FROM sqlite_sequence WHERE name = 'event_log'), 0), coalesce((SELECT MAX(seq) FROM event_log), 0)) AS seq",
+    );
     return row?.seq ?? 0;
   }
 

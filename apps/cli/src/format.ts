@@ -96,7 +96,7 @@ export function formatPr(detail: PrDetail, events: EventView[]): string {
   const { pr } = detail;
   const lines = [
     `${pr.key}  ${pr.title}`,
-    `${pr.state.toLowerCase()} by ${pr.author}, +${pr.additions} -${pr.deletions}, CI ${pr.checks.rollup.toLowerCase()}`,
+    `${pr.state.toLowerCase()} by ${pr.author}, +${pr.additions} -${pr.deletions}`,
     pr.url,
     `topic ${detail.topicId ?? 'none'}, tiles ${detail.tileIds.join(', ') || 'none'}`,
   ];

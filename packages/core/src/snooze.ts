@@ -53,10 +53,6 @@ function newPush(snooze: Snooze, context: SnoozeContext): boolean {
   return context.events.some((event) => event.at > snooze.since && PUSH_KINDS.includes(event.kind));
 }
 
-function ciGreen(context: SnoozeContext): boolean {
-  return context.pr.checks.rollup === 'SUCCESS';
-}
-
 /**
  * What ends a mute (2026-10-05): someone asked the viewer in person since
  * (`isPersonalAsk`: a mention, question or reply to them, a comment edited
@@ -76,10 +72,10 @@ function personallyAsked(snooze: Snooze, context: SnoozeContext): boolean {
 }
 
 /**
- * True once the snooze condition is met: a human reply, a push, green CI,
- * the time passed, or for a mute a personal ask. Every snooze also ends when
- * the PR is merged or closed (decided 2026-09-30): nothing left to wait for,
- * and a snooze that holds a finished PR keeps its topic from retiring.
+ * True once the snooze condition is met: a human reply, a push, the time
+ * passed, or for a mute a personal ask. Every snooze also ends when the PR
+ * is merged or closed (decided 2026-09-30): nothing left to wait for, and a
+ * snooze that holds a finished PR keeps its topic from retiring.
  */
 export function isSnoozeOver(snooze: Snooze, context: SnoozeContext): boolean {
   if (context.pr.state !== 'OPEN') {
@@ -90,8 +86,6 @@ export function isSnoozeOver(snooze: Snooze, context: SnoozeContext): boolean {
       return someoneReplied(snooze, context);
     case 'new_push':
       return newPush(snooze, context);
-    case 'ci_green':
-      return ciGreen(context);
     case 'until_time':
       return context.now >= snooze.condition.until;
     case 'muted':
@@ -172,7 +166,7 @@ export function snoozeWrites(tile: Tile, change: SnoozeChange): SnoozeWrites {
   }
 }
 
-export type SnoozeTelemetryBucket = 'hours' | 'a_day' | 'days' | 'a_week' | 'someone_replies' | 'new_push' | 'ci_green' | 'muted';
+export type SnoozeTelemetryBucket = 'hours' | 'a_day' | 'days' | 'a_week' | 'someone_replies' | 'new_push' | 'muted';
 
 /** The `snoozed` telemetry event's prop: a time bucket for `until_time`, the condition name otherwise. */
 export function snoozeTelemetryBucket(condition: SnoozeCondition, nowMs: number): SnoozeTelemetryBucket {

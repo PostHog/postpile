@@ -49,8 +49,9 @@ export interface EngineFromEnvOptions {
  * claude-limit). POSTPILE_FAKE_QUOTA=low or critical simulates a GitHub
  * quota that is low or nearly used. POSTPILE_FAKE_CATCH_UP=0 starts without
  * the inbox catch-up dialog (it shows on every fake start otherwise). POSTPILE_FAKE_BUSY=1 makes the
- * inbox busy (the board cap cut it), with invented numbers. Otherwise throws DataDirLockedError while
- * another process holds the database.
+ * inbox busy (the board cap cut it), with invented numbers. POSTPILE_FAKE_LOCKED=1 starts with GitHub
+ * writes locked (the sample starts with them on, like the packaged app). Otherwise throws
+ * DataDirLockedError while another process holds the database.
  */
 export function engineFromEnv(options: EngineFromEnvOptions = {}): EngineService {
   if (isFake()) {
@@ -61,6 +62,7 @@ export function engineFromEnv(options: EngineFromEnvOptions = {}): EngineService
       tidyOnFirstSync: process.env.POSTPILE_FAKE_TIDY === '1',
       catchUpGate: process.env.POSTPILE_FAKE_CATCH_UP !== '0',
       busy: process.env.POSTPILE_FAKE_BUSY === '1',
+      writesLocked: process.env.POSTPILE_FAKE_LOCKED === '1',
     });
   }
   if (options.migrateLegacy ?? true) {

@@ -80,8 +80,6 @@ export type StepSpec =
 
 export type EndSpec = { kind: 'open' } | { kind: 'merged'; by: Person } | { kind: 'closed'; by: Person };
 
-export type CiSpec = 'none' | 'pending' | 'success' | 'failure';
-
 /**
  * How the app knows the PR: a notification thread (read after `readAfter`
  * steps, null for never), found by the full sync, or pulled in as a stack or
@@ -89,7 +87,7 @@ export type CiSpec = 'none' | 'pending' | 'success' | 'failure';
  */
 export type TrackingSpec = { kind: 'thread'; reason: NotificationReason; readAfter: number | null } | { kind: 'found' } | { kind: 'pulled_in' };
 
-export type SnoozeConditionKind = 'someone_replies' | 'new_push' | 'ci_green' | 'until_time' | 'muted';
+export type SnoozeConditionKind = 'someone_replies' | 'new_push' | 'until_time' | 'muted';
 
 /** A snooze started after `after` steps; an until_time snooze has passed or not. */
 export interface SnoozeSpec {
@@ -115,7 +113,6 @@ export interface PrSpec {
   draft: boolean;
   steps: StepSpec[];
   end: EndSpec;
-  ci: CiSpec;
   tracking: TrackingSpec;
   /** The unresolved review threads are resolved. */
   threadsResolved: boolean;
@@ -154,7 +151,6 @@ export const QUIET_PR: PrSpec = {
   draft: false,
   steps: [],
   end: { kind: 'open' },
-  ci: 'none',
   tracking: { kind: 'thread', reason: 'review_requested', readAfter: null },
   threadsResolved: false,
   approvedAfter: null,
@@ -338,7 +334,7 @@ const trackingArb: fc.Arbitrary<TrackingSpec> = fc.oneof(
 );
 
 const snoozeArb: fc.Arbitrary<SnoozeSpec> = fc.record({
-  condition: fc.constantFrom<SnoozeConditionKind>('until_time', 'someone_replies', 'new_push', 'ci_green', 'muted'),
+  condition: fc.constantFrom<SnoozeConditionKind>('until_time', 'someone_replies', 'new_push', 'muted'),
   after: stepIndex,
   untilPassed: fc.boolean(),
 });
@@ -350,7 +346,6 @@ export const prSpecArb: fc.Arbitrary<PrSpec> = fc.record({
   draft: sometimes(1, 4),
   steps: fc.array(stepArb, { maxLength: 8 }),
   end: endArb,
-  ci: fc.constantFrom<CiSpec>('none', 'success', 'failure', 'pending'),
   tracking: trackingArb,
   threadsResolved: fc.boolean(),
   approvedAfter: maybe(stepIndex, 20),

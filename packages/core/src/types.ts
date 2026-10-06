@@ -86,20 +86,6 @@ export interface ReviewThread {
   comments: Comment[];
 }
 
-export type CheckRollup = 'SUCCESS' | 'FAILURE' | 'PENDING' | 'NONE';
-
-export interface CheckContext {
-  name: string;
-  /** SUCCESS, FAILURE, NEUTRAL, SKIPPED, CANCELLED, TIMED_OUT, ACTION_REQUIRED, or null while running. */
-  conclusion: string | null;
-  completedAt: IsoTime | null;
-}
-
-export interface Checks {
-  rollup: CheckRollup;
-  contexts: CheckContext[];
-}
-
 export type TimelineItemKind =
   | 'review_requested'
   | 'review_request_removed'
@@ -167,7 +153,6 @@ export interface Pr {
   comments: Comment[];
   threads: ReviewThread[];
   timeline: TimelineItem[];
-  checks: Checks;
   headOid: string;
   createdAt: IsoTime;
   updatedAt: IsoTime;
@@ -314,7 +299,6 @@ export type EventKind =
   | 'reopened'
   | 'ready_for_review'
   | 'converted_to_draft'
-  | 'ci'
   | 'deploy'
   | 'merge_queue'
   | 'bot_comment'
@@ -732,7 +716,6 @@ export interface UserPrState {
 export type SnoozeCondition =
   | { kind: 'someone_replies' }
   | { kind: 'new_push' }
-  | { kind: 'ci_green' }
   | { kind: 'until_time'; until: IsoTime }
   | { kind: 'muted' };
 

@@ -117,23 +117,6 @@ export interface RawTimelineItem {
   requestedReviewer?: RawRequestedReviewer | null;
 }
 
-export interface RawCheckContext {
-  __typename: 'CheckRun' | 'StatusContext';
-  /** CheckRun */
-  name?: string;
-  conclusion?: string | null;
-  completedAt?: string | null;
-  /** StatusContext */
-  context?: string;
-  state?: string;
-  createdAt?: string;
-}
-
-export interface RawStatusCheckRollup {
-  state: string;
-  contexts: { nodes: RawCheckContext[] };
-}
-
 /** One aliased pullRequest node from the batched GraphQL query. */
 export interface RawPullRequest {
   number: number;
@@ -166,8 +149,6 @@ export interface RawPullRequest {
   comments: RawConnection<RawComment>;
   reviewThreads: RawConnection<RawReviewThread>;
   commits: RawConnection<RawCommit>;
-  /** commits(last: 1) again, only for the head commit's check rollup. */
-  headCommit: { nodes: { commit: { statusCheckRollup: RawStatusCheckRollup | null } }[] };
   timelineItems: RawConnection<RawTimelineItem>;
 }
 

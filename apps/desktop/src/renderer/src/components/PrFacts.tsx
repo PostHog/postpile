@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import type { PrPaneView } from '@postpile/core';
-import { checksNote, mergeStatus } from '../lib/pr.ts';
+import { mergeStatus } from '../lib/pr.ts';
 import { ageLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
 import { SectionLabel } from './SectionLabel.tsx';
@@ -29,12 +29,11 @@ function Fact(props: { label: string; children: ReactNode }) {
   );
 }
 
-/** Size, checks, age and what stands between the PR and a merge. */
+/** Size, age and what stands between the PR and a merge. No checks: PostPile does not fetch CI (0.21.0). */
 /** `agentApprovers` (`PrDetail.agentApprovers`) lets "To merge" say "approved by reviewbot (agent)". */
 export function PrFacts(props: { pr: PrPaneView; agentApprovers: string[] }) {
   const now = useNow();
   const { pr } = props;
-  const { checks } = pr;
   const pushedAt = pr.lastCommitAt;
   const age = pr.mergedAt ? `merged ${ageLabel(pr.mergedAt, now)}` : `opened ${ageLabel(pr.createdAt, now)}`;
   return (
@@ -50,16 +49,6 @@ export function PrFacts(props: { pr: PrPaneView; agentApprovers: string[] }) {
           parts={[
             { weight: pr.additions, tone: 'bg-open' },
             { weight: pr.deletions, tone: 'bg-diff-red' },
-          ]}
-        />
-      </Fact>
-      {/* Neutral on purpose: CI is not a signal in PostPile, so no pass or fail colour (2026-09-29). */}
-      <Fact label="Checks">
-        <span className="font-mono text-[11.5px] leading-[normal] text-hint tabular-nums">{checks.total === 0 ? 'none' : checksNote(checks)}</span>
-        <SplitBar
-          parts={[
-            { weight: checks.passed, tone: 'bg-dot-quiet' },
-            { weight: checks.failed + checks.pending, tone: 'bg-chip' },
           ]}
         />
       </Fact>

@@ -52,9 +52,9 @@ describe('touchKindOf', () => {
     expect(touchKindOf(makeEvent({ kind: 'force_pushed', actor: 'rowan' }), ownPr, viewer)).toBeNull();
   });
 
-  it('is null for other people, CI and own events that are not a touch', () => {
+  it('is null for other people, bots and own events that are not a touch', () => {
     expect(touchKindOf(makeEvent({ kind: 'review_approved', actor: 'rowan' }), alicePr, viewer)).toBeNull();
-    expect(touchKindOf(makeEvent({ kind: 'ci', actor: '', isBot: true }), alicePr, viewer)).toBeNull();
+    expect(touchKindOf(makeEvent({ kind: 'deploy', actor: 'vercel', isBot: true }), alicePr, viewer)).toBeNull();
     expect(touchKindOf(own('review_requested', 0), alicePr, viewer)).toBeNull();
   });
 });

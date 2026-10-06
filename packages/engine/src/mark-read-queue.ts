@@ -91,9 +91,13 @@ export const MUTE_ENDED_REASON = 'the mute ended before it was sent (someone ask
 /** Whether a PR's mute still holds, as the store has it now (`muteHolds`). */
 export type MuteCheck = (prKey: PrKey) => boolean;
 
-/** Who sends, for the log: the queue when a window ran out, the quit flush, or the user sending pending writes from the footer. */
+/**
+ * Who sends, for the log: the queue when a window ran out, the quit flush,
+ * the user sending pending writes from the footer, or PostPile sending them
+ * once when writes went on by default.
+ */
 export interface SendContext {
-  origin: 'queue' | 'quit' | 'footer';
+  origin: 'queue' | 'quit' | 'footer' | 'default';
   tileId: string | null;
   batchId: string;
 }
@@ -211,7 +215,9 @@ export class MarkReadQueue {
       return { kind: 'observed' };
     }
     // Decided before `send` puts anything back, so the tile does not flicker unread and read again. Not on quit: nothing waits for a refresh then.
-    if (result.kind === 'moved' && this.retry && !this.flushing && thread.prKey !== null) {
+    // Not for the send when writes went on by default either: nobody clicked now, so newer activity leaves the thread unread.
+    // (That send runs inside the sync, and the retry's refresh waits for the running sync: it would never end.)
+    if (result.kind === 'moved' && this.retry && !this.flushing && context.origin !== 'default' && thread.prKey !== null) {
       return this.retry.afterNewerActivity(thread, thread.prKey, logContext);
     }
     if (result.kind === 'moved') {

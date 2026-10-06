@@ -257,9 +257,11 @@ export interface FakeEngineOptions {
   tidyOnFirstSync?: boolean;
   /** POSTPILE_FAKE_BUSY=1: the busy inbox card shows, with invented numbers (see `busyInbox`). */
   busy?: boolean;
+  /** POSTPILE_FAKE_LOCKED=1: GitHub writes start locked. Off by default: the sample starts with writes on, like the packaged app. */
+  writesLocked?: boolean;
 }
 
-/** The invented busy inbox of POSTPILE_FAKE_BUSY=1: a heavy install over the cap, writes locked. */
+/** The invented busy inbox of POSTPILE_FAKE_BUSY=1: a heavy install over the cap. */
 const FAKE_BUSY_INBOX = { busy: true, inboxPrs: 6140, keptByTier: { you: 940, team: 560, others: 0 } };
 const FAKE_BUSY_UPDATES_LAST_HOUR = 300;
 
@@ -447,7 +449,7 @@ export class FakeEngine implements EngineService {
       readHere: (scope, clickedAt) => this.readSample(scope, { kind: 'pending_completion', clickedAt }),
       title: (prKeys, threadId) => this.pendingTitle(prKeys, threadId),
       startCatchUp: (picks) => this.cleanup.startFromPending(picks, this.cleanupThreads()),
-    });
+    }, options.writesLocked !== true);
     this.cleanup = new FakeCleanup({
       now: this.now,
       writes: this.writes,
@@ -1125,12 +1127,12 @@ export class FakeEngine implements EngineService {
 
   /**
    * Not busy: every sample PR is hot and kept, counted by the engine's tier
-   * rule. POSTPILE_FAKE_BUSY=1: a heavy install over the cap with writes
-   * locked, so the card can be built and checked on sample data.
+   * rule. POSTPILE_FAKE_BUSY=1: a heavy install over the cap, so the card
+   * can be built and checked on sample data.
    */
   async busyInbox(): Promise<BusyInboxView> {
     if (this.busy) {
-      return busyInboxView(FAKE_BUSY_INBOX, { updatesLastHour: FAKE_BUSY_UPDATES_LAST_HOUR, writesLocked: true });
+      return busyInboxView(FAKE_BUSY_INBOX, { updatesLastHour: FAKE_BUSY_UPDATES_LAST_HOUR });
     }
     const threads = this.prThreads();
     const keptByTier = { you: 0, team: 0, others: 0 };
@@ -1142,8 +1144,7 @@ export class FakeEngine implements EngineService {
       );
       keptByTier[hotTier(facts, this.viewer())] += 1;
     }
-    const writesLocked = !this.writes.status().enabled;
-    return busyInboxView({ busy: false, inboxPrs: this.data.prs.length, keptByTier }, { updatesLastHour: 0, writesLocked });
+    return busyInboxView({ busy: false, inboxPrs: this.data.prs.length, keptByTier }, { updatesLastHour: 0 });
   }
 
   /** The Archive's sample topics that still take new PRs, newest first, like the engine. Samples keep no join times. */

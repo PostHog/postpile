@@ -85,15 +85,6 @@ describe('selectTopicDelta', () => {
     expect(delta.toSeq).toBe(14);
   });
 
-  it('drops CI results, so a CI-only change starts no dossier update, and still moves the cursor', () => {
-    const ci = { kind: 'ci', actor: '', isBot: true, ruleLoudness: 'quiet', summary: 'CI failed: test' } as const;
-    const onlyCi = selectTopicDelta(input({ logged: [logged(11, pr1, ci), logged(12, pr2, ci)] }));
-    expect(isEmptyDelta(onlyCi)).toBe(true);
-    expect(onlyCi.toSeq).toBe(12);
-    const mixed = selectTopicDelta(input({ logged: [logged(11, pr1, ci), logged(12, pr1)] }));
-    expect(mixed.events.map((event) => event.sourceId)).toEqual(['12']);
-  });
-
   it('lets review bot comments ride along: alone they start nothing and keep the cursor before them', () => {
     const rabbit = { kind: 'bot_comment', actor: 'coderabbitai[bot]', isBot: true, ruleLoudness: 'quiet' } as const;
     const alone = selectTopicDelta(input({ logged: [logged(11, pr1, rabbit)] }));

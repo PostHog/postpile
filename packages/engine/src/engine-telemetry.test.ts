@@ -60,7 +60,7 @@ describe('engine telemetry', () => {
     h.telemetry.events.length = 0;
     await h.engine.setGitHubWrites(true);
     await h.engine.sync({ maxAgentCalls: 0 });
-    expect(h.telemetry.events.find((e) => e.event === 'github_writes_changed')?.props).toEqual({ enabled: true });
+    expect(h.telemetry.events.find((e) => e.event === 'github_writes_changed')?.props).toEqual({ enabled: true, from: 'footer' });
     expect(h.telemetry.events.find((e) => e.event === 'sync_completed')?.props).toMatchObject({ writes_on: true });
   });
 
@@ -145,8 +145,8 @@ describe('engine telemetry', () => {
 
   it('fires snoozed with the condition name for an event-based snooze', async () => {
     const h = await synced();
-    await h.engine.snooze(tileId, { kind: 'ci_green' });
-    expect(h.telemetry.events).toContainEqual({ event: 'snoozed', props: { duration_bucket: 'ci_green' } });
+    await h.engine.snooze(tileId, { kind: 'new_push' });
+    expect(h.telemetry.events).toContainEqual({ event: 'snoozed', props: { duration_bucket: 'new_push' } });
   });
 
   it('fires chat_message_sent on a topic chat', async () => {

@@ -37,7 +37,7 @@ export interface LoudnessDecision {
 }
 
 // Machine activity that never needs a person: shown with a dot at most.
-const machineKinds: EventKind[] = ['ci', 'deploy', 'merge_queue', 'bot_comment'];
+const machineKinds: EventKind[] = ['deploy', 'merge_queue', 'bot_comment'];
 
 const reviewKinds: EventKind[] = ['review_approved', 'review_changes_requested', 'review_commented'];
 

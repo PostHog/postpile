@@ -60,7 +60,7 @@ export function PaneHousekeeping(props: PaneHousekeepingProps) {
   const openedMark = opened.prKey === prKey ? opened.marked : null;
   const markLeads = offers.lead === 'mark_read' || offers.lead === 'mark_done';
   const markReadTitle = pending
-    ? 'Already pending: goes to GitHub when you unlock and send it from the footer.'
+    ? 'Already pending: goes to GitHub when you send it from the lock in the footer.'
     : (actions.blockedReason('markRead') ??
       markReadNote(actions.writes) ??
       (onePr ? `Marks only #${prKey.split('#')[1]} read; GitHub follows after 6s` : 'Marks the PR read; GitHub follows after 6s'));

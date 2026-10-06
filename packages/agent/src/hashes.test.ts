@@ -34,16 +34,8 @@ describe('glanceItemInputHash', () => {
     expect(glanceHash()).toBe(base);
   });
 
-  it('ignores bot comments, PR update timestamps and CI re-runs', () => {
+  it('ignores bot comments and PR update timestamps', () => {
     expect(glanceHash(makePr({ updatedAt: '2026-09-09T00:00:00Z', comments: [makeComment({ author: 'dependabot[bot]' })] }))).toBe(base);
-    expect(glanceHash(makePr({ checks: { rollup: 'FAILURE', contexts: [] } }))).toBe(base);
-  });
-
-  it('ignores every checks change: CI is not a signal', () => {
-    const failed = { name: 'backend-tests', conclusion: 'FAILURE', completedAt: '2026-09-02T09:30:00Z' };
-    expect(glanceHash(makePr({ checks: { rollup: 'FAILURE', contexts: [failed] } }))).toBe(base);
-    expect(glanceHash(makePr({ checks: { rollup: 'PENDING', contexts: [{ ...failed, conclusion: null, completedAt: null }] } }))).toBe(base);
-    expect(glanceHash(makePr({ checks: { rollup: 'NONE', contexts: [] } }))).toBe(base);
   });
 
   it('ignores bot review comments but changes on an agent approval', () => {

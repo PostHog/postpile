@@ -1,17 +1,6 @@
-import type { ChecksSummary, MergeQueueStep, PaneReview, PrIcon, PrPaneView, PrStatus, TileStack } from '@postpile/core';
+import type { MergeQueueStep, PaneReview, PrIcon, PrPaneView, PrStatus, TileStack } from '@postpile/core';
 import { prNumber } from './tiles.ts';
 import { sinceLabel } from './time.ts';
-
-/**
- * The Checks fact's note, "12 checks · 2 not passing" ("all passing" at
- * none). Neutral words: CI is not a signal here (2026-09-29), so failed and
- * still running both count as not passing, without a colour.
- */
-export function checksNote(checks: ChecksSummary): string {
-  const total = `${checks.total} ${checks.total === 1 ? 'check' : 'checks'}`;
-  const notPassing = checks.failed + checks.pending;
-  return notPassing === 0 ? `${total} · all passing` : `${total} · ${notPassing} not passing`;
-}
 
 export type ReviewStatus = 'requested' | 'approved' | 'changes_requested' | 'commented' | 'dismissed';
 

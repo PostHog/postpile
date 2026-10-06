@@ -10,7 +10,6 @@ const busy: BusyInboxView = {
   quietPrs: 4640,
   cap: 1500,
   updatesLastHour: 300,
-  writesLocked: true,
   keptYou: 940,
   keptTeam: 560,
   keptOthers: 0,
@@ -64,13 +63,15 @@ describe('whyLines', () => {
     const lines = whyLines(busy);
     expect(lines[0]).toBe('6,140 PRs are open, unread or active this week, 300 of them updated in the last hour. PostPile works on 1,500 at a time.');
     expect(lines).toContain("Other people's PRs wait, with no fetching and no agent work. Nothing is deleted.");
-    expect(lines).toContain('With GitHub writes locked, PostPile cannot mark read what it handled.');
     expect(lines.at(-1)).toBe('This goes away by itself once your inbox is back under 1,500.');
   });
 
-  it('leaves out the writes line when writes are on and the updates line without updates', () => {
-    const lines = whyLines({ ...busy, writesLocked: false, updatesLastHour: 0 });
-    expect(lines.some((line) => line.includes('locked'))).toBe(false);
+  it('never mentions the GitHub writes lock: that lives in the footer only', () => {
+    expect(whyLines(busy).some((line) => /writes|lock/i.test(line))).toBe(false);
+  });
+
+  it('leaves out the updates line without updates', () => {
+    const lines = whyLines({ ...busy, updatesLastHour: 0 });
     expect(lines.some((line) => line.includes('last hour'))).toBe(false);
   });
 });

@@ -264,9 +264,14 @@ describe('FakeEngine rechecks', () => {
     expect((await engine.getPr(key))?.facts.map((view) => view.fact.text).sort()).toEqual([...before].sort());
   });
 
+  it('starts with GitHub writes on, like the packaged app, unless POSTPILE_FAKE_LOCKED=1', async () => {
+    expect(await new FakeEngine().githubWrites()).toEqual({ enabled: true, forcedOffReason: null, pending: [] });
+    expect(await new FakeEngine({ writesLocked: true }).githubWrites()).toEqual({ enabled: false, forcedOffReason: null, pending: [] });
+  });
+
   it('flips the writes lock and fills the action log with fake queue sends', async () => {
     let now = new Date('2026-09-27T10:00:00Z');
-    const engine = new FakeEngine({ now: () => now });
+    const engine = new FakeEngine({ now: () => now, writesLocked: true });
     expect(await engine.githubWrites()).toEqual({ enabled: false, forcedOffReason: null, pending: [] });
     await engine.setGitHubWrites(true);
 
@@ -285,7 +290,7 @@ describe('FakeEngine rechecks', () => {
 
   it('turns a locked mark-read into a pending write: the tile stays unread until it is sent', async () => {
     let now = new Date('2026-09-27T10:00:00Z');
-    const engine = new FakeEngine({ now: () => now });
+    const engine = new FakeEngine({ now: () => now, writesLocked: true });
     const tileOf = async () => (await engine.getTopic('topic-depot'))?.tiles.find((view) => view.tile.id === 'set:turbo-cache');
     const before = await engine.debugNotifications(100);
     const unread = before.filter((row) => row.thread.unread && row.landing.kind === 'tile' && row.landing.tileId === 'set:turbo-cache');
@@ -318,7 +323,7 @@ describe('FakeEngine rechecks', () => {
 
   it('discards pending writes and leaves the tile unread', async () => {
     let now = new Date('2026-09-27T10:00:00Z');
-    const engine = new FakeEngine({ now: () => now });
+    const engine = new FakeEngine({ now: () => now, writesLocked: true });
     await engine.markRead('set:turbo-cache');
     now = new Date(now.getTime() + 7000);
 
@@ -377,7 +382,7 @@ describe('FakeEngine removeTeamRequest', () => {
   }
 
   it('offers it on sample PRs with a pending team request, refuses while locked, then removes and logs both writes', async () => {
-    const engine = new FakeEngine();
+    const engine = new FakeEngine({ writesLocked: true });
     const [found] = await teamRequested(engine);
     expect(found).toBeDefined();
     const team = found!.pr.ownTeamRequests[0]!;
@@ -533,7 +538,7 @@ describe('FakeEngine addressed your changes', () => {
 });
 
 describe('FakeEngine what is new on a revisit', () => {
-  it('summarises the pushes since your changes request on #1960, bots and CI left out', async () => {
+  it('summarises the pushes since your changes request on #1960, bots left out', async () => {
     const engine = new FakeEngine();
     const devEnv = (await engine.getTopic('topic-dev-env'))?.tiles ?? [];
     const view = devEnv.find((item) => item.tile.id === 'pr:acme/app#1960');
@@ -541,7 +546,7 @@ describe('FakeEngine what is new on a revisit', () => {
     const detail = await engine.getPr('acme/app#1960');
     expect(detail?.whatsNew?.anchor.kind).toBe('changes_request');
     expect(detail?.activity.fresh.map((line) => line.summary)).toEqual(['pim pushed 3 commits']);
-    expect(detail?.activity.freshNoiseLabel).toBe('2 bot comments, CI');
+    expect(detail?.activity.freshNoiseLabel).toBe('2 bot comments');
     expect(detail?.activity.earlier.map((line) => line.summary)).toEqual(['you requested changes']);
     expect(detail?.activity.noise).toEqual([]);
   });

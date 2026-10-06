@@ -322,7 +322,7 @@ export function Tile(props: TileProps) {
               variant="joined"
               title={
                 view.pendingWrite
-                  ? 'Already pending: goes to GitHub when you unlock and send it from the footer.'
+                  ? 'Already pending: goes to GitHub when you send it from the lock in the footer.'
                   : (actions.blockedReason('markRead') ?? markReadNote(actions.writes) ?? 'Marks every PR here read; GitHub follows after 6s')
               }
               disabled={view.pendingWrite !== null || actions.isBusy(`markRead:${tile.id}`)}

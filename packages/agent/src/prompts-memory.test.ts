@@ -23,7 +23,7 @@ import {
   viewer,
 } from './test-fixtures.ts';
 
-const pr1 = makePr({ checks: { rollup: 'FAILURE', contexts: [] } });
+const pr1 = makePr();
 const pr2 = makePr({ ref: { repo: 'acme/app', number: 2 }, title: 'Docker builds on Depot', author: 'bob', body: 'Moves docker builds.' });
 
 function dossierInput(overrides: Partial<DossierUpdateInput> = {}): DossierUpdateInput {
@@ -33,8 +33,6 @@ function dossierInput(overrides: Partial<DossierUpdateInput> = {}): DossierUpdat
     delta: makeDelta({
       events: [
         makeEvent({ id: 'ev-human', summary: 'bob asked: are release builds staying?' }),
-        makeEvent({ id: 'ev-bot', actor: 'github-actions', isBot: true, kind: 'ci', summary: 'CI failed' }),
-        makeEvent({ id: 'ev-bot2', actor: 'github-actions', isBot: true, kind: 'ci', summary: 'CI failed again' }),
         makeEvent({ id: 'ev-bot3', actor: 'reviewbot[bot]', isBot: true, kind: 'bot_comment', summary: 'reviewbot left a summary' }),
       ],
       joinedPrKeys: [pr2.key],
@@ -104,8 +102,6 @@ describe('dossierUpdatePrompt', () => {
   });
 
   it('carries no CI status and says not to bring it up, while CI as a subject of the work stays', () => {
-    expect(prompt).not.toContain('CI failed');
-    expect(prompt).not.toContain('(ci)');
     expect(prompt).not.toContain('CI failing');
     expect(prompt).not.toMatch(/CI: (failure|success|pending|none)/);
     expect(prompt).toContain(NO_CI_RULE);
@@ -258,6 +254,16 @@ describe('topicAssignmentPrompt', () => {
     expect(prompt).toContain('Never the developer\'s own field or team ("Dev tooling", "DevEx")');
     expect(prompt).toContain('A project is live when it has open PRs or activity in the\n  last two weeks; a standing topic is live for as long as it is listed.');
     expect(prompt).not.toContain('broader existing topic');
+  });
+
+  it('says which topics the user took a PR out of, names fenced, and nothing for the others', () => {
+    const other = makePr({ ref: { repo: 'acme/app', number: 7 }, author: 'bob', title: 'Add the MCP tools' });
+    const notIn = { [pr1.key]: [{ id: 'billing-1a2b3c', name: 'Billing' }, { id: 'ci-4d5e6f', name: 'CI' }] };
+    const prompt = topicAssignmentPrompt({ prs: [pr1, other], viewer, topics: [], notIn, context: emptyContext });
+    const note = 'The user took this PR out of these topics. Never put it back there, also not as a new topic of the same name:\n<github_data>\n- id billing-1a2b3c: "Billing"\n- id ci-4d5e6f: "CI"\n</github_data>';
+    expect(prompt).toContain(`</github_data>\n${note}\n\n---\n\n`);
+    expect(prompt.split('The user took this PR out of')).toHaveLength(2);
+    expect(topicAssignmentPrompt({ prs: [pr1], viewer, topics: [], notIn: {}, context: emptyContext })).toBe(topicAssignmentPrompt({ prs: [pr1], viewer, topics: [], context: emptyContext }));
   });
 });
 

@@ -36,11 +36,11 @@ const verdict = z.enum(['looks_safe', 'look_closer', 'not_yours']).nullable();
 const approveFrom = z.enum(['detail', 'tile', 'agent_tile', 'agent_topic']);
 const markReadOrigin = z.enum(['tile', 'detail', 'debug', 'cleanup', 'agent_tile', 'agent_topic']);
 // A snooze is either a time (bucketed) or a condition (someone replies, a
-// push, CI going green, a mute until someone asks you in person - see
-// packages/core/src/snooze.ts SnoozeCondition): the same prop name the spec
-// uses ("duration bucket"), widened to the condition-based snoozes the
-// product actually has.
-const snoozeDurationBucket = z.enum(['hours', 'a_day', 'days', 'a_week', 'someone_replies', 'new_push', 'ci_green', 'muted']);
+// push, a mute until someone asks you in person - see
+// packages/core/src/snooze.ts SnoozeCondition; CI going green until 0.21.0,
+// no longer sent): the same prop name the spec uses ("duration bucket"),
+// widened to the condition-based snoozes the product actually has.
+const snoozeDurationBucket = z.enum(['hours', 'a_day', 'days', 'a_week', 'someone_replies', 'new_push', 'muted']);
 const queryLengthBucket = z.enum(['short', 'medium', 'long']);
 const queueFilter = z.enum(['mine', 'team', 'reply', 'review', 'none']);
 // The sidebar section the opened topic sits in, core's `TopicSection` as is.
@@ -70,7 +70,7 @@ const quotaResource = z.enum(['core', 'graphql']);
 const quotaLevel = z.enum(['low', 'critical']);
 const percent = z.number().int().min(0).max(100);
 // packages/engine/src/storage-jobs: every background storage job by name. Append only.
-const storageJobName = z.enum(['bot_body_trim']);
+const storageJobName = z.enum(['bot_body_trim', 'checks_strip']);
 
 // -----------------------------------------------------------------------
 // 6. MCP server (postpile-mcp, a separate process that reads the database and asks the app for the rest)
@@ -180,8 +180,9 @@ export const TELEMETRY_EVENTS = {
   rate_limited: z.object({ source: rateLimitSource, where: rateLimitWhere }).strict(),
   // Once per drop into a worse level within one rate-limit window, not per request (DESIGN.md "GitHub quota").
   github_quota_low: z.object({ resource: quotaResource, level: quotaLevel }).strict(),
-  // The footer lock opened or closed. With writes locked PostPile cannot mark anything read, so a heavy inbox only grows (2026-10-05).
-  github_writes_changed: z.object({ enabled: z.boolean() }).strict(),
+  // GitHub writes went on or off. With writes locked PostPile cannot mark anything read, so a heavy inbox only grows (2026-10-05).
+  // from: footer = the user flipped the lock; default = an install that never chose got the default (on), sent once.
+  github_writes_changed: z.object({ enabled: z.boolean(), from: z.enum(['footer', 'default']) }).strict(),
   consolidation_ran: z.object({ proposals_filed: count }).strict(),
   // The daily board snapshot, counts only: one per tile on the board. stacked_prs = members in a stack
   // (all of a stack tile, the stacks' members in a set, 0 for a single); pulled_in = layers fetched

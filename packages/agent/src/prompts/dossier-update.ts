@@ -3,7 +3,7 @@ import type { Fact, PrEvent } from '@postpile/core';
 import type { DossierRefs, UserSource } from '../dossier-refs.ts';
 import type { DossierUpdateInput } from '../service.ts';
 import { renderDossier } from './dossier.ts';
-import { clip, contextBlock, entityText, GITHUB_DATA_RULE, githubData, jsonOnly, NO_CI_RULE, prLine, viewerLine, withoutCi, WORK_GLOSSARY, workContextBlock } from './shared.ts';
+import { clip, contextBlock, entityText, GITHUB_DATA_RULE, githubData, jsonOnly, NO_CI_RULE, prLine, viewerLine, WORK_GLOSSARY, workContextBlock } from './shared.ts';
 
 /**
  * A standing topic has no finish line (core TopicKind): its dossier follows
@@ -26,7 +26,7 @@ function eventLine(event: PrEvent, shortId: string): string {
 /** Bots are most of the volume and none of the story: one count per PR. CI results are left out (NO_CI_RULE). */
 function botCounts(events: PrEvent[]): string[] {
   const byPr = new Map<string, { count: number; kinds: Set<string> }>();
-  for (const event of withoutCi(events).filter((e) => e.isBot)) {
+  for (const event of events.filter((e) => e.isBot)) {
     const entry = byPr.get(event.prKey) ?? { count: 0, kinds: new Set<string>() };
     entry.count += 1;
     entry.kinds.add(event.kind);

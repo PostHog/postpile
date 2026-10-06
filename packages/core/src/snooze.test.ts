@@ -36,18 +36,11 @@ describe('isSnoozeOver', () => {
     expect(isSnoozeOver(push, context({ events: [makeEvent({ kind: 'force_pushed', at: at(11) })] }))).toBe(true);
   });
 
-  it('ci_green ends when the PR is green', () => {
-    const green = snooze({ kind: 'ci_green' });
-    expect(isSnoozeOver(green, context({ pr: makePr({ checks: { rollup: 'FAILURE', contexts: [] } }) }))).toBe(false);
-    expect(isSnoozeOver(green, context({ pr: makePr({ checks: { rollup: 'SUCCESS', contexts: [] } }) }))).toBe(true);
-  });
-
   it('every snooze ends when the PR is merged or closed', () => {
-    const failingMerged = makePr({ state: 'MERGED', checks: { rollup: 'FAILURE', contexts: [] } });
-    const closed = makePr({ state: 'CLOSED', checks: { rollup: 'FAILURE', contexts: [] } });
+    const merged = makePr({ state: 'MERGED' });
+    const closed = makePr({ state: 'CLOSED' });
     const later = snooze({ kind: 'until_time', until: at(999) });
-    for (const pr of [failingMerged, closed]) {
-      expect(isSnoozeOver(snooze({ kind: 'ci_green' }), context({ pr }))).toBe(true);
+    for (const pr of [merged, closed]) {
       expect(isSnoozeOver(snooze({ kind: 'new_push' }), context({ pr }))).toBe(true);
       expect(isSnoozeOver(snooze({ kind: 'someone_replies' }), context({ pr }))).toBe(true);
       expect(isSnoozeOver(later, context({ pr }))).toBe(true);
@@ -142,7 +135,6 @@ describe('snoozeTelemetryBucket', () => {
   it('names the condition directly for an event-based snooze', () => {
     expect(snoozeTelemetryBucket({ kind: 'someone_replies' }, nowMs)).toBe('someone_replies');
     expect(snoozeTelemetryBucket({ kind: 'new_push' }, nowMs)).toBe('new_push');
-    expect(snoozeTelemetryBucket({ kind: 'ci_green' }, nowMs)).toBe('ci_green');
     expect(snoozeTelemetryBucket({ kind: 'muted' }, nowMs)).toBe('muted');
   });
 

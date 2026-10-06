@@ -247,23 +247,6 @@ describe('deriveEvents: reviews, commits, timeline, CI', () => {
     expect(only(deriveEvents(reviewed, viewer, null), 'merged')).toHaveLength(1);
   });
 
-  it('emits one CI line per head commit and result', () => {
-    const pr = makePr({
-      headOid: 'abc',
-      checks: {
-        rollup: 'FAILURE',
-        contexts: [
-          { name: 'lint', conclusion: 'SUCCESS', completedAt: at(3) },
-          { name: 'test', conclusion: 'FAILURE', completedAt: at(5) },
-        ],
-      },
-    });
-    const [ci] = deriveEvents(pr, viewer, null);
-    expect(ci).toMatchObject({ kind: 'ci', sourceId: 'abc:FAILURE', at: at(5), summary: 'CI failed: test' });
-    expect(ci?.ruleLoudness).toBe('quiet');
-    expect(deriveEvents(makePr({ checks: { rollup: 'PENDING', contexts: [] } }), viewer, null)).toHaveLength(0);
-  });
-
   it('returns events oldest first', () => {
     const pr = makePr({
       comments: [makeComment({ id: 'late', createdAt: at(50) })],

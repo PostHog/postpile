@@ -439,7 +439,7 @@ interface CompiledPr {
   pr: Pr;
   /** The head commit after each number of steps. */
   headAfter: string[];
-  /** Last activity on GitHub (steps, merge or close, CI). */
+  /** Last activity on GitHub (steps, merge or close). */
   lastMinute: number;
 }
 
@@ -448,7 +448,6 @@ function compilePr(spec: PrSpec, place: PrPlace): CompiledPr {
   const history = new PrHistory(place.number, author, spec.draft);
   spec.steps.forEach((step, index) => history.apply(step, index, at(stepMinute(place.prIndex, index))));
   const endMinute = stepMinute(place.prIndex, spec.steps.length);
-  const ciMinute = afterMinute(place.prIndex, spec.steps.length) - 3;
   let state: Pr['state'] = 'OPEN';
   let mergedAt: string | null = null;
   let mergedBy: string | null = null;
@@ -467,10 +466,7 @@ function compilePr(spec: PrSpec, place: PrPlace): CompiledPr {
     history.timeline.push({ id: `tl${place.number}-end`, kind: 'closed', actor: LOGINS[spec.end.by], at: at(endMinute), subject: null });
   }
   const lastStepMinute = spec.steps.length === 0 ? 0 : stepMinute(place.prIndex, spec.steps.length - 1);
-  const ciRan = spec.ci !== 'none';
-  const lastMinute = Math.max(lastStepMinute, state === 'OPEN' ? 0 : endMinute, ciRan ? ciMinute : 0);
-  const rollup = { none: 'NONE', pending: 'PENDING', success: 'SUCCESS', failure: 'FAILURE' } as const;
-  const finished = spec.ci === 'success' || spec.ci === 'failure';
+  const lastMinute = Math.max(lastStepMinute, state === 'OPEN' ? 0 : endMinute);
   const pr = makePr({
     number: place.number,
     repo: PROPERTY_REPO,
@@ -488,10 +484,6 @@ function compilePr(spec: PrSpec, place: PrPlace): CompiledPr {
     comments: history.comments,
     threads: history.threads(spec.threadsResolved),
     timeline: history.timeline,
-    checks: {
-      rollup: rollup[spec.ci],
-      contexts: ciRan ? [{ name: 'ci', conclusion: finished ? spec.ci.toUpperCase() : null, completedAt: finished ? at(ciMinute) : null }] : [],
-    },
     headOid: history.headOid,
     createdAt: at(0),
     updatedAt: at(lastMinute),

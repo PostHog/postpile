@@ -31,6 +31,18 @@ at least one PR left behind) right away, with no undo; "Wrong topic" on a PR
 fixes a bad one, and that correction reaches the next consolidation prompt.
 Bigger splits stay proposals.
 
+**"Wrong topic" sticks** (2026-10-05): no rule and no agent puts a PR back
+into a topic the user took it out of. The stack shortcut skips that topic
+and asks the agent; the assignment prompt names it per PR, and an answer
+that picks it (by id, or by a "new" name matching its name, also when the
+topic is in the Archive and no longer offered) is dropped, so the PR gets
+the retry and else waits in Unsorted; the topic tidy folds or
+splits nothing that would put it back with that work. The "no" follows the
+topic into whatever it is merged into, and on a stack it holds for every
+layer that moved (one feedback row each). Only the user puts it back, by
+picking that topic; a merge proposal they accept is their call too
+(`excludedTopicIds` in core, `TopicExclusions` in the engine).
+
 **Areas, topics, tiles and sets** (2026-09-29): one glossary,
 `WORK_GLOSSARY` in `packages/agent/src/prompts/shared.ts`, goes into every
 prompt that sorts, groups or tidies PRs (topic assignment, set grouping,
@@ -204,7 +216,7 @@ agent-grouped among pinged and found PRs; the agent never pulls PRs in.
 | loudness | effect | examples |
 |---|---|---|
 | loud | pings, coral "new since you looked", lights up the topic (the tile is unread while its thread is unread on GitHub, loud or not: "GitHub unread is PostPile unread") | mention, review requested, question to the user, a push after the user approved when the agent raises it, the author's push or comment after the user requested changes ("addressed your changes") |
-| quiet | dot, no ping | bots, CI (always, see "CI is not a signal"), deploys, merge queue (except trunk taking your own PR out of it: loud, see "Merge queue"), pushes after the user approved (by default), merged without the user's review (never loud; surfaced by the done rule instead, see "Merged without your review") |
+| quiet | dot, no ping | bots, deploys, merge queue (except trunk taking your own PR out of it: loud, see "Merge queue"), pushes after the user approved (by default), merged without the user's review (never loud; surfaced by the done rule instead, see "Merged without your review") |
 | muted | hidden as noise, one click to unmute | bot rebase on a draft |
 | seen | already read | any of the above after reading, or before the user's own last action on the PR (see "You already dealt with it") |
 
@@ -271,7 +283,7 @@ against the user's own instructions), `does`, `risk`, `othersSaid`. Cached by a
 hash of its inputs; regenerated only when the PR moves or instructions change.
 
 **User actions**: approve (single press, immediate, no undo), mark read, snooze
-(until someone replies | new push | CI green, the user's own pick | a time), mute
+(until someone replies | new push | a time; "until CI is green" until 0.21.0), mute
 (until someone asks the user in person; also a mark-read and GitHub's thread
 unsubscribe), "ask <person>" (agent
 drafts a PR comment, user edits and sends), feedback on a tile ("not mine",
@@ -572,10 +584,10 @@ only had old settled PRs.
 `BusyInboxView`): `busy` (the cap cut the hot set on the last load),
 `inboxPrs` (PRs that would be hot without the cap), `keptPrs`, `quietPrs`
 (the difference: not loaded, fetched or worked on), `keptYou`,
-`keptTeam`, `keptOthers` (kept PRs by their own tier), `cap`,
-`updatesLastHour` (PR threads with activity in the last hour) and
-`writesLocked` (GitHub writes off, so PostPile cannot shed load by marking
-things read). It reuses what the last load picked. `POSTPILE_FAKE_BUSY=1`
+`keptTeam`, `keptOthers` (kept PRs by their own tier), `cap` and
+`updatesLastHour` (PR threads with activity in the last hour; `writesLocked`
+was dropped 2026-10-05 with the card's Unlock writes). It reuses what the
+last load picked. `POSTPILE_FAKE_BUSY=1`
 makes the fake inbox busy with invented numbers. While busy, the engine
 logs a line and sends `board_trimmed { kept, dropped }` at most once an
 hour.
@@ -585,10 +597,10 @@ a card sits at the top of the sidebar, right after Inbox and above the
 topics: that is where a busy inbox shows, as topics that are not there.
 "Busy inbox", then "Focusing on what is aimed at you. 4,640 quiet PRs wait
 for news." and what is kept per tier ("Kept 940 for you · 560 for your
-team · 0 for others"). Three text links: Clean up opens the inbox cleanup
-dialog (sidebar mode), Unlock writes (only while `writesLocked`) opens the
-footer lock's popover, the one way to allow GitHub writes, and Why? folds
-out what PostPile does now: it keeps your PRs and what is aimed at you,
+team · 0 for others"). Two text links: Clean up opens the inbox cleanup
+dialog (sidebar mode), and Why? folds out what PostPile does now (no
+"Unlock writes" and no writes line since 2026-10-05: the lock lives in the
+footer only, see "GitHub writes: lock, action log"): it keeps your PRs and what is aimed at you,
 then your team's; other people's PRs wait with no fetching and no agent
 work; nothing is deleted; it goes away by itself once the inbox is back
 under the cap. The tone is calm: PostPile is focusing, nothing broke. Calm
@@ -732,25 +744,80 @@ the reasons and does not flip back:
    merged without your review"). Idea from 2026-09-28: "when people come
    from vacation, I had 500".
 
+## CI is not tracked
+
+Decided 2026-10-05 (0.21.0): PostPile fetches no CI at all. The checks were
+the costliest part of every PR fetch, usually stale by the time anyone
+looked, and CI had been taken off everything that ranks or speaks since
+2026-09-29 ("CI is not a signal", below). What was left (a quiet CI event in
+the activity list, the pane's neutral Checks fact, the "Until CI is green"
+snooze and the CLI's rollup) did not pay for the fetch.
+
+- **The fetch.** The PR query asks for no `statusCheckRollup` and no head
+  commit (`commits(last: 1)`, which was there only for the checks).
+  Measured on 12 merged PostHog/posthog PRs (100 checks each): the
+  response went from 621 KB to 471 KB and from 5.3–8.1 s to 3.7–4.3 s; the
+  GraphQL rate limit cost stayed 7 points per batch, 1,212 fewer nodes
+  (24,492 → 23,280).
+- **The model.** `Pr` has no `checks`; `summarizeChecks`, the CI event, the
+  `ci` event kind, the pane's Checks fact and the CLI's `CI <rollup>` are
+  gone. The GitHub "Checks" tab stays one click away under "Open on GitHub".
+- **Old CI events.** Migration 030 deletes the stored `ci` events and every
+  event log row of one, by id (`<pr key>:ci:<head oid>:<rollup>`), also log
+  rows whose event a newer head commit had already dropped. Every log reader
+  joins `pr_event`, so nothing a reader showed changes but the CI lines
+  themselves; rows only leave, so nothing turns unseen and no cursor moves
+  (on the copies: unseen non-CI events the same before and after). The
+  log's high-water mark (`EventLogRepo.maxSeq`) reads SQLite's
+  AUTOINCREMENT counter, not `MAX(seq)`: deleting the newest rows must not
+  lower it, or a cursor already past it could never be marked seen again
+  (`CursorRepo.advance` only moves forward; found by GPT-6.1). Chosen over letting re-derivation drop them: merged and closed
+  PRs are never fetched again, so their CI events would stay forever and
+  the `ci` kind with them. A PR whose newest event was a CI result can fall
+  out of the hot set's "active in the last 7 days" a little earlier. It took
+  0.12 s on the normal copy and 0.5 s on the heavy one, once.
+- **Old "Until CI is green" snoozes.** `SnoozeRepo` reads a condition this
+  build no longer offers (or cannot parse) as `until_time` at the snooze's
+  start: it ends like an expired snooze on the next load. The menu and the
+  server's schema offer only someone replies, a new push and times.
+- **Old checks in the stored json.** Reads drop the `checks` key when they
+  parse a snapshot (`PrRepo` `parsePr`), so they never reach memory or a
+  rewrite. Storage job 2, `checks_strip`, removes them on disk: one unit is
+  one snapshot in key order, `json_remove` in place inside the slice's
+  transaction, no revision (no read changes). Done means a whole walk,
+  unit by unit within the slice budget, found nothing to strip: a walk that
+  stripped something (meta `storage_job:checks_strip:stripped`) starts over
+  to verify. Revisions cannot prove it, since an unguarded older build
+  (0.19.0 and before) keeps them when it writes checks back. Such a
+  downgrade after the job finished leaves bytes behind, harmlessly: reads
+  drop them, and the next fetch of that PR writes them out. Migration 030 is also what keeps 0.20.0 off the stripped json.
+  Measured (one walk, before the verifying walk was added): heavy 93 MB of
+  json freed in 138 slices (p95 37 ms, max 54 ms), 4.3 s of work, 11 s
+  wall; normal 6.7 MB in 10 slices. Every snapshot
+  equals the original but for its checks. Hot-set heap on heavy 283 MB (the
+  0.20.0 read) → 264 MB (this build, before the strip) → 263 MB after.
+- **What stays.** `NO_CI_RULE` in every writing prompt: glances and
+  dossiers stored before can still talk about CI status. The MCP
+  instructions keep saying PostPile does not track CI. CI as a subject of
+  the work (topic names, the "CI" area, workflow files) is code and stays.
+
 ## CI is not a signal
 
-Decided 2026-09-29. Julian: "I don't think we should focus on or even take in
+Decided 2026-09-29, and since 2026-10-05 the CI side of it is gone entirely
+("CI is not tracked", above): no checks are fetched, so no prompt, rule or
+view can get them. What still holds from here is how agents treat CI in older
+stored text. Julian: "I don't think we should focus on or even take in
 any CI at any point because that's too fuzzy. It could flake, it could fail at
 any time, and it's always the responsibility of the author to bring the PR to
 green. Except for maybe some details in the detail pane, we shouldn't
 highlight it or put it into text or into any risk."
 
-**The rule.** CI status (the check rollup, check results, `ci` events) never
-drives anything the app says or ranks:
+**The rule.** CI status never drives anything the app says or ranks:
 
-- *No prompt gets it.* `prDetails` has no `CI:` line, the rendered dossier's
-  timeline has no "CI failing" (`prStateWords`), and `ci` events are left out
-  of the ping decision, memory recheck and dossier update prompts
-  (`withoutCi`). The topic delta drops them (`selectTopicDelta`), so a
-  CI-only change starts no dossier update and bumps no dossier version; the
-  digest cursor still moves past them, so they are not read again.
-  Checks were never in the glance hash (`prGlanceSnapshot`) and stay out, so
-  a re-run never makes a glance stale.
+- *No prompt gets it.* `prDetails` has no `CI:` line and the rendered
+  dossier's timeline has no "CI failing" (`prStateWords`). Until 0.21.0 the
+  `ci` events were left out of the prompts and the topic delta; now there are
+  none.
 - *The writing agents are told.* Every prompt that writes something the
   user reads carries `NO_CI_RULE`: glance, dossier update, ping decision,
   memory recheck, chat, topic assignment, sets, consolidation. No CI or check
@@ -759,20 +826,12 @@ drives anything the app says or ranks:
   claim answers drop (or fix without the CI part), never holds. The draft
   comment prompt is the exception: it writes the user's own ask. The MCP
   server's instructions say PostPile does not track CI.
-- *Not a move.* Whose turn has no `fix_ci`; failing CI on the user's own PR
-  is not their move by itself.
-- *Never loud.* `ci` events are machine activity: quiet by the rules, never a
-  ping (bot-only activity), never an unread reason. The events agent never
-  sees them (it only judges loud events and pushes after approval), so
-  nothing overrides that.
+- *Not a move.* Whose turn has no `fix_ci`.
 
 **What stays, and why.** CI as a subject of the work is code, not status:
 topic names ("Move CI to Depot"), the "CI" area, changed workflow files in the
 prompt, and the events agent raising a push that makes a substantial change
-in CI, build or devex areas the user approved. The detail pane keeps the
-"Checks" fact (`PrFacts`) as a neutral detail, no more prominent than now,
-and the activity list keeps CI results in the folded bot/CI line. The snooze
-option "Until CI is green" (`ci_green`) stays: the user picks it.
+in CI, build or devex areas the user approved.
 
 **History.** Design 3a (2026-09-29 morning) took CI off rows, tiles, the
 detail state line and the RISK box, leaving it only in the facts. CI still fed
@@ -783,7 +842,9 @@ Existing glances and dossiers that mention CI are not regenerated on purpose
 (no `GLANCE_PROMPT_VERSION` / `DOSSIER_PROMPT_VERSION` bump): a glance goes
 stale on the PR's next push, review or human comment, a dossier on the
 topic's next real activity, and a bump would rewrite every one of them in
-one go for a line that fades on its own.
+one go for a line that fades on its own. Until 0.21.0 the pane kept a
+neutral Checks fact, the activity list a quiet CI line, and the snooze menu
+"Until CI is green".
 
 ## Merge queue
 
@@ -1165,7 +1226,7 @@ stale facts and claims, and topic feedback. It:
 
 - adds `joinedHistory`: log entries of joined members at or below the
   cursor (`joinedMembers` decides who joined)
-- drops noise (see "Event roles": muted, CI, bot status refreshes), keeps
+- drops noise (see "Event roles": muted, bot status refreshes), keeps
   ride-along bots (the prompt compacts them to counts)
 - caps at `DELTA_LIMITS.maxEvents` (120) with at most 15 per PR, newest
   kept; the rest are only counted in `omittedEvents`
@@ -1204,7 +1265,7 @@ core `event-roles.ts`), first match wins:
 | Event | Role |
 | --- | --- |
 | effective loudness loud (incl. the app's Look closer, an event the agent raised) | trigger |
-| muted (by rule, agent or user), CI result | noise |
+| muted (by rule, agent or user) | noise |
 | a push (commits pushed, after approval, force push), from a person or a bot | ride_along (since 2026-10-05; a loud push, answering the viewer's changes request, is a trigger by the first row) |
 | anything a person did, the viewer included | trigger |
 | a state change, whoever did it: merged, merged without review, closed, reopened, ready for review, back to draft, review requested or removed, a bot's approval; Look closer even when turned down | trigger |
@@ -1308,8 +1369,7 @@ assignment and consolidation, where many topics share one prompt.
 **Dossier update prompt** input, in order: the rendered previous dossier
 (or "none yet"), the user's context block, member PR state lines, intros of
 joined PRs, the new events (short ids `e1..eN`, bots compacted to counts
-per PR; CI results are dropped from the delta, so a CI-only change starts no
-update), left PRs, known facts (short ids `F1..Fn`), stale facts to
+per PR), left PRs, known facts (short ids `F1..Fn`), stale facts to
 recheck with their stale reason, new feedback. The answer (JSON,
 `dossierUpdateOutput`) is the whole new dossier plus `flags`, `facts`,
 `closeFacts`, `confirmedFactIds`. Refs in the answer are the short ids; the
@@ -2724,9 +2784,8 @@ chats.
 `PrPaneView` (`prPaneView` in `pr-pane.ts`), not the stored `Pr`: header
 fields, the description whole, the files with their counts (key files read
 them), reviews as author, state and time (no text), the last commit's time
-and a checks summary (`summarizeChecks` in `checks.ts`: rollup, passed,
-failed, pending, newest finish, FAILURE names; the pane shows only the
-counts). No comments, threads, commits, timeline or check contexts: the
+and nothing about checks (CI is not tracked since 0.21.0). No comments,
+threads, commits or timeline: the
 activity list, its bodies and its reply and react targets come built on
 `PrDetail.activity`, made from the stored PR before the view. The biggest
 open PR on a real copy went from 1.18 MB to 389 KB per open (its `pr` part
@@ -2859,7 +2918,8 @@ A one-time rewrite of stored data that needs JS (parse, cut, rebuild) runs
 as a storage job, never in a numbered migration: a migration runs at
 startup in one transaction on Electron's main thread, and on a heavy
 install that is seconds of a frozen app and a WAL the size of the rewrite.
-The bot body trim is job 1; the PR snapshot normalization (NEXT.md) adds
+The bot body trim is job 1, the strip of the old checks (`checks_strip`,
+"CI is not tracked") job 2; the PR snapshot normalization (NEXT.md) adds
 its backfills and strips as later jobs. Code in
 `packages/engine/src/storage-jobs/`: `runner.ts` (`StorageJobRunner`),
 `jobs.ts` (the ordered list), one file per job. Checked with Codex
@@ -3034,10 +3094,8 @@ amber). State colors stay on done tiles; only titles and counts go grey. **CI sh
 detail pane's facts** ("Checks"): not on rows, tiles, the detail state line
 or the RISK box, and not in whose turn or any agent text (see "CI is not a
 signal").
-The Checks fact itself is neutral (2026-09-29): a grey bar (passing a notch
-darker than the rest) and "12 checks · 2 not passing" (failed and running
-together; "all passing" at none) in the normal muted text, no pass or fail
-colour. The Size fact next to it draws deletions (count and bar) in their
+The Checks fact is gone since 0.21.0 ("CI is not tracked"); until then it
+was neutral, a grey bar and "12 checks · 2 not passing". The Size fact draws deletions (count and bar) in their
 own diff red (`--diff-red`), never coral: coral stays for "new".
 
 **PR rows** (`PrRow`): state icon, the coral dot for an unread PR
@@ -3468,7 +3526,7 @@ as `PrSummary.whatsNew` and `PrDetail.whatsNew`; words from the renderer's
 only its text changes, and only when the viewer already touched the PR
 before the new loud events. Rules:
 
-- New events are the unseen loud ones, the same loud news that pings. Quiet bot, CI and other events never change the text or the count.
+- New events are the unseen loud ones, the same loud news that pings. Quiet bot and other events never change the text or the count.
 - A touch is one of the viewer's own events (review, approval, changes
   request, comment, a push to their own PR, a merge or close they did; core
   `lastTouch` in `last-touch.ts`, shared with "You already dealt with it"),
@@ -3721,8 +3779,8 @@ and detail start equally wide (2026-09-30, was a 420-480px tile clamp). At
   LOOKED · since your changes request yesterday" (anchor from `whatsNew`,
   relative day from `whenLabel`; plain header on a first look). Up to 3
   loud lines (`activity.fresh`, same rows as the activity list), then "N
-  more"; the quiet bot and CI events since the touch fold into one line
-  (`activity.freshNoise`, `noiseSummary`: "10 bot comments, CI") that
+  more"; the quiet bot events since the touch fold into one line
+  (`activity.freshNoise`, `noiseSummary`: "10 bot comments, a deploy") that
   expands. The activity list below no longer repeats any of it.
 - **Look at first** (2026-09-29, `KeyFiles`): the glance's `keyFiles`, up to
   3 changed files a reviewer should open first with the agent's why (max 12
@@ -3746,9 +3804,9 @@ and detail start equally wide (2026-09-30, was a 420-480px tile clamp). At
   unseen noise after the viewer's last touch (`activityList(events,
   viewer, since)`) go to the box under the title (2026-09-29); the list,
   titled "Earlier activity" then, keeps only the rest. About 12 lines
-  (`ACTIVITY_LINE_CAP`) before "Show all N". Bots, CI, deploys, merge queue,
+  (`ACTIVITY_LINE_CAP`) before "Show all N". Bots, deploys, merge queue,
   agent-muted events and review requests between others fold into one "N
-  bot/CI events" line that expands (Unmute lives there).
+  bot events" line that expands (Unmute lives there).
   Comments and reviews from people show in full (2026-09-29): the event
   `summary` is one clipped line (100 chars, first line) for tiles, MCP and
   the agent, so `activityList(events, viewer, since, pr)` also puts the
@@ -4069,18 +4127,77 @@ help either: marking read never unsubscribes, so a thread that was only read
 is still subscribed.
 
 **The lock.** GitHub writes are a runtime switch (`WriteSwitch` in
-engine `writes/`), off (read-only) on first run, flipped by the lock in the
-status footer (`POST /api/github-writes {enabled}`), kept in meta
-`github_writes` so it survives restarts (decided 2026-10-05, not built yet:
-on by default, and a locked heavy inbox stops PostPile at thresholds, see
-NEXT.md "GitHub writes on by default"). While off the switch hands out the
-`ReadOnlyWriter`, so a path that forgets to ask still cannot write.
-`POSTPILE_READ_ONLY=1` never builds the real write client; the lock
-then shows disabled with the reason and turning it on answers `ok: false`.
-Opening the lock asks in a popover ("Mark-read and approvals will reach
-GitHub"); closing is instant. The UI guard follows it: approve and comment
-are blocked while locked (no pending queue for them), mark read and "not
-mine" run and become pending writes. `CODE_MANAGER_ALLOW_WRITES` is gone.
+engine `writes/`), flipped by the lock in the status footer
+(`POST /api/github-writes {enabled}`), kept in meta `github_writes`
+("on" / "off") so it survives restarts. With no choice stored, the default
+decides: on in the packaged app since 2026-10-05 (see "On by default"
+below). While off the switch hands out the `ReadOnlyWriter`, so a path that
+forgets to ask still cannot write. `POSTPILE_READ_ONLY=1` never builds the
+real write client; the lock then shows disabled with the reason and turning
+it on answers `ok: false`. Opening the lock asks in a popover ("Mark-read
+and approvals will reach GitHub"); closing is instant. The UI guard follows
+it: approve and comment are blocked while locked (no pending queue for
+them), mark read and "not mine" run and become pending writes.
+`CODE_MANAGER_ALLOW_WRITES` is gone.
+
+**The lock lives in the footer only** (2026-10-05). It is an opt-out, not
+something PostPile asks for: while writes are on the footer shows a faint
+open-lock icon (a click locks), locked it is a quiet "read-only" in the
+footer's text colour, never amber or another alarm colour, with the pending
+count next to it. No other surface pushes it: the busy inbox card lost its
+"Unlock writes" link and its "With GitHub writes locked…" Why? line. A
+write that is blocked because the user locked writes still says so in its
+tooltip or toast ("…GitHub writes are off. Open the lock in the footer…").
+
+**On by default** (2026-10-05, NEXT.md "GitHub writes on by default").
+With the lock closed PostPile cannot mark anything read on GitHub, so a
+heavy inbox only grows; telemetry showed 2 of 14 installs with writes on,
+and a heavy user's board dropped to 250 hot PRs once he turned them on. So:
+
+- No `github_writes` key (the user never touched the lock) means writes on,
+  as long as the real writer exists. An explicit "off" stays locked: the
+  user chose it. `POSTPILE_READ_ONLY=1` wins over both.
+- Only the packaged app gets the default (`writesOnByDefault` in
+  `create.ts`: lock kind `packaged` and the default profile). Dev runs keep
+  the old default, locked: the unpackaged desktop app, `pnpm server`, the
+  CLI, the simulation (which also stores "off"), and a packaged build on the
+  dev profile. A dev session never writes because nobody chose
+  (`create-writes-default.test.ts`).
+- Once per install, at the first sync with gh working
+  (`Engine.keepWritesDefault`, before the sync's fetch): the default is
+  stored as "on", logged as `writes_on` with origin `default`, and sent as
+  `github_writes_changed { enabled: true, from: 'default' }`. Stored first,
+  so a lock click during the send is never overwritten.
+
+**The backlog when writes go on by default.** An install that ran locked
+can hold days of pending mark-reads. A hand unlock offers Send N / Discard
+and sends through the guard: each thread is read again, a thread that moved
+since the click is decided again (`ClickedReadRetry`). The default switch
+sends less, since nobody pressed Send and the clicks can be days old
+(`PendingWrites.sendAfterDefault`):
+
+- Only `mark_read` writes. A waiting inbox cleanup (`catch_up`,
+  `mark_all_read_before`) stays pending for the user to send or discard
+  from the footer: it is bulk, and the user picked it while locked.
+- A thread is sent only when it is unchanged since the click
+  (`markThreadReadIfUnchanged`): that is exactly what the click asked for,
+  and nothing new is marked read with it. Already read elsewhere: cleared,
+  the PR turns read here.
+- A thread with newer activity is left unread and drops out (logged
+  `skipped`, "GitHub didn't take it: activity after the last sync; still
+  unread"). It is not decided again: that second decision belongs to a
+  fresh click, and the send runs inside the sync, whose refresh the retry
+  would wait for.
+- A failed send stays pending with its error, shown in the footer's count
+  and popover ("These did not reach GitHub yet": Send / Discard / Lock).
+- Every row is in the action log with origin `default` ("marked read by
+  PostPile when GitHub writes went on by default" in the debug view). A
+  footer Send already running is left to itself.
+- The footer can still Discard while it runs: Discard asks the send in
+  flight (this one or a footer Send) to stop before its next write, waits
+  for the write it is on, then drops the rest. Each write is read from the
+  store again right before it is sent, so a row gone meanwhile sends
+  nothing.
 
 **Pending writes** (2026-09-28). GitHub is the source of truth for read and
 unread; the app never holds a read state GitHub doesn't have. So a mark-read
@@ -5113,7 +5230,9 @@ for the user to work through, and never in later syncs.
   call is an error line and the next full sync tries again.
 - User placements ("Wrong topic") are never undone: a split skips a PR the
   user placed, with its whole stack, and a merge never folds away a topic
-  that holds one.
+  that holds one. Nor does the tidy undo a "Wrong topic" without a pick:
+  no fold that puts a PR together with the topic it left (either way
+  round), no split into that topic ("'Wrong topic' sticks").
 
 ## You already dealt with it
 
@@ -5305,8 +5424,8 @@ too).
 
 1. *Read before, bots since.* GitHub has the thread unread, it has a
    `last_read_at`, and every stored event by someone else after it is
-   automation (`event.isBot`, or no actor at all: CI results carry an empty
-   actor and are flagged as bots already). The viewer's own events (a
+   automation (`event.isBot`, or no actor at all, named "GitHub"; CI results
+   had an empty actor until 0.21.0). The viewer's own events (a
    review from the CLI does not move the read time) are not someone else's
    activity and are left out (2026-09-29; before they blocked the rule). No
    known event by someone else after the read counts as "don't know": left
@@ -6430,8 +6549,8 @@ topic names are never event props.
    (origin `tile`, `detail`, `debug`, `cleanup`, `agent_tile` or
    `agent_topic`; count is the tile count for the agent ones), `team_request_removed` (no
    props: no PR, no team slug), `snoozed`
-   (the condition name for an event-based snooze — someone replies, a push,
-   CI green — or a time bucket for `until_time`), `opened_on_github`,
+   (the condition name for an event-based snooze — someone replies or a
+   push; `ci_green` until 0.21.0 — or a time bucket for `until_time`), `opened_on_github`,
    `ask_sent` (the Ask popover's send), `reply_sent` (target `thread` or
    `comment`, 2026-10-05), `reaction_sent` (a thumbs up, 2026-10-05),
    `chat_message_sent` (tile and topic chat), `mac_ping_shown` /
@@ -6469,15 +6588,18 @@ topic names are never event props.
    `app_crashed_last_run` (version_changed: sent at start when the last run
    ended without a clean quit, see "Memory on big boards"; true when that
    run was another version), `github_writes_changed`
-   (enabled: the footer lock opened or closed, 2026-10-05; with writes
-   locked PostPile cannot mark anything read, so a heavy inbox only grows),
+   (enabled, from: `footer` when the user opened or closed the lock,
+   `default` once when an install that never chose got writes on by
+   default; 2026-10-05; with writes locked PostPile cannot mark anything
+   read, so a heavy inbox only grows),
    `catch_up_ran` (topics, always 1; agent_calls, duration_ms, ok: one glance
    catch-up run after the poll), `board_trimmed` (kept, dropped: the board
    cap cut the hot set, the inbox is busy; at most hourly, since 0.18.0),
    `work_shed` (skipped_prs: PRs with news that syncs and polls left alone
    in the last hour because they are outside the hot slice; at most hourly,
    since 0.18.0, see "Big inboxes: what PostPile loads and works on"),
-   `storage_job_done` (name, one of the known jobs (`bot_body_trim`);
+   `storage_job_done` (name, one of the known jobs (`bot_body_trim`,
+   `checks_strip`);
    units, work_ms, longest_slice_ms, wall_ms: a background storage job
    finished and its check passed, this run's share of it, see "Storage
    jobs"; since 0.20.0),
@@ -7162,7 +7284,7 @@ generated boards instead of a handful of fixed ones. `@postpile/core/testing`
 holds the board recipe (`boardSpecArb`: one topic, 1-3 tiles, 1-4 PRs each as
 single, stack or set, pinged, found or pulled in; authors viewer, teammate,
 other or bot; a short history of review requests, comments and mentions,
-reviews, pushes, readiness, merge or close, CI; thread read state, handled,
+reviews, pushes, readiness, merge or close; thread read state, handled,
 in-app approval, per-PR and whole-tile snoozes, glance verdicts, Look closer,
 agent overrides, truncated or stale snapshots, pending writes), `buildBoard`
 (snapshots from the steps, events from `deriveEvents` made seen the way the
@@ -7175,7 +7297,7 @@ core). Where rules differ on purpose the invariant names the exception
 cases the first runs found were decided 2026-09-30 (above) and their
 exceptions removed, each with a scenario next to its property. `properties/coverage.test.ts` fails when a
 branch-relevant label (PR state x author, request target, review state
-including dismissed, CI, thread and seen state, snooze kind and phase,
+including dismissed, thread and seen state, snooze kind and phase,
 truncated, and the shapes past bugs needed) shows on under 1% of boards.
 Each invariant checks 2000 boards by default (the property files take about
 4s, `pnpm test` about 7s); `POSTPILE_PROPERTY_RUNS=10000 pnpm test` checks
@@ -7376,7 +7498,9 @@ preflight and does not know the token, so CORS stays open.
 - **Env switches**: `POSTPILE_FAKE=1` runs server/CLI/desktop on the in-memory Depot sample
   data (`FakeEngine`, for UI work). `POSTPILE_READ_ONLY=1` never builds the real GitHub
   writer and keeps the footer lock closed (smoke runs against a real account). Without it,
-  writes are still off until the lock is opened. `POSTPILE_POLL_SECONDS`
+  dev runs still start locked (only the packaged app has writes on by default) until the
+  lock is opened. `POSTPILE_FAKE_LOCKED=1` starts the sample data locked (it starts with
+  writes on, like the packaged app). `POSTPILE_POLL_SECONDS`
   (default 60, 0 off, never faster than GitHub's X-Poll-Interval), `POSTPILE_PING_CAP` (default 200 per 24h) and
   `POSTPILE_MAC_NOTIFICATIONS=0` tune the live poll. `POSTPILE_CATCHUP_CAP` (default
   600 per 24h, 0 off) caps glance catch-up, `POSTPILE_AUTO_SYNC_MINUTES` (default 60,

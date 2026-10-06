@@ -71,6 +71,6 @@ export function markReadNote(writes: GitHubWritesStatus | undefined): string | u
 /** Tooltip of the pending marker on a tile. */
 export function pendingWriteTitle(error: string | null): string {
   const base =
-    'Pending: this mark-read waits for GitHub. GitHub writes were locked, so nothing changed here yet; the tile stays unread until you unlock and send it from the footer lock, or discard it.';
+    'Pending: this mark-read waits for GitHub. GitHub writes were locked, so nothing changed here yet; the tile stays unread until you send it from the lock in the footer, or discard it.';
   return error ? `${base}\nLast try failed: ${error}` : base;
 }
