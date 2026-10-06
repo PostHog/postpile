@@ -8,7 +8,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 - Typing a bot command like `@codex review` or answering a review bot no longer counts as replying to a person: their question stays on your list.
 
-## 0.22.0 (unreleased)
+## 0.22.0 (2026-10-06)
 
 ### Changed
 
