@@ -118,31 +118,25 @@ describe('the activity_rows and snapshot_strip_2 jobs', () => {
     expect(reports).toMatchObject([{ name: 'activity_rows', units: 2, wrote: 2 }]);
   });
 
-  it('keeps reads on the json while a PR cannot be split, and finishes once a fetch stored it again', () => {
+  it('switches without a PR that cannot be split, which then counts as not stored until a fetch stores it again', () => {
     storedBefore033(store, activePr(1));
     storedBefore033(store, activePr(2));
     store.db.prepare("UPDATE pr_snapshot SET json = json_set(json, '$.files[1].path', 'b.ts') WHERE key = 'acme/app#2'").run();
-    const broken = store.prs.getFull('acme/app#2');
 
     runToEnd(runner());
 
-    expect(store.meta.get(ACTIVITY_READY_KEY)).toBeNull();
-    expect(store.meta.get(`${INCOMPLETE_KEY_PREFIX}activity_rows`)).not.toBeNull();
-    expect(store.meta.get(new SnapshotStrip2Job().doneKey)).toBeNull();
+    expect(store.meta.get(ACTIVITY_READY_KEY)).not.toBeNull();
+    expect(store.meta.get(`${INCOMPLETE_KEY_PREFIX}activity_rows`)).toBeNull();
+    expect(store.meta.get(new SnapshotStrip2Job().doneKey)).not.toBeNull();
     expect(rowsVersions(store)).toEqual([
       { key: 'acme/app#1', rows_version: ROWS.activity },
       { key: 'acme/app#2', rows_version: ROWS.discussion },
     ]);
-    expect(withActivityInJson(store)).toEqual(['acme/app#1', 'acme/app#2']);
-    expect(store.prs.getFull('acme/app#2')).toEqual(broken);
+    expect(store.prs.getFull('acme/app#2')).toBeNull();
+    expect([...store.prs.fetchedAtByKey().keys()]).toEqual(['acme/app#1']);
     expect(blocked).toEqual([{ name: 'activity_rows', blockedUnits: 1 }]);
 
-    // The sync fetches the PR again; the next start finishes both jobs.
     store.prs.upsert(activePr(2), at(5));
-    runToEnd(runner());
-
-    expect(store.meta.get(ACTIVITY_READY_KEY)).not.toBeNull();
-    expect(withActivityInJson(store)).toEqual([]);
     expect(store.prs.getFull('acme/app#2')).toEqual(canonicalPr(activePr(2)));
   });
 

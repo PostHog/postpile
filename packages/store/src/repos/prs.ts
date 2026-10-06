@@ -852,14 +852,9 @@ export class PrRepo {
     return one<{ key: string }>(this.db, 'SELECT key FROM pr WHERE key > ? AND rows_version < ? ORDER BY key LIMIT 1', afterKey, ROWS[collection])?.key ?? null;
   }
 
-  /** How many stored PRs have no rows of this collection yet (storage_job_blocked). */
+  /** How many stored PRs have no rows of this collection yet: after its backfill, the ones it rejected (storage_job_blocked). */
   countWithoutRows(collection: RowsCollection): number {
     return one<{ n: number }>(this.db, 'SELECT count(*) AS n FROM pr WHERE rows_version < ?', ROWS[collection])?.n ?? 0;
-  }
-
-  /** Every stored PR has this collection's rows: the check before reads switch to them. */
-  allHaveRows(collection: RowsCollection): boolean {
-    return one<{ missing: number }>(this.db, 'SELECT EXISTS (SELECT 1 FROM pr WHERE rows_version < ?) AS missing', ROWS[collection])?.missing === 0;
   }
 
   /** How many stored snapshots still hold `checks` (storage_job_blocked). */

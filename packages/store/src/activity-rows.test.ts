@@ -98,7 +98,7 @@ describe('migration 033', () => {
     expect(db.prepare('SELECT count(*) AS n FROM pr_commit').get()).toEqual({ n: 0 });
     expect(migrated.prs.getFull(pr.key)).toEqual(canonicalPr({ ...pr, comments: [], threads: [], reviews: [] }));
     expect(migrated.prs.nextWithoutRows('activity', '')).toBe(pr.key);
-    expect(migrated.prs.allHaveRows('activity')).toBe(false);
+    expect(migrated.prs.countWithoutRows('activity')).not.toBe(0);
     db.close();
   });
 
@@ -172,7 +172,7 @@ describe('PrRepo.backfillActivity', () => {
     expect(store.prs.backfillActivity(pr.key)).toBe(true);
 
     expect(header(pr.key)).toEqual({ rows_version: ROWS.activity, snapshot_revision: revision });
-    expect(store.prs.allHaveRows('activity')).toBe(true);
+    expect(store.prs.countWithoutRows('activity')).toBe(0);
     switchToRows();
     store.prs.stripJson('activity', pr.key);
     expect(store.prs.getFull(pr.key)).toEqual(canonicalPr(pr));
@@ -200,7 +200,7 @@ describe('PrRepo.backfillActivity', () => {
       expect(header(key).rows_version, key).toBe(ROWS.discussion);
     }
     expect([count('pr_commit'), count('pr_timeline'), count('pr_file')]).toEqual([0, 0, 0]);
-    expect(store.prs.allHaveRows('activity')).toBe(false);
+    expect(store.prs.countWithoutRows('activity')).not.toBe(0);
   });
 
   it('raises only a PR at the discussion version: rows_version is cumulative', () => {

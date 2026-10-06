@@ -209,8 +209,9 @@ export const TELEMETRY_EVENTS = {
   // from its first slice to the end, pauses and waits included.
   storage_job_done: z.object({ name: storageJobName, units: count, work_ms: durationMs, longest_slice_ms: durationMs, wall_ms: durationMs }).strict(),
   // A background storage job ended its walk incomplete (its check failed twice, so it is not done and the jobs after it
-  // wait), with how many units its check still finds undone (discussion_rows, activity_rows, text_rows: PRs whose json
-  // could not be split into rows). At most once per job per app run. Counts only, never keys.
+  // wait), with how many units its check still finds undone; or a row backfill (discussion_rows, activity_rows,
+  // text_rows) finished without the PRs whose json it could not split into rows, which the sync fetches again. At most
+  // once per job per app run. Counts only, never keys.
   storage_job_blocked: z.object({ name: storageJobName, blocked_units: count }).strict(),
   // The packaged app's self-updater (main process). One per check it ran; a check skipped while one runs or an update is staged sends nothing.
   update_check_finished: z.object({ trigger: updateCheckTrigger, result: updateCheckResult, available_version: releaseVersion.optional() }).strict(),

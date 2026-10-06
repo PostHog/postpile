@@ -8,12 +8,11 @@
 // slice's transaction. No revision moves: reads take the json until the
 // switch, and the rows hold the same lists.
 //
-// The switch is the job's check, as for discussion_rows: once no stored PR
-// is below the activity's version, `complete` sets meta
-// `rows_ready:activity` in the same transaction. A PR whose snapshot is
-// missing or does not split keeps its version, so the check fails and
-// reads stay on the json until a fetch stores that PR again; it is never
-// taken for a PR without commits.
+// The switch comes at the end of the walk, as for discussion_rows:
+// `complete` sets meta `rows_ready:activity` in the same transaction. A PR
+// whose snapshot is missing or does not split keeps its version, so it is
+// never taken for a PR without commits; from the switch on it counts as
+// not stored and the sync fetches it again.
 import type { IsoTime } from '@postpile/core';
 import { ACTIVITY_READY_KEY, type Store } from '@postpile/store';
 import type { StorageJob, StorageJobUnit } from './runner.ts';
@@ -31,16 +30,20 @@ export class ActivityRowsJob implements StorageJob {
     return { key, wrote: store.prs.backfillActivity(key) };
   }
 
-  /** Done, and reads switch to the rows, once every stored PR has them. */
-  complete(store: Store, at: IsoTime): 'done' | 'again' {
-    if (!store.prs.allHaveRows('activity')) {
-      return 'again';
-    }
+  /**
+   * The walk went through every PR below the version, so whatever is left
+   * the backfill rejected. Reads switch to the rows anyway: from then on a
+   * rejected PR counts as not stored (an integrity failure), so reads leave
+   * it out and the sync fetches it again, and a PR GitHub no longer has
+   * never holds the switch back. The runner reports the rejected ones
+   * (`blockedUnits`, storage_job_blocked).
+   */
+  complete(store: Store, at: IsoTime): 'done' {
     store.meta.set(ACTIVITY_READY_KEY, at);
     return 'done';
   }
 
-  /** The stored PRs still without rows: a snapshot that is missing, malformed or does not split. */
+  /** The stored PRs the backfill rejected: a snapshot that is missing, malformed or does not split. */
   blockedUnits(store: Store): number {
     return store.prs.countWithoutRows('activity');
   }

@@ -117,34 +117,31 @@ describe('the discussion_rows and snapshot_strip jobs', () => {
     expect(reports).toMatchObject([{ name: 'discussion_rows', units: 2, wrote: 2 }]);
   });
 
-  it('keeps reads on the json while a PR cannot be split, and finishes once a fetch stored it again', () => {
+  it('switches without a PR that cannot be split, which then counts as not stored until a fetch stores it again', () => {
     storedBefore031(store, discussedPr(1));
     storedBefore031(store, discussedPr(2));
     store.db.prepare("UPDATE pr_snapshot SET json = json_set(json, '$.threads[0].comments[0].body', 'edited') WHERE key = 'acme/app#2'").run();
-    const broken = store.prs.getFull('acme/app#2');
 
     runToEnd(runner());
 
-    expect(store.meta.get(DISCUSSION_READY_KEY)).toBeNull();
-    expect(store.meta.get(`${INCOMPLETE_KEY_PREFIX}discussion_rows`)).not.toBeNull();
-    expect(store.meta.get(new DiscussionRowsJob().doneKey)).toBeNull();
-    expect(store.meta.get(new SnapshotStripJob().doneKey)).toBeNull();
+    expect(store.meta.get(DISCUSSION_READY_KEY)).not.toBeNull();
+    expect(store.meta.get(`${INCOMPLETE_KEY_PREFIX}discussion_rows`)).toBeNull();
+    expect(store.meta.get(new SnapshotStripJob().doneKey)).not.toBeNull();
     expect(rowsVersions(store)).toEqual([
       { key: 'acme/app#1', rows_version: 1 },
       { key: 'acme/app#2', rows_version: 0 },
     ]);
-    expect(withDiscussionInJson(store)).toEqual(['acme/app#1', 'acme/app#2']);
-    expect(store.prs.getFull('acme/app#2')).toEqual(broken);
-    expect(lines).toEqual([expect.stringMatching(/walking it once more/), expect.stringMatching(/discussion_rows is incomplete: .*, 1 units left undone/)]);
+    // Never read as a PR without comments: left out of reads and of the sync's freshness, so the sync fetches it again.
+    expect(store.prs.getFull('acme/app#2')).toBeNull();
+    expect([...store.prs.fetchedAtByKey().keys()]).toEqual(['acme/app#1']);
+    expect([...store.prs.updatedAtByKey().keys()]).toEqual(['acme/app#1']);
+    expect(lines).toEqual([expect.stringMatching(/discussion_rows done/), expect.stringMatching(/discussion_rows is done without 1 units/), expect.stringMatching(/snapshot_strip done/)]);
     expect(blocked).toEqual([{ name: 'discussion_rows', blockedUnits: 1 }]);
 
-    // The sync fetches the PR again; the next start finishes both jobs.
+    // The sync fetches the PR again: the upsert writes its rows and it counts as stored.
     store.prs.upsert(discussedPr(2), at(5));
-    runToEnd(runner());
-
-    expect(store.meta.get(DISCUSSION_READY_KEY)).not.toBeNull();
-    expect(withDiscussionInJson(store)).toEqual([]);
     expect(store.prs.getFull('acme/app#2')).toEqual(canonicalPr(discussedPr(2)));
+    expect(store.prs.fetchedAtByKey().get('acme/app#2')).toBe(at(5));
   });
 
   it('strips the lists from every snapshot once reads take the rows, moving no revision and changing no read', () => {

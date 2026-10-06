@@ -68,9 +68,10 @@ export interface StorageJob {
    */
   complete(store: Store, at: IsoTime): 'done' | 'again';
   /**
-   * For a job whose check can fail: how many units it still finds undone,
-   * in the transaction that left it incomplete (telemetry
-   * storage_job_blocked). Counts only.
+   * How many units it still finds undone, read in the transaction that
+   * ended its walk: for a job whose check failed (incomplete), and for a
+   * row backfill that switched without the PRs it rejected (done). More
+   * than 0 is reported as telemetry storage_job_blocked. Counts only.
    */
   blockedUnits?(store: Store): number;
   /**
@@ -106,9 +107,10 @@ export interface StorageJobRunnerDeps {
   /** A job finished and its check passed (telemetry storage_job_done). */
   onDone: (report: StorageJobReport) => void;
   /**
-   * A job ended its walk incomplete (its check failed twice), with the
-   * units its check still finds undone: telemetry storage_job_blocked. At
-   * most once per job per runner, so once per app run.
+   * A job ended its walk incomplete (its check failed twice), or a row
+   * backfill switched without PRs it rejected, with the units still undone:
+   * telemetry storage_job_blocked. At most once per job per runner, so
+   * once per app run.
    */
   onBlocked?: (blocked: StorageJobBlocked) => void;
   /** Tests pass 0: one unit per slice. */
@@ -221,7 +223,7 @@ export class StorageJobRunner {
       const unit = job.step(store, after);
       if (unit === null) {
         const end = this.complete(job);
-        return end === 'incomplete' ? { units, wrote, end, blockedUnits: job.blockedUnits?.(store) ?? null } : { units, wrote, end };
+        return end === 'incomplete' || end === 'done' ? { units, wrote, end, blockedUnits: job.blockedUnits?.(store) ?? null } : { units, wrote, end };
       }
       units += 1;
       wrote += unit.wrote ? 1 : 0;
@@ -295,6 +297,11 @@ export class StorageJobRunner {
     const progress = this.noteSlice(job, started, work);
     if (work.end === 'done') {
       this.finish(progress);
+      const left = work.blockedUnits ?? 0;
+      if (left > 0) {
+        this.deps.log(`storage job ${job.name} is done without ${left} units it could not rewrite; they count as not stored until a fetch stores them again`);
+        this.reportBlocked(job.name, left);
+      }
     } else if (work.end === 'again') {
       this.walkedAgain.add(job.name);
       this.deps.log(`storage job ${job.name}: its check failed at the end, walking it once more`);

@@ -571,11 +571,15 @@ How the move goes (the protocol every later collection follows):
    prepared once and reused) and sets `rows_version`, in its transaction.
 2. **Backfill**, storage job `discussion_rows` (see "Storage jobs"): the
    json of every PR still at version 0 becomes rows, no revision moves.
-3. **Switch.** The job's check passes only when no stored PR is below
-   version 1, and then sets meta `rows_ready:discussion` in the same
-   transaction. A missing, malformed or unsplittable snapshot keeps
-   version 0: it never counts as a PR without comments, and the switch
-   waits until a fetch stores that PR again.
+3. **Switch.** At the end of the walk the job sets meta
+   `rows_ready:discussion` in the same transaction. A missing, malformed
+   or unsplittable snapshot keeps version 0: it never counts as a PR
+   without comments. From the switch on it is an integrity failure (step
+   4), so the sync fetches it again and the upsert writes its rows. Until
+   0.23.0 such a PR held the switch back until a fetch stored it, which a
+   PR the sync never looks at again, or GitHub no longer has, never got
+   (Codex review on #140); the runner reports how many it switched
+   without (`storage_job_blocked`).
 4. **Reads** take the flag, revisions, headers, the json and the rows in
    one read transaction (`get` included), so a read-only CLI or MCP never
    mixes two commits. Before the switch they parse the json; after it the
@@ -644,8 +648,12 @@ collection at a time, and then the table goes:
   version 1, `text_rows` only one at version 2, so rows_version stays a
   cumulative guarantee on an install that skips releases. A snapshot
   that is missing, malformed, lacks a field or holds a duplicate keeps
-  its version and blocks the switch (`storage_job_blocked`); it is never
-  read as an empty list or as defaults.
+  its version; it is never read as an empty list or as defaults. The job
+  switches without it at the end of its walk (`storage_job_blocked`
+  counts it): from then on the PR counts as not stored, reads and the
+  sync's freshness (`fetchedAtByKey`, `updatedAtByKey`) leave it out, and
+  the next sync that sees its thread fetches it again with every row. One
+  GitHub no longer has stays left out and holds nothing back.
 - **After the text switch no read takes the json.** A read builds the PR
   from the header, `pr_body` and the child rows, flags and rows in one
   read transaction. Upserts stop writing `pr_snapshot`, `delete` leaves
@@ -3426,10 +3434,13 @@ GPT-6.1 (2026-10-05).
   `storage_job_incomplete:<name>`, a log line), never done, and the jobs
   after it wait. The next start tries again. The runner reports it once
   per app run as `storage_job_blocked` (name, `blocked_units`: what the
-  job's check still finds undone, `blockedUnits()`; for
-  `discussion_rows`, `activity_rows` and `text_rows` the PRs whose json
-  could not be split). Counts only,
-  never keys. The trim's walk is its own
+  job's check still finds undone, `blockedUnits()`). Counts only, never
+  keys. The row backfills (`discussion_rows`, `activity_rows`,
+  `text_rows`) are the exception since 0.23.0: their walk is their check,
+  they switch at its end without the PRs whose json they rejected (those
+  count as not stored until a fetch stores them again, "PR storage"), and
+  the runner reports those as `storage_job_blocked` when the job is
+  done. The trim's walk is its own
   check: a PR stored behind the cursor meanwhile came from a fetch, which
   cuts on save.
 - **What a job may write, and revisions.** A unit may issue any SQL or
@@ -7122,8 +7133,9 @@ topic names are never event props.
    finished and its check passed, this run's share of it, see "Storage
    jobs"; since 0.20.0), `storage_job_blocked` (name, blocked_units: a
    job ended its walk incomplete, its check failed twice, and how many
-   units it still finds undone; at most once per job per app run, counts
-   only, never keys; since 0.22.0),
+   units it still finds undone, or since 0.23.0 a row backfill finished
+   without PRs whose json it rejected and how many; at most once per job
+   per app run, counts only, never keys; since 0.22.0),
    `update_check_finished` (trigger `launch` / `interval` / `wake` /
    `menu`, result `none` / `available` / `error`, available_version when
    one was found: one per self-update check the packaged app ran),

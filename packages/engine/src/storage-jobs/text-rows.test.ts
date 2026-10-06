@@ -127,22 +127,21 @@ describe('the text_rows job', () => {
     expect(store.prs.getFull('acme/app#3')).not.toHaveProperty('assignees');
   });
 
-  it('keeps reads on the json while a PR lacks a field, and finishes once a fetch stored it again', () => {
+  it('switches without a PR that lacks a field, which then counts as not stored until a fetch stores it again', () => {
     storedBefore034(store, textPr(1));
     storedBefore034(store, textPr(2));
     store.db.prepare("UPDATE pr_snapshot SET json = json_remove(json, '$.url') WHERE key = 'acme/app#2'").run();
 
     runToEnd(runner());
 
-    expect(store.meta.get(TEXT_READY_KEY)).toBeNull();
-    expect(store.meta.get(`${INCOMPLETE_KEY_PREFIX}text_rows`)).not.toBeNull();
+    expect(store.meta.get(TEXT_READY_KEY)).not.toBeNull();
+    expect(store.meta.get(`${INCOMPLETE_KEY_PREFIX}text_rows`)).toBeNull();
     expect(blocked).toEqual([{ name: 'text_rows', blockedUnits: 1 }]);
     expect(store.prs.getFull('acme/app#1')).toEqual(canonicalPr(textPr(1)));
+    expect(store.prs.getFull('acme/app#2')).toBeNull();
+    expect([...store.prs.fetchedAtByKey().keys()]).toEqual(['acme/app#1']);
 
     store.prs.upsert(textPr(2), at(5));
-    runToEnd(runner());
-
-    expect(store.meta.get(TEXT_READY_KEY)).not.toBeNull();
     expect(store.prs.getFull('acme/app#2')).toEqual(canonicalPr(textPr(2)));
   });
 

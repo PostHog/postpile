@@ -100,7 +100,7 @@ describe('migration 031', () => {
     expect(db.prepare('SELECT count(*) AS n FROM pr_comment').get()).toEqual({ n: 0 });
     expect(migrated.prs.getFull(pr.key)).toEqual(pr);
     expect(migrated.prs.nextWithoutRows('discussion', '')).toBe(pr.key);
-    expect(migrated.prs.allHaveRows('discussion')).toBe(false);
+    expect(migrated.prs.countWithoutRows('discussion')).not.toBe(0);
     db.close();
   });
 
@@ -182,7 +182,7 @@ describe('PrRepo.backfillDiscussion', () => {
     expect(store.prs.backfillDiscussion(pr.key)).toBe(true);
 
     expect(header(pr.key)).toEqual({ rows_version: 1, mentioned_teams: '["acme/team-infra","acme/team-platform"]', snapshot_revision: revision });
-    expect(store.prs.allHaveRows('discussion')).toBe(true);
+    expect(store.prs.countWithoutRows('discussion')).toBe(0);
     switchToRows();
     store.prs.stripJson('discussion', pr.key);
     expect(store.prs.getFull(pr.key)).toEqual(canonicalPr(pr));
@@ -207,7 +207,7 @@ describe('PrRepo.backfillDiscussion', () => {
       expect(header(key).rows_version, key).toBe(0);
     }
     expect([count('pr_comment'), count('pr_thread'), count('pr_review')]).toEqual([0, 0, 0]);
-    expect(store.prs.allHaveRows('discussion')).toBe(false);
+    expect(store.prs.countWithoutRows('discussion')).not.toBe(0);
   });
 
   it('walks only the PRs without rows', () => {

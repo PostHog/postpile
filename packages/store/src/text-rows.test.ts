@@ -115,7 +115,7 @@ describe('migration 034', () => {
     expect(db.prepare('SELECT url, truncated, cap_hits, absent_fields FROM pr').get()).toEqual({ url: '', truncated: null, cap_hits: null, absent_fields: '[]' });
     expect(migrated.prs.getFull(pr.key)).toEqual(canonicalPr(pr));
     expect(migrated.prs.nextWithoutRows('text', '')).toBe(pr.key);
-    expect(migrated.prs.allHaveRows('text')).toBe(false);
+    expect(migrated.prs.countWithoutRows('text')).not.toBe(0);
     db.close();
   });
 });
@@ -163,7 +163,7 @@ describe('PrRepo.backfillText', () => {
     expect(store.prs.backfillText(pr.key)).toBe(true);
 
     expect(header(pr.key)).toMatchObject({ rows_version: ROWS.text, snapshot_revision: revision, url: pr.url, cap_hits: JSON.stringify(pr.capHits) });
-    expect(store.prs.allHaveRows('text')).toBe(true);
+    expect(store.prs.countWithoutRows('text')).toBe(0);
     switchToRows();
     expect(store.prs.getFull(pr.key)).toEqual(canonicalPr(pr));
   });
@@ -203,7 +203,7 @@ describe('PrRepo.backfillText', () => {
       expect(header(key).rows_version, key).toBe(ROWS.activity);
     }
     expect(store.db.prepare('SELECT count(*) AS n FROM pr_body').get()).toEqual({ n: 0 });
-    expect(store.prs.allHaveRows('text')).toBe(false);
+    expect(store.prs.countWithoutRows('text')).not.toBe(0);
   });
 
   it('raises only a PR at the activity version: rows_version is cumulative', () => {

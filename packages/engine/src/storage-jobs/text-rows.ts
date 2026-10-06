@@ -6,11 +6,11 @@
 //
 // One unit is one PR, in key order, like discussion_rows and
 // activity_rows: no revision moves, reads take the json until the switch.
-// Once no stored PR is below the text's version, `complete` sets meta
-// `rows_ready:text` in the same transaction, and from then on no read
-// takes anything from `pr_snapshot`. A PR whose snapshot is missing or
-// lacks a field keeps its version, so the check fails and reads stay on
-// the json until a fetch stores that PR again.
+// At the end of the walk `complete` sets meta `rows_ready:text` in the
+// same transaction, and from then on no read takes anything from
+// `pr_snapshot`. A PR whose snapshot is missing or lacks a field keeps its
+// version: from the switch on it counts as not stored and the sync fetches
+// it again.
 import type { IsoTime } from '@postpile/core';
 import { TEXT_READY_KEY, type Store } from '@postpile/store';
 import type { StorageJob, StorageJobUnit } from './runner.ts';
@@ -28,16 +28,20 @@ export class TextRowsJob implements StorageJob {
     return { key, wrote: store.prs.backfillText(key) };
   }
 
-  /** Done, and reads stop taking the json, once every stored PR has its text rows. */
-  complete(store: Store, at: IsoTime): 'done' | 'again' {
-    if (!store.prs.allHaveRows('text')) {
-      return 'again';
-    }
+  /**
+   * The walk went through every PR below the version, so whatever is left
+   * the backfill rejected. Reads switch to the rows anyway: from then on a
+   * rejected PR counts as not stored (an integrity failure), so reads leave
+   * it out and the sync fetches it again, and a PR GitHub no longer has
+   * never holds the switch back. The runner reports the rejected ones
+   * (`blockedUnits`, storage_job_blocked).
+   */
+  complete(store: Store, at: IsoTime): 'done' {
     store.meta.set(TEXT_READY_KEY, at);
     return 'done';
   }
 
-  /** The stored PRs still without text rows: a snapshot that is missing or lacks a field. */
+  /** The stored PRs the backfill rejected: a snapshot that is missing or lacks a field. */
   blockedUnits(store: Store): number {
     return store.prs.countWithoutRows('text');
   }

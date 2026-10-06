@@ -1566,7 +1566,9 @@ the app meanwhile.
     in one read transaction, so a read-only CLI or MCP never mixes two
     commits. Parse caches drop when the projection changes.
   - Completion is checked from the data, never from an empty collection.
-    Jobs fail closed.
+    Jobs fail closed, except the row backfills: they switch at the end of
+    their walk without the PRs they rejected, which then count as not
+    stored until a fetch brings them back (0.23.0, Codex review on #140).
   - Revisions move through the store-wide counter (`prs.ts`, meta
     `snapshot_revision`), only when what a read returns changes.
     `snapshot_revision` keeps its name; a rename would need its own
