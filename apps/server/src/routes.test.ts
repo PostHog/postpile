@@ -494,6 +494,37 @@ describe('server routes over the fake engine', () => {
     expect(topic.tiles.find((view) => view.tile.id === 'pr:acme/app#1822')?.state.kind).not.toBe('snoozed');
   });
 
+  it('mutes a tile: muted at once, the unsubscribe waits in the lock, and Unmute subscribes again', async () => {
+    const start = Date.now();
+    let elapsed = 0;
+    const app = appWithFake(new FakeEngine({ syncStepMs: 0, writesLocked: true, now: () => new Date(start + elapsed) }));
+    const tile = encodeURIComponent('pr:acme/app#1822');
+    const tileState = async () => {
+      const topic = (await (await app.request('/api/topics/topic-ci-tests')).json()) as TopicDetail;
+      return topic.tiles.find((view) => view.tile.id === 'pr:acme/app#1822')?.state;
+    };
+    const actions = async () => ((await (await app.request('/api/debug/actions?limit=50')).json()) as ActionLogEntry[]).map((entry) => [entry.action, entry.origin, entry.outcome]);
+
+    const muted = await post<ActionResult>(app, `/api/tiles/${tile}/snooze`, { condition: { kind: 'muted' } });
+    expect(muted.status).toBe(200);
+    expect(muted.json.undoToken).not.toBeNull();
+    expect(muted.json.message).toContain('pending until you unlock GitHub writes');
+    expect(await tileState()).toMatchObject({ kind: 'snoozed', muted: true });
+
+    elapsed += 7_000;
+    const locked = (await (await app.request('/api/github-writes')).json()) as GitHubWritesStatus;
+    expect(locked.pending.filter((write) => write.kind === 'unsubscribe').map((write) => write.title)).toEqual(['Mute: Split backend tests by timing data']);
+    await post(app, '/api/github-writes', { enabled: true });
+    expect((await post<{ ok: boolean }>(app, '/api/github-writes/pending/send')).json.ok).toBe(true);
+    expect(await actions()).toContainEqual(['unsubscribe', 'footer', 'github']);
+
+    const unmuted = await app.request(`/api/tiles/${tile}/snooze`, { method: 'DELETE' });
+    expect(((await unmuted.json()) as ActionResult).message).toMatch(/^Unmuted/);
+    expect((await tileState())?.kind).not.toBe('snoozed');
+    elapsed += 14_000;
+    expect(await actions()).toContainEqual(['subscribe', 'queue', 'github']);
+  });
+
   it('drops a set member on "not related" feedback', async () => {
     const app = appWithFake();
     await post(app, '/api/feedback', { kind: 'not_related', tileId: 'set:turbo-cache', prKey: 'acme/app#1855' });

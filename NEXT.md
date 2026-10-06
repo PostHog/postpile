@@ -6,6 +6,26 @@ now".
 
 ## Done
 
+- Mute until I'm mentioned (2026-10-05, for 0.21.0; DESIGN.md "Mute until
+  I'm mentioned"): the Snooze menu's last item. A `muted` snooze per
+  tracked PR that only a personal ask ends (`isPersonalAsk`, split out of
+  `isPersonalPing`), plus the tile's mark-read and the threads' GitHub
+  unsubscribe in one mark-read batch (`MarkReadRequest.subscription`): one
+  Undo, and locked it waits as pending writes `mark_read` + `unsubscribe`.
+  Unmute subscribes again (`subscribeThread`, pending kind `subscribe`).
+  `TileState.muted` drives the "Muted" label and Unmute; a stack or set
+  that came back through one PR is `partlyMuted` and offers "Unmute the
+  rest" (`TileOffers.unmuteRest`); a snoozed tile mixing a mute with plain
+  snoozes is `partlyMuted` too and its Unsnooze is guarded as `mute`. A
+  subscription change GitHub did not take waits as a failed pending write.
+  An unsubscribe whose mute ended before it went out (a personal ask in the
+  undo window) is skipped (`muteHolds`), and so is a subscribe while the PR
+  is muted again; a discarded pending Unmute mutes again (`mute_again`,
+  from the click time); a plain snooze keeps a mute that still holds.
+  Telemetry bucket
+  `muted`; the fake engine logs the unsubscribe and subscribe. Gap: a
+  watched repo still notifies (see DESIGN), the "N pending mark-reads"
+  headline counts a locked mute as two.
 - GitHub writes on by default, lock in the footer only (2026-10-05,
   DESIGN.md "GitHub writes: lock, action log" › On by default): an install
   that never touched the lock has writes on in the packaged app; an
@@ -1459,6 +1479,12 @@ the app meanwhile.
 
 ## Decided
 
+- **Mute a PR until someone asks you in person** (2026-10-05, owner report
+  "no way to snooze/dismiss forever"): a snooze kind, not a new screen.
+  Personal asks only (mention, question, reply, a review request naming
+  you); muting marks read and unsubscribes on GitHub (DELETE thread
+  subscription) through the mark-read queue and lock. Unmute subscribes
+  again, so the tile can turn unread on new activity.
 - **Drop CI checks: costly to fetch, usually stale, deprioritized**
   (2026-10-05, DESIGN.md "CI is not tracked"). PostPile fetches no
   checks, keeps no CI event, shows no Checks fact and offers no "Until CI
@@ -1469,7 +1495,6 @@ the app meanwhile.
   and CI had been off everything that ranks or speaks since 2026-09-29. The
   stored CI events go in migration 030 rather than with the next
   re-derivation, which never comes for merged and closed PRs.
-
 - **No "Not mine" where the tile already says Not yours** (2026-10-05, owner
   report): the menu offered to teach the agent what its verdict already
   said. Mark read is the way to clear such a tile. A stack or set counts as

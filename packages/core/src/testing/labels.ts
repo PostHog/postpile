@@ -271,6 +271,12 @@ function ownPrQuietLabels(board: PropertyBoard, key: PrKey, pr: Pr, quiet: Quiet
 
 function tileLabels(view: TileView): string[] {
   const labels = [`tile:${view.tile.kind}`, `tile-state:${view.state.kind}`, `footer:${view.offers.footer}`, `turn:${view.turn.kind}`];
+  if (view.state.muted) {
+    labels.push('shape:muted tile');
+  }
+  if (view.state.partlyMuted) {
+    labels.push('shape:partly muted tile');
+  }
   if (view.turn.kind === 'you') {
     labels.push(`move:${view.turn.move}`);
   }
@@ -402,6 +408,8 @@ export function boardLabels(board: PropertyBoard, views: TileView[] = tileViewsO
 export const REQUIRED_LABELS: readonly string[] = [
   'shape:done PR on a live tile',
   'shape:snoozed multi-PR tile',
+  'shape:muted tile',
+  'shape:partly muted tile',
   'shape:bot request for viewer',
   'shape:dismissed review on head',
   'shape:truncated snapshot',
@@ -496,6 +504,7 @@ export const REQUIRED_LABELS: readonly string[] = [
   'snooze:someone_replies',
   'snooze:new_push',
   'snooze:until_time',
+  'snooze:muted',
   'snooze-phase:active',
   'snooze-phase:broken',
   'snooze-phase:over',

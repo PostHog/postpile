@@ -87,7 +87,7 @@ export type EndSpec = { kind: 'open' } | { kind: 'merged'; by: Person } | { kind
  */
 export type TrackingSpec = { kind: 'thread'; reason: NotificationReason; readAfter: number | null } | { kind: 'found' } | { kind: 'pulled_in' };
 
-export type SnoozeConditionKind = 'someone_replies' | 'new_push' | 'until_time';
+export type SnoozeConditionKind = 'someone_replies' | 'new_push' | 'until_time' | 'muted';
 
 /** A snooze started after `after` steps; an until_time snooze has passed or not. */
 export interface SnoozeSpec {
@@ -334,7 +334,7 @@ const trackingArb: fc.Arbitrary<TrackingSpec> = fc.oneof(
 );
 
 const snoozeArb: fc.Arbitrary<SnoozeSpec> = fc.record({
-  condition: fc.constantFrom<SnoozeConditionKind>('until_time', 'someone_replies', 'new_push'),
+  condition: fc.constantFrom<SnoozeConditionKind>('until_time', 'someone_replies', 'new_push', 'muted'),
   after: stepIndex,
   untilPassed: fc.boolean(),
 });

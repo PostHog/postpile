@@ -103,6 +103,12 @@ describe('GitHubWriteClient', () => {
     expect(fake.requests.map((r) => [r.method, r.url, r.body])).toEqual([['DELETE', 'https://api.github.com/notifications/threads/1001/subscription', undefined]]);
   });
 
+  it('subscribes to a thread again with a subscription that is not ignored', async () => {
+    const fake = new FakeFetch([{ status: 200, body: { subscribed: true, ignored: false } }]);
+    await new GitHubWriteClient(fakeTokens, fake.fn).subscribeThread('1001');
+    expect(fake.requests.map((r) => [r.method, r.url, r.body])).toEqual([['PUT', 'https://api.github.com/notifications/threads/1001/subscription', { ignored: false }]]);
+  });
+
   it('throws GitHubError on a failed write', async () => {
     const fake = new FakeFetch([{ status: 422, body: { message: 'Can not approve your own pull request' } }]);
     const call = new GitHubWriteClient(fakeTokens, fake.fn).approvePr(ref, '', 'abc123');

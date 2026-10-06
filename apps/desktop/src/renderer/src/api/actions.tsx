@@ -58,7 +58,7 @@ import { capNote } from '../lib/agent-stats.ts';
 import { writeBlockedReason, type GithubWrite } from '../lib/guard.ts';
 import { approvedMessage, batchMarkReadMessage } from '../lib/agent-actions.ts';
 import { markReadNotice } from '../lib/mark-read.ts';
-import { approvedDetail, markedReadPr, markedReadTile, snoozedTile, withApprovedPrs, withTile, withTiles } from '../lib/optimistic.ts';
+import { approvedDetail, markedReadPr, markedReadTile, mutedTile, snoozedTile, withApprovedPrs, withTile, withTiles } from '../lib/optimistic.ts';
 import { newerReport } from '../lib/sync-report.ts';
 import { teamRoleNotice } from '../lib/team-roles.ts';
 import { UNDO_WINDOW_MS } from '../lib/undo-window.ts';
@@ -187,8 +187,14 @@ export interface Actions {
    * Snooze here, since snoozing is for the whole tile.
    */
   markPrRead(tileId: string, prKey: PrKey, afterRead: TileAfterRead): Promise<void>;
+  /** A `muted` condition is Mute: also a mark-read and a GitHub unsubscribe, guarded as `mute`. */
   snooze(tileId: string, condition: SnoozeCondition): Promise<void>;
-  unsnooze(tileId: string): Promise<void>;
+  /**
+   * `muted`: any tracked PR of the tile is muted (`TileState.muted` or
+   * `partlyMuted`), so this is also Unmute, which subscribes again on GitHub
+   * (guarded as `mute`).
+   */
+  unsnooze(tileId: string, muted?: boolean): Promise<void>;
   undo(undoToken: string): Promise<void>;
   feedback(input: FeedbackInput): Promise<void>;
   unmute(eventId: string): Promise<void>;
@@ -967,10 +973,17 @@ export function ActionsProvider(props: { children: ReactNode }) {
       await run(`markPr:${tileId}:${prKey}`, 'markRead', () => request('POST', `${tilePrPath(tileId, prKey)}/mark-read`), shape, optimistic);
     },
     snooze: async (tileId, condition) => {
+      // A mute also marks read and unsubscribes on GitHub: guarded like a mark-read, pending while locked.
+      if (condition.kind === 'muted') {
+        const writesOn = writes?.enabled ?? false;
+        await run(`snooze:${tileId}`, 'mute', () => request('POST', `${tilePath(tileId)}/snooze`, { condition }), null, () => changeTile(tileId, (view) => mutedTile(view, writesOn)));
+        return;
+      }
       await run(`snooze:${tileId}`, null, () => request('POST', `${tilePath(tileId)}/snooze`, { condition }), null, () => changeTile(tileId, snoozedTile));
     },
-    unsnooze: async (tileId) => {
-      await run(`snooze:${tileId}`, null, () => request('DELETE', `${tilePath(tileId)}/snooze`));
+    unsnooze: async (tileId, muted = false) => {
+      // Unmute subscribes again on GitHub: the same guard as the mute.
+      await run(`snooze:${tileId}`, muted ? 'mute' : null, () => request('DELETE', `${tilePath(tileId)}/snooze`));
     },
     undo,
     feedback,

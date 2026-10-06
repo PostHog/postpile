@@ -224,13 +224,13 @@ export function isAddressedToViewer(event: PrEvent, pr: Pr, viewer: Viewer): boo
 }
 
 /**
- * A ping about the viewer in person: a mention, question or reply to them
- * (or a comment edited to mention them), or a review request that names them and not a team, or the author's answer to
- * their changes request. A team mention, a team request and other push or
- * changes-request events are not (they may still ping).
+ * Asks the viewer in person: a mention, question or reply to them (or a
+ * comment edited to mention them), or a review request that names them and
+ * not a team. A team mention and a team request are not. Who asked is the
+ * caller's question (a mute leaves automation out).
  */
-export function isPersonalPing(event: PrEvent, pr: Pr, viewer: Viewer): boolean {
-  if (PERSONAL_ASK_KINDS.includes(event.kind) || editMentionOf(event, pr, viewer) === 'you' || isChangesAnswerEvent(event, pr, viewer)) {
+export function isPersonalAsk(event: PrEvent, pr: Pr, viewer: Viewer): boolean {
+  if (PERSONAL_ASK_KINDS.includes(event.kind) || editMentionOf(event, pr, viewer) === 'you') {
     return true;
   }
   if (event.kind !== 'review_requested') {
@@ -238,6 +238,16 @@ export function isPersonalPing(event: PrEvent, pr: Pr, viewer: Viewer): boolean 
   }
   const subject = reviewRequestTarget(event, pr);
   return subject !== null && sameLogin(subject, viewer.login);
+}
+
+/**
+ * A ping about the viewer in person: a personal ask (`isPersonalAsk`), or
+ * the author's answer to their changes request. A team mention, a team
+ * request and other push or changes-request events are not (they may still
+ * ping).
+ */
+export function isPersonalPing(event: PrEvent, pr: Pr, viewer: Viewer): boolean {
+  return isPersonalAsk(event, pr, viewer) || isChangesAnswerEvent(event, pr, viewer);
 }
 
 /** How long after the viewer's own comment or review a person's answer counts as a live conversation. */

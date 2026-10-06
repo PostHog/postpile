@@ -49,8 +49,20 @@ export function markedReadPr(view: TileView, prKey: PrKey): TileView {
  * closer event, it goes to Open. The strip and its NEW pill go.
  */
 export function snoozedTile(view: TileView): TileView {
-  const state: TileState = { ...view.state, kind: 'snoozed', unreadBecause: [], unseenMerges: undefined };
+  // A plain snooze leaves a mute that still holds alone, so `partlyMuted` stays as it was.
+  const state: TileState = { ...view.state, kind: 'snoozed', unreadBecause: [], unseenMerges: undefined, muted: undefined };
   return { ...view, state, group: state.unreadOnGitHub ? 'unread' : 'open', newBadge: false };
+}
+
+/**
+ * A muted tile: snoozed and saying Muted. With GitHub writes on, the mute's
+ * mark-read shows at once too (`markedReadTile`); locked, the thread stays
+ * unread like any locked mark-read, so the tile keeps its Unread place.
+ */
+export function mutedTile(view: TileView, writesOn: boolean): TileView {
+  const snoozed = snoozedTile(view);
+  const muted: TileView = { ...snoozed, state: { ...snoozed.state, muted: true, partlyMuted: undefined } };
+  return writesOn ? markedReadTile(muted) : muted;
 }
 
 /** The PR after the viewer's approval of the commit on screen, so Approve turns into "Approved". */

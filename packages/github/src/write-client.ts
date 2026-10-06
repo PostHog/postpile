@@ -122,4 +122,13 @@ export class GitHubWriteClient implements GitHubWriter {
   async unsubscribeThread(threadId: string): Promise<void> {
     await this.http.requestOk('DELETE', `notifications/threads/${encodeURIComponent(threadId)}/subscription`);
   }
+
+  /**
+   * https://docs.github.com/en/rest/activity/notifications#set-a-thread-subscription
+   * 200. `ignored: false` subscribes the viewer to the thread again, also one
+   * they unsubscribed from (Unmute).
+   */
+  async subscribeThread(threadId: string): Promise<void> {
+    await this.http.requestOk('PUT', `notifications/threads/${encodeURIComponent(threadId)}/subscription`, { body: { ignored: false } });
+  }
 }

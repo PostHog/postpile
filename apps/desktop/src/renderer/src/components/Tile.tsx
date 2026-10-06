@@ -273,7 +273,12 @@ export function Tile(props: TileProps) {
               greyed={done}
               missing={glanceText}
             />
-            {state.kind === 'snoozed' && <span className="text-[10.5px] font-medium text-muted">Snoozed</span>}
+            {state.kind === 'snoozed' && !state.muted && <span className="text-[10.5px] font-medium text-muted">Snoozed</span>}
+            {state.kind === 'snoozed' && state.muted && (
+              <span className="text-[10.5px] font-medium text-muted" title="Muted: back when someone mentions you, asks you, replies to you or requests your review">
+                Muted
+              </span>
+            )}
             {view.repoLabel && <RepoLabel label={view.repoLabel} />}
             {view.quietRepo && (
               <span className="shrink-0 text-[10.5px] text-hint" title="This repo is set to “Let it go stale” in the repo menu: still synced, never urgent, never pings">
@@ -326,7 +331,17 @@ export function Tile(props: TileProps) {
               {markLabel}
             </Button>
           )}
-          {view.offers.snooze && <SnoozeMenu tileId={tile.id} snoozed={state.kind === 'snoozed'} variant="joined" />}
+          {view.offers.snooze && (
+            <SnoozeMenu
+              tileId={tile.id}
+              snoozed={state.kind === 'snoozed'}
+              muted={state.muted === true}
+              partlyMuted={state.partlyMuted === true}
+              unmuteRest={view.offers.unmuteRest}
+              align="right"
+              variant="joined"
+            />
+          )}
           {footerAction === 'open' && (
             <Button variant="joined" onClick={selectLead}>
               Open

@@ -573,6 +573,11 @@ describe('SnoozeRepo', () => {
     expect(store.snoozes.list()).toEqual([]);
   });
 
+  it('reads a mute back as a mute', () => {
+    store.snoozes.put({ prKey: 'a/b#1', condition: { kind: 'muted' }, since: at(0) });
+    expect(store.snoozes.get('a/b#1')).toEqual({ prKey: 'a/b#1', condition: { kind: 'muted' }, since: at(0) });
+  });
+
   it('reads a condition this build no longer offers, or cannot read, as a time that passed at the start', () => {
     const insert = store.db.prepare('INSERT INTO pr_snooze (pr_key, condition_json, since) VALUES (?, ?, ?)');
     insert.run('a/b#1', '{"kind":"ci_green"}', at(5));
