@@ -88,6 +88,16 @@ describe('TELEMETRY_EVENTS', () => {
     expect(RENDERER_TELEMETRY_EVENTS).not.toContain('storage_job_done');
   });
 
+  it('takes the self-updater events with a version and a short error code only', () => {
+    expect(TELEMETRY_EVENTS.update_check_finished.safeParse({ trigger: 'wake', result: 'available', available_version: '0.20.0' }).success).toBe(true);
+    expect(TELEMETRY_EVENTS.update_check_finished.safeParse({ trigger: 'launch', result: 'none' }).success).toBe(true);
+    expect(TELEMETRY_EVENTS.update_check_finished.safeParse({ trigger: 'startup', result: 'none' }).success).toBe(false);
+    expect(TELEMETRY_EVENTS.update_downloaded.safeParse({ version: 'v0.20.0' }).success).toBe(false);
+    expect(TELEMETRY_EVENTS.update_failed.safeParse({ stage: 'download', error_code: 'ERR_CHECKSUM_MISMATCH' }).success).toBe(true);
+    expect(TELEMETRY_EVENTS.update_failed.safeParse({ stage: 'check', error_code: 'failed at /Users/alice' }).success).toBe(false);
+    expect(RENDERER_TELEMETRY_EVENTS).not.toContain('update_check_finished');
+  });
+
   it('lists every catalogue key in TELEMETRY_EVENT_NAMES', () => {
     expect(TELEMETRY_EVENT_NAMES).toEqual(Object.keys(TELEMETRY_EVENTS));
   });
