@@ -84,7 +84,6 @@ type LogInput = Pick<NewActionLogEntry, 'action' | 'origin' | 'outcome'> & Parti
  * locked becomes a pending write and the sample stays unread.
  */
 export class FakeWrites {
-  private enabled = false;
   private readonly entries: ActionLogEntry[] = [];
   private readonly batches: FakeBatch[] = [];
   private readonly pending: FakePending[] = [];
@@ -92,9 +91,11 @@ export class FakeWrites {
   private readonly githubUnread = new Map<string, boolean>();
   private nextId = 1;
 
+  /** `enabled`: how the sample starts. On, like the packaged app with no choice stored; POSTPILE_FAKE_LOCKED=1 starts it locked. */
   constructor(
     private readonly now: () => Date,
     private readonly sample: FakeSample,
+    private enabled = true,
   ) {}
 
   private pendingViews(): PendingWriteView[] {

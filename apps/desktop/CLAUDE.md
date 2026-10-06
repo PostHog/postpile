@@ -141,7 +141,8 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   mark-read) and "Remove <team>" pass through `writeBlockedReason` in
   `lib/guard.ts`, which reads the footer lock (`useGitHubWrites`, `GET
   /api/github-writes`, changes at runtime). With the lock closed
-  (read-only, the default) approve and comment are blocked with a clear
+  (read-only; on by default in the packaged app, locked by default in dev
+  runs) approve and comment are blocked with a clear
   toast (so is "Remove <team>", `removeTeam`: final, never a pending
   write); mark read and "not mine" still run but change nothing in the app:
   after the undo window they become pending writes (buttons carry
@@ -157,15 +158,24 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   never GitHub, so it is not on the `GithubWrite` list. Fire it only from a
   click, never from an effect or along with Accept: the app never installs
   the MCP server by itself. `hideMcpConnect` is the footer's "Not now".
-- **The lock** (`WritesLock` in the footer): locked = read-only. Opening it
-  (from the lock, or the busy inbox card's "Unlock writes", which sets the
-  popover state `App` holds) asks in a small popover ("Mark-read and approvals will reach GitHub")
+- **The lock** (`WritesLock` in the footer, its popover state its own):
+  locked = read-only. **The footer is the only place to lock or unlock**
+  (2026-10-05, DESIGN.md "GitHub writes: lock, action log"): writes are on
+  by default, so no banner, card, setup step, toast or title bar item
+  offers to unlock. A blocked write may say in its tooltip or toast that
+  the lock in the footer is closed; that is all. On, the lock is a faint
+  open-lock icon (`text-faint` on purpose, hover shows it; a click locks);
+  locked, a quiet "read-only" in the footer's own `text-muted`, never
+  `amber-*`, `status-bad`, coral or honey. Opening it asks in a small
+  popover ("Mark-read and approvals will reach GitHub")
   that also lists the pending writes (`lib/pending.ts`) with "Send N to
   GitHub" / "Discard" / "Cancel" and "Discard pending, stay locked"; the
-  count badge sits on the lock. Closing it is instant unless something is
-  pending. With `POSTPILE_READ_ONLY=1` it cannot unlock, only discard. The
-  server keeps the choice and the pending writes; the renderer never
-  stores them.
+  count badge sits on the lock, also while writes are on (a failed send,
+  or mark-reads from the locked days the default switch left). Closing it
+  is instant unless something is pending. With `POSTPILE_READ_ONLY=1` it
+  cannot unlock, only discard. The server keeps the choice and the pending
+  writes; the renderer never stores them. States are checked in
+  `WritesLock.test.tsx`.
 - Buttons for guarded actions carry the blocked reason as their `title`.
 - The notifications debug pane has "Mark read" (thread level, same queue,
   undo, lock and action log as a tile). There is no "bring back": GitHub has
@@ -428,11 +438,10 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   `busy-*` keyframes, only under `motion-safe:`; calm `amber-*` tokens,
   never coral or honey, the sweat drop `--drop` the one blue; words and
   per-tier counts in `lib/busy-inbox.ts`. Clean up opens
-  `InboxCleanupDialog` in sidebar mode, Unlock writes (only while
-  `writesLocked`) opens the footer lock's popover: `WritesLock`'s open
-  state lives in `App` for that. Why? folds out inline. It folds to one
-  line for the session, sessionStorage `postpile.busyInbox.folded`; wiring
-  test in `BusyInboxCard.test.tsx`),
+  `InboxCleanupDialog` in sidebar mode, Why? folds out inline. No writes
+  lock and no writes line here: the lock lives in the footer only. It
+  folds to one line for the session, sessionStorage
+  `postpile.busyInbox.folded`; wiring test in `BusyInboxCard.test.tsx`),
   `UpdatePill` (title bar update reminder, self-contained so it can move;
   neutral, never coral; under 24h behind; "Update ready" once staged) +
   `UpdateNextStep` (the offer both share: ink "Restart to update", the

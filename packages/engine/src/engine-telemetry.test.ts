@@ -60,7 +60,7 @@ describe('engine telemetry', () => {
     h.telemetry.events.length = 0;
     await h.engine.setGitHubWrites(true);
     await h.engine.sync({ maxAgentCalls: 0 });
-    expect(h.telemetry.events.find((e) => e.event === 'github_writes_changed')?.props).toEqual({ enabled: true });
+    expect(h.telemetry.events.find((e) => e.event === 'github_writes_changed')?.props).toEqual({ enabled: true, from: 'footer' });
     expect(h.telemetry.events.find((e) => e.event === 'sync_completed')?.props).toMatchObject({ writes_on: true });
   });
 

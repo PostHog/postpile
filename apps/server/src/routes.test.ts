@@ -100,7 +100,7 @@ describe('server routes over the fake engine', () => {
   });
 
   it('holds the sample start sync for the inbox catch-up, parks a clear while locked and runs it from the lock', async () => {
-    const app = appWithFake(new FakeEngine({ syncStepMs: 0, cleanupStepMs: 0, catchUpGate: true }));
+    const app = appWithFake(new FakeEngine({ syncStepMs: 0, cleanupStepMs: 0, catchUpGate: true, writesLocked: true }));
     const cleanup = async () => (await (await app.request('/api/inbox-cleanup')).json()) as InboxCleanupView;
 
     expect((await post<SyncReport>(app, '/api/sync')).json.heldForCatchUp).toBe(true);
@@ -228,7 +228,6 @@ describe('server routes over the fake engine', () => {
       quietPrs: 4640,
       cap: 1500,
       updatesLastHour: 300,
-      writesLocked: true,
       keptYou: 940,
       keptTeam: 560,
       keptOthers: 0,
@@ -277,7 +276,7 @@ describe('server routes over the fake engine', () => {
   });
 
   it('marks an opened PR read in memory only when nothing is asked and writes are unlocked', async () => {
-    const app = appWithFake();
+    const app = appWithFake(new FakeEngine({ syncStepMs: 0, writesLocked: true }));
     const topics = (await (await app.request('/api/topics')).json()) as TopicListItem[];
     const details = await Promise.all(topics.map(async (item) => (await (await app.request(`/api/topics/${item.topic.id}`)).json()) as TopicDetail));
     const rows = (await (await app.request('/api/debug/notifications')).json()) as NotificationDebugRow[];
@@ -440,7 +439,7 @@ describe('server routes over the fake engine', () => {
   });
 
   it('removes a team review request only with a team, and refuses it while writes are locked', async () => {
-    const app = appWithFake();
+    const app = appWithFake(new FakeEngine({ syncStepMs: 0, writesLocked: true }));
     const rows = await allRows(app);
     const row = rows.find((pr) => pr.ownTeamRequests.length > 0)!;
     const path = `/api/prs/${row.key.replace('#', '/')}/remove-team-request`;
@@ -451,7 +450,7 @@ describe('server routes over the fake engine', () => {
   });
 
   it('refuses to approve while GitHub writes are off, approves once the lock is open', async () => {
-    const app = appWithFake();
+    const app = appWithFake(new FakeEngine({ syncStepMs: 0, writesLocked: true }));
     const head = ((await (await app.request('/api/prs/acme/app/1911')).json()) as PrDetail).pr.headOid;
     const refused = await post<ActionResult>(app, '/api/prs/acme/app/1911/approve', { headOid: head });
     expect(refused.json.ok).toBe(false);
@@ -468,7 +467,7 @@ describe('server routes over the fake engine', () => {
   });
 
   it('marks a thread read from the debug view and logs it', async () => {
-    const app = appWithFake();
+    const app = appWithFake(new FakeEngine({ syncStepMs: 0, writesLocked: true }));
     const rows = (await (await app.request('/api/debug/notifications')).json()) as NotificationDebugRow[];
     const row = rows.find((candidate) => candidate.prKey === 'acme/app#1902' && candidate.thread.unread)!;
     const marked = await post<ActionResult>(app, `/api/notifications/${encodeURIComponent(row.thread.id)}/mark-read`);
@@ -567,7 +566,7 @@ describe('server routes over the fake engine', () => {
   });
 
   it('replies to a thread comment and an issue comment, and keeps both local', async () => {
-    const app = appWithFake();
+    const app = appWithFake(new FakeEngine({ syncStepMs: 0, writesLocked: true }));
     const locked = await post<ActionResult>(app, '/api/prs/acme/app/1902/reply', { commentId: 'thread-1902-1-0', body: 'Yes, next layer.' });
     expect(locked.json.ok).toBe(false);
     await post(app, '/api/github-writes', { enabled: true });

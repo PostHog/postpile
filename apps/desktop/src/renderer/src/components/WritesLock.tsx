@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { GitHubWritesStatus, PendingWriteView } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { pendingBadgeTitle, pendingHeadline, pendingList } from '../lib/pending.ts';
@@ -11,7 +11,7 @@ function lockTitle(writes: GitHubWritesStatus, fake: boolean): string {
     return `Locked: read-only. ${writes.forcedOffReason}${sample}`;
   }
   if (writes.enabled) {
-    return `Unlocked: mark-read, approvals and comments reach GitHub. Click to lock (read-only).${sample}`;
+    return `GitHub writes on: mark-read, approvals and comments reach GitHub. Click to lock (read-only).${sample}`;
   }
   return `Locked: read-only. Mark-reads wait as pending writes, approve and comment are blocked. Click to allow GitHub writes.${sample}`;
 }
@@ -36,17 +36,18 @@ function PendingList(props: { pending: PendingWriteView[] }) {
 }
 
 /**
- * The GitHub writes switch in the status footer. Locked = read-only.
- * Unlocking asks first in a small popover, which lists the mark-reads made
- * while locked (pending writes) and offers to send or discard them; locking
- * is instant unless pending writes are left. The count badge shows how many
- * wait. With POSTPILE_READ_ONLY=1 it cannot unlock; the popover then only
- * offers to discard. Whether the popover is open lives in App, so the busy
- * inbox card's "Unlock writes" can open it too.
+ * The GitHub writes switch in the status footer, the only place to lock or
+ * unlock (2026-10-05). Writes are on by default, so the on state is just a
+ * small open-lock icon; locked (read-only) is a quiet "read-only" word, never
+ * an alarm colour. Unlocking asks first in a small popover, which lists the
+ * mark-reads made while locked (pending writes) and offers to send or discard
+ * them; locking is instant unless pending writes are left. The count badge
+ * shows how many wait. With POSTPILE_READ_ONLY=1 it cannot unlock; the
+ * popover then only offers to discard.
  */
-export function WritesLock(props: { open: boolean; onOpenChange: (open: boolean) => void }) {
+export function WritesLock() {
   const actions = useActions();
-  const { open, onOpenChange: setOpen } = props;
+  const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -121,10 +122,10 @@ export function WritesLock(props: { open: boolean; onOpenChange: (open: boolean)
         aria-label={writes.enabled ? 'GitHub writes on, click to lock' : 'GitHub writes off (read-only)'}
         aria-pressed={writes.enabled}
         aria-expanded={open}
-        className={`flex items-center gap-[5px] rounded px-1 hover:bg-subtle disabled:cursor-default disabled:opacity-60 disabled:hover:bg-transparent ${writes.enabled ? 'text-ink-2' : 'text-amber-ink'}`}
+        className={`flex items-center gap-[5px] rounded px-1 hover:bg-subtle hover:text-ink-2 disabled:cursor-default disabled:opacity-60 disabled:hover:bg-transparent ${writes.enabled ? 'text-faint' : ''}`}
       >
         {writes.enabled ? <UnlockIcon size={11} /> : <LockIcon size={11} />}
-        {writes.enabled ? 'GitHub writes on' : 'read-only'}
+        {!writes.enabled && 'read-only'}
         {count > 0 && (
           <span title={pendingBadgeTitle(pending)} className="ml-0.5 rounded-full bg-segment px-1.5 text-[10px] leading-[15px] font-semibold text-ink-2">
             {count}

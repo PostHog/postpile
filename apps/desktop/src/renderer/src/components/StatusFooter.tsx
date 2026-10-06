@@ -32,16 +32,9 @@ function withDividers(items: ReactNode[]): ReactNode[] {
 }
 
 /**
- * 26px strip: unread count, PR counts for the open topic, the GitHub writes lock, an inbox cleanup while it runs, live poll, the GitHub quota while low, what gh or claude leave off, agent calls of the last sync, the MCP offer while not connected, mark-read queue, app version.
- * The lock's popover state comes from App (`lockOpen`), so the sidebar's busy inbox card can open it too.
+ * 26px strip: unread count, PR counts for the open topic, the GitHub writes lock (an icon while writes are on), an inbox cleanup while it runs, live poll, the GitHub quota while low, what gh or claude leave off, agent calls of the last sync, the MCP offer while not connected, mark-read queue, app version.
  */
-export function StatusFooter(props: {
-  topics: TopicListItem[];
-  detail: TopicDetail | undefined;
-  live: LivePollStatus | undefined;
-  lockOpen: boolean;
-  onLockOpen: (open: boolean) => void;
-}) {
+export function StatusFooter(props: { topics: TopicListItem[]; detail: TopicDetail | undefined; live: LivePollStatus | undefined }) {
   const actions = useActions();
   const now = useNow(1000);
   const live = liveLabel(props.live, now);
@@ -74,7 +67,7 @@ export function StatusFooter(props: {
         <Num>{counts.pulledIn}</Num> pulled in
       </span>
     ),
-    <WritesLock key="lock" open={props.lockOpen} onOpenChange={props.onLockOpen} />,
+    <WritesLock key="lock" />,
     cleanup && (
       <span key="cleanup" className="flex items-center gap-2" title="The inbox cleanup runs in the background; you can keep working">
         {progressLabel(cleanup)}
