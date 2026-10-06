@@ -144,6 +144,45 @@ export function saysDeploy(body: string): boolean {
   return commentText(body) === 'deploy';
 }
 
+/**
+ * A person answering a bot in a review thread (2026-10-06): the comment is
+ * in a thread, people other than its author spoke there before it, and all
+ * of them were automation.
+ */
+export function answersBotInThread(pr: Pr, comment: Comment): boolean {
+  const thread = pr.threads.find((candidate) => candidate.id === comment.threadId);
+  if (thread === undefined || isMachineComment(comment)) {
+    return false;
+  }
+  const position = thread.comments.findIndex((candidate) => candidate.id === comment.id);
+  const earlierOthers = thread.comments.slice(0, Math.max(position, 0)).filter((earlier) => !sameLogin(earlier.author, comment.author));
+  return earlierOthers.length > 0 && earlierOthers.every(isMachineComment);
+}
+
+/**
+ * An event that belongs to a person's answer to a bot in a thread: the
+ * comment itself (plain kind, not an ask), its edit, or the empty COMMENTED
+ * review GitHub posts with it (same author, within 2 seconds, and every
+ * thread comment it came with answers a bot).
+ */
+export function isBotThreadAnswer(pr: Pr, event: Pick<PrEvent, 'kind' | 'sourceId'>): boolean {
+  if (event.kind === 'comment' || event.kind === 'comment_edited') {
+    const comment = pr.comments.find((candidate) => candidate.id === event.sourceId);
+    return comment !== undefined && answersBotInThread(pr, comment);
+  }
+  if (event.kind !== 'review_commented') {
+    return false;
+  }
+  const review = pr.reviews.find((candidate) => candidate.id === event.sourceId);
+  if (review === undefined || review.state !== 'COMMENTED' || review.body.trim() !== '') {
+    return false;
+  }
+  const sentWith = pr.comments.filter(
+    (comment) => comment.threadId !== null && sameLogin(comment.author, review.author) && Math.abs(Date.parse(comment.createdAt) - Date.parse(review.submittedAt)) <= 2000,
+  );
+  return sentWith.length > 0 && sentWith.every((comment) => answersBotInThread(pr, comment));
+}
+
 // ---------------------------------------------------------------------------
 // The merge queue (DESIGN "Merge queue"; the builder writes one body per TrunkText)
 // ---------------------------------------------------------------------------

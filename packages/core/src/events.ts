@@ -1,4 +1,5 @@
 import { trimBotBody } from './bot-bodies.ts';
+import { carriedBotThreadReplies, isBotThreadReply, threadReplyOf } from './bot-threads.ts';
 import { isBot, isMachineComment } from './bots.ts';
 import { ADDRESSED_KINDS } from './kinds.ts';
 import { lastSpokeAt, spokeAfter } from './last-touch.ts';
@@ -21,6 +22,8 @@ interface RawEvent {
   subject: string | null;
   /** comment_edited: the edit time, part of the event id so a later edit is a new event. */
   version?: IsoTime;
+  /** A person's reply to a bot in a review thread, or the empty review carrying it (`bot-threads.ts`). */
+  botThreadReply?: boolean;
 }
 
 interface ApprovalPoint {
@@ -107,7 +110,13 @@ export function isRoutingTeamMention(event: Pick<PrEvent, 'kind' | 'sourceId'>, 
   return team !== null && isRoutingTeam(team, viewer);
 }
 
-function commentSummary(kind: EventKind, comment: Comment): string {
+/** "alice commented", or for a reply in a review thread "alice replied to greptile-apps[bot] on src/x.ts". */
+function plainCommentLead(comment: Comment, pr: Pr): string {
+  const reply = threadReplyOf(comment, pr);
+  return reply === null ? `${comment.author} commented` : `${comment.author} replied to ${reply.to} on ${reply.path}`;
+}
+
+function commentSummary(kind: EventKind, comment: Comment, pr: Pr): string {
   switch (kind) {
     case 'mention':
       return withText(`${comment.author} mentioned you`, comment.body);
@@ -120,7 +129,7 @@ function commentSummary(kind: EventKind, comment: Comment): string {
     case 'deploy':
       return withText(`${comment.author} deploy`, comment.body);
     default:
-      return withText(`${comment.author} commented`, comment.body);
+      return withText(plainCommentLead(comment, pr), comment.body);
   }
 }
 
@@ -147,10 +156,11 @@ function commentEvent(comment: Comment, pr: Pr, viewer: Viewer): RawEvent | null
     actor: comment.author,
     isBot: machine,
     at: comment.createdAt,
-    summary: commentSummary(finalKind, comment),
+    summary: commentSummary(finalKind, comment, pr),
     url: comment.url,
     sourceId: comment.id,
     subject: finalKind === 'team_mention' ? mentionedTeam(comment, viewer) : null,
+    botThreadReply: finalKind === 'comment' && isBotThreadReply(comment, pr),
   };
 }
 
@@ -269,6 +279,7 @@ function reviewEvents(pr: Pr): RawEvent[] {
       url: null,
       sourceId: review.id,
       subject: null,
+      botThreadReply: carriedBotThreadReplies(review, pr).length > 0,
     });
   }
   return events;
@@ -456,6 +467,7 @@ export function deriveEvents(
       subject: raw.subject,
       userRepliedAfter: (ADDRESSED_KINDS.includes(raw.kind) || raw.kind === 'comment_edited') && spokeAfter(pr, viewer.login, raw.at),
       requestAnswered: requestAnswered(pr, viewer, raw),
+      botThreadReply: raw.botThreadReply === true,
     });
     return {
       id: raw.version === undefined ? eventId(pr.key, raw.kind, raw.sourceId) : editEventId(pr.key, raw.sourceId, raw.version),

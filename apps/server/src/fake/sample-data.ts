@@ -59,6 +59,9 @@ const TOPIC = {
 };
 
 // Trunk's status comment as trunk-io[bot] edits it (DESIGN.md "Merge queue"): an en space after the emoji.
+/** A review bot that opens inline threads (as greptile does); people answer it there. */
+const GREPTILE = 'greptile-apps[bot]';
+
 const TRUNK_TESTING =
   '<!-- Trunk Merge -->\n🧪\u2002Running tests on this pull request (testing on PR [#1976](https://github.com/acme/app/pull/1976)) - [details](https://app.trunk.io/acme/merge/1975).';
 const TRUNK_SUBMITTED =
@@ -467,8 +470,56 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
     }),
     samplePr(clock, {
       number: 1857, title: 'Upgrade to Vite 7', author: 'lyra', state: 'MERGED',
-      size: [120, 90, 14], openedHoursAgo: 50, mergedHoursAgo: 3, reviews: [['jude', 'APPROVED']],
+      size: [120, 90, 14], openedHoursAgo: 50, mergedHoursAgo: 3,
+      // A review bot's threads, answered by the author: each "fixed" folds into
+      // one quiet line per thread in the activity list. In one bot thread nell
+      // asks you (a line of its own), and one thread is between people. GitHub
+      // wraps every thread reply in an empty review of its own, the same second.
+      reviews: [
+        [GREPTILE, 'COMMENTED', 'Greptile summary: upgrades Vite to 7 and moves the test setup. 3 comments.', undefined, 30],
+        ['lyra', 'COMMENTED', '', undefined, 28],
+        ['lyra', 'COMMENTED', '', undefined, 27],
+        ['lyra', 'COMMENTED', '', undefined, 26],
+        ['nell', 'COMMENTED', '', undefined, 4],
+        ['jude', 'APPROVED'],
+      ],
       comments: [{ id: 'issuecomment-6', author: 'jude', body: '@you are the stale snapshots gone after this?', hoursAgo: 2 }],
+      threads: [
+        {
+          id: 'thread-1857-1',
+          path: 'vite.config.ts',
+          comments: [
+            { author: GREPTILE, body: '`build.target` drops es2019, so older Safari versions fail to load the bundle.', hoursAgo: 30 },
+            { author: 'lyra', body: 'Fixed, the target is back to es2019 for now.', hoursAgo: 28 },
+            { author: GREPTILE, body: 'Thanks, that resolves it.', hoursAgo: 27.9 },
+            { author: 'lyra', body: 'Also added a browserslist check to CI.', hoursAgo: 27 },
+          ],
+        },
+        {
+          id: 'thread-1857-2',
+          path: 'src/test/setup.ts',
+          comments: [
+            { author: GREPTILE, body: '`vi.useFakeTimers()` is never reset between tests.', hoursAgo: 30 },
+            { author: 'lyra', body: 'Moved the reset into afterEach.', hoursAgo: 26 },
+          ],
+        },
+        {
+          id: 'thread-1857-3',
+          path: 'vite.config.ts',
+          comments: [
+            { author: GREPTILE, body: 'The dev server port is hardcoded; the e2e config reads it from the environment.', hoursAgo: 30 },
+            { author: 'nell', body: '@you is the hardcoded port fine for the devbox?', hoursAgo: 4 },
+          ],
+        },
+        {
+          id: 'thread-1857-4',
+          path: 'scripts/check-snapshots.ts',
+          comments: [
+            { author: 'nell', body: 'Does this still need the old snapshot folder?', hoursAgo: 25 },
+            { author: 'lyra', body: 'No, it reads the new one since this PR.', hoursAgo: 24 },
+          ],
+        },
+      ],
     }),
     samplePr(clock, {
       number: 1870, title: 'Make devbox start default to minimal stack', author: 'sol', state: 'OPEN',
@@ -712,6 +763,21 @@ function buildEvents(clock: SampleClock): PrEvent[] {
       { kind: 'commits_pushed', actor: 'renovate[bot]', text: 'opened the PR', hoursAgo: 12, rule: 'quiet', isBot: true },
     ]),
     ...sampleEvents(clock, 1857, [
+      { kind: 'review_commented', actor: GREPTILE, text: 'reviewed: Greptile summary: upgrades Vite to 7 and moves the test setup. 3 comments.', hoursAgo: 30, rule: 'quiet', isBot: true, sourceId: 'review-1857-0', seen: true },
+      { kind: 'bot_comment', actor: GREPTILE, text: 'commented: `build.target` drops es2019', hoursAgo: 30, rule: 'quiet', isBot: true, sourceId: 'thread-1857-1-0', seen: true },
+      { kind: 'bot_comment', actor: GREPTILE, text: 'commented: `vi.useFakeTimers()` is never reset between tests.', hoursAgo: 30, rule: 'quiet', isBot: true, sourceId: 'thread-1857-2-0', seen: true },
+      { kind: 'bot_comment', actor: GREPTILE, text: 'commented: The dev server port is hardcoded', hoursAgo: 30, rule: 'quiet', isBot: true, sourceId: 'thread-1857-3-0', seen: true },
+      { kind: 'comment', actor: 'lyra', text: `replied to ${GREPTILE} on vite.config.ts: Fixed, the target is back to es2019 for now.`, hoursAgo: 28, rule: 'quiet', sourceId: 'thread-1857-1-1', seen: true },
+      { kind: 'review_commented', actor: 'lyra', text: 'reviewed', hoursAgo: 28, rule: 'quiet', sourceId: 'review-1857-1', seen: true },
+      { kind: 'bot_comment', actor: GREPTILE, text: 'commented: Thanks, that resolves it.', hoursAgo: 27.9, rule: 'quiet', isBot: true, sourceId: 'thread-1857-1-2', seen: true },
+      { kind: 'comment', actor: 'lyra', text: `replied to ${GREPTILE} on vite.config.ts: Also added a browserslist check to CI.`, hoursAgo: 27, rule: 'quiet', sourceId: 'thread-1857-1-3', seen: true },
+      { kind: 'review_commented', actor: 'lyra', text: 'reviewed', hoursAgo: 27, rule: 'quiet', sourceId: 'review-1857-2', seen: true },
+      { kind: 'comment', actor: 'lyra', text: `replied to ${GREPTILE} on src/test/setup.ts: Moved the reset into afterEach.`, hoursAgo: 26, rule: 'quiet', sourceId: 'thread-1857-2-1', seen: true },
+      { kind: 'review_commented', actor: 'lyra', text: 'reviewed', hoursAgo: 26, rule: 'quiet', sourceId: 'review-1857-3', seen: true },
+      { kind: 'comment', actor: 'nell', text: 'commented: Does this still need the old snapshot folder?', hoursAgo: 25, rule: 'quiet', sourceId: 'thread-1857-4-0', seen: true },
+      { kind: 'comment', actor: 'lyra', text: 'replied to nell on scripts/check-snapshots.ts: No, it reads the new one since this PR.', hoursAgo: 24, rule: 'quiet', sourceId: 'thread-1857-4-1', seen: true },
+      { kind: 'question_to_user', actor: 'nell', text: 'asked you: @you is the hardcoded port fine for the devbox?', hoursAgo: 4, rule: 'loud', sourceId: 'thread-1857-3-1' },
+      { kind: 'review_commented', actor: 'nell', text: 'reviewed', hoursAgo: 4, rule: 'quiet', sourceId: 'review-1857-4' },
       { kind: 'merged', actor: 'lyra', text: 'merged it', hoursAgo: 3, rule: 'quiet', seen: true },
       { kind: 'mention', actor: 'jude', text: 'mentioned you: "are the stale snapshots gone?"', hoursAgo: 2, rule: 'loud' },
     ]),

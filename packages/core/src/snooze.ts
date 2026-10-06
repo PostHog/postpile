@@ -1,3 +1,4 @@
+import { botThreadOf } from './bot-threads.ts';
 import { isAutomation } from './bots.ts';
 import { PUSH_KINDS } from './kinds.ts';
 import { effectiveLoudness, raisedToLoud } from './loudness.ts';
@@ -18,7 +19,8 @@ export interface SnoozeContext {
 }
 
 // Wider than the asks in kinds.ts on purpose: any human comment or review
-// ends a "someone replies" snooze, not only one aimed at the viewer.
+// ends a "someone replies" snooze, not only one aimed at the viewer. A reply
+// to a bot in a review thread does not (`botThreadOf`): it answers the bot.
 const replyKinds: EventKind[] = [
   'mention',
   'team_mention',
@@ -44,6 +46,7 @@ function someoneReplied(snooze: Snooze, context: SnoozeContext): boolean {
     (event) =>
       event.at > snooze.since &&
       replyKinds.includes(event.kind) &&
+      botThreadOf(event, context.pr) === null &&
       !isAutomationOn(event, context) &&
       !isByViewer(event, context.viewer ?? null),
   );

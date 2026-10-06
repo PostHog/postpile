@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { eventGlyph, splitActor, summaryLead } from './events.ts';
+import { eventGlyph, splitActor, splitPath, summaryLead } from './events.ts';
 
 describe('event helpers', () => {
   it('keeps the glyph set small: pushes share the commit glyph', () => {
@@ -19,5 +19,17 @@ describe('event helpers', () => {
   it('keeps only the lead of a summary', () => {
     expect(summaryLead('lyra asked you: can you check: the migration?')).toBe('lyra asked you');
     expect(summaryLead('ada approved')).toBe('ada approved');
+  });
+});
+
+describe('splitPath', () => {
+  it('splits the file off the end of a thread line', () => {
+    expect(splitPath(' replied to bob on src/a.ts', 'src/a.ts')).toEqual({ before: ' replied to bob on ', path: 'src/a.ts' });
+  });
+
+  it('leaves a line that does not end in the file alone', () => {
+    expect(splitPath(' commented', 'src/a.ts')).toBeNull();
+    expect(splitPath(' replied to bob on src/a.ts: ok', 'src/a.ts')).toBeNull();
+    expect(splitPath(' replied', '')).toBeNull();
   });
 });
