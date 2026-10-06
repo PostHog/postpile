@@ -78,7 +78,9 @@ export function withViewerReaction(pr: FullPr, id: string): FullPr {
  * What the agent reads besides the comment when drafting a reply, oldest
  * first and including the comment: its whole review thread for an inline
  * comment, else the human conversation around it (a few before, a few after),
- * without bot talk ("@codex review", `isBotTalk`).
+ * without bot talk ("@codex review", `isBotTalk`). A thread stays whole, bots
+ * included: a review bot's finding is what its thread is about, and a reply
+ * there answers it.
  */
 export function replyConversation(pr: FullPr, comment: FullComment): FullComment[] {
   const target = replyTarget(comment);

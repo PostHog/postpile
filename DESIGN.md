@@ -3202,8 +3202,11 @@ unread thread, went to the events agent.
 
 - Prompts: `humanComments` is `humanDiscussion`, so "Human discussion" in
   glances, dossiers, sets, chat and pings holds people talking to people.
-  "Review states" leaves carriers out. A reply draft's conversation leaves
-  bot talk out, except the comment it answers.
+  "Review states" and "the user's own last review" leave carriers out. A
+  reply draft to a top-level comment leaves bot talk out of the comments
+  around it, except the comment it answers. A reply in a review thread
+  still reads the whole thread: there the bot's finding is what the
+  thread is about, and the thread is short.
 - Glance hash: `prGlanceSnapshot` covers human discussion ids and human
   reviews `[id, state]`, and comment edit times of human discussion only.
 - Topic memory: chatter is noise (`memoryRole`, "Event roles"). It never
