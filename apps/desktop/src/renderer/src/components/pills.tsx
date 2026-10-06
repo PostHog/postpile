@@ -1,8 +1,9 @@
 // Small status chips used across panes: verdict, why it's here, PR status.
-import { useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import type { ForWhom, Provenance, TilePendingWrite, TopicRelation, Verdict, WhyCode } from '@postpile/core';
 import { pendingWriteTitle } from '../lib/guard.ts';
 import { OPENED_READ_DELAY_MS, type DotCountdown } from '../lib/opened-read.ts';
+import { RecentDots } from '../lib/recent-dots.ts';
 import type { GlanceStateText } from '../lib/glance.ts';
 import { staleVerdictTitle, staleWord } from '../lib/staleness.ts';
 import type { EventGlyph } from '../lib/events.ts';
@@ -18,6 +19,9 @@ const VERDICTS: Record<Verdict, { icon: ReactNode; label: string; tone: string }
   NOT_YOURS: { icon: <DashIcon size={11} />, label: 'Not yours', tone: 'bg-segment text-muted inset-ring-hairline' },
 };
 
+/** The unread dots shown a moment ago, shared by every UnreadDot. */
+const recentDots = new RecentDots();
+
 /**
  * The coral dot in front of a PR number on an unread PR (core
  * `TileView.unreadPrKeys`: an unread thread on GitHub, a pulled-in layer
@@ -30,21 +34,29 @@ const VERDICTS: Record<Verdict, { icon: ReactNode; label: string; tone: string }
  * the same for every read (2026-10-06): the dot shrinks to nothing over
  * 275ms while a thin coral ring ripples out from it and fades over 500ms;
  * instant with reduced motion. The ripple sits in the dot's grid cell with
- * negative margins, so it never moves the layout.
+ * negative margins, so it never moves the layout. `dotKey` names the dot
+ * across remounts (`RecentDots`): a row that remounts hidden right after
+ * its dot was shown (a tile changing group on read) still ripples.
  *
  * `countdown` (tile rows only, `dotCountdown`): while the PR in the pane
  * waits out the dwell the dot is a pie that drains clockwise over
  * OPENED_READ_DELAY_MS (`.unread-pie` in app.css), and it stays empty until
  * the dot leaves.
  */
-export function UnreadDot(props: { shown: boolean; countdown?: DotCountdown; className?: string }) {
-  // The ripple plays only when a shown dot hides, never for a dot that mounts hidden (every read row).
-  const [wasShown, setWasShown] = useState(props.shown);
+export function UnreadDot(props: { shown: boolean; dotKey: string; countdown?: DotCountdown; className?: string }) {
+  const { shown, dotKey } = props;
   const [rippling, setRippling] = useState(false);
-  if (props.shown !== wasShown) {
-    setWasShown(props.shown);
-    setRippling(!props.shown);
-  }
+  // A shown dot notes when it hides or unmounts; a hidden one ripples when its key was shown a moment ago.
+  // Passive cleanups of a removed row run before the new row's effects, so a remount finds the note.
+  useEffect(() => {
+    if (shown) {
+      setRippling(false);
+      return () => recentDots.noteShown(dotKey, Date.now());
+    }
+    if (recentDots.takeRecent(dotKey, Date.now())) {
+      setRippling(true);
+    }
+  }, [shown, dotKey]);
   const look = props.shown ? 'scale-100' : 'scale-0';
   return (
     <span
@@ -60,7 +72,7 @@ export function UnreadDot(props: { shown: boolean; countdown?: DotCountdown; cla
         style={{ '--dwell': `${OPENED_READ_DELAY_MS}ms` } as CSSProperties}
         className={`unread-pie col-start-1 row-start-1 rounded-full ring-2 ring-unread-soft transition-[scale] duration-275 ease-in motion-reduce:transition-none ${look}`}
       />
-      {rippling && (
+      {rippling && !shown && (
         <span
           data-testid="unread-ripple"
           onAnimationEnd={() => setRippling(false)}

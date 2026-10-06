@@ -2852,7 +2852,12 @@ happened when it did. Chosen from a clickable mockup:
   so a dwell read ends like every other read. Reduced motion: no
   countdown, no ripple, the dot goes at once. The pane's button fill stays.
   Built as `dotCountdown` (`lib/opened-read.ts`), `UnreadDot` `countdown`
-  and `.unread-pie` / `animate-unread-ripple` in `app.css`.
+  and `.unread-pie` / `animate-unread-ripple` in `app.css`. The open's
+  phase is tied to its PR, so the next PR's dot starts full even right
+  after the previous one was marked. A row that remounts on read (its tile
+  changed group) still ripples: `RecentDots` remembers dots shown within
+  the last second by key. A row that leaves the screen entirely (into the
+  folded Dealt with group) has nothing to ripple.
 - The held place does not change: the selected tile and its topic row keep
   their place until the selection moves ("only once I move"). Then the move
   animates (FLIP, `useFlip`): every tile, group heading and topic row that

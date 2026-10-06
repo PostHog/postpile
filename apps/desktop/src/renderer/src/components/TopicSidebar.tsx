@@ -209,7 +209,7 @@ function TopicItem(props: { item: TopicListItem; active: boolean; searching: boo
     >
       <span className="flex w-full min-w-0 items-center">
         <LeadSlot>
-          <UnreadDot shown={item.unreadPrs > 0} />
+          <UnreadDot shown={item.unreadPrs > 0} dotKey={`topic:${item.topic.id}`} />
         </LeadSlot>
         <span className="flex min-w-0 flex-1 items-center gap-[7px]">
           <span className={`truncate text-[12.5px] leading-[normal] tracking-[-0.006em] ${name}`}>{item.topic.name}</span>

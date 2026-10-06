@@ -289,8 +289,10 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   until the selection moves; list moves then slide with `useFlip`
   (`lib/use-flip.ts`): mark the moving elements `data-flip-key` (never one
   inside another) and `data-flip-group`. The unread dot (`UnreadDot`
-  `shown`) stays mounted; hiding it shrinks it and plays one ripple
-  (never for a dot that mounts hidden). In tile rows it takes
+  `shown`) stays mounted; hiding it shrinks it and plays one ripple.
+  A dot that mounts hidden ripples only when its `dotKey` (`tile:` /
+  `detail:` + PR key, `topic:` + id) was shown within the last second
+  (`RecentDots`, `lib/recent-dots.ts`: a row that remounts on read). In tile rows it takes
   `countdown` from `dotCountdown` (`lib/opened-read.ts`) and drains as a
   pie over the dwell (`.unread-pie` in `app.css`, 2026-10-06). Respect `prefers-reduced-motion`
   (`motion-reduce:` or the hook's check) in any new motion.
