@@ -125,6 +125,13 @@ describe('splitDiscussion and joinDiscussion', () => {
     expect(back.reviews[0]).not.toHaveProperty('viewerReacted');
   });
 
+  it("keeps a review's url when known and leaves it out when not (stored before 0.25.0)", () => {
+    const pr = makePr({ reviews: [makeReview({ id: 'r-old' }), makeReview({ id: 'r-new', url: 'https://github.com/acme/app/pull/1#pullrequestreview-2' })] });
+    const back = roundTrip(pr);
+    expect(back.reviews[0]).not.toHaveProperty('url');
+    expect(back.reviews[1]?.url).toBe('https://github.com/acme/app/pull/1#pullrequestreview-2');
+  });
+
   it('keeps reviewId and updatedAt when known and leaves them out when not, and reads a missing edit as never', () => {
     const known = inline('rc1', 't1', { reviewId: 'rv1', updatedAt: at(12), lastEditedAt: at(11), editor: 'bob' });
     const back = roundTrip(withThread(known)).comments[0]!;

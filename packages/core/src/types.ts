@@ -38,6 +38,11 @@ export interface Review {
   commitOid: string | null;
   /** The viewer has a THUMBS_UP reaction on the review. Missing on older snapshots: read as false. */
   viewerReacted?: boolean;
+  /**
+   * The review's permalink on github.com. Missing on reviews stored before
+   * 0.25.0: read as none (its event falls back to the body comment's link).
+   */
+  url?: string;
 }
 
 export interface Commit {

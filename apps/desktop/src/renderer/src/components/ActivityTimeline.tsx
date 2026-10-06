@@ -3,7 +3,7 @@ import type { ActivityEvent, ActivityLine, ActivityList, EventDisplayState, Even
 import { useActions } from '../api/actions.tsx';
 import { eventGlyph, splitActor, splitPath, summaryLead } from '../lib/events.ts';
 import { replyCopy } from '../lib/reply.ts';
-import { ageLabel, clockLabel, whenLabel } from '../lib/time.ts';
+import { ageLabel, clockLabel, dateTimeLabel, whenLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
 import { Button } from './Button.tsx';
 import { Composer, useCompose } from './Composer.tsx';
@@ -74,10 +74,34 @@ interface RowProps {
   below?: ReactNode;
   /** A thread reply's file, drawn in mono in the line. */
   path?: string | null;
+  /** The event's permalink on github.com; the age links to it. Null: the age is plain text. */
+  url: string | null;
 }
 
 function UnseenDot() {
   return <span aria-label="Unseen" className="size-1.5 rounded-full bg-unread" />;
+}
+
+/**
+ * The row's age. With a permalink it opens the event on github.com, like
+ * GitHub's own timestamps; quiet until hovered.
+ */
+function AgeLink(props: { at: string; url: string | null; now: Date }) {
+  const age = ageLabel(props.at, props.now);
+  if (props.url === null) {
+    return <>{age}</>;
+  }
+  return (
+    <a
+      href={props.url}
+      target="_blank"
+      rel="noreferrer"
+      title={`Open on GitHub · ${dateTimeLabel(props.at, props.now)}`}
+      className="hover:text-ink-2 hover:underline"
+    >
+      {age}
+    </a>
+  );
 }
 
 function ActivityRow(props: RowProps) {
@@ -105,7 +129,7 @@ function ActivityRow(props: RowProps) {
       </span>
       <span className="flex items-center gap-1.5 self-start pt-px font-mono text-[10.5px] text-faint">
         {props.unseen && <UnseenDot />}
-        {ageLabel(props.at, now)}
+        <AgeLink at={props.at} url={props.url} now={now} />
       </span>
     </div>
   );
@@ -128,6 +152,7 @@ export function lineRow(line: ActivityLine, last: boolean, below: ReactNode = nu
       unmuteId={null}
       below={below}
       path={line.thread?.path ?? null}
+      url={line.url}
     />
   );
 }
@@ -146,6 +171,7 @@ export function eventRow(item: ActivityEvent, last: boolean) {
       reason={item.reason}
       last={last}
       unmuteId={item.display === 'muted' ? item.id : null}
+      url={item.url}
     />
   );
 }
@@ -340,7 +366,9 @@ function FoldedLine(props: { line: ActivityLine; last: boolean }) {
         </button>
         {open && (line.fold === 'bot_review' ? <FoldedComments comments={line.folded} /> : <FoldedReplies replies={line.folded} />)}
       </span>
-      <span className="self-start pt-px font-mono text-[10.5px] text-faint">{ageLabel(line.at, now)}</span>
+      <span className="self-start pt-px font-mono text-[10.5px] text-faint">
+        <AgeLink at={line.at} url={line.url} now={now} />
+      </span>
     </div>
   );
 }

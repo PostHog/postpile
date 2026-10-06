@@ -10,7 +10,7 @@ import { mentionsAnyTeam, mentionsTeam, mentionsUser, sameLogin } from './mentio
 import { isPrOwner } from './pr-owners.ts';
 import { homeTeamsOf, isRoutingTeam, teamsHomeFirst } from './team-roles.ts';
 import { viewerAskedToReview } from './review-request.ts';
-import type { Comment, EventKind, FullComment, FullPr, IsoTime, Pr, PrEvent, ReviewState, TimelineItem, UserPrState, Viewer } from './types.ts';
+import type { Comment, EventKind, FullComment, FullPr, FullReview, IsoTime, Pr, PrEvent, ReviewState, TimelineItem, UserPrState, Viewer } from './types.ts';
 
 /** What deriveEvents knows about an event before it gets classified. */
 interface RawEvent {
@@ -294,6 +294,15 @@ function editEvent(comment: FullComment, pr: Pr, viewer: Viewer): RawEvent | nul
   };
 }
 
+/** A review's permalink: its own, else its body comment's (reviews stored before 0.25.0 have none), else null. */
+function reviewUrl(review: FullReview, pr: FullPr): string | null {
+  if (review.url) {
+    return review.url;
+  }
+  const body = pr.comments.find((comment) => comment.id === review.id && comment.kind === 'review');
+  return body?.url ?? null;
+}
+
 function reviewEvents(pr: FullPr): RawEvent[] {
   const events: RawEvent[] = [];
   for (const review of pr.reviews) {
@@ -317,7 +326,7 @@ function reviewEvents(pr: FullPr): RawEvent[] {
       isBot: isBot(review.author),
       at: review.submittedAt,
       summary: withText(`${review.author} ${verb}`, review.body),
-      url: null,
+      url: reviewUrl(review, pr),
       sourceId: review.id,
       subject: null,
       carrierReview: isCarrierReview(review, pr),
@@ -364,7 +373,7 @@ function commitEvents(pr: Pr, viewer: Viewer, userState: UserPrState | null): Ra
     isBot: isBot(commit.author),
     at: commit.committedAt,
     summary: `${commit.author} pushed: ${oneLine(commit.headline)}`,
-    url: null,
+    url: `${pr.url}/commits/${commit.oid}`,
     sourceId: commit.oid,
     subject: null,
   }));

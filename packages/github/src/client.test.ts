@@ -84,9 +84,9 @@ describe('fetchPrs', () => {
     expect(pr.reviewerUsers).toEqual(['viewer']);
     expect(pr.reviewerTeams).toEqual(['acme/infra']);
     expect(pr.reviews).toEqual([
-      { id: 'R1', author: 'bob', state: 'APPROVED', body: 'LGTM', submittedAt: '2026-09-19T10:00:00.000Z', commitOid: 'c1' },
+      { id: 'R1', author: 'bob', state: 'APPROVED', body: 'LGTM', submittedAt: '2026-09-19T10:00:00.000Z', commitOid: 'c1', url: 'https://github.com/acme/app/pull/42#pullrequestreview-1' },
       // Bot logins get the REST-style suffix so isBot() catches them.
-      { id: 'R2', author: 'greptile-apps[bot]', state: 'COMMENTED', body: '  ', submittedAt: '2026-09-19T11:00:00.000Z', commitOid: 'c1' },
+      { id: 'R2', author: 'greptile-apps[bot]', state: 'COMMENTED', body: '  ', submittedAt: '2026-09-19T11:00:00.000Z', commitOid: 'c1', url: 'https://github.com/acme/app/pull/42#pullrequestreview-2' },
     ]);
     expect(pr.commits).toEqual([
       { oid: 'c1', headline: 'Add depot config', author: 'alice', committer: 'alice', committedAt: '2026-09-18T09:00:00.000Z' },
