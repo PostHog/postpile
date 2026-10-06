@@ -1,5 +1,6 @@
 // "Whose turn": is the next move on a tile the viewer's, someone else's, or
 // nobody's? Rules only, no agent. DESIGN.md "Whose turn" lists them.
+import { talksToBot } from './bot-talk.ts';
 import { isBot, isMadeByAutomation } from './bots.ts';
 import { changesAnswered, standingChanges, type ChangesAnswer } from './changes-answered.ts';
 import { editMentionOf } from './events.ts';
@@ -239,12 +240,12 @@ function reviewText(ctx: PrContext, ask: ReviewRequest, verb: 'Review' | 'Re-rev
   return by && !isViewer(ctx, by) ? `${verb}, ${by} asked` : verb;
 }
 
-/** Unresolved threads whose last word is someone else's (not the viewer's, not a bot's). */
+/** Unresolved threads whose last word is someone else's (not the viewer's, not a bot's, not bot talk like "fixed" to a review bot). */
 function threadsWaitingOnViewer(ctx: PrContext): { count: number; from: string | null } {
   const lastAuthors: string[] = [];
   for (const thread of ctx.pr.threads) {
     const last = thread.comments[thread.comments.length - 1];
-    if (thread.isResolved || !last || isViewer(ctx, last.author) || isBot(last.author)) {
+    if (thread.isResolved || !last || isViewer(ctx, last.author) || isBot(last.author) || talksToBot(last, ctx.pr)) {
       continue;
     }
     lastAuthors.push(last.author);

@@ -111,8 +111,9 @@ function headlineRank(event: PrEvent, pr: Pr, board: PropertyBoard): number {
   if (event.kind === 'review_approved' || event.kind === 'review_changes_requested') {
     return 2;
   }
-  // A person answering a bot in its thread, and the empty review GitHub wraps a thread reply in, rank with other people's events, below comments (2026-10-06).
-  if (isBotThreadAnswer(pr, event) || isCarrierEvent(pr, event)) {
+  // Bot talk (a person answering a bot in its thread, a command for a bot) and the empty review GitHub wraps a thread reply in
+  // rank with other people's events, below comments (2026-10-06). Chatter is the event's data; eventsMatchTheSnapshot checks it.
+  if (event.chatter || isBotThreadAnswer(pr, event) || isCarrierEvent(pr, event)) {
     return 4;
   }
   return event.kind === 'comment' || event.kind === 'review_commented' || event.kind === 'comment_edited' ? 3 : 4;

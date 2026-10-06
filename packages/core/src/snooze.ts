@@ -19,8 +19,9 @@ export interface SnoozeContext {
 }
 
 // Wider than the asks in kinds.ts on purpose: any human comment or review
-// ends a "someone replies" snooze, not only one aimed at the viewer. A reply
-// to a bot in a review thread does not (`botThreadOf`): it answers the bot.
+// ends a "someone replies" snooze, not only one aimed at the viewer. Bot talk
+// does not (`PrEvent.chatter`, and `botThreadOf` for rows stored before it):
+// "fixed" to a review bot or "@codex review" answers nobody.
 const replyKinds: EventKind[] = [
   'mention',
   'team_mention',
@@ -46,6 +47,7 @@ function someoneReplied(snooze: Snooze, context: SnoozeContext): boolean {
     (event) =>
       event.at > snooze.since &&
       replyKinds.includes(event.kind) &&
+      !event.chatter &&
       botThreadOf(event, context.pr) === null &&
       !isAutomationOn(event, context) &&
       !isByViewer(event, context.viewer ?? null),

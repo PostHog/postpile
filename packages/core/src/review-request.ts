@@ -6,6 +6,7 @@
 // done rule all read the same answers. A bot-made request counts like a
 // human one everywhere.
 import { isBot } from './bots.ts';
+import { isCarrierReview } from './carrier-reviews.ts';
 import { isOwnTeam, isViewerSubject, sameLogin } from './mentions.ts';
 import { isPrOwner, prOwners } from './pr-owners.ts';
 import { isHomeTeam, isRoutingTeam } from './team-roles.ts';
@@ -153,7 +154,8 @@ export function ownedByTeammate(pr: Pr, viewer: Viewer): boolean {
 /**
  * Humans other than the owners and the viewer who submitted a review and
  * are on one of the viewer's home teams. Until the member list has been
- * fetched (`teamMembers` missing) any other reviewer counts.
+ * fetched (`teamMembers` missing) any other reviewer counts. The empty
+ * review carrying a thread reply (`isCarrierReview`) is no review.
  */
 function teammateReviews(pr: Pr, viewer: Viewer, since: IsoTime | null = null): Review[] {
   const members = viewer.teamMembers;
@@ -162,6 +164,9 @@ function teammateReviews(pr: Pr, viewer: Viewer, since: IsoTime | null = null): 
       return false;
     }
     if (review.state === 'PENDING' || sameLogin(review.author, viewer.login) || isPrOwner(pr, review.author) || isBot(review.author)) {
+      return false;
+    }
+    if (isCarrierReview(review, pr)) {
       return false;
     }
     return members === undefined || members.some((member) => sameLogin(member, review.author));
@@ -196,7 +201,8 @@ function homeTeamTakenBy(pr: Pr, viewer: Viewer, since: IsoTime | null = null): 
  * Who reviewed the head, other than the viewer, the author, the owners
  * (`prOwners`) and bots. A
  * routing team's members are not known, so anyone's review of the head
- * takes its request (2026-09-30).
+ * takes its request (2026-09-30). A carrier review (`isCarrierReview`)
+ * reviews nothing.
  */
 function headReviewers(pr: Pr, viewer: Viewer, since: IsoTime | null = null): string[] {
   const reviews = pr.reviews.filter(
@@ -208,7 +214,8 @@ function headReviewers(pr: Pr, viewer: Viewer, since: IsoTime | null = null): st
       !sameLogin(review.author, viewer.login) &&
       !sameLogin(review.author, pr.author) &&
       !isPrOwner(pr, review.author) &&
-      !isBot(review.author),
+      !isBot(review.author) &&
+      !isCarrierReview(review, pr),
   );
   return uniqueAuthors(reviews);
 }
@@ -316,12 +323,15 @@ export function isPersonalRequest(request: ReviewRequest): boolean {
 /**
  * The viewer's newest review of the current head, or null. A pending review
  * is their unsent draft, and a dismissed one no longer counts as a review:
- * the request it answered is open again.
+ * the request it answered is open again. The empty review GitHub wraps a
+ * thread reply in (`isCarrierReview`) is no review either: a "fixed" to a
+ * review bot never reviews the PR (2026-10-06).
  */
 export function viewerHeadReview(pr: Pr, viewer: Viewer): Review | null {
   let newest: Review | null = null;
   for (const review of pr.reviews) {
-    if (!sameLogin(review.author, viewer.login) || review.state === 'PENDING' || review.state === 'DISMISSED' || review.commitOid !== pr.headOid) {
+    const skipped = review.state === 'PENDING' || review.state === 'DISMISSED' || review.commitOid !== pr.headOid || isCarrierReview(review, pr);
+    if (!sameLogin(review.author, viewer.login) || skipped) {
       continue;
     }
     if (newest === null || review.submittedAt >= newest.submittedAt) {

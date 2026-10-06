@@ -3226,9 +3226,47 @@ unread thread, went to the events agent.
   longer a loud comment on your PR, so it pings nobody and gets no second
   opinion. Replies to bots and carriers keep their loudness.
 - Not changed: the PR pane activity (a command is a quiet line of its
-  own), the headline ranking, "someone replies" snoozes, whose turn, and
-  your own command counting as you speaking on the PR. Those decide what
-  you see, not what an agent reads.
+  own), and a reply draft in a review thread (it reads the whole thread).
+
+**Bot talk answers nobody** (2026-10-06, for 0.23.0). The first version
+left the user-facing rules alone, so the viewer's own "@codex review" or
+"fixed" to greptile counted as them speaking on the PR: an older ask from a
+person turned "you already replied" and dropped off the list. A person
+talking to a bot (core `talksToBot`: a bot command or a reply in a bot-only
+thread) and a carrier review now never count as speaking, reviewing or
+answering:
+
+- Touch (`touchKindOf`): a chatter event is no touch, so `lastTouch`,
+  `READING_TOUCH_KINDS`, `eventsSeenByTouch`, "New since you looked", the
+  touched quiet read and an ask being answered (`isUnansweredAsk`) all
+  skip it ("You already dealt with it").
+- Speaking (`lastSpokeAt`): talk to a bot and carrier reviews are left
+  out, so "you already replied" loudness, review requests answered and the
+  changes answer read only what a person can read as an answer.
+  `changesAnswered.replied` needs an owner's real comment or review, and
+  the viewer's own bot command never moves `since`.
+- Reviews: a carrier is no review of the head (`viewerHeadReview`) and
+  does not take a team's request (`teammateReviews`, `headReviewers`): a
+  "fixed" to a bot never reviews the PR.
+- Whose turn: a thread whose last word is talk to a bot does not wait on
+  the viewer (`threadsWaitingOnViewer`).
+- Headline: chatter ranks with other people's quiet events (class 4),
+  never over a person's comment.
+- Snoozes: chatter never ends a "someone replies" snooze. Raised to loud,
+  it wakes a snooze like any loud event.
+- Lessons: the user's replies to bots stay out of a review's inline
+  comments, and a carrier does not cut off the comments before it
+  (`previousReviewAt`). Any thread reply the user sent on its own (the
+  replies a carrier holds, by `reviewId` when the snapshot has it) stays
+  out too, so a reply to a person between two reviews never joins the next
+  change request. A lesson stored with a reply to a bot is `trimmed`, not
+  edited: the engine stores the review without it (`setReview`) and keeps
+  the line, its status and its join.
+
+Property: bot talk by the author, an outsider or the viewer leaves whose
+turn, the open ask, the viewer's last touch, the changes answer, a
+person's headline and "someone replies" and mute snoozes as they were
+(`properties/bot-talk.test.ts`).
 
 **Glances written before** stay current. A new hash definition would
 make every stored glance of a PR with bot talk stale on update (20 of the
@@ -5618,7 +5656,9 @@ unread for days. Julian asked to make this general instead of a one-off.
 **"Acted" is the viewer's last touch**, the definition already agreed for
 "New since you looked" (`whatsNew`'s anchor): their review (approve, request
 changes, comment), a comment or thread reply, or a push to their own PR.
-Merging or closing counts only when the viewer did it.
+Merging or closing counts only when the viewer did it. Bot talk is no touch
+(2026-10-06): a bot command, a reply to a bot or a carrier review answers
+nobody ("Bot talk leaves agent work" › Bot talk answers nobody).
 
 1. *Tile*: every event before the viewer's last touch counts as seen by the
    rules. This generalizes two narrow rules that already existed (a review

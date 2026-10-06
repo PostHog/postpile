@@ -26,10 +26,16 @@ now".
   comments 3,599 → 922, reviews 2,997 → 763, events waiting for the events
   agent 1,430 → 935, memory triggers of the last week 3,898 → 2,017 (52
   dossier updates that week had only bot talk), 0 glances due on update.
-  Gaps, not agent work: "someone replies" snoozes and the headline still
-  treat a bot command like a comment; the viewer's own command counts as
-  them speaking on the PR (an older ask turns "you already replied");
-  lesson context can include the viewer's own replies to bots.
+- Bot talk answers nobody (2026-10-06, for 0.23.0; DESIGN.md "Bot talk
+  leaves agent work" › Bot talk answers nobody): core `talksToBot`;
+  chatter is no touch (`touchKindOf`), talk to a bot and carriers are not
+  speaking (`lastSpokeAt`: "you already replied", review requests,
+  `changesAnswered`), a carrier is no review (`viewerHeadReview`, team
+  takers), a thread ending in talk to a bot waits on nobody, chatter ranks
+  class 4 in the headline and never ends a "someone replies" snooze,
+  lessons leave the user's replies to bots out. Spec oracles follow
+  (`talksToBotSpec`); the bot-talk property now covers the viewer's own
+  bot talk and whose turn, asks, touch, headline and snoozes.
 - Board diet (2026-10-06, for 0.22.0; DESIGN.md "Big inboxes" › The board
   diet; step 5 of normalizing the PR snapshot, Later): board reads
   (`get`, `getMany`, `keepParsed`) leave out comment and review bodies no

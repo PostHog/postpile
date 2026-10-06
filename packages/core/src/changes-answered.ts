@@ -14,9 +14,9 @@ import type { EventKind, IsoTime, Pr, Viewer } from './types.ts';
 export interface ChangesAnswer {
   /** The author pushed commits (or force-pushed) after `since`. */
   pushed: boolean;
-  /** The author commented, reviewed or replied in a thread after `since`. */
+  /** The author commented, reviewed or replied in a thread after `since`; bot talk is no reply (`lastSpokeAt`). */
   replied: boolean;
-  /** The viewer's last word on the PR: their changes request, or a later comment or review. */
+  /** The viewer's last word on the PR: their changes request, or a later comment or review that is not bot talk. */
   since: IsoTime;
 }
 
