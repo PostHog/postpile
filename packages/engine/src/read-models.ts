@@ -704,7 +704,9 @@ export class ReadModels {
       pr: prPaneView(pr),
       status: prStatus(pr),
       fetchedAt: this.store.prs.fetchedAt(key),
-      activity: activityList(events, viewer, news?.anchor.at ?? null, pr, board.threads.get(key) ?? null),
+      // The activity list shows a folded bot review's comments by their first line and checks bot text for mentions of
+      // you: bodies the board leaves out, so it reads this one PR whole.
+      activity: activityList(events, viewer, news?.anchor.at ?? null, this.store.prs.getFull(key), board.threads.get(key) ?? null),
       whatsNew: news,
       glance,
       glanceStale: stale,

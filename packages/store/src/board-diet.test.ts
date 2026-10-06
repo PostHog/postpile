@@ -10,6 +10,7 @@ import { boardShape, canonicalPr, type FullComment, type FullPr } from '@postpil
 import { at, makeComment, makePr, makeReview } from '@postpile/core/fixtures';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DISCUSSION_READY_KEY, Store } from './index.ts';
+import { JS_WHITESPACE } from './repos/pr-rows.ts';
 
 let dir: string;
 let path: string;
@@ -134,4 +135,31 @@ describe('the board read', () => {
     const json = store.db.prepare('SELECT json FROM pr_snapshot WHERE key = ?').get(pr.key) as { json: string };
     expect(JSON.parse(json.json)).not.toHaveProperty('mentionedTeams');
   });
+
+  it('keeps an empty or whitespace bot body after the switch, as boardShape does', () => {
+    const pr = makePr({
+      comments: [
+        makeComment({ id: 'w1', author: 'coderabbitai[bot]', body: '\u00a0\n\u2003' }),
+        makeComment({ id: 'w2', author: 'coderabbitai[bot]', body: '\u00a0x' }),
+      ],
+    });
+    store.prs.upsert(pr, at(1));
+    switchToRows();
+    expect(store.prs.get(pr.key)?.comments.map((comment) => comment.body)).toEqual(['\u00a0\n\u2003', null]);
+    expect(store.prs.get(pr.key)).toEqual(boardShape(canonicalPr(pr)));
+  });
 });
+
+describe('JS_WHITESPACE', () => {
+  it('holds exactly the characters String.prototype.trim takes off', () => {
+    const trimmed: string[] = [];
+    for (let code = 0; code <= 0xffff; code += 1) {
+      const char = String.fromCharCode(code);
+      if (char.trim() === '') {
+        trimmed.push(char);
+      }
+    }
+    expect([...JS_WHITESPACE].sort()).toEqual(trimmed.sort());
+  });
+});
+
