@@ -279,9 +279,55 @@ class PrHistory {
       threadId,
     };
     this.comments.push(comment);
-    if (threadId !== null) {
+    if (threadId === null) {
+      return;
+    }
+    this.reviewThreads.set(threadId, [...(this.reviewThreads.get(threadId) ?? []), comment]);
+    if (step.review === 'linked' || step.review === 'unlinked') {
+      // Like GitHub: a thread comment sent on its own comes with an empty review, the same second.
+      const reviewId = this.id('rc', index);
+      this.reviews.push({ id: reviewId, author: comment.author, state: 'COMMENTED', body: '', submittedAt: time, commitOid: this.headOid });
+      if (step.review === 'linked') {
+        comment.reviewId = reviewId;
+      }
+      this.dropRequestOf(comment.author);
+    }
+  }
+
+  /** A submitted review answers its author's pending request, as on GitHub. */
+  private dropRequestOf(login: string): void {
+    const position = this.reviewerUsers.findIndex((user) => sameLogin(user, login));
+    if (position >= 0) {
+      this.reviewerUsers.splice(position, 1);
+    }
+  }
+
+  /** A COMMENTED review with inline comments in threads 0 up to `threads`, each opening its thread or answering in it. */
+  private inlineReview(step: Extract<StepSpec, { kind: 'inline_review' }>, index: number, time: string): void {
+    const login = LOGINS[step.by];
+    const id = this.id('rv', index);
+    const body = step.body ? COMMENT_BODIES[step.body] : '';
+    this.reviews.push({ id, author: login, state: 'COMMENTED', body, submittedAt: time, commitOid: this.headOid });
+    if (body !== '') {
+      this.comments.push({ id, author: login, body, createdAt: time, kind: 'review', url: `https://github.com/${PROPERTY_REPO}/pull/${this.number}#review-${index}`, path: null, threadId: null });
+    }
+    for (let thread = 0; thread < step.threads; thread += 1) {
+      const threadId = `rt${this.number}-${thread}`;
+      const comment: FullComment = {
+        id: `${this.id('cm', index)}-${thread}`,
+        author: login,
+        body: COMMENT_BODIES[step.text],
+        createdAt: time,
+        kind: 'review_comment',
+        url: `https://github.com/${PROPERTY_REPO}/pull/${this.number}#comment-${index}-${thread}`,
+        path: 'a.ts',
+        threadId,
+        ...(step.linked ? { reviewId: id } : {}),
+      };
+      this.comments.push(comment);
       this.reviewThreads.set(threadId, [...(this.reviewThreads.get(threadId) ?? []), comment]);
     }
+    this.dropRequestOf(login);
   }
 
   /** Edits an earlier comment in place (the thread holds the same object); a review body's review gets the new text too. */
@@ -316,10 +362,7 @@ class PrHistory {
       // Like the reader: a submitted review's body is also a comment of kind review, with the review's id.
       this.comments.push({ id, author: login, body, createdAt: time, kind: 'review', url: `https://github.com/${PROPERTY_REPO}/pull/${this.number}#review-${index}`, path: null, threadId: null });
     }
-    const position = this.reviewerUsers.findIndex((user) => sameLogin(user, login));
-    if (position >= 0) {
-      this.reviewerUsers.splice(position, 1);
-    }
+    this.dropRequestOf(login);
   }
 
   /** Merge queue and deploys, by the request bot; a draft never enters the queue. */
@@ -383,6 +426,9 @@ class PrHistory {
         break;
       case 'review':
         this.review(step, index, time);
+        break;
+      case 'inline_review':
+        this.inlineReview(step, index, time);
         break;
       case 'push':
         this.push(step, index, time);

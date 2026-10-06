@@ -295,15 +295,32 @@ function FoldedReplies(props: { replies: FoldedReply[] }) {
   );
 }
 
+/** The inline comments a bot-review line folds: each one's file in mono, then its first line. */
+function FoldedComments(props: { comments: FoldedReply[] }) {
+  return (
+    <div className="mt-1.5 flex flex-col gap-2 border-l border-hairline pl-2.5 font-normal select-text">
+      {props.comments.map((comment) => (
+        <div key={comment.id} className="flex flex-col">
+          <span className="truncate font-mono text-[11px] text-muted">{comment.path}</span>
+          <div className="break-words text-ink-2 [overflow-wrap:anywhere]">
+            <MarkdownText text={comment.body} compact />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /**
- * A person's replies to a bot in one review thread, folded into one quiet
- * line (core `ActivityLine.folded`, DESIGN.md "The PR pane"): a chevron in
- * the badge's spot, muted words, the file in mono, no unread dot, never in
- * "New since you looked". The whole line opens it to the replies.
- * Picked 2026-10-06 over a rail row with a "Show 2 replies" link (two lines
- * per thread) and a bare dotted link (no hint that it opens).
+ * A folded quiet line (core `ActivityLine.fold`, DESIGN.md "The PR pane"):
+ * a person's replies to a bot in one review thread, or a bot's review with
+ * its inline comments. A chevron in the badge's spot, muted words, a
+ * thread's file in mono, no unread dot, never in "New since you looked".
+ * The whole line opens it: to the replies, or to each comment's file and
+ * first line. Picked 2026-10-06 over a rail row with a "Show 2 replies"
+ * link (two lines per thread) and a bare dotted link (no hint that it opens).
  */
-function BotThreadLine(props: { line: ActivityLine; last: boolean }) {
+function FoldedLine(props: { line: ActivityLine; last: boolean }) {
   const now = useNow();
   const [open, setOpen] = useState(false);
   const { line } = props;
@@ -321,7 +338,7 @@ function BotThreadLine(props: { line: ActivityLine; last: boolean }) {
         <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="text-left hover:text-ink-2">
           <LineText summary={line.summary} actor={line.actor} path={line.thread?.path ?? null} actorClass="font-medium text-ink-2" />
         </button>
-        {open && <FoldedReplies replies={line.folded} />}
+        {open && (line.fold === 'bot_review' ? <FoldedComments comments={line.folded} /> : <FoldedReplies replies={line.folded} />)}
       </span>
       <span className="self-start pt-px font-mono text-[10.5px] text-faint">{ageLabel(line.at, now)}</span>
     </div>
@@ -362,8 +379,8 @@ export function ActivityTimeline(props: { activity: ActivityList; prKey: string 
       {empty && <span className="text-xs text-hint">No activity yet.</span>}
       {threadChangedAt !== null && <ThreadChangeRow at={threadChangedAt} last={lines.length === 0 && noise.length === 0} />}
       {shown.map((line, index) =>
-        line.folded.length > 0 ? (
-          <BotThreadLine key={line.id} line={line} last={index === shown.length - 1} />
+        line.fold !== null ? (
+          <FoldedLine key={line.id} line={line} last={index === shown.length - 1} />
         ) : (
           <TalkLine key={line.id} line={line} last={index === shown.length - 1} prKey={props.prKey} />
         ),

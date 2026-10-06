@@ -339,15 +339,26 @@ export function canonicalPr<T extends Discussion>(pr: T): T {
 }
 
 /**
- * A review's body on a board read: left out (null) unless a board rule
- * reads it (`isBodyReadByRules`), judged like the cut on save, with the
- * editor of its comment. The store applies this to the reviews it joined
- * from rows; `boardShape` to a whole PR.
+ * A body stays on a board read when a board rule reads it
+ * (`isBodyReadByRules`), and when it is empty or whitespace: whether a
+ * bot's review has text decides whether it only carries thread replies
+ * (`carriedReplies`), and an empty body costs nothing. So a body left out
+ * (null) always had text.
+ */
+function staysOnBoard(author: string, editor: string | null, body: string): boolean {
+  return isBodyReadByRules({ author, editor }) || body.trim() === '';
+}
+
+/**
+ * The reviews as a board read gives them: a body left out (null) unless it
+ * stays on the board (`staysOnBoard`), judged like the cut on save, with
+ * the editor of its review comment. The store applies this to the reviews
+ * it joined from rows; `boardShape` to a whole PR.
  */
 export function boardReviews(reviews: Review[], comments: Comment[]): Review[] {
   const editors = new Map(comments.map((comment) => [comment.id, comment.editor ?? null]));
   return reviews.map((review) => {
-    if (review.body === null || isBodyReadByRules({ author: review.author, editor: editors.get(review.id) ?? null })) {
+    if (review.body === null || staysOnBoard(review.author, editors.get(review.id) ?? null, review.body)) {
       return review;
     }
     return { ...review, body: null };
@@ -355,12 +366,13 @@ export function boardReviews(reviews: Review[], comments: Comment[]): Review[] {
 }
 
 function boardComment(comment: Comment): Comment {
-  return comment.body === null || isBodyReadByRules(comment) ? comment : { ...comment, body: null };
+  return comment.body === null || staysOnBoard(comment.author, comment.editor ?? null, comment.body) ? comment : { ...comment, body: null };
 }
 
 /**
  * What a board read returns for a stored PR (DESIGN.md "The board diet"):
- * every comment and review body no board rule reads left out (null), and
+ * every comment and review body with text no board rule reads left out
+ * (null), and
  * `mentionedTeams` from the bodies as stored. The store reads this shape
  * from rows (SQL `postpile_reads_body`) and from the json before the
  * switch alike, so a cached board copy never changes shape; tests hold the

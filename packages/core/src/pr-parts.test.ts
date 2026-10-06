@@ -239,10 +239,10 @@ describe('boardShape', () => {
     ],
   });
 
-  it('leaves out the bodies no board rule reads and keeps the rest', () => {
+  it('leaves out the bodies no board rule reads and keeps the rest, empty ones too', () => {
     const board = boardShape(pr);
     expect(board.comments.map((comment) => comment.body)).toEqual(['cc @acme/team-platform', null, '⏳ Testing', 'Preview ready @viewer', null, 'from a deleted account', null]);
-    expect(board.reviews.map((review) => review.body)).toEqual(['Looks good', null, null]);
+    expect(board.reviews.map((review) => review.body)).toEqual(['Looks good', null, '']);
     expect(board.body).toBe('Fixes the runner');
   });
 

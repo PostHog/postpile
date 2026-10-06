@@ -14,6 +14,7 @@ import {
   changesAnswer,
   isAutomationLogin,
   isBotThreadAnswer,
+  isCarrierEvent,
   isHomeTeam,
   isMachineComment,
   isOwner,
@@ -277,8 +278,12 @@ function loudnessOf(pr: Pr, viewer: Viewer, event: RawExpected): { loudness: Lou
     }
     return loud(LOUD_ADDRESSED[event.kind]!);
   }
+  // The empty review GitHub wraps thread replies in is no review: its replies speak for themselves (2026-10-06).
+  if (event.kind === 'review_commented' && event.sourceId !== undefined && isCarrierEvent(pr, { kind: event.kind, sourceId: event.sourceId })) {
+    return quiet('only carries replies in review threads');
+  }
   // Answering a review bot in its thread is housekeeping, even on the viewer's PR or as an answer to their changes request (2026-10-06).
-  if ((event.kind === 'comment' || event.kind === 'review_commented') && event.sourceId !== undefined && isBotThreadAnswer(pr, { kind: event.kind, sourceId: event.sourceId })) {
+  if (event.kind === 'comment' && event.sourceId !== undefined && isBotThreadAnswer(pr, { kind: event.kind, sourceId: event.sourceId })) {
     return quiet('replied to a bot in a review thread');
   }
   if (answersChanges(pr, viewer, event)) {

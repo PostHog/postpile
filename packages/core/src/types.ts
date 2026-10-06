@@ -77,8 +77,9 @@ export interface Comment {
    * Only for review_comment: the review it was submitted with (GitHub's
    * pullRequestReview). Missing when GitHub does not say, and on snapshots
    * stored before it was fetched (2026-10-06): never inferred from author or
-   * time. No rule reads it yet; the PR pane is to fold a review's inline
-   * comments under it.
+   * time. Read by `carrier-reviews.ts` (the empty review GitHub makes for a
+   * thread reply) and `bot-reviews.ts` (a bot's review folded with its
+   * inline comments).
    */
   reviewId?: string;
   /**

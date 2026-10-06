@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { prPaneView, type PrStatus, type FullReview } from '@postpile/core';
-import { at, makePr } from '@postpile/core/fixtures';
+import { at, makeComment, makePr, makeThread } from '@postpile/core/fixtures';
 import { approvedText, ICON_WORDS, mergeQueueWord, mergeStatus, reviewRows, reviewWord, rowStateWord, stackQueueWord } from './pr.ts';
 
 function review(author: string, state: FullReview['state'], minutes: number): FullReview {
@@ -22,6 +22,15 @@ describe('pr helpers', () => {
       { login: 'lyra', status: 'approved', at: at(10) },
       { login: 'acme/team-platform', status: 'requested', at: null },
     ]);
+  });
+
+  it('leaves out the empty reviews GitHub makes for thread replies', () => {
+    const thread = makeThread('t1', [
+      makeComment({ id: 'b1', author: 'nell', body: 'why?', createdAt: at(10), reviewId: 'nell-10' }),
+      makeComment({ id: 'l1', author: 'lyra', body: 'because', createdAt: at(20), reviewId: 'lyra-20' }),
+    ]);
+    const pr = prPaneView(makePr({ threads: [thread], comments: thread.comments, reviews: [review('nell', 'COMMENTED', 10), review('lyra', 'COMMENTED', 20)] }));
+    expect(reviewRows(pr)).toEqual([{ login: 'nell', status: 'commented', at: at(10) }]);
   });
 
   it('lets a later change request replace an approval', () => {

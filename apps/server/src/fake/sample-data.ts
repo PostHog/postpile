@@ -471,17 +471,19 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
     samplePr(clock, {
       number: 1857, title: 'Upgrade to Vite 7', author: 'lyra', state: 'MERGED',
       size: [120, 90, 14], openedHoursAgo: 50, mergedHoursAgo: 3,
-      // A review bot's threads, answered by the author: each "fixed" folds into
-      // one quiet line per thread in the activity list. In one bot thread nell
-      // asks you (a line of its own), and one thread is between people. GitHub
-      // wraps every thread reply in an empty review of its own, the same second.
+      // A review bot's review with 4 inline comments folds into one quiet line,
+      // and the author's answers fold into one quiet line per bot thread. In
+      // one bot thread nell asks you (a line of its own), and one thread is
+      // between people. GitHub wraps every thread reply in an empty review of
+      // its own, the same second: none of them shows as "reviewed".
       reviews: [
-        [GREPTILE, 'COMMENTED', 'Greptile summary: upgrades Vite to 7 and moves the test setup. 3 comments.', undefined, 30],
+        [GREPTILE, 'COMMENTED', 'Greptile summary: upgrades Vite to 7 and moves the test setup. 4 comments.', undefined, 30],
         ['lyra', 'COMMENTED', '', undefined, 28],
         ['lyra', 'COMMENTED', '', undefined, 27],
         ['lyra', 'COMMENTED', '', undefined, 26],
         ['nell', 'COMMENTED', '', undefined, 4],
         ['jude', 'APPROVED'],
+        ['lyra', 'COMMENTED', '', undefined, 24],
       ],
       comments: [{ id: 'issuecomment-6', author: 'jude', body: '@you are the stale snapshots gone after this?', hoursAgo: 2 }],
       threads: [
@@ -489,34 +491,39 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
           id: 'thread-1857-1',
           path: 'vite.config.ts',
           comments: [
-            { author: GREPTILE, body: '`build.target` drops es2019, so older Safari versions fail to load the bundle.', hoursAgo: 30 },
-            { author: 'lyra', body: 'Fixed, the target is back to es2019 for now.', hoursAgo: 28 },
+            { author: GREPTILE, body: '**logic:** `build.target` drops es2019, so older Safari versions fail to load the bundle.', hoursAgo: 30, review: 0 },
+            { author: 'lyra', body: 'Fixed, the target is back to es2019 for now.', hoursAgo: 28, review: 1 },
             { author: GREPTILE, body: 'Thanks, that resolves it.', hoursAgo: 27.9 },
-            { author: 'lyra', body: 'Also added a browserslist check to CI.', hoursAgo: 27 },
+            { author: 'lyra', body: 'Also added a browserslist check to CI.', hoursAgo: 27, review: 2 },
           ],
         },
         {
           id: 'thread-1857-2',
           path: 'src/test/setup.ts',
           comments: [
-            { author: GREPTILE, body: '`vi.useFakeTimers()` is never reset between tests.', hoursAgo: 30 },
-            { author: 'lyra', body: 'Moved the reset into afterEach.', hoursAgo: 26 },
+            { author: GREPTILE, body: '**logic:** `vi.useFakeTimers()` is never reset between tests.', hoursAgo: 30, review: 0 },
+            { author: 'lyra', body: 'Moved the reset into afterEach.', hoursAgo: 26, review: 3 },
           ],
         },
         {
           id: 'thread-1857-3',
           path: 'vite.config.ts',
           comments: [
-            { author: GREPTILE, body: 'The dev server port is hardcoded; the e2e config reads it from the environment.', hoursAgo: 30 },
-            { author: 'nell', body: '@you is the hardcoded port fine for the devbox?', hoursAgo: 4 },
+            { author: GREPTILE, body: '**style:** The dev server port is hardcoded; the e2e config reads it from the environment.', hoursAgo: 30, review: 0 },
+            { author: 'nell', body: '@you is the hardcoded port fine for the devbox?', hoursAgo: 4, review: 4 },
           ],
+        },
+        {
+          id: 'thread-1857-5',
+          path: 'package.json',
+          comments: [{ author: GREPTILE, body: '**style:** `vite-plugin-legacy` is no longer imported anywhere.', hoursAgo: 30, review: 0 }],
         },
         {
           id: 'thread-1857-4',
           path: 'scripts/check-snapshots.ts',
           comments: [
             { author: 'nell', body: 'Does this still need the old snapshot folder?', hoursAgo: 25 },
-            { author: 'lyra', body: 'No, it reads the new one since this PR.', hoursAgo: 24 },
+            { author: 'lyra', body: 'No, it reads the new one since this PR.', hoursAgo: 24, review: 6 },
           ],
         },
       ],
@@ -763,10 +770,12 @@ function buildEvents(clock: SampleClock): PrEvent[] {
       { kind: 'commits_pushed', actor: 'renovate[bot]', text: 'opened the PR', hoursAgo: 12, rule: 'quiet', isBot: true },
     ]),
     ...sampleEvents(clock, 1857, [
-      { kind: 'review_commented', actor: GREPTILE, text: 'reviewed: Greptile summary: upgrades Vite to 7 and moves the test setup. 3 comments.', hoursAgo: 30, rule: 'quiet', isBot: true, sourceId: 'review-1857-0', seen: true },
+      { kind: 'review_commented', actor: GREPTILE, text: 'reviewed: Greptile summary: upgrades Vite to 7 and moves the test setup. 4 comments.', hoursAgo: 30, rule: 'quiet', isBot: true, sourceId: 'review-1857-0', seen: true },
+      { kind: 'bot_comment', actor: GREPTILE, text: 'commented: Greptile summary: upgrades Vite to 7 and moves the test setup. 4 comments.', hoursAgo: 30, rule: 'quiet', isBot: true, sourceId: 'review-1857-0', seen: true },
       { kind: 'bot_comment', actor: GREPTILE, text: 'commented: `build.target` drops es2019', hoursAgo: 30, rule: 'quiet', isBot: true, sourceId: 'thread-1857-1-0', seen: true },
       { kind: 'bot_comment', actor: GREPTILE, text: 'commented: `vi.useFakeTimers()` is never reset between tests.', hoursAgo: 30, rule: 'quiet', isBot: true, sourceId: 'thread-1857-2-0', seen: true },
       { kind: 'bot_comment', actor: GREPTILE, text: 'commented: The dev server port is hardcoded', hoursAgo: 30, rule: 'quiet', isBot: true, sourceId: 'thread-1857-3-0', seen: true },
+      { kind: 'bot_comment', actor: GREPTILE, text: 'commented: `vite-plugin-legacy` is no longer imported anywhere.', hoursAgo: 30, rule: 'quiet', isBot: true, sourceId: 'thread-1857-5-0', seen: true },
       { kind: 'comment', actor: 'lyra', text: `replied to ${GREPTILE} on vite.config.ts: Fixed, the target is back to es2019 for now.`, hoursAgo: 28, rule: 'quiet', sourceId: 'thread-1857-1-1', seen: true },
       { kind: 'review_commented', actor: 'lyra', text: 'reviewed', hoursAgo: 28, rule: 'quiet', sourceId: 'review-1857-1', seen: true },
       { kind: 'bot_comment', actor: GREPTILE, text: 'commented: Thanks, that resolves it.', hoursAgo: 27.9, rule: 'quiet', isBot: true, sourceId: 'thread-1857-1-2', seen: true },
@@ -776,6 +785,7 @@ function buildEvents(clock: SampleClock): PrEvent[] {
       { kind: 'review_commented', actor: 'lyra', text: 'reviewed', hoursAgo: 26, rule: 'quiet', sourceId: 'review-1857-3', seen: true },
       { kind: 'comment', actor: 'nell', text: 'commented: Does this still need the old snapshot folder?', hoursAgo: 25, rule: 'quiet', sourceId: 'thread-1857-4-0', seen: true },
       { kind: 'comment', actor: 'lyra', text: 'replied to nell on scripts/check-snapshots.ts: No, it reads the new one since this PR.', hoursAgo: 24, rule: 'quiet', sourceId: 'thread-1857-4-1', seen: true },
+      { kind: 'review_commented', actor: 'lyra', text: 'reviewed', hoursAgo: 24, rule: 'quiet', sourceId: 'review-1857-6', seen: true },
       { kind: 'question_to_user', actor: 'nell', text: 'asked you: @you is the hardcoded port fine for the devbox?', hoursAgo: 4, rule: 'loud', sourceId: 'thread-1857-3-1' },
       { kind: 'review_commented', actor: 'nell', text: 'reviewed', hoursAgo: 4, rule: 'quiet', sourceId: 'review-1857-4' },
       { kind: 'merged', actor: 'lyra', text: 'merged it', hoursAgo: 3, rule: 'quiet', seen: true },

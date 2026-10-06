@@ -37,18 +37,37 @@ now".
   the file grows 1,284 → 1,403 MB (freed pages stay inside). Not tried by
   hand: the app on a real heavy database.
 
+- Carrier reviews and bot review folds (2026-10-06, for 0.22.0;
+  DESIGN.md "The PR pane" › Empty reviews that carry thread replies, A
+  bot's review, folded): core `carrier-reviews.ts` (`carriedReplies`,
+  `isCarrierReview`; by `Comment.reviewId`, author and time only for
+  comments without it) and `bot-reviews.ts` (`foldedBotReviewComments`,
+  `botReviewOf`). The empty review GitHub makes for a thread reply no
+  longer shows as "X reviewed" in any thread, in the activity or the
+  Reviews list (`prPaneView`), is quiet by rule ("only carries replies in
+  review threads") and ranks class 4 in the headline. A bot's COMMENTED
+  review whose inline comments each open a thread folds into one quiet
+  line, "greptile-apps[bot] reviewed · 4 inline comments"
+  (`ActivityLine.fold` `bot_review`, key `bot-review:<reviewId>`,
+  renderer `FoldedLine`), unless it mentions you. Spec: `sentWithReview`,
+  `isCarrier`, `botReviewFold` in `testing/spec-facts.ts`; the generator
+  sends thread comments with a carrier review (linked or by time) and has
+  an `inline_review` step; property `activityFoldsBotAnswers` now also
+  checks carriers and bot-review lines; new coverage labels. Sample: #1857
+  (4 greptile comments, lyra's replies in two threads, a human thread).
+  FYI: the coverage label "cleared with a move that stood before" sits
+  around 1% on any seed (0.65-1.3% measured with and without the new
+  steps), so a generator change can tip it.
 - Quiet bot threads (2026-10-06, for 0.22.0; DESIGN.md "The PR pane" ›
   Thread context and replies to bots): core `bot-threads.ts`
   (`threadReplyOf`, `isBotThreadReply`, `carriedBotThreadReplies`,
   `botThreadOf`). Thread replies say whom they answer and the file; a
   person's replies to a bot fold into one quiet line per thread
-  (`ActivityLine.folded`, renderer `BotThreadLine`), quiet by rule, ranked
+  (`ActivityLine.folded`, renderer `FoldedLine`), quiet by rule, ranked
   below comments in the headline, and they no longer end a "someone
   replies" snooze. Spec restated in `testing/spec-facts.ts`
   (`isBotThreadAnswer`), new property `activityFoldsBotAnswers`. Sample:
-  #1857 in fake mode. Gaps: the empty review of a reply in a thread
-  between people still shows as "alice reviewed" in the activity and in
-  the pane's Reviews list; whose turn still counts the author's reply to
+  #1857 in fake mode. Gap: whose turn still counts the author's reply to
   a bot as an answer to your changes request (`changesAnswered.replied`).
 - Mute until I'm mentioned (2026-10-05, for 0.21.0; DESIGN.md "Mute until
   I'm mentioned"): the Snooze menu's last item. A `muted` snooze per
@@ -1435,13 +1454,6 @@ the app meanwhile.
 
 ## Later
 
-- Fold a bot's review with its inline comments into one line,
-  "greptile-apps[bot] reviewed · 6 inline comments", once the thread
-  comments carry their review id (`Comment.reviewId`, PR
-  feat/devex-discussion-rows): a review key in `foldKeyOf`
-  (`activity.ts`), and `carriedBotThreadReplies` matches by id instead of
-  author and time. The same id can drop the empty "alice reviewed" next to
-  any thread reply, in the activity and the Reviews list.
 - Normalize the PR snapshot (started after 0.19.0; first this, then the
   `utilityProcess` move below). The short fields live in the PR header
   (`pr`, migration 028), the rest of each PR is one JSON blob in

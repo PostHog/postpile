@@ -2,20 +2,23 @@
 // body no board rule reads (`isBodyReadByRules`). Every rule a board runs
 // must answer the same on that shape (`boardShape`) as on the PR with every
 // body, over generated boards and the event corpus. Agent prompt text and
-// glance hashes are checked the same way in packages/agent.
+// glance hashes are checked the same way in packages/agent. The PR pane's
+// activity list is not a board rule: it shows a folded bot review's
+// comments and checks bot text for mentions, so it takes a `FullPr` (the
+// compiler holds it to that) and the pane reads its PR whole.
 // POSTPILE_PROPERTY_RUNS=10000 pnpm test runs more boards.
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { activityList } from '../activity.ts';
-import { botThreadOf } from '../bot-threads.ts';
+import { botThreadOf, carriedBotThreadReplies } from '../bot-threads.ts';
+import { carriedReplies, isCarrierReview } from '../carrier-reviews.ts';
 import { editMentionOf, isRoutingTeamMention } from '../events.ts';
 import { makeThreadFor, singleTile } from '../fixtures.ts';
 import { forWhom } from '../for-whom.ts';
 import { lookCloserPingCheck } from '../glance-pings.ts';
 import { headlineClass } from '../headline.ts';
-import { eventView } from '../loudness.ts';
 import { mergeQueueState } from '../merge-queue.ts';
 import { pingRule } from '../pings.ts';
+import { prPaneView } from '../pr-pane.ts';
 import { boardShape } from '../pr-parts.ts';
 import { prStatus } from '../pr-status.ts';
 import { judgedReadCheck, quietReadCheck, requestGoneReadCheck, touchedReadCheck } from '../quiet-reads.ts';
@@ -56,7 +59,12 @@ function prRuleOutputs(pr: Pr, events: PrEvent[], viewer: Viewer, thread: Notifi
       botThread: botThreadOf(event, pr),
       headline: headlineClass(event, pr, viewer),
     })),
-    activity: activityList(events.map(eventView), viewer, null, pr, thread),
+    reviews: pr.reviews.map((review) => ({
+      carrier: isCarrierReview(review, pr),
+      carried: carriedReplies(review, pr).map((comment) => comment.id),
+      botThread: carriedBotThreadReplies(review, pr).map((comment) => comment.id),
+    })),
+    pane: prPaneView(pr),
     whatsNew: whatsNew(pr, events, viewer),
     turn: whoseTurn({ tile: singleTile(pr), prs: new Map([[pr.key, pr]]), events: new Map([[pr.key, events]]), userStates: new Map(), viewer }),
     lookCloser: lookCloserPingCheck({ pr, viewer, glance: { verdict: 'LOOK_CLOSER' }, userState: null, snoozed: false, pingedRequestId: null }),

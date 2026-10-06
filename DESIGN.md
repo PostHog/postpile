@@ -530,8 +530,10 @@ comments, threads and reviews are child rows of the header
 - `review_id` on an inline comment: the review it was submitted with
   (GitHub's `pullRequestReview`, fetched since 0.22.0). NULL when not
   fetched: rows filled from older json have none, and it is never
-  inferred from author or time. No rule reads it yet; the activity view
-  is to fold a review's inline comments under it (NEXT.md).
+  inferred from author or time. The PR pane reads it to hide the empty
+  review GitHub makes for a thread reply and to fold a bot's review with
+  its inline comments ("The PR pane" › Thread context and replies to
+  bots).
 - `pr_thread` (id, ord, path, resolved) and `pr_review` (id, ord, author,
   state, submitted, commit, reacted, `own_body`), WITHOUT ROWID.
   `own_body` NULL means exactly: a same-PR, same-id `review` comment holds
@@ -2892,7 +2894,9 @@ thread, reading the diff.
   one is outlined. The opened mark's note ("✓ Marked read · Undo") takes
   the mark button's place, as before. With no review row (own PR, done PR)
   the line sits after the glance alone.
-- Description, facts, reviews, what the agent knows, then the activity
+- Description, facts, reviews (`ReviewList`: who reviewed, newest verdict
+  each, without the empty reviews GitHub makes for thread replies), what
+  the agent knows, then the activity
   (`ActivityTimeline`, label "Activity"): every line, new first, then
   earlier. A person's comment or review gets Reply (a button when it asks
   you, else a quiet link; "Reply in thread" on a code comment) and "Thumbs
@@ -2930,19 +2934,47 @@ thread, reading the diff.
     line instead of a second "reviewed" line.
   - Loudness: quiet by rule ("replied to a bot in a review thread", row
     before "addressed your changes" and the "comment / review on your PR"
-    rows), the empty review too. So no coral, no ping, no snooze break
+    rows); its empty review is quiet as a carrier (below). So no coral, no ping, no snooze break
     from it; the author's push still answers your changes request.
   - Headline: ranks with other people's events (class 4), below a person's
     comment, so it never leads a tile over real talk.
   - "Someone replies" snoozes: a reply to a bot does not end them.
   - GitHub read state is untouched: an unread thread stays unread, and the
     tile names the reply as its quiet reason when nothing else is new.
-  The empty review is matched to its reply by author and time (same
-  second, 2 s window) until the snapshot has the comment's review id.
-  Next, once that id lands: a bot's review and its inline comments fold
-  into one line, "greptile-apps[bot] reviewed · 6 inline comments"
-  (`foldKeyOf` in `activity.ts` takes a review key), and the review match
-  uses the id.
+- Empty reviews that carry thread replies (2026-10-06,
+  `carrier-reviews.ts`). GitHub wraps every thread reply in a review of
+  its own: COMMENTED, no body, the same second. Such a review whose every
+  inline comment answers in an existing thread is a carrier
+  (`isCarrierReview`), in any thread, people's too. It never shows as its
+  own "alice reviewed" line: in the activity it joins its reply's line
+  (a bot-thread fold, the ask's or the comment's line), and when the reply
+  has no line (muted) it goes to the noise; one the agent raised to loud
+  keeps a line. The Reviews list leaves it out (`prPaneView`, so MCP
+  `pr_context` too): "lyra commented" next to a reply is gone. Loudness:
+  quiet by rule ("only carries replies in review threads", row before
+  "addressed your changes" and "review on your PR"), so it is never a
+  review on your PR, never pings and never answers a changes request; its
+  reply carries the news. Headline: class 4, below the reply. Real reviews
+  stay: an approval, a changes request, a review with text, and one whose
+  comments start new threads (a single comment opening a thread too).
+  Matched by the comment's review id (`Comment.reviewId`); comments
+  without one (stored before 0.22.0, until refetched) fall back to author
+  and time (same second, 2 s window), and a comment that names a review
+  never matches another one by time.
+- A bot's review, folded (2026-10-06, `bot-reviews.ts`). A review bot
+  submits one COMMENTED review with an inline comment per finding, each
+  opening its own thread; that read as seven bot events in the noise. Now
+  one quiet line, "greptile-apps[bot] reviewed · 6 inline comments"
+  (`ActivityLine.fold` `bot_review`, fold key `bot-review:<reviewId>`),
+  placed at its newest event, holding the review, its text, its inline
+  comments and their edits. The whole line opens to each comment's file
+  in mono and its first line. Like other bot events: no unread dot, never
+  in "New since you looked", no Reply. Matched by review id only, so older
+  snapshots fold once refetched. Exceptions keep the normal lines (the
+  noise): a bot's approval or changes request, a review whose text or a
+  comment mentions you, one whose comments answer in existing threads, a
+  deleted account's, and events the agent raised or muted. People's
+  answers in those threads fold per thread as above.
 - "Back to top" floats at the pane's bottom while the review row has
   scrolled out above.
 

@@ -9,15 +9,17 @@ import { pingRule } from '../pings.ts';
 import { judgedReadCheck, quietReadCheck, requestGoneReadCheck, touchedReadCheck } from '../quiet-reads.ts';
 import { snoozePhase } from '../snooze.ts';
 // Test helpers over the raw snapshot: every stored body (`FullPr`).
-import type { NotificationThread, FullPr as Pr, PrEvent, PrKey } from '../types.ts';
+import type { NotificationThread, FullPr as Pr, PrEvent, PrKey, Review } from '../types.ts';
 import type { PrSummary, TileView } from '../views.ts';
 import type { BoardSpec, RequestTarget } from './board-spec.ts';
 import { buildBoard, tileViewsOf, type PropertyBoard } from './build-board.ts';
 import { describeTurn, ensure, eventsOf, isNews, fullPrOf, trackedRows, type Invariant } from './invariant.ts';
 import {
   answersBotInThread,
+  botReviewFold,
   inGitHubQueue,
   isBotThreadAnswer,
+  isCarrierEvent,
   isViewerLogin,
   isViewerRequestEvent,
   latestViewerRequestAt,
@@ -318,15 +320,33 @@ export const prIconMatchesTheSpec: Invariant = {
   },
 };
 
+/** The rule's loudness of an event, after an override. */
+function loudnessOf(event: PrEvent) {
+  return event.override ? event.override.loudness : event.ruleLoudness;
+}
+
+/** The review a bot's event belongs to when that review folds (`botReviewFold`): the review, its text, an inline comment or an edit of one. */
+function foldingBotReview(pr: Pr, event: PrEvent): Review | null {
+  if (!event.isBot) {
+    return null;
+  }
+  const reviewId = pr.reviews.some((review) => review.id === event.sourceId) ? event.sourceId : pr.comments.find((comment) => comment.id === event.sourceId)?.reviewId;
+  const review = pr.reviews.find((candidate) => candidate.id === reviewId);
+  return review !== undefined && botReviewFold(pr, review).length > 0 ? review : null;
+}
+
 /**
  * The activity list accounts for every event once (lines, where a push burst
- * or a bot thread stands for several, the noise and the fresh noise), and
- * folds people's quiet answers to bots (2026-10-06): a bot-thread line is
- * never new, never loud, has no unread dot and folds only comments that
- * answer bots in their thread; no quiet answer to a bot keeps a line of its own.
+ * or a fold stands for several, the noise and the fresh noise), and folds
+ * the quiet talk around review bots (2026-10-06): a folded line is never
+ * new, never loud and has no unread dot. A bot-thread line folds only
+ * comments that answer bots in their thread; a bot-review line holds
+ * exactly the review's inline comments; no quiet answer to a bot and no
+ * quiet empty review carrying thread replies keeps a line of its own, and no
+ * quiet event of a folding bot review stays in the noise.
  */
 export const activityFoldsBotAnswers: Invariant = {
-  name: 'the activity list shows every event once and folds quiet answers to bots',
+  name: 'the activity list shows every event once, folds quiet talk around bots and hides carrier reviews',
   check(board) {
     for (const [key, events] of board.events) {
       const pr = fullPrOf(board, key);
@@ -335,8 +355,10 @@ export const activityFoldsBotAnswers: Invariant = {
       const shown = lines.reduce((sum, line) => sum + line.eventCount, 0) + list.noise.length + list.freshNoise.length;
       ensure(shown === events.length, `${key}: the activity list shows ${shown} of ${events.length} events`);
       for (const line of lines) {
-        if (line.folded.length > 0) {
-          ensure(!line.isNew && !line.unseen && line.display !== 'loud', `${key}: bot-thread line ${line.id} is new, unread or loud`);
+        if (line.fold !== null) {
+          ensure(!line.isNew && !line.unseen && line.display !== 'loud', `${key}: folded line ${line.id} is new, unread or loud`);
+        }
+        if (line.fold === 'bot_thread') {
           const answers = line.folded.every((reply) => {
             const comment = pr.comments.find((candidate) => candidate.id === reply.id);
             return comment !== undefined && answersBotInThread(pr, comment);
@@ -344,9 +366,22 @@ export const activityFoldsBotAnswers: Invariant = {
           ensure(answers, `${key}: bot-thread line ${line.id} folds a comment that answers no bot`);
           continue;
         }
+        if (line.fold === 'bot_review') {
+          const reviewId = pr.comments.find((comment) => comment.id === line.folded[0]?.id)?.reviewId;
+          const review = pr.reviews.find((candidate) => candidate.id === reviewId);
+          const expected = review === undefined ? [] : botReviewFold(pr, review).map((comment) => comment.id);
+          ensure(expected.length > 0 && JSON.stringify(line.folded.map((comment) => comment.id)) === JSON.stringify(expected), `${key}: bot-review line ${line.id} folds ${line.folded.length} comments, expected ${expected.length}`);
+          continue;
+        }
         const event = line.eventCount === 1 ? events.find((candidate) => candidate.id === line.id) : undefined;
-        const loudness = event?.override ? event.override.loudness : event?.ruleLoudness;
-        ensure(event === undefined || loudness === 'loud' || !isBotThreadAnswer(pr, event), `${key}: quiet answer to a bot ${line.id} has a line of its own`);
+        const quiet = event !== undefined && loudnessOf(event) !== 'loud';
+        ensure(!quiet || !isBotThreadAnswer(pr, event), `${key}: quiet answer to a bot ${line.id} has a line of its own`);
+        ensure(!quiet || !isCarrierEvent(pr, event), `${key}: empty review ${line.id} that only carries thread replies has a line of its own`);
+      }
+      for (const item of [...list.noise, ...list.freshNoise]) {
+        const event = events.find((candidate) => candidate.id === item.id);
+        const folds = event !== undefined && loudnessOf(event) === 'quiet' && foldingBotReview(pr, event) !== null;
+        ensure(!folds, `${key}: ${item.id} of a folding bot review stays in the noise`);
       }
     }
   },
