@@ -17,7 +17,7 @@ describe('topic list queues', () => {
     const mine = makePr({
       number: 2,
       author: viewer.login,
-      reviews: [makeReview({ author: 'ada' }), makeReview({ author: 'lyra' })],
+      reviews: [makeReview({ id: 'r-ada', author: 'ada' }), makeReview({ id: 'r-lyra', author: 'lyra' })],
       comments: [makeComment({ author: 'dependabot[bot]' })],
     });
     const merged = makePr({ number: 3, author: 'lyra', state: 'MERGED' });
