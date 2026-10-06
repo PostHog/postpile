@@ -128,8 +128,8 @@ describe('the checks_strip job', () => {
     expect(store.meta.get(new ChecksStripJob().doneKey)).not.toBeNull();
   });
 
-  it('runs after the bot body trim', () => {
-    expect(storageJobs().map((job) => job.name)).toEqual(['bot_body_trim', 'checks_strip']);
+  it('runs after the bot body trim, before the discussion rows', () => {
+    expect(storageJobs().map((job) => job.name)).toEqual(['bot_body_trim', 'checks_strip', 'discussion_rows', 'snapshot_strip']);
   });
 });
 

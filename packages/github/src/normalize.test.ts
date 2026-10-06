@@ -349,3 +349,18 @@ describe('toPr and addOlderPage: bot bodies', () => {
     expect(older.comments.find((comment) => comment.id === 'IC0')?.body).toBe(short);
   });
 });
+
+describe('toPr: the review an inline comment belongs to', () => {
+  it('keeps the review id GitHub names, in the flat list and the thread, and leaves it out when GitHub does not say', () => {
+    const raw = rawPr();
+    const thread = raw.reviewThreads.nodes[0]!;
+    Object.assign(thread.comments.nodes[0]!, { pullRequestReview: { id: 'R1' } });
+    thread.comments.nodes.push({ ...thread.comments.nodes[0]!, id: 'RC-none', pullRequestReview: null });
+    const pr = toPr(ref, raw);
+    expect(pr.comments.find((comment) => comment.id === 'RC1')?.reviewId).toBe('R1');
+    expect(pr.threads[0]?.comments[0]?.reviewId).toBe('R1');
+    expect(pr.threads[0]?.comments[1]).not.toHaveProperty('reviewId');
+    // Fixtures written before it was asked for have no pullRequestReview at all.
+    expect(toPr(ref, rawPr()).comments.find((comment) => comment.id === 'RC1')).not.toHaveProperty('reviewId');
+  });
+});

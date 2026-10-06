@@ -59,6 +59,8 @@ export interface RawComment extends RawEdit, RawReactions {
   url: string;
   /** Review-thread comments only: PENDING or SUBMITTED. Missing in fixtures written before it was asked for. */
   state?: string;
+  /** Review-thread comments only: the review it was submitted with; null when GitHub does not say. Missing in fixtures written before it was asked for. */
+  pullRequestReview?: { id: string } | null;
 }
 
 export interface RawReview extends RawEdit, RawReactions {

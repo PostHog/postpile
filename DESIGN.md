@@ -492,7 +492,7 @@ pages. Now:
   oid, former base refs, fork, created, updated, merged and fetched
   times; arrays as JSON text). It is the existence authority (a PR is
   stored if and only if it has a header) and the parent of the normalized
-  model later (NEXT.md "Normalize the PR snapshot").
+  model (NEXT.md "Normalize the PR snapshot"; the discussion rows below).
 - `pr_snapshot` is the old table renamed, the json being phased out. Its
   own short columns are still written, for NOT NULL, but never read.
 - `PrRepo.upsert` writes the header, then the snapshot, in one
@@ -509,6 +509,92 @@ pages. Now:
   same keys, and rolls back whole on malformed json. It took 1.9 s on a
   copy of the heavy database with a warm page cache (a cold one could not
   be forced on the test machine; the json is read once).
+
+**PR storage: the discussion as rows** (migration 031, 2026-10-06, for
+0.22.0; schema and protocol checked with Codex GPT-6.1). The json held
+every inline comment twice (flat list and thread) and every review body
+twice (review and its comment), and a board parsed all of it. Now a PR's
+comments, threads and reviews are child rows of the header
+(`packages/store/src/repos/pr-rows.ts`, split and join in core
+`pr-parts.ts`):
+
+- `pr_comment`: one row per GitHub comment (issue comment, review body,
+  inline comment), keyed `(pr_key, id)`, body last, a rowid table. `ord`
+  is the index in `Pr.comments`, NULL for an inline comment only its
+  thread holds (read back outside the flat list); `thread_id` and
+  `thread_ord` place it in its thread. CHECKs: only `review_comment` rows
+  carry path, thread or review; positions are non-negative; flags are
+  0/1, NULL meaning not recorded. A unique index on `(pr_key, ord)` keeps
+  flat positions distinct and serves the ordered read: the one index
+  beyond the primary keys.
+- `review_id` on an inline comment: the review it was submitted with
+  (GitHub's `pullRequestReview`, fetched since 0.22.0). NULL when not
+  fetched: rows filled from older json have none, and it is never
+  inferred from author or time. No rule reads it yet; the activity view
+  is to fold a review's inline comments under it (NEXT.md).
+- `pr_thread` (id, ord, path, resolved) and `pr_review` (id, ord, author,
+  state, submitted, commit, reacted, `own_body`), WITHOUT ROWID.
+  `own_body` NULL means exactly: a same-PR, same-id `review` comment holds
+  the identical body. Every other body is stored there, '' included. A
+  review whose linked comment is missing is an integrity failure, never
+  an empty review.
+- `pr.rows_version`: which row model a PR's rows were written with,
+  cumulative (1: the discussion; version k covers every collection up to
+  k). `pr.mentioned_teams`: every "org/slug" the PR body or a comment of
+  the flat list mentions, from the stored (cut) bodies and with
+  `mentionsTeam`'s exact matching (core `teamMentions`, property-tested).
+  Nothing reads it yet; the board diet will, once bot bodies leave the
+  board.
+- Split and join check the data and throw `DiscussionError` instead of
+  picking a side: a comment twice in a list or in two threads, a thread
+  copy that differs from the flat copy, a thread comment naming another
+  thread, a duplicate id or position, rows in a thread that is not
+  stored. An upsert that does not hold together writes nothing. Missing
+  `lastEditedAt` / `editor` / `commitOid` read back as null (every rule
+  reads them `?? null`); `updatedAt`, `viewerReacted` and `reviewId` stay
+  missing when unknown.
+
+How the move goes (the protocol every later collection follows):
+
+1. **Dual-write.** Every upsert replaces the PR's rows (child INSERTs
+   prepared once and reused) and sets `rows_version`, in its transaction.
+2. **Backfill**, storage job `discussion_rows` (see "Storage jobs"): the
+   json of every PR still at version 0 becomes rows, no revision moves.
+3. **Switch.** The job's check passes only when no stored PR is below
+   version 1, and then sets meta `rows_ready:discussion` in the same
+   transaction. A missing, malformed or unsplittable snapshot keeps
+   version 0: it never counts as a PR without comments, and the switch
+   waits until a fetch stores that PR again.
+4. **Reads** take the flag, revisions, headers, the json and the rows in
+   one read transaction (`get` included), so a read-only CLI or MCP never
+   mixes two commits. Before the switch they parse the json; after it the
+   json minus the three lists (`json_remove` in SQL) plus the joined rows.
+   Cached copies stay valid across the switch: same revision, same
+   content. After the switch a header without rows is an integrity
+   failure like a header without its snapshot: left out of reads,
+   `fetchedAtByKey` and `updatedAtByKey`, so the sync fetches it again.
+5. **The json drops the lists.** Upserts after the switch leave them out;
+   storage job `snapshot_strip` removes them from older json.
+
+The trim job keeps reading through `nextAfter`, which reads the same
+hybrid shape, so it works on stripped json too. Builds before 0.20.0 have
+no newer-schema guard and would misread stripped json; downgrading that
+far is not supported. The simulation copies the rows with each header.
+
+Measured on `.backup` copies brought to 0.21.0 by the 0.21.0 code, then
+upgraded (Node 24.21, SQLite 3.53.4): every PR read from rows equals its
+json read (canonical form), `deriveEvents` and glance input hashes are
+identical for all of them.
+
+| copy | PRs | used before → after | file before → after | hot set heap / read |
+|---|---|---|---|---|
+| normal | 809 | 97 → 89 MB | 119 → 127 MB | 77 → 53 MB (all PRs), 83 → 73 ms |
+| heavy (14x) | 11,326 | 979 → 873 MB | 1,284 → 1,403 MB | 212 → 137 MB (1,500 PRs), 224 → 179 ms |
+
+The rows are written before the strip frees the json, so the file grows
+by about the rows' size not covered by free pages already in it (heavy:
+rows ~424 MB, 304 MB free before, 530 MB free after). No VACUUM: SQLite
+reuses the pages.
 
 `PrRepo.listHeaders` reads `pr` alone, with each PR's newest event time
 from the `(pr_key, at, id)` index: 11k headers in about 60 ms. Stacks over
@@ -2959,8 +3045,10 @@ as a storage job, never in a numbered migration: a migration runs at
 startup in one transaction on Electron's main thread, and on a heavy
 install that is seconds of a frozen app and a WAL the size of the rewrite.
 The bot body trim is job 1, the strip of the old checks (`checks_strip`,
-"CI is not tracked") job 2; the PR snapshot normalization (NEXT.md) adds
-its backfills and strips as later jobs. Code in
+"CI is not tracked") job 2, the discussion backfill (`discussion_rows`)
+job 3 and the strip of the discussion from the json (`snapshot_strip`)
+job 4 ("PR storage: the discussion as rows"); later phases of the PR
+snapshot normalization (NEXT.md) append theirs. Code in
 `packages/engine/src/storage-jobs/`: `runner.ts` (`StorageJobRunner`),
 `jobs.ts` (the ordered list), one file per job. Checked with Codex
 GPT-6.1 (2026-10-05).
@@ -3017,6 +3105,16 @@ GPT-6.1 (2026-10-05).
   checkpoints back, all on the main thread. SQLite's automatic checkpoint
   and `journal_size_limit` (64 MB) keep the WAL small; it peaked at 9 MB
   on the heavy copy. 0.19.0's trim emptied it at the end.
+- **`afterDone`**: a job may run work after its done transaction
+  committed, outside any transaction. Only `snapshot_strip` does: a
+  TRUNCATE checkpoint with busy timeout 0 (`Store.checkpointWal`), since
+  it rewrote most of the json. Without a reader in the way it found the
+  WAL already copied and took 1 to 12 ms. With a reader held through both
+  jobs on the heavy copy the WAL grew to 638 MB (`journal_size_limit`
+  acts only when the WAL resets) and the checkpoint gave up in 6 ms; the
+  first checkpoint after the reader let go took 0.66 s. That cost belongs
+  to any long reader, not to this call, and the app holds none: CLI and
+  MCP reads are short transactions.
 - **A failing unit** rolls its slice back; the runner logs it and stops
   until the next start.
 
@@ -3027,6 +3125,17 @@ bot body trim with real timers):
 |---|---|---|---|---|---|---|---|
 | normal | 809 | 643 | 14 | 35 / 40 / 41 ms | 0.43 s | 1.1 s | 8 MB |
 | heavy (14x) | 11,326 | 9,002 | 190 | 31 / 40 / 46 ms | 5.9 s | 16 s | 10 MB |
+
+The discussion jobs on the same copies after a 0.21.0 install's jobs
+(2026-10-06; slice maxima varied between runs on a loaded machine, 44 to
+67 ms on heavy):
+
+| copy | job | units | work | wall | longest slice | peak WAL |
+|---|---|---|---|---|---|---|
+| normal | discussion_rows | 809 | 0.32 s | 0.83 s | 48 ms | 8 MB |
+| normal | snapshot_strip | 809 | 0.08 s | 0.13 s | 47 ms | 8 MB |
+| heavy (14x) | discussion_rows | 11,326 | 6.0 s | 15.9 s | 67 ms | 9 MB |
+| heavy (14x) | snapshot_strip | 11,326 | 1.2 s | 3.0 s | 55 ms | 9 MB |
 
 Without the commit allowance the normal copy's slices ran 47 ms at the
 median. The WAL stays at its peak size afterwards and is reused.

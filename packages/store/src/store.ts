@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { inImmediateTransaction, inTransaction, openDatabase, openDatabaseReadOnly } from './database.ts';
+import { checkpointWal, inImmediateTransaction, inTransaction, openDatabase, openDatabaseReadOnly } from './database.ts';
 import { one } from './sql.ts';
 import { ActionLogRepo } from './repos/action-log.ts';
 import { AgentCallRepo } from './repos/agent-calls.ts';
@@ -129,6 +129,11 @@ export class Store {
    */
   immediateTransaction<T>(lockWaitMs: number, fn: () => T): T {
     return inImmediateTransaction(this.db, lockWaitMs, fn);
+  }
+
+  /** Copies the WAL into the file and truncates it, without waiting on other connections (checkpointWal); true when it got through. */
+  checkpointWal(): boolean {
+    return checkpointWal(this.db);
   }
 
   close(): void {

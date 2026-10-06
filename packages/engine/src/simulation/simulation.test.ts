@@ -3,9 +3,9 @@ import { copyFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { newTopic } from '@postpile/core';
-import { makeThreadFor } from '@postpile/core/fixtures';
-import { Store } from '@postpile/store';
+import { canonicalPr, newTopic } from '@postpile/core';
+import { at, makeComment, makePr, makeReview, makeThreadFor } from '@postpile/core/fixtures';
+import { DISCUSSION_READY_KEY, Store } from '@postpile/store';
 import { contextHashKey } from '../digest/dossiers.ts';
 import { REJUDGE_ASKS_KEY } from '../digest/event-batches.ts';
 import { glanceGapKey } from '../digest/glance-batches.ts';
@@ -133,6 +133,31 @@ describe('ArmDatabase', () => {
     expect(revealed.length).toBe(arm.store.events.listForPr(PR1.key).length);
     expect(revealed.length).toBeGreaterThan(0);
     expect(Math.min(...revealed.map((entry) => entry.seq))).toBeGreaterThan(baseMaxSeq);
+    arm.close();
+  });
+
+  it('reveals a PR with its discussion rows, so a header never arrives without them', () => {
+    const inline = makeComment({ id: 'rc1', kind: 'review_comment', threadId: 't1', path: 'a.ts' });
+    const pr = makePr({
+      number: 7,
+      comments: [makeComment({ id: 'c1' }), makeComment({ id: 'rv1', kind: 'review', body: 'nit' }), inline],
+      threads: [{ id: 't1', path: 'a.ts', isResolved: false, comments: [inline] }],
+      reviews: [makeReview({ id: 'rv1', state: 'COMMENTED', body: 'nit' })],
+    });
+    const base = join(dir, 'source.sqlite');
+    const source = Store.open(base);
+    source.prs.upsert(pr, at(1));
+    source.meta.set(DISCUSSION_READY_KEY, at(2));
+    source.close();
+    copyFileSync(base, join(dir, 'arm.sqlite'));
+    const arm = ArmDatabase.open(join(dir, 'arm.sqlite'));
+    arm.hidePrs();
+    expect(['pr_comment', 'pr_thread', 'pr_review'].map((table) => count(arm.store, table))).toEqual([0, 0, 0]);
+
+    arm.reveal(base, { pinged: [pr.key], found: [], pulledIn: [] });
+
+    expect(['pr_comment', 'pr_thread', 'pr_review'].map((table) => count(arm.store, table))).toEqual([3, 1, 1]);
+    expect(arm.store.prs.get(pr.key)).toEqual(canonicalPr(pr));
     arm.close();
   });
 

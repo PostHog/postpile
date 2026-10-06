@@ -4,7 +4,7 @@
 // a job walks the store in small units, a slice of units per transaction,
 // with pauses between slices and none while foreground work runs. One job
 // at a time, in order, each resuming where a quit left it.
-import type { StorageJobName, Timers } from '@postpile/core';
+import type { IsoTime, StorageJobName, Timers } from '@postpile/core';
 import { isBusyError, type Store } from '@postpile/store';
 import { errorText } from '../errors.ts';
 
@@ -61,12 +61,18 @@ export interface StorageJob {
   /**
    * In the transaction that found nothing left: checks from the data that
    * the job is complete and, only then, switches what depends on it
-   * (readiness flags). Only 'done' marks it done. 'again' walks it once
-   * more from the start and must leave every switch unset, since it
-   * commits; a second 'again' leaves it incomplete, and the jobs after it
-   * wait.
+   * (readiness flags, set to `at`). Only 'done' marks it done. 'again'
+   * walks it once more from the start and must leave every switch unset,
+   * since it commits; a second 'again' leaves it incomplete, and the jobs
+   * after it wait.
    */
-  complete(store: Store): 'done' | 'again';
+  complete(store: Store, at: IsoTime): 'done' | 'again';
+  /**
+   * After the transaction that marked it done committed, outside any
+   * transaction: work SQLite cannot do inside one, like snapshot_strip's
+   * WAL checkpoint. Must not throw.
+   */
+  afterDone?(store: Store): void;
 }
 
 /** What a finished job did in this run (a job resumed after a quit counts only what was left). */
@@ -166,7 +172,7 @@ export class StorageJobRunner {
     const { store } = this.deps;
     const at = this.deps.now().toISOString();
     store.meta.delete(job.cursorKey);
-    if (job.complete(store) === 'done') {
+    if (job.complete(store, at) === 'done') {
       store.meta.set(job.doneKey, at);
       store.meta.delete(incompleteKey(job));
       return 'done';
@@ -249,8 +255,12 @@ export class StorageJobRunner {
       throw error;
     }
     this.commitMs = (this.commitMs + timers.now() - unitsEnded) / 2;
-    // No checkpoint of its own at the end: one call could copy and sync a WAL that grew while a
+    // No checkpoint of the runner's own at the end: one call could copy and sync a WAL that grew while a
     // reader held checkpoints back. SQLite's automatic checkpoint and journal_size_limit keep it small.
+    // A job that rewrote most of the file may ask for one (afterDone); its time counts as the slice's.
+    if (work.end === 'done') {
+      job.afterDone?.(store);
+    }
     const progress = this.noteSlice(job, started, work);
     if (work.end === 'done') {
       this.finish(progress);

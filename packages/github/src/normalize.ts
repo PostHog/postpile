@@ -224,6 +224,12 @@ function isPending(raw: { state?: string }): boolean {
   return raw.state === 'PENDING';
 }
 
+/** The review an inline comment was submitted with, as `reviewId`; left out when GitHub does not say, never guessed. */
+function toReviewId(raw: RawComment): Pick<Comment, 'reviewId'> {
+  const id = raw.pullRequestReview?.id;
+  return id ? { reviewId: id } : {};
+}
+
 function toThread(raw: RawReviewThread): ReviewThread {
   const submitted = raw.comments.nodes.filter((c) => !isPending(c));
   const comments: Comment[] = submitted.map((c) => ({
@@ -235,6 +241,7 @@ function toThread(raw: RawReviewThread): ReviewThread {
     url: c.url,
     path: raw.path,
     threadId: raw.id,
+    ...toReviewId(c),
     ...toEdit(c),
     ...toReacted(c),
   }));

@@ -9,6 +9,8 @@ export * from './bot-bodies.ts';
 export * from './pr-owners.ts';
 export * from './kinds.ts';
 export * from './mentions.ts';
+export * from './team-mentions.ts';
+export * from './pr-parts.ts';
 export * from './reply.ts';
 export * from './team-roles.ts';
 export * from './provenance.ts';
