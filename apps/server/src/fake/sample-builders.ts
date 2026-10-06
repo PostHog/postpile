@@ -109,7 +109,7 @@ function sampleReviewDecision(reviews: [string, ReviewState, string?, string?, n
 function reviewBodyComments(reviews: FullReview[], url: string): FullComment[] {
   return reviews
     .filter((review) => review.body.trim() !== '')
-    .map((review) => ({ id: review.id, author: review.author, body: review.body, createdAt: review.submittedAt, kind: 'review' as const, url: `${url}#${review.id}`, path: null, threadId: null }));
+    .map((review) => ({ id: review.id, author: review.author, body: review.body, createdAt: review.submittedAt, kind: 'review' as const, url: review.url ?? `${url}#${review.id}`, path: null, threadId: null }));
 }
 
 export function samplePr(clock: SampleClock, input: SamplePrInput): FullPr {
@@ -126,6 +126,7 @@ export function samplePr(clock: SampleClock, input: SamplePrInput): FullPr {
     body: body ?? '',
     submittedAt: clock.hoursAgo(hoursAgo ?? 1),
     commitOid: commitOid ?? headOid,
+    url: `${url}#review-${input.number}-${index}`,
   }));
   const issueComments: FullComment[] = (input.comments ?? []).map((comment) => ({
     id: comment.id,
@@ -219,6 +220,29 @@ export interface SampleEventInput {
   chatter?: boolean;
 }
 
+/** Sample events that stand for a timeline item: like the reader's, they have no link. */
+const TIMELINE_KINDS: readonly EventKind[] = [
+  'review_requested',
+  'review_request_removed',
+  'merged',
+  'merged_without_review',
+  'closed',
+  'reopened',
+  'ready_for_review',
+  'converted_to_draft',
+  'force_pushed',
+  'merge_queue',
+];
+
+/** Like `deriveEvents`: a commit page for a push, the comment or review anchor for the rest, none for a timeline item. */
+function sampleEventUrl(number: number, kind: EventKind, sourceId: string): string | null {
+  if (TIMELINE_KINDS.includes(kind)) {
+    return null;
+  }
+  const prUrl = `https://github.com/${sampleRepo(number)}/pull/${number}`;
+  return kind === 'commits_pushed' || kind === 'commits_after_approval' ? `${prUrl}/commits/${sourceId}` : `${prUrl}#${sourceId}`;
+}
+
 export function sampleEvents(clock: SampleClock, number: number, inputs: SampleEventInput[]): PrEvent[] {
   const key = sampleKey(number);
   return inputs.map((input, index) => {
@@ -232,7 +256,7 @@ export function sampleEvents(clock: SampleClock, number: number, inputs: SampleE
       isBot: input.isBot ?? false,
       at,
       summary: `${input.actor} ${input.text}`,
-      url: null,
+      url: sampleEventUrl(number, input.kind, sourceId),
       sourceId,
       ruleLoudness: input.rule,
       ruleReason: 'sample data',

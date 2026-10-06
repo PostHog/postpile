@@ -169,6 +169,7 @@ function toReview(raw: RawReview): FullReview {
     body: storedBody(raw),
     submittedAt: isoTime(raw.submittedAt ?? raw.createdAt),
     commitOid: raw.commit?.oid ?? null,
+    url: raw.url,
     ...toReacted(raw),
   };
 }

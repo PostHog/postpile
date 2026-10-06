@@ -10,7 +10,7 @@ import { mentionsAnyTeam, mentionsTeam, mentionsUser, sameLogin } from './mentio
 import { isPrOwner } from './pr-owners.ts';
 import { homeTeamsOf, isRoutingTeam, teamsHomeFirst } from './team-roles.ts';
 import { viewerAskedToReview } from './review-request.ts';
-import type { Comment, EventKind, FullComment, FullPr, IsoTime, Pr, PrEvent, TimelineItem, UserPrState, Viewer } from './types.ts';
+import type { Comment, EventKind, FullComment, FullPr, FullReview, IsoTime, Pr, PrEvent, ReviewState, TimelineItem, UserPrState, Viewer } from './types.ts';
 
 /** What deriveEvents knows about an event before it gets classified. */
 interface RawEvent {
@@ -157,6 +157,15 @@ function isChatterComment(comment: FullComment, pr: Pr, viewer: Viewer): boolean
   return !asks && (isBotThreadReply(comment, pr) || isBotCommand(comment));
 }
 
+/** The review states that get an event of their own (`reviewEvents`). */
+const REVIEW_EVENT_STATES: readonly ReviewState[] = ['APPROVED', 'CHANGES_REQUESTED', 'COMMENTED'];
+
+/** A review body whose review has its own event: the body comment shares the review's id. */
+function hasReviewEvent(comment: Comment, pr: Pr): boolean {
+  const review = pr.reviews.find((candidate) => candidate.id === comment.id);
+  return review !== undefined && REVIEW_EVENT_STATES.includes(review.state);
+}
+
 function commentEvent(comment: FullComment, pr: Pr, viewer: Viewer): RawEvent | null {
   const machine = isMachineComment(comment);
   let kind: EventKind | null;
@@ -165,12 +174,15 @@ function commentEvent(comment: FullComment, pr: Pr, viewer: Viewer): RawEvent | 
     // bodies were cut must derive the same kind (part of the event id) as one cut on save.
     kind = deployBody.test(trimBotBody(comment)) ? 'deploy' : 'bot_comment';
   } else if (sameLogin(comment.author, viewer.login)) {
-    kind = 'comment';
+    // The viewer's own review body is part of their review event, never a
+    // second "commented" line next to it. A dismissed review has no event,
+    // so its body still stands for what the viewer said.
+    kind = comment.kind === 'review' && hasReviewEvent(comment, pr) ? null : 'comment';
   } else {
     kind = addressedKind(comment, pr, viewer);
   }
-  // A review body without anything addressed to the viewer is already
-  // covered by the review event itself.
+  // A review body without anything addressed to the viewer (and the
+  // viewer's own) is already covered by the review event itself.
   if (kind === null && comment.kind === 'review') {
     return null;
   }
@@ -282,6 +294,15 @@ function editEvent(comment: FullComment, pr: Pr, viewer: Viewer): RawEvent | nul
   };
 }
 
+/** A review's permalink: its own, else its body comment's (reviews stored before 0.25.0 have none), else null. */
+function reviewUrl(review: FullReview, pr: FullPr): string | null {
+  if (review.url) {
+    return review.url;
+  }
+  const body = pr.comments.find((comment) => comment.id === review.id && comment.kind === 'review');
+  return body?.url ?? null;
+}
+
 function reviewEvents(pr: FullPr): RawEvent[] {
   const events: RawEvent[] = [];
   for (const review of pr.reviews) {
@@ -305,7 +326,7 @@ function reviewEvents(pr: FullPr): RawEvent[] {
       isBot: isBot(review.author),
       at: review.submittedAt,
       summary: withText(`${review.author} ${verb}`, review.body),
-      url: null,
+      url: reviewUrl(review, pr),
       sourceId: review.id,
       subject: null,
       carrierReview: isCarrierReview(review, pr),
@@ -352,7 +373,7 @@ function commitEvents(pr: Pr, viewer: Viewer, userState: UserPrState | null): Ra
     isBot: isBot(commit.author),
     at: commit.committedAt,
     summary: `${commit.author} pushed: ${oneLine(commit.headline)}`,
-    url: null,
+    url: `${pr.url}/commits/${commit.oid}`,
     sourceId: commit.oid,
     subject: null,
   }));

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { deriveEvents } from './events.ts';
-import { at, makeEvent, makePr, makeTimelineItem, viewer } from './fixtures.ts';
+import { at, makeEvent, makePr, makeReview, makeTimelineItem, viewer } from './fixtures.ts';
 import { isLiveConversation, isPersonalPing, pingClickTarget, pingRule, pingTemplate, type PrPlace } from './pings.ts';
 import type { EventKind, Loudness, FullPr as Pr, Viewer } from './types.ts';
 import { prWhoseTurn } from './whose-turn.ts';
@@ -251,6 +251,13 @@ describe('isLiveConversation', () => {
     expect(isLiveConversation(answer, pr, [approval, answer], viewer)).toBe(false);
     const plain = makeEvent({ id: 'plain', kind: 'comment', actor: 'bob', at: '2026-09-02T10:30:00.000Z' });
     expect(isLiveConversation(plain, pr, [ownComment, plain], viewer)).toBe(false);
+  });
+
+  it('counts an approval with a body as talking, though its body has no comment event', () => {
+    const approvedPr = makePr({ reviews: [makeReview({ id: 'ok', author: viewer.login, state: 'APPROVED', body: 'Ship it, one nit inline.' })] });
+    const approval = makeEvent({ id: 'approval', kind: 'review_approved', actor: viewer.login, sourceId: 'ok', at: '2026-09-02T10:00:00.000Z' });
+    const answer = reply('2026-09-02T10:30:00.000Z');
+    expect(isLiveConversation(answer, approvedPr, [approval, answer], viewer)).toBe(true);
   });
 });
 

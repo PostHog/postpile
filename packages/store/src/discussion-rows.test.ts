@@ -47,7 +47,7 @@ function discussedPr(number: number, overrides: Partial<FullPr> = {}): FullPr {
       inline,
     ],
     threads: [{ id: `t${number}`, path: 'src/a.ts', isResolved: true, comments: [inline] }],
-    reviews: [makeReview({ id: `rv${number}`, state: 'COMMENTED', body: 'Two nits', submittedAt: at(12), viewerReacted: true }), makeReview({ id: `ra${number}`, body: '' })],
+    reviews: [makeReview({ id: `rv${number}`, state: 'COMMENTED', body: 'Two nits', submittedAt: at(12), viewerReacted: true, url: `https://github.com/acme/app/pull/${number}#pullrequestreview-${number}` }), makeReview({ id: `ra${number}`, body: '' })],
     ...overrides,
   });
 }
