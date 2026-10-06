@@ -33,6 +33,8 @@ export interface LoudnessInput {
   botThreadReply?: boolean;
   /** review_commented: an empty review GitHub made to carry thread replies (`isCarrierReview`). */
   carrierReview?: boolean;
+  /** comment: a person's command for a bot, "@codex review" (`isBotCommand`). */
+  botCommand?: boolean;
 }
 
 export interface LoudnessDecision {
@@ -188,6 +190,13 @@ export const LOUDNESS_TABLE: readonly LoudnessRow[] = [
     when: (input) => input.kind === 'comment' && input.botThreadReply === true,
     loudness: 'quiet',
     reason: 'replied to a bot in a review thread',
+  },
+  {
+    // "@codex review", "/trunk merge": a person telling a bot what to do, on any PR (2026-10-06). One that mentions or answers the viewer has an ask's kind and stays loud above.
+    name: 'command for a bot',
+    when: (input) => input.kind === 'comment' && input.botCommand === true,
+    loudness: 'quiet',
+    reason: 'a command for a bot',
   },
   {
     // The author pushed or replied after the viewer asked for changes: that is aimed at the viewer.

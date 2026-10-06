@@ -1,4 +1,4 @@
-import { isMachineComment } from './bots.ts';
+import { isBotTalk } from './bot-talk.ts';
 import { mentionsUser } from './mentions.ts';
 import type { Comment, FullComment, FullPr, Pr } from './types.ts';
 
@@ -77,7 +77,10 @@ export function withViewerReaction(pr: FullPr, id: string): FullPr {
 /**
  * What the agent reads besides the comment when drafting a reply, oldest
  * first and including the comment: its whole review thread for an inline
- * comment, else the human conversation around it (a few before, a few after).
+ * comment, else the human conversation around it (a few before, a few after),
+ * without bot talk ("@codex review", `isBotTalk`). A thread stays whole, bots
+ * included: a review bot's finding is what its thread is about, and a reply
+ * there answers it.
  */
 export function replyConversation(pr: FullPr, comment: FullComment): FullComment[] {
   const target = replyTarget(comment);
@@ -85,7 +88,7 @@ export function replyConversation(pr: FullPr, comment: FullComment): FullComment
     const thread = pr.threads.find((candidate) => candidate.id === target.threadId);
     return thread ? thread.comments : [comment];
   }
-  const conversation = pr.comments.filter((candidate) => candidate.kind !== 'review_comment' && (candidate.id === comment.id || !isMachineComment(candidate)));
+  const conversation = pr.comments.filter((candidate) => candidate.kind !== 'review_comment' && (candidate.id === comment.id || !isBotTalk(candidate, pr)));
   const at = conversation.findIndex((candidate) => candidate.id === comment.id);
   if (at === -1) {
     return [comment];

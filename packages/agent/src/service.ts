@@ -692,8 +692,10 @@ export interface AgentService {
   reconcileFacts(input: FactReconcileInput): Promise<ReconcileAction[]>;
   /** Per PR, independent of the other PRs in the batch. Not the dossier version (2026-10-05). */
   glanceItemInputHash(input: GlanceBatchInput, item: GlanceBatchItem): string;
-  /** The hash glances carried before 2026-10-05, with the dossier version: still accepted as current. */
-  legacyGlanceItemInputHash(input: GlanceBatchInput, item: GlanceBatchItem): string;
+  /** The hash glances written before 2026-10-06 carry, bot talk counted as it stood at `writtenAt`: still accepted as current. */
+  glanceItemInputHashWithBotTalk(input: GlanceBatchInput, item: GlanceBatchItem, writtenAt: IsoTime): string;
+  /** The hash glances carried before 2026-10-05, with the dossier version and bot talk as of `writtenAt`: still accepted as current. */
+  legacyGlanceItemInputHash(input: GlanceBatchInput, item: GlanceBatchItem, writtenAt: IsoTime): string;
   glanceBatch(input: GlanceBatchInput): Promise<GlanceBatchResult>;
   classifyEventBatch(input: EventBatchInput): Promise<EventOverrideProposal[]>;
   consolidate(input: ConsolidationInput): Promise<ConsolidationResult>;

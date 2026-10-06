@@ -390,6 +390,14 @@ export interface PrEvent {
   sourceId: string;
   ruleLoudness: Loudness;
   ruleReason: string;
+  /**
+   * A person's bot talk (`isBotTalk`: a reply in a bot-only thread, a bot
+   * command) that asks the viewer nothing, an edit of it, or the empty
+   * review GitHub made to carry thread replies (`isCarrierReview`). No
+   * agent reads or judges it: it never starts a dossier update and never
+   * goes to the events agent (DESIGN.md "Bot talk leaves agent work").
+   */
+  chatter: boolean;
   override: LoudnessOverride | null;
   seenAt: IsoTime | null;
 }

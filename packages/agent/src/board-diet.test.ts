@@ -6,12 +6,15 @@ import { boardShape, type FullPr, type Pr, type Viewer } from '@postpile/core';
 import { boardSpecArb, buildBoard, CORPUS, CORPUS_SCENARIOS, CORPUS_VIEWER, corpusPrAfter, PROPERTY_TIMEOUT_MS, propertyRuns } from '@postpile/core/testing';
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { glanceItemInputHash, legacyGlanceItemInputHash, setGroupingTriggers } from './hashes.ts';
+import { glanceItemInputHash, glanceItemInputHashWithBotTalk, legacyGlanceItemInputHash, setGroupingTriggers } from './hashes.ts';
 import { glanceBatchPrompt } from './prompts/glance-batch.ts';
 import { setGroupingPrompt } from './prompts/sets.ts';
 import { batchDetail, fullDetail, prDetails, shortDetail } from './prompts/shared.ts';
 import type { GlanceBatchInput } from './service.ts';
 import { fullContext, makeDossierVersion, makeTopic } from './test-fixtures.ts';
+
+/** When older stored glances were written: before any activity, mid-way, after all of it. */
+const OLDER_GLANCES = ['2000-01-01T00:00:00.000Z', '2026-09-02T00:00:00.000Z', '2100-01-01T00:00:00.000Z'];
 
 /** Everything the agent layer derives from a few PRs: detail text, the glance prompt and hashes, the set prompt and triggers. */
 function agentOutputs(prs: Pr[], viewer: Viewer): unknown {
@@ -21,7 +24,10 @@ function agentOutputs(prs: Pr[], viewer: Viewer): unknown {
   return {
     details: prs.map((pr) => [fullDetail, shortDetail, batchDetail].map((limits) => prDetails(pr, viewer, limits))),
     glancePrompt: glanceBatchPrompt(glance),
-    glanceHashes: items.map((item) => [glanceItemInputHash(glance, item), legacyGlanceItemInputHash(glance, item)]),
+    glanceHashes: items.map((item) => [
+      glanceItemInputHash(glance, item),
+      ...OLDER_GLANCES.flatMap((writtenAt) => [glanceItemInputHashWithBotTalk(glance, item, writtenAt), legacyGlanceItemInputHash(glance, item, writtenAt)]),
+    ]),
     setPrompt: setGroupingPrompt(sets),
     setTriggers: setGroupingTriggers(sets),
   };

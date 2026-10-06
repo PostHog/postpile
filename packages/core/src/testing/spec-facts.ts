@@ -145,6 +145,11 @@ export function saysDeploy(body: string): boolean {
   return commentText(body) === 'deploy';
 }
 
+/** A person telling a bot what to do ("@codex review", 2026-10-06): a body that is only that command. */
+export function isBotCommandBody(body: string): boolean {
+  return commentText(body) === 'bot_command';
+}
+
 /**
  * A person answering a bot in a review thread (2026-10-06): the comment is
  * in a thread, people other than its author spoke there before it, and all

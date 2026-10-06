@@ -211,6 +211,20 @@ describe('glanceBatchPrompt, per PR', () => {
     const prompt = oneGlancePrompt(pr, { kind: 'pinged', reason: 'author' });
     expect(prompt).toContain("The user's own last review: approved, commits were pushed since");
   });
+
+  it('keeps the user’s approval when they reply in a thread later: the empty review GitHub wraps the reply in is no review', () => {
+    const opener = makeComment({ id: 'o', author: 'alice', body: 'Why not cache this?', createdAt: '2026-09-01T01:00:00Z', kind: 'review_comment', path: 'a.ts', threadId: 't' });
+    const reply = makeComment({ id: 'r1', author: viewer.login, body: 'It is cached one level up.', createdAt: '2026-09-02T00:00:00Z', kind: 'review_comment', path: 'a.ts', threadId: 't', reviewId: 'carrier' });
+    const pr = makePr({
+      comments: [opener, reply],
+      threads: [{ id: 't', path: 'a.ts', isResolved: false, comments: [opener, reply] }],
+      reviews: [
+        { id: 'approval', author: viewer.login, state: 'APPROVED', body: '', submittedAt: '2026-09-01T00:00:00Z', commitOid: null },
+        { id: 'carrier', author: viewer.login, state: 'COMMENTED', body: '', submittedAt: '2026-09-02T00:00:00Z', commitOid: null },
+      ],
+    });
+    expect(oneGlancePrompt(pr, { kind: 'pinged', reason: 'author' })).toContain("The user's own last review: approved");
+  });
 });
 
 describe('glanceBatchPrompt, who approved', () => {

@@ -1830,6 +1830,7 @@ export class FakeEngine implements EngineService {
       sourceId: reply.id,
       ruleLoudness: 'quiet',
       ruleReason: 'own comment',
+      chatter: false,
       override: null,
       seenAt: reply.createdAt,
     });
@@ -1873,6 +1874,7 @@ export class FakeEngine implements EngineService {
       sourceId,
       ruleLoudness: 'quiet',
       ruleReason: 'own comment',
+      chatter: false,
       override: null,
       seenAt: at,
     });

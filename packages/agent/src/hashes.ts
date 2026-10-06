@@ -1,5 +1,5 @@
-import { glanceRiskLevel, isBot, prOwners, standingApprovals } from '@postpile/core';
-import type { Pr } from '@postpile/core';
+import { glanceRiskLevel, humanReviews, isBot, isMachineComment, prOwners, standingApprovals } from '@postpile/core';
+import type { Comment, IsoTime, Pr, Review } from '@postpile/core';
 import { inputHash } from './hash.ts';
 import { modelFor } from './models.ts';
 import { humanComments } from './prompts/shared.ts';
@@ -33,13 +33,48 @@ export const GLANCE_PROMPT_VERSION = 'g2';
 // regenerate a glance, so those are left out on purpose. Checks are not in
 // any prompt (NO_CI_RULE) and stay out of every hash too.
 
+/** The discussion a glance hash covers: people's comments and reviews. */
+interface GlanceDiscussion {
+  comments: Comment[];
+  reviews: Review[];
+}
+
+/**
+ * The discussion a glance reads since 2026-10-06: no bot talk (a bot's
+ * comment, a reply in a bot-only thread, "@codex review"), no bot's review
+ * and no empty review GitHub made to carry thread replies. Bot talk was
+ * most of what counted before, and each one re-ran the glance.
+ */
+function humanGlanceDiscussion(pr: Pr): GlanceDiscussion {
+  return { comments: humanComments(pr), reviews: humanReviews(pr) };
+}
+
+/**
+ * The discussion the glance hash covered before 2026-10-06 (every comment
+ * and review but a bot's), as it stood when a glance was written at
+ * `writtenAt`: bot talk and carrier reviews that came later are left out.
+ * Under the old shape they would have changed the hash, under the new one
+ * they don't, so a glance written before the update stays current until
+ * its PR really changes, instead of every PR with bot talk re-running its
+ * glance on the update (DESIGN.md "Bot talk leaves agent work" › Glances written before).
+ */
+function glanceDiscussionWithBotTalk(pr: Pr, writtenAt: IsoTime): GlanceDiscussion {
+  const human = humanGlanceDiscussion(pr);
+  const humanComment = new Set(human.comments.map((comment) => comment.id));
+  const humanReview = new Set(human.reviews.map((review) => review.id));
+  return {
+    comments: pr.comments.filter((comment) => !isMachineComment(comment) && (humanComment.has(comment.id) || comment.createdAt <= writtenAt)),
+    reviews: pr.reviews.filter((review) => !isBot(review.author) && (humanReview.has(review.id) || review.submittedAt <= writtenAt)),
+  };
+}
+
 /**
  * What a glance depends on: code, description, review state and human
  * discussion. Agent approvals are in the prompt ("Approved by"), so they
  * count too; the key is only added when there are some, so hashes of PRs
  * without them stayed the same when it came in.
  */
-function prGlanceSnapshot(pr: Pr): unknown {
+function prGlanceSnapshot(pr: Pr, discussion: GlanceDiscussion): unknown {
   const agentApprovals = standingApprovals(pr).agents;
   const snapshot = {
     key: pr.key,
@@ -51,8 +86,8 @@ function prGlanceSnapshot(pr: Pr): unknown {
     labels: pr.labels,
     reviewerUsers: pr.reviewerUsers,
     reviewerTeams: pr.reviewerTeams,
-    reviews: pr.reviews.filter((r) => !isBot(r.author)).map((r) => [r.id, r.state]),
-    comments: humanComments(pr).map((c) => c.id),
+    reviews: discussion.reviews.map((r) => [r.id, r.state]),
+    comments: discussion.comments.map((c) => c.id),
   };
   // Owners change the prompt (own-PR note, "for @owner"). Only added when they differ from the author, so older hashes stay valid.
   const owners = prOwners(pr);
@@ -146,27 +181,19 @@ export function dossierInputHash(input: DossierUpdateInput): string {
   );
 }
 
-/**
- * Per PR inside a batch: prGlanceSnapshot, provenance, topic name,
- * instructions, tailoring, standing rules, feedback on this PR, when a
- * human comment was last edited, model.
- * Never the other PRs in the batch, so batch composition cannot invalidate
- * a glance. Not the dossier version (2026-10-05): a dossier rewrite for
- * news on another PR left every glance in the topic out of date. A glance
- * picks up the newer dossier when its own PR changes or on a look.
- */
-export function glanceItemInputHash(input: GlanceBatchInput, item: GlanceBatchItem): string {
+/** The glance hash's shape since 2026-10-05, over the given discussion. */
+function glanceHash(input: GlanceBatchInput, item: GlanceBatchItem, discussion: GlanceDiscussion): string {
   const ownFeedback = input.context.recentFeedback.filter((f) => f.prKey === item.pr.key).map((f) => f.id);
   // An edited comment's new body is in the prompt. The dossier version used to cover it (a person's edit
   // rewrote the dossier); without it the edit time does. Not in prGlanceSnapshot: the legacy hash must stay as it was.
-  const commentEdits = humanComments(item.pr)
+  const commentEdits = discussion.comments
     .filter((comment) => comment.lastEditedAt)
     .map((comment) => [comment.id, comment.lastEditedAt]);
   return inputHash(
     'glance_batch',
     GLANCE_PROMPT_VERSION,
     modelFor('glance_batch'),
-    prGlanceSnapshot(item.pr),
+    prGlanceSnapshot(item.pr, discussion),
     input.viewer,
     item.provenance,
     input.topic?.name ?? null,
@@ -179,19 +206,45 @@ export function glanceItemInputHash(input: GlanceBatchInput, item: GlanceBatchIt
 }
 
 /**
- * The hash glances carried before 2026-10-05, with the dossier version. A
- * stored glance with it still counts as current while that dossier is the
- * latest, so the update regenerates nothing; its next rewrite stores the
- * new shape.
+ * Per PR inside a batch: prGlanceSnapshot, provenance, topic name,
+ * instructions, tailoring, standing rules, feedback on this PR, when a
+ * human comment was last edited, model. Bot talk is left out
+ * (`humanGlanceDiscussion`), so a "fixed" to a review bot or an "@codex
+ * review" never re-runs a glance.
+ * Never the other PRs in the batch, so batch composition cannot invalidate
+ * a glance. Not the dossier version (2026-10-05): a dossier rewrite for
+ * news on another PR left every glance in the topic out of date. A glance
+ * picks up the newer dossier when its own PR changes or on a look.
  */
-export function legacyGlanceItemInputHash(input: GlanceBatchInput, item: GlanceBatchItem): string {
+export function glanceItemInputHash(input: GlanceBatchInput, item: GlanceBatchItem): string {
+  return glanceHash(input, item, humanGlanceDiscussion(item.pr));
+}
+
+/**
+ * The hash glances written from 2026-10-05 until 2026-10-06 carry: bot talk
+ * counted as discussion, as it stood at `writtenAt` (the glance's
+ * createdAt). A stored glance with it still counts as current, so the
+ * update regenerates nothing; its next rewrite stores the new shape.
+ */
+export function glanceItemInputHashWithBotTalk(input: GlanceBatchInput, item: GlanceBatchItem, writtenAt: IsoTime): string {
+  return glanceHash(input, item, glanceDiscussionWithBotTalk(item.pr, writtenAt));
+}
+
+/**
+ * The hash glances carried before 2026-10-05, with the dossier version and
+ * bot talk counted as discussion as it stood at `writtenAt` (the glance's
+ * createdAt). A stored glance with it still counts as current while that
+ * dossier is the latest, so the update regenerates nothing; its next
+ * rewrite stores the new shape.
+ */
+export function legacyGlanceItemInputHash(input: GlanceBatchInput, item: GlanceBatchItem, writtenAt: IsoTime): string {
   const ownFeedback = input.context.recentFeedback.filter((f) => f.prKey === item.pr.key).map((f) => f.id);
   const dossier = input.dossier ? [input.dossier.topicId, input.dossier.version] : null;
   return inputHash(
     'glance_batch',
     GLANCE_PROMPT_VERSION,
     modelFor('glance_batch'),
-    prGlanceSnapshot(item.pr),
+    prGlanceSnapshot(item.pr, glanceDiscussionWithBotTalk(item.pr, writtenAt)),
     input.viewer,
     item.provenance,
     input.topic?.name ?? null,

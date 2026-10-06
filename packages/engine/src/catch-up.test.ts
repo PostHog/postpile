@@ -148,7 +148,7 @@ describe('glance catch-up after a poll', () => {
     // The input the sync wrote the glance from: same PR, same dossier (version 1) as now.
     const input = h.agent.glanceInputs.at(-1)!;
     const item = input.items.find((candidate) => candidate.pr.key === pr.key)!;
-    const legacy = h.agent.legacyGlanceItemInputHash(input, item);
+    const legacy = h.agent.legacyGlanceItemInputHash(input, item, stored.createdAt);
     expect(legacy).not.toBe(stored.inputHash);
     h.store.glances.put({ ...stored, inputHash: legacy });
 
@@ -157,7 +157,7 @@ describe('glance catch-up after a poll', () => {
     // The old shape held comment ids only: a person editing a comment after the glance makes it stale.
     const edited = makeComment({ id: 'e1', author: 'bob', body: 'Blocker: wrong cache key.', createdAt: FRESH, lastEditedAt: LATER });
     h.store.prs.upsert({ ...pr, comments: [{ ...edited, lastEditedAt: null }] }, LATER);
-    const withComment = h.agent.legacyGlanceItemInputHash(input, { ...item, pr: { ...pr, comments: [{ ...edited, lastEditedAt: null }] } });
+    const withComment = h.agent.legacyGlanceItemInputHash(input, { ...item, pr: { ...pr, comments: [{ ...edited, lastEditedAt: null }] } }, stored.createdAt);
     h.store.glances.put({ ...stored, inputHash: withComment });
     expect((await h.engine.getPr(pr.key))?.glanceStale).toBe(false);
     h.store.prs.upsert({ ...pr, comments: [edited] }, LATER);

@@ -66,6 +66,7 @@ export class FakeLivePoll {
       sourceId: `fake-live-${n}`,
       ruleLoudness: 'loud',
       ruleReason: 'asks you a question',
+      chatter: false,
       override: null,
       seenAt: null,
     };

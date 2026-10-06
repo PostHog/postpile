@@ -141,6 +141,7 @@ export const COMMENT_BODIES: Record<CommentText, string> = {
   teams_mention: 'cc @acme/approvers and @acme/team-platform',
   bot_marker: '<!-- bot --> automated comment: coverage went down',
   deploy: 'Deployed the preview',
+  bot_command: '@codex review',
 };
 
 /** The teams each comment names with an @-mention: what the spec oracles read instead of parsing the body. */
@@ -153,6 +154,7 @@ export const MENTIONED_TEAMS: Record<CommentText, string[]> = {
   teams_mention: [ROUTING_TEAM, PROPERTY_TEAM],
   bot_marker: [],
   deploy: [],
+  bot_command: [],
 };
 
 /** What trunk writes for each status, in its words (an en space after the emoji, like trunk). */

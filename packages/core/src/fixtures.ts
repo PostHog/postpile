@@ -144,6 +144,7 @@ export function makeEvent(overrides: Partial<PrEvent> = {}): PrEvent {
     sourceId: 'c1',
     ruleLoudness: 'quiet',
     ruleReason: 'comment',
+    chatter: false,
     override: null,
     seenAt: null,
     ...overrides,

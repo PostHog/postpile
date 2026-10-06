@@ -122,6 +122,11 @@ function quietInput(board: PropertyBoard, key: PrKey, thread: NotificationThread
   };
 }
 
+/** Left below loud by the agent or the user, or bot talk nobody needs to judge (`PrEvent.chatter`). */
+function settledWithoutAgent(event: PrEvent): boolean {
+  return event.override === null ? event.chatter : event.override.loudness !== 'loud';
+}
+
 /**
  * The quiet mark-reads never hide an ask: the bot-only rule never marks
  * while a person's loud news is unseen, the acted-after rule only when the
@@ -160,7 +165,7 @@ export const quietReadsNeverHideAsks: Invariant = {
         ensure(humanNews.length === 0, `${key}: judged quiet read with human news ${humanNews.map((event) => event.id).join(', ')}`);
         const since = lastLooked(thread, pr, board.viewer)!;
         const unjudged = events.filter(
-          (event) => event.at > since && !isViewerLogin(board.viewer, event.actor) && !isAutomationEvent(pr, board.viewer, event) && (event.override === null || event.override.loudness === 'loud'),
+          (event) => event.at > since && !isViewerLogin(board.viewer, event.actor) && !isAutomationEvent(pr, board.viewer, event) && !settledWithoutAgent(event),
         );
         ensure(unjudged.length === 0, `${key}: judged quiet read with activity the agent did not judge quiet: ${unjudged.map((event) => event.id).join(', ')}`);
       }
@@ -170,7 +175,7 @@ export const quietReadsNeverHideAsks: Invariant = {
         const requestAt = latestViewerRequestAt(pr, board.viewer, events)!;
         ensure(!pr.truncated || cutSnapshotHoldsSince(pr, requestAt), `${key}: request-gone quiet read on a snapshot cut off after the request`);
         const unjudged = events.filter(
-          (event) => event.at > requestAt && !isViewerLogin(board.viewer, event.actor) && !isAutomationEvent(pr, board.viewer, event) && (event.override === null || event.override.loudness === 'loud'),
+          (event) => event.at > requestAt && !isViewerLogin(board.viewer, event.actor) && !isAutomationEvent(pr, board.viewer, event) && !settledWithoutAgent(event),
         );
         ensure(unjudged.length === 0, `${key}: request-gone quiet read with activity the agent did not judge quiet: ${unjudged.map((event) => event.id).join(', ')}`);
       }

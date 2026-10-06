@@ -1,10 +1,10 @@
-import { clipText, LESSON_TEXT_MAX, mapSetupDraft, mapSetupFit, PING_BODY_MAX, PING_TITLE_MAX, type ReconcileAction, type SetupFitNote } from '@postpile/core';
+import { clipText, LESSON_TEXT_MAX, mapSetupDraft, mapSetupFit, PING_BODY_MAX, PING_TITLE_MAX, type IsoTime, type ReconcileAction, type SetupFitNote } from '@postpile/core';
 import type { z } from 'zod';
 import { mapConsolidationAnswer } from './consolidation-answer.ts';
 import { mapDossierAnswer } from './dossier-answer.ts';
 import { DossierRefs } from './dossier-refs.ts';
 import { mapGlanceAnswer } from './glance-answer.ts';
-import { dossierInputHash, glanceItemInputHash, legacyGlanceItemInputHash } from './hashes.ts';
+import { dossierInputHash, glanceItemInputHash, glanceItemInputHashWithBotTalk, legacyGlanceItemInputHash } from './hashes.ts';
 import { AgentOutputError, parseAgentJson } from './json.ts';
 import { modelFor } from './models.ts';
 import { chatPrompt } from './prompts/chat.ts';
@@ -321,8 +321,12 @@ export class RunnerAgentService implements AgentService {
     return glanceItemInputHash(input, item);
   }
 
-  legacyGlanceItemInputHash(input: GlanceBatchInput, item: GlanceBatchItem): string {
-    return legacyGlanceItemInputHash(input, item);
+  glanceItemInputHashWithBotTalk(input: GlanceBatchInput, item: GlanceBatchItem, writtenAt: IsoTime): string {
+    return glanceItemInputHashWithBotTalk(input, item, writtenAt);
+  }
+
+  legacyGlanceItemInputHash(input: GlanceBatchInput, item: GlanceBatchItem, writtenAt: IsoTime): string {
+    return legacyGlanceItemInputHash(input, item, writtenAt);
   }
 
   /**

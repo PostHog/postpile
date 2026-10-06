@@ -1,4 +1,4 @@
-import { homeTeamsOf, isBot, isMachineComment, isPrOwner, prOwners, sameLogin, standingApprovals } from '@postpile/core';
+import { homeTeamsOf, humanDiscussion, humanReviews, isPrOwner, prOwners, sameLogin, standingApprovals } from '@postpile/core';
 import type { EntityRef, Feedback, FeedbackKind, FullComment, Pr, Provenance, Viewer } from '@postpile/core';
 import type { PromptContext } from '../service.ts';
 
@@ -184,13 +184,14 @@ export function jsonOnly(shape: string): string {
 }
 
 /**
- * Human comments across the PR, oldest first. Bot chatter is most of the
- * volume and none of the signal. A board read leaves out only bot bodies
- * (`isBodyReadByRules`), which `isMachineComment` drops anyway, so every
- * comment kept has its body.
+ * Human comments across the PR, oldest first. Bot talk is most of the
+ * volume and none of the signal: bots' comments, and since 2026-10-06 also
+ * people's replies to bots and bot commands (`humanDiscussion`). A board
+ * read leaves out only bodies no rule reads (`isBodyReadByRules`), never a
+ * person's, so every comment kept has its body.
  */
 export function humanComments(pr: Pr): FullComment[] {
-  return pr.comments.filter((comment): comment is FullComment => comment.body !== null && !isMachineComment(comment));
+  return humanDiscussion(pr).filter((comment): comment is FullComment => comment.body !== null);
 }
 
 export interface PrDetailLimits {
@@ -252,8 +253,10 @@ export function prDetails(pr: Pr, viewer: Viewer | null, limits: PrDetailLimits)
   if (reviewers.length > 0) {
     lines.push(`Pending review requests: ${reviewers.join(', ')}`);
   }
-  const reviews = pr.reviews
-    .filter((r) => !isBot(r.author) && r.author !== viewer?.login)
+  // Not the empty reviews GitHub wraps thread replies in (`humanReviews`): a reply is no review.
+  const human = humanReviews(pr);
+  const reviews = human
+    .filter((r) => r.author !== viewer?.login)
     .map((r) => `@${r.author} ${r.state.toLowerCase()}`);
   if (reviews.length > 0) {
     lines.push(`Review states: ${reviews.join(', ')}`);
@@ -262,7 +265,8 @@ export function prDetails(pr: Pr, viewer: Viewer | null, limits: PrDetailLimits)
   if (approvedBy) {
     lines.push(approvedBy);
   }
-  const ownReview = viewer ? pr.reviews.filter((r) => r.author === viewer.login).at(-1) : undefined;
+  // The user's own thread reply must not stand in for their approval or changes request.
+  const ownReview = viewer ? human.filter((r) => r.author === viewer.login).at(-1) : undefined;
   if (ownReview) {
     const stale = ownReview.commitOid && ownReview.commitOid !== pr.headOid ? ', commits were pushed since' : '';
     lines.push(`The user's own last review: ${ownReview.state.toLowerCase()}${stale}`);

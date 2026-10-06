@@ -1442,6 +1442,7 @@ core `event-roles.ts`), first match wins:
 | --- | --- |
 | effective loudness loud (incl. the app's Look closer, an event the agent raised) | trigger |
 | muted (by rule, agent or user) | noise |
+| bot talk (`PrEvent.chatter`, 2026-10-06): a person's reply in a bot-only thread, a bot command, an edit of either, an empty review carrying thread replies; see "Bot talk leaves agent work" | noise |
 | a push (commits pushed, after approval, force push), from a person or a bot | ride_along (since 2026-10-05; a loud push, answering the viewer's changes request, is a trigger by the first row) |
 | anything a person did, the viewer included | trigger |
 | a state change, whoever did it: merged, merged without review, closed, reopened, ready for review, back to draft, review requested or removed, a bot's approval; Look closer even when turned down | trigger |
@@ -3160,6 +3161,99 @@ open and never splits a character.
   under its other kind when it is gone (`machineCommentTwinId`), so the
   renamed event turns unseen again with its thread.
 
+## Bot talk leaves agent work (2026-10-06)
+
+Measured on a copy of the owner's database (809 PRs): of 3,599 comments
+the prompts and the glance hash counted as human discussion, 2,190 were
+replies in review threads where only bots had spoken ("fixed" to
+greptile, codex, coderabbit) and 487 were commands people type for bots
+("@codex review" 360, "/trunk merge" 119). Of 2,997 people's reviews,
+2,234 were the empty COMMENTED review GitHub wraps each thread reply in.
+272 PRs had nothing else as their human discussion. The PR pane already
+showed it as quiet ("The PR pane" › Thread context and replies to bots,
+Empty reviews that carry thread replies), but the agents still read it:
+each one re-ran the PR's glance, started a dossier update and, on an
+unread thread, went to the events agent.
+
+**The rule** (core `bot-talk.ts`), the same for every viewer:
+
+- A bot command (`isBotCommand`): one short line (six words at most) that
+  starts with a slash command ("/trunk merge") or an @-mention of a bot
+  (`isBot`, plus "codex", "claude", "cursor" and "mergify", handles that
+  are no bot login), and mentions nobody else. Narrow on purpose: "Should
+  we ask @codex?", "@alice can you /approve", "@codex review cc @alice", a
+  second line of explanation and "@acme/team" stay discussion.
+- Bot talk (`isBotTalk`): a bot's comment (`isMachineComment`), a bot
+  command, or a person's reply in a thread where only bots spoke before
+  (`isBotThreadReply`, unchanged).
+- Human discussion (`humanDiscussion`): every comment that is not bot
+  talk. Human reviews (`humanReviews`): not a bot's, not a carrier
+  (`isCarrierReview`, unchanged): the reply it carries is a comment of its
+  own.
+- Events carry it as `PrEvent.chatter` (column `pr_event.chatter`,
+  migration 032): a person's bot talk that asks the viewer nothing, the
+  viewer's own included; an edit of it that mentions nobody new; every
+  carrier review. A mention, question or reply to the viewer keeps its
+  kind and is never chatter. `deriveEvents` sets it on every fetch; the
+  migration fills stored rows whose rule reason already says reply to a
+  bot or carrier, the rest get it on their PR's next fetch.
+
+**Where it applies:**
+
+- Prompts: `humanComments` is `humanDiscussion`, so "Human discussion" in
+  glances, dossiers, sets, chat and pings holds people talking to people.
+  "Review states" and "the user's own last review" leave carriers out. A
+  reply draft to a top-level comment leaves bot talk out of the comments
+  around it, except the comment it answers. A reply in a review thread
+  still reads the whole thread: there the bot's finding is what the
+  thread is about, and the thread is short.
+- Glance hash: `prGlanceSnapshot` covers human discussion ids and human
+  reviews `[id, state]`, and comment edit times of human discussion only.
+- Topic memory: chatter is noise (`memoryRole`, "Event roles"). It never
+  starts a dossier update or a topic catch-up, never counts as a newer
+  event, and stays out of the dossier delta, the memory recheck and ping
+  prompts. Riding along was the other choice: it would still fill the
+  delta's event slots ("fixed" times twenty) and, past
+  `DELTA_LIMITS.maxEvents`, start an update by itself.
+- Events agent: chatter never awaits judgement (`awaitsJudgement`). The
+  judged and request-gone quiet reads count it as needing nothing, like a
+  person's activity the agent left quiet, so an unread thread with only
+  bot talk since you looked clears without a call. Raised to loud by the
+  agent or the user, it is news like anything else.
+- Loudness: a bot command is quiet ("a command for a bot", the row after
+  "replied to a bot in a review thread", before "addressed your changes"
+  and "comment on your PR"). Someone's "@codex review" on your PR is no
+  longer a loud comment on your PR, so it pings nobody and gets no second
+  opinion. Replies to bots and carriers keep their loudness.
+- Not changed: the PR pane activity (a command is a quiet line of its
+  own), the headline ranking, "someone replies" snoozes, whose turn, and
+  your own command counting as you speaking on the PR. Those decide what
+  you see, not what an agent reads.
+
+**Glances written before** stay current. A new hash definition would
+make every stored glance of a PR with bot talk stale on update (20 of the
+73 glance targets on the copy). A PROMPT_VERSION bump regenerates all of
+them, and a stored hash version does not help either: checking an old
+hash means computing the old shape, and that shape moves with every new
+reply to a bot. So `GlanceInputs.isCurrent` also accepts
+`glanceItemInputHashWithBotTalk(input, item, glance.createdAt)`: the old
+shape, bot talk counted, but only the bot talk there was when the glance
+was written. Bot talk that came later is left out, as in the new shape,
+so the glance stays current until the PR really changes and its next
+rewrite stores the new shape. The pre-2026-10-05 shape (with the dossier
+version) gets the same treatment. Accepted: bot talk written before a
+glance but fetched after it, or edited after it, re-runs that glance once,
+as it did before. Checked on the copy: 0 of 73 glances due with
+origin/main, 0 with this change.
+
+**Measured** on the same copy, old rules against new on the same
+snapshots: in the 15-comment window prompts carry, bot talk held 113 of
+248 slots across the 73 glance targets; 1,430 people's events waited for
+the events agent, 935 now; memory triggers in the last 7 days 3,898 →
+2,017, and 52 of the 488 dossier updates of that week that had a trigger
+had only bot talk. Loudness did not change on the copy: the commands
+there were the owner's own or on other people's PRs.
+
 ## Storage jobs (2026-10-05)
 
 A one-time rewrite of stored data that needs JS (parse, cut, rebuild) runs
@@ -4666,6 +4760,9 @@ the PR, is one of:
   PostPile, but also on GitHub automatically." The events agent now also sees
   new quiet human events on unread threads (a teammate's comment, someone
   else's review, a push by the author), not only loud ones.
+- bot talk (2026-10-06): a person's reply to a bot, a bot command, the
+  empty review GitHub wraps a reply in. Settled by rule, no events agent
+  call ("Bot talk leaves agent work").
 
 Never clearable by itself: a review request to you or your team, a mention, a
 team mention, a question or reply to you, an unseen merge without your review.

@@ -130,6 +130,7 @@ export function lookCloserEvent(pr: Pr, team: string, requestId: string, at: Iso
     sourceId: requestId,
     ruleLoudness: 'loud',
     ruleReason: lookCloserReason(team),
+    chatter: false,
     override: null,
     seenAt: null,
   };

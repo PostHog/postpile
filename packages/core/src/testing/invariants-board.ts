@@ -37,6 +37,7 @@ export const eventsMatchTheSnapshot: Invariant = {
         const got = describeEvent({ ...event, loudness: event.ruleLoudness });
         ensure(got === describeEvent(want!), `${event.id}: ${got}, expected ${describeEvent(want!)}`);
         ensure(event.ruleReason === want!.reason, `${event.id}: reason "${event.ruleReason}", expected "${want!.reason}"`);
+        ensure(event.chatter === want!.chatter, `${event.id}: chatter ${event.chatter}, expected ${want!.chatter}`);
       }
     }
   },
