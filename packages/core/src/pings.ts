@@ -253,8 +253,20 @@ export function isPersonalPing(event: PrEvent, pr: Pr, viewer: Viewer): boolean 
 /** How long after the viewer's own comment or review a person's answer counts as a live conversation. */
 export const CONVERSATION_WINDOW_MS = 2 * 60 * 60 * 1000;
 
-/** The viewer said something on the PR: a comment, a thread reply or a review. An approval or a push is not talking. */
-const TALKING_TOUCHES: readonly TouchKind[] = ['comment', 'review', 'changes_request'];
+/**
+ * The viewer said something on the PR: a comment, a thread reply, a review,
+ * or an approval with a body. An approval alone or a push is not talking.
+ */
+const TALKING_TOUCHES: readonly TouchKind[] = ['comment', 'review', 'changes_request', 'approval'];
+
+/** An approval without a body: a touch, but no words (its body has no event of its own, `deriveEvents`). */
+function isSilentApproval(event: PrEvent, pr: Pr): boolean {
+  if (event.kind !== 'review_approved') {
+    return false;
+  }
+  const review = pr.reviews.find((candidate) => candidate.id === event.sourceId);
+  return (review?.body ?? '').trim() === '';
+}
 
 /**
  * A person answering the viewer while they talk on the PR (2026-10-02): a
@@ -268,7 +280,8 @@ export function isLiveConversation(event: PrEvent, pr: Pr, events: PrEvent[], vi
   if (!PERSONAL_ASK_KINDS.includes(event.kind) || event.isBot) {
     return false;
   }
-  const touch = lastTouch(pr, events, viewer, { before: event.at, kinds: TALKING_TOUCHES });
+  const talking = events.filter((candidate) => !isSilentApproval(candidate, pr));
+  const touch = lastTouch(pr, talking, viewer, { before: event.at, kinds: TALKING_TOUCHES });
   return touch !== null && Date.parse(event.at) - Date.parse(touch.at) <= CONVERSATION_WINDOW_MS;
 }
 

@@ -78,13 +78,19 @@ function viewerSpokeEarlierInThread(pr: Pr, comment: Comment, viewer: Viewer): b
   return thread !== undefined && thread.comments.some((earlier) => sameLogin(earlier.author, viewer.login) && earlier.createdAt < comment.createdAt);
 }
 
-/** The kind of one comment's event, or null when a review body asks nothing of the viewer (its review says it). */
+/** The sent, undismissed review a review body belongs to (same id). */
+function reviewWithEvent(pr: Pr, comment: Comment): boolean {
+  return pr.reviews.some((review) => review.id === comment.id && ['APPROVED', 'CHANGES_REQUESTED', 'COMMENTED'].includes(review.state));
+}
+
+/** The kind of one comment's event, or null when a review body asks nothing of the viewer or is the viewer's own (its review says it). */
 function commentKind(pr: Pr, comment: Comment, viewer: Viewer): EventKind | null {
   if (isMachineComment(comment)) {
     return saysDeploy(comment.body) ? 'deploy' : 'bot_comment';
   }
   if (sameLogin(comment.author, viewer.login)) {
-    return 'comment';
+    // The viewer's own review body is their review's event; a dismissed review has none, so its body stays a comment.
+    return comment.kind === 'review' && reviewWithEvent(pr, comment) ? null : 'comment';
   }
   if (mentionsViewer(comment.body)) {
     return asksQuestion(comment.body) ? 'question_to_user' : 'mention';

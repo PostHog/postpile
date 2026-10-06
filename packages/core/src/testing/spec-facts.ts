@@ -690,8 +690,8 @@ function endTouch(pr: Pr, item: TimelineItem, viewer: Viewer): SpecTouch | null 
 
 /**
  * Everything the viewer did on the PR, from the snapshot: their sent
- * reviews (a dismissed one is no event) but the empty ones carrying thread
- * replies, their comments that are not automated and not talk to a bot
+ * reviews (a dismissed one is no event, its body is a comment) but the empty
+ * ones carrying thread replies, their comments that are not automated and not talk to a bot
  * (2026-10-06: "@codex review" or "fixed" to a bot answers nobody), and on a PR they own the
  * commits they committed and their force pushes, and merging or closing it.
  */
@@ -704,7 +704,9 @@ export function viewerTouches(pr: Pr, viewer: Viewer): SpecTouch[] {
     }
   }
   for (const comment of pr.comments) {
-    if (sameLogin(comment.author, viewer.login) && !isMachineComment(comment) && !talksToBotSpec(pr, comment)) {
+    // A review body is its review's touch (above), unless the review was dismissed.
+    const sentReviewBody = comment.kind === 'review' && pr.reviews.some((review) => review.id === comment.id && REVIEW_TOUCH[review.state] !== undefined);
+    if (sameLogin(comment.author, viewer.login) && !isMachineComment(comment) && !talksToBotSpec(pr, comment) && !sentReviewBody) {
       touches.push({ kind: 'comment', at: comment.createdAt, id: `${pr.key}:comment:${comment.id}` });
     }
   }
