@@ -317,7 +317,9 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   text starts ("✨ Draft with agent" / "✨ Rewrite with agent"), Cancel and a
   button that names the target. Only the review notes draft by themselves
   (`draftsOnOpen`, 2026-10-06): once per opening, into an empty box, not
-  while the write is blocked; a ref guards StrictMode's second effect run.
+  while the write is blocked or `useTools` says `agentOn: false`; it asks
+  with `quiet` (no error toast, a clicked draft keeps its toast); a ref
+  guards StrictMode's second effect run.
   `send` gets the note's source (`lib/review-note.ts`) for telemetry. Replies live in the activity list
   (core's `ActivityLine.reply`, once per comment); "New since" only jumps there
   ("Reply ↓", `jumpToReply`). Housekeeping (`PaneHousekeeping`) is a quiet

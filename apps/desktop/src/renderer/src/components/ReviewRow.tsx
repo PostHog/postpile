@@ -138,7 +138,7 @@ export function ReviewRow(props: ReviewRowProps) {
           submitTitle="Approves on GitHub with this note. Cannot be undone."
           sending={approving}
           drafting={actions.isBusy(`reviewNote:${pr.key}`)}
-          draft={(gist) => actions.draftReviewNote(pr.key, 'approve', gist)}
+          draft={(gist, quiet) => actions.draftReviewNote(pr.key, 'approve', gist, quiet)}
           draftsOnOpen
           send={(body, source) => actions.approve(pr.key, pr.headOid, body, source)}
           closesOnClick
@@ -155,7 +155,7 @@ export function ReviewRow(props: ReviewRowProps) {
           submitTitle="Posts a comment-only review on GitHub, on the commit you see. Cannot be undone."
           sending={actions.isBusy(`commentReview:${pr.key}`)}
           drafting={actions.isBusy(`reviewNote:${pr.key}`)}
-          draft={(gist) => actions.draftReviewNote(pr.key, 'comment', gist)}
+          draft={(gist, quiet) => actions.draftReviewNote(pr.key, 'comment', gist, quiet)}
           draftsOnOpen
           send={(body, source) => actions.commentReview(pr.key, pr.headOid, body, source)}
         />

@@ -3121,7 +3121,11 @@ fires into an empty box, once per opening: a kept draft (the user's text
 or an earlier agent draft) is never replaced, and Cancel or Escape still
 drops a draft that comes back late. Not while the write is blocked (lock
 closed or not loaded yet): a note that cannot be sent is not worth an
-agent call. Ask and replies stay manual ("✨ Draft with agent").
+agent call. Not when the tools status says the agent is off (`agentOn`
+false: claude missing, logged out or at its limit). Nobody clicked for it,
+so a failed draft on open stays quiet: no toast, the box is just empty
+with its placeholder; a clicked "Draft with agent" still shows the error.
+Ask and replies stay manual ("✨ Draft with agent").
 
 **Ask the agent** (`AgentPane`): the agent chat's scope is the topic, and
 it takes over the right pane. Entry: "Ask the agent" in the topic header,

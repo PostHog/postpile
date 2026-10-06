@@ -1,6 +1,7 @@
 import type { ReviewNoteSource } from '@postpile/core';
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useActions } from '../api/actions.tsx';
+import { useTools } from '../api/tools.ts';
 import type { GithubWrite } from '../lib/guard.ts';
 import { reviewNoteSource } from '../lib/review-note.ts';
 import { Button } from './Button.tsx';
@@ -93,12 +94,16 @@ interface ComposerProps {
   submitTitle: string;
   sending: boolean;
   drafting: boolean;
-  /** The agent's text: from the user's words when there are any, else from the PR alone. Null when drafting failed. */
-  draft: (gist: string) => Promise<string | null>;
+  /**
+   * The agent's text: from the user's words when there are any, else from the PR alone. Null when drafting failed.
+   * `quiet`: the draft on open, nobody clicked for it, so a failure shows no toast.
+   */
+  draft: (gist: string, quiet?: boolean) => Promise<string | null>;
   /**
    * Review notes (Approve with a note, Comment review): an empty composer asks
    * the agent for a draft as it opens, since hand-written notes are rare
-   * (2026-10-06). Not while the write is blocked, and never over a kept draft.
+   * (2026-10-06). Not while the write is blocked or the agent is known to be
+   * off, and never over a kept draft. A failure stays quiet: the box stays empty.
    */
   draftsOnOpen?: boolean;
   /** True when it went out. `source`: whether the text is the agent's draft, edited, or the user's own (telemetry). */
@@ -117,6 +122,7 @@ interface ComposerProps {
  */
 export function Composer(props: ComposerProps) {
   const actions = useActions();
+  const tools = useTools();
   const compose = useCompose();
   const key = composeKey(props.target);
   const [text, setText] = useState(() => compose.draftOf(key));
@@ -173,14 +179,17 @@ export function Composer(props: ComposerProps) {
   // Once per opening, and only into an empty box: the kept draft (the user's
   // text or an earlier agent draft) wins. It waits while a draft is still out
   // (the other review note's shares the busy key) and while the write is
-  // blocked. The ref also keeps StrictMode's second effect run from calling twice.
+  // blocked or the agent is known to be off (claude missing, logged out or at
+  // its limit). It fails quietly: nobody clicked, so no toast, the box stays
+  // empty. The ref also keeps StrictMode's second effect run from calling twice.
   const autoDrafted = useRef(false);
+  const agentOff = tools.data?.agentOn === false;
   useEffect(() => {
-    if (!props.draftsOnOpen || autoDrafted.current || props.drafting || blocked !== null || compose.draftOf(key) !== '') {
+    if (!props.draftsOnOpen || autoDrafted.current || props.drafting || blocked !== null || agentOff || compose.draftOf(key) !== '') {
       return;
     }
     autoDrafted.current = true;
-    void props.draft('').then(takeAgentDraft);
+    void props.draft('', true).then(takeAgentDraft);
   });
   return (
     <div

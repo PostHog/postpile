@@ -258,9 +258,10 @@ export interface Actions {
   /**
    * The agent's draft for "Approve with a note" or "Comment review", or null
    * when drafting failed. `gist`: the user's words to write it from ("Rewrite
-   * with the agent"); empty drafts from the PR alone.
+   * with the agent"); empty drafts from the PR alone. `quiet`: no error toast
+   * on failure, for the draft on open that nobody clicked for.
    */
-  draftReviewNote(prKey: PrKey, kind: ReviewNoteKind, gist?: string): Promise<string | null>;
+  draftReviewNote(prKey: PrKey, kind: ReviewNoteKind, gist?: string, quiet?: boolean): Promise<string | null>;
   /** The agent's draft of a reply to one comment, from its thread and `gist` (empty: from the thread alone). Null when drafting failed. */
   draftReply(prKey: PrKey, commentId: string, gist: string): Promise<string | null>;
   /** Returns true when the comment went out. */
@@ -757,12 +758,15 @@ export function ActionsProvider(props: { children: ReactNode }) {
   }
 
   /** An agent draft of a PR comment from `path`; a failure says why in the toast and returns null. */
-  async function draft(busyKey: string, path: string, body: object): Promise<string | null> {
+  /** `quiet`: a draft nobody clicked for (the review notes' draft on open) fails without a toast. */
+  async function draft(busyKey: string, path: string, body: object, quiet = false): Promise<string | null> {
     try {
       const result = await withBusy(busyKey, () => request<{ body: string }>('POST', path, body));
       return result.body;
     } catch (error) {
-      show('error', `Draft failed: ${errorText(error)}`);
+      if (!quiet) {
+        show('error', `Draft failed: ${errorText(error)}`);
+      }
       return null;
     }
   }
@@ -1023,7 +1027,7 @@ export function ActionsProvider(props: { children: ReactNode }) {
     markOpenedRead,
     refreshGlanceOnLook,
     draftAsk: (prKey, person, intent) => draft(`ask:${prKey}`, `${prPath(prKey)}/draft-ask`, { person, intent }),
-    draftReviewNote: (prKey, kind, gist = '') => draft(`reviewNote:${prKey}`, `${prPath(prKey)}/draft-review-note`, { kind, gist }),
+    draftReviewNote: (prKey, kind, gist = '', quiet = false) => draft(`reviewNote:${prKey}`, `${prPath(prKey)}/draft-review-note`, { kind, gist }, quiet),
     draftReply: (prKey, commentId, gist) => draft(`reply:${prKey}:${commentId}`, `${prPath(prKey)}/draft-reply`, { commentId, gist }),
     sendComment: (prKey, body) => run(`comment:${prKey}`, 'comment', () => request('POST', `${prPath(prKey)}/comment`, { body })),
     replyToComment: (prKey, commentId, body) =>
