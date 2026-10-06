@@ -97,6 +97,7 @@ interface ReviewRow {
   submitted_at: string;
   commit_oid: string | null;
   viewer_reacted: number | null;
+  url: string | null;
   own_body: string | null;
 }
 
@@ -149,6 +150,7 @@ function toReviewPart(row: ReviewRow): ReviewPart {
     submittedAt: row.submitted_at,
     commitOid: row.commit_oid,
     viewerReacted: toMaybeBool(row.viewer_reacted),
+    url: row.url,
     ownBody: row.own_body,
   };
 }
@@ -184,8 +186,8 @@ export class DiscussionRows {
       ),
       thread: this.db.prepare('INSERT INTO pr_thread (pr_key, id, ord, path, is_resolved) VALUES (?, ?, ?, ?, ?)'),
       review: this.db.prepare(
-        `INSERT INTO pr_review (pr_key, id, ord, author, state, submitted_at, commit_oid, viewer_reacted, own_body)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO pr_review (pr_key, id, ord, author, state, submitted_at, commit_oid, viewer_reacted, url, own_body)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ),
     };
     return this.statements;
@@ -221,7 +223,7 @@ export class DiscussionRows {
       statements.thread.run(key, t.id, t.ord, t.path, t.isResolved ? 1 : 0);
     }
     for (const r of parts.reviews) {
-      statements.review.run(key, r.id, r.ord, r.author, r.state, r.submittedAt, r.commitOid, fromMaybeBool(r.viewerReacted), r.ownBody);
+      statements.review.run(key, r.id, r.ord, r.author, r.state, r.submittedAt, r.commitOid, fromMaybeBool(r.viewerReacted), r.url, r.ownBody);
     }
   }
 
@@ -252,7 +254,7 @@ export class DiscussionRows {
     }
     const reviews = all<ReviewRow>(
       this.db,
-      `SELECT pr_key, id, ord, author, state, submitted_at, commit_oid, viewer_reacted, own_body FROM pr_review WHERE pr_key IN (${list})`,
+      `SELECT pr_key, id, ord, author, state, submitted_at, commit_oid, viewer_reacted, url, own_body FROM pr_review WHERE pr_key IN (${list})`,
       ...keys,
     );
     for (const row of reviews) {

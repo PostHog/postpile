@@ -433,7 +433,9 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   `PrDescription`, `PrFacts`, `ReviewList`, `NewSinceBox` (the digest
   under the title, "Reply ↓" jumps), `AgentFacts`, `ActivityTimeline`
   (every line, Reply and React on people's comments, `FoldedLine` for
-  replies to bots and bot reviews)), `AgentPane` (the
+  replies to bots and bot reviews; a row's age is `AgeLink`, a plain
+  `target="_blank"` link to `ActivityEvent.url` that main opens in the
+  browser, plain text without one)), `AgentPane` (the
   topic's agent, in the detail pane's place),
   `StatusFooter` (+ `WritesLock`), `Toast`, `SearchField` (title bar filter),
   `ToolsNotice` (missing gh or claude, with `FixCommand`, shared with setup),

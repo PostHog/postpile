@@ -128,6 +128,32 @@ describe('deriveEvents: comments', () => {
 });
 
 describe('deriveEvents: reviews, commits, timeline, CI', () => {
+  it('gives each event its permalink where GitHub has one', () => {
+    const pr = makePr({
+      comments: [
+        makeComment({ id: 'c1', url: 'https://github.com/acme/app/pull/1#issuecomment-1', createdAt: at(1) }),
+        makeComment({ id: 'r2', kind: 'review', author: 'bob', body: 'nit', url: 'https://github.com/acme/app/pull/1#pullrequestreview-2', createdAt: at(2) }),
+      ],
+      reviews: [
+        makeReview({ id: 'r1', state: 'APPROVED', body: '', submittedAt: at(1), url: 'https://github.com/acme/app/pull/1#pullrequestreview-1' }),
+        // Stored before reviews had a link: its body comment's link stands in.
+        makeReview({ id: 'r2', state: 'COMMENTED', body: 'nit', submittedAt: at(2) }),
+        makeReview({ id: 'r3', state: 'APPROVED', body: '', submittedAt: at(3) }),
+      ],
+      commits: [makeCommit({ oid: 'abc123', committedAt: at(4) })],
+      timeline: [makeTimelineItem({ id: 't1', kind: 'closed', at: at(5) })],
+    });
+    const urls = Object.fromEntries(deriveEvents(pr, viewer, null).map((e) => [e.sourceId, e.url]));
+    expect(urls).toEqual({
+      c1: 'https://github.com/acme/app/pull/1#issuecomment-1',
+      r1: 'https://github.com/acme/app/pull/1#pullrequestreview-1',
+      r2: 'https://github.com/acme/app/pull/1#pullrequestreview-2',
+      r3: null,
+      abc123: `${pr.url}/commits/abc123`,
+      t1: null,
+    });
+  });
+
   it('maps review states and skips pending and dismissed', () => {
     const pr = makePr({
       reviews: [

@@ -52,6 +52,15 @@ describe('activityList', () => {
     expect(list.earlier[1]?.at).toBe(at(3));
   });
 
+  it("links each line to its newest event's permalink, and a noise row to its own", () => {
+    const pushes = [1, 2].map((minute) => ev({ kind: 'commits_pushed', actor: 'rowan', summary: 'rowan pushed: x', at: at(minute), url: `https://github.com/acme/app/pull/1/commits/c${minute}` }));
+    const request = ev({ kind: 'review_requested', actor: 'rowan', summary: `rowan requested a review from ${me}`, at: at(3), url: null });
+    const deploy = ev({ kind: 'deploy', actor: 'vercel', isBot: true, summary: 'vercel deployed', at: at(4), url: 'https://github.com/acme/app/pull/1#issuecomment-4' });
+    const list = activityList([...pushes, request, deploy], who);
+    expect(list.earlier.map((line) => line.url)).toEqual([null, 'https://github.com/acme/app/pull/1/commits/c2']);
+    expect(list.noise.map((item) => item.url)).toEqual(['https://github.com/acme/app/pull/1#issuecomment-4']);
+  });
+
   it('says when a burst came after your approval', () => {
     const pushes = [1, 2].map((minute) => ev({ kind: 'commits_after_approval', actor: 'rowan', summary: 'rowan pushed: x', at: at(minute) }, 'loud'));
     const list = activityList(pushes, who);
@@ -114,11 +123,11 @@ describe('activityList fresh noise', () => {
 });
 
 describe('activityList items', () => {
-  it('ships each event as a row draws it: no url, source id, rule loudness or seen time', () => {
+  it('ships each event as a row draws it: its permalink, but no source id, rule loudness or seen time', () => {
     const bot = ev({ kind: 'bot_comment', actor: 'greptile[bot]', isBot: true, summary: 'greptile commented', url: 'https://github.com/acme/app/pull/1#c', at: at(1) }, 'quiet');
     const list = activityList([bot], who);
     expect(list.noise).toEqual([
-      { id: bot.event.id, kind: 'bot_comment', actor: 'greptile[bot]', summary: 'greptile commented', at: at(1), display: 'quiet', unseen: true, reason: 'comment' },
+      { id: bot.event.id, kind: 'bot_comment', actor: 'greptile[bot]', summary: 'greptile commented', at: at(1), display: 'quiet', unseen: true, reason: 'comment', url: 'https://github.com/acme/app/pull/1#c' },
     ]);
   });
 

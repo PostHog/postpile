@@ -219,7 +219,7 @@ describe('an install that skips releases straight to 035', () => {
       const store = Store.open(path);
       // 035 is recorded at open, before any job ran: from here on builds before it refuse the file.
       expect(currentVersion(store.db)).toBe(LATEST_VERSION);
-      expect(LATEST_VERSION).toBe(35);
+      expect(LATEST_VERSION).toBeGreaterThanOrEqual(35);
       const keys = prs.map((pr) => pr.key);
       // The board's first read on the new build, before any job: from the json, already in board shape.
       expect([...store.prs.keepParsed(keys).values()]).toEqual(prs.map(boardShape));

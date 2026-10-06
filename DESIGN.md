@@ -3029,6 +3029,21 @@ thread, reading the diff.
   with the PR and the viewer); a comment on several lines (its event and an
   edit, a review and a mention in it) gets it once, on the newest line. The
   renderer only reads it: workspace imports there stay type-only.
+- Permalinks (2026-10-06). Every activity row's age ("5h") links to the
+  event on github.com, GitHub's own convention: its timestamps are the
+  permalinks. Quiet: the same faint mono text, underlined and `text-ink-2`
+  on hover, the full local time in the tooltip ("Open on GitHub · Tue 6
+  Oct, 21:21"); the unread dot stays outside the link. A line links to its
+  newest event (a push burst to the last commit, a fold to its newest
+  reply or comment). Where the link comes from (`PrEvent.url`, set by
+  `deriveEvents`): a comment or review body its own `url`; a review its
+  `Review.url` (fetched since 0.25.0, column `pr_review.url`, migration
+  036), else its body comment's, else none; a push
+  `<pr url>/commits/<oid>`; timeline items (requests, merges, closes,
+  force pushes, the merge queue) have none, GitHub gives them no
+  anchor the reader fetches, and their age stays plain text. Opening goes
+  through the window's link handler like every other GitHub link (the
+  browser, never the app window).
 - Thread context and replies to bots (2026-10-06, `bot-threads.ts`). A
   comment in a review thread says whom it answers and where: "alice
   replied to bob on src/x.ts" (the last other person before it, or the
@@ -3160,7 +3175,9 @@ seen time. Now `events` is gone; the CLI's `pr` command, its one reader,
 has its own `listPrEvents` (not on the HTTP API). Every item of `activity`
 is an `ActivityEvent`, what a row draws: id (key, Unmute), kind, actor,
 summary, time, display, unseen and the reason for the hover title (the
-agent's override reason before the rule's); a line adds its body, isNew,
+agent's override reason before the rule's), and since 2026-10-06 the
+event's permalink (`url`, the row's age links to it; about 80 bytes a
+row); a line adds its body, isNew,
 `eventCount` (a push burst's "3 events") and its reply target. Nothing the
 pane shows was cut: every line, every body whole and every folded row is
 still sent, since "Show all N" and the noise fold expand on the client.

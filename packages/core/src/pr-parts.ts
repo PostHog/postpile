@@ -82,6 +82,8 @@ export interface ReviewPart {
   submittedAt: IsoTime;
   commitOid: string | null;
   viewerReacted: boolean | null;
+  /** The review's permalink; null for a review stored without one (before 0.25.0). */
+  url: string | null;
   /**
    * Null: the body is the kind 'review' comment with the same id, which
    * holds the identical text. Else the body itself, '' included (a review
@@ -178,6 +180,7 @@ function reviewPart(review: FullReview, ord: number, parts: Map<string, CommentP
     submittedAt: review.submittedAt,
     commitOid: review.commitOid ?? null,
     viewerReacted: review.viewerReacted ?? null,
+    url: review.url ?? null,
     ownBody: shared ? null : review.body,
   };
 }
@@ -292,6 +295,9 @@ function toReview(part: ReviewPart, comments: Map<string, Comment>): Review {
   };
   if (part.viewerReacted !== null) {
     review.viewerReacted = part.viewerReacted;
+  }
+  if (part.url !== null) {
+    review.url = part.url;
   }
   return review;
 }

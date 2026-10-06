@@ -350,7 +350,7 @@ describe('server routes over the fake engine', () => {
     // Every event is in the activity, cut to what a row draws; there is no second, raw list.
     expect(detail).not.toHaveProperty('events');
     const deploy = activityItems(detail).find((item) => item.kind === 'deploy');
-    expect(Object.keys(deploy ?? {}).sort()).toEqual(['actor', 'at', 'display', 'id', 'kind', 'reason', 'summary', 'unseen']);
+    expect(Object.keys(deploy ?? {}).sort()).toEqual(['actor', 'at', 'display', 'id', 'kind', 'reason', 'summary', 'unseen', 'url']);
     expect(detail.activity.fresh[0]).not.toHaveProperty('events');
   });
 

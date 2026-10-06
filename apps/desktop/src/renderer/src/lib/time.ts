@@ -29,6 +29,19 @@ export function clockLabel(date: Date): string {
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** The full local date and time for a tooltip, "Tue 6 Oct, 21:21"; the year only when it is not this one. */
+export function dateTimeLabel(iso: string, now: Date): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+  const year = date.getFullYear() === now.getFullYear() ? '' : ` ${date.getFullYear()}`;
+  return `${WEEKDAYS[date.getDay()]} ${date.getDate()} ${MONTHS[date.getMonth()]}${year}, ${clockLabel(date)}`;
+}
+
 /** When something started, for "since 06:28": the clock time today, else the day ("Sep 30"). */
 export function sinceLabel(iso: string, now: Date): string {
   const then = new Date(iso);

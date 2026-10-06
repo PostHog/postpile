@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { at } from '@postpile/core/fixtures';
-import { ageLabel, newest, sinceLabel, whenLabel } from './time.ts';
+import { ageLabel, dateTimeLabel, newest, sinceLabel, whenLabel } from './time.ts';
 
 describe('time helpers', () => {
   const now = new Date(at(0));
@@ -32,5 +32,13 @@ describe('time helpers', () => {
     expect(whenLabel(at(-3 * 24 * 60), now)).toBe('3 days ago');
     expect(whenLabel(at(-15 * 24 * 60), now)).toBe('2w ago');
     expect(whenLabel('not a time', now)).toBe('');
+  });
+
+  it('gives the full local date and time, with the year only when it is another one', () => {
+    // Local wall-clock times, so the test holds in any time zone.
+    const thisYear = new Date(2026, 9, 6, 21, 21);
+    expect(dateTimeLabel(new Date(2026, 9, 6, 9, 5).toISOString(), thisYear)).toBe('Tue 6 Oct, 09:05');
+    expect(dateTimeLabel(new Date(2025, 11, 31, 23, 59).toISOString(), thisYear)).toBe('Wed 31 Dec 2025, 23:59');
+    expect(dateTimeLabel('not a time', thisYear)).toBe('');
   });
 });

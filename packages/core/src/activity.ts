@@ -57,6 +57,8 @@ export interface ActivityEvent {
   unseen: boolean;
   /** Why the rules, or the agent's override, classed it so. */
   reason: string;
+  /** The event's permalink on github.com, the row's age links to it. Null when it has none (timeline items, CI). */
+  url: string | null;
 }
 
 /** Where a reply in a review thread sits: whom it answers and the file. */
@@ -253,7 +255,7 @@ function fullBody(view: EventView, pr: FullPr | null): string | null {
   return body === '' ? null : body;
 }
 
-/** An event as a row draws it, without what no row reads (url, source id, rule loudness, seen time). */
+/** An event as a row draws it, without what no row reads (source id, rule loudness, seen time). */
 export function activityEvent(view: EventView): ActivityEvent {
   const { event } = view;
   return {
@@ -265,6 +267,7 @@ export function activityEvent(view: EventView): ActivityEvent {
     display: view.display,
     unseen: view.unseen,
     reason: event.override?.reason ?? event.ruleReason,
+    url: event.url,
   };
 }
 
