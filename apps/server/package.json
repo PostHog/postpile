@@ -1,6 +1,6 @@
 {
   "name": "@postpile/server",
-  "version": "0.24.0",
+  "version": "0.25.0",
   "description": "PostPile local HTTP API over the engine, plus the sample-data fake engine",
   "private": true,
   "license": "MIT",
