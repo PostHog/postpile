@@ -29,11 +29,10 @@ export interface LoudnessInput {
   userRepliedAfter?: boolean;
   /** review_requested: the viewer reviewed after it, or the request was removed later. */
   requestAnswered?: boolean;
-  /**
-   * comment / review_commented: a person's reply to a bot in a review thread,
-   * or the empty review GitHub made to carry it (`botThreadOf`).
-   */
+  /** comment: a person's reply to a bot in a review thread (`isBotThreadReply`). */
   botThreadReply?: boolean;
+  /** review_commented: an empty review GitHub made to carry thread replies (`isCarrierReview`). */
+  carrierReview?: boolean;
 }
 
 export interface LoudnessDecision {
@@ -177,9 +176,16 @@ export const LOUDNESS_TABLE: readonly LoudnessRow[] = [
     reason: 'edited a comment',
   },
   {
+    // GitHub wraps every thread reply in an empty review of its own: the reply has its own event and loudness, the wrapper is never a review on your PR (2026-10-06).
+    name: 'empty review carrying thread replies',
+    when: (input) => input.kind === 'review_commented' && input.carrierReview === true,
+    loudness: 'quiet',
+    reason: 'only carries replies in review threads',
+  },
+  {
     // Answering a review bot ("fixed") is housekeeping, not news, on any PR (2026-10-06). Asks have their own kinds and stay loud above.
     name: 'reply to a bot in a review thread',
-    when: (input) => (input.kind === 'comment' || input.kind === 'review_commented') && input.botThreadReply === true,
+    when: (input) => input.kind === 'comment' && input.botThreadReply === true,
     loudness: 'quiet',
     reason: 'replied to a bot in a review thread',
   },

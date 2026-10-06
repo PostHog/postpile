@@ -1,6 +1,7 @@
 import { trimBotBody } from './bot-bodies.ts';
-import { carriedBotThreadReplies, isBotThreadReply, threadReplyOf } from './bot-threads.ts';
+import { isBotThreadReply, threadReplyOf } from './bot-threads.ts';
 import { isBot, isMachineComment } from './bots.ts';
+import { isCarrierReview } from './carrier-reviews.ts';
 import { ADDRESSED_KINDS } from './kinds.ts';
 import { lastSpokeAt, spokeAfter } from './last-touch.ts';
 import { ruleLoudness } from './loudness.ts';
@@ -22,8 +23,10 @@ interface RawEvent {
   subject: string | null;
   /** comment_edited: the edit time, part of the event id so a later edit is a new event. */
   version?: IsoTime;
-  /** A person's reply to a bot in a review thread, or the empty review carrying it (`bot-threads.ts`). */
+  /** A person's reply to a bot in a review thread (`bot-threads.ts`). */
   botThreadReply?: boolean;
+  /** An empty review GitHub made to carry thread replies (`carrier-reviews.ts`). */
+  carrierReview?: boolean;
 }
 
 interface ApprovalPoint {
@@ -34,7 +37,7 @@ interface ApprovalPoint {
 const deployBody = /\b(deploy(ed|ment)?|preview)\b/i;
 
 /** The first line with text, HTML comments (bot markers) removed and whitespace collapsed. */
-function oneLine(text: string, max = 100): string {
+export function oneLine(text: string, max = 100): string {
   const visible = text.replace(/<!--[\s\S]*?-->/g, '');
   const line = visible.split('\n').find((part) => part.trim() !== '') ?? '';
   const trimmed = line.replace(/\s+/g, ' ').trim();
@@ -279,7 +282,7 @@ function reviewEvents(pr: Pr): RawEvent[] {
       url: null,
       sourceId: review.id,
       subject: null,
-      botThreadReply: carriedBotThreadReplies(review, pr).length > 0,
+      carrierReview: isCarrierReview(review, pr),
     });
   }
   return events;
@@ -468,6 +471,7 @@ export function deriveEvents(
       userRepliedAfter: (ADDRESSED_KINDS.includes(raw.kind) || raw.kind === 'comment_edited') && spokeAfter(pr, viewer.login, raw.at),
       requestAnswered: requestAnswered(pr, viewer, raw),
       botThreadReply: raw.botThreadReply === true,
+      carrierReview: raw.carrierReview === true,
     });
     return {
       id: raw.version === undefined ? eventId(pr.key, raw.kind, raw.sourceId) : editEventId(pr.key, raw.sourceId, raw.version),

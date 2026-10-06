@@ -4,6 +4,7 @@
 // from core's `activityList` on `PrDetail.activity`, built from the stored
 // PR before the slim view is made. MCP `pr_context` and the CLI read the
 // same view. Rules only, no IO.
+import { isCarrierReview } from './carrier-reviews.ts';
 import type { IsoTime, Pr, PrFile, PrKey, PrRef, PrState, Review, ReviewDecision } from './types.ts';
 
 /** A review as the pane reads it: who, which state, when. Review text shows in the activity list. */
@@ -37,6 +38,10 @@ export interface PrPaneView {
   reviewerUsers: string[];
   /** Still-pending review requests: "org/team-slug". */
   reviewerTeams: string[];
+  /**
+   * Who reviewed, in GitHub's order. Without the empty reviews GitHub makes
+   * for thread replies (`isCarrierReview`): a reply is no review.
+   */
   reviews: PaneReview[];
   /** The last stored commit's time ("pushed 2h"); null for a PR without commits in the snapshot. */
   lastCommitAt: IsoTime | null;
@@ -69,7 +74,9 @@ export function prPaneView(pr: Pr): PrPaneView {
     reviewDecision: pr.reviewDecision,
     reviewerUsers: pr.reviewerUsers,
     reviewerTeams: pr.reviewerTeams,
-    reviews: pr.reviews.map((review) => ({ author: review.author, state: review.state, submittedAt: review.submittedAt })),
+    reviews: pr.reviews
+      .filter((review) => !isCarrierReview(review, pr))
+      .map((review) => ({ author: review.author, state: review.state, submittedAt: review.submittedAt })),
     lastCommitAt: lastCommit ? lastCommit.committedAt : null,
     createdAt: pr.createdAt,
     updatedAt: pr.updatedAt,

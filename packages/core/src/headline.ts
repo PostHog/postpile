@@ -4,6 +4,7 @@
 // a teammate's approval. DESIGN.md "Tile faces" › Why it's here.
 import { botThreadOf } from './bot-threads.ts';
 import { isAutomation } from './bots.ts';
+import { isCarrierReviewEvent } from './carrier-reviews.ts';
 import { editMentionOf, isRoutingTeamMention } from './events.ts';
 import { requestsOfViewer, reviewRequestTarget } from './review-request.ts';
 import type { Pr, PrEvent, Viewer } from './types.ts';
@@ -11,7 +12,7 @@ import type { Pr, PrEvent, Viewer } from './types.ts';
 /**
  * Most important first: asks, merged or closed without review, verdicts,
  * comments, other people's events (a reply to a bot in a review thread
- * among them), automation.
+ * and the empty review GitHub wraps a thread reply in among them), automation.
  */
 export type HeadlineClass = 0 | 1 | 2 | 3 | 4 | 5;
 
@@ -52,8 +53,9 @@ export function headlineClass(event: PrEvent, pr: Pr, viewer: Viewer | null): He
   if (VERDICT_KINDS.includes(event.kind)) {
     return 2;
   }
-  // "fixed" to a review bot is housekeeping: it never leads over a person's comment (bot-threads.ts).
-  if (botThreadOf(event, pr) !== null) {
+  // "fixed" to a review bot, and the empty review GitHub wraps any thread reply in, are housekeeping:
+  // they never lead over a person's comment (bot-threads.ts, carrier-reviews.ts).
+  if (botThreadOf(event, pr) !== null || isCarrierReviewEvent(event, pr)) {
     return 4;
   }
   return COMMENT_KINDS.includes(event.kind) ? 3 : 4;

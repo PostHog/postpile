@@ -112,9 +112,10 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   `prPaneView`, which both engines call. "Pushed" reads
   `pr.lastCommitAt`; comment text, Reply and Thumbs up come from
   `PrDetail.activity`. Its rows are core's `ActivityEvent` (lines extend
-  it with body, `eventCount`, the reply, `thread` and `folded`; a line
-  with `folded` replies is a quiet bot thread, drawn by `BotThreadLine`
-  with no unread dot and no Reply): no raw events, and no
+  it with body, `eventCount`, the reply, `thread`, `folded` and `fold`; a
+  line with a `fold` is a quiet bot thread or a bot's review with its
+  inline comments, drawn by `FoldedLine` with no unread dot and no
+  Reply): no raw events, and no
   `PrDetail.events` either. A row needs a new field: add it to
   `activityEvent` in core.
 - Derived UI values ("1 pinged · 2 pulled", check counts, review
@@ -425,8 +426,8 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   `GlanceCard`, `ReviewRow`, `PaneHousekeeping`, `Composer`, `KeyFiles`,
   `PrDescription`, `PrFacts`, `ReviewList`, `NewSinceBox` (the digest
   under the title, "Reply ↓" jumps), `AgentFacts`, `ActivityTimeline`
-  (every line, Reply and React on people's comments, `BotThreadLine` for
-  replies to bots)), `AgentPane` (the
+  (every line, Reply and React on people's comments, `FoldedLine` for
+  replies to bots and bot reviews)), `AgentPane` (the
   topic's agent, in the detail pane's place),
   `StatusFooter` (+ `WritesLock`), `Toast`, `SearchField` (title bar filter),
   `ToolsNotice` (missing gh or claude, with `FixCommand`, shared with setup),

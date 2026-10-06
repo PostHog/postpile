@@ -54,8 +54,12 @@ export interface SampleCommitInput {
 export interface SampleThreadInput {
   id: string;
   path: string;
-  /** Comments in order; the first one opens the thread. */
-  comments: { author: string; body: string; hoursAgo: number }[];
+  /**
+   * Comments in order; the first one opens the thread. `review`: the index
+   * of the PR's review it was submitted with (`Comment.reviewId`), left out
+   * for a comment whose review the snapshot does not know.
+   */
+  comments: { author: string; body: string; hoursAgo: number; review?: number }[];
   resolved?: boolean;
 }
 
@@ -148,6 +152,7 @@ export function samplePr(clock: SampleClock, input: SamplePrInput): Pr {
       url: `${url}#discussion_${thread.id}`,
       path: thread.path,
       threadId: thread.id,
+      ...(comment.review === undefined ? {} : { reviewId: `review-${input.number}-${comment.review}` }),
     })),
   }));
   // Every authored body, oldest first, like the GitHub reader: issue comments, review bodies, inline comments.

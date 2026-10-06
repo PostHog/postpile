@@ -55,13 +55,28 @@ export type AutomationItem = 'queued' | 'unqueued' | 'deployed';
  */
 export type TrunkText = 'offer' | 'submitted' | 'testing' | 'stack_testing' | 'failed' | 'emoji_failed' | 'cancelled' | 'merged' | 'garbage';
 
+/** How a thread comment's review shows in the snapshot: by id, or (an older snapshot) only by author and time. */
+export type ReviewLink = 'linked' | 'unlinked';
+
 /** One thing that happened on the PR, in order. Steps GitHub would not allow are skipped when the PR is built. */
 export type StepSpec =
   | { kind: 'request'; target: RequestTarget; byBot: boolean }
   | { kind: 'unrequest'; target: RequestTarget }
   /** GitHub's re-request button: ask every reviewer whose changes request stands again. */
   | { kind: 'rerequest' }
-  | { kind: 'comment'; by: Person; text: CommentText; thread: 0 | 1 | null }
+  /**
+   * `review`: a thread comment sent on its own gets an empty COMMENTED review
+   * from GitHub, the same second; `linked` when the snapshot knows the
+   * comment's review id, `unlinked` for one stored before it was fetched.
+   * Left out: no review (an issue comment, or a review past the caps).
+   */
+  | { kind: 'comment'; by: Person; text: CommentText; thread: 0 | 1 | null; review?: ReviewLink | null }
+  /**
+   * A COMMENTED review sent with inline comments in threads 0 up to
+   * `threads` (opening them, or answering when they exist): a review bot's
+   * findings, or a person's review. `linked` as for comments.
+   */
+  | { kind: 'inline_review'; by: Person; threads: 1 | 2; text: CommentText; body: CommentText | null; linked: boolean }
   /**
    * Edit an earlier comment or review body (the one at `pick`, modulo the
    * comments so far; skipped when there is none): by its author (a bot
@@ -271,6 +286,18 @@ const stepArb: fc.Arbitrary<StepSpec> = fc.oneof(
       by: person,
       text: commentText,
       thread: fc.constantFrom<0 | 1 | null>(null, 0, 1),
+      review: fc.constantFrom<ReviewLink | null>(null, 'linked', 'unlinked'),
+    }),
+  },
+  {
+    weight: 2,
+    arbitrary: fc.record({
+      kind: fc.constant('inline_review' as const),
+      by: fc.oneof({ weight: 2, arbitrary: fc.constant<Person>('bot') }, { weight: 1, arbitrary: person }),
+      threads: fc.constantFrom<1 | 2>(1, 2),
+      text: commentText,
+      body: maybe(commentText, 70),
+      linked: fc.oneof({ weight: 3, arbitrary: fc.constant(true) }, { weight: 1, arbitrary: fc.constant(false) }),
     }),
   },
   {
