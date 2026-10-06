@@ -3111,8 +3111,17 @@ first thing to click; the text starts under it): "✨ Draft with agent" on
 an empty box (from the PR and its topic), "✨ Rewrite with agent" once
 there is text (from the user's words; replaces the old person field, gist
 field and Draft step); Cancel; and a button that names the target ("Post reply to alice",
-"Approve with note" in green, every other post in ink). No agent draft
-starts by itself. Escape closes it and keeps the draft.
+"Approve with note" in green, every other post in ink). Escape closes it and keeps the draft.
+The two review notes (Approve with a note, Comment review) start drafting
+as they open (2026-10-06, `draftsOnOpen`): the box shows "Drafting…" and
+the agent's text lands in it, editable, before anything can be sent.
+Hand-written notes were rare (2 of 21 approvals in two weeks carried a
+PostPile note), so the click that opens the composer is the ask. It only
+fires into an empty box, once per opening: a kept draft (the user's text
+or an earlier agent draft) is never replaced, and Cancel or Escape still
+drops a draft that comes back late. Not while the write is blocked (lock
+closed or not loaded yet): a note that cannot be sent is not worth an
+agent call. Ask and replies stay manual ("✨ Draft with agent").
 
 **Ask the agent** (`AgentPane`): the agent chat's scope is the topic, and
 it takes over the right pane. Entry: "Ask the agent" in the topic header,
@@ -3992,14 +4001,30 @@ any review ask; on top of that:
   sync brings GitHub's copy. The move goes back to the author.
 - Review note drafts (2026-10-02): `PrActions.draftReviewNote(key, kind)`
   reuses `agent.draftComment` (call kind `draft_comment`, no new kind) with
-  `person: null` (a note addressed to nobody) and an intent per kind:
-  approve, only what the author does not already know (a risk to watch, a
-  follow-up), else one short sentence; comment, the one point that stood
-  out, without approving or asking for changes. Both are one or two
-  sentences, never more, and never retell the change or list what was
+  `person: null` (a note addressed to nobody) and an intent per kind
+  (`review-note.ts`). Neither retells the change or lists what was
   checked: the author wrote the diff (2026-10-02, after the first drafts
-  read like a summary of the PR). Plain sentences: active voice, under 25
-  words, no hedging, idioms, em dashes or bullets. The glance's Verdict / Risk lines travel as fenced
+  read like a summary of the PR).
+  Since 2026-10-06 the notes are written for a user who posts them without
+  the agent's view of the diff: a posted "the dict wildcard and the build
+  check both hold up, and `excludePath` safely skips…" listed checks and
+  names the user never looked at. So: plain words anyone on the team
+  understands without the diff, one point the user can stand behind
+  without having read it in detail, no nitpicks (naming, style, small edge
+  cases), code identifiers only when the point cannot be said without one.
+  - Approve: "Looks good." plus at most one short sentence on a risk to
+    watch after merge or a follow-up; with nothing like that, the opener
+    alone (the usual case). The opener is picked in code, not by the
+    agent: `APPROVE_OPENERS` ("Looks good.", "LGTM.", "Looks good to me.",
+    "Good to go.", "All good here."), the next one after the last used
+    (meta `approve_note_last_opener`), so it never repeats twice in a row.
+    The agent call is `pointOnly`: it returns just the point, or an empty
+    body, and the engine puts the opener in front (`approveNoteBody`).
+  - Comment: one or two short sentences with the one point most worth a
+    look (an observation or a doubt that matters), without approving or
+    asking for changes.
+  Plain sentences: at most two (one for the approve point), each about 20
+  words or fewer, active voice, no hedging, idioms, em dashes or bullets. The glance's Verdict / Risk lines travel as fenced
   `notes` (untrusted, they can echo PR text), never in the intent. Its Does
   line stays out, since a summary handed in came back out, and so does For
   you, which can carry local work context into a public note (Codex on
@@ -7093,7 +7118,10 @@ topic names are never event props.
    (throttled to once per 30 minutes).
 3. *Core actions*: `tile_opened` (`for_whom` gained `routing` on
    2026-09-30), `pr_approved` (from `detail`, `tile`, `agent_tile` or
-   `agent_topic`; `was_agent_approved` true for the agent ones), `marked_read`
+   `agent_topic`; `was_agent_approved` true for the agent ones; since
+   2026-10-06 `with_note` and `note`: `none`, `agent`, `agent_edited` or
+   `own`, from the composer, never the text), `comment_review_sent` (note:
+   `agent`, `agent_edited` or `own`, 2026-10-06), `marked_read`
    (origin `tile`, `detail`, `debug`, `cleanup`, `agent_tile` or
    `agent_topic`; count is the tile count for the agent ones), `team_request_removed` (no
    props: no PR, no team slug), `snoozed`
@@ -7997,8 +8025,8 @@ preflight and does not know the token, so CORS stays open.
 | `POST /api/topics/:id/tailoring` `{text, keep}` | `decideTailoring()` |
 | `POST /api/proposals/:id` `{accept}` | `decideTopicProposal()` |
 | `GET /api/prs/:owner/:repo/:number` | `getPr()` (`pr` is the slim `PrPaneView`, see "The PR pane") |
-| `POST /api/prs/:owner/:repo/:number/approve` `{headOid, body?}` | `approve()` (body: "Approve with comment") |
-| `POST /api/prs/:owner/:repo/:number/comment-review` `{headOid, body}` | `commentReview()` (event COMMENT; final; refused while locked) |
+| `POST /api/prs/:owner/:repo/:number/approve` `{headOid, body?, noteSource?}` | `approve()` (body: "Approve with comment"; noteSource: telemetry only) |
+| `POST /api/prs/:owner/:repo/:number/comment-review` `{headOid, body, noteSource?}` | `commentReview()` (event COMMENT; final; refused while locked) |
 | `POST /api/prs/:owner/:repo/:number/draft-ask` `{person, intent}` | `draftAsk()` |
 | `POST /api/prs/:owner/:repo/:number/draft-review-note` `{kind, gist?}` | `draftReviewNote()` (kind `approve` or `comment`; gist: the user's words to write from; agent only) |
 | `POST /api/prs/:owner/:repo/:number/comment` `{body}` | `sendComment()` |

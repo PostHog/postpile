@@ -33,6 +33,7 @@ import type {
   PrKey,
   RepoOverview,
   ReviewNoteKind,
+  ReviewNoteSource,
   SetupAcceptRequest,
   SetupAcceptResult,
   SetupFitRequest,
@@ -151,15 +152,16 @@ export interface Actions {
   /**
    * `headOid`: the head commit on screen; the server refuses the approval when
    * the PR moved past it. `body`: the note from "Approve with comment", empty for none.
-   * Returns true when it went out.
+   * `noteSource`: where the note came from, for telemetry only. Returns true when it went out.
    */
-  approve(prKey: PrKey, headOid: string, body?: string): Promise<boolean>;
+  approve(prKey: PrKey, headOid: string, body?: string, noteSource?: ReviewNoteSource): Promise<boolean>;
   /**
    * "Comment review": a review with event COMMENT on `headOid`, refused like
-   * approve when the PR moved past it. Final, blocked while locked. Returns
-   * true when it went out.
+   * approve when the PR moved past it. Final, blocked while locked.
+   * `noteSource`: where the text came from, for telemetry only. Returns true
+   * when it went out.
    */
-  commentReview(prKey: PrKey, headOid: string, body: string): Promise<boolean>;
+  commentReview(prKey: PrKey, headOid: string, body: string, noteSource?: ReviewNoteSource): Promise<boolean>;
   /**
    * The ✨ Approve of a tile or the topic, after the confirm list: one call for
    * the covered PRs. Optimistic like the pane's approve, never an Undo.
@@ -924,13 +926,13 @@ export function ActionsProvider(props: { children: ReactNode }) {
     markThreadRead: async (threadId) => {
       await run(`markThread:${threadId}`, 'markRead', () => request('POST', `/api/notifications/${encodeURIComponent(threadId)}/mark-read`));
     },
-    approve: (prKey, headOid, body = '') =>
+    approve: (prKey, headOid, body = '', noteSource) =>
       runApprove(`approve:${prKey}`, [prKey], async () => {
-        const result = await request<ActionResult>('POST', `${prPath(prKey)}/approve`, { headOid, body });
+        const result = await request<ActionResult>('POST', `${prPath(prKey)}/approve`, { headOid, body, noteSource });
         return { ...result, results: [{ prKey, ok: result.ok, message: result.message }] };
       }),
-    commentReview: (prKey, headOid, body) =>
-      run(`commentReview:${prKey}`, 'commentReview', () => request('POST', `${prPath(prKey)}/comment-review`, { headOid, body })),
+    commentReview: (prKey, headOid, body, noteSource) =>
+      run(`commentReview:${prKey}`, 'commentReview', () => request('POST', `${prPath(prKey)}/comment-review`, { headOid, body, noteSource })),
     approveAgent: async (input) => {
       const prKeys = input.prs.map((pr) => pr.prKey);
       await runApprove(input.busyKey, prKeys, () => request<BatchApproveResult>('POST', '/api/agent-actions/approve', { prs: input.prs, from: input.from }));

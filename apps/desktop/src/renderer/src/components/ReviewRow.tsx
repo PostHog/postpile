@@ -97,7 +97,7 @@ export function ReviewRow(props: ReviewRowProps) {
                 className={`${splitSeamClasses(variant)} px-2.5`}
                 disabled={approving || approveBlocked !== null}
                 aria-expanded={open === 'approve'}
-                title={approveBlocked ?? 'Approve with a note you write (or let the agent draft)'}
+                title={approveBlocked ?? 'Approve with a note: the agent drafts it, you edit it'}
                 onClick={() => compose.openTarget({ kind: 'approve' })}
               >
                 + note
@@ -139,7 +139,8 @@ export function ReviewRow(props: ReviewRowProps) {
           sending={approving}
           drafting={actions.isBusy(`reviewNote:${pr.key}`)}
           draft={(gist) => actions.draftReviewNote(pr.key, 'approve', gist)}
-          send={(body) => actions.approve(pr.key, pr.headOid, body)}
+          draftsOnOpen
+          send={(body, source) => actions.approve(pr.key, pr.headOid, body, source)}
           closesOnClick
         />
       )}
@@ -155,7 +156,8 @@ export function ReviewRow(props: ReviewRowProps) {
           sending={actions.isBusy(`commentReview:${pr.key}`)}
           drafting={actions.isBusy(`reviewNote:${pr.key}`)}
           draft={(gist) => actions.draftReviewNote(pr.key, 'comment', gist)}
-          send={(body) => actions.commentReview(pr.key, pr.headOid, body)}
+          draftsOnOpen
+          send={(body, source) => actions.commentReview(pr.key, pr.headOid, body, source)}
         />
       )}
       {open === 'ask' && (

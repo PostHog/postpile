@@ -54,6 +54,7 @@ import type {
   PrKey,
   RepoOverview,
   ReviewNoteKind,
+  ReviewNoteSource,
   SearchResult,
   SetupAcceptRequest,
   SetupAcceptResult,
@@ -321,15 +322,17 @@ export interface EngineService {
    * Immediate and final: GitHub approvals cannot be undone. `headOid` is the
    * head commit the user looked at; a different stored head refuses the
    * approval without calling GitHub. `body`: the note from "Approve with
-   * comment", empty for none.
+   * comment", empty for none. `noteSource`: where the note came from, for
+   * telemetry only.
    */
-  approve(prKey: PrKey, headOid: string, body?: string): Promise<ActionResult>;
+  approve(prKey: PrKey, headOid: string, body?: string, noteSource?: ReviewNoteSource): Promise<ActionResult>;
   /**
    * "Comment review": a GitHub review with event COMMENT and `body` (required),
    * pinned to `headOid` with the same head check as approve. Answers a review
    * request without approving. Final; refused while GitHub writes are locked.
+   * `noteSource`: where the text came from, for telemetry only.
    */
-  commentReview(prKey: PrKey, headOid: string, body: string): Promise<ActionResult>;
+  commentReview(prKey: PrKey, headOid: string, body: string, noteSource?: ReviewNoteSource): Promise<ActionResult>;
   /**
    * Agent-assisted Approve (a tile's or the topic's ✨ Approve, DESIGN.md
    * "Agent-assisted actions"): each PR through `approve` with its head guard,

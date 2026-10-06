@@ -33,6 +33,8 @@ const snoozeCondition = z.discriminatedUnion('kind', [
 ]);
 
 const agentActionFrom = z.enum(['agent_tile', 'agent_topic']);
+// Where a review note came from (core's ReviewNoteSource): telemetry only, never the text.
+const reviewNoteSource = z.enum(['agent', 'agent_edited', 'own']);
 
 const feedbackBody = z.object({
   kind: z.enum(['not_mine', 'not_related', 'wrong_topic']),
@@ -475,14 +477,19 @@ export function createApp(
     return c.json(await engine.refreshGlanceOnLook(prKeyFromParams(c.req.param())));
   });
   // headOid: the head commit the renderer showed; the approval is pinned to it or refused. body: "Approve with comment", empty for none.
+  // noteSource: where the note came from (agent draft, edited, own), telemetry only.
   app.post('/api/prs/:owner/:repo/:number/approve', async (c) => {
-    const body = z.object({ headOid: z.string().min(1).max(100), body: z.string().max(65_536).default('') }).parse(await c.req.json());
-    return c.json(await engine.approve(prKeyFromParams(c.req.param()), body.headOid, body.body));
+    const body = z
+      .object({ headOid: z.string().min(1).max(100), body: z.string().max(65_536).default(''), noteSource: reviewNoteSource.optional() })
+      .parse(await c.req.json());
+    return c.json(await engine.approve(prKeyFromParams(c.req.param()), body.headOid, body.body, body.noteSource));
   });
   // "Comment review": a review with event COMMENT, pinned to headOid like approve. Final; refused while writes are locked.
   app.post('/api/prs/:owner/:repo/:number/comment-review', async (c) => {
-    const body = z.object({ headOid: z.string().min(1).max(100), body: z.string().min(1).max(65_536) }).parse(await c.req.json());
-    return c.json(await engine.commentReview(prKeyFromParams(c.req.param()), body.headOid, body.body));
+    const body = z
+      .object({ headOid: z.string().min(1).max(100), body: z.string().min(1).max(65_536), noteSource: reviewNoteSource.optional() })
+      .parse(await c.req.json());
+    return c.json(await engine.commentReview(prKeyFromParams(c.req.param()), body.headOid, body.body, body.noteSource));
   });
   // Agent-assisted Approve (a tile's or the topic's ✨ Approve): each PR with the head the confirm list showed, reported per PR.
   app.post('/api/agent-actions/approve', async (c) => {

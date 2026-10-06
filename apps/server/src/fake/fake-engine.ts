@@ -204,7 +204,7 @@ import {
   type QuietReadView,
   withViewerReaction,
 } from '@postpile/core';
-import { AgentRefresher, AutoSyncSchedule, LivePoller, MemoryPingHold, NEW_COMMITS_SINCE_LOOKED, PingDelivery, topicChatId, UNSORTED_TOPIC_ID, type AutoSyncOptions, type EngineService, type GitHubQuota, type LivePollOptions, type PollCycle } from '@postpile/engine';
+import { AgentRefresher, approveNoteBody, AutoSyncSchedule, LivePoller, MemoryPingHold, NEW_COMMITS_SINCE_LOOKED, nextApproveOpener, PingDelivery, topicChatId, UNSORTED_TOPIC_ID, type AutoSyncOptions, type EngineService, type GitHubQuota, type LivePollOptions, type PollCycle } from '@postpile/engine';
 import { FakeCatchUp } from './fake-catch-up.ts';
 import { FakeInstructions } from './fake-instructions.ts';
 import { FakeLessons } from './fake-lessons.ts';
@@ -352,6 +352,8 @@ export class FakeEngine implements EngineService {
   private readonly instructions: FakeInstructions;
   private readonly lessons: FakeLessons;
   private readonly live: FakeLivePoll;
+  /** The last approve note opener, so the canned drafts rotate like the engine's. */
+  private lastApproveOpener: string | null = null;
   private readonly workContext: FakeWorkContext;
   private readonly setup: FakeSetup;
   private readonly teamRoles: FakeTeamRoles;
@@ -1759,16 +1761,17 @@ export class FakeEngine implements EngineService {
     return { body: `@${person} ${question}${context}` };
   }
 
-  /** Canned review notes, one per kind; with a gist, the user's words with a canned finish. */
+  /**
+   * Canned review notes, one per kind; with a gist, the user's words with a
+   * canned finish. An approve note starts with the engine's rotating opener.
+   */
   async draftReviewNote(prKey: PrKey, kind: ReviewNoteKind, gist = ''): Promise<{ body: string }> {
     this.refuseWithoutAgent();
-    if (gist.trim() !== '') {
-      return { body: fromGist(gist) };
-    }
     if (kind === 'comment') {
-      return { body: 'The retry path in `sync.ts` has no test. It needs one before this merges.' };
+      return { body: gist.trim() !== '' ? fromGist(gist) : 'The retry path has no test yet. One is worth adding before this merges.' };
     }
-    return { body: 'No blockers. A test for the retry limit can follow.' };
+    this.lastApproveOpener = nextApproveOpener(this.lastApproveOpener);
+    return { body: approveNoteBody(this.lastApproveOpener, gist.trim() !== '' ? fromGist(gist) : 'A test for the retry limit can follow after merge.') };
   }
 
   /** A canned reply: from the user's gist when given, else a stock answer that fits where the comment is. */

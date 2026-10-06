@@ -34,6 +34,8 @@ const forWhom = z.enum(['you', 'team', 'routing', 'your_pr', 'none']);
 const verdict = z.enum(['looks_safe', 'look_closer', 'not_yours']).nullable();
 // agent_tile / agent_topic: the ✨ Approve and ✨ Mark read backed by the agent's verdicts (DESIGN "Agent-assisted actions").
 const approveFrom = z.enum(['detail', 'tile', 'agent_tile', 'agent_topic']);
+// Where an approval's or comment review's note came from (core's ReviewNoteSource), none for an approval without one.
+const reviewNote = z.enum(['none', 'agent', 'agent_edited', 'own']);
 const markReadOrigin = z.enum(['tile', 'detail', 'debug', 'cleanup', 'agent_tile', 'agent_topic']);
 // A snooze is either a time (bucketed) or a condition (someone replies, a
 // push, a mute until someone asks you in person - see
@@ -109,7 +111,11 @@ export const TELEMETRY_EVENTS = {
 
   // 3. Core actions
   tile_opened: z.object({ tile_kind: tileKind, for_whom: forWhom, has_glance: z.boolean(), verdict }).strict(),
-  pr_approved: z.object({ from: approveFrom, was_agent_approved: z.boolean() }).strict(),
+  // with_note: the approval carried a note (only the detail pane's "+ note" has one). note: where it came from;
+  // absent when the request did not say (2026-10-06; both absent before).
+  pr_approved: z.object({ from: approveFrom, was_agent_approved: z.boolean(), with_note: z.boolean().optional(), note: reviewNote.optional() }).strict(),
+  // "Comment review" in the detail pane: a review with a note, no approval. note: where the text came from, never the text.
+  comment_review_sent: z.object({ note: reviewNote.exclude(['none']).optional() }).strict(),
   marked_read: z.object({ count, origin: markReadOrigin }).strict(),
   snoozed: z.object({ duration_bucket: snoozeDurationBucket }).strict(),
   opened_on_github: NO_PROPS,

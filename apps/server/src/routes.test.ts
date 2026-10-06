@@ -633,9 +633,10 @@ describe('server routes over the fake engine', () => {
     const fromGist = await post<{ body: string }>(app, '/api/prs/acme/app/1902/draft-reply', { commentId: 'issuecomment-2', gist: 'one cold hour is fine' });
     expect(fromGist.json.body).toBe('One cold hour is fine.');
     const note = await post<{ body: string }>(app, '/api/prs/acme/app/1902/draft-review-note', { kind: 'approve', gist: 'watch the first cold run' });
-    expect(note.json.body).toBe('Watch the first cold run.');
+    expect(note.json.body).toBe('Looks good. Watch the first cold run.');
+    // The opener rotates: never the same twice in a row.
     const plainNote = await post<{ body: string }>(app, '/api/prs/acme/app/1902/draft-review-note', { kind: 'approve' });
-    expect(plainNote.json.body).toBe('No blockers. A test for the retry limit can follow.');
+    expect(plainNote.json.body).toBe('LGTM. A test for the retry limit can follow after merge.');
   });
 
   it('chats on a whole topic, apart from the tile chats', async () => {

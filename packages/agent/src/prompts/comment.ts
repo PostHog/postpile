@@ -30,12 +30,15 @@ Write the note from it: keep their meaning and their points, fix the wording. Ne
  * A review note (Approve with comment, Comment review): addressed to nobody, the engine says what it is for.
  * Unlike an ask, nobody asked about CI here, and older glance notes may still carry stale CI status: NO_CI_RULE.
  */
-function reviewNoteLines(intent: string, gist: string): { audience: string; shape: string } {
+function reviewNoteLines(intent: string, gist: string, pointOnly: boolean): { audience: string; shape: string } {
+  const most = pointOnly ? 'one at most' : 'two at most';
+  const empty = pointOnly ? '\nThe body is an empty string when nothing is worth adding after the opener.' : '';
   return {
     audience: `The comment is the body of the user's review, addressed to nobody in particular.\n${intent}${gistLines(gist)}`,
-    shape: `Write it the way the user would, as plain sentences: active voice, present tense, each under 25 words.
-No hedging ("I think", "it seems", "just"), no idioms, no em dashes, no greeting, no sign-off, no headings or
-bullets. Keep real identifiers and file paths, in backticks.
+    shape: `Write it the way the user would, as plain sentences: ${most}, each about 20 words or fewer, active
+voice, present tense. Plain words over code words. No hedging ("I think", "it seems", "just"), no idioms, no em
+dashes, no greeting, no sign-off, no headings or bullets. An identifier or file path, when one is needed, goes in
+backticks.${empty}
 ${NO_CI_RULE}`,
   };
 }
@@ -51,7 +54,8 @@ function notesBlock(notes: string[]): string {
 /** "Ask <person>" or a review note: a PR comment the user edits before it is sent. Never sent by the agent. */
 export function draftCommentPrompt(input: DraftCommentInput): string {
   const intent = input.intent.trim();
-  const lines = input.person === null ? reviewNoteLines(intent, input.gist?.trim() ?? '') : askLines(input.person, intent);
+  const pointOnly = input.person === null && input.pointOnly === true;
+  const lines = input.person === null ? reviewNoteLines(intent, input.gist?.trim() ?? '', pointOnly) : askLines(input.person, intent);
   return `You are drafting a GitHub PR comment that the user will edit and post themselves.
 ${viewerLine(input.viewer)}
 ${GITHUB_DATA_RULE}

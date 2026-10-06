@@ -35,6 +35,7 @@ import {
   contextSweepOutput,
   dossierUpdateOutput,
   draftCommentOutput,
+  reviewPointOutput,
   eventBatchOutput,
   factReconcileOutput,
   glanceBatchOutput,
@@ -247,7 +248,8 @@ export class RunnerAgentService implements AgentService {
   }
 
   async draftComment(input: DraftCommentInput): Promise<{ body: string }> {
-    const { value } = await this.ask('draft_comment', draftCommentPrompt(input), draftCommentOutput);
+    const schema = input.pointOnly ? reviewPointOutput : draftCommentOutput;
+    const { value } = await this.ask('draft_comment', draftCommentPrompt(input), schema);
     return { body: value.body };
   }
 

@@ -96,6 +96,11 @@ export const draftCommentOutput = z.object({
   body: text.min(1),
 });
 
+/** An approve note's point after PostPile's opener: empty when nothing is worth saying. */
+export const reviewPointOutput = z.object({
+  body: text,
+});
+
 export const chatOutput = z.object({
   reply: text.min(1),
   /** A lasting instruction worth keeping, or null. The user picks where it applies. */

@@ -2,6 +2,13 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## 0.25.0 (unreleased)
+
+### Changed
+
+- "Approve with a note" and "Comment review" start with an agent draft as soon as they open, ready to edit or send. A note you already started is kept as is.
+- Approve notes read like a person wrote them: "Looks good." (worded a bit differently each time) plus at most one plain point worth watching, often nothing more. No more lists of what was checked or code names you never looked at. Comment reviews keep to one plain point too.
+
 ## 0.24.0 (2026-10-06)
 
 ### Changed
