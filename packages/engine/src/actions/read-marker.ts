@@ -90,7 +90,7 @@ export class ReadMarker {
       }
       return { handleKeys: plan.handleKeys, local: { ...writeReadPlan(this.store, plan), threads: readThreadsLocally(this.store, threads) } };
     });
-    const batch = this.queue.enqueue({ threads, prKeys: scope.prKeys, handleKeys, local, subscription }, origin);
+    const batch = this.queue.enqueue({ threads, prKeys: scope.prKeys, handleKeys, local, subscription, clickedAt: at }, origin);
     this.logQueued(batch, threads, scope.prKeys, changeHere);
     return batch;
   }

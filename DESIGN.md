@@ -7153,7 +7153,10 @@ away for good:
   retry refreshes the PR and stores it) or before a pending unsubscribe was
   sent ends the mute and brings the tile back as an ordinary tile without
   Unmute, so GitHub must keep the user subscribed. That unsubscribe is
-  logged `skipped` and the pending row goes.
+  logged `skipped` and the pending row goes. The mirror holds for a
+  subscribe: an Unmute (typically a failed one sent again from the lock)
+  is skipped while the PR is muted again, so the newer mute's unsubscribe
+  stays.
 - Unmute (where Unsnooze is) takes the snoozes back and subscribes the user
   again (`PUT .../subscription` with `ignored: false`; pending kind
   `subscribe`), through the same queue and lock. Without it GitHub would
@@ -7161,7 +7164,10 @@ away for good:
   again, and a tile that looks unmuted but never comes back is worse than
   one more write. Undo of an Unmute puts the mute back, and so does
   discarding a pending Unmute (core effect `mute_again`, 2026-10-06; since
-  = the Unmute's click, a PR snoozed again meanwhile keeps that snooze):
+  = the Unmute's click, which the pending row keeps as `createdAt`
+  (`MarkReadRequest.clickedAt`) rather than the end of the undo window, so
+  a personal ask inside the window still ends it; a PR snoozed again
+  meanwhile keeps that snooze):
   GitHub still has the user unsubscribed, so the tile must offer Unmute
   again instead of staying quiet for good.
 - A subscription change GitHub did not take is not dropped like a failed
@@ -7176,7 +7182,9 @@ away for good:
   again. A snoozed tile can mix a mute with ordinary snoozes too (a muted
   PR joins a snoozed stack or set): it says Snoozed and `partlyMuted`, and
   its Unsnooze is also that Unmute, so the renderer guards it as a GitHub
-  write (`mute`), not as a local-only Unsnooze.
+  write (`mute`), not as a local-only Unsnooze. A plain snooze on a partly
+  muted tile leaves a mute that still holds alone (2026-10-06): replacing
+  it would leave GitHub unsubscribed with no Unmute to take that back.
 - Known gap: GitHub still notifies a user who watches the repo; the DELETE
   does not cover that. GitHub documents `PUT .../subscription` with
   `ignored: true` for watched repos (a stronger block; that it still lets a

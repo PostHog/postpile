@@ -49,8 +49,8 @@ export function markedReadPr(view: TileView, prKey: PrKey): TileView {
  * closer event, it goes to Open. The strip and its NEW pill go.
  */
 export function snoozedTile(view: TileView): TileView {
-  // A new snooze replaces every tracked PR's old one, a mute among them.
-  const state: TileState = { ...view.state, kind: 'snoozed', unreadBecause: [], unseenMerges: undefined, muted: undefined, partlyMuted: undefined };
+  // A plain snooze leaves a mute that still holds alone, so `partlyMuted` stays as it was.
+  const state: TileState = { ...view.state, kind: 'snoozed', unreadBecause: [], unseenMerges: undefined, muted: undefined };
   return { ...view, state, group: state.unreadOnGitHub ? 'unread' : 'open', newBadge: false };
 }
 
@@ -61,7 +61,7 @@ export function snoozedTile(view: TileView): TileView {
  */
 export function mutedTile(view: TileView, writesOn: boolean): TileView {
   const snoozed = snoozedTile(view);
-  const muted: TileView = { ...snoozed, state: { ...snoozed.state, muted: true } };
+  const muted: TileView = { ...snoozed, state: { ...snoozed.state, muted: true, partlyMuted: undefined } };
   return writesOn ? markedReadTile(muted) : muted;
 }
 

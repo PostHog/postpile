@@ -19,8 +19,10 @@ now".
   snoozes is `partlyMuted` too and its Unsnooze is guarded as `mute`. A
   subscription change GitHub did not take waits as a failed pending write.
   An unsubscribe whose mute ended before it went out (a personal ask in the
-  undo window) is skipped (`muteHolds`); a discarded pending Unmute mutes
-  again (`mute_again`). Telemetry bucket
+  undo window) is skipped (`muteHolds`), and so is a subscribe while the PR
+  is muted again; a discarded pending Unmute mutes again (`mute_again`,
+  from the click time); a plain snooze keeps a mute that still holds.
+  Telemetry bucket
   `muted`; the fake engine logs the unsubscribe and subscribe. Gap: a
   watched repo still notifies (see DESIGN), the "N pending mark-reads"
   headline counts a locked mute as two.

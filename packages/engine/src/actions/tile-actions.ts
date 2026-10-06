@@ -16,6 +16,7 @@ import {
 import type { Store } from '@postpile/store';
 import { Board } from '../board.ts';
 import type { PendingBatch } from '../mark-read-queue.ts';
+import { muteHoldsNow } from '../mute-holds.ts';
 import type { ReadMarker } from './read-marker.ts';
 import { failed, muteMessage, ok, readMessage, unmuteMessage } from './results.ts';
 
@@ -183,7 +184,12 @@ export class TileActions {
     return ok(muteMessage(batch), batch.token);
   }
 
-  /** Snoozes each tracked PR of the tile with the same condition (see `snoozeWrites`); a mute does more (`mute`). */
+  /**
+   * Snoozes each tracked PR of the tile with the same condition (see
+   * `snoozeWrites`); a mute does more (`mute`). A PR whose mute still holds
+   * keeps it (2026-10-06): replacing it would leave GitHub unsubscribed
+   * with no Unmute to take that back.
+   */
   snooze(tileId: string, condition: SnoozeCondition): ActionResult {
     const tile = this.findTile(tileId);
     if (!tile) {
@@ -192,7 +198,9 @@ export class TileActions {
     if (condition.kind === 'muted') {
       return this.mute(tile);
     }
-    const writes = snoozeWrites(tile, { kind: 'start', condition, at: this.now().toISOString() });
+    const at = this.now().toISOString();
+    const planned = snoozeWrites(tile, { kind: 'start', condition, at });
+    const writes = { ...planned, put: planned.put.filter((snooze) => !muteHoldsNow(this.store, snooze.prKey, at)) };
     if (writes.put.length === 0) {
       return failed(`nothing to snooze in tile ${tileId}`);
     }

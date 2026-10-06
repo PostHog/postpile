@@ -93,7 +93,9 @@ export class PendingWrites {
         this.store.pendingWrites.add({ ...base, kind: 'mark_read', prKeys: batch.prKeys, handleKeys: batch.handleKeys, threads: batch.threads });
       }
       if (subscription !== null) {
-        const id = this.store.pendingWrites.add({ ...base, kind: subscriptionKind(subscription), prKeys: [], handleKeys: [], threads: subscription.threads });
+        // Created at the click, not after the undo window: a discarded Unmute mutes again from then (`muteAgain`), so a personal ask inside the window still ends it.
+        const row = { ...base, createdAt: batch.clickedAt, kind: subscriptionKind(subscription), prKeys: [], handleKeys: [], threads: subscription.threads };
+        const id = this.store.pendingWrites.add(row);
         // Sent with writes on and not taken: it shows as a failed pending write, to send again from the lock.
         if (subscriptionError !== null) {
           this.store.pendingWrites.keepAfterTry(id, subscription.threads, subscriptionError, createdAt);
@@ -242,7 +244,7 @@ export class PendingWrites {
     }
   }
 
-  /** A discarded Unmute's mute comes back, as of its click; a PR snoozed again since keeps that snooze. */
+  /** A discarded Unmute's mute comes back, as of its click (the row's `createdAt`, see `park`); a PR snoozed again since keeps that snooze. */
   private muteAgain(prKeys: PrKey[], since: string): void {
     for (const prKey of prKeys) {
       if (this.store.snoozes.get(prKey) === null) {

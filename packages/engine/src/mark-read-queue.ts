@@ -38,6 +38,8 @@ export interface MarkReadRequest {
   local: LocalChange;
   /** Mute's unsubscribe or Unmute's subscribe, sent after the mark-read on the same terms; null for a plain mark-read. */
   subscription: SubscriptionChange | null;
+  /** When the user clicked, before the undo window. A parked subscription change keeps it (`PendingWrites.park`). */
+  clickedAt: IsoTime;
 }
 
 interface MarkReadPayload extends BatchOrigin, MarkReadRequest {
@@ -87,6 +89,9 @@ export const NEWER_ACTIVITY_REASON = 'activity after the last sync';
 
 /** Why a Mute's unsubscribe was not sent: the mute ended before it went out. */
 export const MUTE_ENDED_REASON = 'the mute ended before it was sent (someone asked you in person, or the PR closed); stays subscribed';
+
+/** Why an Unmute's subscribe was not sent: the PR was muted again before it went out. */
+export const MUTED_AGAIN_REASON = 'the PR was muted again before it was sent; stays unsubscribed';
 
 /** Whether a PR's mute still holds, as the store has it now (`muteHolds`). */
 export type MuteCheck = (prKey: PrKey) => boolean;
@@ -186,22 +191,30 @@ export class MarkReadQueue {
     this.retry = retry;
   }
 
-  /** A Mute's unsubscribe goes out only while the mute still holds (see `changeSubscriptions`). */
+  /** A subscription change goes out only while it still matches the PR's mute (see `changeSubscriptions`). */
   checkMutesWith(check: MuteCheck): void {
     this.muteCheck = check;
   }
 
   /**
-   * An unsubscribe whose mute ended meanwhile: a mention, reply or review
-   * request during the undo window (the retry's refresh stored it) or before
-   * a pending one was sent. The tile is back as an ordinary tile without
-   * Unmute, so GitHub must keep the viewer subscribed.
+   * Why a subscription change no longer fits the PR's mute, or null when it
+   * does (or there is nothing to check):
+   * - an unsubscribe whose mute ended meanwhile: a mention, reply or review
+   *   request during the undo window (the retry's refresh stored it) or
+   *   before a pending one was sent. The tile is back as an ordinary tile
+   *   without Unmute, so GitHub must keep the viewer subscribed;
+   * - a subscribe (an Unmute, often a failed one waiting to be sent again)
+   *   while the PR is muted again: the newer mute's unsubscribe wins.
    */
-  private muteEnded(change: SubscriptionChange, thread: PendingThread): boolean {
-    if (change.subscribed || thread.prKey === null || this.muteCheck === null) {
-      return false;
+  private staleReason(change: SubscriptionChange, thread: PendingThread): string | null {
+    if (thread.prKey === null || this.muteCheck === null) {
+      return null;
     }
-    return !this.muteCheck(thread.prKey);
+    const muted = this.muteCheck(thread.prKey);
+    if (change.subscribed) {
+      return muted ? MUTED_AGAIN_REASON : null;
+    }
+    return muted ? null : MUTE_ENDED_REASON;
   }
 
   private async markOne(thread: PendingThread, context: SendContext): Promise<ThreadOutcome> {
@@ -250,16 +263,18 @@ export class MarkReadQueue {
   /**
    * Changes the viewer's subscription to each thread on GitHub, in order:
    * Mute's unsubscribe or Unmute's subscribe. One failed thread does not
-   * stop the rest; its outcome carries the error (already logged). An
-   * unsubscribe whose mute ended meanwhile is skipped (`muteEnded`).
+   * stop the rest; its outcome carries the error (already logged). A
+   * change that no longer fits the PR's mute is skipped (`staleReason`).
    */
   async changeSubscriptions(change: SubscriptionChange, context: SendContext): Promise<ThreadOutcome[]> {
     const outcomes: ThreadOutcome[] = [];
     for (const thread of change.threads) {
       const writeContext = { origin: context.origin, prKey: thread.prKey, tileId: context.tileId, batch: context.batchId };
-      if (this.muteEnded(change, thread)) {
-        this.writes.log.record({ action: 'unsubscribe', threadId: thread.id, ...writeContext, outcome: 'skipped', detail: MUTE_ENDED_REASON });
-        outcomes.push({ kind: 'skipped', reason: MUTE_ENDED_REASON });
+      const stale = this.staleReason(change, thread);
+      if (stale !== null) {
+        const action = change.subscribed ? 'subscribe' : 'unsubscribe';
+        this.writes.log.record({ action, threadId: thread.id, ...writeContext, outcome: 'skipped', detail: stale });
+        outcomes.push({ kind: 'skipped', reason: stale });
         continue;
       }
       try {
@@ -328,6 +343,7 @@ export class MarkReadQueue {
       local: NO_LOCAL_CHANGE,
       subscription: subscriptionLeft.left.length > 0 ? { subscribed, threads: subscriptionLeft.left } : null,
       subscriptionError: subscriptionLeft.error,
+      clickedAt: payload.clickedAt,
     });
   }
 

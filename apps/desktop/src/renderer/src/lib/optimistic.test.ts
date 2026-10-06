@@ -95,6 +95,12 @@ describe('mutedTile', () => {
     expect(mutedTile(threadUnread, false)).toMatchObject({ state: { kind: 'snoozed', muted: true, unreadOnGitHub: true }, group: 'unread' });
     expect(snoozedTile(mutedTile(threadUnread, true)).state.muted).toBeUndefined();
   });
+
+  it('keeps a partly muted tile partly muted under a plain snooze, and a full mute clears it', () => {
+    const partly = { ...unreadTile([summary(1)]), state: { ...unreadTile([summary(1)]).state, partlyMuted: true } };
+    expect(snoozedTile(partly).state.partlyMuted).toBe(true);
+    expect(mutedTile(partly, true).state.partlyMuted).toBeUndefined();
+  });
 });
 
 describe('snoozedTile', () => {

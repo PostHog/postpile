@@ -220,6 +220,46 @@ describe('Mute until I am mentioned', () => {
     expect((await h.engine.githubWrites()).pending).toEqual([]);
   });
 
+  it('skips a failed Unmute sent again after the PR was muted again, so the newer mute stays', async () => {
+    const h = await synced();
+    await h.engine.snooze(tileId, MUTED);
+    await afterUndoWindow(h);
+    h.writer.failSubscribe = true;
+    await h.engine.unsnooze(tileId);
+    await afterUndoWindow(h);
+    h.writer.failSubscribe = false;
+
+    await h.engine.snooze(tileId, MUTED);
+    await afterUndoWindow(h);
+    expect(await h.engine.sendPendingWrites()).toMatchObject({ ok: true, done: 1 });
+
+    expect(h.writer.calls.filter((call) => call.startsWith('subscribeThread'))).toEqual([]);
+    expect(logRows(h).at(-1)).toEqual(['subscribe', 'footer', 'skipped']);
+    expect((await h.engine.githubWrites()).pending).toEqual([]);
+    expect(h.store.snoozes.get(pr.key)?.condition).toEqual(MUTED);
+  });
+
+  it('mutes again from the Unmute click when it is discarded, so a mention inside the undo window still counts', async () => {
+    let now = NOW;
+    const h = await synced({ now: () => now });
+    await h.engine.snooze(tileId, MUTED);
+    await afterUndoWindow(h);
+    await h.engine.setGitHubWrites(false);
+    await h.engine.unsnooze(tileId);
+    const mention = makeComment({ id: 'c1', author: 'rogue', body: `@${viewer.login} one question`, createdAt: at(1690) });
+    const asked: Pr = { ...pr, updatedAt: at(1700), comments: [mention] };
+    h.reader.addPr(asked, makeThreadFor(asked));
+    h.reader.etag = 'etag-2';
+    now = new Date(at(1705));
+    await afterUndoWindow(h);
+    await h.engine.sync({ maxAgentCalls: 0 });
+
+    await h.engine.discardPendingWrites();
+
+    expect(h.store.snoozes.get(pr.key)).toEqual({ prKey: pr.key, condition: MUTED, since: NOW.toISOString() });
+    expect((await tile(h))?.state.kind).toBe('unread');
+  });
+
   it('waits as a pending subscribe when Unmute happens while locked', async () => {
     const h = await synced();
     await h.engine.snooze(tileId, MUTED);
@@ -251,6 +291,23 @@ describe('Mute until I am mentioned', () => {
     expect((await h.engine.unsnooze('set:s1')).message).toMatch(/^Unmuted/);
     await afterUndoWindow(h);
     expect(h.writer.calls).toEqual(['subscribeThread thread-1']);
+  });
+
+  it('leaves a mute that still holds alone when the rest of the tile is snoozed', async () => {
+    const h = makeHarness();
+    const other = reviewRequestedPr(2);
+    h.reader.addPr(pr, makeThreadFor(pr));
+    h.reader.addPr(other, makeThreadFor(other));
+    await h.engine.sync({ maxAgentCalls: 0 });
+    pairInSet(h, other);
+    h.store.snoozes.put({ prKey: pr.key, condition: MUTED, since: NOW.toISOString() });
+
+    expect((await h.engine.snooze('set:s1', { kind: 'new_push' })).ok).toBe(true);
+
+    expect(h.store.snoozes.get(pr.key)?.condition).toEqual(MUTED);
+    expect(h.store.snoozes.get(other.key)?.condition).toEqual({ kind: 'new_push' });
+    const snoozed = (await h.engine.getTopic('depot'))?.tiles.find((view) => view.tile.id === 'set:s1');
+    expect(snoozed?.state).toMatchObject({ kind: 'snoozed', partlyMuted: true });
   });
 
   it('on a set, a mention on one PR brings the tile back and offers Unmute for the rest, which subscribes both again', async () => {
