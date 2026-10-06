@@ -254,7 +254,8 @@ export function prDetails(pr: Pr, viewer: Viewer | null, limits: PrDetailLimits)
     lines.push(`Pending review requests: ${reviewers.join(', ')}`);
   }
   // Not the empty reviews GitHub wraps thread replies in (`humanReviews`): a reply is no review.
-  const reviews = humanReviews(pr)
+  const human = humanReviews(pr);
+  const reviews = human
     .filter((r) => r.author !== viewer?.login)
     .map((r) => `@${r.author} ${r.state.toLowerCase()}`);
   if (reviews.length > 0) {
@@ -264,7 +265,8 @@ export function prDetails(pr: Pr, viewer: Viewer | null, limits: PrDetailLimits)
   if (approvedBy) {
     lines.push(approvedBy);
   }
-  const ownReview = viewer ? pr.reviews.filter((r) => r.author === viewer.login).at(-1) : undefined;
+  // The user's own thread reply must not stand in for their approval or changes request.
+  const ownReview = viewer ? human.filter((r) => r.author === viewer.login).at(-1) : undefined;
   if (ownReview) {
     const stale = ownReview.commitOid && ownReview.commitOid !== pr.headOid ? ', commits were pushed since' : '';
     lines.push(`The user's own last review: ${ownReview.state.toLowerCase()}${stale}`);
