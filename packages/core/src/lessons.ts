@@ -1,3 +1,5 @@
+import { talksToBot } from './bot-talk.ts';
+import { isCarrierReview } from './carrier-reviews.ts';
 import { glanceRiskLevel } from './glance-risk.ts';
 import { sameLogin } from './mentions.ts';
 import { capHitCoversSince } from './snapshot-coverage.ts';
@@ -126,11 +128,15 @@ export function lessonGlance(glance: Glance): LessonGlance {
   };
 }
 
-/** When the user's review before this one was submitted, or null for their first. */
+/**
+ * When the user's review before this one was submitted, or null for their
+ * first. The empty review carrying a thread reply (`isCarrierReview`) is no
+ * review: a "fixed" to a bot must not cut off the inline comments before it.
+ */
 function previousReviewAt(pr: Pr, review: Review, viewer: Viewer): IsoTime | null {
   let previous: IsoTime | null = null;
   for (const other of pr.reviews) {
-    if (other.id === review.id || !sameLogin(other.author, viewer.login) || other.submittedAt >= review.submittedAt) {
+    if (other.id === review.id || !sameLogin(other.author, viewer.login) || other.submittedAt >= review.submittedAt || isCarrierReview(other, pr)) {
       continue;
     }
     if (previous === null || other.submittedAt > previous) {
@@ -144,7 +150,8 @@ function previousReviewAt(pr: Pr, review: Review, viewer: Viewer): IsoTime | nul
  * The review and the user's inline comments that went with it. GitHub does
  * not link an inline comment to its review here, so the comments the user
  * wrote after their previous review and up to this one count. A change
- * request often says everything inline and nothing in its body.
+ * request often says everything inline and nothing in its body. Their bot
+ * talk ("fixed" to a review bot, `talksToBot`) is no part of it.
  */
 export function lessonReview(pr: FullPr, review: FullReview, viewer: Viewer): LessonReview {
   const after = previousReviewAt(pr, review, viewer);
@@ -153,6 +160,7 @@ export function lessonReview(pr: FullPr, review: FullReview, viewer: Viewer): Le
       (comment) =>
         comment.kind === 'review_comment' &&
         sameLogin(comment.author, viewer.login) &&
+        !talksToBot(comment, pr) &&
         comment.createdAt <= review.submittedAt &&
         (after === null || comment.createdAt > after),
     )
@@ -215,6 +223,12 @@ function sameReviewText(a: LessonReview, b: LessonReview): boolean {
   return a.comments.every((comment) => byId.get(comment.id)?.path === comment.path && byId.get(comment.id)?.body === comment.body);
 }
 
+/** The stored review without the comments the PR now shows as talk to a bot (`talksToBot`). */
+function withoutBotTalk(stored: LessonReview, pr: FullPr): LessonReview {
+  const botTalk = new Set(pr.comments.filter((comment) => talksToBot(comment, pr)).map((comment) => comment.id));
+  return { ...stored, comments: stored.comments.filter((comment) => !botTalk.has(comment.id)) };
+}
+
 /**
  * The stored review against the PR as it is now: unchanged, edited (body or
  * inline comments) or deleted. An edited source makes a new candidate; a
@@ -233,15 +247,17 @@ export function reviewNow(stored: LessonReview, pr: FullPr, viewer: Viewer): { k
     return { kind: 'deleted' };
   }
   const current = lessonReview(pr, review, viewer);
+  // A lesson stored before bot talk left `lessonReview` may hold the user's replies to bots: dropping them is no edit.
+  const known = withoutBotTalk(stored, pr);
   // Where the inline comments start is not stored, so only a complete comment list vouches.
   if (listMayBeCut(pr, ['comments', 'review_threads', 'thread_comments'], null)) {
     // A comment the cut left out proves nothing and keeps its stored text; one the snapshot holds is compared as usual.
     const seen = new Set(current.comments.map((comment) => comment.id));
-    const kept = stored.comments.filter((comment) => !seen.has(comment.id));
+    const kept = known.comments.filter((comment) => !seen.has(comment.id));
     const merged = { ...current, comments: [...kept, ...current.comments] };
-    return sameReviewText(stored, merged) ? { kind: 'same' } : { kind: 'edited', review: merged };
+    return sameReviewText(known, merged) ? { kind: 'same' } : { kind: 'edited', review: merged };
   }
-  return sameReviewText(stored, current) ? { kind: 'same' } : { kind: 'edited', review: current };
+  return sameReviewText(known, current) ? { kind: 'same' } : { kind: 'edited', review: current };
 }
 
 /** Lowercase words only, for "is this the same line" checks. */

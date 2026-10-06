@@ -57,15 +57,24 @@ export function isBotCommand(comment: Pick<Comment, 'body'>): boolean {
 }
 
 /**
+ * A person talking to a bot: a bot command (`isBotCommand`) or a reply in a
+ * review thread where only bots spoke before (`isBotThreadReply`). Never an
+ * answer to a person: it is no touch, no reply to a changes request and no
+ * last word in a thread (DESIGN.md "Bot talk leaves agent work").
+ */
+export function talksToBot(comment: Comment, pr: Pr): boolean {
+  return isBotCommand(comment) || isBotThreadReply(comment, pr);
+}
+
+/**
  * Talk with or by bots, never human discussion: a bot's comment
- * (`isMachineComment`), a person's bot command (`isBotCommand`), or a
- * person's reply in a review thread where only bots spoke before
- * (`isBotThreadReply`). Asks of the viewer are decided per viewer by their
- * event kinds (a mention stays a mention); this rule is the same for
- * everyone, so prompts and input hashes can use it.
+ * (`isMachineComment`) or a person talking to a bot (`talksToBot`). Asks of
+ * the viewer are decided per viewer by their event kinds (a mention stays
+ * a mention); this rule is the same for everyone, so prompts and input
+ * hashes can use it.
  */
 export function isBotTalk(comment: Comment, pr: Pr): boolean {
-  return isMachineComment(comment) || isBotCommand(comment) || isBotThreadReply(comment, pr);
+  return isMachineComment(comment) || talksToBot(comment, pr);
 }
 
 /** The PR's human discussion, oldest first: every comment that is not bot talk (`isBotTalk`). */

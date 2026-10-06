@@ -4,7 +4,10 @@
 // seen), for the quiet mark-read after it and for an ask being answered.
 // Narrower questions pass options (`kinds`, `before`, `reviewsOnly`) instead
 // of keeping their own copy. Rules only, no IO. DESIGN.md "You already dealt
-// with it".
+// with it". Bot talk is never a touch: "@codex review" or a "fixed" to a
+// review bot does not answer anyone (DESIGN.md "Bot talk leaves agent work").
+import { talksToBot } from './bot-talk.ts';
+import { isCarrierReview } from './carrier-reviews.ts';
 import { PUSH_KINDS } from './kinds.ts';
 import { sameLogin } from './mentions.ts';
 import { isPrOwner } from './pr-owners.ts';
@@ -61,8 +64,14 @@ function pushedByViewer(event: PrEvent, pr: Pr, viewer: Viewer): boolean {
  * The touch kind of one event, null when it is not the viewer's or not a
  * touch. A push counts only on the viewer's own PR, and only with evidence
  * that the viewer pushed (`pushedByViewer`), not just authored the commit.
+ * The viewer's bot talk and the empty reviews carrying their thread replies
+ * (`PrEvent.chatter`) are no touch: a bot command says nothing to the people
+ * on the PR, and a carried reply is a touch of its own.
  */
 export function touchKindOf(event: PrEvent, pr: Pr, viewer: Viewer): TouchKind | null {
+  if (event.chatter) {
+    return null;
+  }
   if (PUSH_KINDS.includes(event.kind)) {
     return isPrOwner(pr, viewer.login) && pushedByViewer(event, pr, viewer) ? 'push' : null;
   }
@@ -140,13 +149,20 @@ export interface SpokeOptions {
 
 /**
  * When `login` last spoke on the PR: their newest comment or submitted
- * review (a pending review is their unsent draft and says nothing). Read
- * from the snapshot, not from events, so it also works while events are
- * being derived (loudness asks it). Null when they never spoke.
+ * review (a pending review is their unsent draft and says nothing). Talk
+ * to a bot (`talksToBot`: a bot command, a reply in a bot-only thread) and
+ * the empty review GitHub wraps a thread reply in (`isCarrierReview`) are
+ * not speaking: they never answer a person. Read from the snapshot, not
+ * from events, so it also works while events are being derived (loudness
+ * asks it). Null when they never spoke.
  */
 export function lastSpokeAt(pr: Pr, login: string, options: SpokeOptions = {}): IsoTime | null {
-  const reviews = pr.reviews.filter((review) => sameLogin(review.author, login) && review.state !== 'PENDING').map((review) => review.submittedAt);
-  const comments = options.reviewsOnly ? [] : pr.comments.filter((comment) => sameLogin(comment.author, login)).map((comment) => comment.createdAt);
+  const reviews = pr.reviews
+    .filter((review) => sameLogin(review.author, login) && review.state !== 'PENDING' && !isCarrierReview(review, pr))
+    .map((review) => review.submittedAt);
+  const comments = options.reviewsOnly
+    ? []
+    : pr.comments.filter((comment) => sameLogin(comment.author, login) && !talksToBot(comment, pr)).map((comment) => comment.createdAt);
   let newest: IsoTime | null = null;
   for (const time of [...comments, ...reviews]) {
     if (newest === null || time > newest) {

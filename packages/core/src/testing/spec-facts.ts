@@ -389,7 +389,8 @@ export function viewerApproved(pr: Pr, viewer: Viewer | null, userState: UserPrS
 export function viewerHeadReview(pr: Pr, viewer: Viewer): Review | null {
   let newest: Review | null = null;
   for (const review of pr.reviews) {
-    const counts = sameLogin(review.author, viewer.login) && review.state !== 'PENDING' && review.state !== 'DISMISSED' && review.commitOid === pr.headOid;
+    // An empty review carrying thread replies reviews nothing (2026-10-06).
+    const counts = sameLogin(review.author, viewer.login) && review.state !== 'PENDING' && review.state !== 'DISMISSED' && review.commitOid === pr.headOid && !isCarrier(pr, review);
     if (counts && (newest === null || review.submittedAt >= newest.submittedAt)) {
       newest = review;
     }
@@ -430,7 +431,7 @@ export function viewerWasAsked(pr: Pr, viewer: Viewer): boolean {
 }
 
 /**
- * Teammates who picked up a home team's request: a sent review by a human
+ * Teammates who picked up a home team's request: a sent review (not an empty one carrying thread replies) by a human
  * who is not the viewer or an owner and is on a home team (anyone while
  * the list is unknown). On a teammate's PR only an approval or a changes
  * request.
@@ -440,7 +441,7 @@ function homeTeamTakers(pr: Pr, viewer: Viewer, since: IsoTime | null = null): s
   const takers: string[] = [];
   for (const review of pr.reviews) {
     const who = review.author;
-    if (review.state === 'PENDING' || sameLogin(who, viewer.login) || isOwner(pr, who) || isAutomationLogin(who)) {
+    if (review.state === 'PENDING' || sameLogin(who, viewer.login) || isOwner(pr, who) || isAutomationLogin(who) || isCarrier(pr, review)) {
       continue;
     }
     if (since !== null && review.submittedAt <= since) {
@@ -461,14 +462,15 @@ function homeTeamTakers(pr: Pr, viewer: Viewer, since: IsoTime | null = null): s
 
 /**
  * Who took a routing team's request: anyone who sent a review of the head
- * (not dismissed) other than the viewer, the author, the owners and
- * automation. Its members are not known, so anyone counts.
+ * (not dismissed, not an empty one carrying thread replies) other than the
+ * viewer, the author, the owners and automation. Its members are not
+ * known, so anyone counts.
  */
 function headReviewers(pr: Pr, viewer: Viewer, since: IsoTime | null = null): string[] {
   const takers: string[] = [];
   for (const review of pr.reviews) {
     const who = review.author;
-    const sent = review.state !== 'PENDING' && review.state !== 'DISMISSED' && review.commitOid === pr.headOid && (since === null || review.submittedAt > since);
+    const sent = review.state !== 'PENDING' && review.state !== 'DISMISSED' && review.commitOid === pr.headOid && (since === null || review.submittedAt > since) && !isCarrier(pr, review);
     const someoneElse = !sameLogin(who, viewer.login) && !sameLogin(who, pr.author) && !isOwner(pr, who) && !isAutomationLogin(who);
     if (sent && someoneElse && !takers.some((login) => sameLogin(login, who))) {
       takers.push(who);
@@ -580,10 +582,23 @@ export function reviewStillOwed(pr: Pr, viewer: Viewer, userState: UserPrState |
 // Speaking, pushing, touching
 // ---------------------------------------------------------------------------
 
-/** When `login` last spoke: newest comment (any kind) or sent review; reviews only when asked. */
+/** A person's command for a bot or answer to a bot in its thread: never an answer to a person (2026-10-06). */
+export function talksToBotSpec(pr: Pr, comment: Comment): boolean {
+  return isBotCommandBody(comment.body) || answersBotInThread(pr, comment);
+}
+
+/**
+ * When `login` last spoke: newest comment (any kind) or sent review;
+ * reviews only when asked. Bot talk and the empty reviews carrying thread
+ * replies are not speaking (2026-10-06).
+ */
 export function lastSpoke(pr: Pr, login: string, reviewsOnly = false): IsoTime | null {
-  const reviews = pr.reviews.filter((review) => review.state !== 'PENDING' && sameLogin(review.author, login)).map((review) => review.submittedAt);
-  const comments = reviewsOnly ? [] : pr.comments.filter((comment) => sameLogin(comment.author, login)).map((comment) => comment.createdAt);
+  const reviews = pr.reviews
+    .filter((review) => review.state !== 'PENDING' && sameLogin(review.author, login) && !isCarrier(pr, review))
+    .map((review) => review.submittedAt);
+  const comments = reviewsOnly
+    ? []
+    : pr.comments.filter((comment) => sameLogin(comment.author, login) && !talksToBotSpec(pr, comment)).map((comment) => comment.createdAt);
   return [...reviews, ...comments].sort().at(-1) ?? null;
 }
 
@@ -609,7 +624,8 @@ export interface SpecChangesAnswer {
 /**
  * The owner answered the viewer's changes request: open, not a draft,
  * someone else's PR, the viewer's newest verdict asks for changes, and
- * after the viewer's last word a human pushed or an owner spoke.
+ * after the viewer's last word a human pushed or an owner spoke (bot talk
+ * is neither a last word nor an answer, `lastSpoke`).
  */
 export function changesAnswer(pr: Pr, viewer: Viewer): SpecChangesAnswer | null {
   if (pr.state !== 'OPEN' || pr.isDraft || !viewerAskedForChanges(pr, viewer)) {
@@ -630,12 +646,12 @@ export function askedToReReview(pr: Pr, reviewer: string): boolean {
   return verdict?.state === 'CHANGES_REQUESTED' && someonePushedAfter(pr, reviewer, verdict.submittedAt);
 }
 
-/** Who has the last word in each unresolved thread that waits on the viewer: someone other than the viewer or automation. */
+/** Who has the last word in each unresolved thread that waits on the viewer: someone other than the viewer or automation, and not talking to a bot. */
 export function threadsWaitingOnViewer(pr: Pr, viewer: Viewer): string[] {
   const lastWords: string[] = [];
   for (const thread of pr.threads) {
     const last = thread.comments.at(-1);
-    if (!thread.isResolved && last !== undefined && !sameLogin(last.author, viewer.login) && !isAutomationLogin(last.author)) {
+    if (!thread.isResolved && last !== undefined && !sameLogin(last.author, viewer.login) && !isAutomationLogin(last.author) && !talksToBotSpec(pr, last)) {
       lastWords.push(last.author);
     }
   }
@@ -674,20 +690,21 @@ function endTouch(pr: Pr, item: TimelineItem, viewer: Viewer): SpecTouch | null 
 
 /**
  * Everything the viewer did on the PR, from the snapshot: their sent
- * reviews (a dismissed one is no event), their comments that are not
- * automated, and on a PR they own the commits they committed and their
- * force pushes, and merging or closing it.
+ * reviews (a dismissed one is no event) but the empty ones carrying thread
+ * replies, their comments that are not automated and not talk to a bot
+ * (2026-10-06: "@codex review" or "fixed" to a bot answers nobody), and on a PR they own the
+ * commits they committed and their force pushes, and merging or closing it.
  */
 export function viewerTouches(pr: Pr, viewer: Viewer): SpecTouch[] {
   const touches: SpecTouch[] = [];
   for (const review of pr.reviews) {
     const touch = REVIEW_TOUCH[review.state];
-    if (touch && sameLogin(review.author, viewer.login)) {
+    if (touch && sameLogin(review.author, viewer.login) && !isCarrier(pr, review)) {
       touches.push({ kind: touch.kind, at: review.submittedAt, id: `${pr.key}:${touch.event}:${review.id}` });
     }
   }
   for (const comment of pr.comments) {
-    if (sameLogin(comment.author, viewer.login) && !isMachineComment(comment)) {
+    if (sameLogin(comment.author, viewer.login) && !isMachineComment(comment) && !talksToBotSpec(pr, comment)) {
       touches.push({ kind: 'comment', at: comment.createdAt, id: `${pr.key}:comment:${comment.id}` });
     }
   }
