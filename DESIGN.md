@@ -3099,6 +3099,17 @@ thread, reading the diff.
   without one (stored before 0.22.0, until refetched) fall back to author
   and time (same second, 2 s window), and a comment that names a review
   never matches another one by time.
+- Review bodies (2026-10-06, `deriveEvents`). GitHub keeps a review's
+  text twice: on the review and as a comment of kind review with the
+  review's id. The review event already says it ("alice approved: Looks
+  good"), so the body gets an event of its own only when it asks the
+  viewer something (a mention, a question, a reply, a team mention). The
+  viewer's own body used to skip that check and showed a second
+  "viewer commented" line under their approval. Now it never gets one,
+  except for a dismissed review: that has no review event, so its body
+  stays a comment and a touch. An approval with text still counts as
+  talking for the live conversation ping (`isLiveConversation`); an
+  approval alone does not.
 - A bot's review, folded (2026-10-06, `bot-reviews.ts`). A review bot
   submits one COMMENTED review with an inline comment per finding, each
   opening its own thread; that read as seven bot events in the noise. Now

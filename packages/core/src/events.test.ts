@@ -125,6 +125,32 @@ describe('deriveEvents: comments', () => {
     });
     expect(deriveEvents(pr, viewer, null).map((e) => e.kind)).toEqual(['review_commented']);
   });
+
+  it("skips the viewer's own review body, so an approval with words shows once", () => {
+    const pr = makePr({
+      // Like the reader: the body comment carries the review's id.
+      comments: [makeComment({ id: 'r1', kind: 'review', author: viewer.login, body: 'Looks good, @alice one nit?' })],
+      reviews: [makeReview({ id: 'r1', author: viewer.login, state: 'APPROVED', body: 'Looks good, @alice one nit?' })],
+    });
+    const events = deriveEvents(pr, viewer, null);
+    expect(events.map((e) => [e.kind, e.summary])).toEqual([['review_approved', `${viewer.login} approved: Looks good, @alice one nit?`]]);
+  });
+
+  it("keeps the viewer's body of a dismissed review, which has no review event", () => {
+    const pr = makePr({
+      comments: [makeComment({ id: 'r1', kind: 'review', author: viewer.login, body: 'Needs a retry limit.' })],
+      reviews: [makeReview({ id: 'r1', author: viewer.login, state: 'DISMISSED', body: 'Needs a retry limit.' })],
+    });
+    expect(deriveEvents(pr, viewer, null).map((e) => e.kind)).toEqual(['comment']);
+  });
+
+  it("keeps someone else's review body that mentions the viewer as its own event", () => {
+    const pr = makePr({
+      comments: [makeComment({ id: 'r1', kind: 'review', author: 'bob', body: '@viewer can you check the retry?' })],
+      reviews: [makeReview({ id: 'r1', author: 'bob', state: 'COMMENTED', body: '@viewer can you check the retry?' })],
+    });
+    expect(deriveEvents(pr, viewer, null).map((e) => e.kind).sort()).toEqual(['question_to_user', 'review_commented']);
+  });
 });
 
 describe('deriveEvents: reviews, commits, timeline, CI', () => {
