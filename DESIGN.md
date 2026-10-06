@@ -2986,7 +2986,8 @@ thread, reading the diff.
   tile (tried and dropped the same day).
 - State line: state, review word, repo#number and "Open on GitHub" with an
   arrow menu (Files changed, Commits, Checks): the pane's only link to
-  github.com, its right edge on the boxes' edge (22px), not the 34px text
+  the PR itself on github.com (activity ages link to their single event,
+  see "Permalinks" below), its right edge on the boxes' edge (22px), not the 34px text
   line. Ink when core's lead is Open (own PR, done PR), else outlined.
 - Title, branch line, then "New since you looked": a digest you read. A
   person's comment that can take a reply gets "Reply ↓", which scrolls the
