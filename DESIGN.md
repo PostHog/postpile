@@ -616,9 +616,11 @@ body ask for it.
   `isBodyReadByRules({ author, editor })` (core `bot-bodies.ts`). It is
   #117's "kept whole" rule exported: a person's body, a deleted author's,
   a merge queue bot's and one a person edited last. So the cut on save and
-  the board read never disagree. A review's body follows the same rule,
-  with the editor of its review comment. The PR description stays whole
-  (the glance hash reads it).
+  the board read never disagree. Empty and whitespace bodies stay too: a
+  carrier review (#135) is one without text, so null always means "had
+  text". A review's body follows the same rule, with the editor of its
+  review comment. The PR description stays whole (the glance hash reads
+  it).
 - **`mentionedTeams`**: every board read sets `Pr.mentionedTeams` (from
   `pr.mentioned_teams` after the switch, from the json bodies before it),
   and `for-whom.ts` matches the viewer's teams against it, lowercased, the
@@ -626,7 +628,9 @@ body ask for it.
   PR built in memory (a fetch, a test) has no `mentionedTeams` and its
   bodies are read instead.
 - **In SQL after the switch.** The comment read selects
-  `CASE WHEN postpile_reads_body(author, editor) THEN body END`, a SQL
+  `CASE WHEN postpile_reads_body(author, editor) OR trim(body, ?) = ''
+  THEN body END` (the parameter is every character JS's `trim()` removes,
+  tested against the whole BMP; SQLite's own trim takes spaces only), a SQL
   function `PrRepo` registers on every connection it opens (read-only CLI
   and MCP ones too). The bodies stay in SQLite and never become JS
   strings. It is evaluated with the build's bot list at read time, so no
@@ -642,17 +646,22 @@ body ask for it.
   (`getFullMany`), the write actions (mirror review, drop team request,
   react, reply, reply and comment drafts: `getFull`), lessons, "Why?"
   excerpts (`memory-sources-reads.ts`), the bot body trim (`nextAfter`).
+- **The PR pane's activity list reads its PR whole.** The bot-review fold
+  (#135) shows each folded bot comment's first line and keeps a review
+  that mentions the viewer unfolded, so `activityList` and `bot-reviews.ts`
+  take `FullPr` and `getPr` reads that one PR with `getFull`. The rest of
+  the pane (`prPaneView`, status, tiles) reads the board shape. The
+  payload did not change.
 - **Null-safe board rules**: `isMachineComment` (a bot account is
   automation without its body), `editMentionOf` and the routing team
   mention (a person's comment or edit, so the body is there), the merge
-  queue's Trunk lines (kept whole), the activity list's bodies (people's
-  only), the quiet bot-thread fold and its carrier reviews (a bot's review
-  never carries a person's reply), `humanComments` in prompts (a type
-  guard: bots drop out first).
+  queue's Trunk lines (kept whole), carrier reviews (null is "has text"),
+  `humanComments` in prompts (a type guard: bots drop out first).
 - **Checked**: rule outputs on `boardShape(pr)` equal those on `pr` for
   every generated board and every event corpus PR (tile views, whose turn,
-  headline, pings, quiet reads, for-whom, PR status, merge queue, the
-  activity list with its folds, look-closer pings); prompt text and every
+  headline, pings, quiet reads, for-whom, PR status, merge queue, carrier
+  reviews, the bot-thread fold, the pane's Reviews list, look-closer
+  pings); prompt text and every
   glance hash are byte-identical (agent `board-diet.test.ts`); the core
   invariants run on board shapes (`PropertyBoard.prs`, with `fullPrs` for
   the oracles).
@@ -663,17 +672,19 @@ updated PRs, all 809 on normal; median of 5):
 
 | copy | hot set heap | hot set read | bodies left out |
 |---|---|---|---|
-| normal, rows | 53 → 24 MB | 75 → 70 ms | 13,408 of 21,401 |
-| heavy (14x), rows | 137 → 58 MB | 186 → 171 ms | 187,712 of 299,614 |
-| normal, json (before the switch) | 77 → 28 MB | 82 → 94 ms | |
-| heavy, json (before the switch) | 212 → 72 MB | 220 → 244 ms | |
+| normal, rows | 53 → 24 MB | 75 → 69 ms | 12,435 of 21,401 |
+| heavy (14x), rows | 137 → 58 MB | 185 → 185 ms | 174,090 of 299,614 |
+| normal, json (before the switch) | 77 → 28 MB | 85 → 91 ms | |
+| heavy, json (before the switch) | 212 → 72 MB | 224 → 244 ms | |
 
 On both copies, before and after the switch: every PR's board read equals
 `boardShape` of its full read; glance input hashes and `prDetails` prompt
 text are identical to #134's build; every topic, the Archive, search,
-unread keys and every open PR's detail read the same. The PR pane's
-detail is unchanged: it was slimmed in #122 and #124 and never carried bot
-bodies (biggest open PR on normal: 150 KB, 21 KB of it the PR).
+unread keys and every open PR's detail read the same (against #135's
+build). The PR pane's detail is unchanged: it was slimmed in #122 and
+#124 (biggest open PR: 148 KB, 18 KB of it the PR). Before the switch the
+json is still parsed whole and projected after, so the read takes a
+little longer while the retained heap drops the same way.
 
 `PrRepo.listHeaders` reads `pr` alone, with each PR's newest event time
 from the `(pr_key, at, id)` index: 11k headers in about 60 ms. Stacks over

@@ -16,11 +16,13 @@ now".
   re-derive, write actions, drafts, lessons and "Why?" excerpts; `upsert`
   takes only `FullPr`. `for-whom.ts` reads `Pr.mentionedTeams`. Telemetry
   `storage_job_blocked` (once per job per app run) for a job left
-  incomplete. Measured on copies: hot set heap 137 → 58 MB on heavy and
-  53 → 24 MB on normal, read 186 → 171 ms; board, PR details, prompts and
-  glance hashes identical. The PR pane was already slim (#122, #124), so
-  its payload did not change. Not tried by hand: the app on a real
-  heavy database.
+  incomplete. Empty bodies stay on the board (carrier reviews read them);
+  the PR pane's activity list reads its PR whole (`getFull`: #135's bot
+  review fold shows bot comments' first lines). Measured on copies: hot
+  set heap 137 → 58 MB on heavy and 53 → 24 MB on normal, read time about
+  the same; board, PR details, prompts and glance hashes identical. The
+  PR pane was already slim (#122, #124), so its payload did not change.
+  Not tried by hand: the app on a real heavy database.
 - Discussion as rows (2026-10-06, for 0.22.0; DESIGN.md "Big inboxes" ›
   PR storage: the discussion as rows, and "Storage jobs"; step 4 of
   normalizing the PR snapshot, Later): migration 031 adds `pr_comment`,
