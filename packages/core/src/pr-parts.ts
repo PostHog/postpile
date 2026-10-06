@@ -1,8 +1,8 @@
-// A PR's lists as the rows the store keeps (DESIGN.md "PR storage"): the
-// discussion (one row per GitHub comment, a row per thread and per review)
-// and the activity lists (a row per commit, timeline item and changed
-// file). Pure split and join, so the round trip can be tested here and the
-// store only maps columns.
+// A PR as the rows the store keeps (DESIGN.md "PR storage"): the
+// discussion (one row per GitHub comment, a row per thread and per review),
+// the activity lists (a row per commit, timeline item and changed file) and
+// the text (header columns and the PR body). Pure split and join, so the
+// round trip can be tested here and the store only maps columns.
 //
 // Both directions check the data and throw rather than pick one of two
 // answers: a comment twice in a list, a thread copy that differs from the
@@ -11,7 +11,28 @@
 // file path twice (ActivityError).
 import { isBodyReadByRules } from './bot-bodies.ts';
 import { prTeamMentions } from './team-mentions.ts';
-import type { Comment, CommentKind, Commit, FullComment, FullPr, FullReview, FullReviewThread, IsoTime, Pr, PrFile, Review, ReviewState, ReviewThread, TimelineItem, TimelineItemKind } from './types.ts';
+import type {
+  CapHit,
+  Comment,
+  CommentKind,
+  Commit,
+  FullComment,
+  FullPr,
+  FullReview,
+  FullReviewThread,
+  IsoTime,
+  Pr,
+  PrFile,
+  PrKey,
+  PrRef,
+  PrState,
+  Review,
+  ReviewDecision,
+  ReviewState,
+  ReviewThread,
+  TimelineItem,
+  TimelineItemKind,
+} from './types.ts';
 
 /** The parts of a PR that live in the discussion rows, as a read gives them (a board read leaves some bodies out). */
 export type Discussion = Pick<Pr, 'comments' | 'threads' | 'reviews'>;
@@ -517,4 +538,120 @@ export function joinActivity(parts: ActivityParts): Activity {
     ActivityError,
   ).map((part): PrFile => ({ path: part.path, additions: part.additions, deletions: part.deletions }));
   return { commits, timeline, files };
+}
+
+/** Everything of a PR but its lists: the header and the text. What a read builds before it joins the rows. */
+export type PrText = Omit<Pr, 'comments' | 'threads' | 'reviews' | 'commits' | 'timeline' | 'files' | 'mentionedTeams'>;
+
+/**
+ * Optional `Pr` fields with a header column that cannot tell missing from
+ * empty (`[]`, false). A snapshot stored before they were fetched lacks
+ * them, and a read gives them back missing: the sync refetches a PR
+ * without `assignees` once, so missing must not turn into none.
+ */
+export const OPTIONAL_HEADER_FIELDS = ['assignees', 'previousBaseRefs', 'isCrossRepository'] as const;
+
+export type OptionalHeaderField = (typeof OPTIONAL_HEADER_FIELDS)[number];
+
+/** What the text rows hold: the PR's own text and short fields beyond the header. */
+export type PrTextFields = Pick<
+  Pr,
+  'url' | 'body' | 'additions' | 'deletions' | 'changedFiles' | 'labels' | 'reviewDecision' | 'mergedBy' | 'truncated' | 'capHits' | OptionalHeaderField
+>;
+
+/** The header columns of a stored PR (store `pr`), the optional fields as written: [] or false when the snapshot lacked them. */
+export interface HeaderPart {
+  key: PrKey;
+  ref: PrRef;
+  title: string;
+  author: string;
+  assignees: string[];
+  state: PrState;
+  isDraft: boolean;
+  baseRef: string;
+  headRef: string;
+  headOid: string;
+  reviewerUsers: string[];
+  reviewerTeams: string[];
+  previousBaseRefs: string[];
+  isCrossRepository: boolean;
+  createdAt: IsoTime;
+  updatedAt: IsoTime;
+  mergedAt: IsoTime | null;
+}
+
+/** The text columns of the header and the `pr_body` row. */
+export interface TextPart {
+  url: string;
+  body: string;
+  additions: number;
+  deletions: number;
+  changedFiles: number;
+  labels: string[];
+  reviewDecision: ReviewDecision;
+  mergedBy: string | null;
+  /** Null: not recorded (snapshots stored before it existed); read back as missing. */
+  truncated: boolean | null;
+  /** Null: not recorded; read back as missing, which never vouches (`snapshotCoversSince`). An empty list is not the same. */
+  capHits: CapHit[] | null;
+  /** The optional header fields the snapshot lacked, in `OPTIONAL_HEADER_FIELDS` order. */
+  absentFields: OptionalHeaderField[];
+}
+
+/** The text rows of a PR. Missing stays missing: `truncated` and `capHits` become null, absent header fields are named. */
+export function splitText(pr: PrTextFields): TextPart {
+  return {
+    url: pr.url,
+    body: pr.body,
+    additions: pr.additions,
+    deletions: pr.deletions,
+    changedFiles: pr.changedFiles,
+    labels: pr.labels,
+    reviewDecision: pr.reviewDecision,
+    mergedBy: pr.mergedBy,
+    truncated: pr.truncated ?? null,
+    capHits: pr.capHits ?? null,
+    absentFields: OPTIONAL_HEADER_FIELDS.filter((field) => pr[field] === undefined),
+  };
+}
+
+/** A PR without its lists, from its header and text rows: every field as the snapshot had it, missing ones missing. */
+export function joinText(header: HeaderPart, text: TextPart): PrText {
+  const pr: PrText = {
+    key: header.key,
+    ref: header.ref,
+    title: header.title,
+    url: text.url,
+    body: text.body,
+    author: header.author,
+    assignees: header.assignees,
+    state: header.state,
+    isDraft: header.isDraft,
+    baseRef: header.baseRef,
+    headRef: header.headRef,
+    additions: text.additions,
+    deletions: text.deletions,
+    changedFiles: text.changedFiles,
+    labels: text.labels,
+    reviewDecision: text.reviewDecision,
+    reviewerUsers: header.reviewerUsers,
+    reviewerTeams: header.reviewerTeams,
+    headOid: header.headOid,
+    createdAt: header.createdAt,
+    updatedAt: header.updatedAt,
+    mergedAt: header.mergedAt,
+    mergedBy: text.mergedBy,
+    previousBaseRefs: header.previousBaseRefs,
+    isCrossRepository: header.isCrossRepository,
+  };
+  for (const field of text.absentFields) {
+    delete pr[field];
+  }
+  if (text.truncated !== null) {
+    pr.truncated = text.truncated;
+  }
+  if (text.capHits !== null) {
+    pr.capHits = text.capHits;
+  }
+  return pr;
 }

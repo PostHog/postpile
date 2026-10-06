@@ -17,7 +17,7 @@ function readTopicAssignment(path: string): { topics: Topic[]; memberships: Topi
 }
 
 /** A PR's child rows (DESIGN.md "PR storage"): its header's rows_version vouches for them, so they always come with it. */
-const PR_CHILD_TABLES = ['pr_comment', 'pr_thread', 'pr_review', 'pr_commit', 'pr_timeline', 'pr_file'];
+const PR_CHILD_TABLES = ['pr_comment', 'pr_thread', 'pr_review', 'pr_commit', 'pr_timeline', 'pr_file', 'pr_body'];
 
 export class ArmDatabase {
   private constructor(

@@ -18,6 +18,7 @@ export const KEPT_TABLES: Record<string, string> = {
   pr_commit: 'GitHub data: commits of a PR',
   pr_timeline: 'GitHub data: timeline items of a PR (review requests, merges, pushes, deploys)',
   pr_file: 'GitHub data: changed files of a PR',
+  pr_body: 'GitHub data: the description of a PR',
   pr_event: 'GitHub data plus seen state; agent loudness overrides are cleared, user ones stay',
   event_log: 'first sightings of events; the simulation hides and re-logs them per round',
   user_pr_state: "the user's own approvals and handled marks (seen state)",

@@ -200,9 +200,11 @@ describe('the snapshot_strip checkpoint', () => {
   }
 
   function stripAll(store: Store): void {
-    const jobs = new StorageJobRunner({ store, jobs: storageJobs(), now: () => NOW, timers: new FakeTimers(), busy: () => false, log: () => {}, onDone: () => {} });
+    // The jobs up to snapshot_strip: the later ones write again after its checkpoint.
+    const upToStrip = storageJobs().slice(0, 4);
+    const jobs = new StorageJobRunner({ store, jobs: upToStrip, now: () => NOW, timers: new FakeTimers(), busy: () => false, log: () => {}, onDone: () => {} });
     for (let index = 0; index < 50 && jobs.slice() !== 'idle'; index += 1) {
-      // Every job, a slice at a time.
+      // Each of those jobs, a slice at a time.
     }
   }
 

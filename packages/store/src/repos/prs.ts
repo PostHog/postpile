@@ -7,23 +7,41 @@ import {
   isBodyReadByRules,
   joinActivity,
   joinDiscussion,
+  joinText,
   prTeamMentions,
   splitActivity,
   splitDiscussion,
+  splitText,
   type ActivityParts,
+  type CapHit,
   type DiscussionParts,
   type FullPr,
+  type HeaderPart,
   type Pr,
   type PrHeader,
   type Commit,
   type PrFile,
   type PrKey,
   type PrState,
+  type PrTextFields,
+  type ReviewDecision,
   type TimelineItem,
 } from '@postpile/core';
 import { inTransaction } from '../database.ts';
 import { all, each, one, placeholders, run } from '../sql.ts';
-import { ActivityRows, DiscussionRows, NEWEST_ROWS_VERSION, READY_KEYS, ROWS, storedRowsVersion, type RowsCollection } from './pr-rows.ts';
+import {
+  ActivityRows,
+  DiscussionRows,
+  NEWEST_ROWS_VERSION,
+  READY_KEYS,
+  ROWS,
+  storedRowsVersion,
+  TEXT_COLUMNS_SQL,
+  TextRows,
+  toTextPart,
+  type RowsCollection,
+  type TextRow,
+} from './pr-rows.ts';
 
 /** PR rows read and parsed per query (~80 KB of json each on a busy install). */
 const PARSE_CHUNK = 200;
@@ -31,10 +49,39 @@ const PARSE_CHUNK = 200;
 /** The meta key of the last snapshot revision handed out (migration 029). */
 const SNAPSHOT_REVISION_KEY = 'snapshot_revision';
 
-/** The snapshot json's fields each collection's rows hold: the discussion (migration 031), the activity lists (033). */
+/** The snapshot json's fields each collection's rows hold: the discussion (migration 031), the activity lists (033), the rest (034). */
 const JSON_FIELDS: Record<RowsCollection, Array<keyof FullPr>> = {
   discussion: ['comments', 'threads', 'reviews'],
   activity: ['commits', 'timeline', 'files'],
+  text: [
+    'key',
+    'ref',
+    'title',
+    'url',
+    'body',
+    'author',
+    'assignees',
+    'state',
+    'isDraft',
+    'baseRef',
+    'headRef',
+    'additions',
+    'deletions',
+    'changedFiles',
+    'labels',
+    'reviewDecision',
+    'reviewerUsers',
+    'reviewerTeams',
+    'headOid',
+    'createdAt',
+    'updatedAt',
+    'mergedAt',
+    'mergedBy',
+    'previousBaseRefs',
+    'isCrossRepository',
+    'truncated',
+    'capHits',
+  ],
 };
 
 /** A PR without discussion rows: no comment, thread or review. */
@@ -48,9 +95,17 @@ function jsonPaths(collections: Iterable<RowsCollection>): string[] {
   return [...collections].flatMap((collection) => JSON_FIELDS[collection].map((field) => `'$.${field}'`));
 }
 
-/** SQL over `pr p` joined with `pr_snapshot s`: the stored PRs, given which collections reads take from rows. Ends in a WHERE clause callers can extend with AND. */
+/**
+ * SQL over `pr p`: the stored PRs, given which collections reads take from
+ * rows. A header counts with its snapshot, at the rows_version the
+ * switched collections need, and once the text switched with its body row
+ * too; anything less is an integrity failure that reads leave out, so the
+ * sync fetches the PR again. Ends in a WHERE clause callers can extend
+ * with AND.
+ */
 function storedPrs(ready: ReadonlySet<RowsCollection>): string {
-  return `pr p JOIN pr_snapshot s ON s.key = p.key WHERE p.rows_version >= ${storedRowsVersion(ready)}`;
+  const body = ready.has('text') ? ' JOIN pr_body b ON b.pr_key = p.key' : '';
+  return `pr p JOIN pr_snapshot s ON s.key = p.key${body} WHERE p.rows_version >= ${storedRowsVersion(ready)}`;
 }
 
 /** SQLITE_CONSTRAINT, with any extended code: a row broke a CHECK, NOT NULL or key. */
@@ -76,7 +131,8 @@ interface RevisionRow {
   snapshot_revision: number;
 }
 
-interface HeaderRow {
+/** The header columns of a `pr` row. */
+interface HeaderColumnsRow {
   key: string;
   repo: string;
   number: number;
@@ -95,8 +151,18 @@ interface HeaderRow {
   created_at: string;
   updated_at: string;
   merged_at: string | null;
+}
+
+interface HeaderRow extends HeaderColumnsRow {
   last_event_at: string | null;
 }
+
+/** SQL: the columns of `HeaderColumnsRow`, over the header `p`. */
+const HEADER_COLUMNS_SQL = `p.key, p.repo, p.number, p.state, p.is_draft, p.title, p.author, p.assignees, p.reviewer_users, p.reviewer_teams,
+  p.base_ref, p.head_ref, p.head_oid, p.previous_base_refs, p.cross_repository, p.created_at, p.updated_at, p.merged_at`;
+
+/** A PR's header and text rows, with its mentioned teams: what a read takes once the text is in rows. */
+type HeaderAndTextRow = HeaderColumnsRow & TextRow & { mentioned_teams: string };
 
 /**
  * A stored snapshot, parsed, without the `checks` builds before 0.21.0
@@ -158,6 +224,62 @@ function isStoredFile(value: unknown): value is PrFile {
   return f !== null && typeof f.path === 'string' && typeof f.additions === 'number' && typeof f.deletions === 'number';
 }
 
+function isStringList(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string');
+}
+
+/**
+ * The text fields of a stored snapshot's json, or null when one the rows
+ * need is missing or of the wrong type. `truncated` and `capHits` may be
+ * missing (older snapshots), and the optional header fields are only
+ * looked at for whether they are there.
+ */
+function storedTextFields(value: unknown): PrTextFields | null {
+  const f = fieldsOf(value);
+  if (
+    f === null ||
+    typeof f.url !== 'string' ||
+    typeof f.body !== 'string' ||
+    typeof f.additions !== 'number' ||
+    typeof f.deletions !== 'number' ||
+    typeof f.changedFiles !== 'number' ||
+    !isStringList(f.labels) ||
+    typeof f.reviewDecision !== 'string' ||
+    !(f.mergedBy === null || typeof f.mergedBy === 'string') ||
+    !(f.truncated === undefined || typeof f.truncated === 'boolean') ||
+    !(f.capHits === undefined || (Array.isArray(f.capHits) && f.capHits.every((hit) => fieldsOf(hit) !== null)))
+  ) {
+    return null;
+  }
+  const fields: PrTextFields = {
+    url: f.url,
+    body: f.body,
+    additions: f.additions,
+    deletions: f.deletions,
+    changedFiles: f.changedFiles,
+    labels: f.labels,
+    reviewDecision: f.reviewDecision as ReviewDecision,
+    mergedBy: f.mergedBy,
+  };
+  if (f.truncated !== undefined) {
+    fields.truncated = f.truncated;
+  }
+  if (f.capHits !== undefined) {
+    fields.capHits = f.capHits as CapHit[];
+  }
+  // Only whether they are there counts (`splitText` names the absent ones): their values live in the header columns.
+  if (f.assignees !== undefined) {
+    fields.assignees = [];
+  }
+  if (f.previousBaseRefs !== undefined) {
+    fields.previousBaseRefs = [];
+  }
+  if (f.isCrossRepository !== undefined) {
+    fields.isCrossRepository = false;
+  }
+  return fields;
+}
+
 /** A JSON list column; most are empty, which needs no parse. */
 function listOf(text: string): string[] {
   return text === '[]' ? [] : (JSON.parse(text) as string[]);
@@ -177,7 +299,7 @@ function registerReadsBody(db: DatabaseSync): void {
   );
 }
 
-function toHeader(row: HeaderRow): PrHeader {
+function toHeaderPart(row: HeaderColumnsRow): HeaderPart {
   return {
     key: row.key,
     ref: { repo: row.repo, number: row.number },
@@ -196,8 +318,11 @@ function toHeader(row: HeaderRow): PrHeader {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     mergedAt: row.merged_at,
-    lastEventAt: row.last_event_at,
   };
+}
+
+function toHeader(row: HeaderRow): PrHeader {
+  return { ...toHeaderPart(row), lastEventAt: row.last_event_at };
 }
 
 /**
@@ -237,9 +362,12 @@ export class PrRepo {
 
   private readonly activity: ActivityRows;
 
+  private readonly text: TextRows;
+
   constructor(private readonly db: DatabaseSync) {
     this.discussion = new DiscussionRows(db);
     this.activity = new ActivityRows(db);
+    this.text = new TextRows(db);
     registerReadsBody(db);
   }
 
@@ -266,18 +394,13 @@ export class PrRepo {
   }
 
   /**
-   * These PRs' snapshots, parsed, in board shape or with every body. The
-   * json without the fields of the collections in `ready` (`json_remove` in
-   * SQL), those joined from their rows. The discussion: before its switch
-   * the json, and for the board `boardShape` of it, so a cached board copy
-   * has the same shape on both sides of the switch; after it, the rows (for
-   * the board, bodies no board rule reads stay in SQLite, see
-   * `postpile_reads_body`) and the header's `mentioned_teams`. Keys without
-   * a snapshot are missing. In the caller's read transaction. Rows that do
-   * not hold together throw (DiscussionError, ActivityError): every write
-   * checks them, so that is a bug, not GitHub data.
+   * These PRs from the snapshot json, without the fields of the
+   * collections in `ready` (`json_remove` in SQL): the json part of a read
+   * before the text switch. Typed whole, though the switched fields are
+   * missing: `readChunk` joins them from the rows. Keys without a snapshot
+   * are missing.
    */
-  private readChunk(keys: PrKey[], ready: ReadonlySet<RowsCollection>, shape: ReadShape): Map<PrKey, Pr> {
+  private readJsonBases(keys: PrKey[], ready: ReadonlySet<RowsCollection>): Map<PrKey, { pr: FullPr; mentionedTeams: string }> {
     const paths = jsonPaths(ready);
     const json = paths.length === 0 ? 's.json' : `json_remove(s.json, ${paths.join(', ')})`;
     const rows = all<{ key: string; json: string; mentioned_teams: string }>(
@@ -285,24 +408,57 @@ export class PrRepo {
       `SELECT s.key, ${json} AS json, p.mentioned_teams FROM pr_snapshot s JOIN pr p ON p.key = s.key WHERE s.key IN (${placeholders(keys.length)})`,
       ...keys,
     );
+    return new Map(rows.map((row) => [row.key, { pr: parsePr(row.json), mentionedTeams: row.mentioned_teams }]));
+  }
+
+  /**
+   * These PRs from their header and text rows: the base of a read once the
+   * text switched, no json involved. Typed whole like `readJsonBases`; the
+   * lists come from their rows. Keys without a body row are missing.
+   */
+  private readTextBases(keys: PrKey[]): Map<PrKey, { pr: FullPr; mentionedTeams: string }> {
+    const rows = all<HeaderAndTextRow>(
+      this.db,
+      `SELECT ${HEADER_COLUMNS_SQL}, p.mentioned_teams, ${TEXT_COLUMNS_SQL}
+       FROM pr p JOIN pr_body b ON b.pr_key = p.key WHERE p.key IN (${placeholders(keys.length)})`,
+      ...keys,
+    );
+    return new Map(rows.map((row) => [row.key, { pr: joinText(toHeaderPart(row), toTextPart(row)) as FullPr, mentionedTeams: row.mentioned_teams }]));
+  }
+
+  /**
+   * These PRs, in board shape or with every body. Each collection comes
+   * from its rows once its switch is set, else from the snapshot json; once
+   * the text switched, no json is read at all. The discussion: before its
+   * switch the json, and for the board `boardShape` of it, so a cached
+   * board copy has the same shape on both sides of the switch; after it,
+   * the rows (for the board, bodies no board rule reads stay in SQLite, see
+   * `postpile_reads_body`) and the header's `mentioned_teams`. Keys a read
+   * finds nothing for are missing. In the caller's read transaction. Rows
+   * that do not hold together throw (DiscussionError, ActivityError):
+   * every write checks them, so that is a bug, not GitHub data.
+   */
+  private readChunk(keys: PrKey[], ready: ReadonlySet<RowsCollection>, shape: ReadShape): Map<PrKey, Pr> {
+    if (ready.has('text') && !(ready.has('discussion') && ready.has('activity'))) {
+      // The jobs switch in order; only a hand-set flag gets here.
+      throw new Error('rows_ready:text is set before rows_ready:discussion and rows_ready:activity');
+    }
+    const bases = ready.has('text') ? this.readTextBases(keys) : this.readJsonBases(keys, ready);
     const activity = ready.has('activity') ? this.activity.read(keys) : null;
     const discussion = ready.has('discussion') ? this.discussion.read(keys, shape === 'board') : null;
     const result = new Map<PrKey, Pr>();
-    for (const row of rows) {
-      let pr = parsePr(row.json);
+    for (const [key, base] of bases) {
+      let pr = base.pr;
       if (activity !== null) {
-        pr = { ...pr, ...joinActivity(activity.get(row.key) ?? NO_ACTIVITY) };
+        pr = { ...pr, ...joinActivity(activity.get(key) ?? NO_ACTIVITY) };
       }
       if (discussion === null) {
-        result.set(row.key, shape === 'board' ? boardShape(pr) : pr);
+        result.set(key, shape === 'board' ? boardShape(pr) : pr);
         continue;
       }
-      const joined = joinDiscussion(discussion.get(row.key) ?? NO_DISCUSSION);
+      const joined = joinDiscussion(discussion.get(key) ?? NO_DISCUSSION);
       const withRows = { ...pr, ...joined };
-      result.set(
-        row.key,
-        shape === 'board' ? { ...withRows, reviews: boardReviews(joined.reviews, joined.comments), mentionedTeams: listOf(row.mentioned_teams) } : withRows,
-      );
+      result.set(key, shape === 'board' ? { ...withRows, reviews: boardReviews(joined.reviews, joined.comments), mentionedTeams: listOf(base.mentionedTeams) } : withRows);
     }
     return result;
   }
@@ -398,13 +554,14 @@ export class PrRepo {
    * one without the others. Every write gives the header a new
    * snapshot_revision, so parse caches in this and other processes read the
    * PR again, and the newest rows_version. The json leaves out the
-   * collections reads take from rows and keeps the others. Rows that do not
-   * hold together throw (DiscussionError, ActivityError) before anything is
-   * written.
+   * collections reads take from rows and keeps the others ('{}' once the
+   * text switched). Rows that do not hold together throw (DiscussionError,
+   * ActivityError) before anything is written.
    */
   upsert(pr: FullPr, fetchedAt: string): void {
     const discussion = splitDiscussion(pr);
     const activity = splitActivity(pr);
+    const text = splitText(pr);
     const mentionedTeams = JSON.stringify(prTeamMentions(pr));
     inTransaction(this.db, () => {
       // The first statement writes, so the flags read below are the newest ones, and stay so until the commit.
@@ -469,6 +626,7 @@ export class PrRepo {
       );
       this.discussion.replace(pr.key, discussion);
       this.activity.replace(pr.key, activity);
+      this.text.replace(pr.key, text);
     });
     // The revision moved anyway; dropping the old copy now frees its memory at once.
     this.parsed.delete(pr.key);
@@ -787,6 +945,41 @@ export class PrRepo {
     return this.writeOrRefuse(() => {
       this.activity.replace(key, splitActivity(activity));
       run(this.db, 'UPDATE pr SET rows_version = ? WHERE key = ?', ROWS.activity, key);
+    });
+  }
+
+  /**
+   * Writes one stored PR's text rows (the header's text columns and the
+   * body row) from its snapshot json and raises its rows_version to the
+   * text's, inside the caller's transaction; true when it did. Only from
+   * the activity's version (rows_version is cumulative). The header's own
+   * columns stay as they are: every upsert wrote them from the same PR as
+   * the json. No new revision: until the switch reads take the json, which
+   * holds the same fields.
+   *
+   * False, with nothing written, for a snapshot that is missing, not valid
+   * json or lacks a field the rows need (a missing `truncated` or
+   * `capHits` is kept as missing, not refused), and for a PR not at the
+   * activity's version. Such a PR keeps its version and the switch waits.
+   */
+  backfillText(key: PrKey): boolean {
+    // The lists are not needed: SQLite leaves them out (already stripped on most installs).
+    const row = one<{ rows_version: number; json: string | null }>(
+      this.db,
+      `SELECT p.rows_version, CASE WHEN json_valid(s.json) THEN json_remove(s.json, ${jsonPaths(['discussion', 'activity']).join(', ')}) END AS json
+       FROM pr p JOIN pr_snapshot s ON s.key = p.key WHERE p.key = ?`,
+      key,
+    );
+    if (row === null || row.json === null || row.rows_version !== ROWS.activity) {
+      return false;
+    }
+    const fields = storedTextFields(JSON.parse(row.json));
+    if (fields === null) {
+      return false;
+    }
+    return this.writeOrRefuse(() => {
+      this.text.replace(key, splitText(fields));
+      run(this.db, 'UPDATE pr SET rows_version = ? WHERE key = ?', ROWS.text, key);
     });
   }
 

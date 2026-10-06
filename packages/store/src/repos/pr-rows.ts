@@ -1,21 +1,26 @@
-// The child rows of a stored PR (DESIGN.md "PR storage"): the discussion
-// as `pr_comment`, `pr_thread` and `pr_review` rows (migration 031), the
-// activity lists as `pr_commit`, `pr_timeline` and `pr_file` rows
-// (migration 033). Only column mapping lives here; the split and join, with
+// The rows of a stored PR beside its header (DESIGN.md "PR storage"): the
+// discussion as `pr_comment`, `pr_thread` and `pr_review` rows (migration
+// 031), the activity lists as `pr_commit`, `pr_timeline` and `pr_file`
+// rows (migration 033), the text as header columns and a `pr_body` row
+// (migration 034). Only column mapping lives here; the split and join, with
 // their checks, are core's (`splitDiscussion` / `joinDiscussion`,
-// `splitActivity` / `joinActivity`).
+// `splitActivity` / `joinActivity`, `splitText` / `joinText`).
 import type { DatabaseSync, StatementSync } from 'node:sqlite';
 import type {
   ActivityParts,
+  CapHit,
   CommentKind,
   CommentPart,
   CommitPart,
   DiscussionParts,
   FilePart,
+  OptionalHeaderField,
+  ReviewDecision,
   ReviewPart,
   ReviewState,
   ThreadPart,
   TimelineItemKind,
+  TextPart,
   TimelinePart,
 } from '@postpile/core';
 import { all, placeholders } from '../sql.ts';
@@ -26,10 +31,10 @@ import { all, placeholders } from '../sql.ts';
  * writes the newest it knows on every upsert, and a backfill raises a PR
  * by one step only. Never reuse a number.
  */
-export const ROWS = { discussion: 1, activity: 2 } as const;
+export const ROWS = { discussion: 1, activity: 2, text: 3 } as const;
 
 /** The rows_version every upsert of this build writes: every collection it knows is in rows. */
-export const NEWEST_ROWS_VERSION = ROWS.activity;
+export const NEWEST_ROWS_VERSION = ROWS.text;
 
 /** A part of a PR that moves into rows on its own, with its own readiness flag. */
 export type RowsCollection = keyof typeof ROWS;
@@ -40,8 +45,11 @@ export const DISCUSSION_READY_KEY = 'rows_ready:discussion';
 /** Meta flag (set to when): every stored PR has its activity rows (commits, timeline, files). */
 export const ACTIVITY_READY_KEY = 'rows_ready:activity';
 
+/** Meta flag (set to when): every stored PR has its text columns and body row; from then on no read takes the snapshot json. */
+export const TEXT_READY_KEY = 'rows_ready:text';
+
 /** Each collection's readiness flag. */
-export const READY_KEYS: Record<RowsCollection, string> = { discussion: DISCUSSION_READY_KEY, activity: ACTIVITY_READY_KEY };
+export const READY_KEYS: Record<RowsCollection, string> = { discussion: DISCUSSION_READY_KEY, activity: ACTIVITY_READY_KEY, text: TEXT_READY_KEY };
 
 /** The lowest rows_version a stored PR needs once these collections are read from rows (cumulative: the highest of them). */
 export function storedRowsVersion(ready: ReadonlySet<RowsCollection>): number {
@@ -343,5 +351,79 @@ export class ActivityRows {
       activityOf(byKey, row.pr_key).files.push(file);
     }
     return byKey;
+  }
+}
+
+/** The text columns of a `pr` row and its `pr_body` row, as a read selects them. */
+export interface TextRow {
+  url: string;
+  body: string;
+  additions: number;
+  deletions: number;
+  changed_files: number;
+  labels: string;
+  review_decision: string;
+  merged_by: string | null;
+  truncated: number | null;
+  cap_hits: string | null;
+  absent_fields: string;
+}
+
+/** SQL: the columns of `TextRow`, over the header `p` and its body row `b`. */
+export const TEXT_COLUMNS_SQL =
+  'p.url, b.body, p.additions, p.deletions, p.changed_files, p.labels, p.review_decision, p.merged_by, p.truncated, p.cap_hits, p.absent_fields';
+
+export function toTextPart(row: TextRow): TextPart {
+  return {
+    url: row.url,
+    body: row.body,
+    additions: row.additions,
+    deletions: row.deletions,
+    changedFiles: row.changed_files,
+    labels: row.labels === '[]' ? [] : (JSON.parse(row.labels) as string[]),
+    reviewDecision: row.review_decision as ReviewDecision,
+    mergedBy: row.merged_by,
+    truncated: toMaybeBool(row.truncated),
+    capHits: row.cap_hits === null ? null : (JSON.parse(row.cap_hits) as CapHit[]),
+    absentFields: row.absent_fields === '[]' ? [] : (JSON.parse(row.absent_fields) as OptionalHeaderField[]),
+  };
+}
+
+/** Writes the text rows: the header's text columns and the body row, with the statements prepared once. */
+export class TextRows {
+  private statements: { header: StatementSync; body: StatementSync } | null = null;
+
+  constructor(private readonly db: DatabaseSync) {}
+
+  /** Prepared on first use: the columns and table exist only once migration 034 ran. */
+  private prepared() {
+    this.statements ??= {
+      header: this.db.prepare(
+        `UPDATE pr SET url = ?, additions = ?, deletions = ?, changed_files = ?, labels = ?, review_decision = ?, merged_by = ?,
+           truncated = ?, cap_hits = ?, absent_fields = ?
+         WHERE key = ?`,
+      ),
+      body: this.db.prepare('INSERT INTO pr_body (pr_key, body) VALUES (?, ?) ON CONFLICT (pr_key) DO UPDATE SET body = excluded.body'),
+    };
+    return this.statements;
+  }
+
+  /** The PR's text rows replaced by `text`. In the caller's transaction, after its header is written. */
+  replace(key: string, text: TextPart): void {
+    const statements = this.prepared();
+    statements.header.run(
+      text.url,
+      text.additions,
+      text.deletions,
+      text.changedFiles,
+      JSON.stringify(text.labels),
+      text.reviewDecision,
+      text.mergedBy,
+      fromMaybeBool(text.truncated),
+      text.capHits === null ? null : JSON.stringify(text.capHits),
+      JSON.stringify(text.absentFields),
+      key,
+    );
+    statements.body.run(key, text.body);
   }
 }

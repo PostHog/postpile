@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { canonicalPr, newTopic } from '@postpile/core';
 import { at, makeComment, makeCommit, makePr, makeReview, makeThreadFor, makeTimelineItem } from '@postpile/core/fixtures';
-import { ACTIVITY_READY_KEY, DISCUSSION_READY_KEY, Store } from '@postpile/store';
+import { ACTIVITY_READY_KEY, DISCUSSION_READY_KEY, Store, TEXT_READY_KEY } from '@postpile/store';
 import { contextHashKey } from '../digest/dossiers.ts';
 import { REJUDGE_ASKS_KEY } from '../digest/event-batches.ts';
 import { glanceGapKey } from '../digest/glance-batches.ts';
@@ -147,21 +147,22 @@ describe('ArmDatabase', () => {
       timeline: [makeTimelineItem({ id: 'i1' })],
       files: [{ path: 'a.ts', additions: 1, deletions: 0 }],
     });
-    const tables = ['pr_comment', 'pr_thread', 'pr_review', 'pr_commit', 'pr_timeline', 'pr_file'];
+    const tables = ['pr_comment', 'pr_thread', 'pr_review', 'pr_commit', 'pr_timeline', 'pr_file', 'pr_body'];
     const base = join(dir, 'source.sqlite');
     const source = Store.open(base);
     source.prs.upsert(pr, at(1));
     source.meta.set(DISCUSSION_READY_KEY, at(2));
     source.meta.set(ACTIVITY_READY_KEY, at(2));
+    source.meta.set(TEXT_READY_KEY, at(2));
     source.close();
     copyFileSync(base, join(dir, 'arm.sqlite'));
     const arm = ArmDatabase.open(join(dir, 'arm.sqlite'));
     arm.hidePrs();
-    expect(tables.map((table) => count(arm.store, table))).toEqual([0, 0, 0, 0, 0, 0]);
+    expect(tables.map((table) => count(arm.store, table))).toEqual([0, 0, 0, 0, 0, 0, 0]);
 
     arm.reveal(base, { pinged: [pr.key], found: [], pulledIn: [] });
 
-    expect(tables.map((table) => count(arm.store, table))).toEqual([3, 1, 1, 2, 1, 1]);
+    expect(tables.map((table) => count(arm.store, table))).toEqual([3, 1, 1, 2, 1, 1, 1]);
     expect(arm.store.prs.getFull(pr.key)).toEqual(canonicalPr(pr));
     arm.close();
   });
