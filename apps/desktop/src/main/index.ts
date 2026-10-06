@@ -517,7 +517,7 @@ async function start(): Promise<void> {
   runMarker = new RunMarker(app.getPath('userData'));
   const lastRun = runMarker.start(app.getVersion());
   const config = appConfigFromEnv();
-  // The title bar's update reminder asks GitHub for releases ~30s after start, then every hour.
+  // The title bar's update reminder asks GitHub for releases ~30s after start, then every 6 hours (unauthenticated, shared per-IP quota), and again when the installer starts a download.
   updates = updateSourceFromEnv(app.getVersion());
   server = await startServer({ engine, port: 0, token, config, updates, telemetry, onWrite: () => void boardWatcher?.refresh() });
   console.log(

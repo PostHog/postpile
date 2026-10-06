@@ -3,12 +3,12 @@ import { pickUpdate, RELEASES_PAGE_SIZE, type ReleaseInfo, type UpdateView } fro
 // The update reminder's check: now and then, ask GitHub for the latest
 // PostPile releases and keep the newest one that is newer than the running
 // app. Unauthenticated (public repo, 60 requests an hour per IP is plenty for
-// one ask an hour) and with an ETag, so an unchanged list costs nothing.
+// one ask every 6 hours) and with an ETag, so an unchanged list costs nothing.
 
 export const RELEASES_URL = `https://api.github.com/repos/PostHog/postpile/releases?per_page=${RELEASES_PAGE_SIZE}`;
 
 const FIRST_CHECK_MS = 30_000;
-const CHECK_EVERY_MS = 60 * 60 * 1000;
+const CHECK_EVERY_MS = 6 * 60 * 60 * 1000;
 const TIMEOUT_MS = 10_000;
 
 /** What GET /api/update serves. The server starts it with itself and stops it on close. */
@@ -70,7 +70,7 @@ export interface UpdateCheckerOptions {
 }
 
 /**
- * Checks ~30s after start and then every hour. Never throws: a failed
+ * Checks ~30s after start and then every 6 hours. Never throws: a failed
  * check is logged, kept in `error`, and the last known update stays.
  */
 export class UpdateChecker implements UpdateSource {

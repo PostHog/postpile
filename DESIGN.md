@@ -7606,13 +7606,15 @@ install state only changes what it offers.
   `latest-mac.yml` from the newest published release, downloads the zip it
   names (checked against its sha512) and hands it to Squirrel.Mac, which
   checks the signature against the running app and stages it. Checks run on
-  the release check's clock (~30s after start, then every hour), so both
-  find a release at about the same time. A sleeping Mac runs no timers, so
+  their own clock: ~30s after start, then every hour. The release check
+  stays at every 6 hours, since it asks `api.github.com` without a token
+  and installs behind one office IP share 60 requests an hour; when the
+  installer finds a release, the release check runs right away so the
+  reminder knows it too. A sleeping Mac runs no timers, so
   the hourly timer alone can lag after a sleep: on
   `powerMonitor` resume the installer checks again 30s later (network back)
   unless a check started in the last 30 minutes (wall clock), and never
-  while downloading or staged. When the installer finds a release, the
-  release check runs right away so the reminder knows it too (2026-10-06).
+  while downloading or staged (2026-10-06).
 - **Telemetry** (main process): `update_check_finished` per check it ran
   (trigger launch / interval / wake / menu, result none / available /
   error, the found version), `update_downloaded` once staged,
