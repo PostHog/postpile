@@ -13,7 +13,6 @@ function tomorrowAtNine(): string {
 const OPTIONS: { label: string; condition: () => SnoozeCondition }[] = [
   { label: 'Until someone replies', condition: () => ({ kind: 'someone_replies' }) },
   { label: 'Until a new push', condition: () => ({ kind: 'new_push' }) },
-  { label: 'Until CI is green', condition: () => ({ kind: 'ci_green' }) },
   { label: 'For 1 hour', condition: () => ({ kind: 'until_time', until: new Date(Date.now() + 3_600_000).toISOString() }) },
   { label: 'Until tomorrow 9:00', condition: () => ({ kind: 'until_time', until: tomorrowAtNine() }) },
 ];

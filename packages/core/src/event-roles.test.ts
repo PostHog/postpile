@@ -104,8 +104,6 @@ const ROWS: Row[] = [
   { scenario: 'agentForViewer', entry: 'agentPushes', kind: 'commits_pushed', automation: true, loudness: 'muted', role: 'noise', alone: false, withTrigger: false, newer: false, quietRead: 'mark' },
   { scenario: 'teamRouted', entry: 'agentPushes', kind: 'commits_pushed', automation: true, loudness: 'quiet', role: 'ride_along', alone: false, withTrigger: true, newer: false, quietRead: 'mark' },
   { scenario: 'agentForViewer', entry: 'agentMarksReady', kind: 'ready_for_review', automation: true, loudness: 'quiet', role: 'trigger', alone: true, withTrigger: true, newer: true, quietRead: 'mark' },
-  { scenario: 'ownOpen', entry: 'ciFails', kind: 'ci', automation: true, loudness: 'quiet', role: 'noise', alone: false, withTrigger: false, newer: false, quietRead: 'mark' },
-  { scenario: 'dependabot', entry: 'ciFails', kind: 'ci', automation: true, loudness: 'quiet', role: 'noise', alone: false, withTrigger: false, newer: false, quietRead: 'mark' },
 
   // The viewer: always a trigger (as today), never someone else's activity for a quiet read.
   { scenario: 'ownOpen', entry: 'viewerComments', kind: 'comment', automation: false, loudness: 'quiet', role: 'trigger', alone: true, withTrigger: true, newer: true, quietRead: 'human_activity' },
@@ -233,7 +231,6 @@ describe('the event corpus through the pipeline', () => {
       reopened: true,
       ready_for_review: true,
       converted_to_draft: true,
-      ci: true,
       deploy: true,
       merge_queue: true,
       bot_comment: true,

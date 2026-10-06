@@ -7,7 +7,7 @@
 // every body are invented.
 import { at, makeComment, makeCommit, makePr, makeReview, makeThreadFor, makeTimelineItem } from '../fixtures.ts';
 import { deriveEvents } from '../events.ts';
-import type { Checks, Comment, Commit, NotificationThread, Pr, PrEvent, Review, TimelineItem, Viewer } from '../types.ts';
+import type { Comment, Commit, NotificationThread, Pr, PrEvent, Review, TimelineItem, Viewer } from '../types.ts';
 
 /**
  * The viewer of every scenario: home team acme/team-platform, and
@@ -29,8 +29,8 @@ export const CORPUS_AT = at(30);
 /** Well after everything, so no time-based rule (a grace period) decides a quiet read. */
 export const CORPUS_NOW = at(24 * 60);
 
-/** Something GitHub shows on the PR: a comment or review body, a review, a timeline item, a commit or the checks. */
-export type CorpusArtifact = { comment: Comment } | { review: Review } | { timeline: TimelineItem } | { commit: Commit } | { checks: Checks };
+/** Something GitHub shows on the PR: a comment or review body, a review, a timeline item or a commit. */
+export type CorpusArtifact = { comment: Comment } | { review: Review } | { timeline: TimelineItem } | { commit: Commit };
 
 export interface CorpusEntry {
   /** What happened, the way a person would say it. */
@@ -352,10 +352,6 @@ export const CORPUS = {
     adds: [timeline('tl-agent-ready', 'ready_for_review', 'posthog[bot]')],
     pr: { isDraft: false },
   },
-  ciFails: {
-    says: 'CI fails on the head commit',
-    adds: [{ checks: { rollup: 'FAILURE', contexts: [{ name: 'backend-tests', conclusion: 'FAILURE', completedAt: CORPUS_AT }] } }],
-  },
 
   // The viewer.
   viewerComments: {
@@ -572,10 +568,7 @@ function applyArtifact(pr: Pr, artifact: CorpusArtifact): Pr {
   if ('timeline' in artifact) {
     return { ...pr, timeline: upsertById(pr.timeline, artifact.timeline) };
   }
-  if ('commit' in artifact) {
-    return { ...pr, commits: [...pr.commits, artifact.commit], headOid: artifact.commit.oid };
-  }
-  return { ...pr, checks: artifact.checks };
+  return { ...pr, commits: [...pr.commits, artifact.commit], headOid: artifact.commit.oid };
 }
 
 /** The PR with the entry's `before` artifacts: what was there when the viewer last read it. */

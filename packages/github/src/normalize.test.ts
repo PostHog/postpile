@@ -138,7 +138,6 @@ describe('toPr: truncation', () => {
     raw.reviews.nodes = [];
     raw.commits.nodes = [];
     raw.timelineItems.nodes = [];
-    raw.headCommit.nodes = [];
     raw.comments.nodes = Array.from({ length: 60 }, (_, index) => ({
       id: `BOT${index}`,
       url: `https://github.com/acme/app/pull/42#issuecomment-${100 + index}`,

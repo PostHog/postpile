@@ -59,8 +59,8 @@ describe('bot noise and topic memory', () => {
     expect(h.agent.dossierInputs).toHaveLength(1);
     expect(await eventsBehind()).toBe(0);
 
-    // CI fails and the preview deploy refreshes its comment: nothing.
-    await land(CORPUS.ciFails, CORPUS.deployComment, editedAt(CORPUS.deployEdit, '2026-09-02T16:30:00.000Z'));
+    // The preview deploy refreshes its comment: nothing.
+    await land(CORPUS.deployComment, editedAt(CORPUS.deployEdit, '2026-09-02T16:30:00.000Z'));
     expect(h.agent.dossierInputs).toHaveLength(1);
     expect(await eventsBehind()).toBe(0);
 
@@ -91,7 +91,7 @@ describe('bot noise and topic memory', () => {
     await h.engine.sync({ agentJobs: ['dossiers'] });
 
     // Logged by a sync that runs no agent jobs: the dossier stays where it was.
-    pr = [CORPUS.trunkSubmitted, CORPUS.coderabbitReview, CORPUS.ciFails, CORPUS.teammateAsksViewer].reduce(corpusPrAfter, pr);
+    pr = [CORPUS.trunkSubmitted, CORPUS.coderabbitReview, CORPUS.teammateAsksViewer].reduce(corpusPrAfter, pr);
     h.reader.addPr(pr, makeThreadFor(pr, { updatedAt: nextHour() }));
     h.reader.etag = 'etag-2';
     await h.engine.sync({ agentJobs: [] });

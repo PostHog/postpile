@@ -19,7 +19,6 @@ export type EventGlyph =
   | 'closed'
   | 'ready'
   | 'draft'
-  | 'ci'
   | 'deploy'
   | 'queue'
   | 'bot';
@@ -44,7 +43,6 @@ const GLYPHS: Record<EventKind, EventGlyph> = {
   reopened: 'ready',
   ready_for_review: 'ready',
   converted_to_draft: 'draft',
-  ci: 'ci',
   deploy: 'deploy',
   merge_queue: 'queue',
   bot_comment: 'bot',

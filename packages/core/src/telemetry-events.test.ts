@@ -81,6 +81,7 @@ describe('TELEMETRY_EVENTS', () => {
   it('takes a finished storage job by its known name, with counts and whole milliseconds only', () => {
     const done = { name: 'bot_body_trim', units: 11326, work_ms: 8500, longest_slice_ms: 41, wall_ms: 24000 };
     expect(TELEMETRY_EVENTS.storage_job_done.safeParse(done).success).toBe(true);
+    expect(TELEMETRY_EVENTS.storage_job_done.safeParse({ ...done, name: 'checks_strip' }).success).toBe(true);
     expect(TELEMETRY_EVENTS.storage_job_done.safeParse({ ...done, name: 'acme/app#1' }).success).toBe(false);
     expect(TELEMETRY_EVENTS.storage_job_done.safeParse({ ...done, work_ms: 8.5 }).success).toBe(false);
     expect(TELEMETRY_EVENTS.storage_job_done.safeParse({ ...done, wrote: 3 }).success).toBe(false);

@@ -139,26 +139,6 @@ describe('dossier updates', () => {
     expect(h.agent.dossierInputs).toHaveLength(2);
   });
 
-  it('makes no call for CI results alone, and stores the digest cursor past them', async () => {
-    const { h, setNow } = movableHarness();
-    const pr = reviewRequestedPr(1);
-    topicWithPrs(h, 'depot', [pr]);
-    await h.engine.sync({ agentJobs: ['dossiers'] });
-    const before = h.store.cursors.get('digest', 'depot')?.seq ?? 0;
-
-    setNow(LATER);
-    const failing = { name: 'backend-tests', conclusion: 'FAILURE', completedAt: at(30) };
-    pushSnapshot(h, { ...pr, checks: { rollup: 'FAILURE', contexts: [failing] } }, 'etag-2');
-    const report = await h.engine.sync({ agentJobs: ['dossiers'] });
-
-    expect(report.agentCalls).toBe(0);
-    expect(h.agent.dossierInputs).toHaveLength(1);
-    const cursor = h.store.cursors.get('digest', 'depot');
-    expect(cursor?.seq).toBeGreaterThan(before);
-    expect(cursor?.dossierVersion).toBe(1);
-    expect(h.store.eventLog.listSince([pr.key], cursor?.seq ?? 0)).toEqual([]);
-  });
-
   it('refreshes a dossier once when the tailoring changes, even without new events', async () => {
     const h = makeHarness();
     topicWithPrs(h, 'depot', [reviewRequestedPr(1)]);

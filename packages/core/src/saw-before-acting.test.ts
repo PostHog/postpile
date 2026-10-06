@@ -102,12 +102,10 @@ describe('scenario: marking a PR ready right after a comment', () => {
     expect(isPrDone(readied, null, viewer, synced(readied, lastReadAt), false, lastReadAt)).toBe(true);
     // Before this rule it needed a Mark read in PostPile; without the read it still does.
     expect(isPrDone(readied, null, viewer, synced(readied, time(1)), false, time(1))).toBe(false);
-    // The same with a comment as the touch and CI after it: the acted-after read clears the thread.
+    // The same with a comment as the touch and a bot after it: the acted-after read clears the thread.
     const cliComment = makeComment({ id: 'mine', author: viewer.login, body: 'ready for review', createdAt: time(31) });
-    const withCi = ownPr([lyra, cliComment], {
-      checks: { rollup: 'SUCCESS', contexts: [{ name: 'ci', conclusion: 'SUCCESS', completedAt: time(50) }] },
-      updatedAt: time(50),
-    });
-    expect(touched(withCi, synced(withCi, lastReadAt), lastReadAt)).toEqual({ kind: 'mark', reason: 'replied' });
+    const preview = makeComment({ id: 'preview', author: 'github-actions[bot]', body: 'Preview ready', createdAt: time(50) });
+    const withBot = ownPr([lyra, cliComment, preview], { updatedAt: time(50) });
+    expect(touched(withBot, synced(withBot, lastReadAt), lastReadAt)).toEqual({ kind: 'mark', reason: 'replied' });
   });
 });

@@ -253,7 +253,7 @@ function buildPrs(clock: SampleClock): Pr[] {
   return [
     samplePr(clock, {
       number: 1902, title: 'Use Depot cache backend for Turbo', author: 'rowan', state: 'OPEN',
-      size: [186, 42, 7], checks: 'FAILURE', openedHoursAgo: 5,
+      size: [186, 42, 7], openedHoursAgo: 5,
       baseRef: 'rowan/depot-2', headRef: 'rowan/depot-3',
       body: `<!-- Thanks for the PR! Please fill in the sections below. -->
 
@@ -320,27 +320,27 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
     // lyra's two-layer stack, inside the Turbo cache set: the stack mark shows in a set too.
     samplePr(clock, {
       number: 1904, title: 'Hash Turbo inputs by lockfile only', author: 'lyra', state: 'OPEN',
-      size: [22, 9, 2], checks: 'SUCCESS', openedHoursAgo: 8,
+      size: [22, 9, 2], openedHoursAgo: 8,
       baseRef: 'master', headRef: 'lyra/turbo-keys-1', reviewerUsers: [SAMPLE_VIEWER],
     }),
     samplePr(clock, {
       number: 1907, title: 'Drop the per-job Turbo cache salt', author: 'lyra', state: 'OPEN',
-      size: [6, 14, 2], checks: 'SUCCESS', openedHoursAgo: 7,
+      size: [6, 14, 2], openedHoursAgo: 7,
       baseRef: 'lyra/turbo-keys-1', headRef: 'lyra/turbo-keys-2', reviewerUsers: [SAMPLE_VIEWER],
       comments: [{ id: 'issuecomment-5', author: 'lyra', body: '@you ok to drop the salt now that keys come from the lockfile?', hoursAgo: 0.8 }],
     }),
     samplePr(clock, {
       number: 1921, title: 'Bump turbo to 2.5', author: 'renovate[bot]', state: 'OPEN',
-      size: [4, 4, 2], checks: 'SUCCESS', openedHoursAgo: 3, reviewerTeams: ['acme/team-platform'],
+      size: [4, 4, 2], openedHoursAgo: 3, reviewerTeams: ['acme/team-platform'],
     }),
     samplePr(clock, {
       number: 1855, title: 'Skip Turbo remote cache for Storybook', author: 'jude', state: 'MERGED',
-      size: [3, 1, 1], checks: 'SUCCESS', openedHoursAgo: 30, mergedHoursAgo: 14, reviews: [['lyra', 'APPROVED']],
+      size: [3, 1, 1], openedHoursAgo: 30, mergedHoursAgo: 14, reviews: [['lyra', 'APPROVED']],
       comments: [{ id: 'issuecomment-3', author: 'jude', body: 'Are the snapshots stale because of the cache or because of the Vite upgrade?', hoursAgo: 16 }],
     }),
     samplePr(clock, {
       number: 1911, title: 'Run e2e on Depot runners', author: 'rowan', state: 'OPEN',
-      size: [48, 48, 5], checks: 'SUCCESS', openedHoursAgo: 6,
+      size: [48, 48, 5], openedHoursAgo: 6,
       baseRef: 'rowan/depot-3', headRef: 'rowan/depot-4', reviewerUsers: ['nell'],
       reviews: [[SAMPLE_VIEWER, 'APPROVED', 'Labels match #1880.', 'sha1911-a']],
       commits: [
@@ -352,47 +352,47 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
     samplePr(clock, {
       // Closed on top of the stack: it still shows there, greyed.
       number: 1930, title: 'Drop GitHub runners for release builds', author: 'rowan', state: 'CLOSED',
-      size: [2, 30, 2], checks: 'SUCCESS', openedHoursAgo: 5,
+      size: [2, 30, 2], openedHoursAgo: 5,
       baseRef: 'rowan/depot-4', headRef: 'rowan/depot-5',
     }),
     samplePr(clock, {
       number: 1862, title: 'Backend jobs on Depot', author: 'rowan', state: 'MERGED',
-      size: [60, 60, 6], checks: 'SUCCESS', openedHoursAgo: 96, mergedHoursAgo: 72,
+      size: [60, 60, 6], openedHoursAgo: 96, mergedHoursAgo: 72,
       baseRef: 'rowan/depot-1', headRef: 'rowan/depot-2',
       reviews: [[SAMPLE_VIEWER, 'APPROVED'], ['lyra', 'APPROVED']],
     }),
     samplePr(clock, {
       number: 1851, title: 'Add Depot project config', author: 'rowan', state: 'MERGED',
-      size: [12, 0, 1], checks: 'SUCCESS', openedHoursAgo: 170, mergedHoursAgo: 144,
+      size: [12, 0, 1], openedHoursAgo: 170, mergedHoursAgo: 144,
       baseRef: 'master', headRef: 'rowan/depot-1', reviews: [[SAMPLE_VIEWER, 'APPROVED']],
       comments: [{ id: 'issuecomment-1', author: 'nell', body: 'Can we keep GitHub runners for release builds until Depot has an SLA?', hoursAgo: 150 }],
     }),
     samplePr(clock, {
       number: 1915, title: 'DEPOT_TOKEN as repo secret', author: 'rowan', state: 'MERGED',
-      size: [9, 3, 3], checks: 'SUCCESS', openedHoursAgo: 30, mergedHoursAgo: 24, reviews: [['lyra', 'APPROVED']],
+      size: [9, 3, 3], openedHoursAgo: 30, mergedHoursAgo: 24, reviews: [['lyra', 'APPROVED']],
       comments: [{ id: 'issuecomment-4', author: 'rowan', body: 'Keeping DEPOT_TOKEN a repo secret for now. The org secret move comes with the release workflow.', hoursAgo: 25 }],
     }),
     samplePr(clock, {
       number: 1899, title: 'Rename workflow files to ci-*.yml', author: 'rowan', state: 'OPEN',
-      size: [0, 0, 9], checks: 'SUCCESS', openedHoursAgo: 48, queued: true,
+      size: [0, 0, 9], openedHoursAgo: 48, queued: true,
       reviews: [[SAMPLE_VIEWER, 'APPROVED'], ['lyra', 'APPROVED'], ['nell', 'APPROVED']],
     }),
     samplePr(clock, {
       number: 1840, title: 'Remove the nightly cache warmer job', author: 'nell', state: 'MERGED',
-      size: [0, 64, 2], checks: 'SUCCESS', openedHoursAgo: 150, mergedHoursAgo: 120, reviews: [[SAMPLE_VIEWER, 'APPROVED']],
+      size: [0, 64, 2], openedHoursAgo: 150, mergedHoursAgo: 120, reviews: [[SAMPLE_VIEWER, 'APPROVED']],
     }),
     samplePr(clock, {
       number: 1790, title: 'Raise Django test timeout to 45 min', author: 'nell', state: 'MERGED',
-      size: [1, 1, 1], checks: 'SUCCESS', openedHoursAgo: 60, mergedHoursAgo: 48, reviews: [['rowan', 'APPROVED']],
+      size: [1, 1, 1], openedHoursAgo: 60, mergedHoursAgo: 48, reviews: [['rowan', 'APPROVED']],
     }),
     samplePr(clock, {
       number: 1822, title: 'Split backend tests by timing data', author: 'remy', state: 'OPEN',
-      size: [240, 80, 11], checks: 'SUCCESS', openedHoursAgo: 72,
+      size: [240, 80, 11], openedHoursAgo: 72,
       reviews: [['lyra', 'APPROVED'], ['sol', 'APPROVED']], reviewerTeams: ['acme/team-platform'],
     }),
     samplePr(clock, {
       number: 1801, title: 'Move billing models to modules/', author: SAMPLE_VIEWER, state: 'OPEN',
-      size: [410, 380, 24], checks: 'SUCCESS', openedHoursAgo: 48,
+      size: [410, 380, 24], openedHoursAgo: 48,
       body: 'Moves the six billing models into `modules/billing/`. State-only: `db_table` stays, so no table is renamed.\n\nFollow-up: drop the old re-exports in #1808.',
       files: [
         ['modules/billing/models.py', 320, 0],
@@ -425,115 +425,115 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
     }),
     samplePr(clock, {
       number: 1932, title: 'RFC: self-hosted runners for ingestion CI', author: 'ines', state: 'OPEN',
-      size: [140, 12, 3], checks: 'SUCCESS', openedHoursAgo: 20, reviewerTeams: ['acme/team-platform'],
+      size: [140, 12, 3], openedHoursAgo: 20, reviewerTeams: ['acme/team-platform'],
       body: 'Ingestion jobs need more memory than Depot offers. This RFC adds a runner pool and one workflow change.',
     }),
     samplePr(clock, {
       number: 1940, title: 'Release desktop 2.3', author: 'mae', state: 'OPEN',
-      size: [30, 10, 4], checks: 'PENDING', openedHoursAgo: 30, reviews: [['koa', 'APPROVED']],
+      size: [30, 10, 4], openedHoursAgo: 30, reviews: [['koa', 'APPROVED']],
     }),
     // Added for the sidebar's sections: your own PRs, a team mention (Team
     // mentioned), a bot bump (Other topics, FYI) and a merged PR with news on
     // it (unread, but calm).
     samplePr(clock, {
       number: 1945, title: 'Cap CI shard retries at 2', author: SAMPLE_VIEWER, state: 'OPEN', draft: true,
-      size: [14, 6, 2], checks: 'SUCCESS', openedHoursAgo: 8, reviewerUsers: ['lyra'],
+      size: [14, 6, 2], openedHoursAgo: 8, reviewerUsers: ['lyra'],
       reviews: [['remy', 'COMMENTED', 'Would 3 hide fewer real flakes?']],
     }),
     samplePr(clock, {
       number: 1808, title: 'Drop the old billing re-exports', author: SAMPLE_VIEWER, state: 'OPEN',
       // Approved by an agent only: the pill reads "approved by agent", whose turn stays "Merge".
-      size: [3, 40, 2], checks: 'SUCCESS', openedHoursAgo: 20, reviews: [['reviewbot[bot]', 'APPROVED']],
+      size: [3, 40, 2], openedHoursAgo: 20, reviews: [['reviewbot[bot]', 'APPROVED']],
     }),
     samplePr(clock, {
       number: 1934, title: 'Ingestion runner pool as a Terraform module', author: 'ines', state: 'OPEN',
-      size: [220, 0, 6], checks: 'SUCCESS', openedHoursAgo: 10,
+      size: [220, 0, 6], openedHoursAgo: 10,
       comments: [{ id: 'issuecomment-5', author: 'ines', body: '@acme/team-platform do the runner labels clash with yours?', hoursAgo: 1.5 }],
     }),
     // A routing team's request (client-approvers, added by an assigner bot) and a routing team's mention.
     samplePr(clock, {
       number: 1966, title: 'Retry uploads with jittered backoff', author: 'koa', state: 'OPEN',
-      size: [64, 18, 3], checks: 'SUCCESS', openedHoursAgo: 6, reviewerTeams: ['acme/client-approvers'],
+      size: [64, 18, 3], openedHoursAgo: 6, reviewerTeams: ['acme/client-approvers'],
       body: 'Uploads retried at a fixed 1s interval and piled up after an outage. This adds jittered backoff capped at 30s.',
     }),
     samplePr(clock, {
       number: 1967, title: 'Document the new retry settings', author: 'koa', state: 'OPEN',
-      size: [40, 4, 2], checks: 'SUCCESS', openedHoursAgo: 5,
+      size: [40, 4, 2], openedHoursAgo: 5,
       comments: [{ id: 'issuecomment-7', author: 'koa', body: '@acme/client-approvers heads-up: the defaults change in the next release', hoursAgo: 4 }],
     }),
     samplePr(clock, {
       number: 1925, title: 'Bump ruff to 0.7', author: 'renovate[bot]', state: 'OPEN',
-      size: [2, 2, 1], checks: 'SUCCESS', openedHoursAgo: 12,
+      size: [2, 2, 1], openedHoursAgo: 12,
     }),
     samplePr(clock, {
       number: 1857, title: 'Upgrade to Vite 7', author: 'lyra', state: 'MERGED',
-      size: [120, 90, 14], checks: 'SUCCESS', openedHoursAgo: 50, mergedHoursAgo: 3, reviews: [['jude', 'APPROVED']],
+      size: [120, 90, 14], openedHoursAgo: 50, mergedHoursAgo: 3, reviews: [['jude', 'APPROVED']],
       comments: [{ id: 'issuecomment-6', author: 'jude', body: '@you are the stale snapshots gone after this?', hoursAgo: 2 }],
     }),
     samplePr(clock, {
       number: 1870, title: 'Make devbox start default to minimal stack', author: 'sol', state: 'OPEN',
-      size: [70, 12, 4], checks: 'SUCCESS', openedHoursAgo: 72, reviewerTeams: ['acme/team-platform'],
+      size: [70, 12, 4], openedHoursAgo: 72, reviewerTeams: ['acme/team-platform'],
     }),
     // Found outside the inbox: the viewer's own open PR, and a review asked of them they already read on GitHub.
     // Approved, submitted to the Trunk merge queue, and taken out again: its checks never finished.
     samplePr(clock, {
       number: 1950, title: 'Cache pnpm store in the devbox CI image', author: SAMPLE_VIEWER, state: 'OPEN',
-      size: [34, 8, 2], checks: 'PENDING', openedHoursAgo: 30, reviews: [['lyra', 'APPROVED', '', undefined, 26]],
+      size: [34, 8, 2], openedHoursAgo: 30, reviews: [['lyra', 'APPROVED', '', undefined, 26]],
       comments: [{ id: 'issuecomment-1950-trunk', author: 'trunk-io[bot]', body: TRUNK_REMOVED, hoursAgo: 29, editedHoursAgo: 0.6 }],
     }),
     samplePr(clock, {
       number: 1975, title: 'Pin Depot runner images by digest', author: SAMPLE_VIEWER, state: 'OPEN',
-      size: [18, 18, 6], checks: 'SUCCESS', openedHoursAgo: 20, reviews: [['rowan', 'APPROVED', '', undefined, 3]],
+      size: [18, 18, 6], openedHoursAgo: 20, reviews: [['rowan', 'APPROVED', '', undefined, 3]],
       body: 'Runner images float on `:latest` today, so a Depot image update can change CI under us. This pins every image by digest.',
       comments: [{ id: 'issuecomment-1975-trunk', author: 'trunk-io[bot]', body: TRUNK_TESTING, hoursAgo: 2.5, editedHoursAgo: 0.4 }],
     }),
     // The rest of the merge queue in fake mode: submitted (checks still running), waiting, and merged through it.
     samplePr(clock, {
       number: 1977, title: 'Pin the macOS runner image too', author: SAMPLE_VIEWER, state: 'OPEN',
-      size: [6, 6, 2], checks: 'PENDING', openedHoursAgo: 4, reviews: [['rowan', 'APPROVED', '', undefined, 1.5]],
+      size: [6, 6, 2], openedHoursAgo: 4, reviews: [['rowan', 'APPROVED', '', undefined, 1.5]],
       comments: [{ id: 'issuecomment-1977-trunk', author: 'trunk-io[bot]', body: TRUNK_SUBMITTED, hoursAgo: 1 }],
     }),
     samplePr(clock, {
       number: 1978, title: 'Drop the floating runner image tag', author: 'rowan', state: 'OPEN',
-      size: [2, 9, 3], checks: 'SUCCESS', openedHoursAgo: 6, reviews: [[SAMPLE_VIEWER, 'APPROVED', '', undefined, 2]],
+      size: [2, 9, 3], openedHoursAgo: 6, reviews: [[SAMPLE_VIEWER, 'APPROVED', '', undefined, 2]],
       comments: [{ id: 'issuecomment-1978-trunk', author: 'trunk-io[bot]', body: TRUNK_WAITING, hoursAgo: 1.8, editedHoursAgo: 0.2 }],
     }),
     // The ownership sections' samples.
     samplePr(clock, {
       number: 1980, title: 'Run quarantined tests in their own job', author: 'sol', state: 'OPEN',
-      size: [64, 12, 3], checks: 'SUCCESS', openedHoursAgo: 10,
+      size: [64, 12, 3], openedHoursAgo: 10,
     }),
     samplePr(clock, {
       number: 1981, title: 'Report retries of quarantined tests', author: SAMPLE_VIEWER, state: 'OPEN',
-      size: [48, 4, 2], checks: 'PENDING', openedHoursAgo: 4, reviewerUsers: ['sol'],
+      size: [48, 4, 2], openedHoursAgo: 4, reviewerUsers: ['sol'],
     }),
     samplePr(clock, {
       number: 1982, title: 'Allow the Depot cache host', author: 'nell', state: 'OPEN',
-      size: [3, 0, 1], checks: 'SUCCESS', openedHoursAgo: 9,
+      size: [3, 0, 1], openedHoursAgo: 9,
     }),
     samplePr(clock, {
       number: 1984, title: 'Move recordings older than 30 days to cold storage', author: 'pia', state: 'OPEN',
-      size: [210, 40, 9], checks: 'SUCCESS', openedHoursAgo: 28,
+      size: [210, 40, 9], openedHoursAgo: 28,
     }),
     samplePr(clock, {
       number: 1985, title: 'Cap the replay player buffer', author: 'gus', state: 'OPEN',
-      size: [40, 18, 2], checks: 'SUCCESS', openedHoursAgo: 50,
+      size: [40, 18, 2], openedHoursAgo: 50,
     }),
     samplePr(clock, {
       number: 1986, title: 'Run usage exports on the shared runners', author: SAMPLE_VIEWER, state: 'OPEN',
-      size: [12, 6, 2], checks: 'SUCCESS', openedHoursAgo: 7, reviewerUsers: ['omar'],
+      size: [12, 6, 2], openedHoursAgo: 7, reviewerUsers: ['omar'],
     }),
     samplePr(clock, {
       number: 1987, title: 'Add alert threshold presets', author: 'gus', state: 'OPEN',
-      size: [90, 5, 4], checks: 'SUCCESS', openedHoursAgo: 40,
+      size: [90, 5, 4], openedHoursAgo: 40,
     }),
     samplePr(clock, {
       number: 1988, title: 'Rebuild the docs search index nightly', author: 'tove', state: 'OPEN',
-      size: [22, 3, 2], checks: 'SUCCESS', openedHoursAgo: 3,
+      size: [22, 3, 2], openedHoursAgo: 3,
     }),
     samplePr(clock, {
       number: 1974, title: 'Pin the Linux runner image', author: SAMPLE_VIEWER, state: 'MERGED',
-      size: [8, 8, 2], checks: 'SUCCESS', openedHoursAgo: 30, mergedHoursAgo: 5, reviews: [['rowan', 'APPROVED', '', undefined, 7]],
+      size: [8, 8, 2], openedHoursAgo: 30, mergedHoursAgo: 5, reviews: [['rowan', 'APPROVED', '', undefined, 7]],
       comments: [{ id: 'issuecomment-1974-trunk', author: 'trunk-io[bot]', body: TRUNK_MERGED, hoursAgo: 6, editedHoursAgo: 5 }],
     }),
     // Addressed your changes, seen on a revisit: you asked for changes
@@ -542,7 +542,7 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
     // "3 commits since your changes request".
     samplePr(clock, {
       number: 1960, title: 'Split the toolbar into its own bundle', author: 'pim', state: 'OPEN',
-      size: [260, 90, 9], checks: 'SUCCESS', openedHoursAgo: 50,
+      size: [260, 90, 9], openedHoursAgo: 50,
       reviews: [[SAMPLE_VIEWER, 'CHANGES_REQUESTED', 'The chunk names change on every build, which busts the CDN cache.', 'sha1960-a', 30]],
       threads: [
         {
@@ -563,7 +563,7 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
     // requested after the addressed #1960, quiet.
     samplePr(clock, {
       number: 1963, title: 'Inline small SVG icons into the bundle', author: 'tove', state: 'OPEN',
-      size: [80, 30, 5], checks: 'SUCCESS', openedHoursAgo: 40,
+      size: [80, 30, 5], openedHoursAgo: 40,
       reviews: [[SAMPLE_VIEWER, 'CHANGES_REQUESTED', 'Inlining drops the long cache on the icon sprite.', 'sha1963', 20]],
       threads: [
         {
@@ -576,7 +576,7 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
     }),
     samplePr(clock, {
       number: 1955, title: 'Pin the Playwright browser version', author: 'nell', state: 'OPEN',
-      size: [12, 4, 2], checks: 'SUCCESS', openedHoursAgo: 26, reviewerUsers: [SAMPLE_VIEWER],
+      size: [12, 4, 2], openedHoursAgo: 26, reviewerUsers: [SAMPLE_VIEWER],
     }),
     // Agent PRs: a coding agent's GitHub App opens them on someone's behalf
     // and assigns that person, who owns the PR. #1970 is the viewer's own
@@ -584,12 +584,12 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
     // so the platform team request on it is the viewer's (For you).
     samplePr(clock, {
       number: 1970, title: 'Check that billing migrations stay state-only', author: SAMPLE_AGENT, assignees: [SAMPLE_VIEWER], state: 'OPEN',
-      size: [28, 6, 2], checks: 'SUCCESS', openedHoursAgo: 5, headRef: 'acme-agent/billing-migration-check', reviewerUsers: ['lyra'],
+      size: [28, 6, 2], openedHoursAgo: 5, headRef: 'acme-agent/billing-migration-check', reviewerUsers: ['lyra'],
       body: 'Opened by the coding agent for @you. Fails CI when a billing migration renames or drops a table.',
     }),
     samplePr(clock, {
       number: 1972, title: 'Drop unused env vars from devbox start', author: SAMPLE_AGENT, assignees: ['rowan', 'sol', 'nell'], state: 'OPEN',
-      size: [4, 19, 3], checks: 'SUCCESS', openedHoursAgo: 4, headRef: 'acme-agent/devbox-env-cleanup', reviewerTeams: ['acme/team-platform'],
+      size: [4, 19, 3], openedHoursAgo: 4, headRef: 'acme-agent/devbox-env-cleanup', reviewerTeams: ['acme/team-platform'],
       body: 'Opened by the coding agent for @rowan. Removes env vars no devbox service reads.',
     }),
   ];
@@ -627,7 +627,6 @@ function buildEvents(clock: SampleClock): PrEvent[] {
         rule: 'quiet',
         raisedBecause: 'Changes the CI runner image you approved, not a plain follow-up.',
       },
-      { kind: 'ci', actor: 'ci-bot', text: 'all checks passed', hoursAgo: 0.1, rule: 'quiet', isBot: true },
     ]),
     ...sampleEvents(clock, 1862, [
       { kind: 'merged', actor: 'rowan', text: 'merged it', hoursAgo: 72, rule: 'quiet', seen: true },
@@ -726,7 +725,6 @@ function buildEvents(clock: SampleClock): PrEvent[] {
       { kind: 'commits_pushed', actor: 'pim', text: 'pushed: Stable chunk names for the toolbar', hoursAgo: 2.2, rule: 'loud' },
       { kind: 'bot_comment', actor: 'reviewbot[bot]', text: 'commented: "No issues found in 9 files"', hoursAgo: 2.1, rule: 'quiet', isBot: true },
       { kind: 'bot_comment', actor: 'sizebot[bot]', text: 'commented: "toolbar.js -18 kB"', hoursAgo: 2, rule: 'quiet', isBot: true },
-      { kind: 'ci', actor: 'ci-bot', text: 'all checks passed', hoursAgo: 1.9, rule: 'quiet', isBot: true },
     ]),
     ...sampleEvents(clock, 1963, [
       { kind: 'review_changes_requested', actor: SAMPLE_VIEWER, text: 'requested changes', hoursAgo: 20, rule: 'quiet', seen: true },

@@ -61,7 +61,7 @@ export function memoryRole(event: PrEvent): MemoryRole {
   if (loudness === 'loud') {
     return 'trigger';
   }
-  if (loudness === 'muted' || event.kind === 'ci') {
+  if (loudness === 'muted') {
     return 'noise';
   }
   if (PUSH_KINDS.includes(event.kind)) {

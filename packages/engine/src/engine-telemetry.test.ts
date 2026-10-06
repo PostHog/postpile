@@ -145,8 +145,8 @@ describe('engine telemetry', () => {
 
   it('fires snoozed with the condition name for an event-based snooze', async () => {
     const h = await synced();
-    await h.engine.snooze(tileId, { kind: 'ci_green' });
-    expect(h.telemetry.events).toContainEqual({ event: 'snoozed', props: { duration_bucket: 'ci_green' } });
+    await h.engine.snooze(tileId, { kind: 'new_push' });
+    expect(h.telemetry.events).toContainEqual({ event: 'snoozed', props: { duration_bucket: 'new_push' } });
   });
 
   it('fires chat_message_sent on a topic chat', async () => {

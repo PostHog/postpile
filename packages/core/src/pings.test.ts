@@ -85,11 +85,6 @@ describe('pingRule', () => {
     expect(pingRule([raisedComment], pr, viewer, false)).toMatchObject({ class: 'not_addressed', reason: 'coverage dropped' });
   });
 
-  it('never pings for CI, not even a failure on the viewer own PR', () => {
-    const ci = makeEvent({ id: 'ci', kind: 'ci', actor: '', isBot: true, summary: 'CI failed: test', ruleLoudness: 'quiet', ruleReason: 'bot activity' });
-    expect(pingRule([ci], ownPr, viewer, false)).toMatchObject({ class: 'bot', loudness: 'quiet' });
-  });
-
   it('falls back to quiet, then muted', () => {
     expect(pingRule([makeEvent({ ruleLoudness: 'quiet' })], pr, viewer, false).class).toBe('quiet');
     expect(pingRule([makeEvent({ ruleLoudness: 'muted' })], pr, viewer, false).class).toBe('muted');
@@ -174,7 +169,7 @@ describe('a review request counts by whom it asks, not who clicked it', () => {
 
 describe('ping table', () => {
   it('has a row for every mix of loudness, kind, PR state and quiet repo', () => {
-    const kinds: EventKind[] = ['mention', 'review_requested', 'comment', 'ci', 'commits_after_approval'];
+    const kinds: EventKind[] = ['mention', 'review_requested', 'comment', 'deploy', 'commits_after_approval'];
     const loudnesses: Loudness[] = ['loud', 'quiet', 'muted'];
     const prs = [pr, ownPr, makePr({ isDraft: true }), makePr({ state: 'MERGED' })];
     for (const target of prs) {

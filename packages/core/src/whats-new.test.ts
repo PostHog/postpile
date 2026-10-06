@@ -107,14 +107,14 @@ describe('whatsNew', () => {
   });
 
   it('prefers the viewer\'s own action over a later mark-read', () => {
-    const events = [own('review_changes_requested', 0), ev({ kind: 'ci', actor: '', isBot: true, at: at(5), seenAt: at(10) }), loud('commits_pushed', 'pim', 20)];
+    const events = [own('review_changes_requested', 0), ev({ kind: 'deploy', actor: 'vercel[bot]', isBot: true, at: at(5), seenAt: at(10) }), loud('commits_pushed', 'pim', 20)];
     expect(whatsNew(pr, events, viewer)?.anchor.kind).toBe('changes_request');
   });
 
-  it('never counts quiet bot and CI events', () => {
+  it('never counts quiet bot events', () => {
     const bot = ev({ kind: 'bot_comment', actor: 'greptile[bot]', isBot: true, at: at(8), ruleLoudness: 'quiet' });
-    const ci = ev({ kind: 'ci', actor: '', isBot: true, at: at(9), ruleLoudness: 'quiet' });
-    const events = [own('review_changes_requested', 0), loud('commits_pushed', 'pim', 5), bot, ci];
+    const deploy = ev({ kind: 'deploy', actor: 'vercel[bot]', isBot: true, at: at(9), ruleLoudness: 'quiet' });
+    const events = [own('review_changes_requested', 0), loud('commits_pushed', 'pim', 5), bot, deploy];
     const result = whatsNew(pr, events, viewer);
     expect(result?.lead.count).toBe(1);
     expect(result?.extraCount).toBe(0);

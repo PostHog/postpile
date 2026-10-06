@@ -1,5 +1,5 @@
 import { homeTeamsOf, isBot, isMachineComment, isPrOwner, prOwners, sameLogin, standingApprovals } from '@postpile/core';
-import type { Comment, EntityRef, Feedback, FeedbackKind, Pr, PrEvent, Provenance, Viewer } from '@postpile/core';
+import type { Comment, EntityRef, Feedback, FeedbackKind, Pr, Provenance, Viewer } from '@postpile/core';
 import type { PromptContext } from '../service.ts';
 
 /** Trims a body to keep prompts bounded without losing the point. */
@@ -33,11 +33,6 @@ field: not in a verdict, what it means for the user, risk, status, open question
 facts. It flakes, and bringing a PR to green is the author's job. Older notes, summaries or
 earlier reads above may still mention CI status: it is stale, ignore it. Changes to CI files
 and CI as the subject of the work are code, not status: those are fine to talk about.`;
-
-/** Events without CI results, which never reach a prompt (NO_CI_RULE). */
-export function withoutCi(events: PrEvent[]): PrEvent[] {
-  return events.filter((event) => event.kind !== 'ci');
-}
 
 /**
  * What area, topic, tile and set mean, said the same way to every agent that

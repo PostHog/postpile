@@ -63,7 +63,6 @@ export function makePr(overrides: Partial<Pr> & { number?: number; repo?: string
     comments: [],
     threads: [],
     timeline: [],
-    checks: { rollup: 'NONE', contexts: [] },
     headOid: 'head',
     createdAt: at(0),
     updatedAt: at(0),

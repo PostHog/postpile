@@ -8,8 +8,34 @@ interface SnoozeRow {
   since: string;
 }
 
+/**
+ * The stored condition. One this build no longer offers ("Until CI is
+ * green", gone in 0.21.0) or cannot read becomes a time that already
+ * passed (the snooze's start), so the snooze ends like an expired one.
+ */
+function conditionOf(row: SnoozeRow): SnoozeCondition {
+  const expired: SnoozeCondition = { kind: 'until_time', until: row.since };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(row.condition_json);
+  } catch {
+    return expired;
+  }
+  if (typeof parsed !== 'object' || parsed === null) {
+    return expired;
+  }
+  const stored = parsed as { kind?: unknown; until?: unknown };
+  if (stored.kind === 'someone_replies' || stored.kind === 'new_push') {
+    return { kind: stored.kind };
+  }
+  if (stored.kind === 'until_time' && typeof stored.until === 'string') {
+    return { kind: 'until_time', until: stored.until };
+  }
+  return expired;
+}
+
 function toSnooze(row: SnoozeRow): Snooze {
-  return { prKey: row.pr_key, condition: JSON.parse(row.condition_json) as SnoozeCondition, since: row.since };
+  return { prKey: row.pr_key, condition: conditionOf(row), since: row.since };
 }
 
 /** One snooze per PR (see `snoozeWrites` in core for how a tile's snooze is written). */

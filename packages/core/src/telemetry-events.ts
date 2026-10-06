@@ -36,10 +36,11 @@ const verdict = z.enum(['looks_safe', 'look_closer', 'not_yours']).nullable();
 const approveFrom = z.enum(['detail', 'tile', 'agent_tile', 'agent_topic']);
 const markReadOrigin = z.enum(['tile', 'detail', 'debug', 'cleanup', 'agent_tile', 'agent_topic']);
 // A snooze is either a time (bucketed) or a condition (someone replies, a
-// push, CI going green - see packages/core/src/snooze.ts SnoozeCondition):
+// push - see packages/core/src/snooze.ts SnoozeCondition; CI going green
+// until 0.21.0, no longer sent):
 // the same prop name the spec uses ("duration bucket"), widened to the
 // condition-based snoozes the product actually has.
-const snoozeDurationBucket = z.enum(['hours', 'a_day', 'days', 'a_week', 'someone_replies', 'new_push', 'ci_green']);
+const snoozeDurationBucket = z.enum(['hours', 'a_day', 'days', 'a_week', 'someone_replies', 'new_push']);
 const queryLengthBucket = z.enum(['short', 'medium', 'long']);
 const queueFilter = z.enum(['mine', 'team', 'reply', 'review', 'none']);
 // The sidebar section the opened topic sits in, core's `TopicSection` as is.
@@ -69,7 +70,7 @@ const quotaResource = z.enum(['core', 'graphql']);
 const quotaLevel = z.enum(['low', 'critical']);
 const percent = z.number().int().min(0).max(100);
 // packages/engine/src/storage-jobs: every background storage job by name. Append only.
-const storageJobName = z.enum(['bot_body_trim']);
+const storageJobName = z.enum(['bot_body_trim', 'checks_strip']);
 
 // -----------------------------------------------------------------------
 // 6. MCP server (postpile-mcp, a separate process that reads the database and asks the app for the rest)

@@ -1,5 +1,5 @@
 // The detail pane's activity list: the meaningful events of a PR, with push
-// bursts collapsed and bot / CI noise folded into one line. Rules only; the
+// bursts collapsed and bot noise folded into one line. Rules only; the
 // engine and FakeEngine ship the result on `PrDetail.activity`, with each
 // event cut down to what a row draws (`ActivityEvent`).
 import { reviewRequestSubject } from './events.ts';
@@ -37,7 +37,7 @@ export interface LineReply {
 /**
  * One event as a row of the pane draws it: glyph by kind, the actor in bold,
  * the summary, its age, the unread dot and why it is loud or quiet in the
- * hover title. The folded bot / CI rows are these; a line adds to it.
+ * hover title. The folded bot rows are these; a line adds to it.
  */
 export interface ActivityEvent {
   /** The event's id: the row's key, and what Unmute sends for an agent-muted one. */
@@ -85,7 +85,7 @@ export interface ActivityList {
   earlier: ActivityLine[];
   /** Bot and CI events, agent-muted ones and review requests between others, newest first. Without `freshNoise`. */
   noise: ActivityEvent[];
-  /** The folded noise line: "4 bot/CI events". */
+  /** The folded noise line: "4 bot events". */
   noiseLabel: string;
   /**
    * The unseen part of the noise since the viewer's last touch, newest first,
@@ -281,12 +281,12 @@ function byTime(a: EventView, b: EventView): number {
   return a.event.at < b.event.at ? -1 : a.event.at > b.event.at ? 1 : 0;
 }
 
-/** "4 bot/CI events", or "4 bot/CI and other events" when review requests between others are in it. */
+/** "4 bot events", or "4 bot and other events" when review requests between others are in it. */
 export function noiseLabel(noise: EventView[]): string {
-  const machineKinds: EventKind[] = ['ci', 'deploy', 'merge_queue', 'bot_comment'];
+  const machineKinds: EventKind[] = ['deploy', 'merge_queue', 'bot_comment'];
   const machine = noise.every((view) => view.event.isBot || machineKinds.includes(view.event.kind));
   const events = noise.length === 1 ? 'event' : 'events';
-  return machine ? `${noise.length} bot/CI ${events}` : `${noise.length} bot/CI and other ${events}`;
+  return machine ? `${noise.length} bot ${events}` : `${noise.length} bot and other ${events}`;
 }
 
 function countWord(count: number, word: string, plural = `${word}s`): string {
@@ -295,21 +295,19 @@ function countWord(count: number, word: string, plural = `${word}s`): string {
 
 /**
  * The noise by what it is, for the "New since you looked" box: "10 bot
- * comments, CI", "2 bot pushes, a deploy, merge queue, 1 other".
+ * comments", "2 bot pushes, a deploy, merge queue, 1 other".
  */
 export function noiseSummary(noise: EventView[]): string {
   const count = (test: (view: EventView) => boolean) => noise.filter(test).length;
   const isKind = (kinds: EventKind[]) => (view: EventView) => kinds.includes(view.event.kind);
   const comments = count((view) => view.event.kind === 'bot_comment' || (view.event.isBot && HUMAN_TALK.includes(view.event.kind)));
   const pushes = count((view) => view.event.isBot && PUSH_KINDS.includes(view.event.kind));
-  const ci = count(isKind(['ci']));
   const deploys = count(isKind(['deploy']));
   const queue = count(isKind(['merge_queue']));
-  const other = noise.length - comments - pushes - ci - deploys - queue;
+  const other = noise.length - comments - pushes - deploys - queue;
   const parts = [
     comments > 0 ? countWord(comments, 'bot comment') : '',
     pushes > 0 ? countWord(pushes, 'bot push', 'bot pushes') : '',
-    ci > 0 ? 'CI' : '',
     deploys > 0 ? (deploys === 1 ? 'a deploy' : `${deploys} deploys`) : '',
     queue > 0 ? 'merge queue' : '',
     other > 0 ? `${other} other` : '',

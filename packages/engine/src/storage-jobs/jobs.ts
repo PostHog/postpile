@@ -1,4 +1,5 @@
 import { BotBodyTrimJob } from './bot-body-trim.ts';
+import { ChecksStripJob } from './checks-strip.ts';
 import type { StorageJob } from './runner.ts';
 
 /**
@@ -7,5 +8,5 @@ import type { StorageJob } from './runner.ts';
  * in turn. Append only: never reorder them, rename one or reuse a meta key.
  */
 export function storageJobs(): StorageJob[] {
-  return [new BotBodyTrimJob()];
+  return [new BotBodyTrimJob(), new ChecksStripJob()];
 }

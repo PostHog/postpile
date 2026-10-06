@@ -1,10 +1,9 @@
 // What the PR pane reads of a PR (`PrDetail.pr`). The stored `Pr` holds every
-// comment, thread, commit, timeline item and check context; the pane shows
-// none of them directly. Its activity list, reply and react targets come
+// comment, thread, commit and timeline item; the pane shows none of them
+// directly. Its activity list, reply and react targets come
 // from core's `activityList` on `PrDetail.activity`, built from the stored
 // PR before the slim view is made. MCP `pr_context` and the CLI read the
 // same view. Rules only, no IO.
-import { summarizeChecks, type ChecksSummary } from './checks.ts';
 import type { IsoTime, Pr, PrFile, PrKey, PrRef, PrState, Review, ReviewDecision } from './types.ts';
 
 /** A review as the pane reads it: who, which state, when. Review text shows in the activity list. */
@@ -41,7 +40,6 @@ export interface PrPaneView {
   reviews: PaneReview[];
   /** The last stored commit's time ("pushed 2h"); null for a PR without commits in the snapshot. */
   lastCommitAt: IsoTime | null;
-  checks: ChecksSummary;
   createdAt: IsoTime;
   updatedAt: IsoTime;
   mergedAt: IsoTime | null;
@@ -73,7 +71,6 @@ export function prPaneView(pr: Pr): PrPaneView {
     reviewerTeams: pr.reviewerTeams,
     reviews: pr.reviews.map((review) => ({ author: review.author, state: review.state, submittedAt: review.submittedAt })),
     lastCommitAt: lastCommit ? lastCommit.committedAt : null,
-    checks: summarizeChecks(pr.checks),
     createdAt: pr.createdAt,
     updatedAt: pr.updatedAt,
     mergedAt: pr.mergedAt,
