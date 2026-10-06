@@ -228,7 +228,7 @@ function createSelfUpdate(): SelfUpdate {
   const mode = selfUpdateMode({ env: process.env, packaged: app.isPackaged, fake: isFake() });
   console.log(`self-update: ${mode}`);
   if (mode === 'real') {
-    return new SelfUpdater(electronUpdater.autoUpdater, nativeAutoUpdater);
+    return new SelfUpdater(electronUpdater.autoUpdater, nativeAutoUpdater, { telemetry });
   }
   if (mode === 'fake') {
     return new FakeSelfUpdate(fakeInstallStatus(process.env.POSTPILE_FAKE_INSTALL), () => {
@@ -276,7 +276,7 @@ async function checkForUpdatesFromMenu(): Promise<void> {
   if (!updates) {
     return;
   }
-  const [view, install] = await Promise.all([updates.check(), selfUpdate.check()]);
+  const [view, install] = await Promise.all([updates.check(), selfUpdate.check('menu')]);
   sendInstallState();
   const answer = menuCheckAnswer(view, install);
   const options = { type: 'info' as const, message: answer.message, detail: answer.detail };
@@ -517,7 +517,7 @@ async function start(): Promise<void> {
   runMarker = new RunMarker(app.getPath('userData'));
   const lastRun = runMarker.start(app.getVersion());
   const config = appConfigFromEnv();
-  // The title bar's update reminder asks GitHub for releases ~30s after start, then every 6 hours.
+  // The title bar's update reminder asks GitHub for releases ~30s after start, then every 6 hours (unauthenticated, shared per-IP quota), and again when the installer starts a download.
   updates = updateSourceFromEnv(app.getVersion());
   server = await startServer({ engine, port: 0, token, config, updates, telemetry, onWrite: () => void boardWatcher?.refresh() });
   console.log(
@@ -528,6 +528,13 @@ async function start(): Promise<void> {
   // for its state, hears every change and asks for the restart.
   selfUpdate = createSelfUpdate();
   selfUpdate.onChange(sendInstallState);
+  // The installer found a release (a wake check, say) before the release
+  // check did: ask it now, so the reminder shows what is downloading.
+  selfUpdate.onChange((state) => {
+    if (state.status === 'downloading') {
+      void updates?.check();
+    }
+  });
   ipcMain.handle('postpile:install-state', () => selfUpdate.current());
   ipcMain.on('postpile:restart-to-update', () => void restartToUpdate());
   selfUpdate.start();
@@ -647,6 +654,9 @@ async function start(): Promise<void> {
   powerMonitor.on('resume', () => {
     console.log('the Mac woke from sleep');
     service.noteWake();
+    // No timers run while the Mac sleeps, so the hourly update check can lag
+    // after a wake; this one runs soon after it unless a check ran recently.
+    selfUpdate.checkAfterWake();
   });
 }
 

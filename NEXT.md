@@ -26,6 +26,17 @@ now".
   `muted`; the fake engine logs the unsubscribe and subscribe. Gap: a
   watched repo still notifies (see DESIGN), the "N pending mark-reads"
   headline counts a locked mute as two.
+- Update checks after wake and hourly (2026-10-06, for 0.21.0; DESIGN.md
+  "Self-update"): a 0.19.0 launch checked 3 minutes before 0.20.0 came out,
+  the next check was 6 hours of awake time away and the Mac slept, so the
+  user sat 10+ hours on the old version. The installer now checks hourly
+  (the unauthenticated release check stays at 6 hours, shared per-IP
+  quota); `powerMonitor` resume asks the installer to check
+  30s later unless one started in the last 30 minutes (wall clock), and a
+  found release triggers the release check so the pill shows. Main sends
+  `update_check_finished` (trigger, result, version), `update_downloaded`
+  and `update_failed` (stage, error code). Unit tests only; the wake path
+  is not tried on a real sleep yet.
 - GitHub writes on by default, lock in the footer only (2026-10-05,
   DESIGN.md "GitHub writes: lock, action log" › On by default): an install
   that never touched the lock has writes on in the packaged app; an

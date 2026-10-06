@@ -6603,6 +6603,13 @@ topic names are never event props.
    units, work_ms, longest_slice_ms, wall_ms: a background storage job
    finished and its check passed, this run's share of it, see "Storage
    jobs"; since 0.20.0),
+   `update_check_finished` (trigger `launch` / `interval` / `wake` /
+   `menu`, result `none` / `available` / `error`, available_version when
+   one was found: one per self-update check the packaged app ran),
+   `update_downloaded` (version: Squirrel.Mac staged it), `update_failed`
+   (stage `check` / `download`, error_code: electron-updater's code,
+   Chromium's net error, `HTTP_<status>` or the error class, never the
+   message; see "Self-update", since 0.21.0),
    `sync_failed` (error_kind, currently only
    `gh_unavailable`: a blocked sync never runs), `rate_limited` (source
    `graphql`/`rest`, read from the error text — GitHub's GraphQL and REST
@@ -7674,8 +7681,21 @@ install state only changes what it offers.
   `latest-mac.yml` from the newest published release, downloads the zip it
   names (checked against its sha512) and hands it to Squirrel.Mac, which
   checks the signature against the running app and stages it. Checks run on
-  the release check's clock (~30s after start, then every 6 hours), so both
-  find a release at about the same time.
+  their own clock: ~30s after start, then every hour. The release check
+  stays at every 6 hours, since it asks `api.github.com` without a token
+  and installs behind one office IP share 60 requests an hour; when the
+  installer finds a release, the release check runs right away so the
+  reminder knows it too. A sleeping Mac runs no timers, so
+  the hourly timer alone can lag after a sleep: on
+  `powerMonitor` resume the installer checks again 30s later (network back)
+  unless a check started in the last 30 minutes (wall clock), and never
+  while downloading or staged (2026-10-06).
+- **Telemetry** (main process): `update_check_finished` per check it ran
+  (trigger launch / interval / wake / menu, result none / available /
+  error, the found version), `update_downloaded` once staged,
+  `update_failed` (stage check / download, a short error code, never the
+  message). A check skipped while one runs or an update is staged sends
+  nothing, so "never checked" and "checked and failed" show apart.
 - **States** (core's `InstallState`): off, idle, checking, downloading,
   ready, failed. "Ready" is Squirrel's own `update-downloaded`, not
   electron-updater's earlier one, so a restart never waits on staging. Once

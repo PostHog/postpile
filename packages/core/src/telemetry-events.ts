@@ -71,6 +71,14 @@ const quotaLevel = z.enum(['low', 'critical']);
 const percent = z.number().int().min(0).max(100);
 // packages/engine/src/storage-jobs: every background storage job by name. Append only.
 const storageJobName = z.enum(['bot_body_trim', 'checks_strip']);
+// What started a self-update check (apps/desktop/src/main/self-update.ts): ~30s after launch, the hourly timer, a wake, or "Check for Updates…".
+const updateCheckTrigger = z.enum(['launch', 'interval', 'wake', 'menu']);
+const updateCheckResult = z.enum(['none', 'available', 'error']);
+const updateFailStage = z.enum(['check', 'download']);
+// A release version as latest-mac.yml names it, e.g. 0.21.0.
+const releaseVersion = z.string().regex(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?$/).max(40);
+// electron-updater's error code, Chromium's net error, HTTP_<status> or the error class; never the message.
+const updateErrorCode = z.string().regex(/^[A-Za-z0-9_]{1,40}$/);
 
 // -----------------------------------------------------------------------
 // 6. MCP server (postpile-mcp, a separate process that reads the database and asks the app for the rest)
@@ -200,6 +208,12 @@ export const TELEMETRY_EVENTS = {
   // counts only what was left): units gone through, main-thread time in its slices, the longest slice, and the time
   // from its first slice to the end, pauses and waits included.
   storage_job_done: z.object({ name: storageJobName, units: count, work_ms: durationMs, longest_slice_ms: durationMs, wall_ms: durationMs }).strict(),
+  // The packaged app's self-updater (main process). One per check it ran; a check skipped while one runs or an update is staged sends nothing.
+  update_check_finished: z.object({ trigger: updateCheckTrigger, result: updateCheckResult, available_version: releaseVersion.optional() }).strict(),
+  // Squirrel.Mac staged the update: a restart or quit installs it.
+  update_downloaded: z.object({ version: releaseVersion }).strict(),
+  // A check or download failed. Sent along with update_check_finished (result error) when the check itself failed.
+  update_failed: z.object({ stage: updateFailStage, error_code: updateErrorCode }).strict(),
 
   // 6. MCP server: another agent asked PostPile something. found is false when the PR, topic or search found nothing;
   // response_chars is the answer's length (are brief answers brief), error whether it was a tool error.
@@ -217,6 +231,9 @@ export const TELEMETRY_EVENTS = {
 export type TelemetryEventName = keyof typeof TELEMETRY_EVENTS;
 
 export type TelemetryEventProps<K extends TelemetryEventName> = z.infer<(typeof TELEMETRY_EVENTS)[K]>;
+
+/** What started a self-update check, as update_check_finished reports it. */
+export type UpdateCheckTrigger = z.infer<typeof updateCheckTrigger>;
 
 /** The name of a background storage job (packages/engine/src/storage-jobs), as storage_job_done reports it. */
 export type StorageJobName = z.infer<typeof storageJobName>;
