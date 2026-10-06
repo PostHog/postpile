@@ -28,11 +28,31 @@ cask "postpile" do
   # Read-only MCP server for other agents; the script follows this symlink back into the app.
   binary "#{appdir}/PostPile.app/Contents/Resources/postpile-mcp"
 
+  # After the app stages a self-update, Squirrel's ShipIt waits as a launchd job
+  # and installs the staged bundle when PostPile quits. It checks only the
+  # bundle ID and the code signature, not the version, so a `brew upgrade` with
+  # an older update still staged would be overwritten by that older version on
+  # the next quit. brew runs launchctl before quit (its uninstall directives are
+  # ordered), also on upgrade: the waiting job goes first, then the app quits,
+  # and brew reopens it after the upgrade. Same pattern as the visual-studio-code cask.
+  uninstall launchctl: "com.posthog.postpile.ShipIt",
+            quit:      "com.posthog.postpile"
+
+  # Exact paths on purpose: a PostPile* glob would also catch the dev-run
+  # folders. com.postpile.app is the bundle ID of the early ad-hoc builds.
   zap trash: [
     "~/.config/postpile",
+    "~/Library/Application Support/com.apple.sharedfilelist/com.apple.LSSharedFileList.ApplicationRecentDocuments/com.posthog.postpile.sfl*",
+    "~/Library/Application Support/com.apple.sharedfilelist/com.apple.LSSharedFileList.ApplicationRecentDocuments/com.postpile.app.sfl*",
     "~/Library/Application Support/PostPile",
+    "~/Library/Caches/@postpiledesktop-updater",
+    "~/Library/Caches/com.posthog.postpile",
+    "~/Library/Caches/com.posthog.postpile.ShipIt",
+    "~/Library/HTTPStorages/com.posthog.postpile",
     "~/Library/Logs/PostPile",
+    "~/Library/Preferences/ByHost/com.posthog.postpile.ShipIt.*.plist",
     "~/Library/Preferences/com.posthog.postpile.plist",
+    "~/Library/Preferences/com.postpile.app.plist",
     "~/Library/Saved Application State/com.posthog.postpile.savedState",
   ]
 

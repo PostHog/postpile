@@ -8265,6 +8265,9 @@ install state only changes what it offers.
   postpile` still works. brew's recorded version lags behind after a self
   update; nothing reads it. The `postpile-mcp` link points into the app
   bundle, which Squirrel replaces in place, so it keeps working.
+  The cask also has `uninstall launchctl:` for Squirrel's ShipIt job: it
+  installs a staged bundle on quit without a version check, so without it
+  `brew upgrade` could be overwritten by an older staged update.
 
 Why: the owner releases about twice a day, and the brew command plus a quit
 and reopen was a chore every time. Rejected: update.electronjs.org (one more

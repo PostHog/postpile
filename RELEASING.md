@@ -97,6 +97,7 @@ How installed apps get a release (DESIGN.md "Self-update"): electron-updater in 
 
 - `electron-builder.yml` has `publish: github` (PostHog/postpile). electron-builder writes `Contents/Resources/app-update.yml` (where to look) and, next to the zip, `latest-mac.yml` and the `.blockmap`. `--publish never` keeps it from uploading anything; the workflow attaches the files.
 - Only signed builds attach `latest-mac.yml`: Squirrel.Mac checks that the new app has the same Developer ID as the running one, so an ad-hoc release could never install. Without the file, installed apps show the brew command.
+- The cask's `uninstall launchctl:` line removes Squirrel's waiting ShipIt job on `brew upgrade` and `brew uninstall`, so an older staged update can't overwrite a newer brew install on the next quit. The `zap` list in `homebrew/postpile.rb.tmpl` names the update caches too.
 - Don't edit a release's zip by hand after it is out: `latest-mac.yml` holds its sha512, and a changed zip fails every download.
 - To pull a bad release back from auto-update, mark it a draft or delete `latest-mac.yml` from it; apps then look at the release before it (or show the brew command), and never go back to an older version on their own.
 - To check a release by hand: on a Mac with the previous version installed from brew, PostPile › Check for Updates… says "Downloading PostPile <version>", and a minute later the pill says "Update ready". Restart, then About PostPile shows the new version. The log (`~/Library/Logs/PostPile/main.log`) has electron-updater's lines.

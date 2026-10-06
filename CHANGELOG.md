@@ -2,6 +2,12 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## 0.24.0 (unreleased)
+
+### Fixed
+
+- `brew uninstall --zap` now also removes the update caches (several hundred MB), and `brew upgrade` is no longer undone by an older self-update that was waiting to install on the next quit.
+
 ## 0.23.0 (2026-10-06)
 
 ### Changed
