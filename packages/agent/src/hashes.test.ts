@@ -1,6 +1,6 @@
 import type { PrSet } from '@postpile/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { dossierContextHash, dossierInputHash, glanceItemInputHash, legacyGlanceItemInputHash, setGroupingTriggers } from './hashes.ts';
+import { dossierContextHash, dossierInputHash, glanceItemInputHash, glanceItemInputHashWithBotTalk, legacyGlanceItemInputHash, setGroupingTriggers } from './hashes.ts';
 import type { DossierUpdateInput, GlanceBatchInput } from './service.ts';
 import {
   emptyContext,
@@ -75,9 +75,52 @@ describe('glanceItemInputHash', () => {
   });
 
   it('keeps the old shape, with the dossier version, as the legacy hash', () => {
-    const legacy = (version: number) => legacyGlanceItemInputHash(glanceBatch({ items: [item], dossier: makeDossierVersion({ version }) }), item);
+    const legacy = (version: number) => legacyGlanceItemInputHash(glanceBatch({ items: [item], dossier: makeDossierVersion({ version }) }), item, '2026-09-02T00:00:00Z');
     expect(legacy(1)).not.toBe(base);
     expect(legacy(8)).not.toBe(legacy(1));
+  });
+
+  describe('bot talk', () => {
+    const BOT = 'greptile-apps[bot]';
+    const opener = makeComment({ id: 'g1', author: BOT, body: 'Possible null dereference', createdAt: '2026-09-02T10:00:00Z', threadId: 't1', kind: 'review_comment', path: 'a.ts' });
+    const fixed = makeComment({ id: 'a1', author: 'alice', body: 'fixed', createdAt: '2026-09-02T11:00:00Z', threadId: 't1', kind: 'review_comment', path: 'a.ts', reviewId: 'r1' });
+    const command = makeComment({ id: 'a2', author: 'alice', body: '@codex review', createdAt: '2026-09-02T11:05:00Z' });
+    const carrier = { id: 'r1', author: 'alice', state: 'COMMENTED', body: '', submittedAt: '2026-09-02T11:00:00Z', commitOid: null } as const;
+    const thread = { id: 't1', path: 'a.ts', isResolved: false, comments: [opener, fixed] };
+    const quiet = makePr({ comments: [opener], threads: [{ ...thread, comments: [opener] }] });
+    const noisy = makePr({ comments: [opener, fixed, command], threads: [thread], reviews: [carrier] });
+    const hashOf = (pr: typeof quiet) => glanceHash(pr);
+
+    it('leaves a reply to a bot, a bot command and the empty review carrying a reply out', () => {
+      expect(hashOf(noisy)).toBe(hashOf(quiet));
+    });
+
+    it('still covers a real comment next to them', () => {
+      const question = makeComment({ id: 'b1', author: 'bob', body: 'Why not cache this?', createdAt: '2026-09-02T12:00:00Z' });
+      expect(hashOf({ ...noisy, comments: [...noisy.comments, question] })).not.toBe(hashOf(noisy));
+    });
+
+    it('matches a glance written before the update with the bot talk there was, and ignores bot talk since', () => {
+      const own = { ...item, pr: noisy };
+      const batch = glanceBatch({ items: [own] });
+      const writtenAt = '2026-09-02T11:30:00Z';
+      // The old shape counted the reply, the command and the carrier: what a glance written at 11:30 stored.
+      const stored = glanceItemInputHashWithBotTalk(batch, own, writtenAt);
+      expect(stored).not.toBe(glanceItemInputHash(batch, own));
+      const later = makeComment({ id: 'a3', author: 'alice', body: '/trunk merge', createdAt: '2026-09-02T13:00:00Z' });
+      const after = { ...own, pr: { ...noisy, comments: [...noisy.comments, later] } };
+      expect(glanceItemInputHashWithBotTalk(glanceBatch({ items: [after] }), after, writtenAt)).toBe(stored);
+      // A person's comment after the glance is a real change in any shape.
+      const real = makeComment({ id: 'b2', author: 'bob', body: 'Blocker: wrong key.', createdAt: '2026-09-02T13:00:00Z' });
+      const changed = { ...own, pr: { ...noisy, comments: [...noisy.comments, real] } };
+      expect(glanceItemInputHashWithBotTalk(glanceBatch({ items: [changed] }), changed, writtenAt)).not.toBe(stored);
+    });
+
+    it('is the current hash for a PR without bot talk', () => {
+      const own = { ...item, pr: quiet };
+      const batch = glanceBatch({ items: [own] });
+      expect(glanceItemInputHashWithBotTalk(batch, own, '2026-09-02T11:30:00Z')).toBe(glanceItemInputHash(batch, own));
+    });
   });
 
   it('covers feedback on this PR only', () => {

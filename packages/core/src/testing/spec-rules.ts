@@ -942,9 +942,22 @@ export function lastLooked(thread: NotificationThread, pr: Pr, viewer: Viewer): 
 }
 
 /**
+ * A person's activity that needs nothing from the viewer: the agent (or the
+ * user) left it below loud, or it is bot talk nobody judged (2026-10-06: a
+ * "fixed" to a bot, "@codex review", an empty reply review). Chatter is the
+ * event's data here; eventsMatchTheSnapshot checks it against the recipe.
+ */
+function needsNothingFromViewer(event: PrEvent): boolean {
+  if (event.override !== null) {
+    return event.override.loudness !== 'loud';
+  }
+  return event.chatter;
+}
+
+/**
  * "GitHub unread is PostPile unread" (2026-09-30): everything by someone
- * else since the viewer last looked is automation or a person's activity
- * the events agent (or the user) left below loud, with no ask among it and
+ * else since the viewer last looked is automation, bot talk or a person's
+ * activity the events agent (or the user) left below loud, with no ask among it and
  * no loud news; at least one person, else the bot-only and acted-after
  * rules decide. Plus the safety checks: fresh complete snapshot, no unseen merge without their
  * review, no move of theirs new since they last looked. Liveness too: all of that holds, so it marks.
@@ -975,7 +988,7 @@ export function expectedJudgedRead(input: QuietReadSpecInput): JudgedReadCheck {
   if (people.length === 0) {
     return { kind: 'skip', why: 'no_people' };
   }
-  if (!people.every((event) => event.override !== null && event.override.loudness !== 'loud')) {
+  if (!people.every(needsNothingFromViewer)) {
     return { kind: 'skip', why: 'not_judged' };
   }
   if (input.events.some(isUnseenMergeWithoutViewer)) {
@@ -1036,7 +1049,7 @@ export function expectedRequestGoneRead(input: QuietReadSpecInput): RequestGoneR
     return { kind: 'skip', why: 'unseen_loud' };
   }
   const people = after.filter((event) => !isAutomationEvent(pr, viewer, event));
-  if (!people.every((event) => event.override !== null && event.override.loudness !== 'loud')) {
+  if (!people.every(needsNothingFromViewer)) {
     return { kind: 'skip', why: 'not_judged' };
   }
   if (input.events.some(isUnseenMergeWithoutViewer)) {

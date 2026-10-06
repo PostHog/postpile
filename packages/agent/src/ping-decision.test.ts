@@ -27,6 +27,7 @@ function item(id: string, overrides: Partial<PingDecisionItem> = {}): PingDecisi
         sourceId: 'c1',
         ruleLoudness: 'loud',
         ruleReason: 'mentions you',
+        chatter: false,
         override: null,
         seenAt: null,
       },

@@ -30,7 +30,7 @@ export type Assignee = 'viewer' | 'teammate' | 'other';
 export type RequestTarget = 'viewer' | 'team' | 'other_team' | 'routing_team' | 'teammate' | 'other';
 
 /** What a comment says, as far as the rules care. routing_mention names approvers, teams_mention approvers and team-platform. */
-export type CommentText = 'plain' | 'mention' | 'question' | 'team_mention' | 'routing_mention' | 'teams_mention' | 'bot_marker' | 'deploy';
+export type CommentText = 'plain' | 'mention' | 'question' | 'team_mention' | 'routing_mention' | 'teams_mention' | 'bot_marker' | 'deploy' | 'bot_command';
 
 /**
  * The viewer's teams and their roles (DESIGN "Team roles"). one_home:
@@ -272,7 +272,11 @@ const target: fc.Arbitrary<RequestTarget> = fc.oneof(
   { weight: 2, arbitrary: fc.constantFrom<RequestTarget>('viewer', 'team', 'routing_team') },
   { weight: 1, arbitrary: fc.constantFrom<RequestTarget>('other_team', 'teammate', 'other') },
 );
-const commentText = fc.constantFrom<CommentText>('plain', 'mention', 'question', 'team_mention', 'routing_mention', 'teams_mention', 'bot_marker', 'deploy');
+/** A bot command now and then: enough to reach its rules, not so often that it crowds out the asks. */
+const commentText = fc.oneof(
+  { weight: 8, arbitrary: fc.constantFrom<CommentText>('plain', 'mention', 'question', 'team_mention', 'routing_mention', 'teams_mention', 'bot_marker', 'deploy') },
+  { weight: 1, arbitrary: fc.constant<CommentText>('bot_command') },
+);
 const stepIndex = fc.nat({ max: 8 });
 
 const stepArb: fc.Arbitrary<StepSpec> = fc.oneof(

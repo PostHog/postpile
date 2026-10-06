@@ -21,7 +21,7 @@ import {
   type TopicDigestInput,
   type TopicDigestResult,
 } from '@postpile/agent';
-import { emptyDossier, isBot, type Glance, type ReconcileAction } from '@postpile/core';
+import { emptyDossier, humanDiscussion, type Glance, type IsoTime, type ReconcileAction } from '@postpile/core';
 
 type Answer<I, O> = (input: I) => O;
 
@@ -166,7 +166,7 @@ export class FakeAgent extends RunnerAgentService {
     );
   }
 
-  /** Like the real hash: the PR's code, text, labels and human discussion, not the dossier version. */
+  /** Like the real hash: the PR's code, text, labels and human discussion (no bot talk), not the dossier version. */
   override glanceItemInputHash(input: GlanceBatchInput, item: GlanceBatchItem): string {
     return inputHash(
       'glance_batch',
@@ -175,7 +175,7 @@ export class FakeAgent extends RunnerAgentService {
       item.pr.title,
       item.pr.body,
       item.pr.labels,
-      item.pr.comments.filter((comment) => !isBot(comment.author)).map((comment) => comment.id),
+      humanDiscussion(item.pr).map((comment) => comment.id),
       item.provenance,
       input.topic?.name ?? null,
       input.context.instructions,
@@ -184,7 +184,12 @@ export class FakeAgent extends RunnerAgentService {
     );
   }
 
-  override legacyGlanceItemInputHash(input: GlanceBatchInput, item: GlanceBatchItem): string {
+  /** The fake's hash has no older shape: the current one stands in for it. */
+  override glanceItemInputHashWithBotTalk(input: GlanceBatchInput, item: GlanceBatchItem, _writtenAt: IsoTime): string {
+    return this.glanceItemInputHash(input, item);
+  }
+
+  override legacyGlanceItemInputHash(input: GlanceBatchInput, item: GlanceBatchItem, _writtenAt: IsoTime): string {
     return inputHash(
       'glance_batch',
       item.pr.key,

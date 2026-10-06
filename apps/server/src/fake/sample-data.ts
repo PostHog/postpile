@@ -475,7 +475,9 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
       // and the author's answers fold into one quiet line per bot thread. In
       // one bot thread nell asks you (a line of its own), and one thread is
       // between people. GitHub wraps every thread reply in an empty review of
-      // its own, the same second: none of them shows as "reviewed".
+      // its own, the same second: none of them shows as "reviewed". The answers,
+      // the empty reviews and lyra's "@codex review" are bot talk: no agent
+      // reads or judges them.
       reviews: [
         [GREPTILE, 'COMMENTED', 'Greptile summary: upgrades Vite to 7 and moves the test setup. 4 comments.', undefined, 30],
         ['lyra', 'COMMENTED', '', undefined, 28],
@@ -485,7 +487,10 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
         ['jude', 'APPROVED'],
         ['lyra', 'COMMENTED', '', undefined, 24],
       ],
-      comments: [{ id: 'issuecomment-6', author: 'jude', body: '@you are the stale snapshots gone after this?', hoursAgo: 2 }],
+      comments: [
+        { id: 'issuecomment-1857-codex', author: 'lyra', body: '@codex review', hoursAgo: 29 },
+        { id: 'issuecomment-6', author: 'jude', body: '@you are the stale snapshots gone after this?', hoursAgo: 2 },
+      ],
       threads: [
         {
           id: 'thread-1857-1',
@@ -776,18 +781,19 @@ function buildEvents(clock: SampleClock): PrEvent[] {
       { kind: 'bot_comment', actor: GREPTILE, text: 'commented: `vi.useFakeTimers()` is never reset between tests.', hoursAgo: 30, rule: 'quiet', isBot: true, sourceId: 'thread-1857-2-0', seen: true },
       { kind: 'bot_comment', actor: GREPTILE, text: 'commented: The dev server port is hardcoded', hoursAgo: 30, rule: 'quiet', isBot: true, sourceId: 'thread-1857-3-0', seen: true },
       { kind: 'bot_comment', actor: GREPTILE, text: 'commented: `vite-plugin-legacy` is no longer imported anywhere.', hoursAgo: 30, rule: 'quiet', isBot: true, sourceId: 'thread-1857-5-0', seen: true },
-      { kind: 'comment', actor: 'lyra', text: `replied to ${GREPTILE} on vite.config.ts: Fixed, the target is back to es2019 for now.`, hoursAgo: 28, rule: 'quiet', sourceId: 'thread-1857-1-1', seen: true },
-      { kind: 'review_commented', actor: 'lyra', text: 'reviewed', hoursAgo: 28, rule: 'quiet', sourceId: 'review-1857-1', seen: true },
+      { kind: 'comment', actor: 'lyra', text: 'commented: @codex review', hoursAgo: 29, rule: 'quiet', sourceId: 'issuecomment-1857-codex', seen: true, chatter: true },
+      { kind: 'comment', actor: 'lyra', text: `replied to ${GREPTILE} on vite.config.ts: Fixed, the target is back to es2019 for now.`, hoursAgo: 28, rule: 'quiet', sourceId: 'thread-1857-1-1', chatter: true, seen: true },
+      { kind: 'review_commented', actor: 'lyra', text: 'reviewed', hoursAgo: 28, rule: 'quiet', sourceId: 'review-1857-1', chatter: true, seen: true },
       { kind: 'bot_comment', actor: GREPTILE, text: 'commented: Thanks, that resolves it.', hoursAgo: 27.9, rule: 'quiet', isBot: true, sourceId: 'thread-1857-1-2', seen: true },
-      { kind: 'comment', actor: 'lyra', text: `replied to ${GREPTILE} on vite.config.ts: Also added a browserslist check to CI.`, hoursAgo: 27, rule: 'quiet', sourceId: 'thread-1857-1-3', seen: true },
-      { kind: 'review_commented', actor: 'lyra', text: 'reviewed', hoursAgo: 27, rule: 'quiet', sourceId: 'review-1857-2', seen: true },
-      { kind: 'comment', actor: 'lyra', text: `replied to ${GREPTILE} on src/test/setup.ts: Moved the reset into afterEach.`, hoursAgo: 26, rule: 'quiet', sourceId: 'thread-1857-2-1', seen: true },
-      { kind: 'review_commented', actor: 'lyra', text: 'reviewed', hoursAgo: 26, rule: 'quiet', sourceId: 'review-1857-3', seen: true },
+      { kind: 'comment', actor: 'lyra', text: `replied to ${GREPTILE} on vite.config.ts: Also added a browserslist check to CI.`, hoursAgo: 27, rule: 'quiet', sourceId: 'thread-1857-1-3', chatter: true, seen: true },
+      { kind: 'review_commented', actor: 'lyra', text: 'reviewed', hoursAgo: 27, rule: 'quiet', sourceId: 'review-1857-2', chatter: true, seen: true },
+      { kind: 'comment', actor: 'lyra', text: `replied to ${GREPTILE} on src/test/setup.ts: Moved the reset into afterEach.`, hoursAgo: 26, rule: 'quiet', sourceId: 'thread-1857-2-1', chatter: true, seen: true },
+      { kind: 'review_commented', actor: 'lyra', text: 'reviewed', hoursAgo: 26, rule: 'quiet', sourceId: 'review-1857-3', chatter: true, seen: true },
       { kind: 'comment', actor: 'nell', text: 'commented: Does this still need the old snapshot folder?', hoursAgo: 25, rule: 'quiet', sourceId: 'thread-1857-4-0', seen: true },
       { kind: 'comment', actor: 'lyra', text: 'replied to nell on scripts/check-snapshots.ts: No, it reads the new one since this PR.', hoursAgo: 24, rule: 'quiet', sourceId: 'thread-1857-4-1', seen: true },
-      { kind: 'review_commented', actor: 'lyra', text: 'reviewed', hoursAgo: 24, rule: 'quiet', sourceId: 'review-1857-6', seen: true },
+      { kind: 'review_commented', actor: 'lyra', text: 'reviewed', hoursAgo: 24, rule: 'quiet', sourceId: 'review-1857-6', chatter: true, seen: true },
       { kind: 'question_to_user', actor: 'nell', text: 'asked you: @you is the hardcoded port fine for the devbox?', hoursAgo: 4, rule: 'loud', sourceId: 'thread-1857-3-1' },
-      { kind: 'review_commented', actor: 'nell', text: 'reviewed', hoursAgo: 4, rule: 'quiet', sourceId: 'review-1857-4' },
+      { kind: 'review_commented', actor: 'nell', text: 'reviewed', hoursAgo: 4, rule: 'quiet', sourceId: 'review-1857-4', chatter: true },
       { kind: 'merged', actor: 'lyra', text: 'merged it', hoursAgo: 3, rule: 'quiet', seen: true },
       { kind: 'mention', actor: 'jude', text: 'mentioned you: "are the stale snapshots gone?"', hoursAgo: 2, rule: 'loud' },
     ]),

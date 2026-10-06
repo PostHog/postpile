@@ -165,6 +165,12 @@ function reviewLinkLabels(pr: Pr, events: PrEvent[]): string[] {
   if (pr.reviews.some((review) => botReviewFold(pr, review).length > 0)) {
     labels.push('shape:bot review folds');
   }
+  if (events.some((event) => event.ruleReason === 'a command for a bot')) {
+    labels.push('events:command for a bot');
+  }
+  if (events.some((event) => event.chatter && event.ruleReason === 'replied to a bot in a review thread')) {
+    labels.push('events:reply to a bot');
+  }
   return labels;
 }
 
@@ -437,6 +443,8 @@ export const REQUIRED_LABELS: readonly string[] = [
   'shape:dissolved set',
   'shape:review body',
   'events:carrier review',
+  'events:command for a bot',
+  'events:reply to a bot',
   'shape:carrier matched by time',
   'shape:bot review folds',
   'shape:automation without [bot]',

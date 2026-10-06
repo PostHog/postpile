@@ -6,6 +6,30 @@ now".
 
 ## Done
 
+- Bot talk leaves agent work (2026-10-06, for 0.22.0; DESIGN.md "Bot
+  talk leaves agent work"): core `bot-talk.ts` (`isBotCommand`,
+  `isBotTalk`, `humanDiscussion`, `humanReviews`) and `PrEvent.chatter`
+  (migration 032, `pr_event.chatter`). Replies in bot-only threads, bot
+  commands ("@codex review", "/trunk merge") and carrier reviews leave the
+  prompts' human discussion, the glance hash, topic memory (noise: no
+  dossier trigger, not in the delta) and the events agent (never awaiting judgement; the judged and
+  request-gone quiet reads count them as needing nothing). A bot command
+  is quiet by rule ("a command for a bot"). Stored glances stay current
+  through `glanceItemInputHashWithBotTalk` (old shape with the bot talk as
+  of the glance's createdAt). Spec: `isBotCommandBody`, chatter in
+  `expectedEvents`, a `bot_command` comment text in the generator, new
+  coverage labels; properties: bot talk added to any generated PR leaves
+  earlier events, the glance hash and prompt text unchanged and adds only
+  quiet chatter (`properties/bot-talk.test.ts`, `agent/src/bot-talk.test.ts`).
+  Sample: lyra's "@codex review" on #1857. Measured on a copy: human
+  comments 3,599 → 922, reviews 2,997 → 763, events waiting for the events
+  agent 1,430 → 935, memory triggers of the last week 3,898 → 2,017 (52
+  dossier updates that week had only bot talk), 0 glances due on update.
+  Gaps, not agent work: "someone replies" snoozes and the headline still
+  treat a bot command like a comment; the viewer's own command counts as
+  them speaking on the PR (an older ask turns "you already replied");
+  lesson context can include the viewer's own replies to bots.
+
 - Discussion as rows (2026-10-06, for 0.22.0; DESIGN.md "Big inboxes" ›
   PR storage: the discussion as rows, and "Storage jobs"; step 4 of
   normalizing the PR snapshot, Later): migration 031 adds `pr_comment`,

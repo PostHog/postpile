@@ -31,6 +31,7 @@ function event(id: string, at: string, overrides: Partial<PrEvent> = {}): PrEven
     sourceId: id,
     ruleLoudness: 'loud',
     ruleReason: 'human comment',
+    chatter: false,
     override: null,
     seenAt: null,
     ...overrides,

@@ -1,4 +1,5 @@
 import { trimBotBody } from './bot-bodies.ts';
+import { isBotCommand } from './bot-talk.ts';
 import { isBotThreadReply, threadReplyOf } from './bot-threads.ts';
 import { isBot, isMachineComment } from './bots.ts';
 import { isCarrierReview } from './carrier-reviews.ts';
@@ -27,6 +28,10 @@ interface RawEvent {
   botThreadReply?: boolean;
   /** An empty review GitHub made to carry thread replies (`carrier-reviews.ts`). */
   carrierReview?: boolean;
+  /** A person's command for a bot, "@codex review" (`isBotCommand`). */
+  botCommand?: boolean;
+  /** Bot talk that asks the viewer nothing, an edit of it, or a carrier review (`PrEvent.chatter`). */
+  chatter?: boolean;
 }
 
 interface ApprovalPoint {
@@ -136,6 +141,19 @@ function commentSummary(kind: EventKind, comment: Comment, pr: Pr): string {
   }
 }
 
+/**
+ * A person's bot talk (a reply in a bot-only thread, a bot command) that
+ * asks the viewer nothing: a mention, a question or a reply to them keeps
+ * its own kind and its own weight. The viewer's own counts too.
+ */
+function isChatterComment(comment: Comment, pr: Pr, viewer: Viewer): boolean {
+  if (isMachineComment(comment)) {
+    return false;
+  }
+  const asks = !sameLogin(comment.author, viewer.login) && addressedKind(comment, pr, viewer) !== null;
+  return !asks && (isBotThreadReply(comment, pr) || isBotCommand(comment));
+}
+
 function commentEvent(comment: Comment, pr: Pr, viewer: Viewer): RawEvent | null {
   const machine = isMachineComment(comment);
   let kind: EventKind | null;
@@ -164,6 +182,8 @@ function commentEvent(comment: Comment, pr: Pr, viewer: Viewer): RawEvent | null
     sourceId: comment.id,
     subject: finalKind === 'team_mention' ? mentionedTeam(comment, viewer) : null,
     botThreadReply: finalKind === 'comment' && isBotThreadReply(comment, pr),
+    botCommand: finalKind === 'comment' && isBotCommand(comment),
+    chatter: finalKind === 'comment' && isChatterComment(comment, pr, viewer),
   };
 }
 
@@ -234,8 +254,8 @@ function editSummary(comment: Comment, editor: string, machine: boolean, target:
   return withText(`${editor} edited a comment to mention ${whom}`, comment.body);
 }
 
-/** One event for a comment's latest edit, at the edit time; null for a comment never edited. */
-function editEvent(comment: Comment, viewer: Viewer): RawEvent | null {
+/** One event for a comment's latest edit, at the edit time; null for a comment never edited. An edit of chatter that mentions nobody is chatter too. */
+function editEvent(comment: Comment, pr: Pr, viewer: Viewer): RawEvent | null {
   const at = editedAt(comment);
   if (at === null) {
     return null;
@@ -253,6 +273,7 @@ function editEvent(comment: Comment, viewer: Viewer): RawEvent | null {
     sourceId: comment.id,
     subject: target,
     version: at,
+    chatter: !machine && target === null && isChatterComment(comment, pr, viewer),
   };
 }
 
@@ -283,6 +304,7 @@ function reviewEvents(pr: Pr): RawEvent[] {
       sourceId: review.id,
       subject: null,
       carrierReview: isCarrierReview(review, pr),
+      chatter: isCarrierReview(review, pr),
     });
   }
   return events;
@@ -410,7 +432,7 @@ function collectRawEvents(pr: Pr, viewer: Viewer, userState: UserPrState | null)
     if (event) {
       raw.push(event);
     }
-    const edit = editEvent(comment, viewer);
+    const edit = editEvent(comment, pr, viewer);
     if (edit) {
       raw.push(edit);
     }
@@ -472,6 +494,7 @@ export function deriveEvents(
       requestAnswered: requestAnswered(pr, viewer, raw),
       botThreadReply: raw.botThreadReply === true,
       carrierReview: raw.carrierReview === true,
+      botCommand: raw.botCommand === true,
     });
     return {
       id: raw.version === undefined ? eventId(pr.key, raw.kind, raw.sourceId) : editEventId(pr.key, raw.sourceId, raw.version),
@@ -485,6 +508,7 @@ export function deriveEvents(
       sourceId: raw.sourceId,
       ruleLoudness: decision.loudness,
       ruleReason: decision.reason,
+      chatter: raw.chatter === true,
       override: null,
       seenAt: null,
     };

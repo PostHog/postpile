@@ -315,6 +315,17 @@ describe('judgedReadCheck', () => {
     expect(judgedReadCheck(judged({ events: [raised] }))).toEqual({ kind: 'skip', why: 'unseen_loud' });
   });
 
+  it('clears bot talk nobody judged: a reply to a bot or "@codex review" needs no agent (2026-10-06)', () => {
+    const chatter = teammate(30, { chatter: true, summary: 'lyra commented: @codex review' });
+    expect(awaitsJudgement(chatter, pr, viewer)).toBe(false);
+    expect(judgedReadCheck(judged({ events: [chatter, deployResult(31)] }))).toEqual({ kind: 'mark', actors: ['lyra', 'vercel[bot]'] });
+    // Raised by the agent or the user, it is news like any other.
+    const raised = teammate(30, { chatter: true, override: { loudness: 'loud', reason: 'asks for a decision', by: 'user' } });
+    expect(judgedReadCheck(judged({ events: [raised] }))).toEqual({ kind: 'skip', why: 'unseen_loud' });
+    // Next to a person's comment nobody judged yet, the thread still waits.
+    expect(judgedReadCheck(judged({ events: [chatter, teammate(32)] }))).toEqual({ kind: 'skip', why: 'not_judged' });
+  });
+
   it('never clears an ask, even one the agent lowered', () => {
     const mention = teammate(30, { kind: 'mention', ruleLoudness: 'loud', override: judgedQuiet });
     expect(judgedReadCheck(judged({ events: [mention] }))).toEqual({ kind: 'skip', why: 'asks_you' });

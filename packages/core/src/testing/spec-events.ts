@@ -8,11 +8,14 @@
 import { sameLogin } from '../mentions.ts';
 import type { Comment, EventKind, IsoTime, Loudness, Pr, UserPrState, Viewer } from '../types.ts';
 import {
+  answersBotInThread,
   asksQuestion,
   asksViewer,
   changesAnswer,
   isAutomationLogin,
+  isBotCommandBody,
   isBotThreadAnswer,
+  isCarrier,
   isCarrierEvent,
   isHomeTeam,
   isMachineComment,
@@ -40,6 +43,13 @@ export interface ExpectedEvent {
   loudness: Loudness;
   /** Why, as the event's line says it. */
   reason: string;
+  /**
+   * Bot talk no agent reads (2026-10-06): a person's answer to a bot in its
+   * thread or command for a bot that asks the viewer nothing, a person's
+   * edit of one that mentions nobody new, and GitHub's empty review that
+   * only carries thread replies.
+   */
+  chatter: boolean;
 }
 
 /** An event before its loudness: what happened, by whom, when; `body` for a comment's event; `sourceId` for a comment's or review's. */
@@ -85,6 +95,16 @@ function commentKind(pr: Pr, comment: Comment, viewer: Viewer): EventKind | null
     return 'team_mention';
   }
   return comment.kind === 'review' ? null : 'comment';
+}
+
+/** A person's comment that only talks to a bot, answering one in its thread or giving it a command, and asks the viewer nothing. */
+function isChatterComment(pr: Pr, comment: Comment, viewer: Viewer): boolean {
+  if (isMachineComment(comment)) {
+    return false;
+  }
+  const kind = commentKind(pr, comment, viewer);
+  const asks = kind !== null && SPEC_ADDRESSED_KINDS.includes(kind);
+  return !asks && (answersBotInThread(pr, comment) || isBotCommandBody(comment.body));
 }
 
 const REVIEW_KINDS: Partial<Record<string, EventKind>> = {
@@ -151,14 +171,16 @@ export function isStatusUpdate(pr: Pr, event: { kind: EventKind; actor: string; 
 }
 
 /** Edited after it was posted: one event at the latest edit, by the editor (the author when unknown). */
-function editExpected(pr: Pr, comment: Comment): RawExpected | null {
+function editExpected(pr: Pr, comment: Comment, viewer: Viewer): RawExpected | null {
   const editedAt = comment.lastEditedAt ?? null;
   if (editedAt === null || editedAt <= comment.createdAt) {
     return null;
   }
   const editor = comment.editor || comment.author;
   const isBot = sameLogin(editor, comment.author) ? isMachineComment(comment) : isAutomationLogin(editor);
-  return { id: `${pr.key}:comment_edited:${comment.id}@${editedAt}`, kind: 'comment_edited', actor: editor, at: editedAt, isBot, subject: null, body: comment.body };
+  const mentionsNobodyNew = sameLogin(editor, viewer.login) || editedBodyAsks(comment.body, viewer) === null;
+  const chatter = !isBot && mentionsNobodyNew && isChatterComment(pr, comment, viewer);
+  return { id: `${pr.key}:comment_edited:${comment.id}@${editedAt}`, kind: 'comment_edited', actor: editor, at: editedAt, isBot, subject: null, body: comment.body, chatter };
 }
 
 const TIMELINE_KINDS: Record<string, EventKind> = {
@@ -171,13 +193,14 @@ const TIMELINE_KINDS: Record<string, EventKind> = {
 function rawEvents(pr: Pr, viewer: Viewer, userState: UserPrState | null): RawExpected[] {
   const events: RawExpected[] = [];
   const add = (kind: EventKind, sourceId: string, actor: string, at: IsoTime, isBot: boolean, subject: string | null = null) =>
-    events.push({ id: `${pr.key}:${kind}:${sourceId}`, kind, actor, at, isBot, subject });
+    events.push({ id: `${pr.key}:${kind}:${sourceId}`, kind, actor, at, isBot, subject, chatter: false });
   for (const comment of pr.comments) {
     const kind = commentKind(pr, comment, viewer);
     if (kind !== null) {
-      events.push({ id: `${pr.key}:${kind}:${comment.id}`, kind, actor: comment.author, at: comment.createdAt, isBot: isMachineComment(comment), subject: null, body: comment.body, sourceId: comment.id });
+      const chatter = kind === 'comment' && isChatterComment(pr, comment, viewer);
+      events.push({ id: `${pr.key}:${kind}:${comment.id}`, kind, actor: comment.author, at: comment.createdAt, isBot: isMachineComment(comment), subject: null, body: comment.body, sourceId: comment.id, chatter });
     }
-    const edit = editExpected(pr, comment);
+    const edit = editExpected(pr, comment, viewer);
     if (edit !== null) {
       events.push(edit);
     }
@@ -185,7 +208,7 @@ function rawEvents(pr: Pr, viewer: Viewer, userState: UserPrState | null): RawEx
   for (const review of pr.reviews) {
     const kind = REVIEW_KINDS[review.state];
     if (kind) {
-      events.push({ id: `${pr.key}:${kind}:${review.id}`, kind, actor: review.author, at: review.submittedAt, isBot: isAutomationLogin(review.author), subject: null, sourceId: review.id });
+      events.push({ id: `${pr.key}:${kind}:${review.id}`, kind, actor: review.author, at: review.submittedAt, isBot: isAutomationLogin(review.author), subject: null, sourceId: review.id, chatter: isCarrier(pr, review) });
     }
   }
   const afterApproval = commitsAfterApproval(pr, viewer, userState);
@@ -285,6 +308,10 @@ function loudnessOf(pr: Pr, viewer: Viewer, event: RawExpected): { loudness: Lou
   if (event.kind === 'comment' && event.sourceId !== undefined && isBotThreadAnswer(pr, { kind: event.kind, sourceId: event.sourceId })) {
     return quiet('replied to a bot in a review thread');
   }
+  // Telling a bot what to do ("@codex review") is housekeeping too, on any PR (2026-10-06); one that mentions or answers the viewer is an ask above.
+  if (event.kind === 'comment' && isBotCommandBody(event.body ?? '')) {
+    return quiet('a command for a bot');
+  }
   if (answersChanges(pr, viewer, event)) {
     return loud('addressed your changes');
   }
@@ -323,6 +350,7 @@ export function expectedEvents(pr: Pr, viewer: Viewer, userState: UserPrState | 
     at: raw.at,
     isBot: raw.isBot,
     subject: raw.subject,
+    chatter: raw.chatter,
     ...loudnessOf(pr, viewer, raw),
   }));
 }

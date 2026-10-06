@@ -24,3 +24,4 @@ export * from './invariants-board.ts';
 export * from './invariants-rules.ts';
 export * from './invariants-agent-actions.ts';
 export * from './event-corpus.ts';
+export * from './bot-talk.ts';

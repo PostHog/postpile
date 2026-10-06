@@ -286,14 +286,24 @@ export function isJudgedQuiet(event: PrEvent): boolean {
 }
 
 /**
+ * A person's activity that needs nothing from the viewer: the events agent
+ * (or the user) looked at it and left it below loud, or it is bot talk
+ * (`PrEvent.chatter`), which needs nobody's judgement: a "fixed" to a review
+ * bot, "@codex review", GitHub's empty reply review (2026-10-06).
+ */
+function needsNothing(event: PrEvent): boolean {
+  return isJudgedQuiet(event) || (event.chatter && event.override === null);
+}
+
+/**
  * A person's quiet event the judged rule waits on: someone else's, not
- * automation, not an ask, still at its rule's loudness (no override) and
- * unseen. On an unread thread the events agent gets it (DESIGN.md "GitHub
- * unread is PostPile unread"): left quiet it becomes clearable, raised to
- * loud it pings and keeps the thread unread.
+ * automation, not an ask, not bot talk (`PrEvent.chatter`), still at its
+ * rule's loudness (no override) and unseen. On an unread thread the events
+ * agent gets it (DESIGN.md "GitHub unread is PostPile unread"): left quiet
+ * it becomes clearable, raised to loud it pings and keeps the thread unread.
  */
 export function awaitsJudgement(event: PrEvent, pr: Pr, viewer: Viewer): boolean {
-  if (event.override !== null || event.seenAt !== null || event.ruleLoudness !== 'quiet') {
+  if (event.override !== null || event.seenAt !== null || event.ruleLoudness !== 'quiet' || event.chatter) {
     return false;
   }
   return !isOwnEvent(event, viewer) && !isAutomationOn(event, pr, viewer) && !isAskOfViewer(event, pr, viewer);
@@ -319,7 +329,7 @@ export function lastLookedAt(thread: NotificationThread, pr: Pr, events: PrEvent
  * - asks_you: an ask of the user came since (`isAskOfViewer`)
  * - unseen_loud: loud news since, or unseen loud news on the PR
  * - no_people: only automation since: the bot-only and acted-after rules decide
- * - not_judged: a person's activity since that the events agent has not judged yet
+ * - not_judged: a person's activity since that the events agent has not judged yet (bot talk needs no judgement)
  * - unseen_merge: a merge without the user's review they have not seen
  * - your_move: whose turn is the user's, and it was not when they last looked (`isNewYourMove`)
  */
@@ -340,8 +350,9 @@ export type JudgedReadCheck = { kind: 'mark'; actors: string[] } | { kind: 'skip
 
 /**
  * Whether PostPile may mark this PR thread read on GitHub because everything
- * since the user last looked (`lastLookedAt`) is automation or a person's
- * activity the events agent judged as not needing them, with no ask among it
+ * since the user last looked (`lastLookedAt`) is automation, bot talk
+ * (`PrEvent.chatter`) or a person's activity the events agent judged as not
+ * needing them (`needsNothing`), with no ask among it
  * (DESIGN.md "GitHub unread is PostPile unread", 2026-09-30). The same
  * safety checks as the bot-only rule: fresh complete snapshot, no unseen
  * merge, no new move of theirs. Agent
@@ -374,7 +385,7 @@ export function judgedReadCheck(input: QuietReadInput): JudgedReadCheck {
   if (people.length === 0) {
     return { kind: 'skip', why: 'no_people' };
   }
-  if (!people.every(isJudgedQuiet)) {
+  if (!people.every(needsNothing)) {
     return { kind: 'skip', why: 'not_judged' };
   }
   if (events.some(isUnseenMergeWithoutReview)) {
@@ -474,7 +485,7 @@ export function requestGoneReadCheck(input: QuietReadInput): RequestGoneReadChec
     return { kind: 'skip', why: 'unseen_loud' };
   }
   const people = after.filter((event) => !isAutomationOn(event, pr, viewer));
-  if (!people.every(isJudgedQuiet)) {
+  if (!people.every(needsNothing)) {
     return { kind: 'skip', why: 'not_judged' };
   }
   if (events.some(isUnseenMergeWithoutReview)) {

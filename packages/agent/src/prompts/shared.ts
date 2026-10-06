@@ -1,4 +1,4 @@
-import { homeTeamsOf, isBot, isMachineComment, isPrOwner, prOwners, sameLogin, standingApprovals } from '@postpile/core';
+import { homeTeamsOf, humanDiscussion, humanReviews, isPrOwner, prOwners, sameLogin, standingApprovals } from '@postpile/core';
 import type { Comment, EntityRef, Feedback, FeedbackKind, Pr, Provenance, Viewer } from '@postpile/core';
 import type { PromptContext } from '../service.ts';
 
@@ -183,9 +183,13 @@ export function jsonOnly(shape: string): string {
   return `\nReply with JSON only: no preamble, no markdown, no code fences. Use exactly this shape:\n\n${shape}\n`;
 }
 
-/** Human comments across the PR, oldest first. Bot chatter is most of the volume and none of the signal. */
+/**
+ * Human comments across the PR, oldest first. Bot talk is most of the
+ * volume and none of the signal: bots' comments, and since 2026-10-06 also
+ * people's replies to bots and bot commands (`humanDiscussion`).
+ */
 export function humanComments(pr: Pr): Comment[] {
-  return pr.comments.filter((comment) => !isMachineComment(comment));
+  return humanDiscussion(pr);
 }
 
 export interface PrDetailLimits {
@@ -247,8 +251,9 @@ export function prDetails(pr: Pr, viewer: Viewer | null, limits: PrDetailLimits)
   if (reviewers.length > 0) {
     lines.push(`Pending review requests: ${reviewers.join(', ')}`);
   }
-  const reviews = pr.reviews
-    .filter((r) => !isBot(r.author) && r.author !== viewer?.login)
+  // Not the empty reviews GitHub wraps thread replies in (`humanReviews`): a reply is no review.
+  const reviews = humanReviews(pr)
+    .filter((r) => r.author !== viewer?.login)
     .map((r) => `@${r.author} ${r.state.toLowerCase()}`);
   if (reviews.length > 0) {
     lines.push(`Review states: ${reviews.join(', ')}`);

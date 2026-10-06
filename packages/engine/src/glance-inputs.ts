@@ -1,6 +1,6 @@
 import type { AgentService, GlanceBatchInput, GlanceBatchItem, PromptContext } from '@postpile/agent';
 import {
-  isMachineComment,
+  isBotTalk,
   isTracked,
   isUnseenMergeWithoutReview,
   TILE_STATE_ORDER,
@@ -134,11 +134,16 @@ export class GlanceInputs {
 
   /**
    * Whether a stored glance still matches its input. Never depends on the
-   * other PRs in a batch. The hash from before 2026-10-05, with the dossier
-   * version, still counts while that dossier is the latest, so updating the
-   * app regenerates no glance, unless a person edited a comment after the
-   * glance was written: the old shape holds comment ids only, and the
-   * dossier version that used to cover an edit may never move (Unsorted).
+   * other PRs in a batch. Older hash shapes still count, so updating the app
+   * regenerates no glance:
+   * - before 2026-10-06, bot talk counted as discussion: matched with the
+   *   bot talk there was when the glance was written (DESIGN.md "Bot talk leaves agent work"
+   *   › Glances written before)
+   * - before 2026-10-05, with the dossier version (and bot talk the same
+   *   way): counts while that dossier is the latest, unless a person edited
+   *   a comment after the glance was written: that shape holds comment ids
+   *   only, and the dossier version that used to cover an edit may never
+   *   move (Unsorted).
    */
   isCurrent(agent: AgentService, target: GlanceTarget, stored: Pick<Glance, 'inputHash' | 'createdAt'> | null | undefined): boolean {
     if (!stored) {
@@ -147,10 +152,15 @@ export class GlanceInputs {
     if (stored.inputHash === this.itemHash(agent, target)) {
       return true;
     }
-    if (stored.inputHash !== agent.legacyGlanceItemInputHash(this.batchInput(target.topicId, [target.item], 1), target.item)) {
+    const input = this.batchInput(target.topicId, [target.item], 1);
+    if (stored.inputHash === agent.glanceItemInputHashWithBotTalk(input, target.item, stored.createdAt)) {
+      return true;
+    }
+    if (stored.inputHash !== agent.legacyGlanceItemInputHash(input, target.item, stored.createdAt)) {
       return false;
     }
-    return !target.item.pr.comments.some((comment) => !isMachineComment(comment) && comment.lastEditedAt && comment.lastEditedAt > stored.createdAt);
+    const pr = target.item.pr;
+    return !pr.comments.some((comment) => !isBotTalk(comment, pr) && comment.lastEditedAt && comment.lastEditedAt > stored.createdAt);
   }
 
   /**

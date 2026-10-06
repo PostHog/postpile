@@ -44,8 +44,12 @@ const STATUS_KINDS: readonly EventKind[] = ['deploy', 'merge_queue', 'comment_ed
 
 /**
  * The role of one event, first match wins: loud is always a trigger, muted
- * and CI are always noise, a push rides along whoever made it, a person's
- * event is a trigger, then a bot's event by what it is. A push changes one
+ * events and bot talk (`PrEvent.chatter`: "fixed" to a review bot, "@codex
+ * review", GitHub's empty reply review) are noise, a push rides along
+ * whoever made it, a person's event is a trigger, then a bot's event by
+ * what it is. Bot talk is a person's event, but it says nothing about the
+ * topic (2026-10-06): before, every "fixed" started a dossier update, and
+ * riding along it would crowd people's words out of the delta. A push changes one
  * PR's code, not the topic's story (2026-10-05): it refreshes that PR's
  * glance (its head is in the glance hash) and the dossier reads it at its
  * next real update. Before, an agent pushing 27 times an hour rewrote the
@@ -61,7 +65,7 @@ export function memoryRole(event: PrEvent): MemoryRole {
   if (loudness === 'loud') {
     return 'trigger';
   }
-  if (loudness === 'muted') {
+  if (loudness === 'muted' || event.chatter) {
     return 'noise';
   }
   if (PUSH_KINDS.includes(event.kind)) {

@@ -15,6 +15,7 @@ export interface EventRow {
   source_id: string;
   rule_loudness: string;
   rule_reason: string;
+  chatter: number;
   override_loudness: string | null;
   override_reason: string | null;
   override_by: string | null;
@@ -45,6 +46,7 @@ export function toEvent(row: EventRow): PrEvent {
     sourceId: row.source_id,
     ruleLoudness: row.rule_loudness as Loudness,
     ruleReason: row.rule_reason,
+    chatter: toBool(row.chatter),
     override: toOverride(row),
     seenAt: row.seen_at,
   };
@@ -143,12 +145,12 @@ export class EventRepo {
         run(
           this.db,
           `INSERT INTO pr_event
-             (id, pr_key, kind, actor, is_bot, at, summary, url, source_id, rule_loudness, rule_reason)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             (id, pr_key, kind, actor, is_bot, at, summary, url, source_id, rule_loudness, rule_reason, chatter)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT (id) DO UPDATE SET
              kind = excluded.kind, actor = excluded.actor, is_bot = excluded.is_bot, at = excluded.at,
              summary = excluded.summary, url = excluded.url, source_id = excluded.source_id,
-             rule_loudness = excluded.rule_loudness, rule_reason = excluded.rule_reason`,
+             rule_loudness = excluded.rule_loudness, rule_reason = excluded.rule_reason, chatter = excluded.chatter`,
           event.id,
           prKey,
           event.kind,
@@ -160,6 +162,7 @@ export class EventRepo {
           event.sourceId,
           event.ruleLoudness,
           event.ruleReason,
+          fromBool(event.chatter),
         );
         if (!existing.has(event.id)) {
           created.push(event.id);
@@ -178,8 +181,8 @@ export class EventRepo {
     const changes = run(
       this.db,
       `INSERT OR IGNORE INTO pr_event
-         (id, pr_key, kind, actor, is_bot, at, summary, url, source_id, rule_loudness, rule_reason)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (id, pr_key, kind, actor, is_bot, at, summary, url, source_id, rule_loudness, rule_reason, chatter)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       event.id,
       event.prKey,
       event.kind,
@@ -191,6 +194,7 @@ export class EventRepo {
       event.sourceId,
       event.ruleLoudness,
       event.ruleReason,
+      fromBool(event.chatter),
     );
     return changes > 0;
   }

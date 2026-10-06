@@ -1,4 +1,4 @@
-import { isMachineComment } from './bots.ts';
+import { isBotTalk } from './bot-talk.ts';
 import { mentionsUser } from './mentions.ts';
 import type { Comment, Pr, Review } from './types.ts';
 
@@ -76,7 +76,8 @@ export function withViewerReaction(pr: Pr, id: string): Pr {
 /**
  * What the agent reads besides the comment when drafting a reply, oldest
  * first and including the comment: its whole review thread for an inline
- * comment, else the human conversation around it (a few before, a few after).
+ * comment, else the human conversation around it (a few before, a few after),
+ * without bot talk ("@codex review", `isBotTalk`).
  */
 export function replyConversation(pr: Pr, comment: Comment): Comment[] {
   const target = replyTarget(comment);
@@ -84,7 +85,7 @@ export function replyConversation(pr: Pr, comment: Comment): Comment[] {
     const thread = pr.threads.find((candidate) => candidate.id === target.threadId);
     return thread ? thread.comments : [comment];
   }
-  const conversation = pr.comments.filter((candidate) => candidate.kind !== 'review_comment' && (candidate.id === comment.id || !isMachineComment(candidate)));
+  const conversation = pr.comments.filter((candidate) => candidate.kind !== 'review_comment' && (candidate.id === comment.id || !isBotTalk(candidate, pr)));
   const at = conversation.findIndex((candidate) => candidate.id === comment.id);
   if (at === -1) {
     return [comment];
