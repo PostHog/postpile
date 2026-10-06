@@ -65,6 +65,14 @@ export interface Comment {
   /** Only for review_comment: the review thread it belongs to. */
   threadId: string | null;
   /**
+   * Only for review_comment: the review it was submitted with (GitHub's
+   * pullRequestReview). Missing when GitHub does not say, and on snapshots
+   * stored before it was fetched (2026-10-06): never inferred from author or
+   * time. No rule reads it yet; the PR pane is to fold a review's inline
+   * comments under it.
+   */
+  reviewId?: string;
+  /**
    * When the body was last edited, null when never. Bots edit their sticky
    * comments (CI reports, review summaries) instead of posting new ones,
    * and GitHub keeps the thread unread for it (`comment_edited` events).

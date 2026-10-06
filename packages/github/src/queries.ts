@@ -73,7 +73,8 @@ const REACTIONS = 'reactionGroups { content viewerHasReacted }';
 // older-page queries (cap-fill.ts), so paged-in items normalize the same.
 const REVIEW_NODE = `id state url submittedAt createdAt ...comment commit { oid } ${REACTIONS}`;
 const COMMENT_NODE = `id url ...comment ${REACTIONS}`;
-const THREAD_COMMENT_NODE = `id url state ...comment ${REACTIONS}`;
+/** An inline comment, with the review it was submitted with (the PR pane is to fold a review's inline comments under it). */
+const THREAD_COMMENT_NODE = `id url state pullRequestReview { id } ...comment ${REACTIONS}`;
 /** A thread's first comments; the end cursor lets cap-fill.ts page on past the cap. */
 const THREAD_COMMENTS = `comments(first: ${QUERY_CAPS.threadComments}) { totalCount pageInfo { hasNextPage endCursor } nodes { ${THREAD_COMMENT_NODE} } }`;
 const THREAD_NODE = `id path isResolved ${THREAD_COMMENTS}`;
