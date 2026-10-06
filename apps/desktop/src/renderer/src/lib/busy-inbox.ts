@@ -37,22 +37,18 @@ export function collapsedText(view: BusyInboxView): string {
 
 /**
  * "Why?": what PostPile does now, in plain words. Calm on purpose: it is
- * focusing, nothing broke. The writes line only shows while GitHub writes are
- * locked, since that is when PostPile cannot mark read what it handled.
+ * focusing, nothing broke. It never mentions the GitHub writes lock: that
+ * lives in the footer only (2026-10-05).
  */
 export function whyLines(view: BusyInboxView): string[] {
   // Threads updated in the last hour are active this week, so they are part of the inbox count.
   const lastHour = view.updatesLastHour > 0 ? `, ${countText(view.updatesLastHour)} of them updated in the last hour` : '';
-  const lines = [
+  return [
     `${countText(view.inboxPrs)} PRs are open, unread or active this week${lastHour}. PostPile works on ${countText(view.cap)} at a time.`,
     "It keeps your PRs and what is aimed at you, then your team's.",
     "Other people's PRs wait, with no fetching and no agent work. Nothing is deleted.",
+    `This goes away by itself once your inbox is back under ${countText(view.cap)}.`,
   ];
-  if (view.writesLocked) {
-    lines.push('With GitHub writes locked, PostPile cannot mark read what it handled.');
-  }
-  lines.push(`This goes away by itself once your inbox is back under ${countText(view.cap)}.`);
-  return lines;
 }
 
 /** Why "Clean up" is off, null when it opens the cleanup dialog. Same rules as the sidebar footer's "Clear". */

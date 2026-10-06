@@ -19,6 +19,8 @@ export type WriteResult = 'sent' | 'off';
 
 export const WRITES_OFF_DETAIL = 'GitHub writes are off';
 
+export const WRITES_ON_BY_DEFAULT_DETAIL = 'on by default: writes were never locked or unlocked on this install';
+
 /** Log and toast text for a mark-read GitHub did not take; the app keeps (or goes back to) unread. */
 export function notTakenDetail(reason: string): string {
   return `GitHub didn't take it: ${reason}; still unread`;
@@ -53,6 +55,19 @@ export class GitHubWrites {
       ? 'GitHub writes on: mark-read and approvals reach GitHub'
       : 'GitHub writes locked: mark-reads wait as pending writes, approve, comment review and comment are blocked';
     return { ok: true, message };
+  }
+
+  /**
+   * Writes are on only because the user never chose: stores the default as
+   * the choice and logs it, once per install. False when there was nothing
+   * to keep (a stored choice, a dev run, or POSTPILE_READ_ONLY=1).
+   */
+  keepDefault(): boolean {
+    if (!this.writeSwitch.keepDefault()) {
+      return false;
+    }
+    this.log.record({ action: 'writes_on', origin: 'default', outcome: 'local', detail: WRITES_ON_BY_DEFAULT_DETAIL });
+    return true;
   }
 
   /**

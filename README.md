@@ -62,11 +62,11 @@ Keeps the topic's status and goal next to its people and timeline.
 
 <img src="docs/images/dossier.png" width="533" alt="The topic's status and goal">
 
-Approves, asks, or marks read from the detail pane. Writes (approve, comment, mark read) stay locked until you open the lock in the status bar.
+Approves, asks, or marks read from the detail pane, and marks read on GitHub what it handled. To keep PostPile read-only, close the writes lock in the status bar.
 
 <img src="docs/images/approve.png" width="541" alt="The action bar with Approve">
 
-Uses GitHub as the source of truth for read and unread, and shows the unread count and the writes lock in the status bar. It checks GitHub every minute and right away when you switch to the app.
+Uses GitHub as the source of truth for read and unread, and shows the unread count in the status bar. It checks GitHub every minute and right away when you switch to the app.
 
 Mac notifications are off by default. In setup or under "Interruptions" in the sidebar you can pick a short roundup at 9:30, 13:30 and 16:30 on weekdays, or a notification as soon as someone is waiting on you. Either way only what an agent judged worth it reaches you, and the Dock badge counts what PostPile told you about that you haven't opened yet.
 
@@ -155,7 +155,7 @@ PostPile checks `gh` and `claude` on start. When one is missing, the window says
 
 PostPile runs on your Mac only. There is no PostPile server.
 
-- **GitHub**: the app calls the GitHub API with the token from `gh auth token`. It reads your notifications and the PRs they point to. It writes (approve, comment, mark read) only after you unlock writes.
+- **GitHub**: the app calls the GitHub API with the token from `gh auth token`. It reads your notifications and the PRs they point to. It writes when you act (approve, comment, mark read) and marks read on GitHub what it handled for you. The lock in the footer turns GitHub writes off; with it closed PostPile only reads.
 - **Anthropic**: agent calls run through the `claude` CLI on your machine, so PR titles, bodies, comments and review threads go to Anthropic under your Claude account's terms. GitHub text is treated as untrusted input: it is fenced in prompts, and calls that read it run without tools.
 - **Work context sweep**: once a day the app reads your Claude Code folder (`~/.claude`: `CLAUDE.md` and its includes, each project's memory files, and light signals from the last 7 days of sessions), masks secrets, and asks Claude for a short digest of what you are working on. The digest helps rank and phrase things. Project folders on the skip list are never opened. The default list is `personal`, `private`. Your own list is edited under the digest and saved to `~/.config/postpile/config.json` as `{ "sweepSkip": ["taxes", "side-project"] }`; `POSTPILE_SWEEP_SKIP` (comma separated) wins over both. The digest shows under Your instructions, with its sources, and you can forget it.
 - **MCP server**: `postpile-mcp` answers only the agent that started it, over stdin and stdout. It opens no port. To reach the running app it leaves a small request file in the data folder (`agent-requests`, readable by you only) and reads the app's answer there; no token changes hands. Each tool call sends one `mcp_tool_called` event (which tool, whether it found something, how long the answer was, whether it was an error) under the same usage analytics rules. To show the status bar item, the app runs `claude mcp get postpile` in its own empty folder, at most every few minutes; it changes Claude Code's config only when you click Add to Claude Code.

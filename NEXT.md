@@ -6,6 +6,24 @@ now".
 
 ## Done
 
+- GitHub writes on by default, lock in the footer only (2026-10-05,
+  DESIGN.md "GitHub writes: lock, action log" › On by default): an install
+  that never touched the lock has writes on in the packaged app; an
+  explicit "off" stays locked, `POSTPILE_READ_ONLY=1` still wins, and dev
+  runs (unpackaged desktop, `pnpm server`, CLI, simulation) keep starting
+  locked (`writesOnByDefault`). The first sync with gh working stores the
+  default once, logs it (origin `default`) and sends
+  `github_writes_changed { enabled: true, from: 'default' }` (the footer
+  sends `from: 'footer'`). Pending mark-reads from the locked days go out
+  only where the thread is unchanged since the click; moved threads stay
+  unread, failures stay pending, cleanups stay pending for the user. The
+  footer lock is a faint icon while on, a quiet "read-only" while locked;
+  the busy inbox card lost Unlock writes and its writes line, and
+  `BusyInboxView.writesLocked` is gone. Fake mode starts with writes on
+  (`POSTPILE_FAKE_LOCKED=1` for locked). Checked in the static renderer
+  build with `POSTPILE_FAKE_BUSY=1`: footer on, locked, locked with one
+  pending; busy card and Why? without the lock. Not tried: the default
+  switch on a real database copy with a real backlog.
 - No "Not mine" on a Not yours tile (2026-10-05, for 0.21.0; DESIGN.md
   Product model › "Action details"): core's `TileOffers.notMine` leaves it out of
   the tile's ⋯ menu while the verdict pill says Not yours, read from
@@ -47,12 +65,12 @@ now".
 - Busy inbox card (2026-10-05, DESIGN.md "Big inboxes" › "The busy inbox
   card"): while the board cap cuts the inbox, the sidebar shows a calm amber
   card right above the topics, with the aching robot, the quiet PR count,
-  what is kept per tier, Clean up (the cleanup dialog), Unlock writes
-  (opens the footer lock's popover, only while locked) and an inline Why?.
+  what is kept per tier, Clean up (the cleanup dialog) and an inline Why?
+  (Unlock writes removed the same day: the lock lives in the footer only).
   It folds to one line for the session. `useBusyInbox` reads
   `GET /api/busy-inbox`, refetched with everything else. Checked in fake
   mode (`POSTPILE_FAKE_BUSY=1`) in the static renderer build: the card,
-  Why? open, Clean up and Unlock writes opening their dialogs, the folded
+  Why? open, Clean up opening its dialog, the folded
   line, the default and the 200px sidebar. Not tried: a real busy
   database, and dark mode (the app has no dark theme yet, so it looks the
   same).
@@ -635,7 +653,8 @@ now".
   toast with Undo. Rules for the renderer are in `apps/desktop/CLAUDE.md`.
 - GitHub writes lock (DESIGN.md "GitHub writes: lock, action log"): the lock in the status footer switches GitHub writes on and off at
   runtime (`WriteSwitch`, `GET/POST /api/github-writes`), kept in meta,
-  read-only on first run, confirm popover to open, instant to close,
+  read-only on first run until 2026-10-05 (now on by default in the packaged
+  app), confirm popover to open, instant to close,
   disabled with the reason under `POSTPILE_READ_ONLY=1`. Locked: approve
   and comment blocked; mark read and "not mine" become pending writes
   (`pending_write`, migration 011) after the undo window, the tile keeps its
@@ -644,7 +663,7 @@ now".
   pending, stay locked"). `CODE_MANAGER_ALLOW_WRITES` is gone.
 - Action log (`action_log`, migration 008): every GitHub write, local
   mark-read, undo and lock flip, with origin (tile, debug, queue,
-  quit, sync, poll, footer) and outcome (queued, github, local, skipped,
+  quit, sync, poll, footer, default) and outcome (queued, github, local, skipped,
   failed, observed). Written by `GitHubWrites`, the only door to the writer,
   plus ReadMarker and the sync's "left the inbox" mirror.
 - Notifications debug view: "Mark read" per thread (same queue, undo, lock
@@ -1443,8 +1462,9 @@ the app meanwhile.
   working for everyone else, even with room left. A visible "busy inbox"
   card in the sidebar shows it (see the entry above).
 
-- **GitHub writes on by default; locked writes choke PostPile** (2026-10-05,
-  not built yet): PostPile can only shed load by marking things read on
+- **GitHub writes on by default; locked writes choke PostPile** (2026-10-05;
+  the default and the footer-only lock built the same day, see Done "GitHub
+  writes on by default", the thresholds not yet): PostPile can only shed load by marking things read on
   GitHub (quiet reads, the inbox cleanup, mark read), so with the lock
   closed a heavy inbox only grows. Telemetry the same day: only 2 of 14
   installs show writes on (approvals, quiet reads); the two heavy installs
@@ -1456,10 +1476,14 @@ the app meanwhile.
   PostPile stops taking on more work once it runs into thresholds (defined
   later: board size, tracked PRs, activity rate), says why, and offers the
   inbox cleanup or a fresh start instead of growing until it runs out of
-  memory. Open: the thresholds, what stopping means exactly, what existing
-  locked installs get (switched on, or asked once), and telemetry for the
-  lock state (a `github_writes_changed` event, `writes_on` on
-  `sync_completed`; today it can only be inferred).
+  memory. Open: the thresholds and what stopping means exactly. Settled
+  when built: existing installs that never chose are switched on (not
+  asked), the lock is hidden away in the footer (no other surface pushes
+  it), dev runs keep starting locked, and pending mark-reads go out only
+  where the thread is unchanged since the click (DESIGN.md "On by
+  default"). Telemetry: `github_writes_changed { enabled, from }` and
+  `writes_on` on `sync_completed`. One heavy user turned writes on in
+  0.19.0 the same day and his board dropped to 250 hot PRs.
 
 - **A helper, not an interrupter** (2026-10-05, DESIGN.md Product model,
   AGENTS.md focus): team feedback valued the digests and the agent layer,
@@ -2129,10 +2153,10 @@ The desktop app syncs once on start, on "Sync now" and every 60 minutes in the
 background. Between syncs it polls notifications every minute (GitHub's
 X-Poll-Interval) and when the window gets focus, pings the Mac for
 addressed activity and catches up dossiers and glances of the topics the poll
-brought news for. Without
-GitHub writes stay off until the lock in the status footer is opened (the
-choice is kept in the database); locked, approve and comment are blocked and
-mark-reads stay in the app:
+brought news for. Dev runs start with GitHub writes locked until the lock in
+the status footer is opened (the choice is kept in the database; only the
+packaged app has them on by default); locked, approve and comment are blocked
+and mark-reads wait as pending writes:
 
 ```
 pnpm build                                 # electron-vite bundle into apps/desktop/out
@@ -2163,6 +2187,8 @@ Env switches:
 - `POSTPILE_READ_ONLY=1`: real reads, every GitHub write refused, the
   footer lock cannot be opened. Use this for smoke runs against the real
   account.
+- `POSTPILE_FAKE_LOCKED=1`: with `POSTPILE_FAKE=1`, the sample starts with
+  GitHub writes locked (it starts with them on, like the packaged app).
 - `POSTPILE_MAX_AGENT_CALLS`: agent-call cap for syncs and consolidations
   without an explicit cap (launch, "Sync now", `/api/consolidate`, and the
   CLI without `--max-agent-calls`), default 150 (was 30).

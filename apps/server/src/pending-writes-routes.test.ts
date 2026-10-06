@@ -98,7 +98,7 @@ describe('pending writes routes (real engine, fake GitHub)', () => {
 describe('pending writes routes (fake mode)', () => {
   it('works on sample data: pending after the window, send after unlock', async () => {
     let now = new Date('2026-09-27T10:00:00Z');
-    const app = wrap(createApp(new FakeEngine({ now: () => now }), TOKEN, { fake: true, syncCallCap: 30, syncOnStart: true, profile: 'default', databasePath: null, autoSyncMinutes: 60 }));
+    const app = wrap(createApp(new FakeEngine({ now: () => now, writesLocked: true }), TOKEN, { fake: true, syncCallCap: 30, syncOnStart: true, profile: 'default', databasePath: null, autoSyncMinutes: 60 }));
     const setTile = encodeURIComponent('set:turbo-cache');
 
     await app.post(`/api/tiles/${setTile}/mark-read`);

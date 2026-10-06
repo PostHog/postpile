@@ -11,7 +11,7 @@ import { DataDirLock, type LockKind } from './data-lock.ts';
 import { Engine } from './engine.ts';
 import { PING_DECISIONS_PER_DAY } from './live/ping-decider.ts';
 import { MarkReadQueue } from './mark-read-queue.ts';
-import { agentCwdFor, defaultPaths, seedDevInstructions, type AppPaths } from './paths.ts';
+import { agentCwdFor, defaultPaths, profileFromEnv, seedDevInstructions, type AppPaths } from './paths.ts';
 import type { EngineService } from './service.ts';
 import { ActionLog } from './writes/action-log.ts';
 import { GitHubWrites } from './writes/github-writes.ts';
@@ -72,6 +72,17 @@ export function catchUpCapFromEnv(value: string | undefined, maxAgentCalls: stri
 }
 
 /**
+ * Whether GitHub writes start on for an install that never chose: only in
+ * the packaged app on the default profile (2026-10-05). Dev runs (the
+ * unpackaged desktop app, `pnpm server`, the CLI, the simulation) keep the
+ * old default, locked, so a dev session never writes because nobody chose.
+ * POSTPILE_READ_ONLY=1 never builds the real writer, whatever this says.
+ */
+export function writesOnByDefault(lockKind: LockKind, env: NodeJS.ProcessEnv): boolean {
+  return lockKind === 'packaged' && profileFromEnv(env) === 'default';
+}
+
+/**
  * Wires the real dependencies and returns the Engine itself. Only the
  * simulation (simulation/round.ts) needs its dev-only methods
  * (digestStored); everything else goes through createEngine. Not exported
@@ -127,8 +138,12 @@ export function wireEngine(options: CreateEngineOptions = {}): Engine {
     throw error;
   }
   const reader = new GitHubClient(tokens, fetchFn);
-  // Off until the user opens the footer lock; the choice is kept in meta.
-  const writeSwitch = new WriteSwitch(store, readOnly ? null : new GitHubWriteClient(tokens, fetchFn));
+  // The footer lock's choice is kept in meta; without one, on in the packaged app and off in dev runs.
+  const writeSwitch = new WriteSwitch(
+    store,
+    readOnly ? null : new GitHubWriteClient(tokens, fetchFn),
+    writesOnByDefault(options.lockKind ?? 'server', process.env),
+  );
   const writes = new GitHubWrites(writeSwitch, new ActionLog(store, now));
   const markThreadReadLocally = (threadId: string, readAt: string): void => {
     store.notifications.markRead(threadId, readAt);

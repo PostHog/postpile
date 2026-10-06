@@ -566,10 +566,10 @@ only had old settled PRs.
 `BusyInboxView`): `busy` (the cap cut the hot set on the last load),
 `inboxPrs` (PRs that would be hot without the cap), `keptPrs`, `quietPrs`
 (the difference: not loaded, fetched or worked on), `keptYou`,
-`keptTeam`, `keptOthers` (kept PRs by their own tier), `cap`,
-`updatesLastHour` (PR threads with activity in the last hour) and
-`writesLocked` (GitHub writes off, so PostPile cannot shed load by marking
-things read). It reuses what the last load picked. `POSTPILE_FAKE_BUSY=1`
+`keptTeam`, `keptOthers` (kept PRs by their own tier), `cap` and
+`updatesLastHour` (PR threads with activity in the last hour; `writesLocked`
+was dropped 2026-10-05 with the card's Unlock writes). It reuses what the
+last load picked. `POSTPILE_FAKE_BUSY=1`
 makes the fake inbox busy with invented numbers. While busy, the engine
 logs a line and sends `board_trimmed { kept, dropped }` at most once an
 hour.
@@ -579,10 +579,10 @@ a card sits at the top of the sidebar, right after Inbox and above the
 topics: that is where a busy inbox shows, as topics that are not there.
 "Busy inbox", then "Focusing on what is aimed at you. 4,640 quiet PRs wait
 for news." and what is kept per tier ("Kept 940 for you · 560 for your
-team · 0 for others"). Three text links: Clean up opens the inbox cleanup
-dialog (sidebar mode), Unlock writes (only while `writesLocked`) opens the
-footer lock's popover, the one way to allow GitHub writes, and Why? folds
-out what PostPile does now: it keeps your PRs and what is aimed at you,
+team · 0 for others"). Two text links: Clean up opens the inbox cleanup
+dialog (sidebar mode), and Why? folds out what PostPile does now (no
+"Unlock writes" and no writes line since 2026-10-05: the lock lives in the
+footer only, see "GitHub writes: lock, action log"): it keeps your PRs and what is aimed at you,
 then your team's; other people's PRs wait with no fetching and no agent
 work; nothing is deleted; it goes away by itself once the inbox is back
 under the cap. The tone is calm: PostPile is focusing, nothing broke. Calm
@@ -4063,18 +4063,77 @@ help either: marking read never unsubscribes, so a thread that was only read
 is still subscribed.
 
 **The lock.** GitHub writes are a runtime switch (`WriteSwitch` in
-engine `writes/`), off (read-only) on first run, flipped by the lock in the
-status footer (`POST /api/github-writes {enabled}`), kept in meta
-`github_writes` so it survives restarts (decided 2026-10-05, not built yet:
-on by default, and a locked heavy inbox stops PostPile at thresholds, see
-NEXT.md "GitHub writes on by default"). While off the switch hands out the
-`ReadOnlyWriter`, so a path that forgets to ask still cannot write.
-`POSTPILE_READ_ONLY=1` never builds the real write client; the lock
-then shows disabled with the reason and turning it on answers `ok: false`.
-Opening the lock asks in a popover ("Mark-read and approvals will reach
-GitHub"); closing is instant. The UI guard follows it: approve and comment
-are blocked while locked (no pending queue for them), mark read and "not
-mine" run and become pending writes. `CODE_MANAGER_ALLOW_WRITES` is gone.
+engine `writes/`), flipped by the lock in the status footer
+(`POST /api/github-writes {enabled}`), kept in meta `github_writes`
+("on" / "off") so it survives restarts. With no choice stored, the default
+decides: on in the packaged app since 2026-10-05 (see "On by default"
+below). While off the switch hands out the `ReadOnlyWriter`, so a path that
+forgets to ask still cannot write. `POSTPILE_READ_ONLY=1` never builds the
+real write client; the lock then shows disabled with the reason and turning
+it on answers `ok: false`. Opening the lock asks in a popover ("Mark-read
+and approvals will reach GitHub"); closing is instant. The UI guard follows
+it: approve and comment are blocked while locked (no pending queue for
+them), mark read and "not mine" run and become pending writes.
+`CODE_MANAGER_ALLOW_WRITES` is gone.
+
+**The lock lives in the footer only** (2026-10-05). It is an opt-out, not
+something PostPile asks for: while writes are on the footer shows a faint
+open-lock icon (a click locks), locked it is a quiet "read-only" in the
+footer's text colour, never amber or another alarm colour, with the pending
+count next to it. No other surface pushes it: the busy inbox card lost its
+"Unlock writes" link and its "With GitHub writes locked…" Why? line. A
+write that is blocked because the user locked writes still says so in its
+tooltip or toast ("…GitHub writes are off. Open the lock in the footer…").
+
+**On by default** (2026-10-05, NEXT.md "GitHub writes on by default").
+With the lock closed PostPile cannot mark anything read on GitHub, so a
+heavy inbox only grows; telemetry showed 2 of 14 installs with writes on,
+and a heavy user's board dropped to 250 hot PRs once he turned them on. So:
+
+- No `github_writes` key (the user never touched the lock) means writes on,
+  as long as the real writer exists. An explicit "off" stays locked: the
+  user chose it. `POSTPILE_READ_ONLY=1` wins over both.
+- Only the packaged app gets the default (`writesOnByDefault` in
+  `create.ts`: lock kind `packaged` and the default profile). Dev runs keep
+  the old default, locked: the unpackaged desktop app, `pnpm server`, the
+  CLI, the simulation (which also stores "off"), and a packaged build on the
+  dev profile. A dev session never writes because nobody chose
+  (`create-writes-default.test.ts`).
+- Once per install, at the first sync with gh working
+  (`Engine.keepWritesDefault`, before the sync's fetch): the default is
+  stored as "on", logged as `writes_on` with origin `default`, and sent as
+  `github_writes_changed { enabled: true, from: 'default' }`. Stored first,
+  so a lock click during the send is never overwritten.
+
+**The backlog when writes go on by default.** An install that ran locked
+can hold days of pending mark-reads. A hand unlock offers Send N / Discard
+and sends through the guard: each thread is read again, a thread that moved
+since the click is decided again (`ClickedReadRetry`). The default switch
+sends less, since nobody pressed Send and the clicks can be days old
+(`PendingWrites.sendAfterDefault`):
+
+- Only `mark_read` writes. A waiting inbox cleanup (`catch_up`,
+  `mark_all_read_before`) stays pending for the user to send or discard
+  from the footer: it is bulk, and the user picked it while locked.
+- A thread is sent only when it is unchanged since the click
+  (`markThreadReadIfUnchanged`): that is exactly what the click asked for,
+  and nothing new is marked read with it. Already read elsewhere: cleared,
+  the PR turns read here.
+- A thread with newer activity is left unread and drops out (logged
+  `skipped`, "GitHub didn't take it: activity after the last sync; still
+  unread"). It is not decided again: that second decision belongs to a
+  fresh click, and the send runs inside the sync, whose refresh the retry
+  would wait for.
+- A failed send stays pending with its error, shown in the footer's count
+  and popover ("These did not reach GitHub yet": Send / Discard / Lock).
+- Every row is in the action log with origin `default` ("marked read by
+  PostPile when GitHub writes went on by default" in the debug view). A
+  footer Send already running is left to itself.
+- The footer can still Discard while it runs: Discard asks the send in
+  flight (this one or a footer Send) to stop before its next write, waits
+  for the write it is on, then drops the rest. Each write is read from the
+  store again right before it is sent, so a row gone meanwhile sends
+  nothing.
 
 **Pending writes** (2026-09-28). GitHub is the source of truth for read and
 unread; the app never holds a read state GitHub doesn't have. So a mark-read
@@ -6463,8 +6522,10 @@ topic names are never event props.
    `app_crashed_last_run` (version_changed: sent at start when the last run
    ended without a clean quit, see "Memory on big boards"; true when that
    run was another version), `github_writes_changed`
-   (enabled: the footer lock opened or closed, 2026-10-05; with writes
-   locked PostPile cannot mark anything read, so a heavy inbox only grows),
+   (enabled, from: `footer` when the user opened or closed the lock,
+   `default` once when an install that never chose got writes on by
+   default; 2026-10-05; with writes locked PostPile cannot mark anything
+   read, so a heavy inbox only grows),
    `catch_up_ran` (topics, always 1; agent_calls, duration_ms, ok: one glance
    catch-up run after the poll), `board_trimmed` (kept, dropped: the board
    cap cut the hot set, the inbox is busy; at most hourly, since 0.18.0),
@@ -7309,7 +7370,9 @@ preflight and does not know the token, so CORS stays open.
 - **Env switches**: `POSTPILE_FAKE=1` runs server/CLI/desktop on the in-memory Depot sample
   data (`FakeEngine`, for UI work). `POSTPILE_READ_ONLY=1` never builds the real GitHub
   writer and keeps the footer lock closed (smoke runs against a real account). Without it,
-  writes are still off until the lock is opened. `POSTPILE_POLL_SECONDS`
+  dev runs still start locked (only the packaged app has writes on by default) until the
+  lock is opened. `POSTPILE_FAKE_LOCKED=1` starts the sample data locked (it starts with
+  writes on, like the packaged app). `POSTPILE_POLL_SECONDS`
   (default 60, 0 off, never faster than GitHub's X-Poll-Interval), `POSTPILE_PING_CAP` (default 200 per 24h) and
   `POSTPILE_MAC_NOTIFICATIONS=0` tune the live poll. `POSTPILE_CATCHUP_CAP` (default
   600 per 24h, 0 off) caps glance catch-up, `POSTPILE_AUTO_SYNC_MINUTES` (default 60,

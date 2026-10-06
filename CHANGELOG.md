@@ -4,6 +4,11 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ## 0.21.0 (unreleased)
 
+### Changed
+
+- PostPile now marks handled notifications read on GitHub by default, so a busy inbox goes down instead of piling up. Installs that never touched the GitHub writes lock get writes on with this update; installs that locked writes on purpose stay locked. Mark-reads that waited while writes were locked go to GitHub only where nothing happened on the thread since you clicked; the rest stay unread, and anything that fails stays in the footer to send or discard.
+- The GitHub writes lock now lives only in the footer: a small lock icon while writes are on, a quiet "read-only" while they are locked. The busy inbox card no longer asks you to unlock writes.
+
 ### Fixed
 
 - A tile that already says "Not yours" no longer offers "Not mine" in its ⋯ menu. Mark read clears it. A stack or set only counts when its verdict says Not yours, so one PR the agent calls Not yours next to one that needs a look keeps the option.

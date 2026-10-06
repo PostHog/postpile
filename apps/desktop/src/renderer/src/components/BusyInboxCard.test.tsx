@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import type { BusyInboxView, InboxCleanupView } from '@postpile/core';
+import type { BusyInboxView, GitHubWritesStatus, InboxCleanupView } from '@postpile/core';
 import { ActionsProvider } from '../api/actions.tsx';
 import { queryKeys } from '../api/keys.ts';
 import { BUSY_CARD_FOLDED_KEY, BusyInboxCard } from './BusyInboxCard.tsx';
@@ -14,7 +14,6 @@ const busy: BusyInboxView = {
   quietPrs: 4640,
   cap: 1500,
   updatesLastHour: 300,
-  writesLocked: true,
   keptYou: 940,
   keptTeam: 560,
   keptOthers: 0,
@@ -32,16 +31,20 @@ const somethingToClear: InboxCleanupView = {
   syncing: false,
 };
 
+/** GitHub writes locked by the user: even then the card does not push the lock. */
+const locked: GitHubWritesStatus = { enabled: false, forcedOffReason: null, pending: [] };
+
 /** The card with these numbers; every request stays unanswered, so only the seeded cache counts. */
-function renderCard(view: BusyInboxView, onUnlockWrites: () => void = () => {}) {
+function renderCard(view: BusyInboxView) {
   vi.stubGlobal('fetch', () => new Promise(() => {}));
   const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } });
   client.setQueryData(queryKeys.busyInbox, view);
   client.setQueryData(queryKeys.inboxCleanup, somethingToClear);
+  client.setQueryData(queryKeys.githubWrites, locked);
   render(
     <QueryClientProvider client={client}>
       <ActionsProvider>
-        <BusyInboxCard onUnlockWrites={onUnlockWrites} />
+        <BusyInboxCard />
       </ActionsProvider>
     </QueryClientProvider>,
   );
@@ -69,16 +72,13 @@ describe('BusyInboxCard', () => {
     expect(card.textContent).toContain('0 for others');
   });
 
-  it('offers Unlock writes only while writes are locked, and hands the click to the footer lock', () => {
-    const onUnlockWrites = vi.fn();
-    renderCard(busy, onUnlockWrites);
-    fireEvent.click(screen.getByRole('button', { name: 'Unlock writes' }));
-    expect(onUnlockWrites).toHaveBeenCalledOnce();
-    cleanup();
-
-    renderCard({ ...busy, writesLocked: false });
-    expect(screen.getByRole('region', { name: 'Busy inbox' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Unlock writes' })).toBeNull();
+  it('never offers the GitHub writes lock, even while writes are locked: the footer is its only place', () => {
+    renderCard(busy);
+    fireEvent.click(screen.getByRole('button', { name: 'Why?' }));
+    const card = screen.getByRole('region', { name: 'Busy inbox' });
+    expect(screen.queryByRole('button', { name: /unlock/i })).toBeNull();
+    expect(card.textContent).not.toMatch(/writes|lock/i);
+    expect(screen.getAllByRole('button').map((button) => button.textContent)).toEqual(['', 'Clean up', 'Why?']);
   });
 
   it('opens Why? inline with what PostPile does now', () => {

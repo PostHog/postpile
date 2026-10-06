@@ -179,8 +179,9 @@ export const TELEMETRY_EVENTS = {
   rate_limited: z.object({ source: rateLimitSource, where: rateLimitWhere }).strict(),
   // Once per drop into a worse level within one rate-limit window, not per request (DESIGN.md "GitHub quota").
   github_quota_low: z.object({ resource: quotaResource, level: quotaLevel }).strict(),
-  // The footer lock opened or closed. With writes locked PostPile cannot mark anything read, so a heavy inbox only grows (2026-10-05).
-  github_writes_changed: z.object({ enabled: z.boolean() }).strict(),
+  // GitHub writes went on or off. With writes locked PostPile cannot mark anything read, so a heavy inbox only grows (2026-10-05).
+  // from: footer = the user flipped the lock; default = an install that never chose got the default (on), sent once.
+  github_writes_changed: z.object({ enabled: z.boolean(), from: z.enum(['footer', 'default']) }).strict(),
   consolidation_ran: z.object({ proposals_filed: count }).strict(),
   // The daily board snapshot, counts only: one per tile on the board. stacked_prs = members in a stack
   // (all of a stack tile, the stacks' members in a set, 0 for a single); pulled_in = layers fetched
