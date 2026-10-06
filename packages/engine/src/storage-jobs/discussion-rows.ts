@@ -24,7 +24,7 @@ export class DiscussionRowsJob implements StorageJob {
   readonly doneKey = 'storage_job:discussion_rows:done';
 
   step(store: Store, after: string): StorageJobUnit | null {
-    const key = store.prs.nextWithoutDiscussionRows(after);
+    const key = store.prs.nextWithoutRows('discussion', after);
     if (key === null) {
       return null;
     }
@@ -33,7 +33,7 @@ export class DiscussionRowsJob implements StorageJob {
 
   /** Done, and reads switch to the rows, once every stored PR has them. */
   complete(store: Store, at: IsoTime): 'done' | 'again' {
-    if (!store.prs.allHaveDiscussionRows()) {
+    if (!store.prs.allHaveRows('discussion')) {
       return 'again';
     }
     store.meta.set(DISCUSSION_READY_KEY, at);
@@ -42,6 +42,6 @@ export class DiscussionRowsJob implements StorageJob {
 
   /** The stored PRs still without rows: a snapshot that is missing, malformed or does not split. */
   blockedUnits(store: Store): number {
-    return store.prs.countWithoutDiscussionRows();
+    return store.prs.countWithoutRows('discussion');
   }
 }

@@ -129,7 +129,7 @@ describe('the checks_strip job', () => {
   });
 
   it('runs after the bot body trim, before the discussion rows', () => {
-    expect(storageJobs().map((job) => job.name)).toEqual(['bot_body_trim', 'checks_strip', 'discussion_rows', 'snapshot_strip']);
+    expect(storageJobs().map((job) => job.name)).toEqual(['bot_body_trim', 'checks_strip', 'discussion_rows', 'snapshot_strip', 'activity_rows', 'snapshot_strip_2']);
   });
 });
 

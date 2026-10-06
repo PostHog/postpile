@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { boardShape, canonicalPr, trimBotBodies, type FullComment, type FullPr } from '@postpile/core';
 import { at, FakeTimers, makeComment, makePr, makeReview } from '@postpile/core/fixtures';
-import { DISCUSSION_READY_KEY, runMigrations, Store } from '@postpile/store';
+import { DISCUSSION_READY_KEY, NEWEST_ROWS_VERSION, runMigrations, Store } from '@postpile/store';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { makeHarness, NOW } from '../testing/fakes.ts';
 import { BOT_BODY_TRIM_DONE_KEY, BotBodyTrimJob } from './bot-body-trim.ts';
@@ -108,7 +108,7 @@ describe('the discussion_rows and snapshot_strip jobs', () => {
     expect(store.meta.get(DISCUSSION_READY_KEY)).toBeNull();
     runToEnd(jobs);
 
-    expect(rowsVersions(store)).toEqual([1, 2, 3].map((n) => ({ key: `acme/app#${n}`, rows_version: 1 })));
+    expect(rowsVersions(store)).toEqual([1, 2, 3].map((n) => ({ key: `acme/app#${n}`, rows_version: n === 2 ? NEWEST_ROWS_VERSION : 1 })));
     expect(store.meta.get(DISCUSSION_READY_KEY)).toBe(NOW.toISOString());
     expect(revisions(store)).toEqual(revisionsBefore);
     expect(store.prs.listAll()).toEqual(before.map(canonicalPr));
@@ -274,7 +274,7 @@ describe('an install that skips straight to this release', () => {
       // One unit per slice.
     }
 
-    expect(reports).toEqual(['bot_body_trim', 'checks_strip', 'discussion_rows', 'snapshot_strip']);
+    expect(reports).toEqual(storageJobs().map((job) => job.name));
     expect(store.prs.listAll()).toEqual(prs.map((pr) => canonicalPr(trimBotBodies(pr))));
     const board = [...store.prs.keepParsed(keys).values()];
     expect(board).toEqual(store.prs.listAll().map(boardShape));

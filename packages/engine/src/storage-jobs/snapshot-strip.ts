@@ -25,7 +25,7 @@ export class SnapshotStripJob implements StorageJob {
     if (key === null) {
       return null;
     }
-    return { key, wrote: store.prs.stripDiscussion(key) };
+    return { key, wrote: store.prs.stripJson('discussion', key) };
   }
 
   complete(): 'done' {

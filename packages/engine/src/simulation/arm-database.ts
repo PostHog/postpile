@@ -16,6 +16,9 @@ function readTopicAssignment(path: string): { topics: Topic[]; memberships: Topi
   }
 }
 
+/** A PR's child rows (DESIGN.md "PR storage"): its header's rows_version vouches for them, so they always come with it. */
+const PR_CHILD_TABLES = ['pr_comment', 'pr_thread', 'pr_review', 'pr_commit', 'pr_timeline', 'pr_file'];
+
 export class ArmDatabase {
   private constructor(
     readonly store: Store,
@@ -41,22 +44,22 @@ export class ArmDatabase {
   }
 
   /**
-   * Removes every PR (header, snapshot and discussion rows) with its events, log rows, stack layers and
+   * Removes every PR (header, snapshot and child rows) with its events, log rows, stack layers and
    * found rows. Notification threads stay: the first real sync stores every
    * notification at once and only the PR fetches are capped, and a thread
    * without a PR snapshot shows nowhere and reaches no prompt.
    */
   hidePrs(): void {
     this.store.transaction(() => {
-      for (const table of ['pr_found', 'pr_pull_in', 'event_log', 'pr_event', 'pr_comment', 'pr_thread', 'pr_review', 'pr_snapshot', 'pr']) {
+      for (const table of ['pr_found', 'pr_pull_in', 'event_log', 'pr_event', ...PR_CHILD_TABLES, 'pr_snapshot', 'pr']) {
         this.store.db.exec(`DELETE FROM ${table}`);
       }
     });
   }
 
   /**
-   * Copies the round's PRs from the full copy: header, snapshot and discussion rows, events (with the
-   * user's seen state), then their event log rows in their old order. The discussion rows come
+   * Copies the round's PRs from the full copy: header, snapshot and child rows, events (with the
+   * user's seen state), then their event log rows in their old order. The child rows come
    * with the header: its rows_version vouches for them, so a header must never arrive without them. The
    * log rows get new seqs (AUTOINCREMENT never reuses one), so they land
    * after every cursor and the digest reads them as new. Stack layer and
@@ -66,12 +69,12 @@ export class ArmDatabase {
     const keys = JSON.stringify([...round.pinged, ...round.found, ...round.pulledIn]);
     this.withSource(sourcePath, () => {
       const db = this.store.db;
-      // Header first, then its snapshot and discussion rows, in the same transaction: a PR is stored with all or not at all.
+      // Header first, then its snapshot and child rows, in the same transaction: a PR is stored with all or not at all.
       db.prepare('INSERT OR IGNORE INTO main.pr SELECT * FROM source.pr WHERE key IN (SELECT value FROM json_each(?))').run(keys);
       db.prepare(
         'INSERT OR IGNORE INTO main.pr_snapshot SELECT * FROM source.pr_snapshot WHERE key IN (SELECT key FROM main.pr) AND key IN (SELECT value FROM json_each(?))',
       ).run(keys);
-      for (const table of ['pr_comment', 'pr_thread', 'pr_review']) {
+      for (const table of PR_CHILD_TABLES) {
         db.prepare(
           `INSERT OR IGNORE INTO main.${table} SELECT * FROM source.${table} WHERE pr_key IN (SELECT key FROM main.pr) AND pr_key IN (SELECT value FROM json_each(?))`,
         ).run(keys);
