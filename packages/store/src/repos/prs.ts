@@ -97,15 +97,18 @@ function jsonPaths(collections: Iterable<RowsCollection>): string[] {
 
 /**
  * SQL over `pr p`: the stored PRs, given which collections reads take from
- * rows. A header counts with its snapshot, at the rows_version the
- * switched collections need, and once the text switched with its body row
- * too; anything less is an integrity failure that reads leave out, so the
- * sync fetches the PR again. Ends in a WHERE clause callers can extend
- * with AND.
+ * rows. Before the text switch a header counts with its snapshot, at the
+ * rows_version the switched collections need. After it, `pr_snapshot` is
+ * never named (snapshot_retire drops it): a header counts with its body row
+ * at the newest version. Anything less is an integrity failure that reads
+ * leave out, so the sync fetches the PR again. Ends in a WHERE clause
+ * callers can extend with AND.
  */
 function storedPrs(ready: ReadonlySet<RowsCollection>): string {
-  const body = ready.has('text') ? ' JOIN pr_body b ON b.pr_key = p.key' : '';
-  return `pr p JOIN pr_snapshot s ON s.key = p.key${body} WHERE p.rows_version >= ${storedRowsVersion(ready)}`;
+  if (ready.has('text')) {
+    return `pr p JOIN pr_body b ON b.pr_key = p.key WHERE p.rows_version >= ${storedRowsVersion(ready)}`;
+  }
+  return `pr p JOIN pr_snapshot s ON s.key = p.key WHERE p.rows_version >= ${storedRowsVersion(ready)}`;
 }
 
 /** SQLITE_CONSTRAINT, with any extended code: a row broke a CHECK, NOT NULL or key. */
@@ -326,18 +329,21 @@ function toHeader(row: HeaderRow): PrHeader {
 }
 
 /**
- * Stored PRs (migration 028): the header in `pr` (short columns, the
- * existence authority: a PR is stored if and only if it has one), the
- * snapshot json in `pr_snapshot` (the blob being phased out) and child rows
- * (`pr-rows.ts`): the discussion since migration 031, the activity lists
- * since 033. All are written together; reads of the json ignore a snapshot
+ * Stored PRs (DESIGN.md "PR storage"): the header in `pr` (the existence
+ * authority: a PR is stored if and only if it has one, migration 028) and
+ * its rows (`pr-rows.ts`): the discussion since migration 031, the activity
+ * lists since 033, the text columns and body row since 034. Until the last
+ * switch, the snapshot json in `pr_snapshot` too, the blob being phased
+ * out. All are written together; reads of the json ignore a snapshot
  * without a header.
  *
  * Every upsert writes every collection's rows and the newest rows_version.
  * Reads take a collection from the json until its meta flag
  * `rows_ready:<collection>` is set (its storage job filled the rows of
  * every stored PR), and from the rows after; from then on the json leaves
- * that collection out (DESIGN.md "PR storage").
+ * that collection out. Once `rows_ready:text` is set no code names
+ * `pr_snapshot` any more but the storage job snapshot_retire, which empties
+ * and drops it.
  *
  * Every read of PRs runs in one read transaction, so the flags, the header
  * revisions, the snapshots and the rows it takes come from the same commit,
@@ -550,13 +556,40 @@ export class PrRepo {
   }
 
   /**
+   * The snapshot row, until the text switched: the json without the fields
+   * of the collections reads take from rows. Its own short columns are
+   * legacy: written for NOT NULL, never read.
+   */
+  private writeSnapshot(pr: FullPr, fetchedAt: string, ready: ReadonlySet<RowsCollection>): void {
+    run(
+      this.db,
+      `INSERT INTO pr_snapshot (key, repo, number, state, base_ref, head_ref, updated_at, fetched_at, json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (key) DO UPDATE SET
+         repo = excluded.repo, number = excluded.number, state = excluded.state,
+         base_ref = excluded.base_ref, head_ref = excluded.head_ref, updated_at = excluded.updated_at,
+         fetched_at = excluded.fetched_at, json = excluded.json`,
+      pr.key,
+      pr.ref.repo,
+      pr.ref.number,
+      pr.state,
+      pr.baseRef,
+      pr.headRef,
+      pr.updatedAt,
+      fetchedAt,
+      snapshotJson(pr, ready),
+    );
+  }
+
+  /**
    * Header, snapshot and every collection's rows in one transaction: never
    * one without the others. Every write gives the header a new
    * snapshot_revision, so parse caches in this and other processes read the
-   * PR again, and the newest rows_version. The json leaves out the
-   * collections reads take from rows and keeps the others ('{}' once the
-   * text switched). Rows that do not hold together throw (DiscussionError,
-   * ActivityError) before anything is written.
+   * PR again, and the newest rows_version. Until the text switched, the
+   * snapshot json too, without the collections reads take from rows; after
+   * it, no snapshot (the table is being retired). Rows that do not hold
+   * together throw (DiscussionError, ActivityError) before anything is
+   * written.
    */
   upsert(pr: FullPr, fetchedAt: string): void {
     const discussion = splitDiscussion(pr);
@@ -605,25 +638,9 @@ export class PrRepo {
         NEWEST_ROWS_VERSION,
         mentionedTeams,
       );
-      // The snapshot's own short columns are legacy: written for NOT NULL, never read.
-      run(
-        this.db,
-        `INSERT INTO pr_snapshot (key, repo, number, state, base_ref, head_ref, updated_at, fetched_at, json)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT (key) DO UPDATE SET
-           repo = excluded.repo, number = excluded.number, state = excluded.state,
-           base_ref = excluded.base_ref, head_ref = excluded.head_ref, updated_at = excluded.updated_at,
-           fetched_at = excluded.fetched_at, json = excluded.json`,
-        pr.key,
-        pr.ref.repo,
-        pr.ref.number,
-        pr.state,
-        pr.baseRef,
-        pr.headRef,
-        pr.updatedAt,
-        fetchedAt,
-        snapshotJson(pr, ready),
-      );
+      if (!ready.has('text')) {
+        this.writeSnapshot(pr, fetchedAt, ready);
+      }
       this.discussion.replace(pr.key, discussion);
       this.activity.replace(pr.key, activity);
       this.text.replace(pr.key, text);
@@ -632,12 +649,14 @@ export class PrRepo {
     this.parsed.delete(pr.key);
   }
 
-  /** Header, snapshot and child rows together (the rows also cascade), and the cached copy. */
+  /** Header, snapshot (until the text switched) and rows together (the rows also cascade), and the cached copy. */
   delete(key: PrKey): void {
     inTransaction(this.db, () => {
       this.discussion.replace(key, NO_DISCUSSION);
       this.activity.replace(key, NO_ACTIVITY);
-      run(this.db, 'DELETE FROM pr_snapshot WHERE key = ?', key);
+      if (!this.readyCollections().has('text')) {
+        run(this.db, 'DELETE FROM pr_snapshot WHERE key = ?', key);
+      }
       run(this.db, 'DELETE FROM pr WHERE key = ?', key);
     });
     this.parsed.delete(key);
@@ -996,5 +1015,45 @@ export class PrRepo {
     const paths = jsonPaths([collection]);
     const holdsAny = paths.map((path) => `json_type(json, ${path}) IS NOT NULL`).join(' OR ');
     return run(this.db, `UPDATE pr_snapshot SET json = json_remove(json, ${paths.join(', ')}) WHERE key = ? AND (${holdsAny})`, key) > 0;
+  }
+
+  /** Whether `pr_snapshot` still exists: snapshot_retire drops it once it is empty. */
+  hasSnapshotTable(): boolean {
+    return one<{ name: string }>(this.db, "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'pr_snapshot'") !== null;
+  }
+
+  /**
+   * For the storage job snapshot_retire: deletes one stored snapshot, the
+   * next after `afterKey` ('' for the first), and returns its key; null
+   * when none is left or the table is gone. Only once no read takes the
+   * json (throws before `rows_ready:text`): upserts no longer write it then,
+   * so nothing comes back behind the cursor.
+   */
+  retireNextSnapshot(afterKey: PrKey): PrKey | null {
+    if (!this.readyCollections().has('text')) {
+      throw new Error(`the snapshot json is still read (${READY_KEYS.text} is not set)`);
+    }
+    if (!this.hasSnapshotTable()) {
+      return null;
+    }
+    const key = this.nextSnapshotKey(afterKey);
+    if (key !== null) {
+      run(this.db, 'DELETE FROM pr_snapshot WHERE key = ?', key);
+    }
+    return key;
+  }
+
+  /**
+   * For snapshot_retire's check: drops `pr_snapshot` once it is empty
+   * (instant then, no page is rewritten); true when the table is gone.
+   * False, with the table kept, while it still holds a row. Always named
+   * with IF EXISTS: no later code may fail on the missing table.
+   */
+  dropEmptySnapshotTable(): boolean {
+    if (this.hasSnapshotTable() && one<{ n: number }>(this.db, 'SELECT EXISTS (SELECT 1 FROM pr_snapshot) AS n')?.n === 1) {
+      return false;
+    }
+    this.db.exec('DROP TABLE IF EXISTS pr_snapshot');
+    return true;
   }
 }

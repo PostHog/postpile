@@ -216,7 +216,7 @@ describe('PrRepo.backfillText', () => {
 });
 
 describe('PrRepo after the switch to text rows', () => {
-  it('reads no json: the same PR with the snapshot json emptied, and upserts write {}', () => {
+  it('reads no json: the same PR with the snapshot json emptied, and upserts write no snapshot', () => {
     const before = textPr(1);
     store.prs.upsert(before, at(1));
     switchToRows();
@@ -227,7 +227,7 @@ describe('PrRepo after the switch to text rows', () => {
 
     const after = textPr(2);
     store.prs.upsert(after, at(2));
-    expect(json(after.key)).toBe('{}');
+    expect(store.db.prepare('SELECT count(*) AS n FROM pr_snapshot WHERE key = ?').get(after.key)).toEqual({ n: 0 });
     expect(store.prs.listAll()).toEqual([canonicalPr(before), canonicalPr(after)]);
     expect(store.prs.nextAfter('acme/app#1')?.pr).toEqual(canonicalPr(after));
   });

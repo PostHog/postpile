@@ -11,7 +11,7 @@ export const KEPT_TABLES: Record<string, string> = {
   meta: 'GitHub and app settings stay (viewer, teams, ETags, setup); agent keys are removed, see AGENT_META_PREFIXES',
   notification_thread: 'GitHub data: every notification is stored on the first sync, read state included',
   pr: 'GitHub data: PR headers, the short columns of each PR',
-  pr_snapshot: 'GitHub data: PR snapshots, the json beside each header',
+  pr_snapshot: 'GitHub data: PR snapshots, the json beside each header, until the storage job snapshot_retire drops it',
   pr_comment: 'GitHub data: one row per comment, review body and inline comment of a PR',
   pr_thread: 'GitHub data: review threads of a PR',
   pr_review: 'GitHub data: reviews of a PR',

@@ -136,7 +136,7 @@ describe('ArmDatabase', () => {
     arm.close();
   });
 
-  it('reveals a PR with its child rows, so a header never arrives without them', () => {
+  it('reveals a PR with its child rows, so a header never arrives without them, after pr_snapshot is retired', () => {
     const inline = makeComment({ id: 'rc1', kind: 'review_comment', threadId: 't1', path: 'a.ts' });
     const pr = makePr({
       number: 7,
@@ -154,6 +154,9 @@ describe('ArmDatabase', () => {
     source.meta.set(DISCUSSION_READY_KEY, at(2));
     source.meta.set(ACTIVITY_READY_KEY, at(2));
     source.meta.set(TEXT_READY_KEY, at(2));
+    // As after the storage job snapshot_retire: the rows are all there is.
+    source.db.exec('DELETE FROM pr_snapshot');
+    expect(source.prs.dropEmptySnapshotTable()).toBe(true);
     source.close();
     copyFileSync(base, join(dir, 'arm.sqlite'));
     const arm = ArmDatabase.open(join(dir, 'arm.sqlite'));

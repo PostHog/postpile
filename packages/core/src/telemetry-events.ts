@@ -70,7 +70,7 @@ const quotaResource = z.enum(['core', 'graphql']);
 const quotaLevel = z.enum(['low', 'critical']);
 const percent = z.number().int().min(0).max(100);
 // packages/engine/src/storage-jobs: every background storage job by name. Append only.
-const storageJobName = z.enum(['bot_body_trim', 'checks_strip', 'discussion_rows', 'snapshot_strip', 'activity_rows', 'snapshot_strip_2', 'text_rows']);
+const storageJobName = z.enum(['bot_body_trim', 'checks_strip', 'discussion_rows', 'snapshot_strip', 'activity_rows', 'snapshot_strip_2', 'text_rows', 'snapshot_retire']);
 // What started a self-update check (apps/desktop/src/main/self-update.ts): ~30s after launch, the hourly timer, a wake, or "Check for Updates…".
 const updateCheckTrigger = z.enum(['launch', 'interval', 'wake', 'menu']);
 const updateCheckResult = z.enum(['none', 'available', 'error']);

@@ -51,8 +51,12 @@ export class ArmDatabase {
    */
   hidePrs(): void {
     this.store.transaction(() => {
-      for (const table of ['pr_found', 'pr_pull_in', 'event_log', 'pr_event', ...PR_CHILD_TABLES, 'pr_snapshot', 'pr']) {
+      for (const table of ['pr_found', 'pr_pull_in', 'event_log', 'pr_event', ...PR_CHILD_TABLES, 'pr']) {
         this.store.db.exec(`DELETE FROM ${table}`);
+      }
+      // Gone once the storage job snapshot_retire ran.
+      if (this.store.prs.hasSnapshotTable()) {
+        this.store.db.exec('DELETE FROM pr_snapshot');
       }
     });
   }
@@ -71,9 +75,12 @@ export class ArmDatabase {
       const db = this.store.db;
       // Header first, then its snapshot and child rows, in the same transaction: a PR is stored with all or not at all.
       db.prepare('INSERT OR IGNORE INTO main.pr SELECT * FROM source.pr WHERE key IN (SELECT value FROM json_each(?))').run(keys);
-      db.prepare(
-        'INSERT OR IGNORE INTO main.pr_snapshot SELECT * FROM source.pr_snapshot WHERE key IN (SELECT key FROM main.pr) AND key IN (SELECT value FROM json_each(?))',
-      ).run(keys);
+      // Copies of the same file: both still have the snapshot table, or neither (snapshot_retire dropped it).
+      if (this.store.prs.hasSnapshotTable()) {
+        db.prepare(
+          'INSERT OR IGNORE INTO main.pr_snapshot SELECT * FROM source.pr_snapshot WHERE key IN (SELECT key FROM main.pr) AND key IN (SELECT value FROM json_each(?))',
+        ).run(keys);
+      }
       for (const table of PR_CHILD_TABLES) {
         db.prepare(
           `INSERT OR IGNORE INTO main.${table} SELECT * FROM source.${table} WHERE pr_key IN (SELECT key FROM main.pr) AND pr_key IN (SELECT value FROM json_each(?))`,

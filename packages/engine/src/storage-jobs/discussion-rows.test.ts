@@ -242,7 +242,7 @@ describe('an install that skips straight to this release', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it('runs the trim, the checks strip, the backfill and the strip in one go, and reads every PR the same, cut, the board without bot bodies on both sides', () => {
+  it('runs every job in one go, the snapshot retired at the end, and reads every PR the same, cut, the board without bot bodies on both sides', () => {
     const path = join(dir, 'db.sqlite');
     const old = new DatabaseSync(path);
     runMigrations(old, 27);
@@ -281,7 +281,7 @@ describe('an install that skips straight to this release', () => {
     const board = [...store.prs.keepParsed(keys).values()];
     expect(board).toEqual(store.prs.listAll().map(boardShape));
     expect(board.map((pr) => pr.comments.find((comment) => comment.author === BOT)?.body)).toEqual([null, null, null]);
-    expect(store.db.prepare("SELECT count(*) AS n FROM pr_snapshot WHERE json_type(json, '$.checks') IS NOT NULL OR json_type(json, '$.comments') IS NOT NULL").get()).toEqual({ n: 0 });
+    expect(store.prs.hasSnapshotTable()).toBe(false);
     expect(store.db.prepare('SELECT count(*) AS n FROM pr_comment').get()).toEqual({ n: 12 });
     store.close();
   });
