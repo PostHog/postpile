@@ -24,6 +24,8 @@ const MUTE_TITLE =
 
 const UNMUTE_TITLE = 'Shows the tile again and subscribes you to its GitHub notifications again.';
 
+const UNSNOOZE_UNMUTES_TITLE = 'Some PRs here are muted: Unsnooze also takes their mute back and subscribes you to them on GitHub again.';
+
 const UNMUTE_REST_TITLE =
   'Someone asked you on one PR here, so the tile is back, but the other PRs are still muted. Unmute takes their mute back and subscribes you to them on GitHub again.';
 
@@ -39,6 +41,8 @@ export function SnoozeMenu(props: {
   tileId: string;
   snoozed: boolean;
   muted?: boolean;
+  /** Core's `TileState.partlyMuted`: on a snoozed tile, some PRs are muted, so Unsnooze is also an Unmute (a GitHub write). */
+  partlyMuted?: boolean;
   /** Core's `TileOffers.unmuteRest`: the tile is back while some of its PRs are still muted. */
   unmuteRest?: boolean;
   size?: ButtonSize;
@@ -66,8 +70,10 @@ export function SnoozeMenu(props: {
     );
   }
   if (props.snoozed) {
+    const unmutes = props.partlyMuted === true;
+    const title = unmutes ? (actions.blockedReason('mute') ?? markReadNote(actions.writes) ?? UNSNOOZE_UNMUTES_TITLE) : undefined;
     return (
-      <Button variant={undoVariant} size={props.size} disabled={busy} onClick={() => void actions.unsnooze(props.tileId)}>
+      <Button variant={undoVariant} size={props.size} disabled={busy} title={title} onClick={() => void actions.unsnooze(props.tileId, unmutes)}>
         Unsnooze
       </Button>
     );

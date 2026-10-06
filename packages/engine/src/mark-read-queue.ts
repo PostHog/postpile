@@ -85,6 +85,12 @@ export type ThreadNotTaken = (thread: PendingThread, local: LocalChange) => void
 
 export const NEWER_ACTIVITY_REASON = 'activity after the last sync';
 
+/** Why a Mute's unsubscribe was not sent: the mute ended before it went out. */
+export const MUTE_ENDED_REASON = 'the mute ended before it was sent (someone asked you in person, or the PR closed); stays subscribed';
+
+/** Whether a PR's mute still holds, as the store has it now (`muteHolds`). */
+export type MuteCheck = (prKey: PrKey) => boolean;
+
 /** Who sends, for the log: the queue when a window ran out, the quit flush, or the user sending pending writes from the footer. */
 export interface SendContext {
   origin: 'queue' | 'quit' | 'footer';
@@ -141,6 +147,8 @@ export class MarkReadQueue {
   private retry: ClickedReadRetry | null = null;
   /** How often a thread GitHub has read was mirrored locally (`onMarked`), so the renderer refetches. */
   private mirrors = 0;
+  /** Asked before each unsubscribe; set by the engine, which owns the store. Without it every unsubscribe goes out. */
+  private muteCheck: MuteCheck | null = null;
 
   constructor(
     private readonly writes: GitHubWrites,
@@ -172,6 +180,24 @@ export class MarkReadQueue {
   /** Every batch comes from a user's click, so a skip for newer activity gets a refresh and a second decision. */
   retryWith(retry: ClickedReadRetry): void {
     this.retry = retry;
+  }
+
+  /** A Mute's unsubscribe goes out only while the mute still holds (see `changeSubscriptions`). */
+  checkMutesWith(check: MuteCheck): void {
+    this.muteCheck = check;
+  }
+
+  /**
+   * An unsubscribe whose mute ended meanwhile: a mention, reply or review
+   * request during the undo window (the retry's refresh stored it) or before
+   * a pending one was sent. The tile is back as an ordinary tile without
+   * Unmute, so GitHub must keep the viewer subscribed.
+   */
+  private muteEnded(change: SubscriptionChange, thread: PendingThread): boolean {
+    if (change.subscribed || thread.prKey === null || this.muteCheck === null) {
+      return false;
+    }
+    return !this.muteCheck(thread.prKey);
   }
 
   private async markOne(thread: PendingThread, context: SendContext): Promise<ThreadOutcome> {
@@ -218,12 +244,18 @@ export class MarkReadQueue {
   /**
    * Changes the viewer's subscription to each thread on GitHub, in order:
    * Mute's unsubscribe or Unmute's subscribe. One failed thread does not
-   * stop the rest; its outcome carries the error (already logged).
+   * stop the rest; its outcome carries the error (already logged). An
+   * unsubscribe whose mute ended meanwhile is skipped (`muteEnded`).
    */
   async changeSubscriptions(change: SubscriptionChange, context: SendContext): Promise<ThreadOutcome[]> {
     const outcomes: ThreadOutcome[] = [];
     for (const thread of change.threads) {
       const writeContext = { origin: context.origin, prKey: thread.prKey, tileId: context.tileId, batch: context.batchId };
+      if (this.muteEnded(change, thread)) {
+        this.writes.log.record({ action: 'unsubscribe', threadId: thread.id, ...writeContext, outcome: 'skipped', detail: MUTE_ENDED_REASON });
+        outcomes.push({ kind: 'skipped', reason: MUTE_ENDED_REASON });
+        continue;
+      }
       try {
         const result = change.subscribed ? await this.writes.subscribeThread(thread.id, writeContext) : await this.writes.unsubscribeThread(thread.id, writeContext);
         outcomes.push(result === 'off' ? { kind: 'off' } : { kind: 'sent' });

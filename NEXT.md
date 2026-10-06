@@ -15,8 +15,12 @@ now".
   Unmute subscribes again (`subscribeThread`, pending kind `subscribe`).
   `TileState.muted` drives the "Muted" label and Unmute; a stack or set
   that came back through one PR is `partlyMuted` and offers "Unmute the
-  rest" (`TileOffers.unmuteRest`). A subscription change GitHub did not
-  take waits as a failed pending write. Telemetry bucket
+  rest" (`TileOffers.unmuteRest`); a snoozed tile mixing a mute with plain
+  snoozes is `partlyMuted` too and its Unsnooze is guarded as `mute`. A
+  subscription change GitHub did not take waits as a failed pending write.
+  An unsubscribe whose mute ended before it went out (a personal ask in the
+  undo window) is skipped (`muteHolds`); a discarded pending Unmute mutes
+  again (`mute_again`). Telemetry bucket
   `muted`; the fake engine logs the unsubscribe and subscribe. Gap: a
   watched repo still notifies (see DESIGN), the "N pending mark-reads"
   headline counts a locked mute as two.

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { deriveEvents } from './events.ts';
 import { at, makeEvent, makePr, makeTimelineItem, viewer } from './fixtures.ts';
 import { lookCloserEvent } from './glance-pings.ts';
-import { breaksSnooze, isSnoozeOver, snoozePhase, snoozeTelemetryBucket, type SnoozeContext } from './snooze.ts';
+import { breaksSnooze, isSnoozeOver, muteHolds, snoozePhase, snoozeTelemetryBucket, type SnoozeContext } from './snooze.ts';
 import type { PrEvent, Snooze, SnoozeCondition, TimelineItem } from './types.ts';
 
 function snooze(condition: SnoozeCondition): Snooze {
@@ -125,6 +125,14 @@ describe('mute: only a personal ask brings it back', () => {
 
   it('ends like every snooze once the PR is merged or closed', () => {
     expect(phase([], makePr({ author: 'rogue', state: 'MERGED' }))).toBe('over');
+  });
+
+  it('holds (so its GitHub unsubscribe may go out) only while the PR is muted and nothing ended it', () => {
+    const pr = makePr({ author: 'rogue' });
+    expect(muteHolds(muted, context({ pr }))).toBe(true);
+    expect(muteHolds(muted, context({ pr, events: [makeEvent({ kind: 'mention', actor: 'rogue', at: at(11) })] }))).toBe(false);
+    expect(muteHolds(snooze({ kind: 'new_push' }), context({ pr }))).toBe(false);
+    expect(muteHolds(null, context({ pr }))).toBe(false);
   });
 });
 

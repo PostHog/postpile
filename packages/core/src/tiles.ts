@@ -290,9 +290,11 @@ function isTileMuted(input: TileStateInput): boolean {
 }
 
 /**
- * A tracked PR still has an active mute although the tile shows: a muted
- * stack or set came back through a personal ask on another of its PRs. The
- * rest stays muted (and unsubscribed on GitHub) until Unmute.
+ * A tracked PR still has an active mute, but not every tracked PR is muted:
+ * a muted stack or set came back through a personal ask on another of its
+ * PRs (the rest stays muted, and unsubscribed on GitHub, until Unmute), or a
+ * snoozed tile mixes a mute with ordinary snoozes (its Unsnooze subscribes
+ * the muted PRs again, a GitHub write).
  */
 function isTilePartlyMuted(input: TileStateInput): boolean {
   return input.tile.members.filter((member) => isTracked(member.provenance)).some((member) => activeSnooze(input, member.prKey)?.condition.kind === 'muted');
@@ -328,8 +330,8 @@ function shownTileState(input: TileStateInput, unreadThreads: TileMember[], loud
  * snoozed: every tracked PR has a snooze whose condition is not met and that
  * no human broke with a loud event since it started. It keeps its snooze
  * while a thread is unread; `unreadOnGitHub` says so. `muted` when every
- * tracked PR's snooze is a mute; any other state is `partlyMuted` while a
- * tracked PR's mute still holds.
+ * tracked PR's snooze is a mute; otherwise any state is `partlyMuted` while
+ * a tracked PR's mute still holds.
  * unread: a member's notification thread is unread on GitHub, or a
  * pulled-in layer has unseen loud news, or an unseen Look closer event;
  * unreadBecause says which PR and why. Done or not does not matter: a done
@@ -347,7 +349,10 @@ export function deriveTileState(input: TileStateInput): TileState {
   const loud = loudReasons(input).length > 0;
   if (isTileSnoozed(input)) {
     const snoozed: TileState = { kind: 'snoozed', unreadBecause: [], unreadOnGitHub, loud };
-    return isTileMuted(input) ? { ...snoozed, muted: true } : snoozed;
+    if (isTileMuted(input)) {
+      return { ...snoozed, muted: true };
+    }
+    return isTilePartlyMuted(input) ? { ...snoozed, partlyMuted: true } : snoozed;
   }
   const shown = shownTileState(input, unreadThreads, loudWithoutThread, loud);
   return isTilePartlyMuted(input) ? { ...shown, partlyMuted: true } : shown;

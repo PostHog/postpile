@@ -56,9 +56,10 @@ export const snoozedWhileEveryTrackedPrSnoozed: Invariant = {
       ensure((view.state.kind === 'snoozed') === expected, `${view.tile.id}: state ${view.state.kind}, every tracked PR snoozed: ${expected}`);
       const muted = expected && trackedMembers(view).every((member) => board.snoozes.get(member.prKey)?.condition.kind === 'muted');
       ensure((view.state.muted === true) === muted, `${view.tile.id}: muted ${view.state.muted === true}, every tracked PR muted: ${muted}`);
-      const partly = !expected && trackedMembers(view).some((member) => isMutedByRule(board, member.prKey));
+      const partly = !muted && trackedMembers(view).some((member) => isMutedByRule(board, member.prKey));
       ensure((view.state.partlyMuted === true) === partly, `${view.tile.id}: partly muted ${view.state.partlyMuted === true}, a tracked PR still muted: ${partly}`);
-      ensure(view.offers.unmuteRest === (partly && view.state.kind !== 'done'), `${view.tile.id}: Unmute the rest offered ${view.offers.unmuteRest}`);
+      const unmuteRest = partly && !expected && view.state.kind !== 'done';
+      ensure(view.offers.unmuteRest === unmuteRest, `${view.tile.id}: Unmute the rest offered ${view.offers.unmuteRest}`);
     }
   },
 };

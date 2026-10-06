@@ -234,6 +234,15 @@ export class PendingWrites {
     }
   }
 
+  /** A discarded Unmute's mute comes back, as of its click; a PR snoozed again since keeps that snooze. */
+  private muteAgain(prKeys: PrKey[], since: string): void {
+    for (const prKey of prKeys) {
+      if (this.store.snoozes.get(prKey) === null) {
+        this.store.snoozes.put({ prKey, condition: { kind: 'muted' }, since });
+      }
+    }
+  }
+
   /**
    * Runs one transition (`pendingWriteStep`): carries out its effects in
    * order and stores the next state. PRs that turn read here get what the
@@ -268,6 +277,9 @@ export class PendingWrites {
           break;
         case 'log_discarded':
           this.logDiscarded(write);
+          break;
+        case 'mute_again':
+          this.muteAgain(effect.prKeys, write.createdAt);
           break;
       }
     }

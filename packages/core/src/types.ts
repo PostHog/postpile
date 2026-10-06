@@ -654,9 +654,11 @@ export interface TileState {
    */
   muted?: boolean;
   /**
-   * Only on a tile that is not snoozed, and only true: a tracked PR's mute
-   * still holds, because a muted stack or set came back through a personal
-   * ask on another of its PRs. The tile offers Unmute for the rest.
+   * Only true, never with `muted`: a tracked PR's mute still holds but not
+   * every tracked PR is muted. Shown: a muted stack or set came back through
+   * a personal ask on another of its PRs, and the tile offers Unmute for the
+   * rest. Snoozed: a mute mixed with ordinary snoozes, so Unsnooze also
+   * subscribes again on GitHub and is guarded like Unmute.
    */
   partlyMuted?: boolean;
   /**

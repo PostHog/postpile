@@ -189,7 +189,11 @@ export interface Actions {
   markPrRead(tileId: string, prKey: PrKey, afterRead: TileAfterRead): Promise<void>;
   /** A `muted` condition is Mute: also a mark-read and a GitHub unsubscribe, guarded as `mute`. */
   snooze(tileId: string, condition: SnoozeCondition): Promise<void>;
-  /** `muted`: the tile is muted, so this is Unmute, which subscribes again on GitHub (guarded as `mute`). */
+  /**
+   * `muted`: any tracked PR of the tile is muted (`TileState.muted` or
+   * `partlyMuted`), so this is also Unmute, which subscribes again on GitHub
+   * (guarded as `mute`).
+   */
   unsnooze(tileId: string, muted?: boolean): Promise<void>;
   undo(undoToken: string): Promise<void>;
   feedback(input: FeedbackInput): Promise<void>;

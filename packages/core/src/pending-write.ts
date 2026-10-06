@@ -49,7 +49,9 @@ export type PendingWriteEffect =
   /** The try failed and the write stays pending; said in the send result. */
   | { kind: 'still_pending'; error: string }
   /** Every thread (or the cleanup) logged as discarded. */
-  | { kind: 'log_discarded' };
+  | { kind: 'log_discarded' }
+  /** A discarded Unmute: these PRs are muted again, as of the Unmute's click, unless they have a snooze by now. */
+  | { kind: 'mute_again'; prKeys: PrKey[] };
 
 export interface PendingWriteStep {
   next: PendingWriteNext;
@@ -143,6 +145,21 @@ function afterSubscriptionSend(write: PendingWrite, outcomes: ThreadOutcome[]): 
   return { next: { kind: 'gone' }, effects: [] };
 }
 
+/**
+ * Discarded: the row goes and its threads are logged. A discarded Unmute
+ * also puts its mute back (2026-10-06): the Unmute took the mute away at
+ * the click, and GitHub still has the viewer unsubscribed, so without the
+ * mute the tile would offer no Unmute and stay quiet for good.
+ */
+function afterDiscard(write: PendingWrite): PendingWriteStep {
+  const effects: PendingWriteEffect[] = [{ kind: 'log_discarded' }];
+  if (write.kind === 'subscribe') {
+    const prKeys = [...new Set(write.threads.flatMap((thread) => (thread.prKey === null ? [] : [thread.prKey])))];
+    effects.push({ kind: 'mute_again', prKeys });
+  }
+  return { next: { kind: 'gone' }, effects };
+}
+
 /** The old cleanup's PUT and the catch-up: no thread list to send, one write as a whole. */
 function isCleanup(write: PendingWrite): boolean {
   return write.kind === 'mark_all_read_before' || write.kind === 'catch_up';
@@ -162,7 +179,7 @@ export function isSubscriptionWrite(write: Pick<PendingWrite, 'kind'>): boolean 
 export function pendingWriteStep(write: PendingWrite, cause: PendingWriteCause): PendingWriteStep {
   switch (cause.kind) {
     case 'discarded':
-      return { next: { kind: 'gone' }, effects: [{ kind: 'log_discarded' }] };
+      return afterDiscard(write);
     case 'cleanup_sent':
       return isCleanup(write) ? { next: { kind: 'gone' }, effects: [] } : NO_STEP;
     case 'cleanup_not_taken':

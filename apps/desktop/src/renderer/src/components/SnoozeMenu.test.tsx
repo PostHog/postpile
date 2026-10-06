@@ -28,14 +28,17 @@ function stubFetch(): Call[] {
   return calls;
 }
 
-function renderMenu(props: { snoozed: boolean; muted: boolean; unmuteRest?: boolean }) {
+/** `writesKnown` false: the app has not heard yet whether GitHub writes are on, so every GitHub write is blocked. */
+function renderMenu(props: { snoozed: boolean; muted: boolean; partlyMuted?: boolean; unmuteRest?: boolean; writesKnown?: boolean }) {
   const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } });
   // Locked on purpose: a mute is guarded like a mark-read, so it still runs and waits as a pending write.
-  client.setQueryData(queryKeys.githubWrites, LOCKED);
+  if (props.writesKnown !== false) {
+    client.setQueryData(queryKeys.githubWrites, LOCKED);
+  }
   render(
     <QueryClientProvider client={client}>
       <ActionsProvider>
-        <SnoozeMenu tileId="pr:acme/app#1" snoozed={props.snoozed} muted={props.muted} unmuteRest={props.unmuteRest} />
+        <SnoozeMenu tileId="pr:acme/app#1" snoozed={props.snoozed} muted={props.muted} partlyMuted={props.partlyMuted} unmuteRest={props.unmuteRest} />
       </ActionsProvider>
     </QueryClientProvider>,
   );
@@ -73,6 +76,24 @@ describe('SnoozeMenu', () => {
     cleanup();
     renderMenu({ snoozed: true, muted: false });
     expect(screen.getByRole('button', { name: 'Unsnooze' })).toBeTruthy();
+  });
+
+  it('guards Unsnooze as a GitHub write when some PRs of the snoozed tile are muted', async () => {
+    const calls = stubFetch();
+    renderMenu({ snoozed: true, muted: false, partlyMuted: true, writesKnown: false });
+    const unsnooze = screen.getByRole('button', { name: 'Unsnooze' });
+    expect(unsnooze.getAttribute('title')).toMatch(/blocked until the app knows/);
+
+    fireEvent.click(unsnooze);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(calls).toEqual([]);
+    cleanup();
+
+    // A plain snooze is local only: no guard, it goes through before the writes state is known.
+    renderMenu({ snoozed: true, muted: false, writesKnown: false });
+    fireEvent.click(screen.getByRole('button', { name: 'Unsnooze' }));
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0]?.method).toBe('DELETE');
   });
 
   it('adds "Unmute the rest" only when core offers it, and it takes the remaining mutes back', async () => {

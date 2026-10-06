@@ -97,6 +97,7 @@ export function PaneHousekeeping(props: PaneHousekeepingProps) {
           tileId={tileId}
           snoozed={view.state.kind === 'snoozed'}
           muted={view.state.muted === true}
+          partlyMuted={view.state.partlyMuted === true}
           size="md"
           variant={offers.lead === 'snooze' ? 'secondary' : 'quiet'}
         />

@@ -332,7 +332,15 @@ export function Tile(props: TileProps) {
             </Button>
           )}
           {view.offers.snooze && (
-            <SnoozeMenu tileId={tile.id} snoozed={state.kind === 'snoozed'} muted={state.muted === true} unmuteRest={view.offers.unmuteRest} align="right" variant="joined" />
+            <SnoozeMenu
+              tileId={tile.id}
+              snoozed={state.kind === 'snoozed'}
+              muted={state.muted === true}
+              partlyMuted={state.partlyMuted === true}
+              unmuteRest={view.offers.unmuteRest}
+              align="right"
+              variant="joined"
+            />
           )}
           {footerAction === 'open' && (
             <Button variant="joined" onClick={selectLead}>

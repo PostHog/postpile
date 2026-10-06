@@ -7025,12 +7025,23 @@ away for good:
   the unsubscribe wait as two pending writes of the same batch (kinds
   `mark_read` and `unsubscribe`, listed as "Mute: <title>") and go out from
   the lock. The unsubscribe goes to a thread that is read already too.
+  It goes out only while the mute still holds (core `muteHolds`, asked by
+  the queue before each unsubscribe, 2026-10-06): a mention, reply or
+  review request that came in during the undo window (the mark-read's
+  retry refreshes the PR and stores it) or before a pending unsubscribe was
+  sent ends the mute and brings the tile back as an ordinary tile without
+  Unmute, so GitHub must keep the user subscribed. That unsubscribe is
+  logged `skipped` and the pending row goes.
 - Unmute (where Unsnooze is) takes the snoozes back and subscribes the user
   again (`PUT .../subscription` with `ignored: false`; pending kind
   `subscribe`), through the same queue and lock. Without it GitHub would
   stay quiet about the PR: new activity would never turn the tile unread
   again, and a tile that looks unmuted but never comes back is worse than
-  one more write. Undo of an Unmute puts the mute back.
+  one more write. Undo of an Unmute puts the mute back, and so does
+  discarding a pending Unmute (core effect `mute_again`, 2026-10-06; since
+  = the Unmute's click, a PR snoozed again meanwhile keeps that snooze):
+  GitHub still has the user unsubscribed, so the tile must offer Unmute
+  again instead of staying quiet for good.
 - A subscription change GitHub did not take is not dropped like a failed
   mark-read (that one puts the PR back to unread, so the app agrees with
   GitHub again; a mute or unmute stays here either way). It waits as a
@@ -7040,7 +7051,10 @@ away for good:
   `TileState.partlyMuted` and its Snooze menu offers "Unmute the rest"
   (core `TileOffers.unmuteRest`, not on a done tile), which is the same
   Unmute: every snooze of the tile goes, every muted thread is subscribed
-  again.
+  again. A snoozed tile can mix a mute with ordinary snoozes too (a muted
+  PR joins a snoozed stack or set): it says Snoozed and `partlyMuted`, and
+  its Unsnooze is also that Unmute, so the renderer guards it as a GitHub
+  write (`mute`), not as a local-only Unsnooze.
 - Known gap: GitHub still notifies a user who watches the repo; the DELETE
   does not cover that. GitHub documents `PUT .../subscription` with
   `ignored: true` for watched repos (a stronger block; that it still lets a

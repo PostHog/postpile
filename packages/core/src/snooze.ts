@@ -135,6 +135,16 @@ export function snoozePhase(snooze: Snooze, context: SnoozeContext): SnoozePhase
   return isSnoozeOver(snooze, context) ? 'over' : 'active';
 }
 
+/**
+ * True while the PR is muted and the mute still holds: not taken back, not
+ * ended by a personal ask (`personallyAsked`) or by the PR closing. Mute's
+ * GitHub unsubscribe goes out only then (2026-10-06): a mention that ended
+ * the mute during the undo window must not leave the thread unsubscribed.
+ */
+export function muteHolds(snooze: Snooze | null, context: SnoozeContext): boolean {
+  return snooze !== null && snooze.condition.kind === 'muted' && snoozePhase(snooze, context) === 'active';
+}
+
 /** The user snoozing a tile ("start") or taking the snooze back ("end"). */
 export type SnoozeChange = { kind: 'start'; condition: SnoozeCondition; at: IsoTime } | { kind: 'end' };
 
