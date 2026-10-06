@@ -113,8 +113,26 @@ describe('lesson context', () => {
     expect(lessonReview(pr, changes, viewer).comments.map((comment) => comment.id)).toEqual(['inline']);
   });
 
-  it('reads a lesson stored with a reply to a bot as unchanged', () => {
-    const stored = { ...lessonReview(pr, changes, viewer), comments: [{ id: 'inline', path: 'a.ts', body: 'This drops the backfill.' }, { id: 'fixed', path: 'a.ts', body: 'fixed' }] };
-    expect(reviewNow(stored, pr, viewer)).toEqual({ kind: 'same' });
+  it('trims a lesson stored with a reply to a bot, without calling it edited', () => {
+    const current = lessonReview(pr, changes, viewer);
+    const stored = { ...current, comments: [...current.comments, { id: 'fixed', path: 'a.ts', body: 'fixed' }] };
+    expect(reviewNow(stored, pr, viewer)).toEqual({ kind: 'trimmed', review: current });
+    expect(reviewNow(current, pr, viewer)).toEqual({ kind: 'same' });
+  });
+
+  it('leaves out your reply to a person, sent on its own between two reviews', () => {
+    const first = makeReview({ id: 'r1', author: me, state: 'COMMENTED', body: 'A first pass.', submittedAt: at(10), commitOid: 'head' });
+    const thread = makeThread('t-people', [
+      makeComment({ id: 'ask', author: 'alice', body: 'Why not cache this?', createdAt: at(12) }),
+      makeComment({ id: 'answer', author: me, body: 'Caching is one level up.', createdAt: at(15), reviewId: 'r-answer' }),
+    ]);
+    const answerCarrier = makeReview({ id: 'r-answer', author: me, state: 'COMMENTED', body: '', submittedAt: at(15) });
+    const twoReviews = makePr({
+      author: 'alice',
+      reviews: [first, answerCarrier, changes],
+      comments: [...(thread.comments as FullComment[]), inline],
+      threads: [thread, makeThread('t-mine', [inline])],
+    });
+    expect(lessonReview(twoReviews, changes, viewer).comments.map((comment) => comment.id)).toEqual(['inline']);
   });
 });

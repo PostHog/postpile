@@ -31,6 +31,11 @@ export function checkOpenLesson(store: Store, id: number, at: string): LessonChe
     store.lessons.withdraw(lesson.id, 'The review it came from was deleted or dismissed.', at);
     return { ok: false, message: 'The review it came from was deleted or dismissed, so the lesson was withdrawn.' };
   }
+  if (now.kind === 'trimmed') {
+    // Replies to bots stored with the review: dropped, the line stays (no restart).
+    store.lessons.setReview(lesson.id, now.review);
+    return { ok: true, lesson: { ...lesson, review: now.review } };
+  }
   return { ok: true, lesson };
 }
 

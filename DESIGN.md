@@ -3256,8 +3256,12 @@ answering:
   it wakes a snooze like any loud event.
 - Lessons: the user's replies to bots stay out of a review's inline
   comments, and a carrier does not cut off the comments before it
-  (`previousReviewAt`). A lesson stored with such a reply reads as
-  unchanged, not edited.
+  (`previousReviewAt`). Any thread reply the user sent on its own (the
+  replies a carrier holds, by `reviewId` when the snapshot has it) stays
+  out too, so a reply to a person between two reviews never joins the next
+  change request. A lesson stored with a reply to a bot is `trimmed`, not
+  edited: the engine stores the review without it (`setReview`) and keeps
+  the line, its status and its join.
 
 Property: bot talk by the author, an outsider or the viewer leaves whose
 turn, the open ask, the viewer's last touch, the changes answer, a

@@ -67,6 +67,8 @@ export class LessonKeeper {
         this.store.lessons.restartFromReview(lesson.id, now.review);
       } else if (now.kind === 'deleted') {
         this.store.lessons.withdraw(lesson.id, 'The review it came from was deleted or dismissed.', at);
+      } else if (now.kind === 'trimmed') {
+        this.store.lessons.setReview(lesson.id, now.review);
       }
     }
   }
