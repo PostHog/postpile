@@ -164,3 +164,27 @@ export function inImmediateTransaction<T>(db: DatabaseSync, lockWaitMs: number, 
     throw error;
   }
 }
+
+/**
+ * Copies the WAL into the database file and cuts it to zero bytes
+ * (TRUNCATE), without waiting on any other connection: busy timeout 0 for
+ * this call, so a reader or writer in the way makes it stop where it got
+ * to instead of holding Electron's main thread. Its I/O is what the WAL
+ * holds that SQLite's automatic checkpoint has not copied yet. True when
+ * it got through. https://sqlite.org/pragma.html#pragma_wal_checkpoint
+ */
+export function checkpointWal(db: DatabaseSync): boolean {
+  const timeout = (db.prepare('PRAGMA busy_timeout').get() as { timeout: number }).timeout;
+  db.exec('PRAGMA busy_timeout = 0');
+  try {
+    const row = db.prepare('PRAGMA wal_checkpoint(TRUNCATE)').get() as { busy: number };
+    return row.busy === 0;
+  } catch (error) {
+    if (isBusyError(error)) {
+      return false;
+    }
+    throw error;
+  } finally {
+    db.exec(`PRAGMA busy_timeout = ${timeout}`);
+  }
+}
