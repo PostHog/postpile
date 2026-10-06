@@ -424,7 +424,7 @@ export class ReadModels {
    * The busy inbox card's numbers (`busyInboxView`), from what picked the
    * last hot Board: no load of its own once any read loaded one.
    */
-  busyInbox(writesLocked: boolean): BusyInboxView {
+  busyInbox(): BusyInboxView {
     if (Board.lastSelection(this.store) === null) {
       // Nothing loaded a Board in this process yet.
       this.board();
@@ -432,7 +432,7 @@ export class ReadModels {
     const selection = Board.lastSelection(this.store) ?? { busy: false, inboxPrs: 0, keptByTier: { you: 0, team: 0, others: 0 } };
     const since = new Date(this.now().getTime() - HOUR_MS).toISOString();
     const updatesLastHour = this.store.notifications.countPrThreadsUpdatedSince(since);
-    return busyInboxView(selection, { updatesLastHour, writesLocked });
+    return busyInboxView(selection, { updatesLastHour });
   }
 
   /** The topics the sidebar lists with all repos, each with its tiles. */

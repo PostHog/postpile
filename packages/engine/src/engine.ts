@@ -713,6 +713,33 @@ export class Engine implements EngineService {
   }
 
   /**
+   * GitHub writes are on only because this install never chose (DESIGN.md
+   * "GitHub writes: lock, action log" › On by default). Once, at the first
+   * sync with gh working: the default is stored as the choice, logged and
+   * reported, then the mark-reads that waited from the locked days are sent
+   * where nothing happened on the thread since the click
+   * (`PendingWrites.sendAfterDefault`). Never throws: the sync goes on
+   * whatever the send did.
+   */
+  private async keepWritesDefault(): Promise<void> {
+    if (!this.deps.writes.keepDefault()) {
+      return;
+    }
+    const log = this.deps.syncLog ?? console.log;
+    this.telemetry.capture('github_writes_changed', { enabled: true, from: 'default' });
+    if (!this.deps.pendingWrites.list().some((write) => write.kind === 'mark_read')) {
+      log('GitHub writes on by default');
+      return;
+    }
+    try {
+      const result = await this.deps.pendingWrites.sendAfterDefault(this.deps.markReadQueue, () => this.writesStatus());
+      log(`GitHub writes on by default, pending mark-reads unchanged since the click: ${result.message}`);
+    } catch (error) {
+      log(`GitHub writes on by default, pending mark-reads not sent: ${errorText(error)}`);
+    }
+  }
+
+  /**
    * A sync while one is running joins the running one. Sync, consolidation
    * and a poll cycle never overlap: sync and consolidation wait for the
    * others, so agent calls land in the right run.
@@ -727,6 +754,7 @@ export class Engine implements EngineService {
     if (!tools.canSync) {
       return this.blockedSyncReport(tools.gh.headline);
     }
+    await this.keepWritesDefault();
     const report = await this.syncRun.run(options);
     this.reportIdentity();
     return report;
@@ -1103,7 +1131,7 @@ export class Engine implements EngineService {
   }
 
   async busyInbox(): Promise<BusyInboxView> {
-    return this.reads.busyInbox(!this.deps.writes.enabled());
+    return this.reads.busyInbox();
   }
 
   async listRepos(): Promise<RepoOverview> {
@@ -1187,7 +1215,7 @@ export class Engine implements EngineService {
   async setGitHubWrites(enabled: boolean): Promise<GitHubWritesChange> {
     const change = this.deps.writes.set(enabled);
     if (change.ok) {
-      this.telemetry.capture('github_writes_changed', { enabled });
+      this.telemetry.capture('github_writes_changed', { enabled, from: 'footer' });
     }
     return { ...change, status: this.writesStatus() };
   }

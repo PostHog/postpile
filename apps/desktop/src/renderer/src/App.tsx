@@ -81,8 +81,6 @@ export function App() {
     setQueueFilter(filter);
     sendTelemetry('queue_filter_changed', { filter: filter ?? 'none' });
   };
-  // The footer lock's popover: here so the sidebar's busy inbox card ("Unlock writes") can open it too.
-  const [writesLockOpen, setWritesLockOpen] = useState(false);
   // "Ask the agent" on the topic header, or "Tell the agent" from a glance or a memory line: the topic's agent takes the right pane.
   const [agentRequest, setAgentRequest] = useState<ChatRequest | null>(null);
   const search = useSearch(query);
@@ -416,7 +414,6 @@ export function App() {
               onQueueFilter={changeQueueFilter}
               filterCounts={filterCounts(items)}
               viewer={viewer.data}
-              onUnlockWrites={() => setWritesLockOpen(true)}
             />
             )}
             {showSetup && (
@@ -463,7 +460,7 @@ export function App() {
             {/* The wide lists span both right columns, so there is no tile edge to drag. */}
             {!showSetup && !wideList && <PaneDivider label="Resize the tile column" left={`calc(${columns.sidebar} + ${columns.tiles})`} {...dividerProps('tiles')} />}
           </div>
-          <StatusFooter topics={items} detail={topic.data} live={live.data} lockOpen={writesLockOpen} onLockOpen={setWritesLockOpen} />
+          <StatusFooter topics={items} detail={topic.data} live={live.data} />
           <Toast onShowActionLog={() => go({ ...shown, pane: 'notifications' })} />
           <InboxStartDialog />
           {/* Installs that never picked an interruptions mode get asked once, never on top of setup. */}

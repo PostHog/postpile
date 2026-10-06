@@ -451,8 +451,13 @@ export interface HarnessOptions {
   topicDigest?: boolean;
   /** The store predates the current topic grain, so the next full sync runs the topic tidy. Off by default. */
   topicTidyDue?: boolean;
-  /** GitHub writes on (the default here, so action tests reach FakeWriter) or off, as on a first real run. */
+  /**
+   * GitHub writes on (the default here, so action tests reach FakeWriter).
+   * false stores no choice: locked, as in a dev run, unless `writesOnByDefault`.
+   */
   writesEnabled?: boolean;
+  /** The packaged app's default: a store with no choice has writes on. Off here, like a dev run. */
+  writesOnByDefault?: boolean;
   /** Build the switch with no real writer, like POSTPILE_READ_ONLY=1. */
   forcedReadOnly?: boolean;
   /** Reuse a store, e.g. to check what survives a restart. */
@@ -488,7 +493,7 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
   }
   const reader = new FakeReader();
   const writer = new FakeWriter();
-  const writeSwitch = new WriteSwitch(store, options.forcedReadOnly ? null : writer);
+  const writeSwitch = new WriteSwitch(store, options.forcedReadOnly ? null : writer, options.writesOnByDefault ?? false);
   if (options.writesEnabled ?? true) {
     writeSwitch.set(true);
   }
