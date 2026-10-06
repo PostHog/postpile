@@ -99,6 +99,48 @@ describe('ActivityTimeline bot threads', () => {
   });
 });
 
+/** greptile reviewed with three inline comments, each opening a thread. */
+function botReviewActivity() {
+  const bot = 'greptile-apps[bot]';
+  const files = ['vite.config.ts', 'src/test/setup.ts', 'e2e/config.ts'];
+  const bodies = ['**logic:** `build.target` drops es2019.\n\nOlder Safari fails to load the bundle.', 'Fake timers are never reset.', 'The port is hardcoded.'];
+  const threads = files.map((path, index) => {
+    const comment = makeComment({ id: `g${index}`, author: bot, body: bodies[index]!, createdAt: at(1), kind: 'review_comment', path, threadId: `t${index}`, reviewId: 'rg' });
+    return { id: `t${index}`, path, isResolved: false, comments: [comment] };
+  });
+  const comments = threads.flatMap((thread) => thread.comments);
+  const botPr = makePr({ threads, comments, reviews: [makeReview({ id: 'rg', author: bot, state: 'COMMENTED', body: '', submittedAt: at(1) })] });
+  return { pr: botPr, activity: activityList(deriveEvents(botPr, viewer, null).map(eventView), viewer, null, botPr) };
+}
+
+function BotReviewPane() {
+  const compose = useComposeState();
+  const { pr: botPr, activity: botActivity } = botReviewActivity();
+  return (
+    <ComposeProvider value={compose}>
+      <ActivityTimeline activity={botActivity} prKey={botPr.key} />
+    </ComposeProvider>
+  );
+}
+
+describe('ActivityTimeline bot reviews', () => {
+  it("shows one quiet line for a bot's review that opens to each comment's file and first line", () => {
+    renderPane(<BotReviewPane />);
+    const line = screen.getByRole('button', { name: /greptile-apps\[bot\] reviewed/ });
+    expect(line.textContent).toBe('greptile-apps[bot] reviewed · 3 inline comments');
+    expect(screen.queryByText('vite.config.ts')).toBeNull();
+    expect(screen.queryByLabelText('Unseen')).toBeNull();
+    expect(screen.queryByText(/bot event/)).toBeNull();
+
+    fireEvent.click(line);
+    expect(line.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByText('vite.config.ts')).toBeTruthy();
+    expect(screen.getByText('e2e/config.ts')).toBeTruthy();
+    expect(screen.getByText('Fake timers are never reset.')).toBeTruthy();
+    expect(document.body.textContent).not.toContain('Older Safari');
+  });
+});
+
 describe('ActivityTimeline', () => {
   it('opens the folded list for a jump once, and Show fewer folds it again', () => {
     vi.stubGlobal('fetch', () => new Promise(() => {}));

@@ -326,8 +326,8 @@ describe('activityList bot threads', () => {
       at: at(8),
     });
     expect(line?.folded).toEqual([
-      { id: 'a1', actor: 'alice', at: at(5), body: 'fixed' },
-      { id: 'a2', actor: 'alice', at: at(8), body: 'also renamed it' },
+      { id: 'a1', actor: 'alice', at: at(5), body: 'fixed', path: null },
+      { id: 'a2', actor: 'alice', at: at(8), body: 'also renamed it', path: null },
     ]);
   });
 
@@ -404,5 +404,128 @@ describe('activityList bot threads', () => {
     const pr = prWith({ t1: [say('g1', BOT, 1, 'nit'), say('a1', 'alice', 2, `@${me} is this real?`)] }, { reviews: [carrier('r1', 'alice', 2)] });
     const built = list(pr);
     expect([...built.fresh, ...built.earlier].map((line) => [line.kind, line.eventCount])).toEqual([['question_to_user', 2]]);
+  });
+});
+
+describe('activityList carrier reviews and bot reviews', () => {
+  const BOT = 'greptile-apps[bot]';
+
+  /** An inline comment in thread `threadId` (file `src/<threadId>.ts`), with its review id when the snapshot knows it. */
+  function inline(id: string, author: string, threadId: string, minute: number, body: string, reviewId?: string): Comment {
+    return makeComment({ id, author, body, createdAt: at(minute), kind: 'review_comment', path: `src/${threadId}.ts`, threadId, ...(reviewId === undefined ? {} : { reviewId }) });
+  }
+
+  function emptyReview(id: string, author: string, minute: number) {
+    return makeReview({ id, author, state: 'COMMENTED', body: '', submittedAt: at(minute) });
+  }
+
+  /** A PR whose threads are built from its inline comments, in order. */
+  function prOf(comments: Comment[], extra: Partial<Pr> = {}): Pr {
+    const threads = new Map<string, Comment[]>();
+    for (const comment of comments.filter((candidate) => candidate.threadId !== null)) {
+      threads.set(comment.threadId!, [...(threads.get(comment.threadId!) ?? []), comment]);
+    }
+    const built = [...threads.entries()].map(([id, list]) => ({ id, path: `src/${id}.ts`, isResolved: false, comments: list }));
+    return makePr({ ...extra, comments: comments.toSorted((a, b) => a.createdAt.localeCompare(b.createdAt)), threads: built });
+  }
+
+  function list(pr: Pr, change: (event: PrEvent) => PrEvent = (event) => event) {
+    return activityList(deriveEvents(pr, who, null).map((event) => eventView(change(event))), who, null, pr);
+  }
+
+  const allLines = (built: ReturnType<typeof activityList>) => [...built.fresh, ...built.earlier];
+
+  /** greptile reviews with 4 inline comments; alice (the author) answers in two of the threads. */
+  function greptilePr(reviewIds = true): Pr {
+    const id = (value: string) => (reviewIds ? value : undefined);
+    return prOf(
+      [
+        makeComment({ id: 'rg', author: BOT, body: 'Greptile summary: 4 comments.', createdAt: at(1), kind: 'review' }),
+        inline('g1', BOT, 't1', 1, '**logic:** `build.target` drops es2019.\n\nOlder Safari fails to load.', id('rg')),
+        inline('g2', BOT, 't2', 1, 'Fake timers are never reset.', id('rg')),
+        inline('g3', BOT, 't3', 1, 'The port is hardcoded.', id('rg')),
+        inline('g4', BOT, 't4', 1, 'Unused import.', id('rg')),
+        inline('a1', 'alice', 't1', 5, 'Fixed, back to es2019.', id('ra1')),
+        inline('a2', 'alice', 't1', 7, 'Also added a CI check.', id('ra2')),
+        inline('a3', 'alice', 't2', 8, 'Moved the reset into afterEach.', id('ra3')),
+      ],
+      {
+        author: 'alice',
+        reviews: [
+          makeReview({ id: 'rg', author: BOT, state: 'COMMENTED', body: 'Greptile summary: 4 comments.', submittedAt: at(1) }),
+          emptyReview('ra1', 'alice', 5),
+          emptyReview('ra2', 'alice', 7),
+          emptyReview('ra3', 'alice', 8),
+        ],
+      },
+    );
+  }
+
+  it('folds a bot review with its inline comments into one quiet line, next to the folded replies and without carrier lines', () => {
+    const built = list(greptilePr());
+    expect(built.fresh).toEqual([]);
+    expect(built.noise).toEqual([]);
+    expect(built.earlier.map((line) => [line.summary, line.fold, line.eventCount])).toEqual([
+      [`alice replied to ${BOT} on src/t2.ts`, 'bot_thread', 2],
+      [`alice replied to ${BOT} · 2 replies on src/t1.ts`, 'bot_thread', 4],
+      [`${BOT} reviewed · 4 inline comments`, 'bot_review', 6],
+    ]);
+    const review = built.earlier[2]!;
+    expect(review).toMatchObject({ kind: 'review_commented', actor: BOT, display: 'quiet', unseen: false, isNew: false, reply: null, thread: null, body: null });
+    expect(review.folded).toEqual([
+      { id: 'g1', actor: BOT, at: at(1), path: 'src/t1.ts', body: '**logic:** `build.target` drops es2019.' },
+      { id: 'g2', actor: BOT, at: at(1), path: 'src/t2.ts', body: 'Fake timers are never reset.' },
+      { id: 'g3', actor: BOT, at: at(1), path: 'src/t3.ts', body: 'The port is hardcoded.' },
+      { id: 'g4', actor: BOT, at: at(1), path: 'src/t4.ts', body: 'Unused import.' },
+    ]);
+  });
+
+  it('is never new, even while something loud is new', () => {
+    const pr = greptilePr();
+    const withAsk = { ...pr, comments: [...pr.comments, makeComment({ id: 'c9', author: 'bob', body: `@${me} thoughts?`, createdAt: at(20) })] };
+    const built = list(withAsk);
+    expect(built.fresh.map((line) => line.kind)).toEqual(['question_to_user']);
+    expect(built.earlier.find((line) => line.fold === 'bot_review')).toMatchObject({ isNew: false, unseen: false });
+    expect(built.freshNoise).toEqual([]);
+  });
+
+  it('keeps the bot events with the noise on an older snapshot without review ids; carriers still join their replies by time', () => {
+    const built = list(greptilePr(false));
+    expect(built.earlier.map((line) => [line.summary, line.eventCount])).toEqual([
+      [`alice replied to ${BOT} on src/t2.ts`, 2],
+      [`alice replied to ${BOT} · 2 replies on src/t1.ts`, 4],
+    ]);
+    expect(built.noise).toHaveLength(6);
+  });
+
+  it('keeps a bot review that mentions you, or the agent raised, with the other bot events', () => {
+    const pr = greptilePr();
+    const mentioning = { ...pr, comments: pr.comments.map((comment) => (comment.id === 'g4' ? { ...comment, body: `@${me} is this import needed?` } : comment)) };
+    expect(list(mentioning).earlier.some((line) => line.fold === 'bot_review')).toBe(false);
+    const raised = list(pr, (event) => (event.sourceId === 'rg' && event.kind === 'review_commented' ? { ...event, override: { loudness: 'loud', reason: 'flags a security hole', by: 'agent' } } : event));
+    const review = raised.earlier.find((line) => line.fold === 'bot_review');
+    expect(review?.eventCount).toBe(5);
+    expect([...raised.noise, ...raised.freshNoise].map((item) => item.kind)).toContain('review_commented');
+  });
+
+  it('hides the carrier of a reply in a thread between people on the reply\'s line', () => {
+    const pr = prOf([inline('b1', 'bob', 't1', 1, 'why the retry?', 'rb'), inline('a1', 'alice', 't1', 5, 'flaky upload', 'ra')], {
+      author: me,
+      reviews: [emptyReview('rb', 'bob', 1), emptyReview('ra', 'alice', 5)],
+    });
+    const lines = allLines(list(pr));
+    expect(lines.map((line) => [line.kind, line.summary, line.eventCount])).toEqual([
+      ['comment', 'alice replied to bob on src/t1.ts: flaky upload', 2],
+      ['review_commented', 'bob reviewed', 1],
+      ['comment', 'bob commented: why the retry?', 1],
+    ]);
+    expect(lines[0]?.isNew).toBe(true);
+  });
+
+  it('moves a carrier whose reply is muted to the noise', () => {
+    const pr = prOf([inline('b1', 'bob', 't1', 1, 'why?', 'rb'), inline('a1', 'alice', 't1', 5, 'because', 'ra')], { reviews: [emptyReview('rb', 'bob', 1), emptyReview('ra', 'alice', 5)] });
+    const built = list(pr, (event) => (event.sourceId === 'a1' ? { ...event, override: { loudness: 'muted', reason: 'noise', by: 'agent' } } : event));
+    expect(allLines(built).map((line) => line.summary)).toEqual(['bob reviewed', 'bob commented: why?']);
+    expect(built.noise.map((item) => item.kind).toSorted()).toEqual(['comment', 'review_commented']);
   });
 });

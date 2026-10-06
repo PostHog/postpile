@@ -160,27 +160,81 @@ export function answersBotInThread(pr: Pr, comment: Comment): boolean {
 }
 
 /**
+ * The inline comments a review was submitted with (2026-10-06): the ones
+ * whose review id names it; when none do, the author's thread comments
+ * without a review id from within 2 seconds of it (snapshots stored before
+ * the id was fetched).
+ */
+export function sentWithReview(pr: Pr, review: Review): Comment[] {
+  const named = pr.comments.filter((comment) => comment.reviewId === review.id);
+  if (named.length > 0) {
+    return named;
+  }
+  return pr.comments.filter(
+    (comment) =>
+      comment.threadId !== null &&
+      comment.reviewId === undefined &&
+      sameLogin(comment.author, review.author) &&
+      Math.abs(Date.parse(comment.createdAt) - Date.parse(review.submittedAt)) <= 2000,
+  );
+}
+
+/** The comment is not the first one of its thread. */
+function answersInThread(pr: Pr, comment: Comment): boolean {
+  const thread = pr.threads.find((candidate) => candidate.id === comment.threadId);
+  return thread !== undefined && thread.comments.findIndex((candidate) => candidate.id === comment.id) > 0;
+}
+
+/**
+ * GitHub's wrapper for thread replies: a COMMENTED review without text that
+ * was sent with at least one inline comment, every one of them answering in
+ * a thread that already had a comment.
+ */
+export function isCarrier(pr: Pr, review: Review): boolean {
+  if (review.state !== 'COMMENTED' || review.body.trim() !== '') {
+    return false;
+  }
+  const sent = sentWithReview(pr, review);
+  return sent.length > 0 && sent.every((comment) => answersInThread(pr, comment));
+}
+
+/** A review_commented event of a carrier review. */
+export function isCarrierEvent(pr: Pr, event: Pick<PrEvent, 'kind' | 'sourceId'>): boolean {
+  const review = event.kind === 'review_commented' ? pr.reviews.find((candidate) => candidate.id === event.sourceId) : undefined;
+  return review !== undefined && isCarrier(pr, review);
+}
+
+/**
  * An event that belongs to a person's answer to a bot in a thread: the
- * comment itself (plain kind, not an ask), its edit, or the empty COMMENTED
- * review GitHub posts with it (same author, within 2 seconds, and every
- * thread comment it came with answers a bot).
+ * comment itself (plain kind, not an ask), its edit, or the carrier review
+ * GitHub posts with it, when every comment it carries answers a bot.
  */
 export function isBotThreadAnswer(pr: Pr, event: Pick<PrEvent, 'kind' | 'sourceId'>): boolean {
   if (event.kind === 'comment' || event.kind === 'comment_edited') {
     const comment = pr.comments.find((candidate) => candidate.id === event.sourceId);
     return comment !== undefined && answersBotInThread(pr, comment);
   }
-  if (event.kind !== 'review_commented') {
-    return false;
+  const review = event.kind === 'review_commented' ? pr.reviews.find((candidate) => candidate.id === event.sourceId) : undefined;
+  return review !== undefined && isCarrier(pr, review) && sentWithReview(pr, review).every((comment) => answersBotInThread(pr, comment));
+}
+
+/**
+ * The comments a bot's review folds under one line (2026-10-06): a
+ * COMMENTED review by an automation account (not a deleted one) whose
+ * inline comments, matched by review id only, all start a thread, and
+ * where neither the review text nor a comment mentions the viewer. Empty
+ * when it does not fold.
+ */
+export function botReviewFold(pr: Pr, review: Review): Comment[] {
+  if (review.author === '' || !isAutomationLogin(review.author) || review.state !== 'COMMENTED' || mentionsViewer(review.body)) {
+    return [];
   }
-  const review = pr.reviews.find((candidate) => candidate.id === event.sourceId);
-  if (review === undefined || review.state !== 'COMMENTED' || review.body.trim() !== '') {
-    return false;
-  }
-  const sentWith = pr.comments.filter(
-    (comment) => comment.threadId !== null && sameLogin(comment.author, review.author) && Math.abs(Date.parse(comment.createdAt) - Date.parse(review.submittedAt)) <= 2000,
-  );
-  return sentWith.length > 0 && sentWith.every((comment) => answersBotInThread(pr, comment));
+  const comments = pr.comments.filter((comment) => comment.reviewId === review.id);
+  const startsThreads = comments.every((comment) => {
+    const thread = pr.threads.find((candidate) => candidate.id === comment.threadId);
+    return thread?.comments[0]?.id === comment.id;
+  });
+  return comments.length > 0 && startsThreads && !comments.some((comment) => mentionsViewer(comment.body)) ? comments : [];
 }
 
 // ---------------------------------------------------------------------------

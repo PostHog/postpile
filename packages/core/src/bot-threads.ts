@@ -7,15 +7,9 @@
 // viewer is an ask (events.ts `addressedKind`) and never counts here.
 // DESIGN.md "The PR pane" › Thread context and replies to bots.
 import { isMachineComment } from './bots.ts';
+import { carriedReplies } from './carrier-reviews.ts';
 import { sameLogin } from './mentions.ts';
 import type { Comment, EventKind, Pr, PrEvent, Review, ReviewThread } from './types.ts';
-
-/**
- * How far apart a thread reply and the review GitHub made for it can be.
- * GitHub wraps every thread reply in a review of its own (COMMENTED, no
- * body), submitted the same second as the comment.
- */
-const CARRIER_REVIEW_WINDOW_MS = 2_000;
 
 /** Where a thread reply sits: whom it answers and the file. */
 export interface ThreadReply {
@@ -80,34 +74,14 @@ export function isBotThreadReply(comment: Comment, pr: Pr): boolean {
   return others.length > 0 && others.every(isMachineComment);
 }
 
-function isEmptyComment(review: Review): boolean {
-  return review.state === 'COMMENTED' && review.body.trim() === '';
-}
-
-/** The author's thread comments posted with the review (same second). */
-function threadCommentsWith(review: Review, pr: Pr): Comment[] {
-  const submitted = Date.parse(review.submittedAt);
-  return pr.comments.filter(
-    (comment) =>
-      comment.threadId !== null &&
-      sameLogin(comment.author, review.author) &&
-      Math.abs(Date.parse(comment.createdAt) - submitted) <= CARRIER_REVIEW_WINDOW_MS,
-  );
-}
-
 /**
- * The bot-thread replies an empty review only carries: GitHub makes one
- * review (COMMENTED, no body) per thread reply, so without this every
- * "fixed" to a bot would also show as "alice reviewed". Matched by author
- * and time, since the snapshot does not say which review a comment came
- * with. Empty unless every thread comment posted with it is a bot-thread
- * reply.
+ * The bot-thread replies an empty review only carries (`carriedReplies`):
+ * GitHub makes one review (COMMENTED, no body) per thread reply, so without
+ * this every "fixed" to a bot would also show as "alice reviewed". Empty
+ * unless every reply it carries is a bot-thread reply.
  */
 export function carriedBotThreadReplies(review: Review, pr: Pr): Comment[] {
-  if (!isEmptyComment(review)) {
-    return [];
-  }
-  const carried = threadCommentsWith(review, pr);
+  const carried = carriedReplies(review, pr);
   return carried.length > 0 && carried.every((comment) => isBotThreadReply(comment, pr)) ? carried : [];
 }
 

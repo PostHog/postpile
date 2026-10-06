@@ -1,10 +1,14 @@
 // The detail pane's activity list: the meaningful events of a PR, with push
 // bursts collapsed, people's replies to a bot folded into one quiet line per
-// review thread, and bot noise folded into one line. Rules only; the engine
-// and FakeEngine ship the result on `PrDetail.activity`, with each event cut
-// down to what a row draws (`ActivityEvent`).
-import { botThreadOf, carriedBotThreadReplies, threadReplyOf } from './bot-threads.ts';
-import { reviewRequestSubject } from './events.ts';
+// review thread, a bot's review folded with its inline comments, the empty
+// reviews GitHub makes for thread replies on their reply's line, and bot
+// noise folded into one line. Rules only; the engine and FakeEngine ship the
+// result on `PrDetail.activity`, with each event cut down to what a row
+// draws (`ActivityEvent`).
+import { botReviewOf, foldedBotReviewComments } from './bot-reviews.ts';
+import { botThreadOf, threadReplyOf } from './bot-threads.ts';
+import { carriedReplies } from './carrier-reviews.ts';
+import { oneLine, reviewRequestSubject } from './events.ts';
 import { PERSONAL_ASK_KINDS, PUSH_KINDS } from './kinds.ts';
 import { isOwnTeam, sameLogin } from './mentions.ts';
 import { findComment, replyTarget } from './reply.ts';
@@ -62,14 +66,26 @@ export interface LineThread {
   path: string;
 }
 
-/** One reply inside a folded bot-thread line, as its expanded part shows it. */
+/**
+ * One comment inside a folded line, as its expanded part shows it: a reply
+ * in a bot thread, or an inline comment of a bot's review.
+ */
 export interface FoldedReply {
   /** The comment's id. */
   id: string;
   actor: string;
   at: IsoTime;
+  /** A bot-thread reply: its whole body. A bot review's comment: its first line. */
   body: string;
+  /** A bot review's comment: its file. Null for a bot-thread reply (the line names the file). */
+  path: string | null;
 }
+
+/**
+ * What a folded line stands for: a person's replies in one bot thread, or a
+ * bot's review with its inline comments (2026-10-06).
+ */
+export type FoldKind = 'bot_thread' | 'bot_review';
 
 /**
  * One line of the list: a single event, a burst of pushes by one person, or
@@ -100,10 +116,13 @@ export interface ActivityLine extends ActivityEvent {
   /** A reply in a review thread (a bot-thread line too): whom it answers and the file. Null otherwise. */
   thread: LineThread | null;
   /**
-   * A quiet bot-thread line (2026-10-06): the replies it folds,
-   * oldest first, which the line expands to. Empty on every other line.
+   * A quiet folded line (2026-10-06): the replies of a bot thread, or the
+   * inline comments of a bot's review, oldest first, which the line expands
+   * to. Empty on every other line.
    */
   folded: FoldedReply[];
+  /** What a folded line stands for; null on every other line. */
+  fold: FoldKind | null;
 }
 
 export interface ActivityList {
@@ -157,11 +176,25 @@ function involvesViewer(view: EventView, viewer: Viewer | null): boolean {
   return sameLogin(subject, viewer.login) || isOwnTeam(subject, viewer.teams);
 }
 
-/** Human talk, review requests about you or your team, human pushes, lifecycle. */
-function isMeaningful(view: EventView, viewer: Viewer | null): boolean {
+/**
+ * The bot review a quiet bot event folds into (`botReviewOf`), null for
+ * none. A loud (raised) or muted one stays with the other bot events.
+ */
+function foldedBotReviewId(view: EventView, pr: Pr | null, viewer: Viewer | null): string | null {
+  if (!pr || effectiveLoudness(view.event) !== 'quiet') {
+    return null;
+  }
+  return botReviewOf(view.event, pr, viewer)?.id ?? null;
+}
+
+/** Human talk, review requests about you or your team, human pushes, lifecycle, and a bot's folded review. */
+function isMeaningful(view: EventView, viewer: Viewer | null, pr: Pr | null): boolean {
   const { event } = view;
   if (view.display === 'muted') {
     return false;
+  }
+  if (foldedBotReviewId(view, pr, viewer) !== null) {
+    return true;
   }
   if (LIFECYCLE.includes(event.kind)) {
     return true;
@@ -272,19 +305,26 @@ function toDraft(group: EventView[], pr: Pr | null): LineDraft {
     reply: null,
     thread: group.length > 1 ? null : lineThread(newest, pr),
     folded: [],
+    fold: null,
   };
   return { line, events: newestFirst, folded: false };
 }
 
+const BOT_REVIEW_KEY = 'bot-review:';
+
 /**
  * Which folded line an event goes to, null for none. Events of one fold need
- * not be next to each other. Today: a person's quiet reply to a bot in a
- * review thread and its edit, one line per thread (`botThreadOf`). A loud
- * one (an ask, or the agent raised it) stays a line of its own. The next
- * fold slots in here: a bot's review with its inline comments, keyed by the
- * comments' review id.
+ * not be next to each other. A bot's quiet review, its inline comments and
+ * their edits make one line per review (`bot-review:<reviewId>`). A
+ * person's quiet reply to a bot in a review thread and its edit make one
+ * line per thread (`bot-thread:<threadId>`, `botThreadOf`); a loud one (an
+ * ask, or the agent raised it) stays a line of its own.
  */
-function foldKeyOf(view: EventView, pr: Pr | null): string | null {
+function foldKeyOf(view: EventView, pr: Pr | null, viewer: Viewer | null): string | null {
+  const reviewId = foldedBotReviewId(view, pr, viewer);
+  if (reviewId !== null) {
+    return `${BOT_REVIEW_KEY}${reviewId}`;
+  }
   if (!pr || view.event.kind === 'review_commented' || effectiveLoudness(view.event) === 'loud') {
     return null;
   }
@@ -298,7 +338,7 @@ function carriedIds(view: EventView, pr: Pr | null): string[] {
     return [];
   }
   const review = pr.reviews.find((candidate) => candidate.id === view.event.sourceId);
-  return review ? carriedBotThreadReplies(review, pr).map((comment) => comment.id) : [];
+  return review ? carriedReplies(review, pr).map((comment) => comment.id) : [];
 }
 
 /** The thread comments a fold's events stand for, oldest first. */
@@ -338,24 +378,63 @@ function botThreadDraft(group: EventView[], pr: Pr): LineDraft {
     eventCount: group.length,
     reply: null,
     thread: where === null ? null : { to: where.to, path: where.path },
-    folded: replies.map((comment) => ({ id: comment.id, actor: comment.author, at: comment.createdAt, body: comment.body.trim() })),
+    folded: replies.map((comment) => ({ id: comment.id, actor: comment.author, at: comment.createdAt, body: comment.body.trim(), path: null })),
+    fold: 'bot_thread',
   };
   return { line, events: newestFirst, folded: true };
 }
 
 /**
- * The empty review GitHub made for a reply joins the reply's line (a
- * bot-thread fold, or an ask's own line) instead of saying "alice reviewed"
- * a second time. A review whose reply has no line keeps its own, and so does
- * one the agent or the user raised to loud (`lineDrafts` never passes it).
+ * One quiet line for a bot's review and its inline comments (2026-10-06):
+ * "greptile-apps[bot] reviewed · 6 inline comments", each comment's file
+ * and first line folded under it. Like other bot events: never new since
+ * you looked, no unread dot, no Reply.
  */
-function withCarriers(drafts: LineDraft[], carriers: EventView[], pr: Pr | null): LineDraft[] {
-  const all = [...drafts];
+function botReviewDraft(group: EventView[], reviewId: string, pr: Pr, viewer: Viewer | null): LineDraft {
+  const newestFirst = group.toReversed();
+  const newest = newestFirst[0]!;
+  const review = pr.reviews.find((candidate) => candidate.id === reviewId);
+  const comments = review ? foldedBotReviewComments(review, pr, viewer) : [];
+  const actor = review?.author ?? newest.event.actor;
+  const line: ActivityLine = {
+    ...activityEvent(newest),
+    kind: 'review_commented',
+    actor,
+    summary: `${actor} reviewed · ${plural(comments.length, 'inline comment')}`,
+    display: group.some((view) => view.display === 'quiet') ? 'quiet' : newest.display,
+    unseen: false,
+    reason: 'a bot review with its inline comments',
+    body: null,
+    isNew: false,
+    eventCount: group.length,
+    reply: null,
+    thread: null,
+    folded: comments.map((comment) => ({ id: comment.id, actor: comment.author, at: comment.createdAt, body: oneLine(comment.body), path: comment.path })),
+    fold: 'bot_review',
+  };
+  return { line, events: newestFirst, folded: true };
+}
+
+/** The folded line of one key (`foldKeyOf`). */
+function foldDraft(key: string, group: EventView[], pr: Pr, viewer: Viewer | null): LineDraft {
+  return key.startsWith(BOT_REVIEW_KEY) ? botReviewDraft(group, key.slice(BOT_REVIEW_KEY.length), pr, viewer) : botThreadDraft(group, pr);
+}
+
+/**
+ * The empty review GitHub made for a thread reply joins the reply's line (a
+ * bot-thread fold, the ask's or the comment's own line) instead of saying
+ * "alice reviewed" a second time, in any thread. Returns the carriers whose
+ * reply has no line (a muted reply): they go to the noise. One the agent or
+ * the user raised to loud keeps a line of its own (`lineDrafts` never
+ * passes it).
+ */
+function addCarriers(drafts: LineDraft[], carriers: EventView[], pr: Pr | null): EventView[] {
+  const homeless: EventView[] = [];
   for (const carrier of carriers) {
     const ids = carriedIds(carrier, pr);
-    const home = all.find((draft) => draft.events.some((view) => view.event.kind !== 'review_commented' && ids.includes(view.event.sourceId)));
+    const home = drafts.find((draft) => draft.events.some((view) => view.event.kind !== 'review_commented' && ids.includes(view.event.sourceId)));
     if (home === undefined) {
-      all.push(toDraft([carrier], pr));
+      homeless.push(carrier);
       continue;
     }
     home.events.push(carrier);
@@ -364,7 +443,14 @@ function withCarriers(drafts: LineDraft[], carriers: EventView[], pr: Pr | null)
       home.line.unseen = true;
     }
   }
-  return all;
+  return homeless;
+}
+
+interface Drafts {
+  /** The lines, oldest first. */
+  drafts: LineDraft[];
+  /** Empty reviews that only carry a reply without a line: noise. */
+  homeless: EventView[];
 }
 
 /**
@@ -372,12 +458,12 @@ function withCarriers(drafts: LineDraft[], carriers: EventView[], pr: Pr | null)
  * its newest event), the rest with push bursts grouped, and the reviews
  * that only carry a reply on that reply's line.
  */
-function lineDrafts(meaningful: EventView[], pr: Pr | null): LineDraft[] {
+function lineDrafts(meaningful: EventView[], pr: Pr | null, viewer: Viewer | null): Drafts {
   const folds = new Map<string, EventView[]>();
   const carriers: EventView[] = [];
   const rest: EventView[] = [];
   for (const view of meaningful) {
-    const key = foldKeyOf(view, pr);
+    const key = foldKeyOf(view, pr, viewer);
     if (key !== null) {
       folds.set(key, [...(folds.get(key) ?? []), view]);
     } else if (effectiveLoudness(view.event) !== 'loud' && carriedIds(view, pr).length > 0) {
@@ -388,9 +474,10 @@ function lineDrafts(meaningful: EventView[], pr: Pr | null): LineDraft[] {
   }
   const drafts = groupBursts(rest).map((group) => toDraft(group, pr));
   if (pr) {
-    drafts.push(...[...folds.values()].map((group) => botThreadDraft(group, pr)));
+    drafts.push(...[...folds.entries()].map(([key, group]) => foldDraft(key, group, pr, viewer)));
   }
-  return withCarriers(drafts, carriers, pr).toSorted((a, b) => (a.line.at < b.line.at ? -1 : a.line.at > b.line.at ? 1 : 0));
+  const homeless = addCarriers(drafts, carriers, pr);
+  return { drafts: drafts.toSorted((a, b) => (a.line.at < b.line.at ? -1 : a.line.at > b.line.at ? 1 : 0)), homeless };
 }
 
 /** The reply of one line on its own: its newest event's comment or review. */
@@ -504,9 +591,12 @@ export function threadChangedAt(thread: NotificationThread | null, events: Event
  * reviews, mentions, review requests naming you or your team, human pushes
  * (a burst by one person is one line), and lifecycle (ready, draft, merged,
  * closed, reopened). With `pr`, people's quiet replies to a bot in a review
- * thread fold into one line per thread (`folded`), and a single thread reply
- * says whom it answers (`thread`). The rest (bots, CI, deploys, merge queue,
- * agent-muted events, review requests between others) goes to `noise`.
+ * thread fold into one line per thread, a bot's quiet review with its inline
+ * comments into one line per review (`folded`, `fold`), the empty review
+ * GitHub makes for a thread reply joins the reply's line, and a single
+ * thread reply says whom it answers (`thread`). The rest (bots, CI, deploys,
+ * merge queue, agent-muted events, review requests between others) goes to
+ * `noise`.
  *
  * While something loud is new, the unseen noise after `since` (the viewer's
  * last touch, `whatsNew().anchor.at`; null for a first look) moves to
@@ -524,9 +614,11 @@ export function activityList(
   thread: NotificationThread | null = null,
 ): ActivityList {
   const sorted = events.toSorted(byTime);
-  const meaningful = sorted.filter((view) => isMeaningful(view, viewer));
-  const allNoise = sorted.filter((view) => !isMeaningful(view, viewer)).toReversed();
-  const lines = withReplies(lineDrafts(meaningful, pr).toReversed(), pr, viewer);
+  const meaningful = sorted.filter((view) => isMeaningful(view, viewer, pr));
+  const { drafts, homeless } = lineDrafts(meaningful, pr, viewer);
+  const isNoise = (view: EventView) => !isMeaningful(view, viewer, pr) || homeless.includes(view);
+  const allNoise = sorted.filter(isNoise).toReversed();
+  const lines = withReplies(drafts.toReversed(), pr, viewer);
   const fresh = lines.filter((line) => line.isNew);
   const isFreshNoise = (view: EventView) => fresh.length > 0 && view.display !== 'seen' && (since === null || view.event.at > since);
   const freshNoise = allNoise.filter(isFreshNoise);

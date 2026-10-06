@@ -21,7 +21,7 @@ import type { Pr, PrEvent, PrKey } from '../types.ts';
 import type { TileView } from '../views.ts';
 import { LOGINS, REQUEST_BOT, tileViewsOf, type PropertyBoard } from './build-board.ts';
 import type { Person } from './board-spec.ts';
-import { isAutomationLogin, specOwners } from './spec-facts.ts';
+import { botReviewFold, isAutomationLogin, isCarrier, sentWithReview, specOwners } from './spec-facts.ts';
 import { expectedSection } from './spec-sections.ts';
 
 function prStateLabel(pr: Pr): string {
@@ -152,6 +152,22 @@ function prLabels(board: PropertyBoard, key: PrKey, pr: Pr): string[] {
   return labels;
 }
 
+/** Empty reviews that carry thread replies, by review id or by time, and bot reviews that fold (2026-10-06). */
+function reviewLinkLabels(pr: Pr, events: PrEvent[]): string[] {
+  const labels: string[] = [];
+  if (events.some((event) => event.ruleReason === 'only carries replies in review threads')) {
+    labels.push('events:carrier review');
+  }
+  const carriers = pr.reviews.filter((review) => isCarrier(pr, review));
+  if (carriers.some((review) => sentWithReview(pr, review).every((comment) => comment.reviewId === undefined))) {
+    labels.push('shape:carrier matched by time');
+  }
+  if (pr.reviews.some((review) => botReviewFold(pr, review).length > 0)) {
+    labels.push('shape:bot review folds');
+  }
+  return labels;
+}
+
 /** Actors, timeline items and comment kinds the generator gaps of 2026-09-30 added, and what the poll and quiet reads make of the PR. */
 function activityLabels(board: PropertyBoard, key: PrKey, pr: Pr): string[] {
   const labels: string[] = [];
@@ -168,6 +184,7 @@ function activityLabels(board: PropertyBoard, key: PrKey, pr: Pr): string[] {
   if (pr.comments.some((comment) => comment.kind === 'review')) {
     labels.push('shape:review body');
   }
+  labels.push(...reviewLinkLabels(pr, events));
   if (events.some((event) => event.kind === 'deploy')) {
     labels.push('events:deploy');
   }
@@ -419,6 +436,9 @@ export const REQUIRED_LABELS: readonly string[] = [
   'shape:set with a stack',
   'shape:dissolved set',
   'shape:review body',
+  'events:carrier review',
+  'shape:carrier matched by time',
+  'shape:bot review folds',
   'shape:automation without [bot]',
   'shape:second outsider',
   'shape:re-review asked',
