@@ -1,13 +1,15 @@
 // The detail pane's activity list: the meaningful events of a PR, with push
-// bursts collapsed and bot noise folded into one line. Rules only; the
-// engine and FakeEngine ship the result on `PrDetail.activity`, with each
-// event cut down to what a row draws (`ActivityEvent`).
+// bursts collapsed, people's replies to a bot folded into one quiet line per
+// review thread, and bot noise folded into one line. Rules only; the engine
+// and FakeEngine ship the result on `PrDetail.activity`, with each event cut
+// down to what a row draws (`ActivityEvent`).
+import { botThreadOf, carriedBotThreadReplies, threadReplyOf } from './bot-threads.ts';
 import { reviewRequestSubject } from './events.ts';
 import { PERSONAL_ASK_KINDS, PUSH_KINDS } from './kinds.ts';
 import { isOwnTeam, sameLogin } from './mentions.ts';
 import { findComment, replyTarget } from './reply.ts';
 import { effectiveLoudness } from './loudness.ts';
-import type { EventDisplayState, EventKind, IsoTime, NotificationThread, Pr, Viewer } from './types.ts';
+import type { Comment, EventDisplayState, EventKind, IsoTime, NotificationThread, Pr, Viewer } from './types.ts';
 import type { EventView } from './views.ts';
 
 /** About this many lines show before "Show all N". */
@@ -53,11 +55,30 @@ export interface ActivityEvent {
   reason: string;
 }
 
+/** Where a reply in a review thread sits: whom it answers and the file. */
+export interface LineThread {
+  /** Who it answers: the last other person before it, or the bot that opened a bot thread (`threadReplyOf`). */
+  to: string;
+  path: string;
+}
+
+/** One reply inside a folded bot-thread line, as its expanded part shows it. */
+export interface FoldedReply {
+  /** The comment's id. */
+  id: string;
+  actor: string;
+  at: IsoTime;
+  body: string;
+}
+
 /**
- * One line of the list: a single event, or a burst of pushes by one person.
- * Its event fields are the newest event's, except `summary` (a burst says
- * "pushed 3 commits"), `display` (loud when any of them is, else the
- * newest's) and `unseen` (any of them is).
+ * One line of the list: a single event, a burst of pushes by one person, or
+ * a person's replies in one bot thread. Its event fields are the newest
+ * event's, except `summary` (a burst says "pushed 3 commits", a bot thread
+ * "alice replied to greptile-apps[bot] · 2 replies on src/x.ts"), `actor`
+ * (a bot thread: the replier), `display` (loud
+ * when any of them is, else the newest's) and `unseen` (any of them is; never
+ * on a bot-thread line).
  */
 export interface ActivityLine extends ActivityEvent {
   /**
@@ -76,6 +97,13 @@ export interface ActivityLine extends ActivityEvent {
    * the newest of them.
    */
   reply: LineReply | null;
+  /** A reply in a review thread (a bot-thread line too): whom it answers and the file. Null otherwise. */
+  thread: LineThread | null;
+  /**
+   * A quiet bot-thread line (2026-10-06): the replies it folds,
+   * oldest first, which the line expands to. Empty on every other line.
+   */
+  folded: FoldedReply[];
 }
 
 export interface ActivityList {
@@ -207,10 +235,26 @@ export function activityEvent(view: EventView): ActivityEvent {
   };
 }
 
-/** A line while the list is built: the line, and its events newest first for the reply rules. */
+/**
+ * A line while the list is built: the line, and its events newest first for
+ * the reply rules. A folded line (a bot thread) takes no reply.
+ */
 interface LineDraft {
   line: ActivityLine;
   events: EventView[];
+  folded: boolean;
+}
+
+const THREAD_TALK: EventKind[] = ['comment', 'reply_to_user', 'question_to_user', 'mention', 'team_mention'];
+
+/** The thread a single comment's line answers in, null for anything else. */
+function lineThread(view: EventView, pr: Pr | null): LineThread | null {
+  if (!pr || !THREAD_TALK.includes(view.event.kind)) {
+    return null;
+  }
+  const comment = findComment(pr, view.event.sourceId);
+  const reply = comment ? threadReplyOf(comment, pr) : null;
+  return reply === null ? null : { to: reply.to, path: reply.path };
 }
 
 function toDraft(group: EventView[], pr: Pr | null): LineDraft {
@@ -226,8 +270,126 @@ function toDraft(group: EventView[], pr: Pr | null): LineDraft {
     isNew: loud,
     eventCount: group.length,
     reply: null,
+    thread: group.length > 1 ? null : lineThread(newest, pr),
+    folded: [],
   };
-  return { line, events: newestFirst };
+  return { line, events: newestFirst, folded: false };
+}
+
+/**
+ * Which folded line an event goes to, null for none. Events of one fold need
+ * not be next to each other. Today: a person's quiet reply to a bot in a
+ * review thread and its edit, one line per thread (`botThreadOf`). A loud
+ * one (an ask, or the agent raised it) stays a line of its own. The next
+ * fold slots in here: a bot's review with its inline comments, keyed by the
+ * comments' review id.
+ */
+function foldKeyOf(view: EventView, pr: Pr | null): string | null {
+  if (!pr || view.event.kind === 'review_commented' || effectiveLoudness(view.event) === 'loud') {
+    return null;
+  }
+  const threadId = botThreadOf(view.event, pr);
+  return threadId === null ? null : `bot-thread:${threadId}`;
+}
+
+/** The replies an empty review only carries (GitHub makes one per thread reply), by comment id; empty for any other event. */
+function carriedIds(view: EventView, pr: Pr | null): string[] {
+  if (!pr || view.event.kind !== 'review_commented') {
+    return [];
+  }
+  const review = pr.reviews.find((candidate) => candidate.id === view.event.sourceId);
+  return review ? carriedBotThreadReplies(review, pr).map((comment) => comment.id) : [];
+}
+
+/** The thread comments a fold's events stand for, oldest first. */
+function foldedComments(group: EventView[], pr: Pr): Comment[] {
+  const ids = new Set(group.map((view) => view.event.sourceId));
+  return pr.comments.filter((comment) => ids.has(comment.id));
+}
+
+/**
+ * One quiet line for a person's replies in one bot thread (2026-10-06):
+ * "alice replied to greptile-apps[bot] · 2 replies on src/x.ts", the bodies
+ * folded under it. Always one person: a second one joining is no bot
+ * conversation any more (`isBotThreadReply`). Never new since you looked
+ * and no unread dot: answering a bot is housekeeping. No Reply on it
+ * either; the thread is on GitHub.
+ */
+function botThreadDraft(group: EventView[], pr: Pr): LineDraft {
+  const newestFirst = group.toReversed();
+  const newest = newestFirst[0]!;
+  const replies = foldedComments(group, pr);
+  const first = replies[0];
+  const where = first ? threadReplyOf(first, pr) : null;
+  const actor = first?.author ?? newest.event.actor;
+  const count = replies.length > 1 ? ` · ${replies.length} replies` : '';
+  const to = where?.to ?? 'a bot';
+  const path = where?.path ?? '';
+  const line: ActivityLine = {
+    ...activityEvent(newest),
+    kind: 'comment',
+    actor,
+    summary: `${actor} replied to ${to}${count}${path === '' ? '' : ` on ${path}`}`,
+    display: group.some((view) => view.display === 'quiet') ? 'quiet' : newest.display,
+    unseen: false,
+    reason: 'replies to a bot in a review thread',
+    body: null,
+    isNew: false,
+    eventCount: group.length,
+    reply: null,
+    thread: where === null ? null : { to: where.to, path: where.path },
+    folded: replies.map((comment) => ({ id: comment.id, actor: comment.author, at: comment.createdAt, body: comment.body.trim() })),
+  };
+  return { line, events: newestFirst, folded: true };
+}
+
+/**
+ * The empty review GitHub made for a reply joins the reply's line (a
+ * bot-thread fold, or an ask's own line) instead of saying "alice reviewed"
+ * a second time. A review whose reply has no line keeps its own.
+ */
+function withCarriers(drafts: LineDraft[], carriers: EventView[], pr: Pr | null): LineDraft[] {
+  const all = [...drafts];
+  for (const carrier of carriers) {
+    const ids = carriedIds(carrier, pr);
+    const home = all.find((draft) => draft.events.some((view) => view.event.kind !== 'review_commented' && ids.includes(view.event.sourceId)));
+    if (home === undefined) {
+      all.push(toDraft([carrier], pr));
+      continue;
+    }
+    home.events.push(carrier);
+    home.line.eventCount += 1;
+    if (!home.folded && carrier.unseen) {
+      home.line.unseen = true;
+    }
+  }
+  return all;
+}
+
+/**
+ * The lines of the meaningful events, oldest first: folds (one per key, at
+ * its newest event), the rest with push bursts grouped, and the reviews
+ * that only carry a reply on that reply's line.
+ */
+function lineDrafts(meaningful: EventView[], pr: Pr | null): LineDraft[] {
+  const folds = new Map<string, EventView[]>();
+  const carriers: EventView[] = [];
+  const rest: EventView[] = [];
+  for (const view of meaningful) {
+    const key = foldKeyOf(view, pr);
+    if (key !== null) {
+      folds.set(key, [...(folds.get(key) ?? []), view]);
+    } else if (carriedIds(view, pr).length > 0) {
+      carriers.push(view);
+    } else {
+      rest.push(view);
+    }
+  }
+  const drafts = groupBursts(rest).map((group) => toDraft(group, pr));
+  if (pr) {
+    drafts.push(...[...folds.values()].map((group) => botThreadDraft(group, pr)));
+  }
+  return withCarriers(drafts, carriers, pr).toSorted((a, b) => (a.line.at < b.line.at ? -1 : a.line.at > b.line.at ? 1 : 0));
 }
 
 /** The reply of one line on its own: its newest event's comment or review. */
@@ -260,7 +422,7 @@ function withReplies(drafts: LineDraft[], pr: Pr | null, viewer: Viewer | null):
   if (!pr || !viewer) {
     return lines;
   }
-  const replies = drafts.map((draft) => lineReply(draft, pr, viewer));
+  const replies = drafts.map((draft) => (draft.folded ? null : lineReply(draft, pr, viewer)));
   const owner = new Map<string, number>();
   replies.forEach((reply, index) => {
     if (reply && !owner.has(reply.commentId)) {
@@ -340,8 +502,10 @@ export function threadChangedAt(thread: NotificationThread | null, events: Event
  * The activity list for one PR. Meaningful events: human comments and
  * reviews, mentions, review requests naming you or your team, human pushes
  * (a burst by one person is one line), and lifecycle (ready, draft, merged,
- * closed, reopened). The rest (bots, CI, deploys, merge queue, agent-muted
- * events, review requests between others) goes to `noise`.
+ * closed, reopened). With `pr`, people's quiet replies to a bot in a review
+ * thread fold into one line per thread (`folded`), and a single thread reply
+ * says whom it answers (`thread`). The rest (bots, CI, deploys, merge queue,
+ * agent-muted events, review requests between others) goes to `noise`.
  *
  * While something loud is new, the unseen noise after `since` (the viewer's
  * last touch, `whatsNew().anchor.at`; null for a first look) moves to
@@ -361,13 +525,7 @@ export function activityList(
   const sorted = events.toSorted(byTime);
   const meaningful = sorted.filter((view) => isMeaningful(view, viewer));
   const allNoise = sorted.filter((view) => !isMeaningful(view, viewer)).toReversed();
-  const lines = withReplies(
-    groupBursts(meaningful)
-      .map((group) => toDraft(group, pr))
-      .toReversed(),
-    pr,
-    viewer,
-  );
+  const lines = withReplies(lineDrafts(meaningful, pr).toReversed(), pr, viewer);
   const fresh = lines.filter((line) => line.isNew);
   const isFreshNoise = (view: EventView) => fresh.length > 0 && view.display !== 'seen' && (since === null || view.event.at > since);
   const freshNoise = allNoise.filter(isFreshNoise);

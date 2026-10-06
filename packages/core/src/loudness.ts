@@ -29,6 +29,11 @@ export interface LoudnessInput {
   userRepliedAfter?: boolean;
   /** review_requested: the viewer reviewed after it, or the request was removed later. */
   requestAnswered?: boolean;
+  /**
+   * comment / review_commented: a person's reply to a bot in a review thread,
+   * or the empty review GitHub made to carry it (`botThreadOf`).
+   */
+  botThreadReply?: boolean;
 }
 
 export interface LoudnessDecision {
@@ -170,6 +175,13 @@ export const LOUDNESS_TABLE: readonly LoudnessRow[] = [
     when: (input) => input.kind === 'comment_edited',
     loudness: 'quiet',
     reason: 'edited a comment',
+  },
+  {
+    // Answering a review bot ("fixed") is housekeeping, not news, on any PR (2026-10-06). Asks have their own kinds and stay loud above.
+    name: 'reply to a bot in a review thread',
+    when: (input) => (input.kind === 'comment' || input.kind === 'review_commented') && input.botThreadReply === true,
+    loudness: 'quiet',
+    reason: 'replied to a bot in a review thread',
   },
   {
     // The author pushed or replied after the viewer asked for changes: that is aimed at the viewer.

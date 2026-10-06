@@ -1,7 +1,10 @@
-// PR-level invariants: tier and whose move, snoozes, quiet reads and pings
-// (DESIGN.md "Rules layer: one home per fact", "Handled quietly", "GitHub
-// unread is PostPile unread", "Live poll and Mac pings", "Look closer pings").
+// PR-level invariants: tier and whose move, snoozes, quiet reads, pings and
+// the PR pane's activity list (DESIGN.md "Rules layer: one home per fact",
+// "Handled quietly", "GitHub unread is PostPile unread", "Live poll and Mac
+// pings", "Look closer pings", "The PR pane").
+import { activityList } from '../activity.ts';
 import { lookCloserEvent } from '../glance-pings.ts';
+import { eventView } from '../loudness.ts';
 import { pingRule } from '../pings.ts';
 import { judgedReadCheck, quietReadCheck, requestGoneReadCheck, touchedReadCheck } from '../quiet-reads.ts';
 import { snoozePhase } from '../snooze.ts';
@@ -11,7 +14,9 @@ import type { BoardSpec, RequestTarget } from './board-spec.ts';
 import { buildBoard, tileViewsOf, type PropertyBoard } from './build-board.ts';
 import { describeTurn, ensure, eventsOf, isNews, prOf, trackedRows, type Invariant } from './invariant.ts';
 import {
+  answersBotInThread,
   inGitHubQueue,
+  isBotThreadAnswer,
   isViewerLogin,
   isViewerRequestEvent,
   latestViewerRequestAt,
@@ -312,6 +317,40 @@ export const prIconMatchesTheSpec: Invariant = {
   },
 };
 
+/**
+ * The activity list accounts for every event once (lines, where a push burst
+ * or a bot thread stands for several, the noise and the fresh noise), and
+ * folds people's quiet answers to bots (2026-10-06): a bot-thread line is
+ * never new, never loud, has no unread dot and folds only comments that
+ * answer bots in their thread; no quiet answer to a bot keeps a line of its own.
+ */
+export const activityFoldsBotAnswers: Invariant = {
+  name: 'the activity list shows every event once and folds quiet answers to bots',
+  check(board) {
+    for (const [key, events] of board.events) {
+      const pr = prOf(board, key);
+      const list = activityList(events.map(eventView), board.viewer, null, pr);
+      const lines = [...list.fresh, ...list.earlier];
+      const shown = lines.reduce((sum, line) => sum + line.eventCount, 0) + list.noise.length + list.freshNoise.length;
+      ensure(shown === events.length, `${key}: the activity list shows ${shown} of ${events.length} events`);
+      for (const line of lines) {
+        if (line.folded.length > 0) {
+          ensure(!line.isNew && !line.unseen && line.display !== 'loud', `${key}: bot-thread line ${line.id} is new, unread or loud`);
+          const answers = line.folded.every((reply) => {
+            const comment = pr.comments.find((candidate) => candidate.id === reply.id);
+            return comment !== undefined && answersBotInThread(pr, comment);
+          });
+          ensure(answers, `${key}: bot-thread line ${line.id} folds a comment that answers no bot`);
+          continue;
+        }
+        const event = line.eventCount === 1 ? events.find((candidate) => candidate.id === line.id) : undefined;
+        const loudness = event?.override ? event.override.loudness : event?.ruleLoudness;
+        ensure(event === undefined || loudness === 'loud' || !isBotThreadAnswer(pr, event), `${key}: quiet answer to a bot ${line.id} has a line of its own`);
+      }
+    }
+  },
+};
+
 export const PR_INVARIANTS: readonly Invariant[] = [
   prIconMatchesTheSpec,
   toReviewMatchesReviewMove,
@@ -320,4 +359,5 @@ export const PR_INVARIANTS: readonly Invariant[] = [
   asksNeverAutoClear,
   pingsOnlyForLiveNews,
   botRequestWorksLikeHuman,
+  activityFoldsBotAnswers,
 ];

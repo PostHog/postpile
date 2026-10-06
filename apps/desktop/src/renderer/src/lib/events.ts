@@ -70,3 +70,16 @@ export function summaryLead(summary: string): string {
   const colon = summary.indexOf(': ');
   return colon === -1 ? summary : summary.slice(0, colon);
 }
+
+/**
+ * A thread line ends in " on <file>" (core's `ActivityLine.thread`); split
+ * the file off so it can be drawn in mono. Null when the text has no such
+ * ending.
+ */
+export function splitPath(text: string, path: string): { before: string; path: string } | null {
+  const ending = ` on ${path}`;
+  if (path === '' || !text.endsWith(ending)) {
+    return null;
+  }
+  return { before: `${text.slice(0, -ending.length)} on `, path };
+}
