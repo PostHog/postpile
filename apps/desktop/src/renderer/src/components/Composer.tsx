@@ -1,6 +1,9 @@
+import type { ReviewNoteSource } from '@postpile/core';
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useActions } from '../api/actions.tsx';
+import { useTools } from '../api/tools.ts';
 import type { GithubWrite } from '../lib/guard.ts';
+import { reviewNoteSource } from '../lib/review-note.ts';
 import { Button } from './Button.tsx';
 
 /** What the pane writes to GitHub; one composer is open at a time. */
@@ -24,6 +27,9 @@ export interface ComposeState {
   draftOf(key: string): string;
   /** Keeps a draft without re-rendering anything: the composer holds the live text itself. */
   setDraft(key: string, text: string): void;
+  /** The agent's last draft for a target, null when the agent has not drafted it: tells an agent note from the user's own (telemetry). */
+  agentDraftOf(key: string): string | null;
+  setAgentDraft(key: string, text: string | null): void;
 }
 
 const ComposeContext = createContext<ComposeState | null>(null);
@@ -47,6 +53,7 @@ export function useComposeState(): ComposeState {
   const [open, setOpen] = useState<ComposeTarget | null>(null);
   const [jump, setJump] = useState<{ commentId: string; seq: number } | null>(null);
   const drafts = useRef(new Map<string, string>());
+  const agentDrafts = useRef(new Map<string, string>());
   return useMemo(
     () => ({
       open,
@@ -59,6 +66,14 @@ export function useComposeState(): ComposeState {
       close: (key: string) => setOpen((current) => (current !== null && composeKey(current) === key ? null : current)),
       draftOf: (key: string) => drafts.current.get(key) ?? '',
       setDraft: (key: string, text: string) => drafts.current.set(key, text),
+      agentDraftOf: (key: string) => agentDrafts.current.get(key) ?? null,
+      setAgentDraft: (key: string, text: string | null) => {
+        if (text === null) {
+          agentDrafts.current.delete(key);
+        } else {
+          agentDrafts.current.set(key, text);
+        }
+      },
     }),
     [open, jump],
   );
@@ -79,23 +94,35 @@ interface ComposerProps {
   submitTitle: string;
   sending: boolean;
   drafting: boolean;
-  /** The agent's text: from the user's words when there are any, else from the PR alone. Null when drafting failed. */
-  draft: (gist: string) => Promise<string | null>;
-  /** True when it went out. */
-  send: (body: string) => Promise<boolean>;
+  /**
+   * The agent's text: from the user's words when there are any, else from the PR alone. Null when drafting failed.
+   * `quiet`: the draft on open, nobody clicked for it, so a failure shows no toast.
+   */
+  draft: (gist: string, quiet?: boolean) => Promise<string | null>;
+  /**
+   * Review notes (Approve with a note, Comment review): an empty composer asks
+   * the agent for a draft as it opens, since hand-written notes are rare
+   * (2026-10-06). Not while the write is blocked or the agent is known to be
+   * off, and never over a kept draft. A failure stays quiet: the box stays empty.
+   */
+  draftsOnOpen?: boolean;
+  /** True when it went out. `source`: whether the text is the agent's draft, edited, or the user's own (telemetry). */
+  send: (body: string, source: ReviewNoteSource) => Promise<boolean>;
   /** Approve shows its result at once (optimistic), so its composer closes on click. The note stays when it failed. */
   closesOnClick?: boolean;
 }
 
 /**
  * The one way to write to GitHub from the pane: opened in place under what
- * it answers, one box, the agent as a link ("Let the agent draft" on an empty
- * box, "Rewrite with the agent" once there is text), Cancel, and a button that
- * names the target. Nothing is sent before that press; an empty text cannot
- * be sent. Drafts stay per target until sent or cancelled.
+ * it answers, one box, the agent as a pill ("Draft with agent" on an empty
+ * box, "Rewrite with agent" once there is text), Cancel, and a button that
+ * names the target. Review notes start drafting on open (`draftsOnOpen`).
+ * Nothing is sent before that press; an empty text cannot be sent. Drafts
+ * stay per target until sent or cancelled.
  */
 export function Composer(props: ComposerProps) {
   const actions = useActions();
+  const tools = useTools();
   const compose = useCompose();
   const key = composeKey(props.target);
   const [text, setText] = useState(() => compose.draftOf(key));
@@ -114,6 +141,13 @@ export function Composer(props: ComposerProps) {
     compose.setDraft(key, next);
   }
 
+  function takeAgentDraft(result: string | null) {
+    if (result !== null && open.current) {
+      changeText(result);
+      compose.setAgentDraft(key, result);
+    }
+  }
+
   // The pane scrolls; bring the whole composer into view when it opens.
   useEffect(() => {
     box.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -121,27 +155,42 @@ export function Composer(props: ComposerProps) {
 
   function cancel() {
     changeText('');
+    compose.setAgentDraft(key, null);
     compose.close(key);
   }
 
   async function draft() {
-    const result = await props.draft(text);
-    if (result !== null && open.current) {
-      changeText(result);
-    }
+    takeAgentDraft(await props.draft(text));
   }
 
   async function submit() {
+    const source = reviewNoteSource(text, compose.agentDraftOf(key));
     if (props.closesOnClick) {
       compose.close(key);
     }
-    if (await props.send(text)) {
+    if (await props.send(text, source)) {
       changeText('');
+      compose.setAgentDraft(key, null);
       compose.close(key);
     }
   }
 
   const blocked = actions.blockedReason(props.write);
+  // Once per opening, and only into an empty box: the kept draft (the user's
+  // text or an earlier agent draft) wins. It waits while a draft is still out
+  // (the other review note's shares the busy key) and while the write is
+  // blocked or the agent is known to be off (claude missing, logged out or at
+  // its limit). It fails quietly: nobody clicked, so no toast, the box stays
+  // empty. The ref also keeps StrictMode's second effect run from calling twice.
+  const autoDrafted = useRef(false);
+  const agentOff = tools.data?.agentOn === false;
+  useEffect(() => {
+    if (!props.draftsOnOpen || autoDrafted.current || props.drafting || blocked !== null || agentOff || compose.draftOf(key) !== '') {
+      return;
+    }
+    autoDrafted.current = true;
+    void props.draft('', true).then(takeAgentDraft);
+  });
   return (
     <div
       ref={box}

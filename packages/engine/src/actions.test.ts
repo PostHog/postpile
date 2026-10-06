@@ -234,10 +234,34 @@ describe('approve with comment and comment review', () => {
     const prompt = h.runner.promptsFor('draft_comment').at(-1) ?? '';
     expect(prompt).toContain('comment-only review');
     expect(prompt).toContain('Verdict: ');
-    expect(prompt).toContain('one or two sentences, never more');
+    expect(prompt).toContain('one or two short sentences');
+    expect(prompt).toContain('No nitpicks');
+    expect(prompt).toContain('two at most');
     // A summary of the change made the draft retell it to the author.
     expect(prompt).not.toContain('Does: ');
     expect(prompt).not.toContain('The comment is addressed to @');
+    expect(h.writer.calls).toEqual([]);
+  });
+
+  it('starts an approve note with a rotating opener and adds only the agent\'s one point', async () => {
+    const h = makeHarness();
+    h.reader.addPr(pr, makeThreadFor(pr));
+    await h.engine.sync({ maxAgentCalls: 50 });
+    h.runner.answer('draft_comment', { body: 'Watch the queue depth after deploy.' });
+
+    const first = await h.engine.draftReviewNote(pr.key, 'approve');
+
+    expect(first.body).toBe('Looks good. Watch the queue depth after deploy.');
+    const prompt = h.runner.promptsFor('draft_comment').at(-1) ?? '';
+    expect(prompt).toContain('never an opener');
+    expect(prompt).toContain('the body is an empty string');
+    expect(prompt).toContain('one at most');
+    expect(prompt).toContain('never list what was checked');
+
+    // Nothing worth saying: the opener alone, and not the same one again.
+    h.runner.answer('draft_comment', { body: '' });
+    const second = await h.engine.draftReviewNote(pr.key, 'approve');
+    expect(second.body).toBe('LGTM.');
     expect(h.writer.calls).toEqual([]);
   });
 });

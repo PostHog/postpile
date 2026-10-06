@@ -9,6 +9,7 @@ import type {
   BatchApproveResult,
   PrApproveResult,
   ReviewNoteKind,
+  ReviewNoteSource,
   AgentRefreshOptions,
   AgentRefreshResult,
   AgentRefreshTarget,
@@ -1293,12 +1294,14 @@ export class Engine implements EngineService {
     return this.deps.pendingWrites.discard(() => this.writesStatus());
   }
 
-  async approve(prKey: PrKey, headOid: string, body = ''): Promise<ActionResult> {
+  async approve(prKey: PrKey, headOid: string, body = '', noteSource?: ReviewNoteSource): Promise<ActionResult> {
     const result = await this.prActions.approve(prKey, headOid, body);
     if (result.ok) {
-      // The single approve runs from the detail pane's action bar (CLAUDE.md
+      // The single approve runs from the detail pane's review row (CLAUDE.md
       // "Approve is final"); the agent-backed ones go through approveMany.
-      this.telemetry.capture('pr_approved', { from: 'detail', was_agent_approved: false });
+      const withNote = body.trim() !== '';
+      const note = withNote ? noteSource : 'none';
+      this.telemetry.capture('pr_approved', { from: 'detail', was_agent_approved: false, with_note: withNote, ...(note ? { note } : {}) });
     }
     return result;
   }
@@ -1323,7 +1326,7 @@ export class Engine implements EngineService {
       const result = await this.prActions.approve(prKey, headOid);
       results.push({ prKey, ok: result.ok, message: result.message });
       if (result.ok) {
-        this.telemetry.capture('pr_approved', { from, was_agent_approved: true });
+        this.telemetry.capture('pr_approved', { from, was_agent_approved: true, with_note: false, note: 'none' });
         settleToken = result.settleToken ?? settleToken;
       }
     }
@@ -1412,8 +1415,12 @@ export class Engine implements EngineService {
     return this.tiles.unsnooze(tileId);
   }
 
-  commentReview(prKey: PrKey, headOid: string, body: string): Promise<ActionResult> {
-    return this.prActions.commentReview(prKey, headOid, body);
+  async commentReview(prKey: PrKey, headOid: string, body: string, noteSource?: ReviewNoteSource): Promise<ActionResult> {
+    const result = await this.prActions.commentReview(prKey, headOid, body);
+    if (result.ok) {
+      this.telemetry.capture('comment_review_sent', noteSource ? { note: noteSource } : {});
+    }
+    return result;
   }
 
   draftAsk(prKey: PrKey, person: string, intent: string): Promise<{ body: string }> {

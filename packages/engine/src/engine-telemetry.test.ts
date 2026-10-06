@@ -134,7 +134,26 @@ describe('engine telemetry', () => {
     const h = await synced();
     const result = await h.engine.approve(pr.key, pr.headOid);
     expect(result.ok).toBe(true);
-    expect(h.telemetry.events).toContainEqual({ event: 'pr_approved', props: { from: 'detail', was_agent_approved: false } });
+    expect(h.telemetry.events).toContainEqual({ event: 'pr_approved', props: { from: 'detail', was_agent_approved: false, with_note: false, note: 'none' } });
+  });
+
+  it('says whether an approval carried a note and where it came from, never the text', async () => {
+    const h = await synced();
+    await h.engine.approve(pr.key, pr.headOid, 'Looks good.', 'agent_edited');
+    expect(h.telemetry.events).toContainEqual({ event: 'pr_approved', props: { from: 'detail', was_agent_approved: false, with_note: true, note: 'agent_edited' } });
+  });
+
+  it('leaves the note source out when the request did not say', async () => {
+    const h = await synced();
+    await h.engine.approve(pr.key, pr.headOid, 'Looks good.');
+    expect(h.telemetry.events).toContainEqual({ event: 'pr_approved', props: { from: 'detail', was_agent_approved: false, with_note: true } });
+  });
+
+  it('fires comment_review_sent with the note source on a posted comment review', async () => {
+    const h = await synced();
+    const result = await h.engine.commentReview(pr.key, pr.headOid, 'The retry path has no test yet.', 'agent');
+    expect(result.ok).toBe(true);
+    expect(h.telemetry.events).toContainEqual({ event: 'comment_review_sent', props: { note: 'agent' } });
   });
 
   it('fires marked_read on markRead, with origin tile', async () => {

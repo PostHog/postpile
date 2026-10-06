@@ -78,6 +78,19 @@ describe('draftCommentPrompt, review note gist', () => {
     expect(withGist).toContain('What the user wants to say, in their own words');
     expect(withGist).toContain('in their own words (a gist or a rough draft):\nwatch the cron after deploy\n');
   });
+
+  it('keeps review notes short and in plain words, and asks only for the point after the opener for an approval', () => {
+    const comment = draftCommentPrompt({ pr, viewer, person: null, intent: 'The user is leaving a comment-only review.', context: emptyContext });
+    expect(comment).toContain('two at most, each about 20 words or fewer');
+    expect(comment).toContain('Plain words over code words.');
+    expect(comment).not.toContain('empty string');
+    const point = draftCommentPrompt({ pr, viewer, person: null, intent: 'The user is approving this PR.', pointOnly: true, context: emptyContext });
+    expect(point).toContain('one at most, each about 20 words or fewer');
+    expect(point).toContain('The body is an empty string when nothing is worth adding after the opener.');
+    // An ask is never point-only, whatever the flag says.
+    const ask = draftCommentPrompt({ pr, viewer, person: 'bob', intent: 'why?', pointOnly: true, context: emptyContext });
+    expect(ask).not.toContain('empty string');
+  });
 });
 
 describe('chatPrompt on a whole topic', () => {

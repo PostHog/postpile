@@ -25,7 +25,7 @@ import { loadViewer } from '../viewer-meta.ts';
 import type { GitHubWrites } from '../writes/github-writes.ts';
 import type { ReadMarker } from './read-marker.ts';
 import { failed, ok } from './results.ts';
-import { reviewNoteGlanceNotes, reviewNoteIntent } from './review-note.ts';
+import { approveNoteBody, LAST_APPROVE_OPENER_KEY, nextApproveOpener, reviewNoteGlanceNotes, reviewNoteIntent, reviewNotePointOnly } from './review-note.ts';
 
 /** Why an approval is refused when the stored head moved past the one on screen. */
 export const NEW_COMMITS_SINCE_LOOKED = 'New commits since you looked; take another look';
@@ -239,12 +239,21 @@ export class PrActions {
   /**
    * The draft for the review note popover (Approve with comment, Comment
    * review): addressed to nobody, fed the glance. A non-empty `gist` is the
-   * user's own text ("Rewrite with the agent") the note is written from.
+   * user's own text ("Rewrite with the agent") the note is written from. An
+   * approve note starts with an opener picked here (`APPROVE_OPENERS`, never
+   * the last one again); the agent only adds the one point after it, or nothing.
    */
   async draftReviewNote(key: PrKey, kind: ReviewNoteKind, gist = ''): Promise<{ body: string }> {
     const { pr, viewer } = this.draftInputs(key);
     const notes = reviewNoteGlanceNotes(this.store.glances.get(key));
-    return this.agent.draftComment({ pr, viewer, person: null, intent: reviewNoteIntent(kind), notes, gist, context: this.contextFor(key) });
+    const pointOnly = reviewNotePointOnly(kind);
+    const draft = await this.agent.draftComment({ pr, viewer, person: null, intent: reviewNoteIntent(kind), notes, gist, pointOnly, context: this.contextFor(key) });
+    if (!pointOnly) {
+      return draft;
+    }
+    const opener = nextApproveOpener(this.store.meta.get(LAST_APPROVE_OPENER_KEY));
+    this.store.meta.set(LAST_APPROVE_OPENER_KEY, opener);
+    return { body: approveNoteBody(opener, draft.body) };
   }
 
   /**

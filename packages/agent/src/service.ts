@@ -201,6 +201,12 @@ export interface DraftCommentInput {
    * from the PR alone.
    */
   gist?: string;
+  /**
+   * Approve notes only: PostPile adds the opener ("Looks good."), so the
+   * body is just the one point after it, and empty when nothing is worth
+   * saying (the usual case).
+   */
+  pointOnly?: boolean;
   context: PromptContext;
 }
 

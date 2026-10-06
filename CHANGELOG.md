@@ -8,6 +8,11 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 - Every line in a PR's Activity links to GitHub: click its age ("5h") to open that comment, review or commit there. Hovering shows the full date and time. Events GitHub gives no link to, like review requests and merges, keep a plain age.
 
+### Changed
+
+- "Approve with a note" and "Comment review" start with an agent draft as soon as they open, ready to edit or send. A note you already started is kept as is.
+- Approve notes read like a person wrote them: "Looks good." (worded a bit differently each time) plus at most one plain point worth watching, often nothing more. No more lists of what was checked or code names you never looked at. Comment reviews keep to one plain point too.
+
 ### Fixed
 
 - When you approve or review a PR with text, the Activity list shows your review once. It used to add a second "commented" line with the same text.

@@ -33,6 +33,7 @@ import type {
   PrKey,
   RepoOverview,
   ReviewNoteKind,
+  ReviewNoteSource,
   SetupAcceptRequest,
   SetupAcceptResult,
   SetupFitRequest,
@@ -151,15 +152,16 @@ export interface Actions {
   /**
    * `headOid`: the head commit on screen; the server refuses the approval when
    * the PR moved past it. `body`: the note from "Approve with comment", empty for none.
-   * Returns true when it went out.
+   * `noteSource`: where the note came from, for telemetry only. Returns true when it went out.
    */
-  approve(prKey: PrKey, headOid: string, body?: string): Promise<boolean>;
+  approve(prKey: PrKey, headOid: string, body?: string, noteSource?: ReviewNoteSource): Promise<boolean>;
   /**
    * "Comment review": a review with event COMMENT on `headOid`, refused like
-   * approve when the PR moved past it. Final, blocked while locked. Returns
-   * true when it went out.
+   * approve when the PR moved past it. Final, blocked while locked.
+   * `noteSource`: where the text came from, for telemetry only. Returns true
+   * when it went out.
    */
-  commentReview(prKey: PrKey, headOid: string, body: string): Promise<boolean>;
+  commentReview(prKey: PrKey, headOid: string, body: string, noteSource?: ReviewNoteSource): Promise<boolean>;
   /**
    * The ✨ Approve of a tile or the topic, after the confirm list: one call for
    * the covered PRs. Optimistic like the pane's approve, never an Undo.
@@ -256,9 +258,10 @@ export interface Actions {
   /**
    * The agent's draft for "Approve with a note" or "Comment review", or null
    * when drafting failed. `gist`: the user's words to write it from ("Rewrite
-   * with the agent"); empty drafts from the PR alone.
+   * with the agent"); empty drafts from the PR alone. `quiet`: no error toast
+   * on failure, for the draft on open that nobody clicked for.
    */
-  draftReviewNote(prKey: PrKey, kind: ReviewNoteKind, gist?: string): Promise<string | null>;
+  draftReviewNote(prKey: PrKey, kind: ReviewNoteKind, gist?: string, quiet?: boolean): Promise<string | null>;
   /** The agent's draft of a reply to one comment, from its thread and `gist` (empty: from the thread alone). Null when drafting failed. */
   draftReply(prKey: PrKey, commentId: string, gist: string): Promise<string | null>;
   /** Returns true when the comment went out. */
@@ -755,12 +758,15 @@ export function ActionsProvider(props: { children: ReactNode }) {
   }
 
   /** An agent draft of a PR comment from `path`; a failure says why in the toast and returns null. */
-  async function draft(busyKey: string, path: string, body: object): Promise<string | null> {
+  /** `quiet`: a draft nobody clicked for (the review notes' draft on open) fails without a toast. */
+  async function draft(busyKey: string, path: string, body: object, quiet = false): Promise<string | null> {
     try {
       const result = await withBusy(busyKey, () => request<{ body: string }>('POST', path, body));
       return result.body;
     } catch (error) {
-      show('error', `Draft failed: ${errorText(error)}`);
+      if (!quiet) {
+        show('error', `Draft failed: ${errorText(error)}`);
+      }
       return null;
     }
   }
@@ -924,13 +930,13 @@ export function ActionsProvider(props: { children: ReactNode }) {
     markThreadRead: async (threadId) => {
       await run(`markThread:${threadId}`, 'markRead', () => request('POST', `/api/notifications/${encodeURIComponent(threadId)}/mark-read`));
     },
-    approve: (prKey, headOid, body = '') =>
+    approve: (prKey, headOid, body = '', noteSource) =>
       runApprove(`approve:${prKey}`, [prKey], async () => {
-        const result = await request<ActionResult>('POST', `${prPath(prKey)}/approve`, { headOid, body });
+        const result = await request<ActionResult>('POST', `${prPath(prKey)}/approve`, { headOid, body, noteSource });
         return { ...result, results: [{ prKey, ok: result.ok, message: result.message }] };
       }),
-    commentReview: (prKey, headOid, body) =>
-      run(`commentReview:${prKey}`, 'commentReview', () => request('POST', `${prPath(prKey)}/comment-review`, { headOid, body })),
+    commentReview: (prKey, headOid, body, noteSource) =>
+      run(`commentReview:${prKey}`, 'commentReview', () => request('POST', `${prPath(prKey)}/comment-review`, { headOid, body, noteSource })),
     approveAgent: async (input) => {
       const prKeys = input.prs.map((pr) => pr.prKey);
       await runApprove(input.busyKey, prKeys, () => request<BatchApproveResult>('POST', '/api/agent-actions/approve', { prs: input.prs, from: input.from }));
@@ -1021,7 +1027,7 @@ export function ActionsProvider(props: { children: ReactNode }) {
     markOpenedRead,
     refreshGlanceOnLook,
     draftAsk: (prKey, person, intent) => draft(`ask:${prKey}`, `${prPath(prKey)}/draft-ask`, { person, intent }),
-    draftReviewNote: (prKey, kind, gist = '') => draft(`reviewNote:${prKey}`, `${prPath(prKey)}/draft-review-note`, { kind, gist }),
+    draftReviewNote: (prKey, kind, gist = '', quiet = false) => draft(`reviewNote:${prKey}`, `${prPath(prKey)}/draft-review-note`, { kind, gist }, quiet),
     draftReply: (prKey, commentId, gist) => draft(`reply:${prKey}:${commentId}`, `${prPath(prKey)}/draft-reply`, { commentId, gist }),
     sendComment: (prKey, body) => run(`comment:${prKey}`, 'comment', () => request('POST', `${prPath(prKey)}/comment`, { body })),
     replyToComment: (prKey, commentId, body) =>

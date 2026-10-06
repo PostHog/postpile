@@ -605,6 +605,12 @@ export interface ApprovePrRequest {
  */
 export type ReviewNoteKind = 'approve' | 'comment';
 
+/**
+ * Where a sent review note came from, for telemetry only: the agent's draft
+ * as is, the agent's draft changed by the user, or the user's own text.
+ */
+export type ReviewNoteSource = 'agent' | 'agent_edited' | 'own';
+
 export interface PrApproveResult {
   prKey: PrKey;
   ok: boolean;

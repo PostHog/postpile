@@ -1620,6 +1620,15 @@ the app meanwhile.
 
 ## Decided
 
+- **Review-note composers draft on open; an approve note is "Looks good"
+  plus at most one point** (2026-10-06, owner; DESIGN.md "The PR pane" ›
+  One composer and "Review note drafts"): Approve with a note and Comment
+  review ask the agent as they open (only into an empty box, not while
+  blocked); Ask stays manual. Approve notes start with an opener the code
+  rotates (never the same twice in a row) and add one plain-words point
+  at most: no checklists, no nitpicks, no identifiers the user cannot
+  place. `pr_approved` says whether a note went along and where it came
+  from; comment reviews send `comment_review_sent`.
 - **The unread dot drains over the dwell and ripples out on read**
   (2026-10-06, owner, mockup variants F countdown and C removal; DESIGN.md
   "Marked when the dwell ends"): the tile row's dot of the PR in the pane
