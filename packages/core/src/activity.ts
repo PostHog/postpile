@@ -346,7 +346,8 @@ function botThreadDraft(group: EventView[], pr: Pr): LineDraft {
 /**
  * The empty review GitHub made for a reply joins the reply's line (a
  * bot-thread fold, or an ask's own line) instead of saying "alice reviewed"
- * a second time. A review whose reply has no line keeps its own.
+ * a second time. A review whose reply has no line keeps its own, and so does
+ * one the agent or the user raised to loud (`lineDrafts` never passes it).
  */
 function withCarriers(drafts: LineDraft[], carriers: EventView[], pr: Pr | null): LineDraft[] {
   const all = [...drafts];
@@ -379,7 +380,7 @@ function lineDrafts(meaningful: EventView[], pr: Pr | null): LineDraft[] {
     const key = foldKeyOf(view, pr);
     if (key !== null) {
       folds.set(key, [...(folds.get(key) ?? []), view]);
-    } else if (carriedIds(view, pr).length > 0) {
+    } else if (effectiveLoudness(view.event) !== 'loud' && carriedIds(view, pr).length > 0) {
       carriers.push(view);
     } else {
       rest.push(view);

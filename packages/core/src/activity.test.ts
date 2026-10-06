@@ -390,6 +390,16 @@ describe('activityList bot threads', () => {
     expect(lines(pr, ['r1'])[0]?.display).toBe('quiet');
   });
 
+  it('keeps a carrier review the agent raised to loud on a new line of its own', () => {
+    const pr = prWith({ t1: [say('g1', BOT, 1, 'nit'), say('a1', 'alice', 2)] }, { reviews: [carrier('r1', 'alice', 2)] });
+    const views = deriveEvents(pr, who, null).map((event) =>
+      eventView(event.sourceId === 'r1' ? { ...event, override: { loudness: 'loud', reason: 'approves in all but name', by: 'agent' } } : event),
+    );
+    const built = activityList(views, who, null, pr);
+    expect(built.fresh.map((line) => [line.kind, line.isNew])).toEqual([['review_commented', true]]);
+    expect(built.earlier.map((line) => [line.summary, line.eventCount])).toEqual([[`alice replied to ${BOT} on a.ts`, 1]]);
+  });
+
   it("puts the review GitHub made for an ask on the ask's line, not a second \"reviewed\" line", () => {
     const pr = prWith({ t1: [say('g1', BOT, 1, 'nit'), say('a1', 'alice', 2, `@${me} is this real?`)] }, { reviews: [carrier('r1', 'alice', 2)] });
     const built = list(pr);
