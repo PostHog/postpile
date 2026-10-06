@@ -1,8 +1,12 @@
+import { ActivityRowsJob } from './activity-rows.ts';
 import { BotBodyTrimJob } from './bot-body-trim.ts';
 import { ChecksStripJob } from './checks-strip.ts';
 import { DiscussionRowsJob } from './discussion-rows.ts';
 import type { StorageJob } from './runner.ts';
 import { SnapshotStripJob } from './snapshot-strip.ts';
+import { SnapshotRetireJob } from './snapshot-retire.ts';
+import { SnapshotStrip2Job } from './snapshot-strip-2.ts';
+import { TextRowsJob } from './text-rows.ts';
 
 /**
  * Every storage job, in the order they run. A job starts only once every
@@ -10,5 +14,5 @@ import { SnapshotStripJob } from './snapshot-strip.ts';
  * in turn. Append only: never reorder them, rename one or reuse a meta key.
  */
 export function storageJobs(): StorageJob[] {
-  return [new BotBodyTrimJob(), new ChecksStripJob(), new DiscussionRowsJob(), new SnapshotStripJob()];
+  return [new BotBodyTrimJob(), new ChecksStripJob(), new DiscussionRowsJob(), new SnapshotStripJob(), new ActivityRowsJob(), new SnapshotStrip2Job(), new TextRowsJob(), new SnapshotRetireJob()];
 }

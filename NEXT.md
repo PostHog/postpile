@@ -6,6 +6,24 @@ now".
 
 ## Done
 
+- The rest of the PR as rows, `pr_snapshot` retired (2026-10-06, for
+  0.23.0; DESIGN.md "Big inboxes" › PR storage: the rest of the PR as
+  rows, and "Storage jobs"; steps 6 to 8 of normalizing the PR snapshot,
+  Later): migration 033 adds `pr_commit`, `pr_timeline` and `pr_file`
+  (PK `(pr_key, path)`, duplicates refused), 034 the text columns on
+  `pr` (url, sizes, labels, review decision, merger, `truncated`,
+  `cap_hits`, `absent_fields`) and `pr_body`, 035 is the version barrier.
+  Storage jobs `activity_rows`, `snapshot_strip_2`, `text_rows` and
+  `snapshot_retire` backfill, switch (`rows_ready:activity`,
+  `rows_ready:text`), then empty and drop `pr_snapshot`; after the text
+  switch nothing reads or writes it. Missing stays missing (NULL cap hits
+  never vouch, a PR without assignees still refetches). Measured on
+  copies at the 0.22.0 state: every PR, its events, glance hash and
+  prompt text identical, board and PR details byte-identical; heavy jobs
+  3.7 s of work over 9.6 s, longest slice 118 ms, peak WAL 9 MB; used
+  space 873 → 852 MB with the 110 MB table gone. Hot-set heap unchanged
+  (58 MB on heavy): the lists and text were small. Not tried by hand: the
+  app on a real heavy database.
 - Bot talk leaves agent work (2026-10-06, for 0.22.0; DESIGN.md "Bot
   talk leaves agent work"): core `bot-talk.ts` (`isBotCommand`,
   `isBotTalk`, `humanDiscussion`, `humanReviews`) and `PrEvent.chatter`
@@ -1522,7 +1540,15 @@ the app meanwhile.
      (event derivation, write actions, lessons, "Why?" excerpts).
      `for-whom.ts` then reads `pr.mentioned_teams` instead of scanning
      bodies. Built for 0.22.0 (Done).
-  6. Activity view: fold a review's inline comments under that review in
+  6. Commits, timeline and files as rows (`pr_commit`, `pr_timeline`,
+     `pr_file`, migration 033), the json stripped of them. Built for
+     0.23.0 (Done).
+  7. PR text and short fields as header columns and `pr_body` (034):
+     after the switch no read takes the json. Built for 0.23.0 (Done).
+  8. Retire `pr_snapshot`: version barrier migration 035, then the
+     storage job `snapshot_retire` empties and drops it. Built for 0.23.0
+     (Done).
+  9. Activity view: fold a review's inline comments under that review in
      the PR pane, by `Comment.reviewId` (fetched since 0.22.0; rows filled
      from older json have none, so those keep today's lines until a
      refetch). Bot reviews first. `bot-threads.ts` matches empty carrier
@@ -1540,7 +1566,9 @@ the app meanwhile.
     in one read transaction, so a read-only CLI or MCP never mixes two
     commits. Parse caches drop when the projection changes.
   - Completion is checked from the data, never from an empty collection.
-    Jobs fail closed.
+    Jobs fail closed, except the row backfills: they switch at the end of
+    their walk without the PRs they rejected, which then count as not
+    stored until a fetch brings them back (0.23.0, Codex review on #140).
   - Revisions move through the store-wide counter (`prs.ts`, meta
     `snapshot_revision`), only when what a read returns changes.
     `snapshot_revision` keeps its name; a rename would need its own
@@ -1555,11 +1583,10 @@ the app meanwhile.
   - Compaction (`VACUUM INTO`) is offered later as an explicit action,
     never at startup or quit. Freed pages are reused meanwhile.
 
-  Deferred: commits, timeline and files as rows; PR text and the remaining
-  short fields; retiring `pr_snapshot` (with its own numbered migration, so
-  guarded older builds refuse the database instead of querying a dropped
-  table); text-free skeletons for old merged and closed PRs (no age
-  threshold now: a refetch cannot bring back older paged history). The
+  Deferred: text-free skeletons for old merged and closed PRs (no age
+  threshold now: a refetch cannot bring back older paged history). Later
+  cleanup: after a few releases, drop the per-phase json backfills and
+  either keep one importer for laggard databases or refuse them (open). The
   slim `PrPaneView` for the renderer shipped on its own, apart from this
   plan (Done, "Slim PR pane": the `pr` part about 106 → 7 KB per open PR).
   Researched, not planned yet: a statement cache for `all`, `get` and `run`
@@ -1593,6 +1620,14 @@ the app meanwhile.
 
 ## Decided
 
+- **PR storage finished without the json** (2026-10-06, checked with
+  Codex GPT-6.1): commits stay per PR (no global commit table), files are
+  keyed by path with `ord` kept, labels, assignees and reviewers stay
+  JSON columns, the description gets its own `pr_body` table. Missing
+  stays missing instead of canonical defaults (`truncated`, `cap_hits`
+  NULL, `absent_fields` for the optional header fields). Retiring the
+  table needs its own version barrier migration (035); the drop itself
+  runs in a storage job, never at startup.
 - **Inline comments carry their review** (2026-10-06, owner): the PR
   query fetches `pullRequestReview { id }` for every inline comment, kept
   as `Comment.reviewId` and `pr_comment.review_id`. It cannot be
@@ -1633,7 +1668,7 @@ the app meanwhile.
 
 - **Split pr into header + pr_snapshot; pr is the future model's parent**
   (2026-10-05, checked with Codex GPT-6.1; DESIGN.md "Big inboxes: what
-  PostPile loads and works on" › PR header and snapshot). A side table of
+  PostPile loads and works on" › PR storage). A side table of
   short columns (`pr_light`) was built first and replaced before shipping:
   the user wants a table the normalized model keeps using. `pr` holds the
   header and is the existence authority; `pr_snapshot` is the renamed old

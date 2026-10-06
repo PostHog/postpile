@@ -9,7 +9,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { boardShape, canonicalPr, DiscussionError, type FullComment, type FullPr } from '@postpile/core';
 import { at, makeComment, makePr, makeReview } from '@postpile/core/fixtures';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { DISCUSSION_READY_KEY, runMigrations, Store } from './index.ts';
+import { DISCUSSION_READY_KEY, NEWEST_ROWS_VERSION, runMigrations, Store } from './index.ts';
 
 let dir: string;
 let path: string;
@@ -99,8 +99,8 @@ describe('migration 031', () => {
     expect(db.prepare('SELECT rows_version, mentioned_teams, snapshot_revision FROM pr').get()).toEqual({ rows_version: 0, mentioned_teams: '[]', snapshot_revision: 3 });
     expect(db.prepare('SELECT count(*) AS n FROM pr_comment').get()).toEqual({ n: 0 });
     expect(migrated.prs.getFull(pr.key)).toEqual(pr);
-    expect(migrated.prs.nextWithoutDiscussionRows('')).toBe(pr.key);
-    expect(migrated.prs.allHaveDiscussionRows()).toBe(false);
+    expect(migrated.prs.nextWithoutRows('discussion', '')).toBe(pr.key);
+    expect(migrated.prs.countWithoutRows('discussion')).not.toBe(0);
     db.close();
   });
 
@@ -137,7 +137,7 @@ describe('PrRepo writes the discussion rows on every upsert', () => {
       { id: 'ra1', own_body: '' },
     ]);
     expect(store.db.prepare("SELECT ord, thread_ord, review_id, viewer_reacted FROM pr_comment WHERE id = 'rc1'").get()).toEqual({ ord: 2, thread_ord: 0, review_id: 'rv1', viewer_reacted: 0 });
-    expect(header(pr.key)).toMatchObject({ rows_version: 1, mentioned_teams: '["acme/team-infra","acme/team-platform"]' });
+    expect(header(pr.key)).toMatchObject({ rows_version: NEWEST_ROWS_VERSION, mentioned_teams: '["acme/team-infra","acme/team-platform"]' });
     expect(jsonHas(pr.key, 'comments')).toBe(true);
     expect(store.prs.getFull(pr.key)).toEqual(pr);
   });
@@ -182,9 +182,9 @@ describe('PrRepo.backfillDiscussion', () => {
     expect(store.prs.backfillDiscussion(pr.key)).toBe(true);
 
     expect(header(pr.key)).toEqual({ rows_version: 1, mentioned_teams: '["acme/team-infra","acme/team-platform"]', snapshot_revision: revision });
-    expect(store.prs.allHaveDiscussionRows()).toBe(true);
+    expect(store.prs.countWithoutRows('discussion')).toBe(0);
     switchToRows();
-    store.prs.stripDiscussion(pr.key);
+    store.prs.stripJson('discussion', pr.key);
     expect(store.prs.getFull(pr.key)).toEqual(canonicalPr(pr));
   });
 
@@ -207,16 +207,16 @@ describe('PrRepo.backfillDiscussion', () => {
       expect(header(key).rows_version, key).toBe(0);
     }
     expect([count('pr_comment'), count('pr_thread'), count('pr_review')]).toEqual([0, 0, 0]);
-    expect(store.prs.allHaveDiscussionRows()).toBe(false);
+    expect(store.prs.countWithoutRows('discussion')).not.toBe(0);
   });
 
   it('walks only the PRs without rows', () => {
     storedBefore031(discussedPr(1));
     store.prs.upsert(discussedPr(2), at(1));
     storedBefore031(discussedPr(3));
-    expect(store.prs.nextWithoutDiscussionRows('')).toBe('acme/app#1');
-    expect(store.prs.nextWithoutDiscussionRows('acme/app#1')).toBe('acme/app#3');
-    expect(store.prs.nextWithoutDiscussionRows('acme/app#3')).toBeNull();
+    expect(store.prs.nextWithoutRows('discussion', '')).toBe('acme/app#1');
+    expect(store.prs.nextWithoutRows('discussion', 'acme/app#1')).toBe('acme/app#3');
+    expect(store.prs.nextWithoutRows('discussion', 'acme/app#3')).toBeNull();
   });
 });
 
@@ -228,8 +228,8 @@ describe('PrRepo after the switch to rows', () => {
     expect(store.prs.getFull(before.key)).toEqual(canonicalPr(before));
 
     const revision = header(before.key).snapshot_revision;
-    expect(store.prs.stripDiscussion(before.key)).toBe(true);
-    expect(store.prs.stripDiscussion(before.key)).toBe(false);
+    expect(store.prs.stripJson('discussion', before.key)).toBe(true);
+    expect(store.prs.stripJson('discussion', before.key)).toBe(false);
     expect(header(before.key).snapshot_revision).toBe(revision);
     expect(['comments', 'threads', 'reviews', 'files'].map((field) => jsonHas(before.key, field))).toEqual([false, false, false, true]);
     expect(store.prs.getFull(before.key)).toEqual(canonicalPr(before));
@@ -244,7 +244,7 @@ describe('PrRepo after the switch to rows', () => {
 
   it('refuses to strip before the switch', () => {
     store.prs.upsert(discussedPr(1), at(1));
-    expect(() => store.prs.stripDiscussion('acme/app#1')).toThrow(/rows_ready:discussion/);
+    expect(() => store.prs.stripJson('discussion', 'acme/app#1')).toThrow(/rows_ready:discussion/);
     expect(jsonHas('acme/app#1', 'comments')).toBe(true);
   });
 
@@ -254,7 +254,7 @@ describe('PrRepo after the switch to rows', () => {
     const cached = store.prs.keepParsed([pr.key]).get(pr.key);
 
     switchToRows();
-    store.prs.stripDiscussion(pr.key);
+    store.prs.stripJson('discussion', pr.key);
 
     expect(store.prs.keepParsed([pr.key]).get(pr.key)).toBe(cached);
     expect(store.prs.getMany([pr.key]).get(pr.key)).toBe(cached);
@@ -280,7 +280,7 @@ describe('PrRepo after the switch to rows', () => {
     const pr = discussedPr(1);
     store.prs.upsert(pr, at(1));
     switchToRows();
-    store.prs.stripDiscussion(pr.key);
+    store.prs.stripJson('discussion', pr.key);
 
     const reader = Store.openReadOnly(path);
     try {
@@ -299,7 +299,7 @@ describe('PrRepo after the switch to rows', () => {
     try {
       expect(reader.prs.keepParsed([pr.key]).get(pr.key)).toEqual(boardShape(pr));
       switchToRows();
-      store.prs.stripDiscussion(pr.key);
+      store.prs.stripJson('discussion', pr.key);
       const edited = { ...pr, comments: pr.comments.slice(1) };
       store.prs.upsert(edited, at(2));
       expect(reader.prs.keepParsed([pr.key]).get(pr.key)).toEqual(boardShape(canonicalPr(edited)));

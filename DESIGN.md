@@ -480,30 +480,39 @@ demand, for the request, and lets it go:
   their headers first, at most 200, `SEARCH_COLD_MAX`), the notifications
   debug view and Handled quietly.
 
-**PR header and snapshot** (migration 028, 2026-10-05; the split was
-checked with Codex GPT-6.1). The `pr` row used to hold the whole snapshot
-json next to a few short columns, so anything that wanted a title or a
-stack field parsed the PR (about 1 GB of json for 11k PRs on the heavy
-copy), and a column added after the json would sit behind its overflow
-pages. Now:
+**PR storage** (migrations 028 and 031 to 035, 2026-10-05 and 06;
+schema and protocol checked with Codex GPT-6.1). The `pr` row used to
+hold the whole snapshot json next to a few short columns, so anything
+that wanted a title or a stack field parsed the PR (about 1 GB of json
+for 11k PRs on the heavy copy), and a column after the json would sit
+behind its overflow pages. Since 0.23.0 a stored PR is its header and
+rows, and the json is gone:
 
 - `pr` is the PR header: short columns only (repo and number, state, draft,
   title, author, assignees, pending reviewers, base and head refs, head
   oid, former base refs, fork, created, updated, merged and fetched
-  times; arrays as JSON text). It is the existence authority (a PR is
-  stored if and only if it has a header) and the parent of the normalized
-  model (NEXT.md "Normalize the PR snapshot"; the discussion rows below).
-- `pr_snapshot` is the old table renamed, the json being phased out. Its
-  own short columns are still written, for NOT NULL, but never read.
-- `PrRepo.upsert` writes the header, then the snapshot, in one
-  transaction, both as `ON CONFLICT (key) DO UPDATE` (a REPLACE would
-  delete the parent row). A delete removes both. Detail reads (`get`,
-  `getMany`, `keepParsed`) ignore a snapshot without its header. A header
-  without its snapshot is an integrity failure: the read leaves it out and
-  drops its cached copy, and `fetchedAtByKey` / `updatedAtByKey` leave it
-  out too, so the next sync fetches the PR again.
-- The migration renames the table (no copy of the blobs), creates the
-  header and fills it from the json with type guards (an array that is not
+  times; arrays as JSON text), plus the text columns of migration 034
+  (below). It is the existence authority (a PR is stored if and only if
+  it has a header) and the parent of every row table.
+- The rows, children of the header (`ON DELETE CASCADE`), each replaced
+  whole by every upsert: the discussion (`pr_comment`, `pr_thread`,
+  `pr_review`, 031), the activity lists (`pr_commit`, `pr_timeline`,
+  `pr_file`, 033) and the description (`pr_body`, 034). Split and join
+  live in core `pr-parts.ts`, column mapping in store `pr-rows.ts`.
+- `pr_snapshot` was the old table renamed by 028, the json being phased
+  out. Since 0.23.0 no read takes it and no upsert writes it; the storage
+  job `snapshot_retire` empties and drops it (below). Its own short
+  columns were written for NOT NULL only, never read.
+- `PrRepo.upsert` writes the header and every collection's rows in one
+  transaction, the header as `ON CONFLICT (key) DO UPDATE` (a REPLACE
+  would delete the parent row). A header without what its rows_version
+  vouches for is an integrity failure: reads leave it out and drop its
+  cached copy, and `fetchedAtByKey` / `updatedAtByKey` leave it out too,
+  so the next sync fetches the PR again. Before the text switch that
+  meant a header without its snapshot; after it, a header below
+  rows_version 3 or without its `pr_body` row.
+- Migration 028 renamed the table (no copy of the blobs), created the
+  header and filled it from the json with type guards (an array that is not
   one becomes `[]`, a missing created time falls back to the updated time,
   a missing title or head oid to empty), checks that both tables hold the
   same keys, and rolls back whole on malformed json. It took 1.9 s on a
@@ -562,11 +571,15 @@ How the move goes (the protocol every later collection follows):
    prepared once and reused) and sets `rows_version`, in its transaction.
 2. **Backfill**, storage job `discussion_rows` (see "Storage jobs"): the
    json of every PR still at version 0 becomes rows, no revision moves.
-3. **Switch.** The job's check passes only when no stored PR is below
-   version 1, and then sets meta `rows_ready:discussion` in the same
-   transaction. A missing, malformed or unsplittable snapshot keeps
-   version 0: it never counts as a PR without comments, and the switch
-   waits until a fetch stores that PR again.
+3. **Switch.** At the end of the walk the job sets meta
+   `rows_ready:discussion` in the same transaction. A missing, malformed
+   or unsplittable snapshot keeps version 0: it never counts as a PR
+   without comments. From the switch on it is an integrity failure (step
+   4), so the sync fetches it again and the upsert writes its rows. Until
+   0.23.0 such a PR held the switch back until a fetch stored it, which a
+   PR the sync never looks at again, or GitHub no longer has, never got
+   (Codex review on #140); the runner reports how many it switched
+   without (`storage_job_blocked`).
 4. **Reads** take the flag, revisions, headers, the json and the rows in
    one read transaction (`get` included), so a read-only CLI or MCP never
    mixes two commits. Before the switch they parse the json; after it the
@@ -597,6 +610,83 @@ The rows are written before the strip frees the json, so the file grows
 by about the rows' size not covered by free pages already in it (heavy:
 rows ~424 MB, 304 MB free before, 530 MB free after). No VACUUM: SQLite
 reuses the pages.
+
+**PR storage: the rest of the PR as rows, and the snapshot retired**
+(migrations 033 to 035, 2026-10-06, for 0.23.0; steps 6 to 8 of
+normalizing the PR snapshot; checked with Codex GPT-6.1). After the
+discussion, the json still held the commits, timeline and files, the
+description and the short fields. They follow the same protocol, one
+collection at a time, and then the table goes:
+
+- **Activity lists** (033, `ROWS.activity` = 2, flag `rows_ready:activity`,
+  jobs `activity_rows` and `snapshot_strip_2`): `pr_commit` (PK
+  `(pr_key, oid)`, per PR: a commit in two stacked PRs has a row in each,
+  so no PR's rows depend on another's), `pr_timeline` (PK `(pr_key, id)`,
+  `subject` NULL when GitHub named no reviewer, no CHECK on `kind` since
+  the kinds grow) and `pr_file` (PK `(pr_key, path)`: the path is
+  GitHub's identity for a changed file, so a path twice is refused, never
+  one copy kept). `ord` keeps each list's stored order: older commit pages
+  sit in front of newer ones, and prompts take the first N files. A
+  missing `committer` is NULL and reads back missing.
+- **Text and short fields** (034, `ROWS.text` = 3, flag `rows_ready:text`,
+  job `text_rows`): header columns `url`, `additions`, `deletions`,
+  `changed_files`, `labels` (JSON text, GitHub's order),
+  `review_decision`, `merged_by`, `truncated`, `cap_hits`, and the
+  description in `pr_body`, a rowid table of its own so the hot-set scan
+  over `pr` never walks past bodies. Labels, assignees and reviewers stay
+  JSON columns: short lists, always read whole, filtered nowhere.
+- **Missing stays missing.** `truncated` and `cap_hits` are NULL when the
+  snapshot did not record them: a cut snapshot without cap hits never
+  vouches (`snapshotCoversSince`), while `[]` does. `absent_fields` names
+  the optional header fields a snapshot lacked (`assignees`,
+  `previousBaseRefs`, `isCrossRepository`): their header columns hold
+  `[]` / 0, and the sync refetches a PR without `assignees` once (387 of
+  809 PRs on the normal copy lack it). So the round trip is exact, not
+  canonical: every read returns the same object before and after each
+  switch, and cached copies stay valid.
+- **Backfills raise one step.** `activity_rows` writes only a PR at
+  version 1, `text_rows` only one at version 2, so rows_version stays a
+  cumulative guarantee on an install that skips releases. A snapshot
+  that is missing, malformed, lacks a field or holds a duplicate keeps
+  its version; it is never read as an empty list or as defaults. The job
+  switches without it at the end of its walk (`storage_job_blocked`
+  counts it): from then on the PR counts as not stored, reads and the
+  sync's freshness (`fetchedAtByKey`, `updatedAtByKey`) leave it out, and
+  the next sync that sees its thread fetches it again with every row. One
+  GitHub no longer has stays left out and holds nothing back.
+- **After the text switch no read takes the json.** A read builds the PR
+  from the header, `pr_body` and the child rows, flags and rows in one
+  read transaction. Upserts stop writing `pr_snapshot`, `delete` leaves
+  it alone, and existence checks join `pr_body` instead.
+- **Retiring** (035, job `snapshot_retire`). Migration 035 changes no
+  schema; it records the version, so the newer-schema guard refuses the
+  file to every build that still reads `pr_snapshot` instead of letting
+  it query a dropped table. The job then deletes one snapshot per unit in
+  the usual slices; its check drops the table once it is empty (instant
+  then; a row left behind walks the job once more) and a WAL checkpoint
+  follows. No migration deletes or drops anything at startup, and later
+  code names the table only through `PrRepo.hasSnapshotTable` and `DROP
+  TABLE IF EXISTS`. The simulation copies and hides it only while it
+  exists. `snapshot_revision` keeps its name.
+- `snapshot_strip_2` strips the activity lists from the json in the same
+  release that drops the table a little later. It is cheap (0.7 s of
+  work on heavy), keeps the per-collection protocol whole, and leaves a
+  smaller table should `text_rows` stay blocked on an install.
+
+Measured on `.backup` copies at the 0.22.0 state (Node 24.21, SQLite
+3.53.4, real timers, one run). On the normal copy every PR's full read,
+board read, derived events, glance input hash and `prDetails` prompt
+text are identical between the json and the rows (809 of 809, missing
+fields missing), and every topic, the Archive, search, unread keys and
+every open PR's detail are byte-identical to 0.22.0's.
+
+| copy | used before → after | `pr_snapshot` | new rows | hot set heap / read |
+|---|---|---|---|---|
+| normal | 89.2 → 87.6 MB | 7.9 MB → gone | pr_body 3.2, commit 1.0, file 1.0, timeline 0.9 MB | 24 → 24 MB, 140 → 78 ms |
+| heavy (14x) | 872.9 → 852.2 MB | 109.6 MB → gone | pr_body 45.5, commit 13.6, file 15.0, timeline 13.3 MB | 58 → 58 MB, 203 → 185 ms |
+
+The file keeps its size (1,403 MB on heavy, 551 MB of it free pages):
+no VACUUM, SQLite reuses the pages.
 
 **The board diet** (2026-10-06, for 0.22.0; step 5 of normalizing the PR
 snapshot). Bots write most of the comment text PostPile stores, and the
@@ -3301,8 +3391,10 @@ install that is seconds of a frozen app and a WAL the size of the rewrite.
 The bot body trim is job 1, the strip of the old checks (`checks_strip`,
 "CI is not tracked") job 2, the discussion backfill (`discussion_rows`)
 job 3 and the strip of the discussion from the json (`snapshot_strip`)
-job 4 ("PR storage: the discussion as rows"); later phases of the PR
-snapshot normalization (NEXT.md) append theirs. Code in
+job 4 ("PR storage: the discussion as rows"), the activity backfill
+(`activity_rows`) job 5, its strip (`snapshot_strip_2`) job 6, the text
+backfill (`text_rows`) job 7 and the retirement of `pr_snapshot`
+(`snapshot_retire`) job 8 ("PR storage: the rest of the PR as rows"). Code in
 `packages/engine/src/storage-jobs/`: `runner.ts` (`StorageJobRunner`),
 `jobs.ts` (the ordered list), one file per job. Checked with Codex
 GPT-6.1 (2026-10-05).
@@ -3342,9 +3434,13 @@ GPT-6.1 (2026-10-05).
   `storage_job_incomplete:<name>`, a log line), never done, and the jobs
   after it wait. The next start tries again. The runner reports it once
   per app run as `storage_job_blocked` (name, `blocked_units`: what the
-  job's check still finds undone, `blockedUnits()`; for
-  `discussion_rows` the PRs whose json could not be split). Counts only,
-  never keys. The trim's walk is its own
+  job's check still finds undone, `blockedUnits()`). Counts only, never
+  keys. The row backfills (`discussion_rows`, `activity_rows`,
+  `text_rows`) are the exception since 0.23.0: their walk is their check,
+  they switch at its end without the PRs whose json they rejected (those
+  count as not stored until a fetch stores them again, "PR storage"), and
+  the runner reports those as `storage_job_blocked` when the job is
+  done. The trim's walk is its own
   check: a PR stored behind the cursor meanwhile came from a fetch, which
   cuts on save.
 - **What a job may write, and revisions.** A unit may issue any SQL or
@@ -3364,9 +3460,10 @@ GPT-6.1 (2026-10-05).
   and `journal_size_limit` (64 MB) keep the WAL small; it peaked at 9 MB
   on the heavy copy. 0.19.0's trim emptied it at the end.
 - **`afterDone`**: a job may run work after its done transaction
-  committed, outside any transaction. Only `snapshot_strip` does: a
-  TRUNCATE checkpoint with busy timeout 0 (`Store.checkpointWal`), since
-  it rewrote most of the json. Without a reader in the way it found the
+  committed, outside any transaction. `snapshot_strip`,
+  `snapshot_strip_2` and `snapshot_retire` do: a TRUNCATE checkpoint
+  with busy timeout 0 (`Store.checkpointWal`), since they rewrote or
+  deleted most of the json. Without a reader in the way it found the
   WAL already copied and took 1 to 12 ms. With a reader held through both
   jobs on the heavy copy the WAL grew to 638 MB (`journal_size_limit`
   acts only when the WAL resets) and the checkpoint gave up in 6 ms; the
@@ -3394,6 +3491,25 @@ The discussion jobs on the same copies after a 0.21.0 install's jobs
 | normal | snapshot_strip | 809 | 0.08 s | 0.13 s | 47 ms | 8 MB |
 | heavy (14x) | discussion_rows | 11,326 | 6.0 s | 15.9 s | 67 ms | 9 MB |
 | heavy (14x) | snapshot_strip | 11,326 | 1.2 s | 3.0 s | 55 ms | 9 MB |
+
+The 0.23.0 jobs on copies at the 0.22.0 state (2026-10-06, one run; the
+normal copy also once with a reader held through every job):
+
+| copy | job | units | work | wall | longest slice | peak WAL |
+|---|---|---|---|---|---|---|
+| normal | activity_rows | 809 | 0.11 s | 0.27 s | 32 ms | 5 MB |
+| normal | snapshot_strip_2 | 809 | 0.06 s | 0.11 s | 53 ms | 5 MB |
+| normal | text_rows | 809 | 0.05 s | 0.10 s | 25 ms | 5 MB |
+| normal | snapshot_retire | 809 | 0.03 s | 0.03 s | 25 ms | 4 MB |
+| heavy (14x) | activity_rows | 11,326 | 1.7 s | 4.5 s | 118 ms | 9 MB |
+| heavy (14x) | snapshot_strip_2 | 11,326 | 0.7 s | 1.8 s | 64 ms | 9 MB |
+| heavy (14x) | text_rows | 11,326 | 0.8 s | 2.0 s | 47 ms | 9 MB |
+| heavy (14x) | snapshot_retire | 11,326 | 0.5 s | 1.2 s | 68 ms | 9 MB |
+
+On heavy 6 of 103 slices of the row jobs went past 50 ms, one to 118 ms
+(a loaded machine; one run). With the reader held on normal the WAL grew
+to 15 MB, both checkpoints gave up at once, and the first one after the
+reader let go took 28 ms; dropping the table did not wait on the reader.
 
 Without the commit allowance the normal copy's slices ran 47 ms at the
 median. The WAL stays at its peak size afterwards and is reused.
@@ -7011,13 +7127,15 @@ topic names are never event props.
    in the last hour because they are outside the hot slice; at most hourly,
    since 0.18.0, see "Big inboxes: what PostPile loads and works on"),
    `storage_job_done` (name, one of the known jobs (`bot_body_trim`,
-   `checks_strip`, `discussion_rows`, `snapshot_strip`);
+   `checks_strip`, `discussion_rows`, `snapshot_strip`, `activity_rows`,
+   `snapshot_strip_2`, `text_rows`, `snapshot_retire`);
    units, work_ms, longest_slice_ms, wall_ms: a background storage job
    finished and its check passed, this run's share of it, see "Storage
    jobs"; since 0.20.0), `storage_job_blocked` (name, blocked_units: a
    job ended its walk incomplete, its check failed twice, and how many
-   units it still finds undone; at most once per job per app run, counts
-   only, never keys; since 0.22.0),
+   units it still finds undone, or since 0.23.0 a row backfill finished
+   without PRs whose json it rejected and how many; at most once per job
+   per app run, counts only, never keys; since 0.22.0),
    `update_check_finished` (trigger `launch` / `interval` / `wake` /
    `menu`, result `none` / `available` / `error`, available_version when
    one was found: one per self-update check the packaged app ran),

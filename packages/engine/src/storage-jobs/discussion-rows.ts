@@ -8,12 +8,14 @@
 // written in the slice's transaction. No revision moves: reads take the
 // json until the switch, and the rows hold the same discussion.
 //
-// The switch is the job's check: once no stored PR is left without rows,
-// `complete` sets meta `rows_ready:discussion` in the same transaction and
-// reads take the discussion from the rows. A PR whose snapshot is missing
-// or does not split keeps its old version, so the check fails, the job is
-// left incomplete, and reads stay on the json until a fetch stores that PR
-// again; it is never taken for a PR without comments.
+// The switch comes at the end of the walk: `complete` sets meta
+// `rows_ready:discussion` in the same transaction and reads take the
+// discussion from the rows. A PR whose snapshot is missing or does not
+// split keeps its old version: it is never taken for a PR without
+// comments. From the switch on it counts as not stored, so reads leave it
+// out and the sync fetches it again, whose upsert writes its rows. Until
+// 0.23.0 such a PR held the switch back until a fetch stored it, which a
+// PR GitHub no longer has never got (Codex review on #140).
 import type { IsoTime } from '@postpile/core';
 import { DISCUSSION_READY_KEY, type Store } from '@postpile/store';
 import type { StorageJob, StorageJobUnit } from './runner.ts';
@@ -24,24 +26,28 @@ export class DiscussionRowsJob implements StorageJob {
   readonly doneKey = 'storage_job:discussion_rows:done';
 
   step(store: Store, after: string): StorageJobUnit | null {
-    const key = store.prs.nextWithoutDiscussionRows(after);
+    const key = store.prs.nextWithoutRows('discussion', after);
     if (key === null) {
       return null;
     }
     return { key, wrote: store.prs.backfillDiscussion(key) };
   }
 
-  /** Done, and reads switch to the rows, once every stored PR has them. */
-  complete(store: Store, at: IsoTime): 'done' | 'again' {
-    if (!store.prs.allHaveDiscussionRows()) {
-      return 'again';
-    }
+  /**
+   * The walk went through every PR below the version, so whatever is left
+   * the backfill rejected. Reads switch to the rows anyway: from then on a
+   * rejected PR counts as not stored (an integrity failure), so reads leave
+   * it out and the sync fetches it again, and a PR GitHub no longer has
+   * never holds the switch back. The runner reports the rejected ones
+   * (`blockedUnits`, storage_job_blocked).
+   */
+  complete(store: Store, at: IsoTime): 'done' {
     store.meta.set(DISCUSSION_READY_KEY, at);
     return 'done';
   }
 
-  /** The stored PRs still without rows: a snapshot that is missing, malformed or does not split. */
+  /** The stored PRs the backfill rejected: a snapshot that is missing, malformed or does not split. */
   blockedUnits(store: Store): number {
-    return store.prs.countWithoutDiscussionRows();
+    return store.prs.countWithoutRows('discussion');
   }
 }

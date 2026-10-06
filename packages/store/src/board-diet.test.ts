@@ -83,7 +83,7 @@ describe('the board read', () => {
     const pr = noisyPr(1);
     store.prs.upsert(pr, at(1));
     switchToRows();
-    store.prs.stripDiscussion(pr.key);
+    store.prs.stripJson('discussion', pr.key);
     const full = store.prs.getFull(pr.key)!;
     expect(full).toEqual(canonicalPr(pr));
     expect(store.prs.get(pr.key)).toEqual(boardShape(full));
@@ -114,7 +114,7 @@ describe('the board read', () => {
     expect(cached).toEqual(boardShape(pr));
 
     switchToRows();
-    store.prs.stripDiscussion(pr.key);
+    store.prs.stripJson('discussion', pr.key);
 
     expect(store.prs.keepParsed([pr.key]).get(pr.key)).toBe(cached);
     const reader = Store.openReadOnly(path);

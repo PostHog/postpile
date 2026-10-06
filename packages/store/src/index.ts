@@ -5,7 +5,7 @@ export { inImmediateTransaction, isBusyError } from './database.ts';
 export { MetaRepo } from './repos/meta.ts';
 export { NotificationRepo } from './repos/notifications.ts';
 export { PrRepo } from './repos/prs.ts';
-export { DISCUSSION_READY_KEY, ROWS } from './repos/pr-rows.ts';
+export { ACTIVITY_READY_KEY, DISCUSSION_READY_KEY, NEWEST_ROWS_VERSION, READY_KEYS, ROWS, TEXT_READY_KEY, type RowsCollection } from './repos/pr-rows.ts';
 export { PullInRepo } from './repos/pull-ins.ts';
 export { FoundPrRepo } from './repos/found-prs.ts';
 export { PingDecisionRepo, type PingDecisionCounts } from './repos/ping-decisions.ts';

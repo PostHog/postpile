@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { boardShape, canonicalPr, trimBotBodies, type FullComment, type FullPr } from '@postpile/core';
 import { at, FakeTimers, makeComment, makePr, makeReview } from '@postpile/core/fixtures';
-import { DISCUSSION_READY_KEY, runMigrations, Store } from '@postpile/store';
+import { DISCUSSION_READY_KEY, NEWEST_ROWS_VERSION, runMigrations, Store } from '@postpile/store';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { makeHarness, NOW } from '../testing/fakes.ts';
 import { BOT_BODY_TRIM_DONE_KEY, BotBodyTrimJob } from './bot-body-trim.ts';
@@ -108,7 +108,7 @@ describe('the discussion_rows and snapshot_strip jobs', () => {
     expect(store.meta.get(DISCUSSION_READY_KEY)).toBeNull();
     runToEnd(jobs);
 
-    expect(rowsVersions(store)).toEqual([1, 2, 3].map((n) => ({ key: `acme/app#${n}`, rows_version: 1 })));
+    expect(rowsVersions(store)).toEqual([1, 2, 3].map((n) => ({ key: `acme/app#${n}`, rows_version: n === 2 ? NEWEST_ROWS_VERSION : 1 })));
     expect(store.meta.get(DISCUSSION_READY_KEY)).toBe(NOW.toISOString());
     expect(revisions(store)).toEqual(revisionsBefore);
     expect(store.prs.listAll()).toEqual(before.map(canonicalPr));
@@ -117,34 +117,31 @@ describe('the discussion_rows and snapshot_strip jobs', () => {
     expect(reports).toMatchObject([{ name: 'discussion_rows', units: 2, wrote: 2 }]);
   });
 
-  it('keeps reads on the json while a PR cannot be split, and finishes once a fetch stored it again', () => {
+  it('switches without a PR that cannot be split, which then counts as not stored until a fetch stores it again', () => {
     storedBefore031(store, discussedPr(1));
     storedBefore031(store, discussedPr(2));
     store.db.prepare("UPDATE pr_snapshot SET json = json_set(json, '$.threads[0].comments[0].body', 'edited') WHERE key = 'acme/app#2'").run();
-    const broken = store.prs.getFull('acme/app#2');
 
     runToEnd(runner());
 
-    expect(store.meta.get(DISCUSSION_READY_KEY)).toBeNull();
-    expect(store.meta.get(`${INCOMPLETE_KEY_PREFIX}discussion_rows`)).not.toBeNull();
-    expect(store.meta.get(new DiscussionRowsJob().doneKey)).toBeNull();
-    expect(store.meta.get(new SnapshotStripJob().doneKey)).toBeNull();
+    expect(store.meta.get(DISCUSSION_READY_KEY)).not.toBeNull();
+    expect(store.meta.get(`${INCOMPLETE_KEY_PREFIX}discussion_rows`)).toBeNull();
+    expect(store.meta.get(new SnapshotStripJob().doneKey)).not.toBeNull();
     expect(rowsVersions(store)).toEqual([
       { key: 'acme/app#1', rows_version: 1 },
       { key: 'acme/app#2', rows_version: 0 },
     ]);
-    expect(withDiscussionInJson(store)).toEqual(['acme/app#1', 'acme/app#2']);
-    expect(store.prs.getFull('acme/app#2')).toEqual(broken);
-    expect(lines).toEqual([expect.stringMatching(/walking it once more/), expect.stringMatching(/discussion_rows is incomplete: .*, 1 units left undone/)]);
+    // Never read as a PR without comments: left out of reads and of the sync's freshness, so the sync fetches it again.
+    expect(store.prs.getFull('acme/app#2')).toBeNull();
+    expect([...store.prs.fetchedAtByKey().keys()]).toEqual(['acme/app#1']);
+    expect([...store.prs.updatedAtByKey().keys()]).toEqual(['acme/app#1']);
+    expect(lines).toEqual([expect.stringMatching(/discussion_rows done/), expect.stringMatching(/discussion_rows is done without 1 units/), expect.stringMatching(/snapshot_strip done/)]);
     expect(blocked).toEqual([{ name: 'discussion_rows', blockedUnits: 1 }]);
 
-    // The sync fetches the PR again; the next start finishes both jobs.
+    // The sync fetches the PR again: the upsert writes its rows and it counts as stored.
     store.prs.upsert(discussedPr(2), at(5));
-    runToEnd(runner());
-
-    expect(store.meta.get(DISCUSSION_READY_KEY)).not.toBeNull();
-    expect(withDiscussionInJson(store)).toEqual([]);
     expect(store.prs.getFull('acme/app#2')).toEqual(canonicalPr(discussedPr(2)));
+    expect(store.prs.fetchedAtByKey().get('acme/app#2')).toBe(at(5));
   });
 
   it('strips the lists from every snapshot once reads take the rows, moving no revision and changing no read', () => {
@@ -200,9 +197,11 @@ describe('the snapshot_strip checkpoint', () => {
   }
 
   function stripAll(store: Store): void {
-    const jobs = new StorageJobRunner({ store, jobs: storageJobs(), now: () => NOW, timers: new FakeTimers(), busy: () => false, log: () => {}, onDone: () => {} });
+    // The jobs up to snapshot_strip: the later ones write again after its checkpoint.
+    const upToStrip = storageJobs().slice(0, 4);
+    const jobs = new StorageJobRunner({ store, jobs: upToStrip, now: () => NOW, timers: new FakeTimers(), busy: () => false, log: () => {}, onDone: () => {} });
     for (let index = 0; index < 50 && jobs.slice() !== 'idle'; index += 1) {
-      // Every job, a slice at a time.
+      // Each of those jobs, a slice at a time.
     }
   }
 
@@ -240,7 +239,7 @@ describe('an install that skips straight to this release', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it('runs the trim, the checks strip, the backfill and the strip in one go, and reads every PR the same, cut, the board without bot bodies on both sides', () => {
+  it('runs every job in one go, the snapshot retired at the end, and reads every PR the same, cut, the board without bot bodies on both sides', () => {
     const path = join(dir, 'db.sqlite');
     const old = new DatabaseSync(path);
     runMigrations(old, 27);
@@ -274,12 +273,12 @@ describe('an install that skips straight to this release', () => {
       // One unit per slice.
     }
 
-    expect(reports).toEqual(['bot_body_trim', 'checks_strip', 'discussion_rows', 'snapshot_strip']);
+    expect(reports).toEqual(storageJobs().map((job) => job.name));
     expect(store.prs.listAll()).toEqual(prs.map((pr) => canonicalPr(trimBotBodies(pr))));
     const board = [...store.prs.keepParsed(keys).values()];
     expect(board).toEqual(store.prs.listAll().map(boardShape));
     expect(board.map((pr) => pr.comments.find((comment) => comment.author === BOT)?.body)).toEqual([null, null, null]);
-    expect(store.db.prepare("SELECT count(*) AS n FROM pr_snapshot WHERE json_type(json, '$.checks') IS NOT NULL OR json_type(json, '$.comments') IS NOT NULL").get()).toEqual({ n: 0 });
+    expect(store.prs.hasSnapshotTable()).toBe(false);
     expect(store.db.prepare('SELECT count(*) AS n FROM pr_comment').get()).toEqual({ n: 12 });
     store.close();
   });

@@ -1,32 +1,64 @@
-// The child rows of a stored PR (migration 031, DESIGN.md "PR storage"):
-// the discussion as `pr_comment`, `pr_thread` and `pr_review` rows. Only
-// column mapping lives here; the split and join, with their checks, are
-// core's (`splitDiscussion`, `joinDiscussion`).
+// The rows of a stored PR beside its header (DESIGN.md "PR storage"): the
+// discussion as `pr_comment`, `pr_thread` and `pr_review` rows (migration
+// 031), the activity lists as `pr_commit`, `pr_timeline` and `pr_file`
+// rows (migration 033), the text as header columns and a `pr_body` row
+// (migration 034). Only column mapping lives here; the split and join, with
+// their checks, are core's (`splitDiscussion` / `joinDiscussion`,
+// `splitActivity` / `joinActivity`, `splitText` / `joinText`).
 import type { DatabaseSync, StatementSync } from 'node:sqlite';
-import type { CommentKind, CommentPart, DiscussionParts, ReviewPart, ReviewState, ThreadPart } from '@postpile/core';
+import type {
+  ActivityParts,
+  CapHit,
+  CommentKind,
+  CommentPart,
+  CommitPart,
+  DiscussionParts,
+  FilePart,
+  OptionalHeaderField,
+  ReviewDecision,
+  ReviewPart,
+  ReviewState,
+  ThreadPart,
+  TimelineItemKind,
+  TextPart,
+  TimelinePart,
+} from '@postpile/core';
 import { all, placeholders } from '../sql.ts';
 
 /**
  * `pr.rows_version`: which row model a PR's rows were written with. It is
  * cumulative: version k says every collection up to k is in rows. A build
- * writes the newest it knows on every upsert. Never reuse a number.
+ * writes the newest it knows on every upsert, and a backfill raises a PR
+ * by one step only. Never reuse a number.
  */
-export const ROWS = { discussion: 1 } as const;
+export const ROWS = { discussion: 1, activity: 2, text: 3 } as const;
+
+/** The rows_version every upsert of this build writes: every collection it knows is in rows. */
+export const NEWEST_ROWS_VERSION = ROWS.text;
+
+/** A part of a PR that moves into rows on its own, with its own readiness flag. */
+export type RowsCollection = keyof typeof ROWS;
 
 /** Meta flag (set to when): every stored PR has its discussion rows, so reads take the discussion from them. */
 export const DISCUSSION_READY_KEY = 'rows_ready:discussion';
 
-/** SQL: true once reads take the discussion from rows. */
-export const DISCUSSION_READY_SQL = `EXISTS (SELECT 1 FROM meta WHERE key = '${DISCUSSION_READY_KEY}')`;
+/** Meta flag (set to when): every stored PR has its activity rows (commits, timeline, files). */
+export const ACTIVITY_READY_KEY = 'rows_ready:activity';
 
-/**
- * SQL over the header `p`: the PR counts as stored. Before the switch any
- * header with its snapshot does; after it, only one whose discussion rows
- * were written. A lower version then is an integrity failure: the PR is
- * left out and the sync fetches it again, like a header without its
- * snapshot.
- */
-export const STORED_SQL = `(p.rows_version >= ${ROWS.discussion} OR NOT ${DISCUSSION_READY_SQL})`;
+/** Meta flag (set to when): every stored PR has its text columns and body row; from then on no read takes the snapshot json. */
+export const TEXT_READY_KEY = 'rows_ready:text';
+
+/** Each collection's readiness flag. */
+export const READY_KEYS: Record<RowsCollection, string> = { discussion: DISCUSSION_READY_KEY, activity: ACTIVITY_READY_KEY, text: TEXT_READY_KEY };
+
+/** The lowest rows_version a stored PR needs once these collections are read from rows (cumulative: the highest of them). */
+export function storedRowsVersion(ready: ReadonlySet<RowsCollection>): number {
+  let version = 0;
+  for (const collection of ready) {
+    version = Math.max(version, ROWS[collection]);
+  }
+  return version;
+}
 
 interface CommentRow {
   pr_key: string;
@@ -121,7 +153,7 @@ function toReviewPart(row: ReviewRow): ReviewPart {
   };
 }
 
-/** The parts of one PR, created on first use. */
+/** The discussion parts of one PR, created on first use. */
 function partsOf(byKey: Map<string, DiscussionParts>, key: string): DiscussionParts {
   let parts = byKey.get(key);
   if (parts === undefined) {
@@ -227,5 +259,171 @@ export class DiscussionRows {
       partsOf(byKey, row.pr_key).reviews.push(toReviewPart(row));
     }
     return byKey;
+  }
+}
+
+interface CommitRow {
+  pr_key: string;
+  oid: string;
+  ord: number;
+  headline: string;
+  author: string;
+  committer: string | null;
+  committed_at: string;
+}
+
+interface TimelineRow {
+  pr_key: string;
+  id: string;
+  ord: number;
+  kind: string;
+  actor: string;
+  at: string;
+  subject: string | null;
+}
+
+interface FileRow {
+  pr_key: string;
+  path: string;
+  ord: number;
+  additions: number;
+  deletions: number;
+}
+
+/** The activity parts of one PR, created on first use. */
+function activityOf(byKey: Map<string, ActivityParts>, key: string): ActivityParts {
+  let parts = byKey.get(key);
+  if (parts === undefined) {
+    parts = { commits: [], timeline: [], files: [] };
+    byKey.set(key, parts);
+  }
+  return parts;
+}
+
+/** Writes and reads the activity rows, with the write statements prepared once (like DiscussionRows). */
+export class ActivityRows {
+  private statements: { deletes: StatementSync[]; commit: StatementSync; timeline: StatementSync; file: StatementSync } | null = null;
+
+  constructor(private readonly db: DatabaseSync) {}
+
+  /** Prepared on first use: the tables exist only once migration 033 ran. */
+  private prepared() {
+    this.statements ??= {
+      deletes: ['pr_commit', 'pr_timeline', 'pr_file'].map((table) => this.db.prepare(`DELETE FROM ${table} WHERE pr_key = ?`)),
+      commit: this.db.prepare('INSERT INTO pr_commit (pr_key, oid, ord, headline, author, committer, committed_at) VALUES (?, ?, ?, ?, ?, ?, ?)'),
+      timeline: this.db.prepare('INSERT INTO pr_timeline (pr_key, id, ord, kind, actor, at, subject) VALUES (?, ?, ?, ?, ?, ?, ?)'),
+      file: this.db.prepare('INSERT INTO pr_file (pr_key, path, ord, additions, deletions) VALUES (?, ?, ?, ?, ?)'),
+    };
+    return this.statements;
+  }
+
+  /** The PR's activity rows replaced by `parts`. In the caller's transaction, after its header is written. */
+  replace(key: string, parts: ActivityParts): void {
+    const statements = this.prepared();
+    for (const statement of statements.deletes) {
+      statement.run(key);
+    }
+    for (const c of parts.commits) {
+      statements.commit.run(key, c.oid, c.ord, c.headline, c.author, c.committer, c.committedAt);
+    }
+    for (const t of parts.timeline) {
+      statements.timeline.run(key, t.id, t.ord, t.kind, t.actor, t.at, t.subject);
+    }
+    for (const f of parts.files) {
+      statements.file.run(key, f.path, f.ord, f.additions, f.deletions);
+    }
+  }
+
+  /** The rows of these PRs, by key; a PR without any row (no commit, item or file) is missing. In the caller's read transaction. */
+  read(keys: string[]): Map<string, ActivityParts> {
+    const byKey = new Map<string, ActivityParts>();
+    const list = placeholders(keys.length);
+    for (const row of all<CommitRow>(this.db, `SELECT pr_key, oid, ord, headline, author, committer, committed_at FROM pr_commit WHERE pr_key IN (${list})`, ...keys)) {
+      const commit: CommitPart = { oid: row.oid, ord: row.ord, headline: row.headline, author: row.author, committer: row.committer, committedAt: row.committed_at };
+      activityOf(byKey, row.pr_key).commits.push(commit);
+    }
+    for (const row of all<TimelineRow>(this.db, `SELECT pr_key, id, ord, kind, actor, at, subject FROM pr_timeline WHERE pr_key IN (${list})`, ...keys)) {
+      const item: TimelinePart = { id: row.id, ord: row.ord, kind: row.kind as TimelineItemKind, actor: row.actor, at: row.at, subject: row.subject };
+      activityOf(byKey, row.pr_key).timeline.push(item);
+    }
+    for (const row of all<FileRow>(this.db, `SELECT pr_key, path, ord, additions, deletions FROM pr_file WHERE pr_key IN (${list})`, ...keys)) {
+      const file: FilePart = { path: row.path, ord: row.ord, additions: row.additions, deletions: row.deletions };
+      activityOf(byKey, row.pr_key).files.push(file);
+    }
+    return byKey;
+  }
+}
+
+/** The text columns of a `pr` row and its `pr_body` row, as a read selects them. */
+export interface TextRow {
+  url: string;
+  body: string;
+  additions: number;
+  deletions: number;
+  changed_files: number;
+  labels: string;
+  review_decision: string;
+  merged_by: string | null;
+  truncated: number | null;
+  cap_hits: string | null;
+  absent_fields: string;
+}
+
+/** SQL: the columns of `TextRow`, over the header `p` and its body row `b`. */
+export const TEXT_COLUMNS_SQL =
+  'p.url, b.body, p.additions, p.deletions, p.changed_files, p.labels, p.review_decision, p.merged_by, p.truncated, p.cap_hits, p.absent_fields';
+
+export function toTextPart(row: TextRow): TextPart {
+  return {
+    url: row.url,
+    body: row.body,
+    additions: row.additions,
+    deletions: row.deletions,
+    changedFiles: row.changed_files,
+    labels: row.labels === '[]' ? [] : (JSON.parse(row.labels) as string[]),
+    reviewDecision: row.review_decision as ReviewDecision,
+    mergedBy: row.merged_by,
+    truncated: toMaybeBool(row.truncated),
+    capHits: row.cap_hits === null ? null : (JSON.parse(row.cap_hits) as CapHit[]),
+    absentFields: row.absent_fields === '[]' ? [] : (JSON.parse(row.absent_fields) as OptionalHeaderField[]),
+  };
+}
+
+/** Writes the text rows: the header's text columns and the body row, with the statements prepared once. */
+export class TextRows {
+  private statements: { header: StatementSync; body: StatementSync } | null = null;
+
+  constructor(private readonly db: DatabaseSync) {}
+
+  /** Prepared on first use: the columns and table exist only once migration 034 ran. */
+  private prepared() {
+    this.statements ??= {
+      header: this.db.prepare(
+        `UPDATE pr SET url = ?, additions = ?, deletions = ?, changed_files = ?, labels = ?, review_decision = ?, merged_by = ?,
+           truncated = ?, cap_hits = ?, absent_fields = ?
+         WHERE key = ?`,
+      ),
+      body: this.db.prepare('INSERT INTO pr_body (pr_key, body) VALUES (?, ?) ON CONFLICT (pr_key) DO UPDATE SET body = excluded.body'),
+    };
+    return this.statements;
+  }
+
+  /** The PR's text rows replaced by `text`. In the caller's transaction, after its header is written. */
+  replace(key: string, text: TextPart): void {
+    const statements = this.prepared();
+    statements.header.run(
+      text.url,
+      text.additions,
+      text.deletions,
+      text.changedFiles,
+      JSON.stringify(text.labels),
+      text.reviewDecision,
+      text.mergedBy,
+      fromMaybeBool(text.truncated),
+      text.capHits === null ? null : JSON.stringify(text.capHits),
+      JSON.stringify(text.absentFields),
+      key,
+    );
+    statements.body.run(key, text.body);
   }
 }

@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { canonicalPr, newTopic } from '@postpile/core';
-import { at, makeComment, makePr, makeReview, makeThreadFor } from '@postpile/core/fixtures';
-import { DISCUSSION_READY_KEY, Store } from '@postpile/store';
+import { at, makeComment, makeCommit, makePr, makeReview, makeThreadFor, makeTimelineItem } from '@postpile/core/fixtures';
+import { ACTIVITY_READY_KEY, DISCUSSION_READY_KEY, Store, TEXT_READY_KEY } from '@postpile/store';
 import { contextHashKey } from '../digest/dossiers.ts';
 import { REJUDGE_ASKS_KEY } from '../digest/event-batches.ts';
 import { glanceGapKey } from '../digest/glance-batches.ts';
@@ -136,27 +136,36 @@ describe('ArmDatabase', () => {
     arm.close();
   });
 
-  it('reveals a PR with its discussion rows, so a header never arrives without them', () => {
+  it('reveals a PR with its child rows, so a header never arrives without them, after pr_snapshot is retired', () => {
     const inline = makeComment({ id: 'rc1', kind: 'review_comment', threadId: 't1', path: 'a.ts' });
     const pr = makePr({
       number: 7,
       comments: [makeComment({ id: 'c1' }), makeComment({ id: 'rv1', kind: 'review', body: 'nit' }), inline],
       threads: [{ id: 't1', path: 'a.ts', isResolved: false, comments: [inline] }],
       reviews: [makeReview({ id: 'rv1', state: 'COMMENTED', body: 'nit' })],
+      commits: [makeCommit({ oid: 'a' }), makeCommit({ oid: 'b' })],
+      timeline: [makeTimelineItem({ id: 'i1' })],
+      files: [{ path: 'a.ts', additions: 1, deletions: 0 }],
     });
+    const tables = ['pr_comment', 'pr_thread', 'pr_review', 'pr_commit', 'pr_timeline', 'pr_file', 'pr_body'];
     const base = join(dir, 'source.sqlite');
     const source = Store.open(base);
     source.prs.upsert(pr, at(1));
     source.meta.set(DISCUSSION_READY_KEY, at(2));
+    source.meta.set(ACTIVITY_READY_KEY, at(2));
+    source.meta.set(TEXT_READY_KEY, at(2));
+    // As after the storage job snapshot_retire: the rows are all there is.
+    source.db.exec('DELETE FROM pr_snapshot');
+    expect(source.prs.dropEmptySnapshotTable()).toBe(true);
     source.close();
     copyFileSync(base, join(dir, 'arm.sqlite'));
     const arm = ArmDatabase.open(join(dir, 'arm.sqlite'));
     arm.hidePrs();
-    expect(['pr_comment', 'pr_thread', 'pr_review'].map((table) => count(arm.store, table))).toEqual([0, 0, 0]);
+    expect(tables.map((table) => count(arm.store, table))).toEqual([0, 0, 0, 0, 0, 0, 0]);
 
     arm.reveal(base, { pinged: [pr.key], found: [], pulledIn: [] });
 
-    expect(['pr_comment', 'pr_thread', 'pr_review'].map((table) => count(arm.store, table))).toEqual([3, 1, 1]);
+    expect(tables.map((table) => count(arm.store, table))).toEqual([3, 1, 1, 2, 1, 1, 1]);
     expect(arm.store.prs.getFull(pr.key)).toEqual(canonicalPr(pr));
     arm.close();
   });
