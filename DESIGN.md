@@ -2837,7 +2837,27 @@ happened when it did. Chosen from a clickable mockup:
   and a lock closed inside the window parks it as a pending write, like any
   mark-read.
 - The coral dot on the PR row and on the topic row fades and shrinks out
-  over 500ms instead of vanishing.
+  over 500ms instead of vanishing (superseded 2026-10-06 by the ripple
+  exit below).
+- **The dot counts down, and every read ripples it out** (2026-10-06,
+  owner, from two mockup boards). The dwell only showed in the pane's mark
+  button, far from the tile. Now, while the PR in the pane waits out the
+  dwell, its unread dot in the tile row is a pie that drains linearly over
+  the 1.5s (same 6px dot and halo, the drained part a faint coral track);
+  cancelled before the end, the dot is full again at once. Once marked it
+  stays empty until it leaves. Other rows, the pane's PR list and the
+  topic dot do not count down. When any unread dot goes (the dwell, Mark
+  read, the tile menu, read on github.com) it shrinks to nothing over
+  275ms while a thin coral ring ripples out from it and fades over 500ms,
+  so a dwell read ends like every other read. Reduced motion: no
+  countdown, no ripple, the dot goes at once. The pane's button fill stays.
+  Built as `dotCountdown` (`lib/opened-read.ts`), `UnreadDot` `countdown`
+  and `.unread-pie` / `animate-unread-ripple` in `app.css`. The open's
+  phase is tied to its PR, so the next PR's dot starts full even right
+  after the previous one was marked. A row that remounts on read (its tile
+  changed group) still ripples: `RecentDots` remembers dots shown within
+  the last second by key. A row that leaves the screen entirely (into the
+  folded Dealt with group) has nothing to ripple.
 - The held place does not change: the selected tile and its topic row keep
   their place until the selection moves ("only once I move"). Then the move
   animates (FLIP, `useFlip`): every tile, group heading and topic row that

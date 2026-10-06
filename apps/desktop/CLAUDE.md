@@ -289,7 +289,12 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   until the selection moves; list moves then slide with `useFlip`
   (`lib/use-flip.ts`): mark the moving elements `data-flip-key` (never one
   inside another) and `data-flip-group`. The unread dot (`UnreadDot`
-  `shown`) stays mounted and fades out. Respect `prefers-reduced-motion`
+  `shown`) stays mounted; hiding it shrinks it and plays one ripple.
+  A dot that mounts hidden ripples only when its `dotKey` (`tile:` /
+  `detail:` + PR key, `topic:` + id) was shown within the last second
+  (`RecentDots`, `lib/recent-dots.ts`: a row that remounts on read). In tile rows it takes
+  `countdown` from `dotCountdown` (`lib/opened-read.ts`) and drains as a
+  pie over the dwell (`.unread-pie` in `app.css`, 2026-10-06). Respect `prefers-reduced-motion`
   (`motion-reduce:` or the hook's check) in any new motion.
 - A missing glance is worded from `PrSummary.glanceState` /
   `PrDetail.glanceState` through `glanceStateText` (`lib/glance.ts`),
@@ -393,7 +398,8 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
 - Numbers, PR numbers, ids and ages use `font-mono` (JetBrains Mono, bundled
   in `styles/fonts/`, no network). UI text uses the system font.
 - Plain CSS in `app.css` only for things Tailwind can't say well: the
-  `.drag-region` for the title bar, base `html/body` rules, `.pane-scroll`.
+  `.drag-region` for the title bar, base `html/body` rules, `.pane-scroll`,
+  `.unread-pie` (a conic gradient over the registered `--sweep` angle).
 - Every pane-level scroll area (sidebar, tile column, detail pane, chat,
   full-width panes) carries `pane-scroll`: it reserves the 10px scrollbar
   gutter at all times, so a pane does not jump sideways when its content

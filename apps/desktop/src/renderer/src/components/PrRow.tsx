@@ -1,6 +1,8 @@
 import type { PrSummary } from '@postpile/core';
 import { useViewer } from '../api/viewer.ts';
 import { assigneeLine } from '../lib/assignees.ts';
+import { dotCountdown } from '../lib/opened-read.ts';
+import { useOpenedReadState } from '../lib/use-opened-read.ts';
 import { ICON_WORDS, mergeQueueWord, rowStateWord, type StateWord } from '../lib/pr.ts';
 import type { StackPlace } from '../lib/stacks.ts';
 import { prNumber } from '../lib/tiles.ts';
@@ -92,6 +94,9 @@ export function PrRow(props: PrRowProps) {
   // In the merge queue the icon's tooltip says where it stands, like the word.
   const iconTitle = (props.stackQueue ?? mergeQueueWord(pr.status, now))?.title ?? ICON_WORDS[pr.status.icon].title;
   const viewerLogin = useViewer().data?.login ?? null;
+  // The tile row's dot counts down the pane's dwell; the pane's own list has the mark button's fill next to it.
+  const opened = useOpenedReadState();
+  const countdown = props.place === 'tile' ? dotCountdown(opened, pr.key) : null;
   const assigned = assigneeLine(pr.author, pr.assignees, viewerLogin);
   // The detail pane's list (an @container) keeps its titles readable when the pane is narrow: below 480px
   // "assigned to" goes first (the body's "opened by" line still names the open PR's assignees), below 400px the author's face too.
@@ -107,7 +112,7 @@ export function PrRow(props: PrRowProps) {
     >
       {/* The icon sits centered in a 20px slot (the detail header's kind icon has the same); the dot hangs left of it, in the padding. */}
       <span className="relative flex shrink-0 px-[3px]">
-        <UnreadDot shown={props.unread} className="absolute top-1/2 -left-2 -translate-y-1/2" />
+        <UnreadDot shown={props.unread} dotKey={`${props.place}:${pr.key}`} countdown={countdown} className="absolute top-1/2 -left-2 -translate-y-1/2" />
         <PrStateIcon state={pr.status.icon} title={iconTitle} />
       </span>
       <span className="shrink-0 font-mono text-[11px] text-hint">#{prNumber(pr.key)}</span>

@@ -190,3 +190,23 @@ export class OpenedReadTimer {
     this.stopUndoWindow();
   }
 }
+
+/** The unread dot's countdown (UnreadDot): draining over the dwell, held empty once the dwell marked the PR, else none. */
+export type DotCountdown = 'draining' | 'drained' | null;
+
+/**
+ * The countdown of `prKey`'s unread dot in its tile row (2026-10-06): the
+ * pie drains while the PR in the pane waits out the dwell (and while its mark
+ * is on the way) and stays empty once the open marked it, until the dot
+ * leaves with the refetch. Cancelled or undone it is null, and the dot is
+ * full again. Other PRs never count down.
+ */
+export function dotCountdown(opened: { prKey: PrKey | null; filling: boolean; marked: unknown }, prKey: PrKey): DotCountdown {
+  if (opened.prKey !== prKey) {
+    return null;
+  }
+  if (opened.filling) {
+    return 'draining';
+  }
+  return opened.marked === null ? null : 'drained';
+}

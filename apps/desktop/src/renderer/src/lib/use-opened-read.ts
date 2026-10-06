@@ -52,7 +52,10 @@ export function useOpenedRead(view: TileView | null, prKey: PrKey | null): Opene
   }
   const [markedLabel, setMarkedLabel] = useState<MarkLabel>('Mark read');
   const timer = useRef<OpenedReadTimer | null>(null);
-  const [phase, setPhase] = useState<OpenedReadPhase>('idle');
+  // The phase belongs to the PR whose open set it: on a PR change the first render still holds the old
+  // open's phase (say `marked`), and the new PR must not inherit it (its dot would start empty, Codex on #143).
+  const [opened, setOpened] = useState<{ prKey: PrKey | null; phase: OpenedReadPhase }>({ prKey: null, phase: 'idle' });
+  const phase: OpenedReadPhase = opened.prKey === prKey ? opened.phase : 'idle';
 
   useEffect(() => {
     if (prKey === null) {
@@ -63,9 +66,9 @@ export function useOpenedRead(view: TileView | null, prKey: PrKey | null): Opene
       return latest.current.markOpenedRead(prKey);
     };
     const clock = { setTimeout: (callback: () => void, ms: number) => window.setTimeout(callback, ms), clearTimeout: (handle: number) => window.clearTimeout(handle), now: () => Date.now() };
-    const open = new OpenedReadTimer(markOpened, clock, setPhase);
+    const open = new OpenedReadTimer(markOpened, clock, (next) => setOpened({ prKey, phase: next }));
     timer.current = open;
-    setPhase('idle');
+    setOpened({ prKey, phase: 'idle' });
     // Visibility only counts for the dwell; once it is over, leaving the app changes nothing.
     const onVisibility = () => (document.visibilityState === 'visible' && document.hasFocus() ? open.visible() : open.hidden());
     onVisibility();

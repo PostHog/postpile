@@ -1620,6 +1620,12 @@ the app meanwhile.
 
 ## Decided
 
+- **The unread dot drains over the dwell and ripples out on read**
+  (2026-10-06, owner, mockup variants F countdown and C removal; DESIGN.md
+  "Marked when the dwell ends"): the tile row's dot of the PR in the pane
+  is a pie that drains over the 1.5s dwell; every dot removal shrinks the
+  dot and sends one coral ripple out, replacing the shrink-and-fade. The
+  pane's mark button fill stays.
 - **PR storage finished without the json** (2026-10-06, checked with
   Codex GPT-6.1): commits stay per PR (no global commit table), files are
   keyed by path with `ord` kept, labels, assignees and reviewers stay
