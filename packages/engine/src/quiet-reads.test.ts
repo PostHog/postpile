@@ -1,4 +1,4 @@
-import type { Pr } from '@postpile/core';
+import type { FullPr } from '@postpile/core';
 import { at, makeComment, makeCommit, makePr, makeReview, makeThreadFor, makeTimelineItem, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { CAP_FILL_SYNC_PRS } from './cap-fill.ts';
@@ -7,15 +7,15 @@ import { makeHarness, type Harness, type HarnessOptions } from './testing/fakes.
 // alice's PR, read by the viewer at minute 20; a bot commented at minute 30.
 const botComment = makeComment({ id: 'c-bot', author: 'github-actions[bot]', body: 'Bundle size: +2 kB', createdAt: at(30) });
 
-function alicePr(overrides: Partial<Pr> & { number?: number } = {}): Pr {
+function alicePr(overrides: Partial<FullPr> & { number?: number } = {}): FullPr {
   return makePr({ number: 5, author: 'alice', title: 'Speed up the test shards', updatedAt: at(30), comments: [botComment], ...overrides });
 }
 
-function threadFor(pr: Pr) {
+function threadFor(pr: FullPr) {
   return makeThreadFor(pr, { reason: 'subscribed', lastReadAt: at(20), updatedAt: at(30), unread: true });
 }
 
-async function synced(pr: Pr, options: HarnessOptions = {}): Promise<Harness> {
+async function synced(pr: FullPr, options: HarnessOptions = {}): Promise<Harness> {
   const h = makeHarness(options);
   h.reader.addPr(pr, threadFor(pr));
   await h.engine.sync({ maxAgentCalls: 0 });
@@ -159,7 +159,7 @@ describe('Handled quietly: the full sync marks bot-only threads read', () => {
     const humanReply = makeComment({ id: 'c-human', author: 'rowan', body: 'Why did the shard count change?', createdAt: at(45) });
 
     /** Synced (locked) at minute 40 with only the bot comment; then rowan replies at 45 and GitHub moves the thread. */
-    async function staleAfterReply(overrides: Partial<Pr> = {}): Promise<{ h: Harness; pr: Pr; setNow: (minute: number) => void }> {
+    async function staleAfterReply(overrides: Partial<FullPr> = {}): Promise<{ h: Harness; pr: FullPr; setNow: (minute: number) => void }> {
       let now = new Date(at(40));
       const pr = alicePr(overrides);
       const h = await synced(pr, { writesEnabled: false, now: () => now });
@@ -230,7 +230,7 @@ describe('Handled quietly: the full sync marks bot-only threads read', () => {
 
 describe('Handled quietly: the live poll marks bot-only threads read in the cycle that stored them', () => {
   /** alice's PR synced at minute 25 with its thread read; then a bot comments at 30, GitHub moves the thread, and the poll runs at 31. */
-  async function botCommentAfterSync(options: HarnessOptions = {}): Promise<{ h: Harness; pr: Pr }> {
+  async function botCommentAfterSync(options: HarnessOptions = {}): Promise<{ h: Harness; pr: FullPr }> {
     let now = new Date(at(25));
     const before = alicePr({ comments: [], updatedAt: at(15) });
     const h = makeHarness({ ...options, now: () => now });
@@ -277,7 +277,7 @@ describe('Handled quietly: the live poll marks bot-only threads read in the cycl
 // "You already dealt with it": alice asked the viewer at minute 1 and marked the PR ready at 10; the viewer approved from the gh CLI at 30.
 describe('Handled quietly: the full sync marks threads read the viewer acted on after every unread event', () => {
   // A dependency bump approved from the CLI on a thread never read: only automation came before the approval, so nothing needed reading.
-  function approvedFromTheCli(overrides: Partial<Pr> = {}): Pr {
+  function approvedFromTheCli(overrides: Partial<FullPr> = {}): FullPr {
     return makePr({
       number: 9,
       author: 'dependabot[bot]',
@@ -290,7 +290,7 @@ describe('Handled quietly: the full sync marks threads read the viewer acted on 
     });
   }
 
-  async function syncedNeverRead(pr: Pr, options: HarnessOptions = {}): Promise<Harness> {
+  async function syncedNeverRead(pr: FullPr, options: HarnessOptions = {}): Promise<Harness> {
     const h = makeHarness(options);
     h.reader.addPr(pr, makeThreadFor(pr, { lastReadAt: null, updatedAt: pr.updatedAt, unread: true }));
     await h.engine.sync({ maxAgentCalls: 0 });
@@ -376,13 +376,13 @@ describe('Handled quietly: a capped snapshot gets its older pages before the qui
   const botReview = (id: string, minute: number) => makeReview({ id, author: 'review-bot[bot]', state: 'COMMENTED', submittedAt: at(minute) });
 
   // The query kept the newest 50 reviews, all bots from minute 25 on: after the read at minute 20.
-  function cappedPr(number: number): Pr {
+  function cappedPr(number: number): FullPr {
     return alicePr({ number, reviews: [botReview(`r-new-${number}`, 25)], truncated: true, capHits: [{ list: 'reviews', nodes: 50, oldestAt: at(25), cursor: 'c-50' }] });
   }
 
   it('pages a capped PR back to the last read, stores what came in with its events, then marks the bot-only thread read', async () => {
     const pr = cappedPr(5);
-    const paged: Pr = { ...pr, reviews: [botReview('r-old', 15), ...pr.reviews], capHits: [{ list: 'reviews', nodes: 51, oldestAt: at(15), cursor: null, complete: true }] };
+    const paged: FullPr = { ...pr, reviews: [botReview('r-old', 15), ...pr.reviews], capHits: [{ list: 'reviews', nodes: 51, oldestAt: at(15), cursor: null, complete: true }] };
     const h = makeHarness();
     h.reader.addPr(pr, threadFor(pr));
     h.reader.filledPrs.set(pr.key, paged);

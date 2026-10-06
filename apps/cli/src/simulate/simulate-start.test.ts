@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { Pr } from '@postpile/core';
+import type { FullPr } from '@postpile/core';
 import { at, makePr, makeThreadFor } from '@postpile/core/fixtures';
 import { runSimulatedRound } from '@postpile/engine';
 import { makeHarness } from '@postpile/engine/testing';
@@ -30,7 +30,7 @@ function fileHash(path: string): string {
 }
 
 /** An invented database that synced once: three PRs with threads, glances and a topic from the fake agent. */
-async function sourceDatabase(prs: Pr[] = PRS): Promise<string> {
+async function sourceDatabase(prs: FullPr[] = PRS): Promise<string> {
   const file = join(dir, 'source.sqlite');
   const h = makeHarness({ store: Store.open(file) });
   for (const pr of prs) {

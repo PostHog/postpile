@@ -4,7 +4,7 @@ import { memoryRole, type MemoryRole } from './event-roles.ts';
 import { at, makeComment, makePr } from './fixtures.ts';
 import { mergeQueueFailureAt, mergeQueueState, type MergeQueueStep } from './merge-queue.ts';
 import { CORPUS, CORPUS_SCENARIOS, corpusEvents, type CorpusEntryName, type CorpusScenarioName } from './testing/event-corpus.ts';
-import type { Comment, Loudness } from './types.ts';
+import type { FullComment as Comment, Loudness } from './types.ts';
 
 // Trunk's status lines as seen in the field, with invented names and numbers.
 // Trunk puts an en space (U+2002) after its emoji.

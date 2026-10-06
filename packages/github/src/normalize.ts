@@ -2,15 +2,15 @@ import {
   prKey,
   trimBotBody,
   type CapHit,
-  type Comment,
+  type FullComment,
   type Commit,
-  type Pr,
+  type FullPr,
   type PrRef,
   type PrState,
-  type Review,
+  type FullReview,
   type ReviewDecision,
   type ReviewState,
-  type ReviewThread,
+  type FullReviewThread,
   type TimelineItem,
   type TimelineItemKind,
 } from '@postpile/core';
@@ -140,7 +140,7 @@ function toReviewDecision(decision: string | null): ReviewDecision {
  * the raw node has no reaction groups (fixtures and answers from before
  * they were asked for), so those read as false like older snapshots.
  */
-function toReacted(raw: RawReactions): Pick<Comment, 'viewerReacted'> {
+function toReacted(raw: RawReactions): Pick<FullComment, 'viewerReacted'> {
   if (raw.reactionGroups === undefined) {
     return {};
   }
@@ -161,7 +161,7 @@ function storedBody(raw: RawEdit & { author: RawActor | null; body: string }): s
   return trimBotBody({ author: actorLogin(raw.author), body: raw.body, editor: editorLogin(raw) });
 }
 
-function toReview(raw: RawReview): Review {
+function toReview(raw: RawReview): FullReview {
   return {
     id: raw.id,
     author: actorLogin(raw.author),
@@ -174,8 +174,8 @@ function toReview(raw: RawReview): Review {
 }
 
 /** The last edit of a comment or review body: when, by whom (null when GitHub does not say), and the comment's updatedAt. */
-function toEdit(raw: RawEdit): Pick<Comment, 'lastEditedAt' | 'editor' | 'updatedAt'> {
-  const edit: Pick<Comment, 'lastEditedAt' | 'editor' | 'updatedAt'> = {
+function toEdit(raw: RawEdit): Pick<FullComment, 'lastEditedAt' | 'editor' | 'updatedAt'> {
+  const edit: Pick<FullComment, 'lastEditedAt' | 'editor' | 'updatedAt'> = {
     lastEditedAt: isoTimeOrNull(raw.lastEditedAt ?? null),
     editor: editorLogin(raw),
   };
@@ -185,7 +185,7 @@ function toEdit(raw: RawEdit): Pick<Comment, 'lastEditedAt' | 'editor' | 'update
   return edit;
 }
 
-function toIssueComment(raw: RawComment): Comment {
+function toIssueComment(raw: RawComment): FullComment {
   return {
     id: raw.id,
     author: actorLogin(raw.author),
@@ -200,7 +200,7 @@ function toIssueComment(raw: RawComment): Comment {
   };
 }
 
-function toReviewBodyComment(raw: RawReview): Comment {
+function toReviewBodyComment(raw: RawReview): FullComment {
   return {
     id: raw.id,
     author: actorLogin(raw.author),
@@ -225,14 +225,14 @@ function isPending(raw: { state?: string }): boolean {
 }
 
 /** The review an inline comment was submitted with, as `reviewId`; left out when GitHub does not say, never guessed. */
-function toReviewId(raw: RawComment): Pick<Comment, 'reviewId'> {
+function toReviewId(raw: RawComment): Pick<FullComment, 'reviewId'> {
   const id = raw.pullRequestReview?.id;
   return id ? { reviewId: id } : {};
 }
 
-function toThread(raw: RawReviewThread): ReviewThread {
+function toThread(raw: RawReviewThread): FullReviewThread {
   const submitted = raw.comments.nodes.filter((c) => !isPending(c));
-  const comments: Comment[] = submitted.map((c) => ({
+  const comments: FullComment[] = submitted.map((c) => ({
     id: c.id,
     author: actorLogin(c.author),
     body: storedBody(c),
@@ -249,11 +249,11 @@ function toThread(raw: RawReviewThread): ReviewThread {
 }
 
 /** Submitted review bodies with text, as comments. */
-function reviewBodyComments(reviews: RawReview[]): Comment[] {
+function reviewBodyComments(reviews: RawReview[]): FullComment[] {
   return reviews.filter((review) => !isPending(review) && review.body.trim() !== '').map(toReviewBodyComment);
 }
 
-function oldestFirst(comments: Comment[]): Comment[] {
+function oldestFirst(comments: FullComment[]): FullComment[] {
   return comments.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
@@ -261,7 +261,7 @@ function oldestFirst(comments: Comment[]): Comment[] {
  * The flat list of every authored body: issue comments, non-empty submitted
  * review bodies, and inline review comments. Oldest first.
  */
-function allComments(raw: RawPullRequest, threads: ReviewThread[]): Comment[] {
+function allComments(raw: RawPullRequest, threads: FullReviewThread[]): FullComment[] {
   return oldestFirst([...raw.comments.nodes.map(toIssueComment), ...reviewBodyComments(raw.reviews.nodes), ...threads.flatMap((thread) => thread.comments)]);
 }
 
@@ -381,7 +381,7 @@ function isTruncated(raw: RawPullRequest): boolean {
   return lists.some(cutOff) || raw.reviewThreads.nodes.some((thread) => cutOff(thread.comments));
 }
 
-export function toPr(ref: PrRef, raw: RawPullRequest): Pr {
+export function toPr(ref: PrRef, raw: RawPullRequest): FullPr {
   // A thread started in a pending review holds only drafts: not there yet for anyone else.
   const threads = raw.reviewThreads.nodes.map(toThread).filter((thread) => thread.comments.length > 0);
   const reviewers = pendingReviewers(raw);
@@ -450,7 +450,7 @@ function notIn<T>(list: T[], added: T[], idOf: (item: T) => string): T[] {
 }
 
 /** The snapshot's comments plus the new ones, oldest first. */
-function withComments(comments: Comment[], added: Comment[]): Comment[] {
+function withComments(comments: FullComment[], added: FullComment[]): FullComment[] {
   return oldestFirst([...comments, ...notIn(comments, added, (comment) => comment.id)]);
 }
 
@@ -465,12 +465,12 @@ function olderPageHit(hit: CapHit, page: RawConnection<unknown>, times: string[]
 }
 
 /** The snapshot's cap hits with the one `list` hit moved on by the page. */
-function capHitsAfter(pr: Pr, list: CapHit['list'], page: RawConnection<unknown>, times: string[] | null): CapHit[] {
+function capHitsAfter(pr: FullPr, list: CapHit['list'], page: RawConnection<unknown>, times: string[] | null): CapHit[] {
   return (pr.capHits ?? []).map((hit) => (hit.list === list ? olderPageHit(hit, page, times) : hit));
 }
 
 /** A thread's comments page added to the snapshot: new comments after the ones it has, its hit moved past them. */
-function addThreadComments(pr: Pr, raw: RawReviewThread): Pr {
+function addThreadComments(pr: FullPr, raw: RawReviewThread): FullPr {
   const paged = toThread(raw);
   const known = pr.threads.find((thread) => thread.id === paged.id);
   const added = known === undefined ? paged.comments : notIn(known.comments, paged.comments, (comment) => comment.id);
@@ -495,7 +495,7 @@ function addThreadComments(pr: Pr, raw: RawReviewThread): Pr {
  * the list's cap hit: further back, or complete. Threads on an older page
  * whose comments hit their own cap bring new thread_comments hits.
  */
-export function addOlderPage(pr: Pr, older: OlderPage): Pr {
+export function addOlderPage(pr: FullPr, older: OlderPage): FullPr {
   switch (older.list) {
     case 'reviews': {
       const nodes = older.page.nodes;

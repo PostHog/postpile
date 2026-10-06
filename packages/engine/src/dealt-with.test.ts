@@ -1,4 +1,4 @@
-import { UNDO_WINDOW_MS, type Pr } from '@postpile/core';
+import { UNDO_WINDOW_MS, type FullPr } from '@postpile/core';
 import { at, makeComment, makePr, makeReview, makeThreadFor, makeTimelineItem, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness, type Harness } from './testing/fakes.ts';
@@ -28,7 +28,7 @@ function tileLoud(h: Harness, topicId: string) {
 }
 
 /** alice marked her PR ready for review, then the viewer approved it from the gh CLI: GitHub keeps the thread unread. */
-function approvedFromTheCli(pr: Pr): Pr {
+function approvedFromTheCli(pr: FullPr): FullPr {
   return {
     ...pr,
     updatedAt: APPROVED_AT,
@@ -75,7 +75,7 @@ describe('You already dealt with it: events before the viewer last touch count a
   it('keeps a loud event after the touch unseen', async () => {
     const h = makeHarness({ writesEnabled: false });
     const early = approvedFromTheCli(reviewRequestedPr(1));
-    const pr: Pr = {
+    const pr: FullPr = {
       ...early,
       timeline: [...early.timeline, makeTimelineItem({ id: 'rr-again', kind: 'review_requested', actor: 'alice', subject: viewer.login, at: '2026-09-02T11:50:00.000Z' })],
       updatedAt: '2026-09-02T11:50:00.000Z',
@@ -161,14 +161,14 @@ describe('You already dealt with it: events before the viewer last touch count a
 
 describe('You already dealt with it: opening a PR in PostPile marks it read when nothing is asked', () => {
   /** alice's PR the viewer follows: rowan commented, nothing asks the viewer anything. */
-  function followedPr(): Pr {
+  function followedPr(): FullPr {
     return makePr({ number: 3, comments: [makeComment({ id: 'c-rowan', author: 'rowan', body: 'Nice cleanup', createdAt: at(10) })], updatedAt: at(10) });
   }
 
   const NOT_MARKED = { marked: false, undoToken: null, undoUntil: null };
   const MARKED = { marked: true, undoToken: expect.any(String), undoUntil: expect.any(String) };
 
-  async function syncedTopic(pr: Pr, writesEnabled = true): Promise<Harness> {
+  async function syncedTopic(pr: FullPr, writesEnabled = true): Promise<Harness> {
     const h = makeHarness({ writesEnabled: false });
     topicWithPrs(h, 't', [pr]);
     await h.engine.sync({ maxAgentCalls: 0 });

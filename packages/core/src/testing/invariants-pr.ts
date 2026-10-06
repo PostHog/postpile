@@ -8,11 +8,12 @@ import { eventView } from '../loudness.ts';
 import { pingRule } from '../pings.ts';
 import { judgedReadCheck, quietReadCheck, requestGoneReadCheck, touchedReadCheck } from '../quiet-reads.ts';
 import { snoozePhase } from '../snooze.ts';
-import type { NotificationThread, Pr, PrEvent, PrKey, Review } from '../types.ts';
+// Test helpers over the raw snapshot: every stored body (`FullPr`).
+import type { NotificationThread, FullPr as Pr, PrEvent, PrKey, Review } from '../types.ts';
 import type { PrSummary, TileView } from '../views.ts';
 import type { BoardSpec, RequestTarget } from './board-spec.ts';
 import { buildBoard, tileViewsOf, type PropertyBoard } from './build-board.ts';
-import { describeTurn, ensure, eventsOf, isNews, prOf, trackedRows, type Invariant } from './invariant.ts';
+import { describeTurn, ensure, eventsOf, isNews, fullPrOf, trackedRows, type Invariant } from './invariant.ts';
 import {
   answersBotInThread,
   botReviewFold,
@@ -69,14 +70,14 @@ export const toReviewMatchesReviewMove: Invariant = {
         ensure(row.tier === 'to_review', `${row.key}: move Review, tier ${row.tier}`);
       }
       if (row.tier === 'to_review' && !review) {
-        ensure(toReviewException(board, prOf(board, row.key), row) !== null, `${row.key}: tier To review, ${describeTurn(row.turn)}`);
+        ensure(toReviewException(board, fullPrOf(board, row.key), row) !== null, `${row.key}: tier To review, ${describeTurn(row.turn)}`);
       }
     }
   },
 };
 
 function snoozeContext(board: PropertyBoard, key: PrKey, events: PrEvent[] = eventsOf(board, key)) {
-  return { pr: prOf(board, key), events, now: board.now, viewer: board.viewer };
+  return { pr: fullPrOf(board, key), events, now: board.now, viewer: board.viewer };
 }
 
 /**
@@ -90,7 +91,7 @@ export const snoozeLifecycle: Invariant = {
   name: 'snoozes: human or agent-raised news breaks, a finished PR ends every snooze, Look closer never wakes',
   check(board) {
     for (const [key, snooze] of board.snoozes) {
-      const pr = prOf(board, key);
+      const pr = fullPrOf(board, key);
       const events = eventsOf(board, key);
       const phase = snoozePhase(snooze, snoozeContext(board, key));
       const expected = expectedSnoozePhase({ pr, events, viewer: board.viewer, snooze, now: board.now });
@@ -112,7 +113,7 @@ function holdingViews(views: TileView[], key: PrKey): TileView[] {
 function quietInput(board: PropertyBoard, key: PrKey, thread: NotificationThread) {
   return {
     thread,
-    pr: prOf(board, key),
+    pr: fullPrOf(board, key),
     events: eventsOf(board, key),
     userState: board.userStates.get(key) ?? null,
     viewer: board.viewer,
@@ -137,7 +138,7 @@ export const quietReadsNeverHideAsks: Invariant = {
       if (holdingViews(views, key).length === 0) {
         continue;
       }
-      const pr = prOf(board, key);
+      const pr = fullPrOf(board, key);
       const events = eventsOf(board, key);
       const input = quietInput(board, key, thread);
       const quiet = quietReadCheck(input);
@@ -193,7 +194,7 @@ export const asksNeverAutoClear: Invariant = {
       if (holdingViews(views, key).length === 0) {
         continue;
       }
-      const pr = prOf(board, key);
+      const pr = fullPrOf(board, key);
       const input = quietInput(board, key, thread);
       const reasons = [
         quietReadCheck(input).kind === 'mark' ? 'bots' : null,
@@ -239,7 +240,7 @@ export const pingsOnlyForLiveNews: Invariant = {
       if (!thread.unread || holding.length === 0) {
         continue;
       }
-      const pr = prOf(board, key);
+      const pr = fullPrOf(board, key);
       const since = board.snoozes.get(key)?.since ?? '';
       const fresh = eventsOf(board, key).filter((event) => event.seenAt === null && event.at > since);
       const snoozed = holding.some((view) => view.state.kind === 'snoozed');
@@ -280,9 +281,9 @@ function ruleFacts(board: PropertyBoard, views: TileView[]) {
   return {
     tiles: views.map((view) => ({ id: view.tile.id, state: view.state.kind, turn: view.turn.kind, members: view.tile.members.map((member) => member.provenance.kind) })),
     prs: views.flatMap((view) => view.prs).map((row) => ({ key: row.key, done: row.done, tier: row.tier, turn: row.turn.kind, unseen: row.unseenLoudEvents })),
-    pings: [...board.threads.keys()].filter((key) => board.prs.has(key)).map((key) => {
+    pings: [...board.threads.keys()].filter((key) => board.fullPrs.has(key)).map((key) => {
       const fresh = eventsOf(board, key).filter((event) => event.seenAt === null);
-      const rule = pingRule(fresh, prOf(board, key), board.viewer, false);
+      const rule = pingRule(fresh, fullPrOf(board, key), board.viewer, false);
       return { key, class: rule.class, loudness: rule.loudness };
     }),
     snoozes: [...board.snoozes].map(([key, snooze]) => snoozePhase(snooze, snoozeContext(board, key))),
@@ -308,7 +309,7 @@ export const prIconMatchesTheSpec: Invariant = {
   name: "each PR row's state icon and merge queue step are the spec's",
   check(board, views) {
     for (const row of views.flatMap((view) => view.prs)) {
-      const pr = prOf(board, row.key);
+      const pr = fullPrOf(board, row.key);
       const icon = specPrIcon(pr);
       ensure(row.status.icon === icon, `${row.key}: icon ${row.status.icon}, expected ${icon}`);
       const queue = pr.isDraft ? null : specMergeQueue(pr);
@@ -348,7 +349,7 @@ export const activityFoldsBotAnswers: Invariant = {
   name: 'the activity list shows every event once, folds quiet talk around bots and hides carrier reviews',
   check(board) {
     for (const [key, events] of board.events) {
-      const pr = prOf(board, key);
+      const pr = fullPrOf(board, key);
       const list = activityList(events.map(eventView), board.viewer, null, pr);
       const lines = [...list.fresh, ...list.earlier];
       const shown = lines.reduce((sum, line) => sum + line.eventCount, 0) + list.noise.length + list.freshNoise.length;

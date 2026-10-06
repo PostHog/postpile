@@ -129,14 +129,14 @@ describe('PrRepo and checks stored before 0.21.0', () => {
   it('never hands them out, and a rewrite of what it read does not store them again', () => {
     const key = storedWithChecks(1);
 
-    expect(store.prs.get(key)).not.toHaveProperty('checks');
+    expect(store.prs.getFull(key)).not.toHaveProperty('checks');
     expect(store.prs.getMany([key]).get(key)).not.toHaveProperty('checks');
     expect(store.prs.keepParsed([key]).get(key)).not.toHaveProperty('checks');
     expect(store.prs.listAll()[0]).not.toHaveProperty('checks');
     expect(store.prs.nextAfter('')?.pr).not.toHaveProperty('checks');
-    expect(store.prs.get(key)).toEqual(makePr({ number: 1 }));
+    expect(store.prs.getFull(key)).toEqual(makePr({ number: 1 }));
 
-    store.prs.upsert(store.prs.get(key)!, at(2));
+    store.prs.upsert(store.prs.getFull(key)!, at(2));
     expect(hasChecks(key)).toBe(false);
   });
 
@@ -147,7 +147,7 @@ describe('PrRepo and checks stored before 0.21.0', () => {
     expect(store.prs.stripChecks(key)).toBe(true);
     expect(hasChecks(key)).toBe(false);
     expect(revisionOf(key)).toBe(revision);
-    expect(store.prs.get(key)).toEqual(makePr({ number: 1 }));
+    expect(store.prs.getFull(key)).toEqual(makePr({ number: 1 }));
     expect(store.prs.stripChecks(key)).toBe(false);
   });
 

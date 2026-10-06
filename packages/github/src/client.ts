@@ -3,7 +3,7 @@ import {
   type ActivityPr,
   type IsoTime,
   type NotificationThread,
-  type Pr,
+  type FullPr,
   type PrKey,
   type PrRef,
   type ReviewedPr,
@@ -146,14 +146,14 @@ export class GitHubClient implements GitHubReader {
     return new Map(batches.flat());
   }
 
-  async fetchPrs(refs: PrRef[]): Promise<Map<PrKey, Pr>> {
+  async fetchPrs(refs: PrRef[]): Promise<Map<PrKey, FullPr>> {
     const batches = await inParallel(chunk(refs, PR_BATCH_SIZE), (batch) => this.fetchBatch(batch));
     return new Map(batches.flat().map((pr) => [pr.key, pr]));
   }
 
   async fetchPrsPartial(refs: PrRef[]): Promise<PartialPrs> {
     const errors: string[] = [];
-    const fetchOrNote = (batch: PrRef[]): Promise<Pr[]> =>
+    const fetchOrNote = (batch: PrRef[]): Promise<FullPr[]> =>
       this.fetchBatch(batch).catch((error: unknown) => {
         const first = batch[0] ? `${batch[0].repo}#${batch[0].number}` : '?';
         errors.push(`${batch.length} PRs from ${first}: ${error instanceof Error ? error.message : String(error)}`);
@@ -163,7 +163,7 @@ export class GitHubClient implements GitHubReader {
     return { prs: new Map(batches.flat().map((pr) => [pr.key, pr])), errors };
   }
 
-  fillCappedLists(pr: Pr, since: IsoTime | null, maxPages: number): Promise<CapFill> {
+  fillCappedLists(pr: FullPr, since: IsoTime | null, maxPages: number): Promise<CapFill> {
     return fillCappedLists(this.http, pr, since, maxPages);
   }
 
@@ -208,12 +208,12 @@ export class GitHubClient implements GitHubReader {
    * comes back as an error next to the data; the other PRs still count.
    * No data at all (auth, bad query) fails the whole call.
    */
-  private async fetchBatch(batch: PrRef[]): Promise<Pr[]> {
+  private async fetchBatch(batch: PrRef[]): Promise<FullPr[]> {
     const response = await this.http.graphql<RawBatchResponse>(buildPrBatchQuery(batch));
     if (!response.data) {
       throw graphqlFailure('PR batch query', response.errors);
     }
-    const prs: Pr[] = [];
+    const prs: FullPr[] = [];
     batch.forEach((ref, index) => {
       const raw = response.data?.[batchAlias(index)]?.pullRequest;
       if (raw) {

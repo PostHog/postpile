@@ -88,6 +88,14 @@ describe('TELEMETRY_EVENTS', () => {
     expect(RENDERER_TELEMETRY_EVENTS).not.toContain('storage_job_done');
   });
 
+  it('takes a blocked storage job by its known name and a count, never a key', () => {
+    expect(TELEMETRY_EVENTS.storage_job_blocked.safeParse({ name: 'discussion_rows', blocked_units: 2 }).success).toBe(true);
+    expect(TELEMETRY_EVENTS.storage_job_blocked.safeParse({ name: 'discussion_rows', blocked_units: 2, keys: ['acme/app#1'] }).success).toBe(false);
+    expect(TELEMETRY_EVENTS.storage_job_blocked.safeParse({ name: 'acme/app#1', blocked_units: 2 }).success).toBe(false);
+    expect(TELEMETRY_EVENTS.storage_job_blocked.safeParse({ name: 'discussion_rows', blocked_units: -1 }).success).toBe(false);
+    expect(RENDERER_TELEMETRY_EVENTS).not.toContain('storage_job_blocked');
+  });
+
   it('takes the self-updater events with a version and a short error code only', () => {
     expect(TELEMETRY_EVENTS.update_check_finished.safeParse({ trigger: 'wake', result: 'available', available_version: '0.20.0' }).success).toBe(true);
     expect(TELEMETRY_EVENTS.update_check_finished.safeParse({ trigger: 'launch', result: 'none' }).success).toBe(true);

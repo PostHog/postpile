@@ -157,7 +157,7 @@ describe('ArmDatabase', () => {
     arm.reveal(base, { pinged: [pr.key], found: [], pulledIn: [] });
 
     expect(['pr_comment', 'pr_thread', 'pr_review'].map((table) => count(arm.store, table))).toEqual([3, 1, 1]);
-    expect(arm.store.prs.get(pr.key)).toEqual(canonicalPr(pr));
+    expect(arm.store.prs.getFull(pr.key)).toEqual(canonicalPr(pr));
     arm.close();
   });
 

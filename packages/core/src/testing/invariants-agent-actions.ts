@@ -236,7 +236,7 @@ export const agentApproveRiskIsTheHighestCovered: Invariant = {
       }
       for (const pr of offer.covered) {
         const glance = specGlance(board, pr.prKey);
-        const headOid = board.prs.get(pr.prKey)?.headOid;
+        const headOid = board.fullPrs.get(pr.prKey)?.headOid;
         ensure(pr.risk === glance.risk && pr.riskLine === glance.riskLine && pr.verdict === glance.verdict && pr.headOid === headOid, `${where}: ${pr.prKey} carries ${pr.verdict}/${pr.riskLine}/${pr.headOid}`);
       }
       const risks = offer.covered.map((pr) => specGlance(board, pr.prKey).risk);

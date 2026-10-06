@@ -10,7 +10,7 @@ import type { PrEvent } from '../types.ts';
 import type { TileView } from '../views.ts';
 import { isReReviewMove, prWhoseTurn, type YourMove } from '../whose-turn.ts';
 import { tileViewsOf, type PropertyBoard } from './build-board.ts';
-import { ensure, eventsOf, expectedUnreadRows, isNews, isTrackedHere, prOf, type Invariant } from './invariant.ts';
+import { ensure, eventsOf, expectedUnreadRows, isNews, isTrackedHere, fullPrOf, type Invariant } from './invariant.ts';
 import { expectedTurn, isUnseenMergeWithoutViewer } from './spec-rules.ts';
 import { expectedSection } from './spec-sections.ts';
 
@@ -71,7 +71,7 @@ function queuesOf(board: PropertyBoard, views: TileView[]): TopicQueues {
   const keys = [...new Set(views.flatMap((view) => view.tile.members.map((member) => member.prKey)))];
   return topicQueues(
     keys.map((key) => {
-      const pr = prOf(board, key);
+      const pr = fullPrOf(board, key);
       const userState = board.userStates.get(key) ?? null;
       const turn = prWhoseTurn({ pr, events: eventsOf(board, key), userState, viewer: board.viewer, notYours: board.notYours.has(key) });
       return {
@@ -103,7 +103,7 @@ export const queueCountsMatchRows: Invariant = {
       if (isTrackedHere(row.provenance) && !counted.has(row.key)) {
         counted.add(row.key);
         expected[row.tier] += 1;
-        const spec = expectedTurn({ pr: prOf(board, row.key), events: eventsOf(board, row.key), viewer: board.viewer, userState: board.userStates.get(row.key) ?? null, notYours: board.notYours.has(row.key) });
+        const spec = expectedTurn({ pr: fullPrOf(board, row.key), events: eventsOf(board, row.key), viewer: board.viewer, userState: board.userStates.get(row.key) ?? null, notYours: board.notYours.has(row.key) });
         if (row.tier === 'changes_requested' && spec.kind === 'you' && spec.move === 're_review') {
           reReviews += 1;
         }
@@ -147,7 +147,7 @@ export const finishedTopicRetires: Invariant = {
   name: 'a finished topic with nothing unseen and every thread read has every tile done and needs nothing',
   check(board, views) {
     const keys = [...new Set(views.flatMap((view) => view.tile.members.map((member) => member.prKey)))];
-    const allOver = keys.length > 0 && keys.every((key) => prOf(board, key).state !== 'OPEN');
+    const allOver = keys.length > 0 && keys.every((key) => fullPrOf(board, key).state !== 'OPEN');
     if (allOver) {
       ensure(views.every((view) => view.state.kind !== 'snoozed'), 'a snooze holds a finished tile');
       const nothingUnseen = views.every((view) =>

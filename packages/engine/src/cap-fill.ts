@@ -1,4 +1,4 @@
-import { capHitCoversSince, needsOlderPages, type IsoTime, type NotificationThread, type Pr, type PrKey } from '@postpile/core';
+import { capHitCoversSince, needsOlderPages, type IsoTime, type FullPr, type NotificationThread, type PrKey } from '@postpile/core';
 import type { GitHubReader } from '@postpile/github';
 import type { Store } from '@postpile/store';
 import { errorText } from './errors.ts';
@@ -12,12 +12,12 @@ export const CAP_FILL_SYNC_PRS = 10;
 export const CAP_FILL_POLL_PRS = 3;
 
 interface Wanted {
-  pr: Pr;
+  pr: FullPr;
   thread: NotificationThread;
 }
 
 /** The capped lists that still stop short of `since`, each named once. */
-function shortLists(pr: Pr, since: IsoTime | null): string[] {
+function shortLists(pr: FullPr, since: IsoTime | null): string[] {
   return [...new Set((pr.capHits ?? []).filter((hit) => !capHitCoversSince(hit, since)).map((hit) => hit.list))];
 }
 
@@ -46,7 +46,7 @@ export class CapFiller {
   }
 
   /** The fetched PRs that need older pages, newest thread first. */
-  private wanted(fetched: Map<PrKey, Pr>): Wanted[] {
+  private wanted(fetched: Map<PrKey, FullPr>): Wanted[] {
     const threads = this.store.notifications.getByPrKeys([...fetched.keys()]);
     const wanted: Wanted[] = [];
     for (const pr of fetched.values()) {
@@ -59,7 +59,7 @@ export class CapFiller {
   }
 
   /** The fetched PRs, the ones that needed it with their older pages merged in. */
-  async fill(fetched: Map<PrKey, Pr>): Promise<Map<PrKey, Pr>> {
+  async fill(fetched: Map<PrKey, FullPr>): Promise<Map<PrKey, FullPr>> {
     const wanted = this.wanted(fetched);
     if (wanted.length === 0) {
       return fetched;

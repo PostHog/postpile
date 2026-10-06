@@ -8,10 +8,11 @@
 // ask-for-you come from the spec oracles. Type imports only from the rule
 // modules.
 import type { AgentBlock, AgentOfferState, ApproveNaming, BackedRisk, LeftOutReason, MarkReadBlock, RiskLevel } from '../agent-actions.ts';
-import type { Pr, PrKey, Review, Verdict } from '../types.ts';
+// The oracles read the raw snapshot, every stored body (`FullPr`); the rules under test read the board shape.
+import type { FullPr as Pr, PrKey, FullReview as Review, Verdict } from '../types.ts';
 import type { PrSummary, TileView } from '../views.ts';
 import type { PropertyBoard } from './build-board.ts';
-import { eventsOf, expectedUnreadRows, isTrackedHere, prOf } from './invariant.ts';
+import { eventsOf, expectedUnreadRows, isTrackedHere, fullPrOf } from './invariant.ts';
 import { viewerApproved, viewerOwns } from './spec-facts.ts';
 import { expectedDone, expectedNewMove, expectedTurn, type TurnInput } from './spec-rules.ts';
 
@@ -63,7 +64,7 @@ export function specApproveBlock(board: PropertyBoard, key: PrKey): AgentBlock |
 }
 
 function turnInput(board: PropertyBoard, key: PrKey): TurnInput {
-  return { pr: prOf(board, key), events: eventsOf(board, key), viewer: board.viewer, userState: board.userStates.get(key) ?? null, notYours: board.notYours.has(key) };
+  return { pr: fullPrOf(board, key), events: eventsOf(board, key), viewer: board.viewer, userState: board.userStates.get(key) ?? null, notYours: board.notYours.has(key) };
 }
 
 /** Someone approved on GitHub: GitHub's decision says approved, or a reviewer's newest approve, changes or dismissed review is an approval. */

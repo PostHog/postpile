@@ -1,4 +1,4 @@
-import type { Pr } from '@postpile/core';
+import type { FullPr } from '@postpile/core';
 import { at, makeComment, makePr, makeThreadFor } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness, type Harness } from './testing/fakes.ts';
@@ -7,7 +7,7 @@ import { topicWithPrs } from './testing/topics.ts';
 import { STACK_DEPTH } from './stack-layers.ts';
 
 /** A PR on the given branches with nothing that pings the viewer. */
-function layer(number: number, baseRef: string, headRef: string, overrides: Partial<Pr> = {}): Pr {
+function layer(number: number, baseRef: string, headRef: string, overrides: Partial<FullPr> = {}): FullPr {
   return makePr({ number, baseRef, headRef, ...overrides });
 }
 
@@ -15,7 +15,7 @@ function layer(number: number, baseRef: string, headRef: string, overrides: Part
  * #10 (master <- l10) <- #11 (pinged, in "depot") <- #12, all open.
  * Only #11 has a notification thread.
  */
-function threeLayerStack(h: Harness): { below: Pr; pinged: Pr; above: Pr } {
+function threeLayerStack(h: Harness): { below: FullPr; pinged: FullPr; above: FullPr } {
   const below = layer(10, 'master', 'l10', { comments: [makeComment({ id: 'c10', author: 'bob', body: 'rebased' })] });
   const pinged = reviewRequestedPr(11, { baseRef: 'l10', headRef: 'l11' });
   const above = layer(12, 'l11', 'l12');

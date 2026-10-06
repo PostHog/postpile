@@ -1,7 +1,7 @@
 import type {
   AmbiguousCandidate,
   ChatMessage,
-  Comment,
+  FullComment,
   Dossier,
   DossierFlag,
   DossierVersion,
@@ -208,10 +208,10 @@ export interface DraftCommentInput {
 export interface DraftReplyInput {
   pr: Pr;
   viewer: Viewer;
-  /** The comment being answered. */
-  comment: Comment;
+  /** The comment being answered, with its stored body. */
+  comment: FullComment;
   /** Its review thread, or the conversation around it, oldest first, including the comment. */
-  conversation: Comment[];
+  conversation: FullComment[];
   /** The user's own words: a gist or a rough draft to write the reply from. Empty: drafted from the conversation. */
   gist: string;
   /** Untrusted background lines (the glance). Rendered inside the GitHub data fence. */

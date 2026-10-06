@@ -35,8 +35,8 @@ export function opensThread(comment: Comment, pr: Pr): boolean {
   return thread !== null && thread.comments[0]?.id === comment.id;
 }
 
-/** The inline comments that name the review as theirs (`Comment.reviewId`). */
-export function inlineCommentsOf(review: Review, pr: Pr): Comment[] {
+/** The inline comments that name the review as theirs (`Comment.reviewId`); a `FullPr` gives them with their bodies. */
+export function inlineCommentsOf<P extends Pr>(review: Review, pr: P): P['comments'][number][] {
   return pr.comments.filter((comment) => comment.reviewId === review.id);
 }
 
@@ -67,7 +67,8 @@ export function commentsSentWith(review: Review, pr: Pr): Comment[] {
  * text, or one whose comments start new threads is a real review.
  */
 export function carriedReplies(review: Review, pr: Pr): Comment[] {
-  if (review.state !== 'COMMENTED' || review.body.trim() !== '') {
+  // A board read leaves a body out only when it has text (`boardShape` keeps empty ones), so null is not empty.
+  if (review.state !== 'COMMENTED' || review.body === null || review.body.trim() !== '') {
     return [];
   }
   const sent = commentsSentWith(review, pr);

@@ -1,4 +1,4 @@
-import type { Glance, Pr } from '@postpile/core';
+import type { FullPr, Glance, Pr } from '@postpile/core';
 import { at, makeThreadFor } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness, type Harness } from './testing/fakes.ts';
@@ -31,7 +31,7 @@ function member(pr: Pr, reason = 'same runner change'): { prKey: string; reason:
 }
 
 /** The topic "depot" with one set over the first two PRs; the rest stay open and in no set. */
-async function depotWithSet(prs: Pr[]): Promise<{ h: Harness; setId: string }> {
+async function depotWithSet(prs: FullPr[]): Promise<{ h: Harness; setId: string }> {
   const h = makeHarness();
   topicWithPrs(h, 'depot', prs);
   h.runner.answer('set_grouping', { newSets: [{ title: 'Runner switch', take: 'Both switch runners.', members: [member(prs[0]!), member(prs[1]!)] }] });

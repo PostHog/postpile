@@ -1,5 +1,5 @@
 import { homeTeamsOf, isBot, isMachineComment, isPrOwner, prOwners, sameLogin, standingApprovals } from '@postpile/core';
-import type { Comment, EntityRef, Feedback, FeedbackKind, Pr, Provenance, Viewer } from '@postpile/core';
+import type { EntityRef, Feedback, FeedbackKind, FullComment, Pr, Provenance, Viewer } from '@postpile/core';
 import type { PromptContext } from '../service.ts';
 
 /** Trims a body to keep prompts bounded without losing the point. */
@@ -183,9 +183,14 @@ export function jsonOnly(shape: string): string {
   return `\nReply with JSON only: no preamble, no markdown, no code fences. Use exactly this shape:\n\n${shape}\n`;
 }
 
-/** Human comments across the PR, oldest first. Bot chatter is most of the volume and none of the signal. */
-export function humanComments(pr: Pr): Comment[] {
-  return pr.comments.filter((comment) => !isMachineComment(comment));
+/**
+ * Human comments across the PR, oldest first. Bot chatter is most of the
+ * volume and none of the signal. A board read leaves out only bot bodies
+ * (`isBodyReadByRules`), which `isMachineComment` drops anyway, so every
+ * comment kept has its body.
+ */
+export function humanComments(pr: Pr): FullComment[] {
+  return pr.comments.filter((comment): comment is FullComment => comment.body !== null && !isMachineComment(comment));
 }
 
 export interface PrDetailLimits {

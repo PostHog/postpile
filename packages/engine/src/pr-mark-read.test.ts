@@ -1,4 +1,4 @@
-import { UNDO_WINDOW_MS, type Pr, type TileView } from '@postpile/core';
+import { UNDO_WINDOW_MS, type FullPr, type TileView } from '@postpile/core';
 import { at, makeComment, makePr, makeThreadFor } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness, type Harness } from './testing/fakes.ts';
@@ -7,7 +7,7 @@ const TOPIC = 'cache';
 const SET_TILE = 'set:s1';
 
 /** A PR the viewer follows: alice commented, nothing asks the viewer anything. */
-function followedPr(number: number): Pr {
+function followedPr(number: number): FullPr {
   return makePr({
     number,
     author: 'alice',
@@ -161,7 +161,7 @@ describe('markPrRead: the detail pane acts on the selected PR', () => {
 
 describe('markOpenedRead on a set: checked per PR', () => {
   /** A PR in the set that asks the viewer for a review: a mark-read cannot make it done. */
-  async function syncedWithAsk(): Promise<{ h: Harness; asking: Pr }> {
+  async function syncedWithAsk(): Promise<{ h: Harness; asking: FullPr }> {
     const h = await syncedSet();
     const asking = makePr({ number: 13, author: 'alice', reviewerUsers: ['viewer'], updatedAt: at(6) });
     h.reader.addPr(asking, makeThreadFor(asking, { reason: 'review_requested' }));

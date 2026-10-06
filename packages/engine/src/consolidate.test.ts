@@ -1,4 +1,4 @@
-import { emptyDossier, type Dossier, type Pr } from '@postpile/core';
+import { emptyDossier, type Dossier, type FullPr } from '@postpile/core';
 import { at, makeComment, makeFact, makeFactRef, makeThreadFor, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness, type Harness } from './testing/fakes.ts';
@@ -19,12 +19,12 @@ function finishedDossier(): Dossier {
   return { ...emptyDossier(), summary: 'Done.', status: 'finished' };
 }
 
-function mergedPr(number: number): Pr {
+function mergedPr(number: number): FullPr {
   return reviewRequestedPr(number, { state: 'MERGED', mergedAt: at(5), mergedBy: 'alice' });
 }
 
 /** Synced, dossier written, every event seen: the shape of a topic that is over. */
-async function finishedTopic(h: Harness, prs: Pr[]): Promise<void> {
+async function finishedTopic(h: Harness, prs: FullPr[]): Promise<void> {
   topicWithPrs(h, 'depot', prs);
   await h.engine.sync({ agentJobs: ['dossiers'] });
   const eventIds = prs.flatMap((pr) => h.store.events.listForPr(pr.key).map((e) => e.id));

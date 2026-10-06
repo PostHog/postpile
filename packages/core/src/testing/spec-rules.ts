@@ -13,7 +13,8 @@ import type { PingRuleClass } from '../pings.ts';
 import type { PrTier } from '../pr-tier.ts';
 import type { JudgedReadCheck, OpenedReadCheck, QuietReadCheck, RequestGoneReadCheck, TouchedReadCheck } from '../quiet-reads.ts';
 import type { ReadCause, ReadScope } from '../read-plan.ts';
-import type { EventKind, IsoTime, Loudness, NotificationReason, NotificationThread, Pr, PrEvent, PrKey, Snooze, UserPrState, Verdict, Viewer } from '../types.ts';
+// The oracles read the raw snapshot, every stored body (`FullPr`); the rules under test read the board shape.
+import type { EventKind, IsoTime, Loudness, NotificationReason, NotificationThread, FullPr as Pr, PrEvent, PrKey, Snooze, UserPrState, Verdict, Viewer } from '../types.ts';
 import type { WhyCode } from '../why-here.ts';
 import type { YourMove } from '../whose-turn.ts';
 import { answersChanges, editAsks, SPEC_ADDRESSED_KINDS, SPEC_PERSONAL_ASK_KINDS, SPEC_PUSH_KINDS } from './spec-events.ts';

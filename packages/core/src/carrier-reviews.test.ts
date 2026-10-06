@@ -4,7 +4,7 @@ import { deriveEvents } from './events.ts';
 import { at, makeComment, makePr, makeReview, makeThread, viewer } from './fixtures.ts';
 import { headlineClass } from './headline.ts';
 import { prPaneView } from './pr-pane.ts';
-import type { Comment, Pr, Review } from './types.ts';
+import type { FullComment as Comment, FullPr as Pr, FullReview as Review } from './types.ts';
 
 const me = viewer.login;
 
@@ -24,7 +24,7 @@ function empty(id: string, author: string, minute: number): Review {
   return makeReview({ id, author, state: 'COMMENTED', body: '', submittedAt: at(minute) });
 }
 
-const ids = (comments: Comment[]) => comments.map((comment) => comment.id);
+const ids = (comments: Array<{ id: string }>) => comments.map((comment) => comment.id);
 
 describe('carriedReplies', () => {
   it('matches the replies by review id, whatever their time', () => {

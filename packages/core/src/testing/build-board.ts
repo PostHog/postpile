@@ -21,19 +21,21 @@ import { buildTopicTiles, deriveTileState } from '../tiles.ts';
 import { prAfterMarkRead } from '../after-read.ts';
 import { agentPrFacts } from '../agent-actions.ts';
 import { buildPrSummary, buildTileView, type PrSummaryInput } from '../tile-view.ts';
+import { boardShape } from '../pr-parts.ts';
 import type {
-  Comment,
   Commit,
   FoundPr,
+  FullComment,
+  FullPr,
+  FullReview,
+  FullReviewThread,
   IsoTime,
   NotificationThread,
   Pr,
   PrEvent,
   PrKey,
   PrSet,
-  Review,
   ReviewDecision,
-  ReviewThread,
   Snooze,
   SnoozeCondition,
   Tile,
@@ -192,11 +194,11 @@ function viewerOwns(spec: PrSpec): boolean {
 
 /** Builds one PR snapshot step by step, skipping what GitHub would not allow. */
 class PrHistory {
-  readonly comments: Comment[] = [];
-  readonly reviews: Review[] = [];
+  readonly comments: FullComment[] = [];
+  readonly reviews: FullReview[] = [];
   commits: Commit[];
   readonly timeline: TimelineItem[] = [];
-  readonly reviewThreads = new Map<string, Comment[]>();
+  readonly reviewThreads = new Map<string, FullComment[]>();
   readonly reviewerUsers: string[] = [];
   readonly reviewerTeams: string[] = [];
   isDraft: boolean;
@@ -247,7 +249,7 @@ class PrHistory {
 
   /** Asks again every reviewer whose latest verdict asks for changes and who is not pending already, as the author. */
   private rerequest(index: number, time: string): void {
-    const latest = new Map<string, Review>();
+    const latest = new Map<string, FullReview>();
     for (const review of this.reviews) {
       if (review.state === 'APPROVED' || review.state === 'CHANGES_REQUESTED' || review.state === 'DISMISSED') {
         latest.set(review.author, review);
@@ -266,7 +268,7 @@ class PrHistory {
 
   private comment(step: Extract<StepSpec, { kind: 'comment' }>, index: number, time: string): void {
     const threadId = step.thread === null ? null : `rt${this.number}-${step.thread}`;
-    const comment: Comment = {
+    const comment: FullComment = {
       id: this.id('cm', index),
       author: LOGINS[step.by],
       body: COMMENT_BODIES[step.text],
@@ -311,7 +313,7 @@ class PrHistory {
     }
     for (let thread = 0; thread < step.threads; thread += 1) {
       const threadId = `rt${this.number}-${thread}`;
-      const comment: Comment = {
+      const comment: FullComment = {
         id: `${this.id('cm', index)}-${thread}`,
         author: login,
         body: COMMENT_BODIES[step.text],
@@ -455,7 +457,7 @@ class PrHistory {
 
   /** Like GitHub: the standing verdicts of everyone, a dismissed review counts for nothing. */
   reviewDecision(): ReviewDecision {
-    const latest = new Map<string, Review>();
+    const latest = new Map<string, FullReview>();
     for (const review of this.reviews) {
       if (review.state === 'APPROVED' || review.state === 'CHANGES_REQUESTED' || review.state === 'DISMISSED') {
         latest.set(review.author.toLowerCase(), review);
@@ -468,7 +470,7 @@ class PrHistory {
     return states.includes('APPROVED') ? 'APPROVED' : 'REVIEW_REQUIRED';
   }
 
-  threads(resolved: boolean): ReviewThread[] {
+  threads(resolved: boolean): FullReviewThread[] {
     return [...this.reviewThreads.entries()].map(([id, comments]) => ({ id, path: 'a.ts', isResolved: resolved, comments }));
   }
 }
@@ -482,7 +484,7 @@ interface PrPlace {
 }
 
 interface CompiledPr {
-  pr: Pr;
+  pr: FullPr;
   /** The head commit after each number of steps. */
   headAfter: string[];
   /** Last activity on GitHub (steps, merge or close). */
@@ -579,7 +581,14 @@ export interface PropertyBoard {
   spec: BoardSpec;
   viewer: Viewer;
   now: IsoTime;
+  /**
+   * The PRs as the board reads them (`boardShape`, DESIGN.md "The board
+   * diet"): bodies no board rule reads left out. Every rule under test
+   * reads these.
+   */
   prs: Map<PrKey, Pr>;
+  /** The same PRs with every stored body (`PrRepo.getFull`): what events derive from and what the spec oracles read. */
+  fullPrs: Map<PrKey, FullPr>;
   events: Map<PrKey, PrEvent[]>;
   userStates: Map<PrKey, UserPrState>;
   snoozes: Map<PrKey, Snooze>;
@@ -778,6 +787,7 @@ export function buildBoard(spec: BoardSpec): PropertyBoard {
     viewer,
     now,
     prs: new Map(),
+    fullPrs: new Map(),
     events: new Map(),
     userStates: new Map(),
     snoozes: new Map(),
@@ -801,7 +811,8 @@ export function buildBoard(spec: BoardSpec): PropertyBoard {
   for (const entry of compiled) {
     const { pr } = entry.compiled;
     const tracking = entry.spec.tracking;
-    board.prs.set(pr.key, pr);
+    board.prs.set(pr.key, boardShape(pr));
+    board.fullPrs.set(pr.key, pr);
     board.prSpecs.set(pr.key, entry.spec);
     let thread: NotificationThread | null = null;
     if (tracking.kind === 'thread') {
@@ -889,6 +900,14 @@ export function buildBoard(spec: BoardSpec): PropertyBoard {
     }
   });
   return board;
+}
+
+/**
+ * The board as it read PRs before the board diet: every stored body. Rule
+ * outputs on it must equal those on the board itself (`boardShape`).
+ */
+export function withFullPrs(board: PropertyBoard): PropertyBoard {
+  return { ...board, prs: new Map(board.fullPrs) };
 }
 
 /** A copy of the board with other events and user states, for what a read leaves. */

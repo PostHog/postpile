@@ -400,6 +400,7 @@ export class Engine implements EngineService {
           longest_slice_ms: report.longestSliceMs,
           wall_ms: report.wallMs,
         }),
+      onBlocked: (blocked) => this.telemetry.capture('storage_job_blocked', { name: blocked.name, blocked_units: blocked.blockedUnits ?? 0 }),
     });
     const contexts = new PromptContextSource(store, history, () => this.workContext.promptText());
     this.reads = new ReadModels(store, deps.agent, contexts, now, deps.pendingWrites, {

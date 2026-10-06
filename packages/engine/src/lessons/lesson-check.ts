@@ -17,7 +17,7 @@ export function checkOpenLesson(store: Store, id: number, at: string): LessonChe
   if (lesson.status !== 'open') {
     return { ok: false, message: 'This lesson was already decided or withdrawn.' };
   }
-  const pr = store.prs.get(lesson.prKey);
+  const pr = store.prs.getFull(lesson.prKey);
   const viewer = loadViewer(store);
   if (lesson.review === null || pr === null || viewer === null) {
     return { ok: true, lesson };
@@ -36,7 +36,7 @@ export function checkOpenLesson(store: Store, id: number, at: string): LessonChe
 
 /** The PR and the review behind a lesson, as plain text for the instructions prompt (which fences it). */
 export function lessonEvidence(store: Store, lesson: Lesson): string {
-  const pr = store.prs.get(lesson.prKey);
+  const pr = store.prs.getFull(lesson.prKey);
   const lines = [`PR: ${lesson.prKey}${pr ? ` "${pr.title}"` : ''}`];
   if (lesson.review) {
     lines.push(`Review: ${lesson.review.body.trim() || '(no text in the review body)'}`);

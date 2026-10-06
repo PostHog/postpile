@@ -2,9 +2,10 @@
 // on the why-here codes (`whyHere`, `tileWhy`). Only the output changes: the
 // codes still decide, the UI shows words instead of RV / RT / @ / ...
 import { changesAnswered } from './changes-answered.ts';
-import { isOwnTeam, mentionsTeam } from './mentions.ts';
+import { isOwnTeam } from './mentions.ts';
 import { isPrOwner } from './pr-owners.ts';
 import { requestedTeam, reviewRequest } from './review-request.ts';
+import { teamMentions } from './team-mentions.ts';
 import { isRoutingTeam, teamsHomeFirst } from './team-roles.ts';
 import type { Pr, Viewer } from './types.ts';
 import type { WhyCode } from './why-here.ts';
@@ -29,6 +30,17 @@ function shortTeam(team: string): string {
 }
 
 /**
+ * Every team the PR body or a comment mentions, lowercased: every board
+ * read sets `mentionedTeams` (from the header once the discussion is read
+ * from rows), since it leaves bot bodies out. A PR with every body (a
+ * fetch, `getFull`, a test) may lack it; its bodies are read instead.
+ * `teamMentions` matches exactly what `mentionsTeam` matches.
+ */
+function mentionedTeams(pr: Pr): string[] {
+  return pr.mentionedTeams ?? teamMentions([pr.body, ...pr.comments.flatMap((comment) => (comment.body === null ? [] : [comment.body]))]);
+}
+
+/**
  * Which of the viewer's teams the PR is for ("org/slug"): the pending
  * request, a timeline request, a mention, else the first home team. Home
  * teams go first at each step. Null when the viewer has no teams.
@@ -45,8 +57,8 @@ function teamOf(pr: Pr | null, viewer: Viewer | null): string | null {
     if (timelineTeam) {
       return timelineTeam;
     }
-    const bodies = [pr.body, ...pr.comments.map((comment) => comment.body)];
-    const mentioned = teams.find((team) => bodies.some((body) => mentionsTeam(body, team)));
+    const named = mentionedTeams(pr);
+    const mentioned = teams.find((team) => named.includes(team.toLowerCase()));
     if (mentioned) {
       return mentioned;
     }

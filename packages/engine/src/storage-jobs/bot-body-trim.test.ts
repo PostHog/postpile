@@ -2,7 +2,7 @@
 // storage job 1 cuts what is stored, in small slices, and a deploy event
 // that a cut body no longer explains keeps its state wherever its PR's
 // events are derived again.
-import { deriveEvents, eventId, trimBotBodies, trimBotBody, UNDO_WINDOW_MS, type Pr } from '@postpile/core';
+import { deriveEvents, eventId, trimBotBodies, trimBotBody, UNDO_WINDOW_MS, type FullPr } from '@postpile/core';
 import { at, FakeTimers, makeComment, makeEvent, makePr, makeReview, makeThread, makeThreadFor, viewer } from '@postpile/core/fixtures';
 import { Store } from '@postpile/store';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -17,7 +17,7 @@ const LATE_DEPLOY = `## Test report\n${'- a passing test with a long generated n
 const CUT = trimBotBody({ author: BOT, body: LATE_DEPLOY });
 
 /** A PR with the long report as a comment, an inline comment and a review, plus a person's long comment. */
-function reportPr(number: number, overrides: Partial<Pr> = {}): Pr {
+function reportPr(number: number, overrides: Partial<FullPr> = {}): FullPr {
   const inline = makeComment({ id: `rc${number}`, author: BOT, body: LATE_DEPLOY, createdAt: at(11) });
   return makePr({
     number,
@@ -37,7 +37,7 @@ function reportPr(number: number, overrides: Partial<Pr> = {}): Pr {
  * The comment's event as a build before the cut stored it: the whole body
  * said "deploy". Seen, muted by the user and logged.
  */
-function storeOldDeployEvent(store: Store, pr: Pr): string {
+function storeOldDeployEvent(store: Store, pr: FullPr): string {
   const id = eventId(pr.key, 'deploy', `c${pr.ref.number}`);
   store.events.upsertDerived(pr.key, [makeEvent({ id, prKey: pr.key, kind: 'deploy', actor: BOT, isBot: true, sourceId: `c${pr.ref.number}`, at: at(10) })]);
   store.events.markSeen([id], at(30));
@@ -97,7 +97,7 @@ describe('the bot body trim job', () => {
     trimRunner().start();
     runFor(60_000);
 
-    const stored = store.prs.get(pr.key)!;
+    const stored = store.prs.getFull(pr.key)!;
     expect(stored.comments.map((comment) => comment.body)).toEqual([CUT, pr.comments[1]!.body, CUT]);
     expect(stored.threads[0]!.comments[0]!.body).toBe(CUT);
     expect(stored.reviews[0]!.body).toBe(CUT);
@@ -113,15 +113,15 @@ describe('the bot body trim job', () => {
     store.prs.upsert(reportPr(1), at(1));
     trimRunner().start();
     timers.advance(START_DELAY_MS - 1_000);
-    expect(store.prs.get('acme/app#1')!.comments[0]!.body).toBe(LATE_DEPLOY);
+    expect(store.prs.getFull('acme/app#1')!.comments[0]!.body).toBe(LATE_DEPLOY);
 
     busy = true;
     timers.advance(10_000);
-    expect(store.prs.get('acme/app#1')!.comments[0]!.body).toBe(LATE_DEPLOY);
+    expect(store.prs.getFull('acme/app#1')!.comments[0]!.body).toBe(LATE_DEPLOY);
 
     busy = false;
     runFor(10_000);
-    expect(store.prs.get('acme/app#1')!.comments[0]!.body).toBe(CUT);
+    expect(store.prs.getFull('acme/app#1')!.comments[0]!.body).toBe(CUT);
   });
 
   it('goes a PR per unit, moving the cursor only past PRs done, and the revision only of PRs it cut', () => {
@@ -133,7 +133,7 @@ describe('the bot body trim job', () => {
 
     expect(runner.slice()).toBe('worked');
     expect(store.meta.get(BOT_BODY_TRIM_AFTER_KEY)).toBe('acme/app#1');
-    expect(store.prs.get('acme/app#3')!.comments[0]!.body).toBe(LATE_DEPLOY);
+    expect(store.prs.getFull('acme/app#3')!.comments[0]!.body).toBe(LATE_DEPLOY);
     expect(runner.slice()).toBe('worked');
     expect(runner.slice()).toBe('worked');
     expect(store.meta.get(BOT_BODY_TRIM_AFTER_KEY)).toBe('acme/app#3');
@@ -158,7 +158,7 @@ describe('the bot body trim job', () => {
     first.stop();
     timers.advance(60_000);
     expect(store.meta.get(BOT_BODY_TRIM_AFTER_KEY)).toBe('acme/app#1');
-    expect(store.prs.get('acme/app#3')!.comments[0]!.body).toBe(LATE_DEPLOY);
+    expect(store.prs.getFull('acme/app#3')!.comments[0]!.body).toBe(LATE_DEPLOY);
 
     trimRunner().start();
     runFor(60_000);
@@ -168,7 +168,7 @@ describe('the bot body trim job', () => {
     store.prs.upsert(reportPr(4), at(5));
     trimRunner().start();
     timers.advance(120_000);
-    expect(store.prs.get('acme/app#4')!.comments[0]!.body).toBe(LATE_DEPLOY);
+    expect(store.prs.getFull('acme/app#4')!.comments[0]!.body).toBe(LATE_DEPLOY);
   });
 
   it('goes on from the cursor 0.19.0 left in meta, under the same keys', () => {
@@ -181,9 +181,9 @@ describe('the bot body trim job', () => {
     trimRunner().start();
     runFor(60_000);
 
-    expect(store.prs.get('acme/app#1')!.comments[0]!.body).toBe(LATE_DEPLOY);
-    expect(store.prs.get('acme/app#2')!.comments[0]!.body).toBe(CUT);
-    expect(store.prs.get('acme/app#3')!.comments[0]!.body).toBe(CUT);
+    expect(store.prs.getFull('acme/app#1')!.comments[0]!.body).toBe(LATE_DEPLOY);
+    expect(store.prs.getFull('acme/app#2')!.comments[0]!.body).toBe(CUT);
+    expect(store.prs.getFull('acme/app#3')!.comments[0]!.body).toBe(CUT);
     expect(store.meta.get('bot_body_trim_done')).toBe(NOW.toISOString());
     expect(store.meta.get('bot_body_trim_after')).toBeNull();
     expect(reports).toMatchObject([{ units: 2, wrote: 2 }]);
@@ -197,7 +197,7 @@ describe('the bot body trim job', () => {
     runner.start();
     timers.advance(120_000);
 
-    expect(store.prs.get('acme/app#1')!.comments[0]!.body).toBe(LATE_DEPLOY);
+    expect(store.prs.getFull('acme/app#1')!.comments[0]!.body).toBe(LATE_DEPLOY);
     expect(runner.slice()).toBe('idle');
     expect(lines).toEqual([]);
   });
@@ -223,7 +223,7 @@ describe('the bot body trim job', () => {
     trimRunner().start();
     runFor(60_000);
 
-    expect(store.prs.get(pr.key)).toEqual(pr);
+    expect(store.prs.getFull(pr.key)).toEqual(pr);
     expect(lines.at(-1)).toMatch(/done: 0 of 1 units rewritten/);
   });
 });
@@ -269,7 +269,7 @@ describe('Engine.startStorageJobs', () => {
     runTrim(h);
 
     expect(h.store.meta.get(BOT_BODY_TRIM_DONE_KEY)).not.toBeNull();
-    expect(h.store.prs.get('acme/app#2')!.comments[0]!.body).toBe(CUT);
+    expect(h.store.prs.getFull('acme/app#2')!.comments[0]!.body).toBe(CUT);
     expect(h.telemetry.events.filter((event) => event.event === 'storage_job_done')).toEqual([
       { event: 'storage_job_done', props: { name: 'bot_body_trim', units: 2, work_ms: expect.any(Number), longest_slice_ms: expect.any(Number), wall_ms: expect.any(Number) } },
     ]);
@@ -283,12 +283,12 @@ describe('Engine.startStorageJobs', () => {
     h.engine.startStorageJobs();
     h.engine.noteSuspend();
     h.timers.advance(10 * 60_000);
-    expect(h.store.prs.get('acme/app#1')!.comments[0]!.body).toBe(LATE_DEPLOY);
+    expect(h.store.prs.getFull('acme/app#1')!.comments[0]!.body).toBe(LATE_DEPLOY);
 
     h.engine.noteWake();
     h.timers.advance(START_DELAY_MS);
     runTrim(h);
-    expect(h.store.prs.get('acme/app#1')!.comments[0]!.body).toBe(CUT);
+    expect(h.store.prs.getFull('acme/app#1')!.comments[0]!.body).toBe(CUT);
     await h.engine.close();
   });
 });

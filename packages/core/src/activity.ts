@@ -13,7 +13,7 @@ import { PERSONAL_ASK_KINDS, PUSH_KINDS } from './kinds.ts';
 import { isOwnTeam, sameLogin } from './mentions.ts';
 import { findComment, replyTarget } from './reply.ts';
 import { effectiveLoudness } from './loudness.ts';
-import type { Comment, EventDisplayState, EventKind, IsoTime, NotificationThread, Pr, Viewer } from './types.ts';
+import type { EventDisplayState, EventKind, FullComment, FullPr, IsoTime, NotificationThread, Viewer } from './types.ts';
 import type { EventView } from './views.ts';
 
 /** About this many lines show before "Show all N". */
@@ -180,7 +180,7 @@ function involvesViewer(view: EventView, viewer: Viewer | null): boolean {
  * The bot review a quiet bot event folds into (`botReviewOf`), null for
  * none. A loud (raised) or muted one stays with the other bot events.
  */
-function foldedBotReviewId(view: EventView, pr: Pr | null, viewer: Viewer | null): string | null {
+function foldedBotReviewId(view: EventView, pr: FullPr | null, viewer: Viewer | null): string | null {
   if (!pr || effectiveLoudness(view.event) !== 'quiet') {
     return null;
   }
@@ -188,7 +188,7 @@ function foldedBotReviewId(view: EventView, pr: Pr | null, viewer: Viewer | null
 }
 
 /** Human talk, review requests about you or your team, human pushes, lifecycle, and a bot's folded review. */
-function isMeaningful(view: EventView, viewer: Viewer | null, pr: Pr | null): boolean {
+function isMeaningful(view: EventView, viewer: Viewer | null, pr: FullPr | null): boolean {
   const { event } = view;
   if (view.display === 'muted') {
     return false;
@@ -242,7 +242,7 @@ function groupBursts(events: EventView[]): EventView[][] {
 }
 
 /** The full body behind a human comment or review event; bots keep the one-line summary. */
-function fullBody(view: EventView, pr: Pr | null): string | null {
+function fullBody(view: EventView, pr: FullPr | null): string | null {
   const { event } = view;
   if (!pr || event.isBot || !HUMAN_TALK.includes(event.kind)) {
     return null;
@@ -281,7 +281,7 @@ interface LineDraft {
 const THREAD_TALK: EventKind[] = ['comment', 'reply_to_user', 'question_to_user', 'mention', 'team_mention'];
 
 /** The thread a single comment's line answers in, null for anything else. */
-function lineThread(view: EventView, pr: Pr | null): LineThread | null {
+function lineThread(view: EventView, pr: FullPr | null): LineThread | null {
   if (!pr || !THREAD_TALK.includes(view.event.kind)) {
     return null;
   }
@@ -290,7 +290,7 @@ function lineThread(view: EventView, pr: Pr | null): LineThread | null {
   return reply === null ? null : { to: reply.to, path: reply.path };
 }
 
-function toDraft(group: EventView[], pr: Pr | null): LineDraft {
+function toDraft(group: EventView[], pr: FullPr | null): LineDraft {
   const newestFirst = group.toReversed();
   const newest = newestFirst[0]!;
   const loud = group.some((view) => view.display === 'loud');
@@ -320,7 +320,7 @@ const BOT_REVIEW_KEY = 'bot-review:';
  * line per thread (`bot-thread:<threadId>`, `botThreadOf`); a loud one (an
  * ask, or the agent raised it) stays a line of its own.
  */
-function foldKeyOf(view: EventView, pr: Pr | null, viewer: Viewer | null): string | null {
+function foldKeyOf(view: EventView, pr: FullPr | null, viewer: Viewer | null): string | null {
   const reviewId = foldedBotReviewId(view, pr, viewer);
   if (reviewId !== null) {
     return `${BOT_REVIEW_KEY}${reviewId}`;
@@ -333,7 +333,7 @@ function foldKeyOf(view: EventView, pr: Pr | null, viewer: Viewer | null): strin
 }
 
 /** The replies an empty review only carries (GitHub makes one per thread reply), by comment id; empty for any other event. */
-function carriedIds(view: EventView, pr: Pr | null): string[] {
+function carriedIds(view: EventView, pr: FullPr | null): string[] {
   if (!pr || view.event.kind !== 'review_commented') {
     return [];
   }
@@ -342,7 +342,7 @@ function carriedIds(view: EventView, pr: Pr | null): string[] {
 }
 
 /** The thread comments a fold's events stand for, oldest first. */
-function foldedComments(group: EventView[], pr: Pr): Comment[] {
+function foldedComments(group: EventView[], pr: FullPr): FullComment[] {
   const ids = new Set(group.map((view) => view.event.sourceId));
   return pr.comments.filter((comment) => ids.has(comment.id));
 }
@@ -355,7 +355,7 @@ function foldedComments(group: EventView[], pr: Pr): Comment[] {
  * and no unread dot: answering a bot is housekeeping. No Reply on it
  * either; the thread is on GitHub.
  */
-function botThreadDraft(group: EventView[], pr: Pr): LineDraft {
+function botThreadDraft(group: EventView[], pr: FullPr): LineDraft {
   const newestFirst = group.toReversed();
   const newest = newestFirst[0]!;
   const replies = foldedComments(group, pr);
@@ -390,7 +390,7 @@ function botThreadDraft(group: EventView[], pr: Pr): LineDraft {
  * and first line folded under it. Like other bot events: never new since
  * you looked, no unread dot, no Reply.
  */
-function botReviewDraft(group: EventView[], reviewId: string, pr: Pr, viewer: Viewer | null): LineDraft {
+function botReviewDraft(group: EventView[], reviewId: string, pr: FullPr, viewer: Viewer | null): LineDraft {
   const newestFirst = group.toReversed();
   const newest = newestFirst[0]!;
   const review = pr.reviews.find((candidate) => candidate.id === reviewId);
@@ -416,7 +416,7 @@ function botReviewDraft(group: EventView[], reviewId: string, pr: Pr, viewer: Vi
 }
 
 /** The folded line of one key (`foldKeyOf`). */
-function foldDraft(key: string, group: EventView[], pr: Pr, viewer: Viewer | null): LineDraft {
+function foldDraft(key: string, group: EventView[], pr: FullPr, viewer: Viewer | null): LineDraft {
   return key.startsWith(BOT_REVIEW_KEY) ? botReviewDraft(group, key.slice(BOT_REVIEW_KEY.length), pr, viewer) : botThreadDraft(group, pr);
 }
 
@@ -428,7 +428,7 @@ function foldDraft(key: string, group: EventView[], pr: Pr, viewer: Viewer | nul
  * the user raised to loud keeps a line of its own (`lineDrafts` never
  * passes it).
  */
-function addCarriers(drafts: LineDraft[], carriers: EventView[], pr: Pr | null): EventView[] {
+function addCarriers(drafts: LineDraft[], carriers: EventView[], pr: FullPr | null): EventView[] {
   const homeless: EventView[] = [];
   for (const carrier of carriers) {
     const ids = carriedIds(carrier, pr);
@@ -458,7 +458,7 @@ interface Drafts {
  * its newest event), the rest with push bursts grouped, and the reviews
  * that only carry a reply on that reply's line.
  */
-function lineDrafts(meaningful: EventView[], pr: Pr | null, viewer: Viewer | null): Drafts {
+function lineDrafts(meaningful: EventView[], pr: FullPr | null, viewer: Viewer | null): Drafts {
   const folds = new Map<string, EventView[]>();
   const carriers: EventView[] = [];
   const rest: EventView[] = [];
@@ -481,7 +481,7 @@ function lineDrafts(meaningful: EventView[], pr: Pr | null, viewer: Viewer | nul
 }
 
 /** The reply of one line on its own: its newest event's comment or review. */
-function lineReply(draft: LineDraft, pr: Pr, viewer: Viewer): LineReply | null {
+function lineReply(draft: LineDraft, pr: FullPr, viewer: Viewer): LineReply | null {
   const newest = draft.events[0]?.event;
   if (!newest || newest.isBot || !HUMAN_TALK.includes(newest.kind) || sameLogin(newest.actor, viewer.login)) {
     return null;
@@ -505,7 +505,7 @@ function lineReply(draft: LineDraft, pr: Pr, viewer: Viewer): LineReply | null {
  * body); only the newest gets the reply, so one comment never has two Reply
  * boxes, and it asks the viewer when any of its lines does.
  */
-function withReplies(drafts: LineDraft[], pr: Pr | null, viewer: Viewer | null): ActivityLine[] {
+function withReplies(drafts: LineDraft[], pr: FullPr | null, viewer: Viewer | null): ActivityLine[] {
   const lines = drafts.map((draft) => draft.line);
   if (!pr || !viewer) {
     return lines;
@@ -610,7 +610,7 @@ export function activityList(
   events: EventView[],
   viewer: Viewer | null,
   since: IsoTime | null = null,
-  pr: Pr | null = null,
+  pr: FullPr | null = null,
   thread: NotificationThread | null = null,
 ): ActivityList {
   const sorted = events.toSorted(byTime);

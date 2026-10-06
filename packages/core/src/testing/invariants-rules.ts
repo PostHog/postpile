@@ -28,7 +28,7 @@ import { prAsOf } from '../pr-as-of.ts';
 import type { Pr, PrEvent, PrKey, Verdict } from '../types.ts';
 import type { PrSummary, TileView } from '../views.ts';
 import type { PropertyBoard } from './build-board.ts';
-import { ensure, eventsOf, prOf, type Invariant } from './invariant.ts';
+import { ensure, eventsOf, fullPrOf, type Invariant } from './invariant.ts';
 import { SPEC_ADDRESSED_KINDS } from './spec-events.ts';
 import { isAutomationLogin, isViewerTeam, newestTouch, pendingRequest, specOwnerRelation, specOwners, specRelation, specSnapshotAt } from './spec-facts.ts';
 import {
@@ -55,7 +55,7 @@ function allRows(views: TileView[]): PrSummary[] {
 }
 
 function turnInput(board: PropertyBoard, key: PrKey) {
-  return { pr: prOf(board, key), events: eventsOf(board, key), viewer: board.viewer, userState: board.userStates.get(key) ?? null, notYours: board.notYours.has(key) };
+  return { pr: fullPrOf(board, key), events: eventsOf(board, key), viewer: board.viewer, userState: board.userStates.get(key) ?? null, notYours: board.notYours.has(key) };
 }
 
 /** A turn as one comparable line: kind, move, whom it waits on, lead and words. */
@@ -68,7 +68,7 @@ export const prFactsMatchTheSpec: Invariant = {
   name: "a PR's review request, last touch, open ask and team requests are the spec's",
   check(board, views) {
     for (const row of allRows(views)) {
-      const pr = prOf(board, row.key);
+      const pr = fullPrOf(board, row.key);
       ensure(row.facts.reviewRequest === pendingRequest(pr, board.viewer), `${row.key}: request ${row.facts.reviewRequest}, expected ${pendingRequest(pr, board.viewer)}`);
       const touch = newestTouch(pr, board.viewer);
       const expectedTouch = touch === null ? null : { kind: touch.kind, at: touch.at };
@@ -91,12 +91,12 @@ export const ownershipMatchesTheSpec: Invariant = {
   name: 'owners, their relation and the sidebar faces are the spec owners',
   check(board, views) {
     for (const row of allRows(views)) {
-      const pr = prOf(board, row.key);
+      const pr = fullPrOf(board, row.key);
       ensure(JSON.stringify(row.facts.owners) === JSON.stringify(specOwners(pr)), `${row.key}: owners ${row.facts.owners.join(', ')}, expected ${specOwners(pr).join(', ')}`);
       const relation = specOwnerRelation(pr, board.viewer);
       ensure(row.authorRelation === relation, `${row.key}: owner relation ${row.authorRelation}, expected ${relation}`);
     }
-    const prs = [...board.prs.values()];
+    const prs = [...board.fullPrs.values()];
     const people = new Map<string, string>();
     for (const owner of prs.flatMap(specOwners).filter((login) => !isAutomationLogin(login))) {
       people.set(owner.toLowerCase(), `${owner.toLowerCase()}:${specRelation(owner, board.viewer)}`);
@@ -117,7 +117,7 @@ export const forWhomMatchesTheSpec: Invariant = {
   check(board, views) {
     for (const view of views) {
       for (const row of view.prs) {
-        const expected = JSON.stringify(expectedForWhom(row.why, prOf(board, row.key), board.viewer));
+        const expected = JSON.stringify(expectedForWhom(row.why, fullPrOf(board, row.key), board.viewer));
         ensure(JSON.stringify(row.forWhom) === expected, `${row.key}: for whom ${JSON.stringify(row.forWhom)} (${row.why}), expected ${expected}`);
       }
       const tile = JSON.stringify(expectedTileForWhom(view.prs.map((row) => row.forWhom)));
@@ -209,7 +209,7 @@ function pingEventSets(board: PropertyBoard, key: PrKey): PrEvent[][] {
 export const pingsMatchTheSpec: Invariant = {
   name: 'the ping class and its event are the spec table: addressed asks ping, nothing else does',
   check(board, views) {
-    for (const [key, pr] of board.prs) {
+    for (const [key, pr] of board.fullPrs) {
       const snoozed = holdingViews(views, key).some((view) => view.state.kind === 'snoozed');
       for (const events of pingEventSets(board, key)) {
         for (const [quietRepo, snoozedTile] of [[false, snoozed], [true, false], [false, !snoozed]] as const) {
@@ -247,7 +247,7 @@ export const quietReadsMatchTheSpec: Invariant = {
       if (holding.length === 0) {
         continue;
       }
-      const pr = prOf(board, key);
+      const pr = fullPrOf(board, key);
       const input = {
         thread,
         pr,
@@ -303,7 +303,7 @@ const FOR_YOU = 'Routed to your team. Touches the billing job.';
 export const lookCloserMatchesTheSpec: Invariant = {
   name: 'a Look closer ping follows the spec: routed, unreviewed, unsnoozed, once per request',
   check(board) {
-    for (const [key, pr] of board.prs) {
+    for (const [key, pr] of board.fullPrs) {
       const userState = board.userStates.get(key) ?? null;
       const open = expectedLookCloser({ pr, viewer: board.viewer, verdict: 'LOOK_CLOSER', userState, snoozed: false, pingedRequestId: null });
       const requestIds = [null, 'an-older-request', open.kind === 'ping' ? open.requestId : `pending:${pr.reviewerTeams[0] ?? 'none'}`];
@@ -344,7 +344,7 @@ export const newMoveMatchesTheSpec: Invariant = {
   name: 'a move counts as new since the read exactly when the spec says, on the PR as it stood then',
   check(board) {
     for (const [key, thread] of board.threads) {
-      const pr = prOf(board, key);
+      const pr = fullPrOf(board, key);
       const input = { pr, events: eventsOf(board, key), userState: board.userStates.get(key) ?? null, viewer: board.viewer, notYours: board.notYours.has(key) };
       const boundaries = [thread.lastReadAt, lastLookedAt(thread, pr, input.events, board.viewer)].filter((time): time is string => time !== null);
       for (const since of boundaries) {

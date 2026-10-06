@@ -7,7 +7,8 @@
 // every body are invented.
 import { at, makeComment, makeCommit, makePr, makeReview, makeThreadFor, makeTimelineItem } from '../fixtures.ts';
 import { deriveEvents } from '../events.ts';
-import type { Comment, Commit, NotificationThread, Pr, PrEvent, Review, TimelineItem, Viewer } from '../types.ts';
+// Test helpers over the raw snapshot: every stored body (`FullPr`).
+import type { FullComment as Comment, Commit, NotificationThread, FullPr as Pr, PrEvent, FullReview as Review, TimelineItem, Viewer } from '../types.ts';
 
 /**
  * The viewer of every scenario: home team acme/team-platform, and

@@ -79,7 +79,7 @@ function stackLayers(kind: GroupKind, keys: PrKey[]): PrKey[] {
 
 /** A real stack: two layers or more, one of them open. */
 function isStack(board: PropertyBoard, layers: PrKey[]): boolean {
-  return layers.length >= 2 && layers.some((key) => board.prs.get(key)?.state === 'OPEN');
+  return layers.length >= 2 && layers.some((key) => board.fullPrs.get(key)?.state === 'OPEN');
 }
 
 function stackTile(board: PropertyBoard, layers: PrKey[]): ExpectedTile {

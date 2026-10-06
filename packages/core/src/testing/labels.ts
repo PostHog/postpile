@@ -17,7 +17,8 @@ import { sameLogin } from '../mentions.ts';
 import { isUnseenLoud } from '../loudness.ts';
 import { mergeQueueState } from '../merge-queue.ts';
 import { prWhoseTurn } from '../whose-turn.ts';
-import type { Pr, PrEvent, PrKey } from '../types.ts';
+// Test helpers over the raw snapshot: every stored body (`FullPr`).
+import type { FullPr as Pr, PrEvent, PrKey } from '../types.ts';
 import type { TileView } from '../views.ts';
 import { LOGINS, REQUEST_BOT, tileViewsOf, type PropertyBoard } from './build-board.ts';
 import type { Person } from './board-spec.ts';
@@ -386,7 +387,7 @@ function agentLabels(board: PropertyBoard, views: TileView[]): string[] {
   }
   for (const view of views) {
     for (const row of view.prs) {
-      const pr = board.prs.get(row.key);
+      const pr = board.fullPrs.get(row.key);
       const approvals = pr ? standingApprovals(pr) : { people: [], agents: [] };
       const approvedByOthers = [...approvals.people, ...approvals.agents].some((login) => !sameLogin(login, board.viewer.login)) || pr?.reviewDecision === 'APPROVED';
       if (view.offers.pane[row.key]?.lead === 'approve' && isTracked(row.provenance) && approvedByOthers) {
@@ -402,7 +403,7 @@ export function boardLabels(board: PropertyBoard, views: TileView[] = tileViewsO
   const labels = new Set<string>();
   const shown = new Set(board.tiles.flatMap((tile) => tile.members.map((member) => member.prKey)));
   for (const key of shown) {
-    const pr = board.prs.get(key);
+    const pr = board.fullPrs.get(key);
     if (pr) {
       prLabels(board, key, pr).forEach((label) => labels.add(label));
     }

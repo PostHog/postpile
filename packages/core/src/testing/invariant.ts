@@ -3,7 +3,7 @@
 // it does not depend on vitest, so a differential or a stateful test can run
 // the same catalogue after each step.
 import fc from 'fast-check';
-import type { Pr, PrEvent, PrKey, Provenance, TileMember } from '../types.ts';
+import type { FullPr, Pr, PrEvent, PrKey, Provenance, TileMember } from '../types.ts';
 import type { PrSummary, TileView } from '../views.ts';
 import type { WhoseTurn } from '../whose-turn.ts';
 import { boardSpecArb, type BoardSpec } from './board-spec.ts';
@@ -38,6 +38,15 @@ export function checkBoards(invariant: Invariant, runs: number = propertyRuns(),
 
 export function prOf(board: PropertyBoard, key: PrKey): Pr {
   const pr = board.prs.get(key);
+  if (!pr) {
+    throw new Error(`no PR ${key} on the board`);
+  }
+  return pr;
+}
+
+/** The PR with every stored body: for the spec oracles and for deriving events. */
+export function fullPrOf(board: PropertyBoard, key: PrKey): FullPr {
+  const pr = board.fullPrs.get(key);
   if (!pr) {
     throw new Error(`no PR ${key} on the board`);
   }

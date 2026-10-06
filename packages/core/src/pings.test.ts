@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { deriveEvents } from './events.ts';
 import { at, makeEvent, makePr, makeTimelineItem, viewer } from './fixtures.ts';
 import { isLiveConversation, isPersonalPing, pingClickTarget, pingRule, pingTemplate, type PrPlace } from './pings.ts';
-import type { EventKind, Loudness, Pr, Viewer } from './types.ts';
+import type { EventKind, Loudness, FullPr as Pr, Viewer } from './types.ts';
 import { prWhoseTurn } from './whose-turn.ts';
 
 const pr = makePr({ number: 7, title: 'Move CI to Depot', author: 'alice' });

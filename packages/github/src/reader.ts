@@ -1,8 +1,8 @@
-import type { ActivityPr, IsoTime, NotificationThread, Pr, PrKey, PrRef, PrState, ReviewedPr, Viewer, ViewerTeamSize } from '@postpile/core';
+import type { ActivityPr, IsoTime, NotificationThread, FullPr, PrKey, PrRef, PrState, ReviewedPr, Viewer, ViewerTeamSize } from '@postpile/core';
 import type { FoundRef } from './found.ts';
 
 export interface PartialPrs {
-  prs: Map<PrKey, Pr>;
+  prs: Map<PrKey, FullPr>;
   /** One line per failed batch. */
   errors: string[];
 }
@@ -10,7 +10,7 @@ export interface PartialPrs {
 /** What paging one PR's capped lists back brought (`GitHubReader.fillCappedLists`). */
 export interface CapFill {
   /** The snapshot with the older items merged in and its cap hits moved on. */
-  pr: Pr;
+  pr: FullPr;
   /** Pages fetched, all lists together. */
   pages: number;
 }
@@ -104,7 +104,7 @@ export interface GitHubReader {
   prUpdatedAts(refs: PrRef[]): Promise<Map<PrKey, IsoTime>>;
 
   /** Batched GraphQL enrichment, PR_BATCH_SIZE PRs aliased per query. Missing PRs are left out. */
-  fetchPrs(refs: PrRef[]): Promise<Map<PrKey, Pr>>;
+  fetchPrs(refs: PrRef[]): Promise<Map<PrKey, FullPr>>;
 
   /**
    * Like fetchPrs, but a failed batch (GitHub's "Something went wrong"
@@ -121,7 +121,7 @@ export interface GitHubReader {
    * stays short the rest is left. The items are normalized like fetchPrs
    * and merged in without repeats. Throws on a failed request.
    */
-  fillCappedLists(pr: Pr, since: IsoTime | null, maxPages: number): Promise<CapFill>;
+  fillCappedLists(pr: FullPr, since: IsoTime | null, maxPages: number): Promise<CapFill>;
 
   /**
    * Open and merged same-repo PRs per lookup (a few newest each), answers in

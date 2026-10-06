@@ -5,7 +5,7 @@ import { makeComment, makeCommit, makePr, makeReview, makeThread, singleTile, vi
 import { forWhom } from './for-whom.ts';
 import { isPersonalPing, pingRule, pingTemplate } from './pings.ts';
 import { prTier } from './pr-tier.ts';
-import type { Pr } from './types.ts';
+import type { FullPr as Pr } from './types.ts';
 import { whoseTurn, type WhoseTurn } from './whose-turn.ts';
 
 const me = viewer.login;

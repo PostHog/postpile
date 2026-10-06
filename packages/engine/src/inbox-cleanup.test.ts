@@ -1,4 +1,4 @@
-import { CATCH_UP_CONFIRM_TRIES, CLEANUP_ALREADY_PENDING, SAFE_CLEAR_WAITS_FOR_SYNC, type NotificationThread, type Pr, type Verdict } from '@postpile/core';
+import { CATCH_UP_CONFIRM_TRIES, CLEANUP_ALREADY_PENDING, SAFE_CLEAR_WAITS_FOR_SYNC, type NotificationThread, type FullPr, type Verdict } from '@postpile/core';
 import { makePr, makeThreadFor, makeTimelineItem, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it, vi } from 'vitest';
 import { Board } from './board.ts';
@@ -15,12 +15,12 @@ function daysAgo(days: number): string {
 }
 
 /** A merged PR the viewer was never asked on. */
-function mergedPr(number: number, days: number, repo = 'acme/app'): Pr {
+function mergedPr(number: number, days: number, repo = 'acme/app'): FullPr {
   return makePr({ number, repo, state: 'MERGED', mergedAt: daysAgo(days), mergedBy: 'alice', updatedAt: daysAgo(days) });
 }
 
 /** Merged while the viewer's review was asked: a merge without your review, glanced after the fact. */
-function mergedWithoutReview(number: number, repo: string): Pr {
+function mergedWithoutReview(number: number, repo: string): FullPr {
   return makePr({
     number,
     repo,
@@ -37,11 +37,11 @@ function mergedWithoutReview(number: number, repo: string): Pr {
 }
 
 /** 21 merged PRs in acme/app, nothing else there. */
-function mergedPile(): Pr[] {
+function mergedPile(): FullPr[] {
   return Array.from({ length: 21 }, (_, index) => mergedPr(index + 1, 1 + (index % 3)));
 }
 
-function harnessWith(prs: Pr[], options: HarnessOptions = {}): Harness {
+function harnessWith(prs: FullPr[], options: HarnessOptions = {}): Harness {
   const h = makeHarness({ catchUpGate: true, ...options });
   for (const pr of prs) {
     h.reader.addPr(pr, makeThreadFor(pr));
@@ -172,7 +172,7 @@ describe('inbox catch-up: clearing', () => {
 
 describe('inbox catch-up: merged PRs that look safe', () => {
   /** The stored glance keeps its input hash (current) with this verdict; `stale` makes it read as made for an older input. */
-  function setVerdict(h: Harness, pr: Pr, verdict: Verdict, stale = false): void {
+  function setVerdict(h: Harness, pr: FullPr, verdict: Verdict, stale = false): void {
     const glance = h.store.glances.get(pr.key);
     expect(glance).not.toBeNull();
     h.store.glances.put({ ...glance!, verdict, inputHash: stale ? 'an-older-input' : glance!.inputHash });
@@ -208,7 +208,7 @@ describe('inbox catch-up: merged PRs that look safe', () => {
     expect(h.writer.calls).toEqual(['markThreadRead thread-400', 'markThreadRead thread-402']);
     const unread = h.store.notifications.list().filter((thread) => thread.unread).map((thread) => thread.id);
     expect(unread.sort()).toEqual(['thread-401', 'thread-403']);
-    const mergeSeen = (pr: Pr) => h.store.events.listForPr(pr.key).find((event) => event.kind === 'merged_without_review')?.seenAt ?? null;
+    const mergeSeen = (pr: FullPr) => h.store.events.listForPr(pr.key).find((event) => event.kind === 'merged_without_review')?.seenAt ?? null;
     expect([mergeSeen(safe), mergeSeen(notYours), mergeSeen(closer)].map((seenAt) => seenAt !== null)).toEqual([true, true, false]);
     // Counting and clearing read the glances there are; neither asks the agent for one.
     expect(h.runner.requests.length).toBe(agentCalls);

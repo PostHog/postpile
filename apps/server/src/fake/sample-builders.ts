@@ -1,7 +1,7 @@
 // Small builders that keep sample-data.ts readable. Everything here fills in
 // the fields a fake does not care about with plain defaults.
 import { prKey } from '@postpile/core';
-import type { Comment, EventKind, Glance, KeyFile, Loudness, Pr, PrEvent, PrKey, Provenance, PrState, Review, ReviewDecision, ReviewState, ReviewThread, Tile, TileKind, TileMember, Topic, TopicKind, UserRole, Verdict } from '@postpile/core';
+import type { FullComment, EventKind, Glance, KeyFile, Loudness, FullPr, PrEvent, PrKey, Provenance, PrState, FullReview, ReviewDecision, ReviewState, FullReviewThread, Tile, TileKind, TileMember, Topic, TopicKind, UserRole, Verdict } from '@postpile/core';
 
 export const SAMPLE_REPO = 'acme/app';
 export const SAMPLE_VIEWER = 'you';
@@ -106,20 +106,20 @@ function sampleReviewDecision(reviews: [string, ReviewState, string?, string?, n
 }
 
 /** Review bodies with text, as comments, like the GitHub reader adds them to `pr.comments`. */
-function reviewBodyComments(reviews: Review[], url: string): Comment[] {
+function reviewBodyComments(reviews: FullReview[], url: string): FullComment[] {
   return reviews
     .filter((review) => review.body.trim() !== '')
     .map((review) => ({ id: review.id, author: review.author, body: review.body, createdAt: review.submittedAt, kind: 'review' as const, url: `${url}#${review.id}`, path: null, threadId: null }));
 }
 
-export function samplePr(clock: SampleClock, input: SamplePrInput): Pr {
+export function samplePr(clock: SampleClock, input: SamplePrInput): FullPr {
   const key = sampleKey(input.number);
   const repo = sampleRepo(input.number);
   const url = `https://github.com/${repo}/pull/${input.number}`;
   const headOid = `sha${input.number}`;
   const mergedAt = input.mergedHoursAgo === undefined ? null : clock.hoursAgo(input.mergedHoursAgo);
   const [additions, deletions, changedFiles] = input.size;
-  const reviews: Review[] = (input.reviews ?? []).map(([author, state, body, commitOid, hoursAgo], index) => ({
+  const reviews: FullReview[] = (input.reviews ?? []).map(([author, state, body, commitOid, hoursAgo], index) => ({
     id: `review-${input.number}-${index}`,
     author,
     state,
@@ -127,7 +127,7 @@ export function samplePr(clock: SampleClock, input: SamplePrInput): Pr {
     submittedAt: clock.hoursAgo(hoursAgo ?? 1),
     commitOid: commitOid ?? headOid,
   }));
-  const issueComments: Comment[] = (input.comments ?? []).map((comment) => ({
+  const issueComments: FullComment[] = (input.comments ?? []).map((comment) => ({
     id: comment.id,
     author: comment.author,
     body: comment.body,
@@ -139,7 +139,7 @@ export function samplePr(clock: SampleClock, input: SamplePrInput): Pr {
     lastEditedAt: comment.editedHoursAgo === undefined ? null : clock.hoursAgo(comment.editedHoursAgo),
     editor: comment.editedHoursAgo === undefined ? null : comment.author,
   }));
-  const threads: ReviewThread[] = (input.threads ?? []).map((thread) => ({
+  const threads: FullReviewThread[] = (input.threads ?? []).map((thread) => ({
     id: thread.id,
     path: thread.path,
     isResolved: thread.resolved ?? false,
