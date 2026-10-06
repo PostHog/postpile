@@ -188,6 +188,13 @@ function writeText(verb: string, last: ActionLogEntry): { text: string; tone: Ac
   if (last.outcome === 'failed') {
     return { text: `${verb}: failed`, tone: 'problem' };
   }
+  // A Mute's or Unmute's subscription change waits in the lock like a mark-read.
+  if (last.outcome === 'pending') {
+    return { text: `${verb}: pending until GitHub writes are unlocked`, tone: 'local' };
+  }
+  if (last.outcome === 'discarded') {
+    return { text: `${verb}: discarded while locked, GitHub unchanged`, tone: 'local' };
+  }
   return { text: `${verb}: not sent, GitHub writes were off`, tone: 'problem' };
 }
 
@@ -219,6 +226,8 @@ function entryText(last: ActionLogEntry, decidedBy: ActionLogEntry | null): { te
       return writeText('team review request removed', last);
     case 'unsubscribe':
       return writeText('unsubscribed', last);
+    case 'subscribe':
+      return writeText('subscribed again', last);
     case 'writes_on':
     case 'writes_off':
       return { text: last.action === 'writes_on' ? 'GitHub writes turned on' : 'GitHub writes turned off', tone: 'local' };

@@ -25,13 +25,28 @@ export interface PendingThread {
 }
 
 /**
+ * The viewer's GitHub notification subscription for these threads, changed
+ * by a click along with its mark-read (2026-10-05): Mute unsubscribes
+ * (`subscribed` false: DELETE .../subscription, GitHub's own mute until you
+ * comment or are @mentioned), Unmute subscribes again (`subscribed` true:
+ * PUT .../subscription with ignored false).
+ */
+export interface SubscriptionChange {
+  subscribed: boolean;
+  threads: PendingThread[];
+}
+
+/**
  * mark_read: one click's threads. mark_all_read_before: the old inbox
  * cleanup's single PUT /notifications with last_read_at = `readBefore`
  * (none are made since the catch-up dialog; stored ones still send).
  * catch_up: the inbox cleanup dialog's picks (or the sidebar's "look safe"
- * threads), planned again when sent.
+ * threads), planned again when sent. unsubscribe / subscribe: a Mute's or
+ * Unmute's subscription change for `threads`, its own row next to the
+ * click's mark_read (same batch): a read elsewhere never clears it, and it
+ * turns nothing read here.
  */
-export type PendingWriteKind = 'mark_read' | 'mark_all_read_before' | 'catch_up';
+export type PendingWriteKind = 'mark_read' | 'mark_all_read_before' | 'catch_up' | 'unsubscribe' | 'subscribe';
 
 /** A cleanup waiting for the lock: the picks and when the dialog counted. Sending it runs the same plan. */
 export interface PendingCatchUp extends CleanupPicks {
@@ -53,11 +68,11 @@ export interface PendingWrite {
   tileId: string | null;
   /** The batch id of the click, links the log rows. */
   batch: string;
-  /** Every PR the click covered; they turn read here once the write is through. */
+  /** Every PR the click covered; they turn read here once the write is through. Empty for unsubscribe / subscribe. */
   prKeys: PrKey[];
   /** PRs that also count as handled then (pinged members). */
   handleKeys: PrKey[];
-  /** Threads still to mark read on GitHub. Empty for mark_all_read_before; for catch_up the threads it covered when parked. */
+  /** Threads still to mark read on GitHub (unsubscribe / subscribe: still to change). Empty for mark_all_read_before; for catch_up the threads it covered when parked. */
   threads: PendingThread[];
   /** mark_all_read_before: the cutoff sent as last_read_at. Null for mark_read. */
   readBefore: IsoTime | null;
@@ -119,11 +134,12 @@ export interface GitHubWritesChange {
  * logged with no thread or PR (the detail lists the PRs) so it never shows
  * as a thread's last action.
  * `remove_team_request` and `unsubscribe` are the detail pane's "Remove
- * <team>" (2026-09-29). `comment_review` is the pane's "Comment review", a
+ * <team>" (2026-09-29); `unsubscribe` is also Mute and `subscribe` Unmute
+ * (2026-10-05). `comment_review` is the pane's "Comment review", a
  * review with event COMMENT (2026-10-02). `reply` is a reply to one comment,
  * in its review thread or as a new PR comment quoting it, and `reaction` a
- * thumbs up (2026-10-05). mark_done and subscribe get added with their writer
- * methods; nothing sends them today.
+ * thumbs up (2026-10-05). mark_done gets added with its writer method;
+ * nothing sends it today.
  */
 export type LoggedAction =
   | 'mark_read'
@@ -137,6 +153,7 @@ export type LoggedAction =
   | 'reaction'
   | 'remove_team_request'
   | 'unsubscribe'
+  | 'subscribe'
   | 'bring_back'
   | 'writes_on'
   | 'writes_off'

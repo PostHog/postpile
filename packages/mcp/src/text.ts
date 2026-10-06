@@ -150,10 +150,10 @@ export function prSummaryLine(pr: PrSummary): string {
   return `${pr.key}  ${pr.title}  (${stateWord(pr.state, pr.isDraft)}, by ${pr.author}${verdict})`;
 }
 
-/** The tile's head line: its kind, its group as the app names it ("dealt with", never "done"), snoozed or not, and whose move. */
+/** The tile's head line: its kind, its group as the app names it ("dealt with", never "done"), snoozed, muted or neither, and whose move. */
 export function tileLine(view: TileView): string {
   const kind = view.tile.kind === 'single' ? 'PR' : view.tile.kind;
-  const snoozed = view.state.kind === 'snoozed' ? ', snoozed' : '';
+  const snoozed = view.state.kind === 'snoozed' ? (view.state.muted ? ', muted' : ', snoozed') : '';
   return `[${kind}, ${TILE_GROUP_LABELS[view.group].toLowerCase()}${snoozed}] ${view.tile.title} — ${turnText(view.turn)}`;
 }
 

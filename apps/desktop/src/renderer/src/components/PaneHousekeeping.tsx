@@ -93,7 +93,14 @@ export function PaneHousekeeping(props: PaneHousekeepingProps) {
       )}
       {/* A set or stack is snoozed from its tile footer; here only a single-PR tile, where tile and PR are one. */}
       {offers.snooze && (
-        <SnoozeMenu tileId={tileId} snoozed={view.state.kind === 'snoozed'} size="md" variant={offers.lead === 'snooze' ? 'secondary' : 'quiet'} />
+        <SnoozeMenu
+          tileId={tileId}
+          snoozed={view.state.kind === 'snoozed'}
+          muted={view.state.muted === true}
+          partlyMuted={view.state.partlyMuted === true}
+          size="md"
+          variant={offers.lead === 'snooze' ? 'secondary' : 'quiet'}
+        />
       )}
       {removeItems.length > 0 && <Menu label={<MoreIcon />} title="More" size="icon-md" variant="quiet" items={removeItems} />}
     </div>

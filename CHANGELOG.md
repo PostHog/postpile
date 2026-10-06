@@ -4,6 +4,10 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ## 0.21.0 (unreleased)
 
+### Added
+
+- Mute a PR for good: "Mute until I'm mentioned" at the end of the Snooze menu. The tile leaves your inbox and stays out whatever others or bots do, and comes back only when someone mentions you, asks you, replies to you or requests your review. Muting marks it read and unsubscribes you from the PR's GitHub notifications, so GitHub stays quiet too. Unmute, where Unsnooze is, subscribes you again. If you watch the repo, GitHub still notifies you about it.
+
 ### Changed
 
 - PostPile now marks handled notifications read on GitHub by default, so a busy inbox goes down instead of piling up. Installs that never touched the GitHub writes lock get writes on with this update; installs that locked writes on purpose stay locked. Mark-reads that waited while writes were locked go to GitHub only where nothing happened on the thread since you clicked; the rest stay unread, and anything that fails stays in the footer to send or discard.

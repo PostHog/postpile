@@ -338,6 +338,23 @@ describe('server app', () => {
     expect(seen).toEqual([{ kind: 'until_time', until: '2026-09-28T08:00:00.000Z' }]);
   });
 
+  it('passes a mute through to the engine, which owns its GitHub writes', async () => {
+    const seen: unknown[] = [];
+    const snooze = async (_tileId: string, condition: unknown) => {
+      seen.push(condition);
+      return { ok: true, message: 'Muted', undoToken: 'u1' };
+    };
+    const app = createApp(fakeEngine({ snooze }), 'secret', CONFIG);
+    const res = await app.request('/api/tiles/t/snooze', {
+      method: 'POST',
+      headers: { [TOKEN_HEADER]: 'secret', 'content-type': 'application/json' },
+      body: JSON.stringify({ condition: { kind: 'muted' } }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(seen).toEqual([{ kind: 'muted' }]);
+  });
+
   it('decodes encoded tile ids', async () => {
     let seen = '';
     const unsnooze = async (tileId: string) => {

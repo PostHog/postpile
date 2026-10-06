@@ -50,4 +50,8 @@ export class ReadOnlyWriter implements GitHubWriter {
   unsubscribeThread(threadId: string): Promise<void> {
     return this.refuse(`unsubscribe from thread ${threadId}`);
   }
+
+  subscribeThread(threadId: string): Promise<void> {
+    return this.refuse(`subscribe to thread ${threadId}`);
+  }
 }

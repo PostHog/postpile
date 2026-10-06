@@ -114,6 +114,7 @@ import { ShedReport } from './telemetry/shed-report.ts';
 import { PingSummary } from './telemetry/ping-summary.ts';
 import { NoopTelemetry, type Telemetry } from './telemetry/telemetry.ts';
 import { loadViewer } from './viewer-meta.ts';
+import { muteHoldsNow } from './mute-holds.ts';
 import { GitHubError, type GitHubReader } from '@postpile/github';
 import { recordedVersion, type Store } from '@postpile/store';
 import { ChatActions } from './actions/chat-actions.ts';
@@ -455,6 +456,7 @@ export class Engine implements EngineService {
     this.github = github;
     this.clickedReadRetry = new ClickedReadRetry(store, deps.reader, deps.writes, (key) => this.refreshForRetry(key), this.heldThreads);
     deps.markReadQueue.retryWith(this.clickedReadRetry);
+    deps.markReadQueue.checkMutesWith((key) => muteHoldsNow(store, key, now().toISOString()));
     this.quietReads = new QuietReads(store, deps.reader, deps.writes, now, deps.syncLog ?? ((line) => console.log(line)));
     this.cleanup = new InboxCleanup({
       store,

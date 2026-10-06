@@ -115,6 +115,19 @@ describe('Not mine in the tile menu', () => {
   });
 });
 
+describe('Unmute the rest', () => {
+  it('is offered on a tile that came back while some of its PRs are still muted, never on a done one', () => {
+    const partly = (kind: TileStateKind) => {
+      const base = view(kind, NONE, doneAfter, [row(1), row(2)]);
+      return { ...base, state: { ...base.state, partlyMuted: true } };
+    };
+    expect(tileOffers(partly('unread')).unmuteRest).toBe(true);
+    expect(tileOffers(partly('open')).unmuteRest).toBe(true);
+    expect(tileOffers(partly('done')).unmuteRest).toBe(false);
+    expect(tileOffers(view('unread', NONE, doneAfter)).unmuteRest).toBe(false);
+  });
+});
+
 describe('lead PR', () => {
   function unread(prs: OfferPr[], unreadKeys: string[], turn: WhoseTurn = NONE) {
     const base = view('unread', turn, doneAfter, prs);

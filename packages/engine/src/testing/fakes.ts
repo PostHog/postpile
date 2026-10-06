@@ -289,6 +289,8 @@ export class FakeWriter implements GitHubWriter {
   failRemoveTeamRequest = false;
   /** unsubscribeThread throws while set. */
   failUnsubscribe = false;
+  /** subscribeThread throws while set. */
+  failSubscribe = false;
 
   async markThreadRead(threadId: string): Promise<void> {
     if (this.failingThreads.has(threadId)) {
@@ -340,6 +342,13 @@ export class FakeWriter implements GitHubWriter {
       throw new Error('boom: unsubscribe');
     }
     this.calls.push(`unsubscribeThread ${threadId}`);
+  }
+
+  async subscribeThread(threadId: string): Promise<void> {
+    if (this.failSubscribe) {
+      throw new Error('boom: subscribe');
+    }
+    this.calls.push(`subscribeThread ${threadId}`);
   }
 }
 

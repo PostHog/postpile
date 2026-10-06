@@ -17,7 +17,7 @@ export type ThreadOutcome =
 
 /** What happened to a pending write. */
 export type PendingWriteCause =
-  /** The user sent a mark_read: one outcome per thread, in the write's thread order. */
+  /** The user sent a mark_read (or a subscription change): one outcome per thread, in the write's thread order. */
   | { kind: 'sent'; outcomes: ThreadOutcome[] }
   /** GitHub took the old cleanup's single PUT, or a catch-up's run started in the background. */
   | { kind: 'cleanup_sent' }
@@ -49,7 +49,9 @@ export type PendingWriteEffect =
   /** The try failed and the write stays pending; said in the send result. */
   | { kind: 'still_pending'; error: string }
   /** Every thread (or the cleanup) logged as discarded. */
-  | { kind: 'log_discarded' };
+  | { kind: 'log_discarded' }
+  /** A discarded Unmute: these PRs are muted again, as of the Unmute's click, unless they have a snooze by now. */
+  | { kind: 'mute_again'; prKeys: PrKey[] };
 
 export interface PendingWriteStep {
   next: PendingWriteNext;
@@ -117,20 +119,67 @@ function afterReadElsewhere(write: PendingWrite, threadIds: ReadonlySet<string>)
   return finished(write, effects);
 }
 
+/**
+ * A Mute's or Unmute's subscription change after a send: threads GitHub
+ * took are through; failed ones and ones the lock stopped stay pending with
+ * the first error. Nothing turns read here: the click's mark_read row does
+ * that.
+ */
+function afterSubscriptionSend(write: PendingWrite, outcomes: ThreadOutcome[]): PendingWriteStep {
+  const left: PendingThread[] = [];
+  const errors: string[] = [];
+  write.threads.forEach((thread, index) => {
+    const outcome = outcomes[index];
+    if (outcome?.kind === 'failed') {
+      left.push(thread);
+      errors.push(outcome.error);
+    } else if (outcome?.kind === 'off') {
+      left.push(thread);
+      errors.push(PENDING_WRITES_OFF);
+    }
+  });
+  if (left.length > 0) {
+    const error = errors[0] ?? 'failed';
+    return { next: { kind: 'kept', threads: left, error }, effects: [{ kind: 'still_pending', error }] };
+  }
+  return { next: { kind: 'gone' }, effects: [] };
+}
+
+/**
+ * Discarded: the row goes and its threads are logged. A discarded Unmute
+ * also puts its mute back (2026-10-06): the Unmute took the mute away at
+ * the click, and GitHub still has the viewer unsubscribed, so without the
+ * mute the tile would offer no Unmute and stay quiet for good.
+ */
+function afterDiscard(write: PendingWrite): PendingWriteStep {
+  const effects: PendingWriteEffect[] = [{ kind: 'log_discarded' }];
+  if (write.kind === 'subscribe') {
+    const prKeys = [...new Set(write.threads.flatMap((thread) => (thread.prKey === null ? [] : [thread.prKey])))];
+    effects.push({ kind: 'mute_again', prKeys });
+  }
+  return { next: { kind: 'gone' }, effects };
+}
+
 /** The old cleanup's PUT and the catch-up: no thread list to send, one write as a whole. */
 function isCleanup(write: PendingWrite): boolean {
   return write.kind === 'mark_all_read_before' || write.kind === 'catch_up';
 }
 
+/** A Mute's or Unmute's change to the GitHub subscription (`SubscriptionChange`). */
+export function isSubscriptionWrite(write: Pick<PendingWrite, 'kind'>): boolean {
+  return write.kind === 'unsubscribe' || write.kind === 'subscribe';
+}
+
 /**
  * The one place a pending write changes. A cleanup only knows sent, not
  * taken (it stays pending, also when the lock closes during Send) and
- * discarded; a read elsewhere never clears it.
+ * discarded; a read elsewhere never clears it, nor a subscription change
+ * (reading a thread on github.com does not mute it).
  */
 export function pendingWriteStep(write: PendingWrite, cause: PendingWriteCause): PendingWriteStep {
   switch (cause.kind) {
     case 'discarded':
-      return { next: { kind: 'gone' }, effects: [{ kind: 'log_discarded' }] };
+      return afterDiscard(write);
     case 'cleanup_sent':
       return isCleanup(write) ? { next: { kind: 'gone' }, effects: [] } : NO_STEP;
     case 'cleanup_not_taken':
@@ -139,6 +188,9 @@ export function pendingWriteStep(write: PendingWrite, cause: PendingWriteCause):
       }
       return { next: { kind: 'kept', threads: [], error: cause.error }, effects: [{ kind: 'still_pending', error: cause.error }] };
     case 'sent':
+      if (isSubscriptionWrite(write)) {
+        return afterSubscriptionSend(write, cause.outcomes);
+      }
       return write.kind === 'mark_read' ? afterSend(write, cause.outcomes) : NO_STEP;
     case 'read_elsewhere':
       return write.kind === 'mark_read' ? afterReadElsewhere(write, cause.threadIds) : NO_STEP;

@@ -89,6 +89,13 @@ export interface TileOffers {
    * already says Not yours (`notMineOffer`).
    */
   notMine: boolean;
+  /**
+   * "Unmute the rest" in the Snooze menu: the tile came back while some of
+   * its PRs are still muted (`TileState.partlyMuted`), and it is not done.
+   * A muted tile itself offers Unmute in Snooze's place instead, and a
+   * snoozed one Unsnooze.
+   */
+  unmuteRest: boolean;
   /** The detail pane's buttons, by PR key. */
   pane: Record<PrKey, PaneOffers>;
 }
@@ -278,6 +285,7 @@ export function tileOffers(view: OfferView): TileOffers {
     markLabel: markLabelOf(footer),
     snooze: view.state.kind !== 'done',
     github: footer === 'snooze' ? githubLink(view, lead) : null,
+    unmuteRest: view.state.kind !== 'done' && view.state.kind !== 'snoozed' && view.state.partlyMuted === true,
     notMine: notMineOffer(view, lead),
     pane,
   };

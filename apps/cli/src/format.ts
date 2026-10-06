@@ -75,7 +75,7 @@ export function formatTopic(detail: TopicDetail): string {
   }
   lines.push('');
   for (const view of detail.tiles) {
-    const snoozed = view.state.kind === 'snoozed' ? ', snoozed' : '';
+    const snoozed = view.state.kind === 'snoozed' ? (view.state.muted ? ', muted' : ', snoozed') : '';
     lines.push(`[${TILE_GROUP_LABELS[view.group].toLowerCase()}${snoozed}] ${view.tile.kind}: ${view.tile.title}`);
     for (const reason of view.state.unreadBecause) {
       lines.push(`    ! ${reason.prKey}: ${reason.summary}`);

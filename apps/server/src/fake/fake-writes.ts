@@ -31,18 +31,27 @@ export interface FakeLocalChange {
   handledPrKeys: PrKey[];
 }
 
+type FakeThread = { id: string; prKey: PrKey | null };
+
+/** Mute's unsubscribe or Unmute's subscribe for these sample threads, sent after the batch's mark-read. */
+export interface FakeSubscription {
+  subscribed: boolean;
+  threads: FakeThread[];
+}
+
 export interface FakeBatch {
   token: string;
   batchId: string;
   origin: ActionOrigin;
   tileId: string | null;
   /** Threads that were unread "on GitHub" when queued. */
-  threads: { id: string; prKey: PrKey | null }[];
+  threads: FakeThread[];
   prKeys: PrKey[];
   handleKeys: PrKey[];
   local: FakeLocalChange;
   writesOn: boolean;
   queuedAt: number;
+  subscription: FakeSubscription | null;
 }
 
 /** The inbox cleanup parked while locked: its picks, and the threads it covered then (for the count). */
@@ -55,10 +64,17 @@ interface FakeCatchUp {
 interface FakePending {
   id: number;
   createdAt: IsoTime;
-  /** A mark-read click. Null for a cleanup. */
+  /** A mark-read click, or the click of a Mute or Unmute (then `subscription` is set and its threads are the subscription's). Null for a cleanup. */
   batch: FakeBatch | null;
   /** The inbox cleanup. Null for a mark-read. */
   catchUp: FakeCatchUp | null;
+}
+
+const SUBSCRIPTION_DISCARDED_DETAIL = 'discarded while locked: the GitHub subscription stays as it was';
+
+/** The pending write kind and log action of a subscription change. */
+function subscriptionKind(subscription: FakeSubscription): 'subscribe' | 'unsubscribe' {
+  return subscription.subscribed ? 'subscribe' : 'unsubscribe';
 }
 
 /** What FakeWrites needs from FakeEngine's sample data. */
@@ -110,6 +126,22 @@ export class FakeWrites {
           prKeys: [],
           tileId: null,
           threadCount: write.catchUp?.threadIds.length ?? 0,
+          error: null,
+        };
+      }
+      const subscription = write.batch.subscription;
+      if (subscription !== null) {
+        const keys = subscription.threads.flatMap((thread) => (thread.prKey === null ? [] : [thread.prKey]));
+        const title = this.sample.title(keys, subscription.threads[0]?.id ?? null);
+        return {
+          id: write.id,
+          kind: subscriptionKind(subscription),
+          createdAt: write.createdAt,
+          origin: write.batch.origin,
+          title: subscription.subscribed ? `Unmute: ${title}` : `Mute: ${title}`,
+          prKeys: [],
+          tileId: write.batch.tileId,
+          threadCount: subscription.threads.length,
           error: null,
         };
       }
@@ -233,13 +265,23 @@ export class FakeWrites {
     }
   }
 
+  /** Like PendingWrites.park: the mark-read and a Mute's or Unmute's subscription change wait as their own rows. */
   private park(batch: FakeBatch): void {
-    this.sample.revert(batch.local);
-    this.pending.push({ id: this.nextId, createdAt: this.now().toISOString(), batch, catchUp: null });
-    this.nextId += 1;
-    for (const thread of batch.threads) {
+    const createdAt = this.now().toISOString();
+    if (batch.threads.length > 0) {
+      this.sample.revert(batch.local);
+      this.pending.push({ id: this.nextId, createdAt, batch: { ...batch, subscription: null }, catchUp: null });
+      this.nextId += 1;
+    }
+    const subscription = batch.subscription !== null && batch.subscription.threads.length > 0 ? batch.subscription : null;
+    if (subscription !== null) {
+      this.pending.push({ id: this.nextId, createdAt, batch: { ...batch, threads: [], prKeys: [], handleKeys: [], subscription }, catchUp: null });
+      this.nextId += 1;
+    }
+    const subscriptionRows = subscription === null ? [] : subscription.threads.map((thread) => ({ thread, action: subscriptionKind(subscription) }));
+    for (const { thread, action } of [...batch.threads.map((thread) => ({ thread, action: 'mark_read' as const })), ...subscriptionRows]) {
       this.record({
-        action: 'mark_read',
+        action,
         origin: batch.origin,
         outcome: 'pending',
         threadId: thread.id,
@@ -247,6 +289,26 @@ export class FakeWrites {
         tileId: batch.tileId,
         batch: batch.batchId,
         detail: PENDING_DETAIL,
+      });
+    }
+  }
+
+  /** Mute's unsubscribe or Unmute's subscribe "reaches GitHub": logged only, the sample has no subscriptions. */
+  private changeSubscription(batch: FakeBatch, origin: 'queue' | 'quit' | 'footer'): void {
+    const subscription = batch.subscription;
+    if (subscription === null) {
+      return;
+    }
+    for (const thread of subscription.threads) {
+      this.record({
+        action: subscriptionKind(subscription),
+        origin,
+        outcome: 'github',
+        threadId: thread.id,
+        prKey: thread.prKey,
+        tileId: batch.tileId,
+        batch: batch.batchId,
+        detail: SAMPLE_DETAIL,
       });
     }
   }
@@ -268,7 +330,7 @@ export class FakeWrites {
   }
 
   private send(batch: FakeBatch, origin: 'queue' | 'quit'): void {
-    if (batch.threads.length === 0) {
+    if (batch.threads.length === 0 && (batch.subscription?.threads.length ?? 0) === 0) {
       return;
     }
     if (!batch.writesOn || !this.enabled) {
@@ -276,6 +338,7 @@ export class FakeWrites {
       return;
     }
     this.markThreads(batch, origin);
+    this.changeSubscription(batch, origin);
   }
 
   /** Sends batches whose undo window ran out. Called before reads, since the fake has no timers. */
@@ -350,6 +413,10 @@ export class FakeWrites {
         }
         continue;
       }
+      if (write.batch.subscription !== null) {
+        this.changeSubscription(write.batch, 'footer');
+        continue;
+      }
       this.markThreads(write.batch, 'footer');
       this.completeSent(write, write.batch);
     }
@@ -364,16 +431,18 @@ export class FakeWrites {
         this.record({ action: 'inbox_cleanup', origin: 'footer', outcome: 'discarded', detail: `${write.catchUp?.title ?? 'Inbox cleanup'}: ${CLEANUP_DISCARDED_DETAIL}` });
         continue;
       }
-      for (const thread of write.batch.threads) {
+      const subscription = write.batch.subscription;
+      const threads = subscription?.threads ?? write.batch.threads;
+      for (const thread of threads) {
         this.record({
-          action: 'mark_read',
+          action: subscription ? subscriptionKind(subscription) : 'mark_read',
           origin: 'footer',
           outcome: 'discarded',
           threadId: thread.id,
           prKey: thread.prKey,
           tileId: write.batch.tileId,
           batch: write.batch.batchId,
-          detail: DISCARDED_DETAIL,
+          detail: subscription ? SUBSCRIPTION_DISCARDED_DETAIL : DISCARDED_DETAIL,
         });
       }
     }

@@ -150,4 +150,9 @@ export class GitHubWrites {
   unsubscribeThread(threadId: string, context: WriteContext): Promise<WriteResult> {
     return this.send('unsubscribe', { ...context, threadId }, () => this.writeSwitch.writer().unsubscribeThread(threadId));
   }
+
+  /** Unmute: the viewer's subscription to the thread again. */
+  subscribeThread(threadId: string, context: WriteContext): Promise<WriteResult> {
+    return this.send('subscribe', { ...context, threadId }, () => this.writeSwitch.writer().subscribeThread(threadId));
+  }
 }

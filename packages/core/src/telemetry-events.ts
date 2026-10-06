@@ -36,11 +36,11 @@ const verdict = z.enum(['looks_safe', 'look_closer', 'not_yours']).nullable();
 const approveFrom = z.enum(['detail', 'tile', 'agent_tile', 'agent_topic']);
 const markReadOrigin = z.enum(['tile', 'detail', 'debug', 'cleanup', 'agent_tile', 'agent_topic']);
 // A snooze is either a time (bucketed) or a condition (someone replies, a
-// push - see packages/core/src/snooze.ts SnoozeCondition; CI going green
-// until 0.21.0, no longer sent):
-// the same prop name the spec uses ("duration bucket"), widened to the
-// condition-based snoozes the product actually has.
-const snoozeDurationBucket = z.enum(['hours', 'a_day', 'days', 'a_week', 'someone_replies', 'new_push']);
+// push, a mute until someone asks you in person - see
+// packages/core/src/snooze.ts SnoozeCondition; CI going green until 0.21.0,
+// no longer sent): the same prop name the spec uses ("duration bucket"),
+// widened to the condition-based snoozes the product actually has.
+const snoozeDurationBucket = z.enum(['hours', 'a_day', 'days', 'a_week', 'someone_replies', 'new_push', 'muted']);
 const queryLengthBucket = z.enum(['short', 'medium', 'long']);
 const queueFilter = z.enum(['mine', 'team', 'reply', 'review', 'none']);
 // The sidebar section the opened topic sits in, core's `TopicSection` as is.
