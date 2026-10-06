@@ -1,11 +1,11 @@
-import type { Comment, Dossier, DossierVersion, Fact, Feedback, Pr, PrEvent, Topic, TopicDelta, Viewer } from '@postpile/core';
+import type { Dossier, DossierVersion, Fact, Feedback, FullComment, FullPr, PrEvent, Topic, TopicDelta, Viewer } from '@postpile/core';
 import type { PromptContext } from './service.ts';
 
 // Builders for tests. Not a .test.ts file, so vitest does not run it on its own.
 
 export const viewer: Viewer = { login: 'viewer', teams: ['acme/devex'] };
 
-export function makePr(overrides: Partial<Pr> = {}): Pr {
+export function makePr(overrides: Partial<FullPr> = {}): FullPr {
   const number = overrides.ref?.number ?? 1;
   const repo = overrides.ref?.repo ?? 'acme/app';
   return {
@@ -41,7 +41,7 @@ export function makePr(overrides: Partial<Pr> = {}): Pr {
   };
 }
 
-export function makeComment(overrides: Partial<Comment> = {}): Comment {
+export function makeComment(overrides: Partial<FullComment> = {}): FullComment {
   return {
     id: 'c1',
     author: 'bob',

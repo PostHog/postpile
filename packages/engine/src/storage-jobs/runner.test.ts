@@ -17,6 +17,7 @@ import {
   StorageJobRunner,
   WAKE_DELAY_MS,
   type StorageJob,
+  type StorageJobBlocked,
   type StorageJobReport,
   type StorageJobUnit,
 } from './runner.ts';
@@ -94,6 +95,7 @@ describe('StorageJobRunner', () => {
   let busy: boolean;
   let lines: string[];
   let reports: StorageJobReport[];
+  let blocked: StorageJobBlocked[];
   const dirs: string[] = [];
 
   beforeEach(() => {
@@ -102,6 +104,7 @@ describe('StorageJobRunner', () => {
     busy = false;
     lines = [];
     reports = [];
+    blocked = [];
   });
 
   afterEach(() => {
@@ -122,6 +125,7 @@ describe('StorageJobRunner', () => {
       busy: () => busy,
       log: (line) => lines.push(line),
       onDone: (report) => reports.push(report),
+      onBlocked: (job) => blocked.push(job),
       sliceBudgetMs,
     });
   }
@@ -298,6 +302,21 @@ describe('StorageJobRunner', () => {
     expect(store.meta.get(again.doneKey)).not.toBeNull();
     expect(store.meta.get(`${INCOMPLETE_KEY_PREFIX}first`)).toBeNull();
     expect(items(store)).toEqual(['a+first+first+first+second', 'b+first+first+first+second']);
+  });
+
+  it('reports a blocked job once per runner, so once per app run, however often it ends incomplete', () => {
+    addItems(store, ['a', 'b']);
+    const job = new TagJob('tag', clock);
+    job.checks = ['again', 'again', 'again', 'again'];
+    const runner = runnerFor([job], 0);
+    for (let run = 0; run < 2; run += 1) {
+      runner.start(0);
+      for (let index = 0; index < 20; index += 1) {
+        clock.advance(PAUSE_MS);
+      }
+    }
+    expect(lines.filter((line) => /is incomplete/.test(line))).toHaveLength(2);
+    expect(blocked).toEqual([{ name: 'tag', blockedUnits: null }]);
   });
 
   it('gives an incomplete job its one more walk again when the same runner starts again, and counts only that run', () => {

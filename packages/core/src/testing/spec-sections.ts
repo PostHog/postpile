@@ -10,7 +10,7 @@ import type { TopicSection } from '../topic-sections.ts';
 import type { PrKey } from '../types.ts';
 import type { TileView } from '../views.ts';
 import { LOGINS, type PropertyBoard } from './build-board.ts';
-import { eventsOf, isTrackedHere, prOf } from './invariant.ts';
+import { eventsOf, isTrackedHere, fullPrOf } from './invariant.ts';
 import { isHomeTeam, specRelation, viewerOwns } from './spec-facts.ts';
 import { expectedTier } from './spec-rules.ts';
 
@@ -25,7 +25,7 @@ function trackedKeys(board: PropertyBoard): PrKey[] {
 
 function specTier(board: PropertyBoard, key: PrKey): PrTier {
   return expectedTier({
-    pr: prOf(board, key),
+    pr: fullPrOf(board, key),
     events: eventsOf(board, key),
     viewer: board.viewer,
     userState: board.userStates.get(key) ?? null,
@@ -37,7 +37,7 @@ function specTier(board: PropertyBoard, key: PrKey): PrTier {
 /** The viewer has an open PR in the topic, or a live (unread or open) tile is their move. */
 function viewerHasWorkHere(board: PropertyBoard, views: TileView[]): boolean {
   const openPr = trackedKeys(board).some((key) => {
-    const pr = prOf(board, key);
+    const pr = fullPrOf(board, key);
     return pr.state === 'OPEN' && viewerOwns(pr, board.viewer);
   });
   const move = views.some((view) => (view.state.kind === 'unread' || view.state.kind === 'open') && view.turn.kind === 'you');

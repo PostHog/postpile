@@ -10,6 +10,7 @@ import {
   threadPrKey,
   threadPrRef,
   type NotificationThread,
+  type FullPr,
   type Pr,
   type PrEvent,
   type PrKey,
@@ -496,7 +497,7 @@ export class GitHubSync {
    * newer than what it holds, or a thread updated meanwhile would look
    * covered by it.
    */
-  private storePr(pr: Pr, viewer: Viewer, fetchedAt: IsoTime = this.now().toISOString()): string[] {
+  private storePr(pr: FullPr, viewer: Viewer, fetchedAt: IsoTime = this.now().toISOString()): string[] {
     const at = this.now().toISOString();
     return this.store.transaction(() => {
       this.store.prs.upsert(pr, fetchedAt);
@@ -532,7 +533,7 @@ export class GitHubSync {
    * new layer on top (often a draft) does not move the PR below it. A layer whose snapshot
    * has not moved since the last fetch is not fetched again.
    */
-  private async pullInStackLayers(fetched: Pr[], viewer: Viewer): Promise<Pr[]> {
+  private async pullInStackLayers(fetched: Pr[], viewer: Viewer): Promise<FullPr[]> {
     const tracked = this.trackedPrKeys();
     const seeds = new Map<PrKey, LayerShape & { key: PrKey }>();
     const hot = Board.load(this.store, this.now().toISOString()).prs;
@@ -566,7 +567,7 @@ export class GitHubSync {
    * one; PRs not stored yet or with a newer updatedAt go through the
    * batched fetch. A failure is reported and the rest of the sync goes on.
    */
-  private async syncFound(viewer: Viewer, alreadyFetched: Map<PrKey, Pr>, errors: string[]): Promise<Pr[]> {
+  private async syncFound(viewer: Viewer, alreadyFetched: Map<PrKey, Pr>, errors: string[]): Promise<FullPr[]> {
     const at = this.now().toISOString();
     let refs;
     try {
@@ -662,7 +663,7 @@ export class GitHubSync {
   }
 
   /** Writes snapshots and events. Returns the ids of new events on pinged PRs. */
-  private storeAll(fetched: Map<PrKey, Pr>, viewer: Viewer, fetchedAt: IsoTime): string[] {
+  private storeAll(fetched: Map<PrKey, FullPr>, viewer: Viewer, fetchedAt: IsoTime): string[] {
     const newEventIds: string[] = [];
     for (const pr of fetched.values()) {
       newEventIds.push(...this.storePr(pr, viewer, fetchedAt));
@@ -686,7 +687,7 @@ export class GitHubSync {
    * candidates for the next sync; the other batches still store. One bad
    * batch used to throw away the whole sync.
    */
-  private async fetchPartial(refs: PrRef[], errors: string[], what: string): Promise<Map<PrKey, Pr>> {
+  private async fetchPartial(refs: PrRef[], errors: string[], what: string): Promise<Map<PrKey, FullPr>> {
     if (refs.length === 0) {
       return new Map();
     }
@@ -728,7 +729,7 @@ export class GitHubSync {
       saveViewer(this.store, viewer);
     }
     const fetchedAt = this.now().toISOString();
-    const fetched = await this.capFiller('poll', CAP_FILL_POLL_PRS).fill(refs.length > 0 ? await this.reader.fetchPrs(refs) : new Map<PrKey, Pr>());
+    const fetched = await this.capFiller('poll', CAP_FILL_POLL_PRS).fill(refs.length > 0 ? await this.reader.fetchPrs(refs) : new Map<PrKey, FullPr>());
     const newEventIds = this.storeAll(fetched, viewer, fetchedAt);
     this.rememberPolled([...fetched.keys()]);
     const readOnGitHub = this.takeReadOnGitHub();

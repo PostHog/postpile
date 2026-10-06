@@ -1,7 +1,7 @@
 import { glanceRiskLevel } from './glance-risk.ts';
 import { sameLogin } from './mentions.ts';
 import { capHitCoversSince } from './snapshot-coverage.ts';
-import type { CappedList, Glance, IsoTime, Pr, PrEvent, PrKey, Review, Viewer } from './types.ts';
+import type { CappedList, FullPr, FullReview, Glance, IsoTime, Pr, PrEvent, PrKey, Review, Viewer } from './types.ts';
 
 // Lessons: what the agent should check next time, learned from the user's
 // own pushback (DESIGN.md "Lessons from your reviews"). A review is
@@ -146,7 +146,7 @@ function previousReviewAt(pr: Pr, review: Review, viewer: Viewer): IsoTime | nul
  * wrote after their previous review and up to this one count. A change
  * request often says everything inline and nothing in its body.
  */
-export function lessonReview(pr: Pr, review: Review, viewer: Viewer): LessonReview {
+export function lessonReview(pr: FullPr, review: FullReview, viewer: Viewer): LessonReview {
   const after = previousReviewAt(pr, review, viewer);
   const comments = pr.comments
     .filter(
@@ -171,7 +171,7 @@ function judgedOtherCode(glance: Glance, review: Review): boolean {
  * review and on the same code, let it through. Possible misses only: the
  * agent still decides whether the review holds a lesson worth keeping.
  */
-export function possibleMisses(pr: Pr, newEvents: PrEvent[], glance: Glance | null, viewer: Viewer): PossibleMiss[] {
+export function possibleMisses(pr: FullPr, newEvents: PrEvent[], glance: Glance | null, viewer: Viewer): PossibleMiss[] {
   if (glance === null) {
     return [];
   }
@@ -222,7 +222,7 @@ function sameReviewText(a: LessonReview, b: LessonReview): boolean {
  * holds: a review it may have cut off is not deleted, and inline comments
  * it may have cut off are not an edit.
  */
-export function reviewNow(stored: LessonReview, pr: Pr, viewer: Viewer): { kind: 'same' } | { kind: 'edited'; review: LessonReview } | { kind: 'deleted' } {
+export function reviewNow(stored: LessonReview, pr: FullPr, viewer: Viewer): { kind: 'same' } | { kind: 'edited'; review: LessonReview } | { kind: 'deleted' } {
   // A snapshot cut off at the query's caps (a busy PR) may leave out an old review or its inline comments.
   const review = pr.reviews.find((candidate) => candidate.id === stored.id);
   if (!review) {

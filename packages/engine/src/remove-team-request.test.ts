@@ -1,4 +1,4 @@
-import { UNDO_WINDOW_MS, type Pr } from '@postpile/core';
+import { UNDO_WINDOW_MS, type FullPr } from '@postpile/core';
 import { at, makePr, makeThreadFor } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness, type Harness } from './testing/fakes.ts';
@@ -6,7 +6,7 @@ import { makeHarness, type Harness } from './testing/fakes.ts';
 const TEAM = 'acme/team-platform';
 
 /** rowan's PR from outside the team, review routed to the viewer's team; nobody on the team reviewed. */
-const routed: Pr = makePr({ number: 21, author: 'rowan', reviewerTeams: [TEAM], updatedAt: at(6) });
+const routed: FullPr = makePr({ number: 21, author: 'rowan', reviewerTeams: [TEAM], updatedAt: at(6) });
 
 async function synced(options: { thread?: boolean; writesEnabled?: boolean } = {}): Promise<Harness> {
   const h = makeHarness({ writesEnabled: options.writesEnabled ?? true });

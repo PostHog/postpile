@@ -4,7 +4,7 @@ import type {
   ActivityPr,
   McpLauncher,
   NotificationThread,
-  Pr,
+  FullPr,
   PrKey,
   PrRef,
   ReviewedPr,
@@ -47,7 +47,7 @@ import { WriteSwitch } from '../writes/write-switch.ts';
 import { FakeAgent } from './fake-agent.ts';
 import { TOPIC_GRAIN_KEY, TOPIC_GRAIN_VERSION } from '../digest/topic-tidy.ts';
 
-function toBranchPr(pr: Pr): BranchPr {
+function toBranchPr(pr: FullPr): BranchPr {
   return {
     ref: pr.ref,
     state: pr.state,
@@ -62,7 +62,7 @@ function toBranchPr(pr: Pr): BranchPr {
 
 export class FakeReader implements GitHubReader {
   threads: NotificationThread[] = [];
-  prs = new Map<PrKey, Pr>();
+  prs = new Map<PrKey, FullPr>();
   etag = 'etag-1';
   fetchedRefs: PrRef[][] = [];
   /** Every findPrsByBranch call, one entry per batch. */
@@ -81,13 +81,13 @@ export class FakeReader implements GitHubReader {
   /** What viewer() answers; tests may swap it, e.g. for more teams. */
   constructor(public who: Viewer = fixtureViewer) {}
 
-  addPr(pr: Pr, thread: NotificationThread): void {
+  addPr(pr: FullPr, thread: NotificationThread): void {
     this.prs.set(pr.key, pr);
     this.threads = [thread, ...this.threads.filter((t) => t.id !== thread.id)];
   }
 
   /** A PR on GitHub the user has no notification for, e.g. another layer of a stack. */
-  addStackPr(pr: Pr): void {
+  addStackPr(pr: FullPr): void {
     this.prs.set(pr.key, pr);
   }
 
@@ -151,7 +151,7 @@ export class FakeReader implements GitHubReader {
   findError: Error | null = null;
 
   /** A PR on GitHub without a notification, which the finder query returns. */
-  addFoundPr(pr: Pr, via: FoundRef['via'], reason: string): void {
+  addFoundPr(pr: FullPr, via: FoundRef['via'], reason: string): void {
     this.prs.set(pr.key, pr);
     this.found = [...this.found.filter((entry) => `${entry.ref.repo}#${entry.ref.number}` !== pr.key), { ref: pr.ref, updatedAt: pr.updatedAt, via, reason }];
   }
@@ -183,9 +183,9 @@ export class FakeReader implements GitHubReader {
     return result;
   }
 
-  async fetchPrs(refs: PrRef[]): Promise<Map<PrKey, Pr>> {
+  async fetchPrs(refs: PrRef[]): Promise<Map<PrKey, FullPr>> {
     this.fetchedRefs.push(refs);
-    const result = new Map<PrKey, Pr>();
+    const result = new Map<PrKey, FullPr>();
     for (const ref of refs) {
       const pr = this.prs.get(`${ref.repo}#${ref.number}`);
       if (pr) {
@@ -203,11 +203,11 @@ export class FakeReader implements GitHubReader {
   }
 
   /** What fillCappedLists answers per PR: the snapshot with its older pages merged in. A PR missing here gains nothing. */
-  filledPrs = new Map<PrKey, Pr>();
+  filledPrs = new Map<PrKey, FullPr>();
   /** Every fillCappedLists call as [PR key, since]. */
   fillCalls: [PrKey, IsoTime | null][] = [];
 
-  async fillCappedLists(pr: Pr, since: IsoTime | null): Promise<CapFill> {
+  async fillCappedLists(pr: FullPr, since: IsoTime | null): Promise<CapFill> {
     this.fillCalls.push([pr.key, since]);
     const filled = this.filledPrs.get(pr.key) ?? pr;
     return { pr: filled, pages: filled === pr ? 0 : 1 };

@@ -5,7 +5,7 @@
 import { isBot, isMergeQueueBot } from './bots.ts';
 import { sameLogin } from './mentions.ts';
 import { isBotAuthor } from './pr-owners.ts';
-import type { Comment, Pr, Review } from './types.ts';
+import type { FullComment, FullPr, FullReview } from './types.ts';
 
 /**
  * The longest bot body PostPile keeps, marker included, in UTF-16 code
@@ -18,11 +18,15 @@ export const BOT_BODY_MAX = 3072;
 /** Ends a cut body. Plain words: no rule's pattern (bot markers, deploy, mentions, questions) matches it. */
 export const TRIMMED_MARKER = '\n\n… (trimmed by PostPile)';
 
-/** What decides whether a body is cut: who wrote it, who edited it last (null or missing: nobody, or GitHub did not say). */
-export interface CuttableBody {
+/** Who wrote a body and who edited it last (null or missing: nobody, or GitHub did not say). */
+export interface BodyAuthorship {
   author: string;
-  body: string;
   editor?: string | null;
+}
+
+/** What decides whether a body is cut: who wrote it, who edited it last, and the body. */
+export interface CuttableBody extends BodyAuthorship {
+  body: string;
 }
 
 /**
@@ -30,23 +34,29 @@ export interface CuttableBody {
  * the whole body for mentions of the viewer (`editMentionOf`), so it stays
  * whole. Mirrors the "not automation" case of the edit rules in events.ts.
  */
-function editedByPerson(item: CuttableBody): boolean {
+function editedByPerson(item: BodyAuthorship): boolean {
   const editor = item.editor ?? null;
   return editor !== null && !sameLogin(editor, item.author) && !isBot(editor);
 }
 
 /**
- * Kept whole, however long: a person's body (a deleted author's too, who
+ * A body some board rule reads: a person's (a deleted author's too, who
  * may have been one), a merge queue bot's (`mergeQueueState` looks for its
- * markers anywhere in the body) and one a person edited last.
+ * markers anywhere in the body) and one a person edited last
+ * (`editMentionOf`). It answers two questions (DESIGN.md "The board
+ * diet"): which bodies the cut on save keeps whole, however long, and
+ * which bodies a board read loads at all. Every other body is a bot's that
+ * only event derivation, reply drafts and "Why?" excerpts read, from
+ * `FullPr`. The store calls it from SQL (`postpile_reads_body`), so it
+ * follows this build's bot list and never goes stale in the data.
  */
-function keptWhole(item: CuttableBody): boolean {
+export function isBodyReadByRules(item: BodyAuthorship): boolean {
   return !isBotAuthor(item.author) || isMergeQueueBot(item.author) || editedByPerson(item);
 }
 
 /** A bot body longer than PostPile keeps, and no rule reads past the cut. */
 export function isCutOnSave(item: CuttableBody): boolean {
-  return item.body.length > BOT_BODY_MAX && !keptWhole(item);
+  return item.body.length > BOT_BODY_MAX && !isBodyReadByRules(item);
 }
 
 /**
@@ -95,23 +105,23 @@ export function trimBotBody(item: CuttableBody): string {
   return `${open === -1 ? head : head.slice(0, open)}${TRIMMED_MARKER}`;
 }
 
-function trimmedComment(comment: Comment): Comment {
+function trimmedComment(comment: FullComment): FullComment {
   const body = trimBotBody(comment);
   return body === comment.body ? comment : { ...comment, body };
 }
 
 /** A review's body is cut like its copy among the comments, which carries the editor. */
-function reviewBody(review: Review, comments: Comment[]): CuttableBody {
+function reviewBody(review: FullReview, comments: FullComment[]): CuttableBody {
   const editor = comments.find((comment) => comment.id === review.id)?.editor ?? null;
   return { author: review.author, body: review.body, editor };
 }
 
-function trimmedReview(review: Review, comments: Comment[]): Review {
+function trimmedReview(review: FullReview, comments: FullComment[]): FullReview {
   const body = trimBotBody(reviewBody(review, comments));
   return body === review.body ? review : { ...review, body };
 }
 
-function cutsSomething(pr: Pr): boolean {
+function cutsSomething(pr: FullPr): boolean {
   const comments = [...pr.comments, ...pr.threads.flatMap((thread) => thread.comments)];
   return comments.some(isCutOnSave) || pr.reviews.some((review) => isCutOnSave(reviewBody(review, pr.comments)));
 }
@@ -122,7 +132,7 @@ function cutsSomething(pr: Pr): boolean {
  * bodies (stored JSON holds each copy on its own). The same object when
  * nothing is cut, so callers can tell whether to write it back.
  */
-export function trimBotBodies(pr: Pr): Pr {
+export function trimBotBodies(pr: FullPr): FullPr {
   if (!cutsSomething(pr)) {
     return pr;
   }

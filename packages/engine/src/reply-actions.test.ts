@@ -1,4 +1,4 @@
-import type { Pr, Topic } from '@postpile/core';
+import type { FullPr, Topic } from '@postpile/core';
 import { at, makeComment, makeReview, makeThread, makeThreadFor } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { topicChatId } from './actions/chat-actions.ts';
@@ -12,7 +12,7 @@ const thread = makeThread('T1', [
 ]);
 const question = makeComment({ id: 'IC1', author: 'bob', body: '@viewer can this land today?\n\nThe release is Thursday.', createdAt: at(5) });
 const reviewBody = makeComment({ id: 'R1', author: 'carol', body: 'Needs a test for the retry limit.', kind: 'review', createdAt: at(6) });
-const pr: Pr = reviewRequestedPr(1, {
+const pr: FullPr = reviewRequestedPr(1, {
   title: 'Retry the upload',
   comments: [...thread.comments, question, reviewBody],
   threads: [thread],
@@ -96,7 +96,7 @@ describe('react', () => {
     const h = await synced();
     const send = h.writer.addThumbsUp.bind(h.writer);
     h.writer.addThumbsUp = async (subjectId) => {
-      const stored = h.store.prs.get(pr.key)!;
+      const stored = h.store.prs.getFull(pr.key)!;
       h.store.prs.upsert({ ...stored, title: 'Retry uploads, take two' }, at(500));
       await send(subjectId);
     };
@@ -146,7 +146,7 @@ describe('draftReply', () => {
 });
 
 describe('topic chat', () => {
-  async function inTopic(): Promise<{ h: Harness; other: Pr }> {
+  async function inTopic(): Promise<{ h: Harness; other: FullPr }> {
     const h = makeHarness();
     const other = reviewRequestedPr(2, { title: 'Upload metrics' });
     h.reader.addPr(pr, makeThreadFor(pr));

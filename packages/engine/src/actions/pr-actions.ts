@@ -10,6 +10,7 @@ import {
   teamSlug,
   viewerHeadReview,
   type ActionResult,
+  type FullPr,
   type Pr,
   type PrKey,
   type ReplyTarget,
@@ -134,7 +135,7 @@ export class PrActions {
    * sync brings GitHub's copy.
    */
   private mirrorReview(key: PrKey, headOid: string, body: string, previousReviewAt: string | null): void {
-    const stored = this.store.prs.get(key);
+    const stored = this.store.prs.getFull(key);
     const fetchedAt = this.store.prs.fetchedAtByKey().get(key);
     const viewer = loadViewer(this.store);
     if (!stored || !fetchedAt || !viewer || stored.headOid !== headOid) {
@@ -206,16 +207,16 @@ export class PrActions {
    * the snapshot is not taken for fresher than it is.
    */
   private mirrorRemoval(key: PrKey, team: string): void {
-    const stored = this.store.prs.get(key);
+    const stored = this.store.prs.getFull(key);
     const fetchedAt = this.store.prs.fetchedAtByKey().get(key);
     if (stored && fetchedAt && stored.reviewerTeams.includes(team)) {
       this.store.prs.upsert({ ...stored, reviewerTeams: stored.reviewerTeams.filter((candidate) => candidate !== team) }, fetchedAt);
     }
   }
 
-  /** The stored PR and the viewer a draft needs; throws before the first sync. */
-  private draftInputs(key: PrKey): { pr: Pr; viewer: Viewer } {
-    const pr = this.store.prs.get(key);
+  /** The stored PR, every body included (a reply quotes and reads them), and the viewer a draft needs; throws before the first sync. */
+  private draftInputs(key: PrKey): { pr: FullPr; viewer: Viewer } {
+    const pr = this.store.prs.getFull(key);
     const viewer = loadViewer(this.store);
     if (!pr || !viewer) {
       throw new Error(`${key} is not in the store yet; run a sync first`);
@@ -293,7 +294,7 @@ export class PrActions {
    * Final, blocked while writes are locked; the PR is fetched again after.
    */
   async replyToComment(key: PrKey, commentId: string, body: string): Promise<{ result: ActionResult; target: ReplyTarget | null }> {
-    const pr = this.store.prs.get(key);
+    const pr = this.store.prs.getFull(key);
     const comment = pr ? findComment(pr, commentId) : null;
     if (!pr || !comment) {
       return { result: failed(`No comment ${commentId} on ${key} in the store`), target: null };
@@ -337,7 +338,7 @@ export class PrActions {
       return failed(`Reaction failed: ${errorText(error)}`);
     }
     // Read again: a poll may have stored a newer snapshot while GitHub answered. The fetch time stays.
-    const current = this.store.prs.get(key);
+    const current = this.store.prs.getFull(key);
     const fetchedAt = this.store.prs.fetchedAtByKey().get(key);
     if (current && fetchedAt) {
       this.store.prs.upsert(withViewerReaction(current, id), fetchedAt);

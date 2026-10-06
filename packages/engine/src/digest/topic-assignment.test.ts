@@ -1,4 +1,4 @@
-import type { Pr } from '@postpile/core';
+import type { FullPr, Pr } from '@postpile/core';
 import { at, makePr, makeThreadFor } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness, type Harness } from '../testing/fakes.ts';
@@ -117,7 +117,7 @@ describe('topic assignment places every PR', () => {
 });
 
 /** The PRs sit in the topic as the agent placed them. */
-function placedByAgent(h: Harness, topicId: string, placed: Pr[]): void {
+function placedByAgent(h: Harness, topicId: string, placed: FullPr[]): void {
   topicWithPrs(h, topicId, placed);
   for (const pr of placed) {
     h.store.memberships.assign({ prKey: pr.key, topicId, assignedBy: 'agent', reason: '', createdAt: at(0) });

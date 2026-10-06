@@ -1,7 +1,7 @@
 // The "Move CI to Depot" sample from the design rounds, as domain objects.
 // Used by FakeEngine so the server, CLI and desktop app run without GitHub or
 // the agent.
-import type { Glance, Pr, PrEvent, PrKey, PrSet, Tile, Topic, TopicProposal, UserPrState } from '@postpile/core';
+import type { FullPr, Glance, PrEvent, PrKey, PrSet, Tile, Topic, TopicProposal, UserPrState } from '@postpile/core';
 import {
   found,
   pinged,
@@ -26,7 +26,7 @@ export interface SampleData {
   /** Everyone else on the home teams, like the engine's daily team-member fetch. */
   viewerTeamMembers: string[];
   topics: Topic[];
-  prs: Pr[];
+  prs: FullPr[];
   events: PrEvent[];
   glances: Glance[];
   tiles: Tile[];
@@ -252,7 +252,7 @@ function buildTopics(clock: SampleClock): Topic[] {
   ];
 }
 
-function buildPrs(clock: SampleClock): Pr[] {
+function buildPrs(clock: SampleClock): FullPr[] {
   return [
     samplePr(clock, {
       number: 1902, title: 'Use Depot cache backend for Turbo', author: 'rowan', state: 'OPEN',

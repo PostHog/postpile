@@ -8,7 +8,7 @@ import { mentionsAnyTeam, mentionsTeam, mentionsUser, sameLogin } from './mentio
 import { isPrOwner } from './pr-owners.ts';
 import { homeTeamsOf, isRoutingTeam, teamsHomeFirst } from './team-roles.ts';
 import { viewerAskedToReview } from './review-request.ts';
-import type { Comment, EventKind, IsoTime, Pr, PrEvent, TimelineItem, UserPrState, Viewer } from './types.ts';
+import type { Comment, EventKind, FullComment, FullPr, IsoTime, Pr, PrEvent, TimelineItem, UserPrState, Viewer } from './types.ts';
 
 /** What deriveEvents knows about an event before it gets classified. */
 interface RawEvent {
@@ -75,7 +75,7 @@ function isReplyToViewer(comment: Comment, pr: Pr, viewer: Viewer): boolean {
   return thread.comments.some((c) => sameLogin(c.author, viewer.login) && c.createdAt < comment.createdAt);
 }
 
-function addressedKind(comment: Comment, pr: Pr, viewer: Viewer): EventKind | null {
+function addressedKind(comment: FullComment, pr: Pr, viewer: Viewer): EventKind | null {
   const isQuestion = comment.body.includes('?');
   if (mentionsUser(comment.body, viewer.login)) {
     return isQuestion ? 'question_to_user' : 'mention';
@@ -91,10 +91,13 @@ function addressedKind(comment: Comment, pr: Pr, viewer: Viewer): EventKind | nu
 
 /**
  * The team a team mention names, home teams first: its loudness depends on
- * the team's role (a routing team's mention is FYI, 2026-09-30).
+ * the team's role (a routing team's mention is FYI, 2026-09-30). A team
+ * mention is a person's comment, so a board read has its body
+ * (`isBodyReadByRules`); a body left out mentions no team.
  */
 function mentionedTeam(comment: Comment, viewer: Viewer): string | null {
-  return teamsHomeFirst(viewer).find((team) => mentionsTeam(comment.body, team)) ?? null;
+  const body = comment.body ?? '';
+  return teamsHomeFirst(viewer).find((team) => mentionsTeam(body, team)) ?? null;
 }
 
 /**
@@ -116,7 +119,7 @@ function plainCommentLead(comment: Comment, pr: Pr): string {
   return reply === null ? `${comment.author} commented` : `${comment.author} replied to ${reply.to} on ${reply.path}`;
 }
 
-function commentSummary(kind: EventKind, comment: Comment, pr: Pr): string {
+function commentSummary(kind: EventKind, comment: FullComment, pr: Pr): string {
   switch (kind) {
     case 'mention':
       return withText(`${comment.author} mentioned you`, comment.body);
@@ -133,7 +136,7 @@ function commentSummary(kind: EventKind, comment: Comment, pr: Pr): string {
   }
 }
 
-function commentEvent(comment: Comment, pr: Pr, viewer: Viewer): RawEvent | null {
+function commentEvent(comment: FullComment, pr: Pr, viewer: Viewer): RawEvent | null {
   const machine = isMachineComment(comment);
   let kind: EventKind | null;
   if (machine) {
@@ -196,10 +199,12 @@ function editMentionTarget(comment: Comment, viewer: Viewer): string | null {
   if (isMachineEdit(comment) || sameLogin(editorOf(comment), viewer.login)) {
     return null;
   }
-  if (mentionsUser(comment.body, viewer.login)) {
+  // A person edited it last, so a board read has the body (`isBodyReadByRules`).
+  const body = comment.body ?? '';
+  if (mentionsUser(body, viewer.login)) {
     return viewer.login;
   }
-  return homeTeamsOf(viewer).find((team) => mentionsTeam(comment.body, team)) ?? null;
+  return homeTeamsOf(viewer).find((team) => mentionsTeam(body, team)) ?? null;
 }
 
 /**
@@ -220,7 +225,7 @@ export function editMentionOf(event: Pick<PrEvent, 'kind' | 'sourceId'>, pr: Pr,
   return sameLogin(target, viewer.login) ? 'you' : 'team';
 }
 
-function editSummary(comment: Comment, editor: string, machine: boolean, target: string | null, viewer: Viewer): string {
+function editSummary(comment: FullComment, editor: string, machine: boolean, target: string | null, viewer: Viewer): string {
   if (machine && sameLogin(editor, comment.author)) {
     return withText(`${editor} updated its comment`, comment.body);
   }
@@ -232,7 +237,7 @@ function editSummary(comment: Comment, editor: string, machine: boolean, target:
 }
 
 /** One event for a comment's latest edit, at the edit time; null for a comment never edited. */
-function editEvent(comment: Comment, viewer: Viewer): RawEvent | null {
+function editEvent(comment: FullComment, viewer: Viewer): RawEvent | null {
   const at = editedAt(comment);
   if (at === null) {
     return null;
@@ -253,7 +258,7 @@ function editEvent(comment: Comment, viewer: Viewer): RawEvent | null {
   };
 }
 
-function reviewEvents(pr: Pr): RawEvent[] {
+function reviewEvents(pr: FullPr): RawEvent[] {
   const events: RawEvent[] = [];
   for (const review of pr.reviews) {
     let kind: EventKind;
@@ -400,7 +405,7 @@ function timelineEvents(pr: Pr, viewer: Viewer): RawEvent[] {
   }));
 }
 
-function collectRawEvents(pr: Pr, viewer: Viewer, userState: UserPrState | null): RawEvent[] {
+function collectRawEvents(pr: FullPr, viewer: Viewer, userState: UserPrState | null): RawEvent[] {
   const raw: RawEvent[] = [];
   for (const comment of pr.comments) {
     const event = commentEvent(comment, pr, viewer);
@@ -451,7 +456,7 @@ export function machineCommentTwinId(id: string): string | null {
  * have seenAt and override set to null; the store keeps those across syncs.
  */
 export function deriveEvents(
-  pr: Pr,
+  pr: FullPr,
   viewer: Viewer,
   userState: UserPrState | null,
 ): PrEvent[] {

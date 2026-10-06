@@ -8,7 +8,7 @@ import { at, makeEvent, makePr, makeReview, makeThreadFor, makeUserState, NO_OPE
 import type { PaneOffers } from './offers.ts';
 import { deriveTileState } from './tiles.ts';
 import { buildPrSummary, buildTileView } from './tile-view.ts';
-import type { Pr, PrEvent, PrKey, Snooze, Tile, TileMember, UserPrState, Viewer } from './types.ts';
+import type { FullPr as Pr, PrEvent, PrKey, Snooze, Tile, TileMember, UserPrState, Viewer } from './types.ts';
 import type { TileView } from './views.ts';
 
 const viewer: Viewer = { ...baseViewer, teamMembers: ['lyra', 'rowan'] };

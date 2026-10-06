@@ -8,6 +8,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 - Replies to bots in review threads no longer show up as new comments in a PR's activity; they collapse into one quiet line per thread that opens to the replies. A reply there that mentions or asks you still shows as its own line, and these replies no longer make a tile loud or lead it.
 - Big inboxes take less memory and disk: PostPile now keeps each comment once instead of up to three times. On a heavy test inbox the PRs it works on take about a third less memory, and the stored PR data about a tenth less space. The move runs once in the background a little after the update; the database file keeps the space it frees for new data instead of shrinking.
+- Big inboxes take less memory again: the PRs PostPile works on no longer hold bot comment text it never reads (it still has it for reply drafts and "Why?" sources). On a heavy test inbox they take less than half the memory they did, about 58 MB instead of 137 MB.
 
 ## 0.21.0 (2026-10-06)
 

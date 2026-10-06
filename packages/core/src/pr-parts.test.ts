@@ -5,20 +5,21 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import { at, makeComment, makePr, makeReview, makeThread } from './fixtures.ts';
-import { canonicalPr, DiscussionError, joinDiscussion, splitDiscussion, type Discussion, type DiscussionParts } from './pr-parts.ts';
+import { isBodyReadByRules } from './bot-bodies.ts';
+import { boardShape, canonicalPr, DiscussionError, joinDiscussion, splitDiscussion, type Discussion, type DiscussionParts, type FullDiscussion } from './pr-parts.ts';
 import { boardSpecArb, buildBoard, CORPUS, CORPUS_SCENARIOS, corpusPrAfter, corpusPrBefore, PROPERTY_TIMEOUT_MS, propertyRuns } from './testing/index.ts';
-import type { Comment, Pr } from './types.ts';
+import type { FullComment as Comment, FullPr as Pr } from './types.ts';
 
 function discussionOf(pr: Discussion): Discussion {
   return { comments: pr.comments, threads: pr.threads, reviews: pr.reviews };
 }
 
-function roundTrip(pr: Discussion): Discussion {
+function roundTrip(pr: FullDiscussion): Discussion {
   return joinDiscussion(splitDiscussion(pr));
 }
 
 /** The round trip equals the canonical PR, and threads hold the flat list's comment objects. */
-function expectRoundTrip(pr: Discussion): void {
+function expectRoundTrip(pr: FullDiscussion): void {
   const back = roundTrip(pr);
   expect(back).toEqual(discussionOf(canonicalPr(pr)));
   const flat = new Map(back.comments.map((comment) => [comment.id, comment]));
@@ -42,7 +43,7 @@ describe('splitDiscussion and joinDiscussion', () => {
   it('round-trip every PR of generated boards', () => {
     fc.assert(
       fc.property(boardSpecArb, (spec) => {
-        for (const pr of buildBoard(spec).prs.values()) {
+        for (const pr of buildBoard(spec).fullPrs.values()) {
           expectRoundTrip(pr);
         }
       }),
@@ -143,7 +144,7 @@ describe('splitDiscussion and joinDiscussion', () => {
 });
 
 describe('splitDiscussion refuses data that does not hold together', () => {
-  const refuses = (pr: Discussion, message: RegExp) => expect(() => splitDiscussion(pr)).toThrow(message);
+  const refuses = (pr: FullDiscussion, message: RegExp) => expect(() => splitDiscussion(pr)).toThrow(message);
 
   it('a thread copy that differs from the flat copy', () => {
     const flat = inline('rc1', 't1');
@@ -217,5 +218,51 @@ describe('joinDiscussion refuses rows that do not hold together', () => {
     const rows = parts({});
     refuses({ ...rows, threads: [...rows.threads, { ...rows.threads[0]!, id: 't2' }] }, /two entries at position 0 of the threads/);
     refuses({ ...rows, reviews: [...rows.reviews, { ...rows.reviews[0]!, id: 'r2' }] }, /two entries at position 0 of the reviews/);
+  });
+});
+
+describe('boardShape', () => {
+  const human = makeComment({ id: 'c1', author: 'bob', body: 'cc @acme/team-platform' });
+  const bot = makeComment({ id: 'c2', author: 'coderabbitai[bot]', body: 'Walkthrough for @acme/team-infra' });
+  const trunk = makeComment({ id: 'c3', author: 'trunk-io[bot]', body: '⏳ Testing' });
+  const editedByPerson = makeComment({ id: 'c4', author: 'github-actions[bot]', body: 'Preview ready @viewer', lastEditedAt: at(30), editor: 'bob' });
+  const editedByBot = makeComment({ id: 'c5', author: 'github-actions[bot]', body: 'Bundle +2 KB', lastEditedAt: at(30), editor: 'github-actions[bot]' });
+  const deleted = makeComment({ id: 'c6', author: '', body: 'from a deleted account' });
+  const botReviewBody = makeComment({ id: 'r2', kind: 'review', author: 'greptile-apps[bot]', body: 'Summary of the PR' });
+  const pr = makePr({
+    body: 'Fixes the runner',
+    comments: [human, bot, trunk, editedByPerson, editedByBot, deleted, botReviewBody],
+    reviews: [
+      makeReview({ id: 'r1', author: 'bob', body: 'Looks good' }),
+      makeReview({ id: 'r2', author: 'greptile-apps[bot]', state: 'COMMENTED', body: 'Summary of the PR' }),
+      makeReview({ id: 'r3', author: 'copilot-pull-request-reviewer[bot]', state: 'COMMENTED', body: '' }),
+    ],
+  });
+
+  it('leaves out the bodies no board rule reads and keeps the rest', () => {
+    const board = boardShape(pr);
+    expect(board.comments.map((comment) => comment.body)).toEqual(['cc @acme/team-platform', null, '⏳ Testing', 'Preview ready @viewer', null, 'from a deleted account', null]);
+    expect(board.reviews.map((review) => review.body)).toEqual(['Looks good', null, null]);
+    expect(board.body).toBe('Fixes the runner');
+  });
+
+  it('keeps every team the stored bodies mention, a bot body left out included', () => {
+    expect(boardShape(pr).mentionedTeams).toEqual(['acme/team-infra', 'acme/team-platform']);
+  });
+
+  it('leaves out the same bodies in threads as in the flat list', () => {
+    const inline = makeComment({ id: 'rc1', kind: 'review_comment', author: 'greptile-apps[bot]', threadId: 't1', path: 'a.ts', body: 'Consider a guard' });
+    const board = boardShape(makePr({ comments: [inline], threads: [makeThread('t1', [inline])] }));
+    expect(board.threads[0]!.comments[0]!.body).toBeNull();
+    expect(board.comments[0]!.body).toBeNull();
+  });
+
+  it('reads a body by the same rule that keeps it whole on save', () => {
+    expect(isBodyReadByRules({ author: 'bob' })).toBe(true);
+    expect(isBodyReadByRules({ author: '' })).toBe(true);
+    expect(isBodyReadByRules({ author: 'mergify[bot]' })).toBe(true);
+    expect(isBodyReadByRules({ author: 'vercel[bot]', editor: 'bob' })).toBe(true);
+    expect(isBodyReadByRules({ author: 'vercel[bot]', editor: 'vercel[bot]' })).toBe(false);
+    expect(isBodyReadByRules({ author: 'vercel[bot]', editor: null })).toBe(false);
   });
 });

@@ -28,7 +28,11 @@ export interface Review {
   id: string;
   author: string;
   state: ReviewState;
-  body: string;
+  /**
+   * Null: left out of this read. A board read leaves out the body of a bot
+   * review no board rule reads (`isBodyReadByRules`); `FullPr` has it.
+   */
+  body: string | null;
   submittedAt: IsoTime;
   /** Head commit the review was made against. Used for "new commits after approval". */
   commitOid: string | null;
@@ -56,7 +60,12 @@ export type CommentKind = 'comment' | 'review' | 'review_comment';
 export interface Comment {
   id: string;
   author: string;
-  body: string;
+  /**
+   * Null: left out of this read. A board read loads only the bodies a
+   * board rule reads (`isBodyReadByRules`: people's, merge queue bots',
+   * ones a person edited last); `FullPr` has every stored body.
+   */
+  body: string | null;
   createdAt: IsoTime;
   kind: CommentKind;
   url: string;
@@ -197,6 +206,36 @@ export interface Pr {
    * stored before it existed: then a truncated snapshot never vouches.
    */
   capHits?: CapHit[];
+  /**
+   * Every "org/slug" (lowercased) the PR body or a comment body mentions
+   * (`prTeamMentions`, over the stored bodies). Set by every store read,
+   * from the header column `mentioned_teams` once the discussion is read
+   * from rows; `for-whom.ts` reads it. Missing on a PR built in memory
+   * (a fetch, a test fixture): read the bodies then.
+   */
+  mentionedTeams?: string[];
+}
+
+/** A comment with its stored body: what a fetch builds and `PrRepo.getFull` reads. */
+export type FullComment = Comment & { body: string };
+
+/** A review with its stored body. */
+export type FullReview = Review & { body: string };
+
+export interface FullReviewThread extends ReviewThread {
+  comments: FullComment[];
+}
+
+/**
+ * A PR with every stored body: what a fetch builds and what event
+ * derivation, the write actions, lessons and "Why?" excerpts read
+ * (`PrRepo.getFull` / `getFullMany`). Assignable to `Pr`, the board shape,
+ * whose bodies a read may leave out (DESIGN.md "The board diet").
+ */
+export interface FullPr extends Pr {
+  comments: FullComment[];
+  threads: FullReviewThread[];
+  reviews: FullReview[];
 }
 
 /** The PR query's capped activity lists (packages/github `queries.ts`). */

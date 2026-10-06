@@ -1,4 +1,4 @@
-import type { Pr } from '@postpile/core';
+import type { FullPr } from '@postpile/core';
 import { makeComment, makeThreadFor, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness, NOW, type Harness } from './testing/fakes.ts';
@@ -10,21 +10,21 @@ const FRESH = '2026-09-02T11:55:00.000Z';
 const LATER = '2026-09-02T12:01:00.000Z';
 
 /** A synced PR, then new activity on GitHub the next poll will see. */
-async function syncedPr(h: Harness, number: number): Promise<Pr> {
+async function syncedPr(h: Harness, number: number): Promise<FullPr> {
   const pr = reviewRequestedPr(number);
   h.reader.addPr(pr, makeThreadFor(pr));
   await h.engine.sync({ maxAgentCalls: 0 });
   return pr;
 }
 
-function withActivity(h: Harness, pr: Pr, changes: Partial<Pr>, etag: string): Pr {
+function withActivity(h: Harness, pr: FullPr, changes: Partial<FullPr>, etag: string): FullPr {
   const next = { ...pr, ...changes, updatedAt: LATER };
   h.reader.addPr(next, makeThreadFor(next, { updatedAt: LATER }));
   h.reader.etag = etag;
   return next;
 }
 
-function mention(pr: Pr, body = `@${viewer.login} can you check the cache key?`): Partial<Pr> {
+function mention(pr: FullPr, body = `@${viewer.login} can you check the cache key?`): Partial<FullPr> {
   return { comments: [makeComment({ id: `m-${pr.ref.number}`, author: 'bob', body, createdAt: FRESH })] };
 }
 

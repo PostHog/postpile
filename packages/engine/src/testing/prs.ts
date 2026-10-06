@@ -1,8 +1,8 @@
-import type { Pr } from '@postpile/core';
+import type { FullPr } from '@postpile/core';
 import { at, makePr, makeTimelineItem, viewer } from '@postpile/core/fixtures';
 
 /** An open PR where alice asked the viewer for a review: one loud event. */
-export function reviewRequestedPr(number: number, overrides: Partial<Pr> & { repo?: string } = {}): Pr {
+export function reviewRequestedPr(number: number, overrides: Partial<FullPr> & { repo?: string } = {}): FullPr {
   return makePr({
     number,
     timeline: [makeTimelineItem({ id: `rr-${number}`, subject: viewer.login, at: at(1) })],

@@ -4,7 +4,7 @@ import { isMachineComment } from './bots.ts';
 import { deriveEvents, editMentionOf, machineCommentTwinId } from './events.ts';
 import { at, makeComment, makePr, makeReview, makeThread, viewer } from './fixtures.ts';
 import { mergeQueueState } from './merge-queue.ts';
-import type { Comment, Pr } from './types.ts';
+import type { FullComment as Comment, FullPr as Pr } from './types.ts';
 
 const BOT = 'coderabbitai[bot]';
 

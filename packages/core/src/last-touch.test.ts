@@ -3,7 +3,7 @@ import { deriveEvents } from './events.ts';
 import { at, makeCommit, makeComment, makeEvent, makePr, makeReview, makeTimelineItem, viewer } from './fixtures.ts';
 import { eventsSeenByTouch, lastTouch, READING_TOUCH_KINDS, touchKindOf } from './last-touch.ts';
 import { isUnseenLoud } from './loudness.ts';
-import type { Pr, PrEvent } from './types.ts';
+import type { FullPr as Pr, PrEvent } from './types.ts';
 
 const me = viewer.login;
 

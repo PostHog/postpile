@@ -6,7 +6,8 @@
 // can never move both sides of a check. Nothing here imports a rule module;
 // only `sameLogin` and the builder's names are shared.
 import { sameLogin } from '../mentions.ts';
-import type { Comment, IsoTime, Pr, PrEvent, Review, TimelineItem, UserPrState, Viewer } from '../types.ts';
+// The oracles read the raw snapshot, every stored body (`FullPr`); the rules under test read the board shape.
+import type { FullComment as Comment, IsoTime, FullPr as Pr, PrEvent, FullReview as Review, TimelineItem, UserPrState, Viewer } from '../types.ts';
 import type { CommentText, TrunkText } from './board-spec.ts';
 import { AUTOMATION_LOGINS, COMMENT_BODIES, MENTIONED_TEAMS, TRUNK_BODIES, TRUNK_LOGIN } from './build-board.ts';
 

@@ -1,4 +1,4 @@
-import type { Pr } from '@postpile/core';
+import type { FullPr, Pr } from '@postpile/core';
 import { at, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness } from '../testing/fakes.ts';
@@ -13,7 +13,7 @@ import { TOPIC_GRAIN_KEY, TOPIC_GRAIN_VERSION } from './topic-tidy.ts';
 // without asking, recorded as accepted proposals from the upgrade.
 
 /** topicWithPrs places PRs as the user would; a tidy mostly meets the agent's placements. */
-function placedByAgent(h: ReturnType<typeof makeHarness>, topicId: string, prs: Pr[]): void {
+function placedByAgent(h: ReturnType<typeof makeHarness>, topicId: string, prs: FullPr[]): void {
   topicWithPrs(h, topicId, prs);
   for (const pr of prs) {
     h.store.memberships.assign({ prKey: pr.key, topicId, assignedBy: 'agent', reason: '', createdAt: at(0) });

@@ -80,8 +80,13 @@ export function isBotThreadReply(comment: Comment, pr: Pr): boolean {
   return others.length > 0 && others.every(isMachineComment);
 }
 
+/**
+ * A COMMENTED review without text. A board read leaves out only a bot
+ * review's body (`isBodyReadByRules`), and a bot's review never carries a
+ * person's reply, so a left-out body counts as not empty.
+ */
 function isEmptyComment(review: Review): boolean {
-  return review.state === 'COMMENTED' && review.body.trim() === '';
+  return review.state === 'COMMENTED' && review.body !== null && review.body.trim() === '';
 }
 
 /** The author's thread comments posted with the review (same second). */

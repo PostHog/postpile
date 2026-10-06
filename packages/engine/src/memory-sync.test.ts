@@ -1,4 +1,4 @@
-import type { Dossier, Pr } from '@postpile/core';
+import type { Dossier, FullPr, Pr } from '@postpile/core';
 import type { DossierUpdateInput } from '@postpile/agent';
 import { at, makeCandidate, makeComment, makeCommit, makeFact, makeFactRef, makeReview, makeThread, makeThreadFor, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it, vi } from 'vitest';
@@ -18,7 +18,7 @@ function movableHarness(): { h: Harness; setNow: (iso: string) => void } {
 }
 
 /** Puts a newer snapshot of the PR in the fake reader, with a thread that moved so the next sync fetches it. */
-function pushSnapshot(h: Harness, pr: Pr, etag: string): void {
+function pushSnapshot(h: Harness, pr: FullPr, etag: string): void {
   h.reader.addPr(pr, makeThreadFor(pr, { updatedAt: LATER }));
   h.reader.etag = etag;
 }
@@ -507,7 +507,7 @@ describe('event classification', () => {
 
 describe('replies that ask nothing', () => {
   // The viewer asked in a review thread, bob answered "thanks, that's fine".
-  function thankedPr(number = 1): Pr {
+  function thankedPr(number = 1): FullPr {
     const thread = makeThread(`t${number}`, [
       makeComment({ id: `mine-${number}`, author: viewer.login, body: 'Maybe rename this?', createdAt: at(5) }),
       makeComment({ id: `thanks-${number}`, author: 'bob', body: "Thanks, that's fine", createdAt: at(10) }),
@@ -613,7 +613,7 @@ describe('replies that ask nothing', () => {
 });
 
 describe('pushes after the viewer approved', () => {
-  function pushedAfterApproval(): Pr {
+  function pushedAfterApproval(): FullPr {
     return reviewRequestedPr(1, {
       headOid: 'c2',
       commits: [makeCommit({ oid: 'c1', committedAt: at(5) }), makeCommit({ oid: 'c2', headline: 'switch the runner image', committedAt: at(20) })],

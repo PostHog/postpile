@@ -5,7 +5,8 @@
 // invariants check on their own. Type imports only from the rule modules.
 import type { GitHubLinkOffer, MarkLabel, PaneLead, TileFooterAction } from '../offers.ts';
 import type { PrPrimaryAction } from '../primary-action.ts';
-import type { Pr, PrKey, UserPrState, Viewer } from '../types.ts';
+// The oracles read the raw snapshot, every stored body (`FullPr`); the rules under test read the board shape.
+import type { FullPr as Pr, PrKey, UserPrState, Viewer } from '../types.ts';
 import type { PrSummary, TileView } from '../views.ts';
 import { isAutomationLogin, isViewerTeam, specOwners, viewerApproved, viewerOwns } from './spec-facts.ts';
 

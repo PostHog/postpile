@@ -3,7 +3,7 @@ import { activityList, noiseLabel, noiseSummary, threadChangedAt } from './activ
 import { deriveEvents, reviewRequestSubject } from './events.ts';
 import { at, makeComment, makeEvent, makePr, makeReview, makeThread, makeThreadFor, viewer } from './fixtures.ts';
 import { eventView } from './loudness.ts';
-import type { Comment, EventDisplayState, Pr, PrEvent } from './types.ts';
+import type { FullComment as Comment, EventDisplayState, FullPr as Pr, PrEvent } from './types.ts';
 import type { EventView } from './views.ts';
 
 const me = viewer.login;

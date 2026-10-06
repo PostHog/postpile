@@ -8,7 +8,7 @@ import { eventsSeenByTouch } from './last-touch.ts';
 import { touchedReadCheck } from './quiet-reads.ts';
 import { actedAfterSeeing, sawBeforeActing } from './saw-before-acting.ts';
 import { isPrDone } from './tiles.ts';
-import type { Comment, IsoTime, Pr, PrEvent } from './types.ts';
+import type { FullComment as Comment, IsoTime, FullPr as Pr, PrEvent } from './types.ts';
 
 describe('sawBeforeActing', () => {
   const pr = makePr();

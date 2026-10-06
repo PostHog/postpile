@@ -10,7 +10,7 @@ import { headlineClass } from './headline.ts';
 import { isPersonalPing, pingRule } from './pings.ts';
 import { isAskOfViewer, judgedReadCheck, quietReadCheck, touchedReadCheck, type QuietReadInput } from './quiet-reads.ts';
 import { prTier } from './pr-tier.ts';
-import type { Comment, Pr, PrEvent, Viewer } from './types.ts';
+import type { FullComment as Comment, FullPr as Pr, PrEvent, Viewer } from './types.ts';
 import { prWhoseTurn, unansweredAsk } from './whose-turn.ts';
 
 function edited(overrides: Partial<Comment>): Comment {

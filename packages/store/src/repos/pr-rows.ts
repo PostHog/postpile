@@ -44,7 +44,8 @@ interface CommentRow {
   editor: string | null;
   updated_at: string | null;
   viewer_reacted: number | null;
-  body: string;
+  /** Null only on a board read: a body no board rule reads (`postpile_reads_body`). */
+  body: string | null;
 }
 
 interface ThreadRow {
@@ -185,14 +186,21 @@ export class DiscussionRows {
     }
   }
 
-  /** The rows of these PRs, by key; a PR without any row (no discussion) is missing. In the caller's read transaction. */
-  read(keys: string[]): Map<string, DiscussionParts> {
+  /**
+   * The rows of these PRs, by key; a PR without any row (no discussion) is
+   * missing. In the caller's read transaction. `board`: a comment body no
+   * board rule reads stays in SQLite and comes back null (SQL
+   * `postpile_reads_body`, registered by PrRepo), so it never becomes a JS
+   * string; review bodies the caller handles (`boardReviews`).
+   */
+  read(keys: string[], board: boolean): Map<string, DiscussionParts> {
     const byKey = new Map<string, DiscussionParts>();
     const list = placeholders(keys.length);
+    const body = board ? 'CASE WHEN postpile_reads_body(author, editor) THEN body END AS body' : 'body';
     const comments = all<CommentRow>(
       this.db,
       `SELECT pr_key, id, kind, ord, author, created_at, url, path, thread_id, thread_ord, review_id,
-         last_edited_at, editor, updated_at, viewer_reacted, body
+         last_edited_at, editor, updated_at, viewer_reacted, ${body}
        FROM pr_comment WHERE pr_key IN (${list})`,
       ...keys,
     );

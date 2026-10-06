@@ -7,7 +7,7 @@ import { groupTiles } from '../tile-groups.ts';
 import { topicMove, topicUrgency } from '../topic-urgency.ts';
 import type { TileView } from '../views.ts';
 import type { PropertyBoard } from './build-board.ts';
-import { ensure, eventsOf, prOf, trackedMembers, type Invariant } from './invariant.ts';
+import { ensure, eventsOf, fullPrOf, trackedMembers, type Invariant } from './invariant.ts';
 import { isSnoozedByRule, loudWithoutThreadKeys, prDone, tileNews, unreadThreadKeys } from './invariants-tile.ts';
 import { effectiveLoudnessOf, isAutomationEvent } from './spec-rules.ts';
 
@@ -103,7 +103,7 @@ export const newBadgeNeverOnAutomationHeadline: Invariant = {
       let expected = false;
       if (view.state.kind === 'unread' && headline) {
         const event = eventsOf(board, headline.prKey).find((candidate) => candidate.id === headline.eventId);
-        const automation = event !== undefined && isAutomationEvent(prOf(board, headline.prKey), board.viewer, event);
+        const automation = event !== undefined && isAutomationEvent(fullPrOf(board, headline.prKey), board.viewer, event);
         expected = !automation || effectiveLoudnessOf(event) === 'loud';
       }
       ensure(view.newBadge === expected, `${view.tile.id}: NEW ${view.newBadge}, expected ${expected} (headline ${headline?.eventId ?? 'none'})`);

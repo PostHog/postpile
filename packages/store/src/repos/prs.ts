@@ -1,5 +1,19 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { DiscussionError, joinDiscussion, prTeamMentions, splitDiscussion, type DiscussionParts, type Pr, type PrHeader, type PrKey, type PrState } from '@postpile/core';
+import {
+  boardReviews,
+  boardShape,
+  DiscussionError,
+  isBodyReadByRules,
+  joinDiscussion,
+  prTeamMentions,
+  splitDiscussion,
+  type DiscussionParts,
+  type FullPr,
+  type Pr,
+  type PrHeader,
+  type PrKey,
+  type PrState,
+} from '@postpile/core';
 import { inTransaction } from '../database.ts';
 import { all, each, one, placeholders, run } from '../sql.ts';
 import { DISCUSSION_READY_SQL, DiscussionRows, ROWS, STORED_SQL } from './pr-rows.ts';
@@ -26,6 +40,12 @@ interface ParsedPr {
   revision: number;
   pr: Pr;
 }
+
+/**
+ * What a read gives: the board shape (`boardShape`: bodies no board rule
+ * reads left out, `mentionedTeams` set) or every stored body (`FullPr`).
+ */
+type ReadShape = 'board' | 'full';
 
 /** A header's key and the revision of its snapshot (migration 029): what a cached copy is checked against. */
 interface RevisionRow {
@@ -62,8 +82,8 @@ interface HeaderRow {
  * out of memory and out of anything written back (a local rewrite stores
  * what it read).
  */
-function parsePr(text: string): Pr {
-  const parsed = JSON.parse(text) as Pr & { checks?: unknown };
+function parsePr(text: string): FullPr {
+  const parsed = JSON.parse(text) as FullPr & { checks?: unknown };
   if (!('checks' in parsed)) {
     return parsed;
   }
@@ -71,15 +91,37 @@ function parsePr(text: string): Pr {
   return pr;
 }
 
-/** The PR without the lists the discussion rows hold: what its json keeps once reads take them from the rows. */
-function withoutDiscussion(pr: Pr): Omit<Pr, 'comments' | 'threads' | 'reviews'> {
-  const { comments: _comments, threads: _threads, reviews: _reviews, ...rest } = pr;
-  return rest;
+/**
+ * The PR as its json stores it: never `mentionedTeams` (a read sets it, from
+ * the header column), and once reads take the discussion from the rows,
+ * without the three lists they hold.
+ */
+function snapshotJson(pr: FullPr, fromRows: boolean): string {
+  const { mentionedTeams: _mentionedTeams, ...stored } = pr;
+  if (!fromRows) {
+    return JSON.stringify(stored);
+  }
+  const { comments: _comments, threads: _threads, reviews: _reviews, ...rest } = stored;
+  return JSON.stringify(rest);
 }
 
 /** A JSON list column; most are empty, which needs no parse. */
 function listOf(text: string): string[] {
   return text === '[]' ? [] : (JSON.parse(text) as string[]);
+}
+
+/**
+ * SQL `postpile_reads_body(author, editor)`: 1 when a board rule reads a
+ * body by them (`isBodyReadByRules`), else 0. Registered on every
+ * connection a PrRepo reads with, read-only CLI ones included, so the board
+ * read leaves bot bodies in SQLite and they never become JS strings. It is
+ * the build's own rule at read time: nothing stored can go stale when the
+ * bot list changes.
+ */
+function registerReadsBody(db: DatabaseSync): void {
+  db.function('postpile_reads_body', { deterministic: true }, (author, editor) =>
+    isBodyReadByRules({ author: String(author), editor: editor === null ? null : String(editor) }) ? 1 : 0,
+  );
 }
 
 function toHeader(row: HeaderRow): PrHeader {
@@ -141,6 +183,7 @@ export class PrRepo {
 
   constructor(private readonly db: DatabaseSync) {
     this.discussion = new DiscussionRows(db);
+    registerReadsBody(db);
   }
 
   /**
@@ -153,26 +196,47 @@ export class PrRepo {
   }
 
   /**
-   * These PRs' snapshots, parsed: the json alone before the switch; after
-   * it, the json without the three lists and the discussion joined from
-   * the rows. Keys without a snapshot are missing. In the caller's read
-   * transaction. Rows that do not hold together throw (DiscussionError):
-   * every write checks them, so that is a bug, not GitHub data.
+   * These PRs' snapshots, parsed, in board shape or with every body. Before
+   * the switch: the json, and for the board `boardShape` of it, so a cached
+   * board copy has the same shape on both sides of the switch. After it:
+   * the json without the three lists, the discussion joined from the rows
+   * (for the board, bodies no board rule reads stay in SQLite, see
+   * `postpile_reads_body`) and the header's `mentioned_teams`. Keys without
+   * a snapshot are missing. In the caller's read transaction. Rows that do
+   * not hold together throw (DiscussionError): every write checks them, so
+   * that is a bug, not GitHub data.
    */
-  private readChunk(keys: PrKey[], fromRows: boolean): Map<PrKey, Pr> {
-    const json = fromRows ? `json_remove(json, ${DISCUSSION_PATHS})` : 'json';
-    const rows = all<{ key: string; json: string }>(this.db, `SELECT key, ${json} AS json FROM pr_snapshot WHERE key IN (${placeholders(keys.length)})`, ...keys);
-    const discussion = fromRows ? this.discussion.read(keys) : null;
+  private readChunk(keys: PrKey[], fromRows: boolean, shape: ReadShape): Map<PrKey, Pr> {
+    const json = fromRows ? `json_remove(s.json, ${DISCUSSION_PATHS})` : 's.json';
+    const rows = all<{ key: string; json: string; mentioned_teams: string }>(
+      this.db,
+      `SELECT s.key, ${json} AS json, p.mentioned_teams FROM pr_snapshot s JOIN pr p ON p.key = s.key WHERE s.key IN (${placeholders(keys.length)})`,
+      ...keys,
+    );
     const result = new Map<PrKey, Pr>();
+    if (!fromRows) {
+      for (const row of rows) {
+        const pr = parsePr(row.json);
+        result.set(row.key, shape === 'board' ? boardShape(pr) : pr);
+      }
+      return result;
+    }
+    const discussion = this.discussion.read(keys, shape === 'board');
     for (const row of rows) {
-      const pr = parsePr(row.json);
-      result.set(row.key, discussion === null ? pr : { ...pr, ...joinDiscussion(discussion.get(row.key) ?? NO_DISCUSSION) });
+      const joined = joinDiscussion(discussion.get(row.key) ?? NO_DISCUSSION);
+      const pr = { ...parsePr(row.json), ...joined };
+      result.set(row.key, shape === 'board' ? { ...pr, reviews: boardReviews(joined.reviews, joined.comments), mentionedTeams: listOf(row.mentioned_teams) } : pr);
     }
     return result;
   }
 
+  /** `readChunk` with every stored body: no read leaves one out then. */
+  private readFullChunk(keys: PrKey[], fromRows: boolean): Map<PrKey, FullPr> {
+    return this.readChunk(keys, fromRows, 'full') as Map<PrKey, FullPr>;
+  }
+
   /**
-   * The given header rows' snapshots, parsed: cached ones that are still
+   * The given header rows' snapshots in board shape, parsed: cached ones that are still
    * current from the cache, the others read and parsed a chunk at a time
    * (the raw json of a whole board next to its parsed copy went past the
    * main process's 4 GB heap). `keep` says which freshly parsed ones go into
@@ -189,6 +253,7 @@ export class PrRepo {
       const read = this.readChunk(
         chunk.map((row) => row.key),
         fromRows,
+        'board',
       );
       for (const row of chunk) {
         const pr = read.get(row.key);
@@ -267,7 +332,7 @@ export class PrRepo {
    * does not hold together throws (DiscussionError) before anything is
    * written.
    */
-  upsert(pr: Pr, fetchedAt: string): void {
+  upsert(pr: FullPr, fetchedAt: string): void {
     const parts = splitDiscussion(pr);
     const mentionedTeams = JSON.stringify(prTeamMentions(pr));
     inTransaction(this.db, () => {
@@ -329,7 +394,7 @@ export class PrRepo {
         pr.headRef,
         pr.updatedAt,
         fetchedAt,
-        JSON.stringify(fromRows ? withoutDiscussion(pr) : pr),
+        snapshotJson(pr, fromRows),
       );
       this.discussion.replace(pr.key, parts);
     });
@@ -348,22 +413,49 @@ export class PrRepo {
   }
 
   /**
-   * The stored PR, read for this call and never cached; null without a
-   * header (a snapshot alone is not a stored PR), without a snapshot, or
-   * (after the switch) without discussion rows.
+   * The stored PR in board shape (a bot body no board rule reads left out,
+   * DESIGN.md "The board diet"), the cached copy when it is hot, else read
+   * for this call; null without a header (a snapshot alone is not a stored
+   * PR), without a snapshot, or (after the switch) without discussion rows.
    */
   get(key: PrKey): Pr | null {
-    return inTransaction(this.db, () => {
-      if (this.revisionRows([key]).length === 0) {
-        return null;
-      }
-      return this.readChunk([key], this.readsDiscussionFromRows()).get(key) ?? null;
-    });
+    return this.getMany([key]).get(key) ?? null;
   }
 
-  /** Stored PRs by key. A hot PR comes from the cache; any other is parsed for this call only and not kept. */
+  /** Stored PRs by key, in board shape. A hot PR comes from the cache; any other is parsed for this call only and not kept. */
   getMany(keys: PrKey[]): Map<PrKey, Pr> {
     return keys.length === 0 ? new Map() : inTransaction(this.db, () => this.parse(this.revisionRows(keys), () => false));
+  }
+
+  /**
+   * The stored PR with every stored body: for event derivation, the write
+   * actions, lessons and "Why?" excerpts. Read for this call, never cached.
+   * Null when `get` would be.
+   */
+  getFull(key: PrKey): FullPr | null {
+    return this.getFullMany([key]).get(key) ?? null;
+  }
+
+  /** Stored PRs by key with every stored body, a chunk at a time; never cached. Keys a read leaves out are missing. */
+  getFullMany(keys: PrKey[]): Map<PrKey, FullPr> {
+    if (keys.length === 0) {
+      return new Map();
+    }
+    return inTransaction(this.db, () => {
+      const rows = this.revisionRows(keys);
+      const fromRows = this.readsDiscussionFromRows();
+      const result = new Map<PrKey, FullPr>();
+      for (let start = 0; start < rows.length; start += PARSE_CHUNK) {
+        const read = this.readFullChunk(
+          rows.slice(start, start + PARSE_CHUNK).map((row) => row.key),
+          fromRows,
+        );
+        for (const [key, pr] of read) {
+          result.set(key, pr);
+        }
+      }
+      return result;
+    });
   }
 
   /**
@@ -382,14 +474,15 @@ export class PrRepo {
   }
 
   /**
-   * Every stored snapshot, parsed for this call. Tests and dev tools only:
-   * on a heavy install this is about 2 GB. App code reads `listHeaders`, or
-   * `getMany` for the PRs it needs.
+   * Every stored PR with every body, parsed for this call. Tests and dev
+   * tools only: on a heavy install this is about 2 GB. App code reads
+   * `listHeaders`, or `getMany` / `getFullMany` for the PRs it needs.
    */
-  listAll(): Pr[] {
+  listAll(): FullPr[] {
     return inTransaction(this.db, () => {
-      const rows = all<RevisionRow>(this.db, `SELECT p.key, p.snapshot_revision FROM pr p WHERE ${STORED_SQL} ORDER BY p.repo, p.number`);
-      return [...this.parse(rows, () => false).values()];
+      const keys = all<{ key: string }>(this.db, `SELECT p.key FROM pr p WHERE ${STORED_SQL} ORDER BY p.repo, p.number`).map((row) => row.key);
+      const full = this.getFullMany(keys);
+      return keys.flatMap((key) => full.get(key) ?? []);
     });
   }
 
@@ -461,7 +554,7 @@ export class PrRepo {
    * some back (`upsert` with the same fetched_at), with no statement left
    * open between them.
    */
-  nextAfter(afterKey: PrKey): { key: PrKey; pr: Pr; fetchedAt: string } | null {
+  nextAfter(afterKey: PrKey): { key: PrKey; pr: FullPr; fetchedAt: string } | null {
     return inTransaction(this.db, () => {
       const row = one<{ key: string; fetched_at: string }>(
         this.db,
@@ -471,7 +564,7 @@ export class PrRepo {
       if (row === null) {
         return null;
       }
-      const pr = this.readChunk([row.key], this.readsDiscussionFromRows()).get(row.key);
+      const pr = this.readFullChunk([row.key], this.readsDiscussionFromRows()).get(row.key);
       return pr === undefined ? null : { key: row.key, pr, fetchedAt: row.fetched_at };
     });
   }
@@ -495,6 +588,16 @@ export class PrRepo {
   /** For the storage job discussion_rows: the next PR after `afterKey` ('' for the first) whose discussion rows are not written yet; null after the last. */
   nextWithoutDiscussionRows(afterKey: PrKey): PrKey | null {
     return one<{ key: string }>(this.db, 'SELECT key FROM pr WHERE key > ? AND rows_version < ? ORDER BY key LIMIT 1', afterKey, ROWS.discussion)?.key ?? null;
+  }
+
+  /** How many stored PRs have no discussion rows yet (storage_job_blocked). */
+  countWithoutDiscussionRows(): number {
+    return one<{ n: number }>(this.db, 'SELECT count(*) AS n FROM pr WHERE rows_version < ?', ROWS.discussion)?.n ?? 0;
+  }
+
+  /** How many stored snapshots still hold `checks` (storage_job_blocked). */
+  countWithChecks(): number {
+    return one<{ n: number }>(this.db, "SELECT count(*) AS n FROM pr_snapshot WHERE json_type(json, '$.checks') IS NOT NULL")?.n ?? 0;
   }
 
   /** Every stored PR has its discussion rows: the check before reads switch to them. A header without its snapshot counts as missing. */
@@ -530,7 +633,7 @@ export class PrRepo {
     if (typeof body !== 'string' || !Array.isArray(comments) || !Array.isArray(threads) || !Array.isArray(reviews)) {
       return false;
     }
-    const discussion = { body, comments: comments as Pr['comments'], threads: threads as Pr['threads'], reviews: reviews as Pr['reviews'] };
+    const discussion = { body, comments: comments as FullPr['comments'], threads: threads as FullPr['threads'], reviews: reviews as FullPr['reviews'] };
     this.db.exec('SAVEPOINT backfill_discussion');
     try {
       this.discussion.replace(key, splitDiscussion(discussion));

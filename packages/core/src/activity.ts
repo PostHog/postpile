@@ -338,7 +338,7 @@ function botThreadDraft(group: EventView[], pr: Pr): LineDraft {
     eventCount: group.length,
     reply: null,
     thread: where === null ? null : { to: where.to, path: where.path },
-    folded: replies.map((comment) => ({ id: comment.id, actor: comment.author, at: comment.createdAt, body: comment.body.trim() })),
+    folded: replies.map((comment) => ({ id: comment.id, actor: comment.author, at: comment.createdAt, body: (comment.body ?? '').trim() })),
   };
   return { line, events: newestFirst, folded: true };
 }

@@ -5,7 +5,7 @@ import { clipText } from './dossier.ts';
 import { parsePrKey } from './keys.ts';
 import type { Fact, FactRef, LineSources, StaleReason, UserRef, VerifyOutcome } from './memory.ts';
 import type { MemoryCheck, MemorySource } from './memory-views.ts';
-import type { Comment, Pr, PrEvent, PrKey, ReviewState } from './types.ts';
+import type { FullComment, FullPr, PrEvent, PrKey, ReviewState } from './types.ts';
 
 const EXCERPT = 240;
 
@@ -25,7 +25,7 @@ function number(prKey: PrKey): string {
   }
 }
 
-function findComment(pr: Pr, id: string): Comment | undefined {
+function findComment(pr: FullPr, id: string): FullComment | undefined {
   return pr.comments.find((comment) => comment.id === id) ?? pr.threads.flatMap((thread) => thread.comments).find((comment) => comment.id === id);
 }
 
@@ -33,7 +33,7 @@ function gone(ref: FactRef, what: string): MemorySource {
   return { kind: ref.kind, who: null, title: `${what} on ${number(ref.prKey)}, no longer there`, excerpt: '', at: ref.at, url: ref.url, missing: true };
 }
 
-function describeComment(ref: FactRef, pr: Pr): MemorySource {
+function describeComment(ref: FactRef, pr: FullPr): MemorySource {
   const comment = ref.sourceId ? findComment(pr, ref.sourceId) : undefined;
   if (!comment) {
     return gone(ref, 'A comment');
@@ -50,7 +50,7 @@ function describeComment(ref: FactRef, pr: Pr): MemorySource {
   };
 }
 
-function describeReview(ref: FactRef, pr: Pr): MemorySource {
+function describeReview(ref: FactRef, pr: FullPr): MemorySource {
   const review = pr.reviews.find((candidate) => candidate.id === ref.sourceId);
   if (!review) {
     return gone(ref, 'A review');
@@ -59,7 +59,7 @@ function describeReview(ref: FactRef, pr: Pr): MemorySource {
   return { kind: ref.kind, who: review.author, title, excerpt: clipText(review.body, EXCERPT), at: review.submittedAt, url: ref.url, missing: false };
 }
 
-function describeCommit(ref: FactRef, pr: Pr): MemorySource {
+function describeCommit(ref: FactRef, pr: FullPr): MemorySource {
   const commit = pr.commits.find((candidate) => candidate.oid === ref.sourceId);
   if (!commit) {
     return gone(ref, 'A commit');
@@ -77,7 +77,7 @@ function describeEvent(ref: FactRef, events: PrEvent[]): MemorySource {
 }
 
 /** A GitHub ref as a readable source. events are the stored events of the ref's PR. */
-export function describeFactRef(ref: FactRef, pr: Pr | undefined, events: PrEvent[]): MemorySource {
+export function describeFactRef(ref: FactRef, pr: FullPr | undefined, events: PrEvent[]): MemorySource {
   if (pr === undefined) {
     return { kind: ref.kind, who: null, title: `${number(ref.prKey)}, not synced`, excerpt: '', at: ref.at, url: ref.url, missing: true };
   }
@@ -108,7 +108,7 @@ export function describeUserRef(ref: UserRef): MemorySource {
 }
 
 /** Every source of a line, oldest first. */
-export function describeLineSources(sources: LineSources, prs: Map<PrKey, Pr>, events: Map<PrKey, PrEvent[]>): MemorySource[] {
+export function describeLineSources(sources: LineSources, prs: Map<PrKey, FullPr>, events: Map<PrKey, PrEvent[]>): MemorySource[] {
   const github = sources.refs.map((ref) => describeFactRef(ref, prs.get(ref.prKey), events.get(ref.prKey) ?? []));
   const user = sources.userRefs.map(describeUserRef);
   return [...github, ...user].sort((a, b) => a.at.localeCompare(b.at));

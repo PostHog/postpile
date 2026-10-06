@@ -7,7 +7,7 @@ import { existsSync, mkdtempSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { canonicalPr, trimBotBodies, type Comment, type Pr } from '@postpile/core';
+import { boardShape, canonicalPr, trimBotBodies, type FullComment, type FullPr } from '@postpile/core';
 import { at, FakeTimers, makeComment, makePr, makeReview } from '@postpile/core/fixtures';
 import { DISCUSSION_READY_KEY, runMigrations, Store } from '@postpile/store';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -15,15 +15,15 @@ import { makeHarness, NOW } from '../testing/fakes.ts';
 import { BOT_BODY_TRIM_DONE_KEY, BotBodyTrimJob } from './bot-body-trim.ts';
 import { DiscussionRowsJob } from './discussion-rows.ts';
 import { storageJobs } from './jobs.ts';
-import { INCOMPLETE_KEY_PREFIX, PAUSE_MS, START_DELAY_MS, StorageJobRunner, type StorageJob, type StorageJobReport } from './runner.ts';
+import { INCOMPLETE_KEY_PREFIX, PAUSE_MS, START_DELAY_MS, StorageJobRunner, type StorageJob, type StorageJobBlocked, type StorageJobReport } from './runner.ts';
 import { SnapshotStripJob } from './snapshot-strip.ts';
 
 const BOT = 'github-actions[bot]';
 const LONG_REPORT = `## Test report\n${'- a passing test with a long generated name\n'.repeat(160)}`;
 
 /** A PR with an issue comment, a review with its body, and an inline comment in its thread. */
-function discussedPr(number: number, overrides: Partial<Pr> = {}): Pr {
-  const inline: Comment = makeComment({ id: `rc${number}`, kind: 'review_comment', threadId: `t${number}`, path: 'a.ts', body: 'nit', createdAt: at(12) });
+function discussedPr(number: number, overrides: Partial<FullPr> = {}): FullPr {
+  const inline: FullComment = makeComment({ id: `rc${number}`, kind: 'review_comment', threadId: `t${number}`, path: 'a.ts', body: 'nit', createdAt: at(12) });
   return makePr({
     number,
     body: 'cc @acme/team-platform',
@@ -35,7 +35,7 @@ function discussedPr(number: number, overrides: Partial<Pr> = {}): Pr {
 }
 
 /** The PR as 0.21.0 left it: json only, no rows, rows_version 0. */
-function storedBefore031(store: Store, pr: Pr): void {
+function storedBefore031(store: Store, pr: FullPr): void {
   store.prs.upsert(pr, at(1));
   for (const table of ['pr_comment', 'pr_thread', 'pr_review']) {
     store.db.prepare(`DELETE FROM ${table} WHERE pr_key = ?`).run(pr.key);
@@ -59,11 +59,13 @@ function withDiscussionInJson(store: Store): string[] {
 describe('the discussion_rows and snapshot_strip jobs', () => {
   let store: Store;
   let reports: StorageJobReport[];
+  let blocked: StorageJobBlocked[];
   let lines: string[];
 
   beforeEach(() => {
     store = Store.open(':memory:');
     reports = [];
+    blocked = [];
     lines = [];
   });
 
@@ -80,6 +82,7 @@ describe('the discussion_rows and snapshot_strip jobs', () => {
       busy: () => false,
       log: (line) => lines.push(line),
       onDone: (report) => reports.push(report),
+      onBlocked: (job) => blocked.push(job),
       sliceBudgetMs: 0,
     });
   }
@@ -118,7 +121,7 @@ describe('the discussion_rows and snapshot_strip jobs', () => {
     storedBefore031(store, discussedPr(1));
     storedBefore031(store, discussedPr(2));
     store.db.prepare("UPDATE pr_snapshot SET json = json_set(json, '$.threads[0].comments[0].body', 'edited') WHERE key = 'acme/app#2'").run();
-    const broken = store.prs.get('acme/app#2');
+    const broken = store.prs.getFull('acme/app#2');
 
     runToEnd(runner());
 
@@ -131,8 +134,9 @@ describe('the discussion_rows and snapshot_strip jobs', () => {
       { key: 'acme/app#2', rows_version: 0 },
     ]);
     expect(withDiscussionInJson(store)).toEqual(['acme/app#1', 'acme/app#2']);
-    expect(store.prs.get('acme/app#2')).toEqual(broken);
-    expect(lines).toEqual([expect.stringMatching(/walking it once more/), expect.stringMatching(/discussion_rows is incomplete/)]);
+    expect(store.prs.getFull('acme/app#2')).toEqual(broken);
+    expect(lines).toEqual([expect.stringMatching(/walking it once more/), expect.stringMatching(/discussion_rows is incomplete: .*, 1 units left undone/)]);
+    expect(blocked).toEqual([{ name: 'discussion_rows', blockedUnits: 1 }]);
 
     // The sync fetches the PR again; the next start finishes both jobs.
     store.prs.upsert(discussedPr(2), at(5));
@@ -140,7 +144,7 @@ describe('the discussion_rows and snapshot_strip jobs', () => {
 
     expect(store.meta.get(DISCUSSION_READY_KEY)).not.toBeNull();
     expect(withDiscussionInJson(store)).toEqual([]);
-    expect(store.prs.get('acme/app#2')).toEqual(canonicalPr(discussedPr(2)));
+    expect(store.prs.getFull('acme/app#2')).toEqual(canonicalPr(discussedPr(2)));
   });
 
   it('strips the lists from every snapshot once reads take the rows, moving no revision and changing no read', () => {
@@ -175,7 +179,7 @@ describe('the discussion_rows and snapshot_strip jobs', () => {
     store.meta.delete(BOT_BODY_TRIM_DONE_KEY);
     runToEnd(runner([new BotBodyTrimJob()]));
 
-    expect(store.prs.get(pr.key)).toEqual(canonicalPr(trimBotBodies(pr)));
+    expect(store.prs.getFull(pr.key)).toEqual(canonicalPr(trimBotBodies(pr)));
     expect(withDiscussionInJson(store)).toEqual([]);
   });
 });
@@ -236,7 +240,7 @@ describe('an install that skips straight to this release', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it('runs the trim, the checks strip, the backfill and the strip in one go, and reads every PR the same, cut', () => {
+  it('runs the trim, the checks strip, the backfill and the strip in one go, and reads every PR the same, cut, the board without bot bodies on both sides', () => {
     const path = join(dir, 'db.sqlite');
     const old = new DatabaseSync(path);
     runMigrations(old, 27);
@@ -252,6 +256,9 @@ describe('an install that skips straight to this release', () => {
     old.close();
 
     const store = Store.open(path);
+    const keys = prs.map((pr) => pr.key);
+    // The board's first read on the new build, before any job: from the json, already in board shape.
+    expect([...store.prs.keepParsed(keys).values()]).toEqual(prs.map(boardShape));
     const reports: string[] = [];
     const jobs = new StorageJobRunner({
       store,
@@ -269,6 +276,9 @@ describe('an install that skips straight to this release', () => {
 
     expect(reports).toEqual(['bot_body_trim', 'checks_strip', 'discussion_rows', 'snapshot_strip']);
     expect(store.prs.listAll()).toEqual(prs.map((pr) => canonicalPr(trimBotBodies(pr))));
+    const board = [...store.prs.keepParsed(keys).values()];
+    expect(board).toEqual(store.prs.listAll().map(boardShape));
+    expect(board.map((pr) => pr.comments.find((comment) => comment.author === BOT)?.body)).toEqual([null, null, null]);
     expect(store.db.prepare("SELECT count(*) AS n FROM pr_snapshot WHERE json_type(json, '$.checks') IS NOT NULL OR json_type(json, '$.comments') IS NOT NULL").get()).toEqual({ n: 0 });
     expect(store.db.prepare('SELECT count(*) AS n FROM pr_comment').get()).toEqual({ n: 12 });
     store.close();
@@ -287,7 +297,7 @@ describe('Engine.startStorageJobs with the discussion rows', () => {
     }
 
     expect(withDiscussionInJson(h.store)).toEqual([]);
-    expect(h.store.prs.get('acme/app#1')).toEqual(canonicalPr(discussedPr(1)));
+    expect(h.store.prs.getFull('acme/app#1')).toEqual(canonicalPr(discussedPr(1)));
     const done = h.telemetry.events.filter((event) => event.event === 'storage_job_done').map((event) => (event.props as { name: string }).name);
     expect(done).toEqual(['bot_body_trim', 'checks_strip', 'discussion_rows', 'snapshot_strip']);
     await h.engine.close();

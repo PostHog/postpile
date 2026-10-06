@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { prPaneView, type PrStatus, type Review } from '@postpile/core';
+import { prPaneView, type PrStatus, type FullReview } from '@postpile/core';
 import { at, makePr } from '@postpile/core/fixtures';
 import { approvedText, ICON_WORDS, mergeQueueWord, mergeStatus, reviewRows, reviewWord, rowStateWord, stackQueueWord } from './pr.ts';
 
-function review(author: string, state: Review['state'], minutes: number): Review {
+function review(author: string, state: FullReview['state'], minutes: number): FullReview {
   return { id: `${author}-${minutes}`, author, state, body: '', submittedAt: at(minutes), commitOid: null };
 }
 

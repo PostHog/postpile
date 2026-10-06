@@ -1,7 +1,7 @@
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Glance, Pr } from '@postpile/core';
+import type { Glance, FullPr } from '@postpile/core';
 import { makeComment, makeReview, makeThreadFor, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness, type Harness } from './testing/fakes.ts';
@@ -12,7 +12,7 @@ const GLANCED_AT = '2026-09-02T11:35:00.000Z';
 const REVIEWED_AT = '2026-09-02T11:45:00.000Z';
 const LINE = 'When core imports from ee/, say LOOK_CLOSER and name the import.';
 
-function glance(pr: Pr, overrides: Partial<Glance> = {}): Glance {
+function glance(pr: FullPr, overrides: Partial<Glance> = {}): Glance {
   return {
     prKey: pr.key,
     verdict: 'LOOKS_SAFE',
@@ -35,7 +35,7 @@ const changes = makeReview({ id: 'r-me', author: viewer.login, state: 'CHANGES_R
 const inline = makeComment({ id: 'c-me', author: viewer.login, kind: 'review_comment', path: 'core/x.ts', body: 'core must not import from ee/', createdAt: '2026-09-02T11:44:00.000Z' });
 
 /** GitHub now shows this PR; the poll picks it up. */
-async function onGitHub(h: Harness, pr: Pr, at: string): Promise<void> {
+async function onGitHub(h: Harness, pr: FullPr, at: string): Promise<void> {
   h.reader.addPr(pr, makeThreadFor(pr, { updatedAt: at }));
   h.reader.etag = `etag-${at}`;
   await h.engine.pollOnce();
@@ -43,13 +43,13 @@ async function onGitHub(h: Harness, pr: Pr, at: string): Promise<void> {
 
 interface Scene {
   h: Harness;
-  pr: Pr;
-  reviewed: Pr;
+  pr: FullPr;
+  reviewed: FullPr;
   setClock: (iso: string) => void;
 }
 
 /** The PR is synced and glanced; then the viewer requests changes, with an inline comment, and the poll brings it in. */
-async function requestChangesAfter(g: (pr: Pr) => Glance): Promise<Scene> {
+async function requestChangesAfter(g: (pr: FullPr) => Glance): Promise<Scene> {
   let clock = new Date('2026-09-02T11:30:00.000Z');
   const instructionsFile = join(mkdtempSync(join(tmpdir(), 'cm-engine-lessons-')), 'instructions.md');
   writeFileSync(instructionsFile, '# Reviews\n- I own CI config\n');
@@ -60,7 +60,7 @@ async function requestChangesAfter(g: (pr: Pr) => Glance): Promise<Scene> {
   await h.engine.pollOnce();
   h.store.glances.put(g(pr));
   clock = new Date('2026-09-02T11:50:00.000Z');
-  const reviewed: Pr = { ...pr, updatedAt: REVIEWED_AT, reviews: [changes], comments: [inline] };
+  const reviewed: FullPr = { ...pr, updatedAt: REVIEWED_AT, reviews: [changes], comments: [inline] };
   await onGitHub(h, reviewed, REVIEWED_AT);
   return { h, pr, reviewed, setClock: (iso) => (clock = new Date(iso)) };
 }
@@ -104,12 +104,12 @@ describe('lessons from change requests', () => {
     h.store.lessons.setWritten(first!.id, { text: LINE, why: 'stated inline', status: 'open', joinedId: null });
 
     setClock('2026-09-02T12:10:00.000Z');
-    const edited: Pr = { ...reviewed, updatedAt: '2026-09-02T12:05:00.000Z', comments: [{ ...inline, body: 'core must never import from ee/ or cloud/' }] };
+    const edited: FullPr = { ...reviewed, updatedAt: '2026-09-02T12:05:00.000Z', comments: [{ ...inline, body: 'core must never import from ee/ or cloud/' }] };
     await onGitHub(h, edited, '2026-09-02T12:05:00.000Z');
     expect(h.store.lessons.get(first!.id)).toMatchObject({ status: 'new', text: '', review: { comments: [{ body: 'core must never import from ee/ or cloud/' }] } });
 
     setClock('2026-09-02T12:30:00.000Z');
-    const gone: Pr = { ...edited, updatedAt: '2026-09-02T12:25:00.000Z', reviews: [] };
+    const gone: FullPr = { ...edited, updatedAt: '2026-09-02T12:25:00.000Z', reviews: [] };
     await onGitHub(h, gone, '2026-09-02T12:25:00.000Z');
     expect(h.store.lessons.get(first!.id)).toMatchObject({ status: 'withdrawn' });
   });
@@ -124,7 +124,7 @@ describe('joined lessons follow their review', () => {
     expect((await h.engine.getLesson(open.id))?.reviews).toBe(1);
 
     setClock('2026-09-02T12:10:00.000Z');
-    const edited: Pr = { ...reviewed, updatedAt: '2026-09-02T12:05:00.000Z', comments: [{ ...inline, body: 'and drop the cloud/ import too' }] };
+    const edited: FullPr = { ...reviewed, updatedAt: '2026-09-02T12:05:00.000Z', comments: [{ ...inline, body: 'and drop the cloud/ import too' }] };
     await onGitHub(h, edited, '2026-09-02T12:05:00.000Z');
     expect(h.store.lessons.get(lesson!.id)).toMatchObject({ status: 'new', joinedId: null });
 

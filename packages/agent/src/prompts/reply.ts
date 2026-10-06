@@ -1,11 +1,11 @@
-import { replyTarget, type Comment } from '@postpile/core';
+import { replyTarget, type Comment, type FullComment } from '@postpile/core';
 import type { DraftReplyInput } from '../service.ts';
 import { clip, contextBlock, GITHUB_DATA_RULE, githubData, jsonOnly, NO_CI_RULE, prLine, viewerLine } from './shared.ts';
 
 const CONVERSATION_COMMENT_MAX = 1200;
 const REPLIED_TO_MAX = 3000;
 
-function conversationLine(comment: Comment, repliedToId: string): string {
+function conversationLine(comment: FullComment, repliedToId: string): string {
   const marker = comment.id === repliedToId ? ' [the comment to answer]' : '';
   return `@${comment.author}${marker}: ${clip(comment.body, CONVERSATION_COMMENT_MAX)}`;
 }
