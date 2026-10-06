@@ -250,3 +250,50 @@ describe('topic tidy after an upgrade', () => {
     expect(h.store.topics.get('migration-safety')?.kind).toBe('standing');
   });
 });
+
+describe('topic tidy keeps "Wrong topic"', () => {
+  /** A "Wrong topic" the user gave before the tidy: the PR was in topicId and left it. */
+  function tookOut(h: ReturnType<typeof makeHarness>, pr: Pr, topicId: string): void {
+    h.store.feedback.add({ kind: 'wrong_topic', topicId, prKey: pr.key, tileId: `pr:${pr.key}`, setId: null, eventId: null, note: '', createdAt: at(1) });
+  }
+
+  it('never folds a topic into one the user took a PR of it out of', async () => {
+    const { h, prs } = tidyHarness();
+    tookOut(h, prs[1]!, 'review-app-polling');
+    h.runner.answer('topic_tidy', {
+      merges: [{ fromTopicIds: ['review-app-packaging'], intoTopicId: 'review-app-polling', name: 'Desktop review app', reason: 'one app' }],
+    });
+
+    await h.engine.sync({ agentJobs: ['topics'] });
+
+    expect(h.store.memberships.get(prs[1]!.key)?.topicId).toBe('review-app-packaging');
+    expect(h.store.topics.get('review-app-packaging')?.status).toBe('active');
+    expect(h.store.topics.get('review-app-polling')?.name).toBe('review-app-polling');
+  });
+
+  it('never folds the work a PR was taken out of into the topic that holds it now, also after an earlier fold', async () => {
+    const { h, prs } = tidyHarness();
+    tookOut(h, prs[1]!, 'repo-conventions');
+    h.runner.answer('topic_tidy', {
+      merges: [{ fromTopicIds: ['review-app-packaging', 'repo-conventions'], intoTopicId: 'review-app-polling', name: null, reason: 'one app' }],
+    });
+
+    await h.engine.sync({ agentJobs: ['topics'] });
+
+    expect(h.store.memberships.get(prs[1]!.key)?.topicId).toBe('review-app-polling');
+    expect(h.store.memberships.get(prs[2]!.key)?.topicId).toBe('repo-conventions');
+    expect(h.store.topics.get('repo-conventions')?.status).toBe('active');
+  });
+
+  it('never splits a PR into a topic the user took it out of', async () => {
+    const { h, prs } = tidyHarness();
+    tookOut(h, prs[3]!, 'review-app-polling');
+    h.runner.answer('topic_tidy', {
+      splits: [{ topicId: 'repo-conventions', prKeys: [prs[3]!.key], intoTopicId: 'review-app-polling', newName: null, reason: 'app work' }],
+    });
+
+    await h.engine.sync({ agentJobs: ['topics'] });
+
+    expect(h.store.memberships.get(prs[3]!.key)?.topicId).toBe('repo-conventions');
+  });
+});

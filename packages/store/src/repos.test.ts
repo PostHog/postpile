@@ -489,6 +489,20 @@ describe('TopicProposalRepo', () => {
     expect(store.proposals.listDecidedForTopic('topic-1', at(6)).map((p) => p.id)).toEqual(['m1', 'c1']);
     expect(store.proposals.listDecidedForTopic('topic-2', at(6)).map((p) => p.id)).toEqual(['m1']);
   });
+
+  it('lists accepted merges only, oldest decision first', () => {
+    const base = { kind: 'merge' as const, name: null, fromArea: null, prKeys: [], reason: 'same work', status: 'pending' as const, decidedAt: null, source: 'consolidation' as const, client: null };
+    store.proposals.add({ ...base, id: 'm1', topicId: 'topic-2', intoTopicId: 'topic-1', createdAt: at(0) });
+    store.proposals.add({ ...base, id: 'm2', topicId: 'topic-3', intoTopicId: 'topic-1', createdAt: at(1) });
+    store.proposals.add({ ...base, id: 'm3', topicId: 'topic-4', intoTopicId: 'topic-1', createdAt: at(2) });
+    store.proposals.add({ ...base, kind: 'rename', id: 'r1', topicId: 'topic-1', name: 'One', intoTopicId: null, createdAt: at(3) });
+    store.proposals.decide('m2', 'accepted', at(4));
+    store.proposals.decide('m1', 'accepted', at(5));
+    store.proposals.decide('m3', 'rejected', at(6));
+    store.proposals.decide('r1', 'accepted', at(7));
+
+    expect(store.proposals.listAcceptedMerges().map((p) => p.id)).toEqual(['m2', 'm1']);
+  });
 });
 
 describe('PrSetRepo', () => {
@@ -587,6 +601,18 @@ describe('FeedbackRepo', () => {
     expect(store.feedback.listForPr('a/b#1')).toHaveLength(1);
     store.feedback.delete(last.id);
     expect(store.feedback.recentForTopic('topic-1', 10).map((f) => f.kind)).toEqual(['not_mine']);
+  });
+
+  it('lists every row of one kind, oldest first', () => {
+    const base = { tileId: null, setId: null, eventId: null, note: '' };
+    store.feedback.add({ ...base, kind: 'wrong_topic', topicId: 'topic-2', prKey: 'a/b#2', createdAt: at(2) });
+    store.feedback.add({ ...base, kind: 'not_mine', topicId: 'topic-1', prKey: 'a/b#1', createdAt: at(1) });
+    store.feedback.add({ ...base, kind: 'wrong_topic', topicId: 'topic-1', prKey: 'a/b#1', createdAt: at(0) });
+
+    expect(store.feedback.listAllOfKind('wrong_topic').map((f) => [f.prKey, f.topicId])).toEqual([
+      ['a/b#1', 'topic-1'],
+      ['a/b#2', 'topic-2'],
+    ]);
   });
 });
 

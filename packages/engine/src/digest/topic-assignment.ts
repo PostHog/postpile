@@ -1,4 +1,4 @@
-import type { TopicAssignment, TopicChoice } from '@postpile/agent';
+import type { ExcludedTopic, TopicAssignment, TopicChoice } from '@postpile/agent';
 import { buildStacks, cleanTopicName, dossierBrief, lastJoinAt, newTopic, stackByPrKey, stackTopicId, takesNewPrs, type Pr, type PrKey, type Topic, type TopicKind } from '@postpile/core';
 import { Board } from '../board.ts';
 import { newTopicId } from '../ids.ts';
@@ -6,6 +6,7 @@ import { errorText } from '../errors.ts';
 import { chunk } from '../lists.ts';
 import { changeTopicStatus } from '../topic-status.ts';
 import type { DigestDeps } from './deps.ts';
+import { TopicExclusions } from './topic-exclusions.ts';
 
 /**
  * PRs per assignment call. Short PR details keep 40 in one prompt of a sane
@@ -53,10 +54,13 @@ function askOrder(a: Pr, b: Pr): number {
  * offered too; a PR joining one brings it back. A stack is one unit: its
  * layers always get the same topic. PRs an answer leaves out get one retry
  * batch; what is still missing (or cut by the call cap) stays without a
- * topic and is asked about again on the next sync.
+ * topic and is asked about again on the next sync. Neither the stack
+ * shortcut nor an answer puts a PR back into a topic the user took it out
+ * of ("Wrong topic", `TopicExclusions`).
  */
 export class TopicAssigner {
   private followers = new Map<PrKey, PrKey[]>();
+  private exclusions = new TopicExclusions();
 
   constructor(private readonly deps: DigestDeps) {}
 
@@ -77,13 +81,16 @@ export class TopicAssigner {
   /**
    * A stack moves as one, so the agent never splits one across topics: a
    * layer whose stack already shows in a topic joins it, and of a stack
-   * without a topic only the lowest waiting layer is asked about.
+   * without a topic only the lowest waiting layer is asked about. A stack
+   * topic that a waiting layer was taken out of ("Wrong topic") is no
+   * shortcut: the waiting layers are asked about like a stack without one.
    */
   private splitByStack(keys: PrKey[]): StackSplit {
     const { store } = this.deps;
     const stackOf = stackByPrKey(buildStacks(store.prs.listHeaders()));
     const memberships = new Map(store.memberships.listAll().map((m) => [m.prKey, m]));
     const activeTopicIds = new Set(store.topics.listActive().map((topic) => topic.id));
+    const waiting = new Set(keys);
     const split: StackSplit = { join: [], ask: [], followers: new Map() };
     const askedFor = new Map<string, PrKey>();
     for (const key of keys) {
@@ -93,7 +100,8 @@ export class TopicAssigner {
         continue;
       }
       const topicId = stackTopicId(stack, memberships, activeTopicIds);
-      if (topicId !== null) {
+      const waitingLayers = stack.prKeys.filter((layer) => waiting.has(layer));
+      if (topicId !== null && !this.exclusions.forKeys(waitingLayers).has(topicId)) {
         split.join.push({ prKey: key, topicId });
         continue;
       }
@@ -179,21 +187,73 @@ export class TopicAssigner {
     return this.findOrCreateTopic(assignment.name, assignment.goal, assignment.topicKind).id;
   }
 
-  private apply(assignments: TopicAssignment[]): void {
+  /** The PR the agent is asked about and the rest of its stack, which follows the answer. */
+  private unitOf(prKey: PrKey): PrKey[] {
+    return [prKey, ...(this.followers.get(prKey) ?? [])];
+  }
+
+  /**
+   * The stored topics the user took these PRs out of, offered or not: one
+   * in the Archive that no longer takes PRs can still come back as a "new"
+   * topic of the same name.
+   */
+  private excludedTopics(keys: PrKey[]): Topic[] {
+    return [...this.exclusions.forKeys(keys)].flatMap((id) => this.deps.store.topics.get(id) ?? []);
+  }
+
+  /** Per PR of the batch, the topics the user took it (or a layer that follows it) out of. PRs with none are left out. */
+  private notIn(batch: Pr[]): Record<PrKey, ExcludedTopic[]> {
+    const result: Record<PrKey, ExcludedTopic[]> = {};
+    for (const pr of batch) {
+      const topics = this.excludedTopics(this.unitOf(pr.key));
+      if (topics.length > 0) {
+        result[pr.key] = topics.map((topic) => ({ id: topic.id, name: topic.name }));
+      }
+    }
+    return result;
+  }
+
+  /**
+   * The answer puts the PR back into a topic the user took it out of: by id,
+   * or by a "new" name that is that topic's (cleaned, any case), checked
+   * before anything is created.
+   */
+  private putsBack(assignment: TopicAssignment, keys: PrKey[]): boolean {
+    const excluded = this.excludedTopics(keys);
+    if (assignment.kind === 'existing') {
+      return excluded.some((topic) => topic.id === assignment.topicId);
+    }
+    const wanted = cleanTopicName(assignment.name).toLowerCase();
+    return excluded.some((topic) => cleanTopicName(topic.name).toLowerCase() === wanted);
+  }
+
+  /**
+   * Stores the answers and returns the PRs placed. An answer that puts a PR
+   * into a topic the user took it out of (`putsBack`) is dropped: the PR
+   * counts as left out, so it gets the retry and else waits in Unsorted for
+   * the next sync. A PR the user
+   * placed while the call ran stays where they put it.
+   */
+  private apply(assignments: TopicAssignment[]): Set<PrKey> {
     const { store } = this.deps;
     const at = this.deps.now().toISOString();
+    const placed = new Set<PrKey>();
     store.transaction(() => {
       for (const assignment of assignments) {
-        // The rest of a stack follows the layer the agent was asked about.
-        const keys = [assignment.prKey, ...(this.followers.get(assignment.prKey) ?? [])];
+        const keys = this.unitOf(assignment.prKey);
+        if (this.putsBack(assignment, keys)) {
+          continue;
+        }
         const topicId = this.topicIdFor(assignment);
         // A new PR is news: it brings a retired topic back.
         changeTopicStatus(store, topicId, 'revive', at);
-        for (const prKey of keys) {
+        for (const prKey of keys.filter((key) => store.memberships.get(key)?.assignedBy !== 'user')) {
           store.memberships.assign({ prKey, topicId, assignedBy: 'agent', reason: assignment.reason, createdAt: at });
         }
+        placed.add(assignment.prKey);
       }
     });
+    return placed;
   }
 
   /**
@@ -206,19 +266,20 @@ export class TopicAssigner {
       return [];
     }
     try {
+      // Re-read per batch so a topic created by the previous batch is offered again.
+      const topics = this.topicChoices();
       const assignments = await this.deps.agent.assignTopics({
         prs: batch,
         waiting,
         viewer: this.deps.viewer,
-        // Re-read per batch so a topic created by the previous batch is offered again.
-        topics: this.topicChoices(),
+        topics,
+        notIn: this.notIn(batch),
         context: this.deps.contexts.forTopic(null),
       });
       // A new topic whose name is empty after cleaning is an unusable answer: the PR is asked again.
       const usable = assignments.filter((assignment) => assignment.kind !== 'new' || cleanTopicName(assignment.name) !== '');
-      this.apply(usable);
-      const answered = new Set(usable.map((assignment) => assignment.prKey));
-      return batch.filter((pr) => !answered.has(pr.key));
+      const placed = this.apply(usable);
+      return batch.filter((pr) => !placed.has(pr.key));
     } catch (error) {
       this.deps.errors.push(`topic assignment: ${errorText(error)}`);
       return batch;
@@ -246,6 +307,7 @@ export class TopicAssigner {
   async run(onlyKeys: PrKey[] | null = null): Promise<void> {
     const only = onlyKeys === null ? null : new Set(onlyKeys);
     const keys = this.unassignedKeys().filter((key) => only === null || only.has(key));
+    this.exclusions = TopicExclusions.load(this.deps.store);
     const split = this.splitByStack(keys);
     this.joinStacks(split.join);
     this.followers = split.followers;

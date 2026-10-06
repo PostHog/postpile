@@ -255,6 +255,16 @@ describe('topicAssignmentPrompt', () => {
     expect(prompt).toContain('A project is live when it has open PRs or activity in the\n  last two weeks; a standing topic is live for as long as it is listed.');
     expect(prompt).not.toContain('broader existing topic');
   });
+
+  it('says which topics the user took a PR out of, names fenced, and nothing for the others', () => {
+    const other = makePr({ ref: { repo: 'acme/app', number: 7 }, author: 'bob', title: 'Add the MCP tools' });
+    const notIn = { [pr1.key]: [{ id: 'billing-1a2b3c', name: 'Billing' }, { id: 'ci-4d5e6f', name: 'CI' }] };
+    const prompt = topicAssignmentPrompt({ prs: [pr1, other], viewer, topics: [], notIn, context: emptyContext });
+    const note = 'The user took this PR out of these topics. Never put it back there, also not as a new topic of the same name:\n<github_data>\n- id billing-1a2b3c: "Billing"\n- id ci-4d5e6f: "CI"\n</github_data>';
+    expect(prompt).toContain(`</github_data>\n${note}\n\n---\n\n`);
+    expect(prompt.split('The user took this PR out of')).toHaveLength(2);
+    expect(topicAssignmentPrompt({ prs: [pr1], viewer, topics: [], notIn: {}, context: emptyContext })).toBe(topicAssignmentPrompt({ prs: [pr1], viewer, topics: [], context: emptyContext }));
+  });
 });
 
 describe('factReconcilePrompt', () => {

@@ -16,6 +16,8 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 ### Fixed
 
 - A tile that already says "Not yours" no longer offers "Not mine" in its ⋯ menu. Mark read clears it. A stack or set only counts when its verdict says Not yours, so one PR the agent calls Not yours next to one that needs a look keeps the option.
+- "Wrong topic" no longer puts a PR back into the topic you took it out of. The next sort keeps it out of there, also when the rest of its stack sits in that topic or the topic was merged into another one. It goes back only when you pick that topic yourself.
+- A topic you pick for a PR while a sync is sorting PRs is no longer replaced by the sync's own pick.
 
 ## 0.20.0 (2026-10-05)
 

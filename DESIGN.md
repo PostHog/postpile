@@ -31,6 +31,18 @@ at least one PR left behind) right away, with no undo; "Wrong topic" on a PR
 fixes a bad one, and that correction reaches the next consolidation prompt.
 Bigger splits stay proposals.
 
+**"Wrong topic" sticks** (2026-10-05): no rule and no agent puts a PR back
+into a topic the user took it out of. The stack shortcut skips that topic
+and asks the agent; the assignment prompt names it per PR, and an answer
+that picks it (by id, or by a "new" name matching its name, also when the
+topic is in the Archive and no longer offered) is dropped, so the PR gets
+the retry and else waits in Unsorted; the topic tidy folds or
+splits nothing that would put it back with that work. The "no" follows the
+topic into whatever it is merged into, and on a stack it holds for every
+layer that moved (one feedback row each). Only the user puts it back, by
+picking that topic; a merge proposal they accept is their call too
+(`excludedTopicIds` in core, `TopicExclusions` in the engine).
+
 **Areas, topics, tiles and sets** (2026-09-29): one glossary,
 `WORK_GLOSSARY` in `packages/agent/src/prompts/shared.ts`, goes into every
 prompt that sorts, groups or tidies PRs (topic assignment, set grouping,
@@ -5212,7 +5224,9 @@ for the user to work through, and never in later syncs.
   call is an error line and the next full sync tries again.
 - User placements ("Wrong topic") are never undone: a split skips a PR the
   user placed, with its whole stack, and a merge never folds away a topic
-  that holds one.
+  that holds one. Nor does the tidy undo a "Wrong topic" without a pick:
+  no fold that puts a PR together with the topic it left (either way
+  round), no split into that topic ("'Wrong topic' sticks").
 
 ## You already dealt with it
 
