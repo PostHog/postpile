@@ -3,7 +3,7 @@ import { at, makeComment, makeCommit, makeEvent, makePr, makeReview, makeThread,
 import type { Pr, PrEvent, Tile, UserPrState, Viewer } from './types.ts';
 import { mergeQueueFailureAt, mergeQueueState } from './merge-queue.ts';
 import { prStatus } from './pr-status.ts';
-import { isMergeApprovedMove, NO_TURN, whoseTurn, YOUR_MOVE_ORDER, type WhoseTurn } from './whose-turn.ts';
+import { isMergeApprovedMove, whoseTurn, YOUR_MOVE_ORDER, type WhoseTurn } from './whose-turn.ts';
 
 const me = viewer.login;
 
@@ -265,14 +265,6 @@ describe('whoseTurn: on your own PR', () => {
     expect(single({ ...pushed, reviewerUsers: ['bob', 'carol'] })).toEqual({ kind: 'them', who: 'bob', what: 'to re-review', prKey: own.key });
   });
 
-  it('never makes failing CI on your own PR a move of yours: CI is not a signal', () => {
-    const failing = { name: 'backend-tests', conclusion: 'FAILURE', completedAt: at(20) };
-    const red = { ...own, checks: { rollup: 'FAILURE' as const, contexts: [failing] } };
-    expect(single(red)).toEqual(NO_TURN);
-    expect(single({ ...red, reviewerUsers: ['sol'] })).toMatchObject({ kind: 'them', who: 'sol', lead: 'Waiting on' });
-    expect(single({ ...red, reviewDecision: 'APPROVED' })).toMatchObject({ kind: 'you', move: 'merge' });
-  });
-
   it('says it waits on the first requested reviewer', () => {
     expect(single({ ...own, reviewerUsers: ['sol', 'lyra'] })).toEqual({ kind: 'them', who: 'sol', what: 'and 1 more', prKey: own.key, lead: 'Waiting on' });
     expect(single({ ...own, reviewerTeams: ['acme/team-platform'] })).toEqual({ kind: 'them', who: 'acme/team-platform', what: '', prKey: own.key, lead: 'Waiting on' });
@@ -311,7 +303,6 @@ describe('whoseTurn: on your own PR', () => {
   it('asks you to merge once it is approved', () => {
     expect(single({ ...own, reviewDecision: 'APPROVED' }).what).toBe('Merge, it is approved');
     expect(isMergeApprovedMove(single({ ...own, reviewDecision: 'APPROVED' }))).toBe(true);
-    expect(isMergeApprovedMove(single({ ...own, checks: { ...own.checks, rollup: 'FAILURE' }, reviewDecision: 'APPROVED' }))).toBe(true);
     expect(single({ ...own, reviewDecision: 'APPROVED', isDraft: true }).kind).toBe('none');
   });
 
@@ -392,7 +383,7 @@ describe('whoseTurn: multi-PR tiles', () => {
   it('picks the most urgent pinged member and names the PR', () => {
     const approved = makePr({ number: 1, author: 'rowan', reviews: [makeReview({ author: me })] });
     const asked = makePr({ number: 2, author: 'rowan', reviewerUsers: [me] });
-    const pulled = makePr({ number: 3, author: me, checks: { rollup: 'FAILURE', contexts: [] } });
+    const pulled = makePr({ number: 3, author: me });
     const tile: Tile = {
       id: 'stack:x',
       topicId: 'topic-1',
@@ -441,7 +432,7 @@ describe('whoseTurn: drafts', () => {
   it('asks you to address comments on your own draft', () => {
     const own = makePr({ author: me, isDraft: true, threads: [makeThread('t1', [makeComment({ author: 'mira' })]), makeThread('t2', [makeComment({ author: 'mira' })])] });
     expect(single(own)).toMatchObject({ kind: 'you', what: 'Address 2 comments on your draft' });
-    expect(single({ ...own, threads: [], checks: { rollup: 'FAILURE' as const, contexts: [] } }).kind).toBe('none');
+    expect(single({ ...own, threads: [] }).kind).toBe('none');
   });
 
   it('turns back to a review once the draft is ready', () => {

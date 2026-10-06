@@ -23,7 +23,7 @@ import {
   viewer,
 } from './test-fixtures.ts';
 
-const pr1 = makePr({ checks: { rollup: 'FAILURE', contexts: [] } });
+const pr1 = makePr();
 const pr2 = makePr({ ref: { repo: 'acme/app', number: 2 }, title: 'Docker builds on Depot', author: 'bob', body: 'Moves docker builds.' });
 
 function dossierInput(overrides: Partial<DossierUpdateInput> = {}): DossierUpdateInput {
@@ -33,8 +33,6 @@ function dossierInput(overrides: Partial<DossierUpdateInput> = {}): DossierUpdat
     delta: makeDelta({
       events: [
         makeEvent({ id: 'ev-human', summary: 'bob asked: are release builds staying?' }),
-        makeEvent({ id: 'ev-bot', actor: 'github-actions', isBot: true, kind: 'ci', summary: 'CI failed' }),
-        makeEvent({ id: 'ev-bot2', actor: 'github-actions', isBot: true, kind: 'ci', summary: 'CI failed again' }),
         makeEvent({ id: 'ev-bot3', actor: 'reviewbot[bot]', isBot: true, kind: 'bot_comment', summary: 'reviewbot left a summary' }),
       ],
       joinedPrKeys: [pr2.key],
@@ -104,8 +102,6 @@ describe('dossierUpdatePrompt', () => {
   });
 
   it('carries no CI status and says not to bring it up, while CI as a subject of the work stays', () => {
-    expect(prompt).not.toContain('CI failed');
-    expect(prompt).not.toContain('(ci)');
     expect(prompt).not.toContain('CI failing');
     expect(prompt).not.toMatch(/CI: (failure|success|pending|none)/);
     expect(prompt).toContain(NO_CI_RULE);

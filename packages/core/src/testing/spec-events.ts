@@ -57,7 +57,7 @@ export const SPEC_REVIEW_KINDS: readonly EventKind[] = ['review_approved', 'revi
 const ANSWER_KINDS: readonly EventKind[] = [...SPEC_PUSH_KINDS, 'comment', 'review_commented', 'reply_to_user', 'question_to_user', 'mention'];
 
 /** Machine kinds: quiet whoever made them. */
-const MACHINE_KINDS: readonly EventKind[] = ['ci', 'deploy', 'merge_queue', 'bot_comment'];
+const MACHINE_KINDS: readonly EventKind[] = ['deploy', 'merge_queue', 'bot_comment'];
 
 /** The viewer wrote in this thread before `comment`. */
 function viewerSpokeEarlierInThread(pr: Pr, comment: Comment, viewer: Viewer): boolean {
@@ -196,10 +196,6 @@ function rawEvents(pr: Pr, viewer: Viewer, userState: UserPrState | null): RawEx
       kind = 'merged_without_review';
     }
     add(kind, item.id, item.actor, item.at, isAutomationLogin(item.actor), item.subject);
-  }
-  const finished = pr.checks.contexts.map((context) => context.completedAt).filter((at): at is IsoTime => at !== null);
-  if ((pr.checks.rollup === 'SUCCESS' || pr.checks.rollup === 'FAILURE') && finished.length > 0) {
-    add('ci', `${pr.headOid}:${pr.checks.rollup}`, '', finished.sort().at(-1)!, true);
   }
   return events;
 }

@@ -12,13 +12,13 @@ function hoursBefore(now: Date, hours: number): string {
  * since the viewer last looked was judged as not needing them. Invented.
  */
 const QUIET_SAMPLES: { number: number; detail: string; hoursAgo: number }[] = [
-  { number: 1904, detail: quietReadDetail(['trunk-io[bot]', 'CI']), hoursAgo: 2 },
+  { number: 1904, detail: quietReadDetail(['trunk-io[bot]', 'vercel[bot]']), hoursAgo: 2 },
   { number: 1911, detail: quietReasonDetail('approved'), hoursAgo: 3.5 },
-  { number: 1934, detail: judgedReadDetail(['lyra', 'CI']), hoursAgo: 4 },
+  { number: 1934, detail: judgedReadDetail(['lyra', 'vercel[bot]']), hoursAgo: 4 },
   // After mergify queued it (1h ago): the tile is done again.
   { number: 1899, detail: quietReadDetail(['renovate[bot]', 'mergify[bot]']), hoursAgo: 0.5 },
   { number: 1960, detail: quietReasonDetail('changes_requested'), hoursAgo: 29 },
-  { number: 1921, detail: quietReadDetail(['renovate[bot]', 'CI']), hoursAgo: 50 },
+  { number: 1921, detail: quietReadDetail(['renovate[bot]', 'vercel[bot]']), hoursAgo: 50 },
   { number: 1963, detail: quietReadDetail(['chatgpt-codex-connector[bot]', 'coderabbitai[bot]']), hoursAgo: 75 },
   // Older than the view's 7 days: in the log, not in "Handled quietly".
   { number: 1855, detail: quietReadDetail(['vercel[bot]']), hoursAgo: 9 * 24 },

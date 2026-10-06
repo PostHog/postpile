@@ -27,7 +27,6 @@ export * from './for-whom.ts';
 export * from './approvals.ts';
 export * from './merge-queue.ts';
 export * from './pr-status.ts';
-export * from './checks.ts';
 export * from './pr-pane.ts';
 export * from './tile-people.ts';
 export * from './changes-answered.ts';

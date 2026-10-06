@@ -216,7 +216,7 @@ agent-grouped among pinged and found PRs; the agent never pulls PRs in.
 | loudness | effect | examples |
 |---|---|---|
 | loud | pings, coral "new since you looked", lights up the topic (the tile is unread while its thread is unread on GitHub, loud or not: "GitHub unread is PostPile unread") | mention, review requested, question to the user, a push after the user approved when the agent raises it, the author's push or comment after the user requested changes ("addressed your changes") |
-| quiet | dot, no ping | bots, CI (always, see "CI is not a signal"), deploys, merge queue (except trunk taking your own PR out of it: loud, see "Merge queue"), pushes after the user approved (by default), merged without the user's review (never loud; surfaced by the done rule instead, see "Merged without your review") |
+| quiet | dot, no ping | bots, deploys, merge queue (except trunk taking your own PR out of it: loud, see "Merge queue"), pushes after the user approved (by default), merged without the user's review (never loud; surfaced by the done rule instead, see "Merged without your review") |
 | muted | hidden as noise, one click to unmute | bot rebase on a draft |
 | seen | already read | any of the above after reading, or before the user's own last action on the PR (see "You already dealt with it") |
 
@@ -282,7 +282,7 @@ against the user's own instructions), `does`, `risk`, `othersSaid`. Cached by a
 hash of its inputs; regenerated only when the PR moves or instructions change.
 
 **User actions**: approve (single press, immediate, no undo), mark read, snooze
-(until someone replies | new push | CI green, the user's own pick | a time), "ask <person>" (agent
+(until someone replies | new push | a time; "until CI is green" until 0.21.0), "ask <person>" (agent
 drafts a PR comment, user edits and sends), feedback on a tile ("not mine",
 "not related" for sets, "wrong topic"), chat on a tile. Lasting points from
 chat come back for the user to place: "Keep for this topic" (tailoring), "Keep
@@ -738,25 +738,80 @@ the reasons and does not flip back:
    merged without your review"). Idea from 2026-09-28: "when people come
    from vacation, I had 500".
 
+## CI is not tracked
+
+Decided 2026-10-05 (0.21.0): PostPile fetches no CI at all. The checks were
+the costliest part of every PR fetch, usually stale by the time anyone
+looked, and CI had been taken off everything that ranks or speaks since
+2026-09-29 ("CI is not a signal", below). What was left (a quiet CI event in
+the activity list, the pane's neutral Checks fact, the "Until CI is green"
+snooze and the CLI's rollup) did not pay for the fetch.
+
+- **The fetch.** The PR query asks for no `statusCheckRollup` and no head
+  commit (`commits(last: 1)`, which was there only for the checks).
+  Measured on 12 merged PostHog/posthog PRs (100 checks each): the
+  response went from 621 KB to 471 KB and from 5.3–8.1 s to 3.7–4.3 s; the
+  GraphQL rate limit cost stayed 7 points per batch, 1,212 fewer nodes
+  (24,492 → 23,280).
+- **The model.** `Pr` has no `checks`; `summarizeChecks`, the CI event, the
+  `ci` event kind, the pane's Checks fact and the CLI's `CI <rollup>` are
+  gone. The GitHub "Checks" tab stays one click away under "Open on GitHub".
+- **Old CI events.** Migration 030 deletes the stored `ci` events and every
+  event log row of one, by id (`<pr key>:ci:<head oid>:<rollup>`), also log
+  rows whose event a newer head commit had already dropped. Every log reader
+  joins `pr_event`, so nothing a reader showed changes but the CI lines
+  themselves; rows only leave, so nothing turns unseen and no cursor moves
+  (on the copies: unseen non-CI events the same before and after). The
+  log's high-water mark (`EventLogRepo.maxSeq`) reads SQLite's
+  AUTOINCREMENT counter, not `MAX(seq)`: deleting the newest rows must not
+  lower it, or a cursor already past it could never be marked seen again
+  (`CursorRepo.advance` only moves forward; found by GPT-6.1). Chosen over letting re-derivation drop them: merged and closed
+  PRs are never fetched again, so their CI events would stay forever and
+  the `ci` kind with them. A PR whose newest event was a CI result can fall
+  out of the hot set's "active in the last 7 days" a little earlier. It took
+  0.12 s on the normal copy and 0.5 s on the heavy one, once.
+- **Old "Until CI is green" snoozes.** `SnoozeRepo` reads a condition this
+  build no longer offers (or cannot parse) as `until_time` at the snooze's
+  start: it ends like an expired snooze on the next load. The menu and the
+  server's schema offer only someone replies, a new push and times.
+- **Old checks in the stored json.** Reads drop the `checks` key when they
+  parse a snapshot (`PrRepo` `parsePr`), so they never reach memory or a
+  rewrite. Storage job 2, `checks_strip`, removes them on disk: one unit is
+  one snapshot in key order, `json_remove` in place inside the slice's
+  transaction, no revision (no read changes). Done means a whole walk,
+  unit by unit within the slice budget, found nothing to strip: a walk that
+  stripped something (meta `storage_job:checks_strip:stripped`) starts over
+  to verify. Revisions cannot prove it, since an unguarded older build
+  (0.19.0 and before) keeps them when it writes checks back. Such a
+  downgrade after the job finished leaves bytes behind, harmlessly: reads
+  drop them, and the next fetch of that PR writes them out. Migration 030 is also what keeps 0.20.0 off the stripped json.
+  Measured (one walk, before the verifying walk was added): heavy 93 MB of
+  json freed in 138 slices (p95 37 ms, max 54 ms), 4.3 s of work, 11 s
+  wall; normal 6.7 MB in 10 slices. Every snapshot
+  equals the original but for its checks. Hot-set heap on heavy 283 MB (the
+  0.20.0 read) → 264 MB (this build, before the strip) → 263 MB after.
+- **What stays.** `NO_CI_RULE` in every writing prompt: glances and
+  dossiers stored before can still talk about CI status. The MCP
+  instructions keep saying PostPile does not track CI. CI as a subject of
+  the work (topic names, the "CI" area, workflow files) is code and stays.
+
 ## CI is not a signal
 
-Decided 2026-09-29. Julian: "I don't think we should focus on or even take in
+Decided 2026-09-29, and since 2026-10-05 the CI side of it is gone entirely
+("CI is not tracked", above): no checks are fetched, so no prompt, rule or
+view can get them. What still holds from here is how agents treat CI in older
+stored text. Julian: "I don't think we should focus on or even take in
 any CI at any point because that's too fuzzy. It could flake, it could fail at
 any time, and it's always the responsibility of the author to bring the PR to
 green. Except for maybe some details in the detail pane, we shouldn't
 highlight it or put it into text or into any risk."
 
-**The rule.** CI status (the check rollup, check results, `ci` events) never
-drives anything the app says or ranks:
+**The rule.** CI status never drives anything the app says or ranks:
 
-- *No prompt gets it.* `prDetails` has no `CI:` line, the rendered dossier's
-  timeline has no "CI failing" (`prStateWords`), and `ci` events are left out
-  of the ping decision, memory recheck and dossier update prompts
-  (`withoutCi`). The topic delta drops them (`selectTopicDelta`), so a
-  CI-only change starts no dossier update and bumps no dossier version; the
-  digest cursor still moves past them, so they are not read again.
-  Checks were never in the glance hash (`prGlanceSnapshot`) and stay out, so
-  a re-run never makes a glance stale.
+- *No prompt gets it.* `prDetails` has no `CI:` line and the rendered
+  dossier's timeline has no "CI failing" (`prStateWords`). Until 0.21.0 the
+  `ci` events were left out of the prompts and the topic delta; now there are
+  none.
 - *The writing agents are told.* Every prompt that writes something the
   user reads carries `NO_CI_RULE`: glance, dossier update, ping decision,
   memory recheck, chat, topic assignment, sets, consolidation. No CI or check
@@ -765,20 +820,12 @@ drives anything the app says or ranks:
   claim answers drop (or fix without the CI part), never holds. The draft
   comment prompt is the exception: it writes the user's own ask. The MCP
   server's instructions say PostPile does not track CI.
-- *Not a move.* Whose turn has no `fix_ci`; failing CI on the user's own PR
-  is not their move by itself.
-- *Never loud.* `ci` events are machine activity: quiet by the rules, never a
-  ping (bot-only activity), never an unread reason. The events agent never
-  sees them (it only judges loud events and pushes after approval), so
-  nothing overrides that.
+- *Not a move.* Whose turn has no `fix_ci`.
 
 **What stays, and why.** CI as a subject of the work is code, not status:
 topic names ("Move CI to Depot"), the "CI" area, changed workflow files in the
 prompt, and the events agent raising a push that makes a substantial change
-in CI, build or devex areas the user approved. The detail pane keeps the
-"Checks" fact (`PrFacts`) as a neutral detail, no more prominent than now,
-and the activity list keeps CI results in the folded bot/CI line. The snooze
-option "Until CI is green" (`ci_green`) stays: the user picks it.
+in CI, build or devex areas the user approved.
 
 **History.** Design 3a (2026-09-29 morning) took CI off rows, tiles, the
 detail state line and the RISK box, leaving it only in the facts. CI still fed
@@ -789,7 +836,9 @@ Existing glances and dossiers that mention CI are not regenerated on purpose
 (no `GLANCE_PROMPT_VERSION` / `DOSSIER_PROMPT_VERSION` bump): a glance goes
 stale on the PR's next push, review or human comment, a dossier on the
 topic's next real activity, and a bump would rewrite every one of them in
-one go for a line that fades on its own.
+one go for a line that fades on its own. Until 0.21.0 the pane kept a
+neutral Checks fact, the activity list a quiet CI line, and the snooze menu
+"Until CI is green".
 
 ## Merge queue
 
@@ -1171,7 +1220,7 @@ stale facts and claims, and topic feedback. It:
 
 - adds `joinedHistory`: log entries of joined members at or below the
   cursor (`joinedMembers` decides who joined)
-- drops noise (see "Event roles": muted, CI, bot status refreshes), keeps
+- drops noise (see "Event roles": muted, bot status refreshes), keeps
   ride-along bots (the prompt compacts them to counts)
 - caps at `DELTA_LIMITS.maxEvents` (120) with at most 15 per PR, newest
   kept; the rest are only counted in `omittedEvents`
@@ -1210,7 +1259,7 @@ core `event-roles.ts`), first match wins:
 | Event | Role |
 | --- | --- |
 | effective loudness loud (incl. the app's Look closer, an event the agent raised) | trigger |
-| muted (by rule, agent or user), CI result | noise |
+| muted (by rule, agent or user) | noise |
 | a push (commits pushed, after approval, force push), from a person or a bot | ride_along (since 2026-10-05; a loud push, answering the viewer's changes request, is a trigger by the first row) |
 | anything a person did, the viewer included | trigger |
 | a state change, whoever did it: merged, merged without review, closed, reopened, ready for review, back to draft, review requested or removed, a bot's approval; Look closer even when turned down | trigger |
@@ -1314,8 +1363,7 @@ assignment and consolidation, where many topics share one prompt.
 **Dossier update prompt** input, in order: the rendered previous dossier
 (or "none yet"), the user's context block, member PR state lines, intros of
 joined PRs, the new events (short ids `e1..eN`, bots compacted to counts
-per PR; CI results are dropped from the delta, so a CI-only change starts no
-update), left PRs, known facts (short ids `F1..Fn`), stale facts to
+per PR), left PRs, known facts (short ids `F1..Fn`), stale facts to
 recheck with their stale reason, new feedback. The answer (JSON,
 `dossierUpdateOutput`) is the whole new dossier plus `flags`, `facts`,
 `closeFacts`, `confirmedFactIds`. Refs in the answer are the short ids; the
@@ -2730,9 +2778,8 @@ chats.
 `PrPaneView` (`prPaneView` in `pr-pane.ts`), not the stored `Pr`: header
 fields, the description whole, the files with their counts (key files read
 them), reviews as author, state and time (no text), the last commit's time
-and a checks summary (`summarizeChecks` in `checks.ts`: rollup, passed,
-failed, pending, newest finish, FAILURE names; the pane shows only the
-counts). No comments, threads, commits, timeline or check contexts: the
+and nothing about checks (CI is not tracked since 0.21.0). No comments,
+threads, commits or timeline: the
 activity list, its bodies and its reply and react targets come built on
 `PrDetail.activity`, made from the stored PR before the view. The biggest
 open PR on a real copy went from 1.18 MB to 389 KB per open (its `pr` part
@@ -2865,7 +2912,8 @@ A one-time rewrite of stored data that needs JS (parse, cut, rebuild) runs
 as a storage job, never in a numbered migration: a migration runs at
 startup in one transaction on Electron's main thread, and on a heavy
 install that is seconds of a frozen app and a WAL the size of the rewrite.
-The bot body trim is job 1; the PR snapshot normalization (NEXT.md) adds
+The bot body trim is job 1, the strip of the old checks (`checks_strip`,
+"CI is not tracked") job 2; the PR snapshot normalization (NEXT.md) adds
 its backfills and strips as later jobs. Code in
 `packages/engine/src/storage-jobs/`: `runner.ts` (`StorageJobRunner`),
 `jobs.ts` (the ordered list), one file per job. Checked with Codex
@@ -3040,10 +3088,8 @@ amber). State colors stay on done tiles; only titles and counts go grey. **CI sh
 detail pane's facts** ("Checks"): not on rows, tiles, the detail state line
 or the RISK box, and not in whose turn or any agent text (see "CI is not a
 signal").
-The Checks fact itself is neutral (2026-09-29): a grey bar (passing a notch
-darker than the rest) and "12 checks · 2 not passing" (failed and running
-together; "all passing" at none) in the normal muted text, no pass or fail
-colour. The Size fact next to it draws deletions (count and bar) in their
+The Checks fact is gone since 0.21.0 ("CI is not tracked"); until then it
+was neutral, a grey bar and "12 checks · 2 not passing". The Size fact draws deletions (count and bar) in their
 own diff red (`--diff-red`), never coral: coral stays for "new".
 
 **PR rows** (`PrRow`): state icon, the coral dot for an unread PR
@@ -3474,7 +3520,7 @@ as `PrSummary.whatsNew` and `PrDetail.whatsNew`; words from the renderer's
 only its text changes, and only when the viewer already touched the PR
 before the new loud events. Rules:
 
-- New events are the unseen loud ones, the same loud news that pings. Quiet bot, CI and other events never change the text or the count.
+- New events are the unseen loud ones, the same loud news that pings. Quiet bot and other events never change the text or the count.
 - A touch is one of the viewer's own events (review, approval, changes
   request, comment, a push to their own PR, a merge or close they did; core
   `lastTouch` in `last-touch.ts`, shared with "You already dealt with it"),
@@ -3727,8 +3773,8 @@ and detail start equally wide (2026-09-30, was a 420-480px tile clamp). At
   LOOKED · since your changes request yesterday" (anchor from `whatsNew`,
   relative day from `whenLabel`; plain header on a first look). Up to 3
   loud lines (`activity.fresh`, same rows as the activity list), then "N
-  more"; the quiet bot and CI events since the touch fold into one line
-  (`activity.freshNoise`, `noiseSummary`: "10 bot comments, CI") that
+  more"; the quiet bot events since the touch fold into one line
+  (`activity.freshNoise`, `noiseSummary`: "10 bot comments, a deploy") that
   expands. The activity list below no longer repeats any of it.
 - **Look at first** (2026-09-29, `KeyFiles`): the glance's `keyFiles`, up to
   3 changed files a reviewer should open first with the agent's why (max 12
@@ -3752,9 +3798,9 @@ and detail start equally wide (2026-09-30, was a 420-480px tile clamp). At
   unseen noise after the viewer's last touch (`activityList(events,
   viewer, since)`) go to the box under the title (2026-09-29); the list,
   titled "Earlier activity" then, keeps only the rest. About 12 lines
-  (`ACTIVITY_LINE_CAP`) before "Show all N". Bots, CI, deploys, merge queue,
+  (`ACTIVITY_LINE_CAP`) before "Show all N". Bots, deploys, merge queue,
   agent-muted events and review requests between others fold into one "N
-  bot/CI events" line that expands (Unmute lives there).
+  bot events" line that expands (Unmute lives there).
   Comments and reviews from people show in full (2026-09-29): the event
   `summary` is one clipped line (100 chars, first line) for tiles, MCP and
   the agent, so `activityList(events, viewer, since, pr)` also puts the
@@ -5372,8 +5418,8 @@ too).
 
 1. *Read before, bots since.* GitHub has the thread unread, it has a
    `last_read_at`, and every stored event by someone else after it is
-   automation (`event.isBot`, or no actor at all: CI results carry an empty
-   actor and are flagged as bots already). The viewer's own events (a
+   automation (`event.isBot`, or no actor at all, named "GitHub"; CI results
+   had an empty actor until 0.21.0). The viewer's own events (a
    review from the CLI does not move the read time) are not someone else's
    activity and are left out (2026-09-29; before they blocked the rule). No
    known event by someone else after the read counts as "don't know": left
@@ -6497,8 +6543,8 @@ topic names are never event props.
    (origin `tile`, `detail`, `debug`, `cleanup`, `agent_tile` or
    `agent_topic`; count is the tile count for the agent ones), `team_request_removed` (no
    props: no PR, no team slug), `snoozed`
-   (the condition name for an event-based snooze — someone replies, a push,
-   CI green — or a time bucket for `until_time`), `opened_on_github`,
+   (the condition name for an event-based snooze — someone replies or a
+   push; `ci_green` until 0.21.0 — or a time bucket for `until_time`), `opened_on_github`,
    `ask_sent` (the Ask popover's send), `reply_sent` (target `thread` or
    `comment`, 2026-10-05), `reaction_sent` (a thumbs up, 2026-10-05),
    `chat_message_sent` (tile and topic chat), `mac_ping_shown` /
@@ -6546,7 +6592,8 @@ topic names are never event props.
    `work_shed` (skipped_prs: PRs with news that syncs and polls left alone
    in the last hour because they are outside the hot slice; at most hourly,
    since 0.18.0, see "Big inboxes: what PostPile loads and works on"),
-   `storage_job_done` (name, one of the known jobs (`bot_body_trim`);
+   `storage_job_done` (name, one of the known jobs (`bot_body_trim`,
+   `checks_strip`);
    units, work_ms, longest_slice_ms, wall_ms: a background storage job
    finished and its check passed, this run's share of it, see "Storage
    jobs"; since 0.20.0),
@@ -7170,7 +7217,7 @@ generated boards instead of a handful of fixed ones. `@postpile/core/testing`
 holds the board recipe (`boardSpecArb`: one topic, 1-3 tiles, 1-4 PRs each as
 single, stack or set, pinged, found or pulled in; authors viewer, teammate,
 other or bot; a short history of review requests, comments and mentions,
-reviews, pushes, readiness, merge or close, CI; thread read state, handled,
+reviews, pushes, readiness, merge or close; thread read state, handled,
 in-app approval, per-PR and whole-tile snoozes, glance verdicts, Look closer,
 agent overrides, truncated or stale snapshots, pending writes), `buildBoard`
 (snapshots from the steps, events from `deriveEvents` made seen the way the
@@ -7183,7 +7230,7 @@ core). Where rules differ on purpose the invariant names the exception
 cases the first runs found were decided 2026-09-30 (above) and their
 exceptions removed, each with a scenario next to its property. `properties/coverage.test.ts` fails when a
 branch-relevant label (PR state x author, request target, review state
-including dismissed, CI, thread and seen state, snooze kind and phase,
+including dismissed, thread and seen state, snooze kind and phase,
 truncated, and the shapes past bugs needed) shows on under 1% of boards.
 Each invariant checks 2000 boards by default (the property files take about
 4s, `pnpm test` about 7s); `POSTPILE_PROPERTY_RUNS=10000 pnpm test` checks

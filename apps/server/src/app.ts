@@ -23,7 +23,6 @@ export const TOKEN_HEADER = 'x-postpile-token';
 const snoozeCondition = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('someone_replies') }),
   z.object({ kind: z.literal('new_push') }),
-  z.object({ kind: z.literal('ci_green') }),
   // Snoozes compare ISO strings, so any offset is normalised to UTC "Z" form here.
   z.object({
     kind: z.literal('until_time'),

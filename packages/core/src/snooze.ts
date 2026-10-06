@@ -52,13 +52,9 @@ function newPush(snooze: Snooze, context: SnoozeContext): boolean {
   return context.events.some((event) => event.at > snooze.since && PUSH_KINDS.includes(event.kind));
 }
 
-function ciGreen(context: SnoozeContext): boolean {
-  return context.pr.checks.rollup === 'SUCCESS';
-}
-
 /**
- * True once the snooze condition is met: a human reply, a push, green CI, or
- * the time passed. Every snooze also ends when the PR is merged or closed
+ * True once the snooze condition is met: a human reply, a push, or the time
+ * passed. Every snooze also ends when the PR is merged or closed
  * (decided 2026-09-30): nothing left to wait for, and a snooze that holds a
  * finished PR keeps its topic from retiring.
  */
@@ -71,8 +67,6 @@ export function isSnoozeOver(snooze: Snooze, context: SnoozeContext): boolean {
       return someoneReplied(snooze, context);
     case 'new_push':
       return newPush(snooze, context);
-    case 'ci_green':
-      return ciGreen(context);
     case 'until_time':
       return context.now >= snooze.condition.until;
   }
@@ -135,7 +129,7 @@ export function snoozeWrites(tile: Tile, change: SnoozeChange): SnoozeWrites {
   }
 }
 
-export type SnoozeTelemetryBucket = 'hours' | 'a_day' | 'days' | 'a_week' | 'someone_replies' | 'new_push' | 'ci_green';
+export type SnoozeTelemetryBucket = 'hours' | 'a_day' | 'days' | 'a_week' | 'someone_replies' | 'new_push';
 
 /** The `snoozed` telemetry event's prop: a time bucket for `until_time`, the condition name otherwise. */
 export function snoozeTelemetryBucket(condition: SnoozeCondition, nowMs: number): SnoozeTelemetryBucket {

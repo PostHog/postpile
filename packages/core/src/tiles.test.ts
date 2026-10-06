@@ -212,7 +212,6 @@ describe('deriveTileState', () => {
     const events = [
       makeEvent({ id: 'approval', kind: 'review_approved', at: at(10), actor: 'lyra', isBot: false }),
       makeEvent({ id: 'merge', kind: 'merged_without_review', at: at(20), actor: 'trunk-io[bot]', isBot: true, summary: 'trunk-io[bot] merged without your review' }),
-      makeEvent({ id: 'ci', kind: 'ci', at: at(25), actor: '', isBot: true }),
       makeEvent({ id: 'deploy', kind: 'deploy', at: at(30), actor: 'deployment-status-posthog[bot]', isBot: true, summary: 'deploy' }),
     ];
     const state = deriveTileState(stateInput(tile, [pr], events, [handled], [unreadThread]));

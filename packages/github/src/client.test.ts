@@ -110,7 +110,7 @@ describe('fetchPrs', () => {
     expect(pr.threads[0]?.comments[0]?.body).toBe('Why this project id?');
   });
 
-  it('maps timeline items and checks', async () => {
+  it('maps timeline items, and asks for no checks', async () => {
     const fake = new FakeFetch([{ body: loadFixture('pr-batch.json') }]);
     const prs = await new GitHubClient(fakeTokens, fake.fn).fetchPrs(refs);
     const pr = prs.get('acme/app#42')!;
@@ -120,15 +120,8 @@ describe('fetchPrs', () => {
       { id: 'E2', kind: 'head_ref_force_pushed', actor: 'alice', at: '2026-09-20T09:00:00.000Z', subject: null },
       { id: 'E3', kind: 'added_to_merge_queue', actor: 'trunk-io[bot]', at: '2026-09-20T10:00:00.000Z', subject: null },
     ]);
-    expect(pr.checks).toEqual({
-      rollup: 'PENDING',
-      contexts: [
-        { name: 'test', conclusion: 'SUCCESS', completedAt: '2026-09-20T09:10:00.000Z' },
-        { name: 'lint', conclusion: null, completedAt: null },
-        { name: 'deploy/preview', conclusion: 'FAILURE', completedAt: '2026-09-20T09:05:00.000Z' },
-        { name: 'ci/legacy', conclusion: null, completedAt: null },
-      ],
-    });
+    // No CI: the query asks for no checks, and the PR holds none.
+    expect(pr).not.toHaveProperty('checks');
 
     const merged = prs.get('acme/api#8')!;
     expect(merged).toMatchObject({
@@ -138,7 +131,6 @@ describe('fetchPrs', () => {
       mergedAt: '2026-09-17T10:00:00.000Z',
       reviewDecision: 'NONE',
       files: [],
-      checks: { rollup: 'NONE', contexts: [] },
     });
   });
 

@@ -93,7 +93,7 @@ describe('NotificationRepo', () => {
 
 describe('PrRepo', () => {
   it('round-trips the full snapshot', () => {
-    const pr = makePr({ number: 2, labels: ['devex'], checks: { rollup: 'SUCCESS', contexts: [] } });
+    const pr = makePr({ number: 2, labels: ['devex'] });
     store.prs.upsert(pr, at(1));
     store.prs.upsert(makePr({ number: 1 }), at(1));
     store.prs.upsert(makePr({ number: 9, repo: 'acme/other' }), at(1));
@@ -571,6 +571,20 @@ describe('SnoozeRepo', () => {
     expect(store.snoozes.list()).toEqual([{ prKey: 'a/b#1', condition: { kind: 'until_time', until: at(60) }, since: at(1) }]);
     store.snoozes.remove('a/b#1');
     expect(store.snoozes.list()).toEqual([]);
+  });
+
+  it('reads a condition this build no longer offers, or cannot read, as a time that passed at the start', () => {
+    const insert = store.db.prepare('INSERT INTO pr_snooze (pr_key, condition_json, since) VALUES (?, ?, ?)');
+    insert.run('a/b#1', '{"kind":"ci_green"}', at(5));
+    insert.run('a/b#2', '{"kind":"until_time"}', at(6));
+    insert.run('a/b#3', 'not json', at(7));
+    insert.run('a/b#4', 'null', at(8));
+    expect(store.snoozes.list().map((snooze) => [snooze.prKey, snooze.condition])).toEqual([
+      ['a/b#1', { kind: 'until_time', until: at(5) }],
+      ['a/b#2', { kind: 'until_time', until: at(6) }],
+      ['a/b#3', { kind: 'until_time', until: at(7) }],
+      ['a/b#4', { kind: 'until_time', until: at(8) }],
+    ]);
   });
 });
 

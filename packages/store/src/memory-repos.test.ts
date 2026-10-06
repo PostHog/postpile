@@ -48,7 +48,8 @@ describe('EventLogRepo', () => {
     store.eventLog.append([{ id: `${pr1}:comment:a`, prKey: pr1 }, { id: `${pr1}:comment:b`, prKey: pr1 }], at(60));
     store.eventLog.append([{ id: `${pr2}:comment:c`, prKey: pr2 }, { id: `${pr1}:comment:a`, prKey: pr1 }], at(61));
 
-    expect(store.eventLog.maxSeq()).toBe(3);
+    // The high-water mark: the ignored second sighting of a used up seq 4 in SQLite's AUTOINCREMENT counter; the next row gets 5.
+    expect(store.eventLog.maxSeq()).toBe(4);
     const all = store.eventLog.listSince([pr1, pr2], 0);
     expect(all.map((entry) => [entry.seq, entry.event.sourceId])).toEqual([
       [1, 'a'],

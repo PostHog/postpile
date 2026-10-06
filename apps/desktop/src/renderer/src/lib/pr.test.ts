@@ -1,15 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { prPaneView, type ChecksSummary, type PrStatus, type Review } from '@postpile/core';
+import { prPaneView, type PrStatus, type Review } from '@postpile/core';
 import { at, makePr } from '@postpile/core/fixtures';
-import { approvedText, checksNote, ICON_WORDS, mergeQueueWord, mergeStatus, reviewRows, reviewWord, rowStateWord, stackQueueWord } from './pr.ts';
+import { approvedText, ICON_WORDS, mergeQueueWord, mergeStatus, reviewRows, reviewWord, rowStateWord, stackQueueWord } from './pr.ts';
 
 function review(author: string, state: Review['state'], minutes: number): Review {
   return { id: `${author}-${minutes}`, author, state, body: '', submittedAt: at(minutes), commitOid: null };
-}
-
-/** The pane's checks summary with these counts. */
-function checks(passed: number, failed: number, pending: number): ChecksSummary {
-  return { rollup: 'PENDING', total: passed + failed + pending, passed, failed, pending, finishedAt: null, failedNames: [] };
 }
 
 describe('pr helpers', () => {
@@ -32,12 +27,6 @@ describe('pr helpers', () => {
   it('lets a later change request replace an approval', () => {
     const pr = prPaneView(makePr({ reviews: [review('lyra', 'APPROVED', 10), review('lyra', 'CHANGES_REQUESTED', 20)] }));
     expect(reviewRows(pr)).toEqual([{ login: 'lyra', status: 'changes_requested', at: at(20) }]);
-  });
-
-  it('words checks neutrally, failed and running together as not passing', () => {
-    expect(checksNote(checks(2, 1, 1))).toBe('4 checks · 2 not passing');
-    expect(checksNote(checks(3, 0, 0))).toBe('3 checks · all passing');
-    expect(checksNote(checks(1, 0, 0))).toBe('1 check · all passing');
   });
 
   it('describes the merge status', () => {

@@ -9,7 +9,6 @@ const PANE_FIELDS = [
   'baseRef',
   'body',
   'changedFiles',
-  'checks',
   'createdAt',
   'deletions',
   'files',
@@ -94,19 +93,6 @@ describe('prPaneView', () => {
     const pr = makePr({ commits: [makeCommit({ oid: 'a', committedAt: at(5) }), makeCommit({ oid: 'b', committedAt: at(9) })] });
     expect(prPaneView(pr).lastCommitAt).toBe(at(9));
     expect(prPaneView(makePr()).lastCommitAt).toBeNull();
-  });
-
-  it('sums up the checks', () => {
-    const pr = makePr({
-      checks: {
-        rollup: 'FAILURE',
-        contexts: [
-          { name: 'lint', conclusion: 'SUCCESS', completedAt: at(3) },
-          { name: 'test', conclusion: 'FAILURE', completedAt: at(4) },
-        ],
-      },
-    });
-    expect(prPaneView(pr).checks).toEqual({ rollup: 'FAILURE', total: 2, passed: 1, failed: 1, pending: 0, finishedAt: at(4), failedNames: ['test'] });
   });
 
   it('stays small however much the PR has talked', () => {

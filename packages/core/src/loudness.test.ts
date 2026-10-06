@@ -32,17 +32,10 @@ describe('ruleLoudness', () => {
     expect(decision).toEqual({ loudness: 'quiet', reason: 'you already replied' });
   });
 
-  it('keeps bot mentions, CI, deploys and the merge queue quiet', () => {
+  it('keeps bot mentions, deploys and the merge queue quiet', () => {
     expect(ruleLoudness(input({ kind: 'mention', actor: 'github-actions', isBot: true })).loudness).toBe('quiet');
-    for (const kind of ['ci', 'deploy', 'merge_queue', 'bot_comment'] as const) {
+    for (const kind of ['deploy', 'merge_queue', 'bot_comment'] as const) {
       expect(ruleLoudness(input({ kind, actor: 'someone' })).loudness).toBe('quiet');
-    }
-  });
-
-  it('never makes a CI result loud, not even a failure on the viewer own PR (CI is not a signal)', () => {
-    const own = makePr({ author: viewer.login, checks: { rollup: 'FAILURE', contexts: [] } });
-    for (const pr of [own, makePr({ checks: { rollup: 'FAILURE', contexts: [] } }), makePr({ isDraft: true })]) {
-      expect(ruleLoudness(input({ kind: 'ci', actor: '', isBot: true, pr })).loudness).toBe('quiet');
     }
   });
 
@@ -161,7 +154,7 @@ describe('loudness table', () => {
       question_to_user: true, comment: true, review_approved: true, review_changes_requested: true,
       review_commented: true, commits_pushed: true, commits_after_approval: true, force_pushed: true, merged: true,
       merged_without_review: true, closed: true, reopened: true, ready_for_review: true, converted_to_draft: true,
-      ci: true, deploy: true, merge_queue: true, bot_comment: true, comment_edited: true, look_closer: true,
+      deploy: true, merge_queue: true, bot_comment: true, comment_edited: true, look_closer: true,
     };
     const kinds = Object.keys(kindNames) as LoudnessInput['kind'][];
     const prs = [makePr(), makePr({ author: viewer.login }), makePr({ isDraft: true }), makePr({ state: 'MERGED' })];

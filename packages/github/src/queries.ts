@@ -108,16 +108,6 @@ fragment prData on PullRequest {
   comments(last: ${QUERY_CAPS.comments}) { totalCount ${OLDER_PAGE_INFO} nodes { ${COMMENT_NODE} } }
   reviewThreads(last: ${QUERY_CAPS.reviewThreads}) { totalCount ${OLDER_PAGE_INFO} nodes { ${THREAD_NODE} } }
   commits(last: ${QUERY_CAPS.commits}) { totalCount ${OLDER_PAGE_INFO} nodes { ${COMMIT_NODE} } }
-  headCommit: commits(last: 1) {
-    nodes { commit { statusCheckRollup {
-      state
-      contexts(first: 100) { nodes {
-        __typename
-        ... on CheckRun { name conclusion completedAt }
-        ... on StatusContext { context state createdAt }
-      } }
-    } } }
-  }
   timelineItems(last: ${QUERY_CAPS.timeline}, itemTypes: [${TIMELINE_TYPES.join(', ')}]) {
     totalCount
     ${OLDER_PAGE_INFO}
