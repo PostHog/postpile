@@ -192,6 +192,20 @@
   --font-sans: var(--type-ui);
   --font-mono: var(--type-mono);
 
+  /* An unread dot's exit (UnreadDot): a coral ring ripples out from the dot once while the dot shrinks away. */
+  --animate-unread-ripple: unread-ripple 500ms ease-out both;
+
+  @keyframes unread-ripple {
+    0% {
+      opacity: 1;
+      scale: 0.6;
+    }
+    100% {
+      opacity: 0;
+      scale: 1.7;
+    }
+  }
+
   /* The inbox cleanup's illustration: the two cards bob, the trash lid tips. Use with motion-safe:. */
   --animate-cleanup-bob: cleanup-bob 3.2s ease-in-out infinite;
   --animate-cleanup-lid: cleanup-lid 3.2s ease-in-out infinite;
@@ -465,4 +479,40 @@ body {
    the thumb still only shows when there is something to scroll. */
 .pane-scroll {
   scrollbar-gutter: stable;
+}
+
+/* The unread dot as a pie (UnreadDot `countdown`, 2026-10-06): while its PR
+   waits out the opened-read dwell, the coral drains clockwise from full to
+   empty over a faint coral track, linear over `--dwell` (set inline from
+   OPENED_READ_DELAY_MS). Tailwind can't say a conic gradient over a
+   registered angle, so it lives here. The dot is mounted already when the
+   dwell starts, so the transition runs without a frame flip. Cancelled
+   (no `data-countdown` any more), the angle jumps back to full: the
+   transition then only lists `scale`. Reduced motion: no countdown. */
+@property --sweep {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 360deg;
+}
+
+.unread-pie {
+  background: conic-gradient(var(--unread) var(--sweep), color-mix(in srgb, var(--unread) 22%, transparent) 0);
+}
+
+.unread-pie[data-countdown='drained'] {
+  --sweep: 0deg;
+}
+
+.unread-pie[data-countdown='draining'] {
+  --sweep: 0deg;
+  transition:
+    scale 275ms ease-in,
+    --sweep var(--dwell) linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .unread-pie[data-countdown] {
+    --sweep: 360deg;
+    transition: none;
+  }
 }

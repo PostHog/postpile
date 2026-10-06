@@ -1,7 +1,8 @@
 // Small status chips used across panes: verdict, why it's here, PR status.
-import type { ReactNode } from 'react';
+import { useState, type CSSProperties, type ReactNode } from 'react';
 import type { ForWhom, Provenance, TilePendingWrite, TopicRelation, Verdict, WhyCode } from '@postpile/core';
 import { pendingWriteTitle } from '../lib/guard.ts';
+import { OPENED_READ_DELAY_MS, type DotCountdown } from '../lib/opened-read.ts';
 import type { GlanceStateText } from '../lib/glance.ts';
 import { staleVerdictTitle, staleWord } from '../lib/staleness.ts';
 import type { EventGlyph } from '../lib/events.ts';
@@ -24,20 +25,49 @@ const VERDICTS: Record<Verdict, { icon: ReactNode; label: string; tone: string }
  * PRs. It means exactly "unread", so the dots add up to GitHub's unread
  * count. What is seen but still owed is the honey "Your move" instead.
  *
- * It stays mounted when the PR turns read and fades and shrinks out over
- * 500ms (2026-10-01, "Marked when the dwell ends"), so the mark the user just
- * caused is seen to happen; instant with reduced motion.
+ * It stays mounted when the PR turns read, so the mark the user just caused
+ * is seen to happen (2026-10-01, "Marked when the dwell ends"). The exit is
+ * the same for every read (2026-10-06): the dot shrinks to nothing over
+ * 275ms while a thin coral ring ripples out from it and fades over 500ms;
+ * instant with reduced motion. The ripple sits in the dot's grid cell with
+ * negative margins, so it never moves the layout.
+ *
+ * `countdown` (tile rows only, `dotCountdown`): while the PR in the pane
+ * waits out the dwell the dot is a pie that drains clockwise over
+ * OPENED_READ_DELAY_MS (`.unread-pie` in app.css), and it stays empty until
+ * the dot leaves.
  */
-export function UnreadDot(props: { shown: boolean; className?: string }) {
-  const look = props.shown ? 'scale-100 opacity-100' : 'scale-30 opacity-0';
+export function UnreadDot(props: { shown: boolean; countdown?: DotCountdown; className?: string }) {
+  // The ripple plays only when a shown dot hides, never for a dot that mounts hidden (every read row).
+  const [wasShown, setWasShown] = useState(props.shown);
+  const [rippling, setRippling] = useState(false);
+  if (props.shown !== wasShown) {
+    setWasShown(props.shown);
+    setRippling(!props.shown);
+  }
+  const look = props.shown ? 'scale-100' : 'scale-0';
   return (
     <span
       role={props.shown ? 'img' : undefined}
       aria-label={props.shown ? 'Unread' : undefined}
       aria-hidden={props.shown ? undefined : true}
       title={props.shown ? 'Unread' : undefined}
-      className={`size-1.5 shrink-0 rounded-full bg-unread ring-2 ring-unread-soft transition-[opacity,scale] duration-500 ease-out motion-reduce:transition-none ${look} ${props.className ?? ''}`}
-    />
+      className={`grid size-1.5 shrink-0 ${props.className ?? ''}`}
+    >
+      <span
+        data-countdown={props.countdown ?? undefined}
+        // The dwell's length is a render-time value from opened-read.ts; the transition in app.css reads it.
+        style={{ '--dwell': `${OPENED_READ_DELAY_MS}ms` } as CSSProperties}
+        className={`unread-pie col-start-1 row-start-1 rounded-full ring-2 ring-unread-soft transition-[scale] duration-275 ease-in motion-reduce:transition-none ${look}`}
+      />
+      {rippling && (
+        <span
+          data-testid="unread-ripple"
+          onAnimationEnd={() => setRippling(false)}
+          className="pointer-events-none col-start-1 row-start-1 -m-0.5 size-2.5 animate-unread-ripple rounded-full inset-ring-[1.5px] inset-ring-unread/55 motion-reduce:hidden"
+        />
+      )}
+    </span>
   );
 }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { OpenedReadCheck, OpenedReadResult } from '@postpile/core';
-import { OPENED_READ_DELAY_MS, OpenedReadTimer, opensMarkRead, type OpenedReadClock, type OpenedReadPhase, type OpenedTileView } from './opened-read.ts';
+import { dotCountdown, OPENED_READ_DELAY_MS, OpenedReadTimer, opensMarkRead, type OpenedReadClock, type OpenedReadPhase, type OpenedTileView } from './opened-read.ts';
 import { UNDO_WINDOW_MS } from './undo-window.ts';
 
 const ON = { enabled: true, forcedOffReason: null, pending: [] };
@@ -238,5 +238,24 @@ describe('OpenedReadTimer', () => {
     timer.leave();
     await answered();
     expect(phases).toEqual(['filling', 'sending']);
+  });
+});
+
+describe('dotCountdown', () => {
+  const MARKED = { label: 'Mark read', canUndo: true };
+
+  it('drains only the dot of the PR in the pane, while the dwell runs', () => {
+    const opened = { prKey: 'acme/app#3', filling: true, marked: null };
+    expect(dotCountdown(opened, 'acme/app#3')).toBe('draining');
+    expect(dotCountdown(opened, 'acme/app#4')).toBeNull();
+  });
+
+  it('holds the dot empty once the open marked the PR', () => {
+    expect(dotCountdown({ prKey: 'acme/app#3', filling: false, marked: MARKED }, 'acme/app#3')).toBe('drained');
+  });
+
+  it('gives a full dot back when the dwell is cancelled or the mark undone', () => {
+    expect(dotCountdown({ prKey: 'acme/app#3', filling: false, marked: null }, 'acme/app#3')).toBeNull();
+    expect(dotCountdown({ prKey: null, filling: false, marked: null }, 'acme/app#3')).toBeNull();
   });
 });

@@ -4,6 +4,10 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ## 0.24.0 (unreleased)
 
+### Changed
+
+- While a PR you opened waits to be marked read, its unread dot on the tile empties like a small timer, so you see the mark coming where you are looking. When a dot goes, for any reason, it now ends with a short ripple. With reduced motion both stay off.
+
 ### Fixed
 
 - `brew uninstall --zap` now also removes the update caches (several hundred MB), and `brew upgrade` is no longer undone by an older self-update that was waiting to install on the next quit.
