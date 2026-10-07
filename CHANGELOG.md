@@ -11,7 +11,6 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 ### Fixed
 
 - A topic whose unread tile is a closed PR, or a merged one that is not waiting on a glance, no longer shows a greyed "Mark read" with "Rechecking…" that never clears. They get no agent glance, so there is nothing to wait for.
-- On a bot's PR where you asked for changes, a comment the bot posts afterwards counts as its reply everywhere, so the tile, its loudness and pings agree. A bot comment like "@codex review" used to count only on some of them.
 
 ## 0.25.0 (2026-10-06)
 
