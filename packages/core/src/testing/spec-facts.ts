@@ -582,8 +582,16 @@ export function reviewStillOwed(pr: Pr, viewer: Viewer, userState: UserPrState |
 // Speaking, pushing, touching
 // ---------------------------------------------------------------------------
 
-/** A person's command for a bot or answer to a bot in its thread: never an answer to a person (2026-10-06). */
+/**
+ * A person's command for a bot or answer to a bot in its thread: never an
+ * answer to a person (2026-10-06). A bot's own comment is never one, whatever
+ * its body says: it is the bot speaking, and board reads leave its body out
+ * (2026-10-07).
+ */
 export function talksToBotSpec(pr: Pr, comment: Comment): boolean {
+  if (isMachineComment(comment)) {
+    return false;
+  }
   return isBotCommandBody(comment.body) || answersBotInThread(pr, comment);
 }
 

@@ -60,9 +60,15 @@ export function isBotCommand(comment: Pick<Comment, 'body'>): boolean {
  * A person talking to a bot: a bot command (`isBotCommand`) or a reply in a
  * review thread where only bots spoke before (`isBotThreadReply`). Never an
  * answer to a person: it is no touch, no reply to a changes request and no
- * last word in a thread (DESIGN.md "Bot talk leaves agent work").
+ * last word in a thread (DESIGN.md "Bot talk leaves agent work"). A bot's
+ * own comment never is, whatever its body says: a board read leaves bot
+ * bodies out, so reading one here would answer differently on the board
+ * than on the full PR (2026-10-07).
  */
 export function talksToBot(comment: Comment, pr: Pr): boolean {
+  if (isMachineComment(comment)) {
+    return false;
+  }
   return isBotCommand(comment) || isBotThreadReply(comment, pr);
 }
 
