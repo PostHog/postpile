@@ -10,7 +10,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ### Fixed
 
-- A topic whose unread tile is a merged or closed PR no longer shows a greyed "Mark read" with "Rechecking…" that never clears. Those PRs get no agent glance, so there is nothing to wait for.
+- A topic whose unread tile is a closed PR, or a merged one that is not waiting on a glance, no longer shows a greyed "Mark read" with "Rechecking…" that never clears. They get no agent glance, so there is nothing to wait for.
 
 ## 0.25.0 (2026-10-06)
 
