@@ -82,7 +82,7 @@ describe('tile footer', () => {
     expect(tileOffers(view('unread', NONE, doneAfter, [doneRow])).footer).toBe('mark_read');
     const set = view('unread', NONE, doneAfter, [doneRow, row(2, { done: true })]);
     expect(paneOffers(set, doneRow).markLabel).toBe('Mark read');
-    expect(paneOffers(set, row(2, { done: true })).lead).toBe('open_on_github');
+    expect(paneOffers(set, row(2, { done: true })).lead).toBe('none');
   });
 });
 
@@ -177,7 +177,7 @@ describe('detail pane', () => {
     const set = view('open', REREVIEW, stillYours, [row(1, { turn: REREVIEW }), done]);
     expect(paneOffers(set, done)).toEqual({
       scope: 'pr',
-      lead: 'open_on_github',
+      lead: 'none',
       approve: false,
       ask: false,
       markLabel: null,
@@ -185,7 +185,16 @@ describe('detail pane', () => {
       removeTeams: [],
       pendingWrite: null,
     });
-    expect(paneOffers(view('done', NONE, doneAfter), row(1, { done: true }))).toMatchObject({ lead: 'open_on_github', approve: false, ask: false, snooze: false, markLabel: null });
+    expect(paneOffers(view('done', NONE, doneAfter), row(1, { done: true }))).toMatchObject({ lead: 'none', approve: false, ask: false, snooze: false, markLabel: null });
+  });
+
+  // 2026-10-07: on a dealt-with topic the ink Open on GitHub competed with "Archive now" for the next move.
+  it('leaves Open on GitHub outlined on a done PR, and leading only on an open PR with nothing to mark', () => {
+    const merged = row(1, { done: true, state: 'MERGED', primaryAction: 'open_on_github' });
+    expect(paneOffers(view('done', NONE, doneAfter, [merged]), merged).lead).toBe('none');
+    const yours = row(2, { turn: REREVIEW, afterRead: stillYours, primaryAction: 'approved' });
+    const set = view('open', REREVIEW, stillYours, [row(1, { primaryAction: 'approved' }), yours]);
+    expect(paneOffers(set, yours).lead).toBe('open_on_github');
   });
 
   it('keeps Mark read on a done PR whose news keeps the tile unread, without Approve', () => {

@@ -100,3 +100,17 @@ export function allDealtNote(listed: TopicListItem[], dealt: TopicListItem[]): s
 export function dealtLineLabel(count: number, open: boolean): string {
   return open ? `Hide ${count} dealt with` : `+ ${count} dealt with`;
 }
+
+/**
+ * The open topic's row as it was listed, when it just left the list for the
+ * Archive (in `before`, gone from `after`, now in the Archive drawer): the
+ * row flies into the Archive fold and the space it leaves closes
+ * (2026-10-07). Null for anything else: a topic that merged into another or
+ * left a filtered list just goes.
+ */
+export function archivedRow(before: TopicListItem[], after: TopicListItem[], activeTopicId: string | null, archivedIds: Set<string>): TopicListItem | null {
+  if (activeTopicId === null || !archivedIds.has(activeTopicId) || after.some((item) => item.topic.id === activeTopicId)) {
+    return null;
+  }
+  return before.find((item) => item.topic.id === activeTopicId) ?? null;
+}

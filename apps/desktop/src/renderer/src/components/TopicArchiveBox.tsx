@@ -14,8 +14,12 @@ function dayLabel(iso: string): string {
  * moves to the Archive by itself and offers "Archive now"; in the Archive it
  * says since when and what brings it back. Gone while anything is open or
  * unread.
+ *
+ * `arrived`: the box just came in because the last read landed while the
+ * topic was on screen. "Archive now" then rises into place (+640ms) and one
+ * soft sheen passes over it (+960ms), once (2026-10-07).
  */
-export function TopicArchiveBox(props: { detail: TopicDetail }) {
+export function TopicArchiveBox(props: { detail: TopicDetail; arrived: boolean }) {
   const actions = useActions();
   const box = props.detail.archive;
   if (!box) {
@@ -40,8 +44,14 @@ export function TopicArchiveBox(props: { detail: TopicDetail }) {
         <span className="font-semibold text-ink">Everything here is dealt with.</span> Every PR is merged or closed and every thread read. It moves to the
         Archive {when}.
       </p>
-      <Button variant="primary" disabled={actions.isBusy(busyKey)} onClick={() => void actions.archiveTopic(topicId)}>
+      <Button
+        variant="primary"
+        className={`relative overflow-hidden ${props.arrived ? 'animate-archive-rise' : ''}`}
+        disabled={actions.isBusy(busyKey)}
+        onClick={() => void actions.archiveTopic(topicId)}
+      >
         Archive now
+        {props.arrived && <span aria-hidden="true" className="archive-sheen pointer-events-none absolute inset-0 animate-archive-sheen" />}
       </Button>
     </div>
   );

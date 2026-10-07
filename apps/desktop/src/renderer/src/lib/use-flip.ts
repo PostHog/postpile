@@ -1,15 +1,12 @@
 import { useLayoutEffect, useRef, type RefObject } from 'react';
 import { flipMoves, type FlipPlace } from './flip.ts';
+import { reducedMotion } from './motion.ts';
 
 /** The slide: about as long as the mockup the owner approved, easing out. */
 const SLIDE_MS = 420;
 const SLIDE_EASING = 'cubic-bezier(.2,.7,.2,1)';
 /** The "landed" tint fades out over this long, holding full for the first third. */
 const LANDED_MS = 1100;
-
-function reducedMotion(): boolean {
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-}
 
 /** How far a running slide has the element shifted right now, so a measure mid-slide reads its real place. */
 function currentShift(element: HTMLElement): number {

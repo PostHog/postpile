@@ -206,6 +206,74 @@
     }
   }
 
+  /*
+    The settle after a read lands on the held tile (2026-10-07, DESIGN.md
+    "Marked when the dwell ends"), in one sequence from the read: the heading
+    word swaps at +160ms (word-*), the footer at +240ms (footer-*), "Archive
+    now" rises at +640ms and one sheen passes over it at +960ms (archive-*).
+    The sidebar's unread bubble shrinks out with its dot (bubble-out). All
+    `both`: before its delay a step shows where it starts. Crossfade and the
+    callers skip them with reduced motion.
+  */
+  --animate-word-in: word-in 220ms ease-out 160ms both;
+  --animate-word-out: word-out 220ms ease-out 160ms both;
+  --animate-footer-in: footer-in 240ms ease-out 240ms both;
+  --animate-footer-out: footer-out 220ms ease-out 240ms both;
+  --animate-archive-rise: archive-rise 300ms cubic-bezier(0.2, 0.8, 0.2, 1.2) 640ms both;
+  --animate-archive-sheen: archive-sheen 700ms ease-in-out 960ms both;
+  --animate-bubble-out: bubble-out 260ms ease-in both;
+
+  @keyframes word-in {
+    from {
+      opacity: 0;
+      translate: 0 4px;
+    }
+  }
+
+  @keyframes word-out {
+    to {
+      opacity: 0;
+      translate: 0 -4px;
+    }
+  }
+
+  @keyframes footer-in {
+    from {
+      opacity: 0;
+      translate: 8px 0;
+    }
+  }
+
+  @keyframes footer-out {
+    to {
+      opacity: 0;
+      translate: -8px 0;
+    }
+  }
+
+  @keyframes archive-rise {
+    from {
+      opacity: 0;
+      translate: 0 6px;
+    }
+  }
+
+  @keyframes archive-sheen {
+    from {
+      translate: -120% 0;
+    }
+    to {
+      translate: 120% 0;
+    }
+  }
+
+  @keyframes bubble-out {
+    to {
+      opacity: 0;
+      scale: 0.2;
+    }
+  }
+
   /* The inbox cleanup's illustration: the two cards bob, the trash lid tips. Use with motion-safe:. */
   --animate-cleanup-bob: cleanup-bob 3.2s ease-in-out infinite;
   --animate-cleanup-lid: cleanup-lid 3.2s ease-in-out infinite;
@@ -508,6 +576,31 @@ body {
   transition:
     scale 275ms ease-in,
     --sweep var(--dwell) linear;
+}
+
+/* The soft light that passes over "Archive now" once when it arrives
+   (TopicArchiveBox `arrived`): a diagonal band of the button's own text
+   colour, mostly transparent. A gradient, so it lives here. */
+.archive-sheen {
+  background: linear-gradient(105deg, transparent 30%, color-mix(in srgb, var(--on-ink) 35%, transparent) 50%, transparent 70%);
+}
+
+/* The sidebar row of a topic that just went to the Archive (LeavingRow):
+   hidden while a copy flies to the Archive fold, its space closes from
+   +120ms over 280ms, so the rows below move up smoothly instead of the
+   list jumping. Reduced motion: the row just goes (the sidebar skips it). */
+.topic-row-leaving {
+  display: grid;
+  animation: topic-row-close 280ms cubic-bezier(0.4, 0, 0.2, 1) 120ms both;
+}
+
+@keyframes topic-row-close {
+  from {
+    grid-template-rows: 1fr;
+  }
+  to {
+    grid-template-rows: 0fr;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

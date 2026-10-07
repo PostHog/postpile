@@ -4,6 +4,10 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ## 0.26.0 (unreleased)
 
+### Changed
+
+- Reading the last news in a topic now settles step by step instead of everything changing at once: the unread marks leave together, the news strip folds away, the "Unread" label turns into "Dealt with", and the "Everything here is dealt with" box grows in with "Archive now" as the one dark button. "Archive now" shows the topic moving into the Archive in the sidebar instead of the row just disappearing.
+
 ### Fixed
 
 - A topic whose unread tile is a merged or closed PR no longer shows a greyed "Mark read" with "Rechecking…" that never clears. Those PRs get no agent glance, so there is nothing to wait for.

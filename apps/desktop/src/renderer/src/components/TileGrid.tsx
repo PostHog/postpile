@@ -2,10 +2,14 @@ import { useRef, type ReactNode } from 'react';
 import { TopicActions } from './AgentActions.tsx';
 import { TopicArchiveBox } from './TopicArchiveBox.tsx';
 import type { TileGroup, TileView, TopicDetail, TopicListItem } from '@postpile/core';
-import { gridGroups } from '../lib/queues.ts';
+import { gridGroups, headingGroup } from '../lib/queues.ts';
 import { useFlip } from '../lib/use-flip.ts';
 import { useHeldPlace } from '../lib/use-held-place.ts';
-import { ChevronIcon } from './icons.tsx';
+import { useSettling } from '../lib/use-settling.ts';
+import { Crossfade } from './Crossfade.tsx';
+import { Fold } from './Fold.tsx';
+import { ChevronIcon, Glyph } from './icons.tsx';
+import { UnreadDot } from './pills.tsx';
 import { Tile } from './Tile.tsx';
 
 interface TileGridProps {
@@ -104,18 +108,46 @@ function GroupMarker(props: { children: ReactNode }) {
   );
 }
 
-/** Unread or Open: the name and count sit right on top of the group's first tile. */
+/**
+ * Unread's coral dot, which ripples out like every unread dot when the
+ * heading stops saying Unread, and the grey check of Dealt with, which
+ * fades in with the heading's new word (+160ms). Open has no marker.
+ */
+function GroupMarkers(props: { shown: TileGroup; topicId: string }) {
+  const check = props.shown === 'dealt_with' ? 'scale-100 opacity-100' : 'scale-60 opacity-0';
+  return (
+    <GroupMarker>
+      <span className="grid place-items-center">
+        <UnreadDot shown={props.shown === 'unread'} halo={false} dotKey={`group:${props.topicId}`} className="col-start-1 row-start-1" />
+        <span
+          aria-hidden="true"
+          className={`col-start-1 row-start-1 flex text-faint transition-[opacity,scale] delay-160 duration-220 ease-out motion-reduce:transition-none ${check}`}
+        >
+          <Glyph glyph="check" size={10} strokeWidth={2} />
+        </span>
+      </span>
+    </GroupMarker>
+  );
+}
+
+/**
+ * Unread or Open: the name and count sit right on top of the group's first
+ * tile. The name follows `headingGroup`: once the held tile under "Unread"
+ * is read, the word changes in place to the group it went to (+160ms).
+ */
 function GroupSection(props: TileGridProps & { group: TileGroup; views: TileView[] }) {
+  const shown = headingGroup(
+    props.group,
+    props.views.map((view) => view.group),
+  );
   return (
     <section className="flex flex-col gap-2">
       {/* 16px in: the tile's 15px padding plus its 1px frame. */}
       <h3 data-flip-key={`group:${props.group}`} className="relative flex items-baseline gap-1.5 pl-4 text-[11.5px] leading-[normal] font-semibold text-ink-2">
-        {props.group === 'unread' && (
-          <GroupMarker>
-            <span className="size-1.5 rounded-full bg-unread" />
-          </GroupMarker>
-        )}
-        {GROUP_LABELS[props.group]}
+        <GroupMarkers shown={shown} topicId={props.detail.topic.id} />
+        <Crossfade swapKey={shown} animate enterClass="animate-word-in" leaveClass="animate-word-out">
+          <span className={shown === 'unread' ? '' : 'text-hint'}>{GROUP_LABELS[shown]}</span>
+        </Crossfade>
         <TileCount count={props.views.length} />
         <YourMoveCount count={props.showYourMove ? props.detail.groupYourMoves[props.group] : 0} />
       </h3>
@@ -182,6 +214,34 @@ function tileId(view: TileView): string {
  * there and the moved tile lights up briefly (`useFlip`, "Marked when the
  * dwell ends").
  */
+/**
+ * The topic's action row and its Archive box, each in a `Fold` with its
+ * spacing inside, so a fold with nothing in it takes no room. When the
+ * last read lands, the action row gives way and the box grows into its
+ * place at +320ms; its "Archive now" then rises in (`arrived`). Keyed by
+ * topic by the caller: another topic just shows its own.
+ */
+function TopicBoxes(props: { detail: TopicDetail }) {
+  const hasActions = props.detail.agent.approve !== null || props.detail.agent.markRead !== null;
+  const hasArchive = props.detail.archive !== null;
+  const arrived = useSettling(hasArchive);
+  const timing = 'delay-320 duration-320 ease-[cubic-bezier(.3,.7,.2,1)]';
+  return (
+    <>
+      <Fold open={hasActions} className={timing}>
+        <div className="pt-3">
+          <TopicActions detail={props.detail} />
+        </div>
+      </Fold>
+      <Fold open={hasArchive} className={timing}>
+        <div className="pt-3">
+          <TopicArchiveBox detail={props.detail} arrived={arrived} />
+        </div>
+      </Fold>
+    </>
+  );
+}
+
 export function TileGrid(props: Omit<TileGridProps, 'showYourMove'>) {
   const listRef = useRef<HTMLDivElement>(null);
   useFlip(listRef, { landed: true });
@@ -193,7 +253,7 @@ export function TileGrid(props: Omit<TileGridProps, 'showYourMove'>) {
   const showYourMove = matching === null && !held;
   return (
     <div ref={listRef} className="flex flex-col gap-5">
-      <div className="flex flex-col gap-3 pt-[13px] shadow-[inset_0_1px_0_var(--hairline)]">
+      <div className="flex flex-col pt-[13px] shadow-[inset_0_1px_0_var(--hairline)]">
         {/* Only the count: the Unread group's label right below already says how many are unread. */}
         <div className="flex items-center gap-2.5">
           <span className="text-xs font-semibold text-ink-2">Tiles</span>
@@ -210,8 +270,7 @@ export function TileGrid(props: Omit<TileGridProps, 'showYourMove'>) {
             )}
           </span>
         </div>
-        <TopicActions detail={props.detail} />
-        <TopicArchiveBox detail={props.detail} />
+        <TopicBoxes key={props.detail.topic.id} detail={props.detail} />
       </div>
       {tiles.length === 0 && (
         <p className="rounded-tile border border-dashed border-frame px-4 py-8 text-center text-xs text-muted">
@@ -222,7 +281,7 @@ export function TileGrid(props: Omit<TileGridProps, 'showYourMove'>) {
         bucket.key === 'dealt_with' ? (
           <DealtWithGroup key={bucket.key} {...props} showYourMove={showYourMove} views={bucket.items} />
         ) : (
-          <GroupSection key={bucket.key} {...props} showYourMove={showYourMove} group={bucket.key as TileGroup} views={bucket.items} />
+          <GroupSection key={`${props.detail.topic.id}:${bucket.key}`} {...props} showYourMove={showYourMove} group={bucket.key as TileGroup} views={bucket.items} />
         ),
       )}
     </div>
