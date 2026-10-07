@@ -2,13 +2,11 @@ import type { AgentService, GlanceBatchInput, GlanceBatchItem, PromptContext } f
 import {
   isBotTalk,
   isTracked,
-  isUnseenMergeWithoutReview,
+  prWantsGlance,
   TILE_STATE_ORDER,
   withoutStaleClaims,
   type DossierVersion,
   type Glance,
-  type Pr,
-  type PrEvent,
   type PrKey,
   type Topic,
   type Viewer,
@@ -31,18 +29,9 @@ interface TopicParts {
 }
 
 /**
- * Open pinged and found PRs in tiles, most urgent tile first. Pulled-in stack layers
+ * Pinged and found PRs in tiles that want a glance (`prWantsGlance`), most urgent tile first. Pulled-in stack layers
  * get no glance: they are context for the pinged PR, not work of their own.
  */
-/**
- * Open PRs, and merged ones while a merge without the user's review is
- * unseen: the glance then answers "worth a look after the fact?" (DESIGN
- * "Merged without your review").
- */
-function wantsGlance(pr: Pr, events: PrEvent[]): boolean {
-  return pr.state === 'OPEN' || (pr.state === 'MERGED' && events.some(isUnseenMergeWithoutReview));
-}
-
 function itemsByUrgency(board: Board): Map<PrKey, GlanceBatchItem> {
   const tiles = board
     .allTiles()
@@ -52,7 +41,7 @@ function itemsByUrgency(board: Board): Map<PrKey, GlanceBatchItem> {
   for (const { tile } of tiles) {
     for (const member of tile.members) {
       const pr = board.prs.get(member.prKey);
-      if (!pr || !isTracked(member.provenance) || result.has(member.prKey) || !wantsGlance(pr, board.events.get(pr.key) ?? [])) {
+      if (!pr || !isTracked(member.provenance) || result.has(member.prKey) || !prWantsGlance(pr, board.events.get(pr.key) ?? [])) {
         continue;
       }
       result.set(member.prKey, { pr, provenance: member.provenance });
