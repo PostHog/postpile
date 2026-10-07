@@ -14,7 +14,7 @@ import type { PrSummary, TileView } from '../views.ts';
 import type { PropertyBoard } from './build-board.ts';
 import { eventsOf, expectedUnreadRows, isTrackedHere, fullPrOf } from './invariant.ts';
 import { viewerApproved, viewerOwns } from './spec-facts.ts';
-import { expectedDone, expectedNewMove, expectedTurn, type TurnInput } from './spec-rules.ts';
+import { expectedDone, expectedNewMove, expectedTurn, isUnseenMergeWithoutViewer, type TurnInput } from './spec-rules.ts';
 
 /** The stored glance as the agent actions read it. */
 export interface SpecGlance {
@@ -49,6 +49,12 @@ function isBacked(risk: RiskLevel | null): risk is BackedRisk {
 /** Medium when any is medium, else low. */
 export function specHighestRisk(risks: BackedRisk[]): BackedRisk {
   return risks.includes('medium') ? 'medium' : 'low';
+}
+
+/** A glance is wanted on an open PR, and on a merged one while a merge without the viewer's review is unseen (event not seen, not muted). */
+function specGlanceWanted(board: PropertyBoard, key: PrKey): boolean {
+  const state = fullPrOf(board, key).state;
+  return state === 'OPEN' || (state === 'MERGED' && eventsOf(board, key).some(isUnseenMergeWithoutViewer));
 }
 
 /** Why a PR is not agent-safe, or null when it is: a current glance, Looks safe, risk low or medium. */
@@ -244,6 +250,9 @@ export function specMarkReadBlocks(board: PropertyBoard, key: PrKey): MarkReadBl
   const blocks: MarkReadBlock[] = [];
   if (specAsksForYou(board, key)) {
     blocks.push('asks_for_you');
+  }
+  if (!specGlanceWanted(board, key)) {
+    return blocks;
   }
   if (!glance.current) {
     return [...blocks, 'rechecking'];

@@ -129,6 +129,7 @@ import {
   compareInSection,
   actionTrail,
   isUnseenMergeWithoutReview,
+  prWantsGlance,
   DEFAULT_REPO_SETTINGS,
   isPrInQuietRepo,
   isQuietTile,
@@ -1050,7 +1051,7 @@ export class FakeEngine implements EngineService {
     return new Set(
       this.data.prs
         .filter((pr) => keys.has(pr.key))
-        .filter((pr) => pr.state === 'OPEN' || (pr.state === 'MERGED' && this.eventsOf(pr.key).some(isUnseenMergeWithoutReview)))
+        .filter((pr) => prWantsGlance(pr, this.eventsOf(pr.key)))
         .map((pr) => pr.key),
     );
   }

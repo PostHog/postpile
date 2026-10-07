@@ -342,6 +342,15 @@ export function isUnseenMergeWithoutReview(event: PrEvent): boolean {
   return event.kind === 'merged_without_review' && event.seenAt === null && effectiveLoudness(event) !== 'muted';
 }
 
+/**
+ * Whether the PR gets a glance: open PRs, and merged ones while a merge
+ * without the user's review is unseen ("worth a look after the fact?").
+ * Closed PRs and merged ones otherwise get none.
+ */
+export function prWantsGlance(pr: Pick<Pr, 'state'>, events: PrEvent[]): boolean {
+  return pr.state === 'OPEN' || (pr.state === 'MERGED' && events.some(isUnseenMergeWithoutReview));
+}
+
 export function isUnseenLoud(event: PrEvent): boolean {
   return event.seenAt === null && effectiveLoudness(event) === 'loud';
 }

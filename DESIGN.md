@@ -164,6 +164,19 @@ topic never sits in neither list (the view would fall back to another topic
 and pin it). Until 2026-09-29 only the daily consolidation retired topics,
 and only when the agent said finished and 14 quiet days had passed; most
 topics with every PR merged never left the sidebar.
+**Where the topic went** (2026-10-07, owner): "Archive now" used to drop the
+sidebar row in one frame; the list jumped and nothing showed where the
+topic went. Now a copy of the row lifts off and flies into the Archive fold
+(~560ms, shrinking and fading on the way, `flyToArchive` in
+`lib/archive-flight.ts`), the row's space closes smoothly behind it
+(`.topic-row-leaving`, from +120ms over 280ms) and the fold tints
+`--accent-soft` as the copy lands (~300ms in, ~900ms out). The Archive
+gets no count. The sidebar keeps the old row (`archivedRow` in
+`lib/sidebar.ts`: the open topic left the list and is in the Archive)
+until the flight ends, re-renders once its space has closed so the FLIP
+slides measure the list as it is, and the footer slides with the list
+instead of sitting under rows that slide over it. Reduced motion: the row
+just goes.
 
 **Tiles** are the unit of attention inside a topic. A tile holds one of:
 
@@ -2867,6 +2880,35 @@ happened when it did. Chosen from a clickable mockup:
   selected, topic rows re-sorting) slide the same way. Only a change of
   order or group slides; new text or a resize does not. With reduced motion
   there is no slide and no tint.
+- **The settle after the read** (2026-10-07, owner, from a recording of a
+  topic whose only news was a merge and a playable mock). The dwell stays
+  exactly as it is, merged-only news included. What follows used to land in
+  one frame (card in, strip out, title grey, footer swapped, an ink "Open on
+  GitHub", dots gone), 40ms after the pane flipped, and the tile jumped. Now
+  it runs as one short sequence from the read landing (`useSettling`, only
+  when the read lands while the tile is on screen, never on first render or
+  on opening a topic that is read already; the same for a Mark read click or
+  the tile menu on the held tile):
+  - 0ms: the pane flips to "✓ Marked read"; every coral mark of the PR
+    leaves together with the ripple (tile row dot, topic dot, the group
+    heading's dot, the Activity line's dot), the sidebar's unread bubble
+    shrinks out with its dot, the NEW pill fades (160ms).
+  - +90ms: the news strip folds up (`Fold`, 280ms) while the title eases to
+    its read colour (320ms).
+  - +160ms: the heading's word changes in place (`headingGroup` in
+    `lib/queues.ts`): "Unread" becomes "Dealt with" with a grey check, once
+    no tile under it is still unread. The tile keeps its held place; moving
+    the selection regroups as before.
+  - +240ms: the footer crossfades Mark read · Snooze to Open (`Crossfade`).
+  - +320ms: the topic's action row gives way and the Archive box grows into
+    its place (320ms); the strip folding at the same time keeps the tile
+    close to where it was.
+  - +640ms: "Archive now" rises 6px into place; at +960ms one soft sheen
+    passes over it, once.
+  - Leaving the topic, its sidebar row eases to its quiet grey over 320ms
+    instead of snapping.
+  Reduced motion: everything lands at once. Plain CSS transitions and
+  keyframes in `app.css` (`word-*`, `footer-*`, `archive-*`, `bubble-out`).
 
 **Built as** (2026-09-29):
 
@@ -3988,8 +4030,12 @@ any review ask; on top of that:
   tile's `tileFooterAction`): the one filled button, placed first, is Approve
   while it is due (someone else's open PR, not approved, not a draft), else
   on a single-PR tile the tile footer's Mark read / Mark done / Snooze, or
-  Open on GitHub on a done tile; on a stack or set the selected PR's Mark
-  read / Mark done, else Open on GitHub (see "After a mark-read"). "Approve again" and "Approve draft" stay outlined next to it.
+  nothing on a done tile or done PR; on a stack or set the selected PR's Mark
+  read / Mark done, else Open on GitHub while that PR is not done (see
+  "After a mark-read"). On a done PR "Open on GitHub" stays outlined
+  (`PaneLead` `none`, 2026-10-07, owner): with an ink one there, a
+  dealt-with topic showed two black buttons at once, and "Archive now" is
+  the next move. "Approve again" and "Approve draft" stay outlined next to it.
   The filled button is ink, except Approve (2026-09-30): it leads in `--safe`
   green, the same color as the "Approved" state it produces, because it is
   the one action that is both final and positive. Accent blue stays for
@@ -5429,8 +5475,11 @@ Owner decisions (2026-09-30):
 - **Mark read skips asks.** Only actions carry ✨, never text or lines. A
   tile's Mark read is always on offer, so it stays plain: no ✨, no pill, the
   old route. Core's tile backing (the unread news holds no ask for you, and
-  every unread PR has a current glance that is not `LOOK_CLOSER`, low or
-  medium risk) only feeds the topic's "Mark N read", which covers the
+  every unread PR that gets a glance has a current one that is not
+  `LOOK_CLOSER`, low or medium risk; it waits for a glance only on PRs that
+  get one: open PRs, and merged PRs merged without your review until you
+  have seen that (`prWantsGlance`, shared with the engine). Any other merged
+  or closed PR waits for none and its older glance is ignored) only feeds the topic's "Mark N read", which covers the
   unread, unsnoozed tiles whose backing is active. Tiles with an ask for you
   are skipped and stay unread. It is gone when no tile is unread; when tiles
   are unread but none qualify it shows a plain "Mark read" greyed out, with

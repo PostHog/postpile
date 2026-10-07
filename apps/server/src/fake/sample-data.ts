@@ -56,6 +56,7 @@ const TOPIC = {
   usageExports: 'topic-usage-exports',
   alertPresets: 'topic-alert-presets',
   docsSearch: 'topic-docs-search',
+  statusBadge: 'topic-status-badge',
 };
 
 // Trunk's status comment as trunk-io[bot] edits it (DESIGN.md "Merge queue"): an en space after the emoji.
@@ -229,6 +230,17 @@ function buildTopics(clock: SampleClock): Topic[] {
       id: TOPIC.docsSearch,
       area: null,
       name: 'Docs search index',
+      summary: '',
+      tailoring: '',
+      driver: null,
+      userRole: 'watcher',
+    }),
+    // Its only news is a merge: opening it marks the merge read after the
+    // dwell and the topic settles into "Everything here is dealt with".
+    sampleTopic(clock, {
+      id: TOPIC.statusBadge,
+      area: null,
+      name: 'Status page badge',
       summary: '',
       tailoring: '',
       driver: null,
@@ -595,6 +607,11 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
       size: [22, 3, 2], openedHoursAgo: 3,
     }),
     samplePr(clock, {
+      number: 1989, title: 'Show the uptime badge on the status page', author: 'bram', state: 'MERGED',
+      size: [18, 2, 2], openedHoursAgo: 6, mergedHoursAgo: 1, reviews: [['nell', 'APPROVED', '', undefined, 2]],
+      comments: [{ id: 'issuecomment-1989-1', author: 'nell', body: 'Badge colours match the design tokens now.', hoursAgo: 3 }],
+    }),
+    samplePr(clock, {
       number: 1974, title: 'Pin the Linux runner image', author: SAMPLE_VIEWER, state: 'MERGED',
       size: [8, 8, 2], openedHoursAgo: 30, mergedHoursAgo: 5, reviews: [['rowan', 'APPROVED', '', undefined, 7]],
       comments: [{ id: 'issuecomment-1974-trunk', author: 'trunk-io[bot]', body: TRUNK_MERGED, hoursAgo: 6, editedHoursAgo: 5 }],
@@ -833,6 +850,12 @@ function buildEvents(clock: SampleClock): PrEvent[] {
     ...sampleEvents(clock, 1988, [
       { kind: 'comment', actor: 'tove', text: 'commented: "index build takes 4 minutes"', hoursAgo: 2, rule: 'quiet' },
     ]),
+    // Read up to the merge: the merge is the only unseen news.
+    ...sampleEvents(clock, 1989, [
+      { kind: 'comment', actor: 'nell', text: 'commented: "Badge colours match the design tokens now."', hoursAgo: 3, rule: 'quiet', sourceId: 'issuecomment-1989-1', seen: true },
+      { kind: 'review_approved', actor: 'nell', text: 'approved', hoursAgo: 2, rule: 'quiet', seen: true },
+      { kind: 'merged', actor: 'bram', text: 'merged it', hoursAgo: 1, rule: 'quiet' },
+    ]),
     ...sampleEvents(clock, 1955, [
       // Loud, but the PR is only found (no notification): the tile stays calm, whose turn says your move.
       { kind: 'review_requested', actor: 'nell', text: 'requested a review from you', hoursAgo: 26, rule: 'loud' },
@@ -1033,6 +1056,7 @@ function buildTiles(): Tile[] {
     sampleTile(TOPIC.usageExports, 'single', `pr:${sampleKey(1986)}`, 'Your export runner change waits on omar', [found(1986, 'own_open', 'your open PR')]),
     sampleTile(TOPIC.alertPresets, 'single', `pr:${sampleKey(1987)}`, 'Alert threshold presets', [pinged(1987, 'subscribed')]),
     sampleTile(TOPIC.docsSearch, 'single', `pr:${sampleKey(1988)}`, 'Nightly docs search index', [pinged(1988, 'subscribed')]),
+    sampleTile(TOPIC.statusBadge, 'single', `pr:${sampleKey(1989)}`, 'Uptime badge on the status page', [pinged(1989, 'subscribed')]),
     sampleTile(TOPIC.migrations, 'single', `pr:${sampleKey(1970)}`, 'Your agent PR guards the billing migrations', [pinged(1970, 'assign')]),
     sampleTile(TOPIC.devEnv, 'single', `pr:${sampleKey(1972)}`, "Rowan's agent PR drops unused devbox env vars", [
       pinged(1972, 'review_requested'),

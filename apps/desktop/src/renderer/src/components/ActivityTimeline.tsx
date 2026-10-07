@@ -10,6 +10,7 @@ import { Composer, useCompose } from './Composer.tsx';
 import { ChevronIcon, Glyph, ReplyIcon, ThumbsUpIcon } from './icons.tsx';
 import { SectionLabel } from './SectionLabel.tsx';
 import { MarkdownText } from './MarkdownText.tsx';
+import { UnreadDot } from './pills.tsx';
 
 // Loud events wear the same ink badge as the tile's unread strip; the rest go quieter.
 const BADGES: Record<EventDisplayState, string> = {
@@ -65,6 +66,8 @@ interface RowProps {
   display: EventDisplayState;
   /** The event's own seen state is unseen (from core): the coral unread dot. */
   unseen: boolean;
+  /** Names the row's dot (`UnreadDot`), the line or event id. */
+  dotKey: string;
   /** Why the rules (or the agent) classed it so, for the hover title. */
   reason: string;
   last: boolean;
@@ -107,6 +110,11 @@ function AgeLink(props: { at: string; url: string | null; now: Date }) {
 function ActivityRow(props: RowProps) {
   const actions = useActions();
   const now = useNow();
+  // A row that was unseen keeps its dot's slot after the read, so the dot ripples out with the others and the age does not move.
+  const [hadDot, setHadDot] = useState(props.unseen);
+  if (props.unseen && !hadDot) {
+    setHadDot(true);
+  }
   return (
     <div className="grid grid-cols-[20px_minmax(0,1fr)_auto] gap-x-2" title={`${props.display}: ${props.reason}`}>
       <span className="flex flex-col items-center">
@@ -128,7 +136,7 @@ function ActivityRow(props: RowProps) {
         )}
       </span>
       <span className="flex items-center gap-1.5 self-start pt-px font-mono text-[10.5px] text-faint">
-        {props.unseen && <UnseenDot />}
+        {hadDot && <UnreadDot shown={props.unseen} halo={false} label="Unseen" dotKey={`activity:${props.dotKey}`} />}
         <AgeLink at={props.at} url={props.url} now={now} />
       </span>
     </div>
@@ -147,6 +155,7 @@ export function lineRow(line: ActivityLine, last: boolean, below: ReactNode = nu
       at={line.at}
       display={line.display}
       unseen={line.unseen}
+      dotKey={line.id}
       reason={reason}
       last={last}
       unmuteId={null}
@@ -168,6 +177,7 @@ export function eventRow(item: ActivityEvent, last: boolean) {
       at={item.at}
       display={item.display}
       unseen={item.unseen}
+      dotKey={item.id}
       reason={item.reason}
       last={last}
       unmuteId={item.display === 'muted' ? item.id : null}

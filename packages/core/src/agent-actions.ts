@@ -8,6 +8,7 @@
 // (`isNewYourMove`), the snoozed tile state and provenance.
 import { standingApprovals } from './approvals.ts';
 import { isTracked } from './provenance.ts';
+import { prWantsGlance } from './loudness.ts';
 import { isNewYourMove } from './quiet-reads.ts';
 import type { IsoTime, Pr, PrEvent, PrKey, Tile, TileStack, TileState, UserPrState, Verdict, Viewer } from './types.ts';
 import type { PrApproveResult, TileView } from './views.ts';
@@ -54,6 +55,8 @@ export interface AgentPrFacts {
   risk: RiskLevel | null;
   /** The head commit, for the approve's head guard. */
   headOid: string;
+  /** The PR gets a glance (`prWantsGlance`). Without one wanted there is nothing to wait for or judge; an older glance is history. */
+  glanceWanted: boolean;
   /** Its news asks something of you: a move of yours that is new since your last read ("New moves only", `isNewYourMove`). */
   askForYou: boolean;
   /** Someone approved it on GitHub already: a standing approval, or the review decision says approved. An agent Approve there is noise. */
@@ -248,6 +251,7 @@ export function agentPrFacts(input: AgentPrFactsInput): AgentPrFacts {
     riskLine: glance?.risk ?? null,
     risk: glance ? riskLevelOf(glance.risk) : null,
     headOid: input.pr.headOid,
+    glanceWanted: prWantsGlance(input.pr, input.events),
     askForYou: asksForYou(input),
     approvedOnGitHub: approvedByAnyone(input.pr),
   };
@@ -269,10 +273,14 @@ function approveBlock(facts: AgentPrFacts): AgentBlock | null {
   return backedRisk(facts.risk) === null ? 'high' : null;
 }
 
-/** Why the agent does not back marking this unread PR read, or null: no ask for you, a current glance that is not Look closer, low or medium risk. */
+/** Why the agent does not back marking this unread PR read, or null: no ask for you, and, when a glance is wanted, a current glance that is not Look closer, low or medium risk. */
 function markReadBlock(facts: AgentPrFacts): MarkReadBlock | null {
   if (facts.askForYou) {
     return 'asks_for_you';
+  }
+  // No glance wanted (closed, or merged with the merge seen or reviewed): nothing to wait for, and any older glance is history.
+  if (!facts.glanceWanted) {
+    return null;
   }
   if (!facts.current) {
     return 'rechecking';

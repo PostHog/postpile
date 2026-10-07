@@ -106,17 +106,17 @@ describe('server routes over the fake engine', () => {
     expect((await post<SyncReport>(app, '/api/sync')).json.heldForCatchUp).toBe(true);
     const view = await cleanup();
     // 24 merged PRs only in the inbox, plus the merged sample tiles still unread.
-    expect(view).toMatchObject({ start: { kind: 'first_run' }, counts: { mergedAll: 27 }, pending: false });
+    expect(view).toMatchObject({ start: { kind: 'first_run' }, counts: { mergedAll: 28 }, pending: false });
 
     const parked = await post<{ ok: boolean; message: string }>(app, '/api/inbox-cleanup/clear', { merged: 'all', older: null, countedAt: view.countedAt, from: 'start' });
-    expect(parked.json.message).toMatch(/^Pending: clears 27/);
+    expect(parked.json.message).toMatch(/^Pending: clears 28/);
     const writes = (await (await app.request('/api/github-writes')).json()) as GitHubWritesStatus;
-    expect(writes.pending).toEqual([expect.objectContaining({ kind: 'catch_up', origin: 'cleanup', threadCount: 27 })]);
+    expect(writes.pending).toEqual([expect.objectContaining({ kind: 'catch_up', origin: 'cleanup', threadCount: 28 })]);
     expect((await cleanup()).start).toBeNull();
 
     await post(app, '/api/github-writes', { enabled: true });
     await post(app, '/api/github-writes/pending/send');
-    await vi.waitFor(async () => expect((await cleanup()).lastRun).toMatchObject({ marked: 27 }));
+    await vi.waitFor(async () => expect((await cleanup()).lastRun).toMatchObject({ marked: 28 }));
     expect((await cleanup()).counts.mergedAll).toBe(0);
 
     expect((await post(app, '/api/inbox-cleanup/clear', { merged: 'quiet3', older: null, countedAt: view.countedAt, from: 'start' })).status).toBe(400);
@@ -128,11 +128,11 @@ describe('server routes over the fake engine', () => {
     const cleanup = async () => (await (await app.request('/api/inbox-cleanup')).json()) as InboxCleanupView;
     await post(app, '/api/github-writes', { enabled: true });
     const view = await cleanup();
-    expect(view.counts).toMatchObject({ mergedAll: 27, mergedSafe: 8 });
+    expect(view.counts).toMatchObject({ mergedAll: 28, mergedSafe: 8 });
 
     expect((await post<{ message: string }>(app, '/api/inbox-cleanup/clear-safe', { countedAt: view.countedAt })).json.message).toBe('Clearing 8 on GitHub in the background');
     await vi.waitFor(async () => expect((await cleanup()).lastRun).toMatchObject({ marked: 8 }));
-    expect((await cleanup()).counts).toMatchObject({ mergedAll: 19, mergedSafe: 0 });
+    expect((await cleanup()).counts).toMatchObject({ mergedAll: 20, mergedSafe: 0 });
   });
 
   it('lists repos, keeps the topics of the chosen repo, labels other repos and sets a repo quiet', async () => {
@@ -140,7 +140,7 @@ describe('server routes over the fake engine', () => {
     const repos = (await (await app.request('/api/repos')).json()) as RepoOverview;
     expect(repos.scope).toBeNull();
     expect(repos.repos.map((entry) => [entry.repo, entry.topics])).toEqual([
-      ['acme/app', 14],
+      ['acme/app', 15],
       ['acme/python-sdk', 2],
       ['acme/desktop', 1],
       ['acme/infra', 1],

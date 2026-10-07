@@ -30,10 +30,13 @@ export type MarkLabel = 'Mark read' | 'Done for now';
  *   approved yet, not done).
  * - mark_read / mark_done: the mark button.
  * - snooze: single-PR tile only, read and still your move, as on the tile.
- * - open_on_github: the tile or the selected PR is done, or on a stack or
- *   set the selected PR has nothing to mark.
+ * - open_on_github: on a stack or set the selected PR is not done but has
+ *   nothing to mark.
+ * - none: the tile or the selected PR is done with nothing left to mark. No
+ *   ink button: Open on GitHub stays outlined, so on a dealt-with topic
+ *   "Archive now" is the one ink button on screen (2026-10-07).
  */
-export type PaneLead = 'approve' | 'mark_read' | 'mark_done' | 'snooze' | 'open_on_github';
+export type PaneLead = 'approve' | 'mark_read' | 'mark_done' | 'snooze' | 'open_on_github' | 'none';
 
 /**
  * The quieter link next to Snooze: "Review on GitHub" opens the files tab of
@@ -241,7 +244,7 @@ export function paneOffers(view: OfferView, pr: OfferPr): PaneOffers {
   if (approve && pr.primaryAction === 'approve' && !pr.isDraft) {
     lead = 'approve';
   } else if (mark === 'open' || mark === 'none') {
-    lead = 'open_on_github';
+    lead = finished ? 'none' : 'open_on_github';
   } else {
     lead = mark;
   }
