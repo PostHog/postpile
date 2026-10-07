@@ -4,6 +4,7 @@ import { deriveEvents } from './events.ts';
 import { makeComment, makeCommit, makePr, makeReview, makeThread, singleTile, viewer } from './fixtures.ts';
 import { forWhom } from './for-whom.ts';
 import { isPersonalPing, pingRule, pingTemplate } from './pings.ts';
+import { boardShape } from './pr-parts.ts';
 import { prTier } from './pr-tier.ts';
 import type { FullPr as Pr } from './types.ts';
 import { whoseTurn, type WhoseTurn } from './whose-turn.ts';
@@ -179,5 +180,32 @@ describe('addressed your changes: variants', () => {
     expect(changesAnswered(pushedDraft, viewer)).toBeNull();
     const events = deriveEvents(pushedDraft, viewer, null);
     expect(events.find((event) => event.sourceId === 'c3')?.ruleLoudness).toBe('quiet');
+  });
+});
+
+// Property counterexample (2026-10-07): a bot's PR where the viewer asked for
+// changes, and the bot then commented "@codex review". A board read leaves
+// the bot's body out, so the rule has to answer the same without it.
+describe('addressed your changes: a bot owner', () => {
+  const bot = 'renovate[bot]';
+  const botPr = makePr({
+    number: 11,
+    author: bot,
+    headOid: 'b0',
+    reviewerUsers: [],
+    reviews: [makeReview({ id: 'r-bot', author: me, state: 'CHANGES_REQUESTED', body: '', submittedAt: '2026-09-01T09:10:00.000Z', commitOid: 'b0' })],
+    commits: [makeCommit({ oid: 'b0', author: bot, committedAt: '2026-09-01T09:00:00.000Z' })],
+    threads: [],
+    comments: [makeComment({ id: 'cm-bot', author: bot, body: '@codex review', createdAt: '2026-09-01T09:20:00.000Z' })],
+  });
+
+  it('counts the bot’s own comment as its reply, with or without the body', () => {
+    const board = boardShape(botPr);
+    expect(board.comments[0]?.body).toBeNull();
+    const answer = { pushed: false, replied: true, since: '2026-09-01T09:10:00.000Z' };
+    expect(changesAnswered(botPr, viewer)).toEqual(answer);
+    expect(changesAnswered(board, viewer)).toEqual(answer);
+    expect(forWhom('CM', botPr, viewer)).toEqual({ kind: 'you' });
+    expect(forWhom('CM', board, viewer)).toEqual({ kind: 'you' });
   });
 });

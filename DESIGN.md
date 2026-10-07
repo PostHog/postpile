@@ -3428,7 +3428,12 @@ left the user-facing rules alone, so the viewer's own "@codex review" or
 person turned "you already replied" and dropped off the list. A person
 talking to a bot (core `talksToBot`: a bot command or a reply in a bot-only
 thread) and a carrier review now never count as speaking, reviewing or
-answering:
+answering. Only a person talks to a bot: a bot's own comment is never
+`talksToBot`, whatever its body says (2026-10-07). A board read leaves bot
+bodies out ("The board diet"), so reading one there would answer
+differently on the board than on the full PR. A bot owner's "@codex review"
+after your changes request is its reply, like any other comment it posts.
+Where it applies:
 
 - Touch (`touchKindOf`): a chatter event is no touch, so `lastTouch`,
   `READING_TOUCH_KINDS`, `eventsSeenByTouch`, "New since you looked", the

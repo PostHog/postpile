@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { humanDiscussion, humanReviews, isBotCommand, isBotTalk } from './bot-talk.ts';
+import { humanDiscussion, humanReviews, isBotCommand, isBotTalk, talksToBot } from './bot-talk.ts';
 import { memoryRole } from './event-roles.ts';
 import { deriveEvents } from './events.ts';
 import { at, makeComment, makePr, makeReview, makeThread, viewer } from './fixtures.ts';
@@ -36,6 +36,17 @@ describe('isBotCommand', () => {
 
   it('is never a comment without its body', () => {
     expect(isBotCommand({ body: null as unknown as string })).toBe(false);
+  });
+});
+
+describe('talksToBot', () => {
+  // A board read leaves bot bodies out: reading one would answer differently there.
+  it('is a person’s command, never a bot’s own comment', () => {
+    const person = makeComment({ id: 'p1', author: 'alice', body: '@codex review', createdAt: at(1) });
+    const bot = makeComment({ id: 'b1', author: 'renovate[bot]', body: '@codex review', createdAt: at(2) });
+    const pr = makePr({ comments: [person, bot] });
+    expect(talksToBot(person, pr)).toBe(true);
+    expect(talksToBot(bot, pr)).toBe(false);
   });
 });
 
