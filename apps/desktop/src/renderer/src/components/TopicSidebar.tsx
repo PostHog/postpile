@@ -1,10 +1,12 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { TopicListItem, TopicPerson, TopicSection, ViewerView } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { useTools } from '../api/tools.ts';
 import { useFinishedTopics } from '../api/topics.ts';
 import { statusLabel } from '../lib/memory.ts';
 import { bucketItems, dealtItems, dealtKey, sidebarBuckets, topicRowId, unreadLook, type QueueFilter } from '../lib/queues.ts';
+import { ARCHIVE_FLIGHT_MS, flyToArchive } from '../lib/archive-flight.ts';
+import { reducedMotion } from '../lib/motion.ts';
 import { useFlip } from '../lib/use-flip.ts';
 import { useHeldPlace } from '../lib/use-held-place.ts';
 import { type SearchFilter } from '../lib/search.ts';
@@ -12,6 +14,7 @@ import { stateMix } from '../lib/pr-mix.ts';
 import { sectionLook } from '../lib/sections.ts';
 import {
   allDealtNote,
+  archivedRow,
   areaFolds,
   dealtLineLabel,
   foldedSummary,
@@ -48,24 +51,46 @@ function topicSnippet(item: TopicListItem): string {
   return `${item.openTiles} open · ${item.totalTiles} tiles`;
 }
 
+/** What the unread bubble shows: its look and count, null when all is read. */
+interface Bubble {
+  look: 'urgent' | 'calm';
+  count: number;
+}
+
+function bubbleOf(item: TopicListItem): Bubble | null {
+  const look = unreadLook(item);
+  return look === null ? null : { look, count: item.unreadTiles };
+}
+
 /**
  * The row's one number: unread tiles, in a small bubble (the dots stay per PR). Coral while an unread
  * tile is still open (the urgency rule), grey when every unread tile is merged
  * or closed. Nothing when all is read.
  */
 function UnreadBubble(props: { item: TopicListItem }) {
-  const look = unreadLook(props.item);
-  const count = props.item.unreadTiles;
-  if (look === null) {
+  const now = bubbleOf(props.item);
+  // The bubble that was there when the topic turned read, kept while it shrinks out with the dot (2026-10-07).
+  const [last, setLast] = useState(now);
+  const [leaving, setLeaving] = useState<Bubble | null>(null);
+  if (now?.count !== last?.count || now?.look !== last?.look) {
+    // The documented "adjust state while rendering" pattern: React re-renders right away with it.
+    setLast(now);
+    setLeaving(now === null && last !== null && !reducedMotion() ? last : null);
+  }
+  const shown = now ?? leaving;
+  if (shown === null) {
     return null;
   }
+  const { look, count } = shown;
   const label = look === 'urgent' ? `${count} unread ${count === 1 ? 'tile' : 'tiles'}` : `${count} unread, merged or closed since you looked`;
   const tint = look === 'urgent' ? 'bg-unread text-on-ink' : 'bg-chip text-muted';
   return (
     <span
-      title={label}
-      aria-label={label}
-      className={`flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full px-[5px] font-mono text-[10px] leading-none font-semibold tabular-nums shadow-bubble ${tint}`}
+      title={now === null ? undefined : label}
+      aria-label={now === null ? undefined : label}
+      aria-hidden={now === null ? true : undefined}
+      onAnimationEnd={() => setLeaving(null)}
+      className={`flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full px-[5px] font-mono text-[10px] leading-none font-semibold tabular-nums shadow-bubble ${tint} ${now === null ? 'animate-bubble-out' : ''}`}
     >
       {count}
     </span>
@@ -73,7 +98,7 @@ function UnreadBubble(props: { item: TopicListItem }) {
 }
 
 /** Quiet rows (`data-quiet` on the row button): the faces and the PR state icon step back. */
-const QUIET_ICONS = 'group-data-quiet:opacity-45';
+const QUIET_ICONS = 'transition-opacity duration-320 ease-out group-data-quiet:opacity-45 motion-reduce:transition-none';
 
 /** The row's background decides the face rings: they cut the overlaps in the row's own color. */
 type RowTone = 'active' | 'unread' | 'read';
@@ -205,14 +230,15 @@ function TopicItem(props: { item: TopicListItem; active: boolean; searching: boo
       onClick={props.onSelect}
       aria-current={props.active ? 'true' : undefined}
       data-quiet={dim ? '' : undefined}
-      className={`group flex min-w-0 flex-col gap-[3px] rounded-row px-2 pt-1.5 pb-[7px] text-left ${rows[tone]}`}
+      // Colors ease (320ms) when the row turns read or quiet, or stops being the selected one.
+      className={`group flex min-w-0 flex-col gap-[3px] rounded-row px-2 pt-1.5 pb-[7px] text-left transition-[background-color,box-shadow] duration-320 ease-out motion-reduce:transition-none ${rows[tone]}`}
     >
       <span className="flex w-full min-w-0 items-center">
         <LeadSlot>
           <UnreadDot shown={item.unreadPrs > 0} dotKey={`topic:${item.topic.id}`} />
         </LeadSlot>
         <span className="flex min-w-0 flex-1 items-center gap-[7px]">
-          <span className={`truncate text-[12.5px] leading-[normal] tracking-[-0.006em] ${name}`}>{item.topic.name}</span>
+          <span className={`truncate text-[12.5px] leading-[normal] tracking-[-0.006em] transition-[color,font-weight] duration-320 ease-out motion-reduce:transition-none ${name}`}>{item.topic.name}</span>
           <span className="ml-auto" />
           <FaceStack people={item.people} tone={tone} />
           <UnreadBubble item={item} />
@@ -222,7 +248,10 @@ function TopicItem(props: { item: TopicListItem; active: boolean; searching: boo
       <span className="flex w-full min-w-0 items-center">
         <LeadSlot />
         <span className="flex min-w-0 flex-1 items-center gap-1.5">
-          <span title={topicSnippet(item)} className={`min-w-0 flex-1 truncate text-[11px] leading-[1.4] ${dim ? 'text-faint opacity-80' : 'text-muted'}`}>
+          <span
+            title={topicSnippet(item)}
+            className={`min-w-0 flex-1 truncate text-[11px] leading-[1.4] transition-[color,opacity] duration-320 ease-out motion-reduce:transition-none ${dim ? 'text-faint opacity-80' : 'text-muted'}`}
+          >
             {topicSnippet(item)}
           </span>
           <YourMoveChip moves={item.yourMoves} />
@@ -267,7 +296,7 @@ function FoldedSummary(props: { open: boolean; text: string | undefined }) {
 function GroupHeader(props: { label: string; open: boolean; onToggle: () => void; small?: boolean; flipKey: string; summary?: string }) {
   const size = props.small ? 'text-[10.5px] font-medium text-hint' : 'text-[11px] font-semibold tracking-[0.04em] text-hint';
   return (
-    <button type="button" data-flip-key={props.flipKey} aria-expanded={props.open} onClick={props.onToggle} className="flex items-center px-2 py-1 text-left">
+    <button type="button" data-flip-key={props.flipKey} aria-expanded={props.open} onClick={props.onToggle} className="flex items-center rounded-row px-2 py-1 text-left">
       <FoldChevron open={props.open} />
       <span className={size}>{props.label}</span>
       <FoldedSummary open={props.open} text={props.summary} />
@@ -404,6 +433,55 @@ interface TopicSidebarProps {
   viewer: ViewerView | undefined;
 }
 
+/**
+ * The row of the topic that just went to the Archive: hidden (a copy of it
+ * flies into the Archive fold, `flyToArchive`) while its space closes
+ * (`.topic-row-leaving` in app.css), until the sidebar drops it.
+ */
+function LeavingRow(props: { children: ReactNode }) {
+  return (
+    <div aria-hidden="true" inert className="topic-row-leaving">
+      <div className="invisible min-h-0 overflow-hidden">{props.children}</div>
+    </div>
+  );
+}
+
+/**
+ * The open topic's row right after it left the list for the Archive
+ * (`archivedRow`), kept for ARCHIVE_FLIGHT_MS so it can fly there and its
+ * space can close; null otherwise, and always with reduced motion.
+ */
+/** When `.topic-row-leaving` has closed the row's space (120ms delay + 280ms), a little after. */
+const LEAVING_CLOSE_MS = 440;
+
+function useLeavingRow(shown: TopicListItem[], activeTopicId: string | null, archivedIds: Set<string>): TopicListItem | null {
+  const [before, setBefore] = useState(shown);
+  const [leaving, setLeaving] = useState<TopicListItem | null>(null);
+  if (before !== shown) {
+    // The documented "adjust state while rendering" pattern: React re-renders right away with it.
+    setBefore(shown);
+    const row = archivedRow(before, shown, activeTopicId, archivedIds);
+    if (row !== null && !reducedMotion()) {
+      setLeaving(row);
+    }
+  }
+  // One render once its space has closed, so useFlip measures the list as it is now; without it, dropping the
+  // row later compared against places from before the close and slid the whole list.
+  const [, setClosed] = useState(false);
+  useLayoutEffect(() => {
+    if (leaving === null) {
+      return;
+    }
+    const closed = window.setTimeout(() => setClosed((value) => !value), LEAVING_CLOSE_MS);
+    const dropped = window.setTimeout(() => setLeaving(null), ARCHIVE_FLIGHT_MS);
+    return () => {
+      window.clearTimeout(closed);
+      window.clearTimeout(dropped);
+    };
+  }, [leaving]);
+  return leaving;
+}
+
 /** Plain lines in the list (filter, hidden topics, errors) start on the topic names' x: a row's 8px padding plus its 14px leading slot. */
 const TEXT_COLUMN = 'pr-2.5 pl-[22px]';
 
@@ -479,25 +557,38 @@ export function TopicSidebar(props: TopicSidebarProps) {
   useFlip(navRef, { landed: false });
   const { topicMoves } = useActions();
   const holdKey = props.selectedTileId === null ? null : `${props.selectedTileId}#${topicMoves}`;
+  // A topic that just went to the Archive stays a moment in its old place, hidden, while a copy flies there.
+  const archivedIds = new Set((useFinishedTopics().data ?? []).map((topic) => topic.id));
+  const leaving = useLeavingRow(props.shown, props.activeTopicId, archivedIds);
+  const listed = leaving !== null && !props.shown.some((item) => item.topic.id === leaving.topic.id) ? [...props.shown, leaving] : props.shown;
+  useLayoutEffect(() => {
+    const row = leaving === null ? null : navRef.current?.querySelector<HTMLElement>(`[data-flip-key="topic:${leaving.topic.id}"]`);
+    if (row) {
+      flyToArchive(row, navRef.current?.querySelector<HTMLElement>('[data-flip-key="group:finished"]') ?? null);
+    }
+  }, [leaving]);
   // Dealt-with topics leave the owner sections, except while the search or a queue filter narrows: filters are for finding things.
-  const buckets = useHeldPlace(holdKey, props.activeTopicId, sidebarBuckets(props.shown, !narrowed), topicRowId);
+  const buckets = useHeldPlace(holdKey, props.activeTopicId, sidebarBuckets(listed, !narrowed), topicRowId);
   const otherWork = bucketItems(buckets, 'other_work');
   const otherWorkDealt = dealtItems(buckets, 'other_work');
   const otherTopics = otherTopicsGroups(bucketItems(buckets, 'other_topics'));
   // `forcedOpen`: while the search filters, no match hides in a fold.
   const isOpen = (key: FoldKey, openByDefault: boolean, forcedOpen: boolean) => forcedOpen || (foldChoices.get(key) ?? openByDefault);
   const toggle = (key: FoldKey, open: boolean) => setFoldChoices(new Map(foldChoices).set(key, !open));
-  const topicItem = (item: TopicListItem, group: string, notSorted = false) => (
-    <TopicItem
-      key={item.topic.id}
-      item={item}
-      flipGroup={group}
-      notSorted={notSorted}
-      searching={searching}
-      active={item.topic.id === props.activeTopicId}
-      onSelect={() => props.onSelect(item.topic.id)}
-    />
-  );
+  const topicItem = (item: TopicListItem, group: string, notSorted = false) => {
+    const row = (
+      <TopicItem
+        key={item.topic.id}
+        item={item}
+        flipGroup={group}
+        notSorted={notSorted}
+        searching={searching}
+        active={item.topic.id === props.activeTopicId}
+        onSelect={() => props.onSelect(item.topic.id)}
+      />
+    );
+    return item.topic.id === leaving?.topic.id ? <LeavingRow key={item.topic.id}>{row}</LeavingRow> : row;
+  };
   // "+ 3 dealt with" and, open, the dealt-with rows under it; folded, only the selected topic stays.
   const dealtFooter = (section: TopicSection, dealt: TopicListItem[]) => {
     if (dealt.length === 0) {
@@ -605,7 +696,8 @@ export function TopicSidebar(props: TopicSidebarProps) {
         a sidebar-colored fade on the sidebar color shows nothing.
       */}
       <div aria-hidden="true" className="pointer-events-none sticky bottom-0 -ml-2.5 mt-auto -mb-[70px] h-14 shrink-0 bg-linear-to-b from-transparent to-sidebar" />
-      <div className="relative z-[1] flex flex-col gap-0.5 border-t border-hairline-strong pt-2.5">
+      {/* Keyed for useFlip: when the list above it moves, it slides along instead of jumping under the sliding rows. */}
+      <div data-flip-key="sidebar-footer" className="relative z-[1] flex flex-col gap-0.5 border-t border-hairline-strong pt-2.5">
         <InboxCleanupLine />
         <button
           type="button"

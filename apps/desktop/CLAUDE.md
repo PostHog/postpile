@@ -296,6 +296,18 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   `countdown` from `dotCountdown` (`lib/opened-read.ts`) and drains as a
   pie over the dwell (`.unread-pie` in `app.css`, 2026-10-06). Respect `prefers-reduced-motion`
   (`motion-reduce:` or the hook's check) in any new motion.
+- The settle after a read on the held tile (2026-10-07, DESIGN.md "Marked
+  when the dwell ends" › The settle after the read) is plain CSS with small
+  flags: `useSettling` (`lib/use-settling.ts`) is true for a moment after a
+  value turned on while mounted, never on first render; `Fold` opens and
+  closes content by height (one-row grid, `1fr` ↔ `0fr`, spacing inside the
+  content, closing keeps the last open content); `Crossfade` swaps content
+  in one grid cell with enter / leave keyframes from `app.css`. Group
+  headings read `headingGroup` (`lib/queues.ts`). "Archive now" flies the
+  sidebar row with `flyToArchive` (`lib/archive-flight.ts`) while
+  `LeavingRow` closes its space. Reduced motion: `reducedMotion()` in
+  `lib/motion.ts`; everything lands at once. Don't grow these into a
+  generic animation layer.
 - A missing glance is worded from `PrSummary.glanceState` /
   `PrDetail.glanceState` through `glanceStateText` (`lib/glance.ts`),
   never "the next sync picks it up". Only a failed glance gets a button:

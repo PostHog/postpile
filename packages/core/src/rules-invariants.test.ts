@@ -82,7 +82,7 @@ function paneOf(view: TileView, key: PrKey): PaneOffers {
   return pane;
 }
 
-const ONLY_OPEN = { lead: 'open_on_github', approve: false, ask: false, markLabel: null, removeTeams: [] };
+const ONLY_OPEN = { lead: 'none', approve: false, ask: false, markLabel: null, removeTeams: [] };
 
 /** ada's open PR the viewer marked done earlier, with nothing asked of them. */
 const handledPr = makePr({ number: 1, author: 'ada' });

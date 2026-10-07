@@ -11,6 +11,7 @@ import {
   sidebarBuckets,
   topicRowId,
   gridGroups,
+  headingGroup,
   tilesInTierOrder,
   unreadLook,
   visibleQueueFilters,
@@ -283,6 +284,20 @@ describe('gridGroups', () => {
       ['open', ['open', 'snoozed']],
       ['dealt_with', []],
     ]);
+  });
+});
+
+describe('headingGroup', () => {
+  it('names the group its tiles left once none is in it any more: Unread becomes Dealt with when the held tile is read', () => {
+    expect(headingGroup('unread', ['dealt_with'])).toBe('dealt_with');
+    expect(headingGroup('unread', ['open'])).toBe('open');
+    expect(headingGroup('open', ['dealt_with'])).toBe('dealt_with');
+  });
+
+  it('stays while any tile under it is still in the group, when the others disagree, or with no tiles', () => {
+    expect(headingGroup('unread', ['unread', 'dealt_with'])).toBe('unread');
+    expect(headingGroup('unread', ['open', 'dealt_with'])).toBe('unread');
+    expect(headingGroup('unread', [])).toBe('unread');
   });
 });
 

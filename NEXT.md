@@ -1620,6 +1620,16 @@ the app meanwhile.
 
 ## Decided
 
+- **A topic settles in steps once its last read lands; the dwell stays**
+  (2026-10-07, owner, from a recording and a playable mock; DESIGN.md
+  "Marked when the dwell ends" › The settle after the read, "The Archive"):
+  the dwell stays exactly as it is everywhere, also when the only news is a
+  merge (skipping it for merged-only news was offered and declined). After
+  it, coral leaves together, the strip folds, "Unread" over the held tile
+  turns into "Dealt with" in place, the footer swaps, and the Archive box
+  grows in with "Archive now" rising last. On a done PR "Open on GitHub"
+  stays outlined, so "Archive now" is the one ink button. "Archive now"
+  flies the sidebar row into the Archive fold; the Archive gets no count.
 - **Review-note composers draft on open; an approve note is "Looks good"
   plus at most one point** (2026-10-06, owner; DESIGN.md "The PR pane" ›
   One composer and "Review note drafts"): Approve with a note and Comment

@@ -9,11 +9,14 @@ import { stackQueueWord } from '../lib/pr.ts';
 import { stackPlaces } from '../lib/stacks.ts';
 import { kindParts, leadPr, sameForWhom, tileForYou, tileUpdatedAt } from '../lib/tiles.ts';
 import { useNow } from '../lib/use-now.ts';
+import { useSettling } from '../lib/use-settling.ts';
 import { personTitle } from '../lib/why.ts';
 import { AgentApproveButton } from './AgentActions.tsx';
 import { tileApproveLabel } from '../lib/agent-actions.ts';
 import { Avatar } from './Avatar.tsx';
 import { Button, buttonClasses, JoinedButtons } from './Button.tsx';
+import { Crossfade } from './Crossfade.tsx';
+import { Fold } from './Fold.tsx';
 import { ExternalIcon, KindIcon } from './icons.tsx';
 import { ForWhomChip, PendingWritePill, RepoLabel, VerdictPill } from './pills.tsx';
 import { PrRow } from './PrRow.tsx';
@@ -169,6 +172,8 @@ export function Tile(props: TileProps) {
   const unread = view.group === 'unread';
   // Core's Draft rule (`TileView.draft`), the same one the topic's draft icon uses.
   const draft = view.draft;
+  // The read just landed on this tile while it was on screen (the held tile): the staged settle runs.
+  const settling = useSettling(!unread);
   // Unread: bold, full ink. Read: regular weight, a notch quieter (the your-move footer stays the reminder). Done and drafts: muted.
   let titleLook = unread ? 'font-semibold text-ink' : 'font-normal text-ink-2';
   if (props.selected && !unread) {
@@ -177,6 +182,8 @@ export function Tile(props: TileProps) {
   if (done || draft) {
     titleLook = 'font-medium text-muted';
   }
+  // Settling, the title eases to its read colour after the strip starts folding (+90ms); otherwise it changes at once.
+  const titleMotion = settling ? 'transition-[color,font-weight] delay-90 duration-320 ease-out' : '';
   const lead = leadPr(view);
   // The pill shows the worst glance among the open tracked PRs, as core picks it (`TileView.verdict`).
   const verdict = view.verdict;
@@ -250,7 +257,10 @@ export function Tile(props: TileProps) {
           )}
         </span>
       )}
-      {unread && <UnreadStrip view={view} />}
+      {/* Folds up once the read lands (+90ms, 280ms); while it folds it still says what it said, the NEW pill fading first. */}
+      <Fold open={unread} className="delay-90 duration-280 ease-[cubic-bezier(.4,0,.2,1)]">
+        <UnreadStrip view={view} />
+      </Fold>
       {!unread && <UnseenMergeStrip view={view} />}
       <div className="flex min-h-0 flex-1 flex-col gap-2 pt-3 pr-3.5 pb-[13px] pl-[15px]">
         <div className="flex flex-col gap-2">
@@ -294,7 +304,7 @@ export function Tile(props: TileProps) {
               </>
             )}
           </div>
-          <h2 className={`text-[14.5px] leading-[1.375] tracking-[-0.012em] text-balance ${titleLook}`}>
+          <h2 className={`text-[14.5px] leading-[1.375] tracking-[-0.012em] text-balance ${titleLook} ${titleMotion}`}>
             <button type="button" aria-pressed={props.selected} onClick={selectTile} className="rounded-[3px] text-left">
               {tile.title}
             </button>
@@ -316,7 +326,9 @@ export function Tile(props: TileProps) {
             <AgentApproveButton offer={approve} label={approve ? tileApproveLabel(approve, tile.kind) : ''} busyKey={`approveTile:${tile.id}`} from="agent_tile" />
           </div>
         </div>
-        <JoinedButtons look={yourMove ? 'move' : 'secondary'} className="ml-auto">
+        {/* Settling, Mark read · Snooze give way to Open at +240ms with a small slide. */}
+        <Crossfade swapKey={footerAction} animate={settling} enterClass="animate-footer-in" leaveClass="animate-footer-out" className="ml-auto justify-items-end">
+        <JoinedButtons look={yourMove ? 'move' : 'secondary'}>
           {(footerAction === 'mark_read' || footerAction === 'mark_done') && (
             <Button
               variant="joined"
@@ -355,6 +367,7 @@ export function Tile(props: TileProps) {
           )}
           <TileMenu view={view} topics={props.topics} prKey={menuPrKey} variant="joined" />
         </JoinedButtons>
+        </Crossfade>
       </div>
     </article>
   );

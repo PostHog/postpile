@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Topic, TopicListItem, TopicPlacement } from '@postpile/core';
 import { bucketItems, dealtItems, sidebarBuckets } from './queues.ts';
-import { allDealtNote, areaFolds, dealtLineLabel, foldedSummary, isNotSorted, otherTopicsGroups, otherWorkStartsOpen, rowsWhileFolded, startsOpen } from './sidebar.ts';
+import { allDealtNote, archivedRow, areaFolds, dealtLineLabel, foldedSummary, isNotSorted, otherTopicsGroups, otherWorkStartsOpen, rowsWhileFolded, startsOpen } from './sidebar.ts';
 
 function topic(id: string, area: string | null): Topic {
   const at = '2026-09-27T00:00:00.000Z';
@@ -122,5 +122,21 @@ describe('dealt-with topics', () => {
     expect(otherWorkStartsOpen([], dealt, null)).toBe(false);
     expect(otherWorkStartsOpen([item('news', { unread: 1 })], dealt, null)).toBe(true);
     expect(otherWorkStartsOpen([], dealt, 'mine-done')).toBe(true);
+  });
+});
+
+describe('archivedRow', () => {
+  const listed = [item('docs'), item('ci')];
+
+  it('is the open topic as it was listed when it left the list for the Archive', () => {
+    expect(archivedRow(listed, [item('ci')], 'docs', new Set(['docs']))?.topic.id).toBe('docs');
+  });
+
+  it('is null for another topic, a topic still listed, one not in the Archive, or nothing open', () => {
+    expect(archivedRow(listed, [item('docs')], 'docs', new Set(['ci']))).toBeNull();
+    expect(archivedRow(listed, listed, 'docs', new Set(['docs']))).toBeNull();
+    expect(archivedRow(listed, [item('ci')], 'docs', new Set())).toBeNull();
+    expect(archivedRow(listed, [item('ci')], null, new Set(['docs']))).toBeNull();
+    expect(archivedRow([item('ci')], [item('ci')], 'docs', new Set(['docs']))).toBeNull();
   });
 });
