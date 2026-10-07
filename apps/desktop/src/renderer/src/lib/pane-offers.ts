@@ -3,7 +3,7 @@ import type { PaneOffers, PrKey, TileView } from '@postpile/core';
 /** Only Open, for a PR the tile has no row for (it left the tile since the pane opened). */
 const ONLY_OPEN: PaneOffers = {
   scope: 'tile',
-  lead: 'open_on_github',
+  lead: 'none',
   approve: false,
   ask: false,
   markLabel: null,

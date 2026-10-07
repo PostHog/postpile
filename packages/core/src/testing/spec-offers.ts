@@ -117,7 +117,8 @@ export interface ExpectedPane {
  * offers no Approve, Ask or Remove team; with its news seen and its thread
  * read nothing to mark either. Ask needs an owner who is a person and not
  * the viewer. Approve leads on someone else's open, not yet approved,
- * non-draft PR; else the mark button; else Open on GitHub.
+ * non-draft PR; else the mark button; else Open on GitHub, which stays
+ * outlined (lead none) on a done PR.
  */
 export function expectedPane(view: TileView, row: PrSummary, pr: Pr, viewer: Viewer): ExpectedPane {
   const scope = view.tile.members.length <= 1 ? 'tile' : 'pr';
@@ -132,7 +133,7 @@ export function expectedPane(view: TileView, row: PrSummary, pr: Pr, viewer: Vie
   if (approve && primary === 'approve' && !row.isDraft) {
     lead = 'approve';
   } else if (mark === 'open' || mark === 'none') {
-    lead = 'open_on_github';
+    lead = finished ? 'none' : 'open_on_github';
   } else {
     lead = mark;
   }

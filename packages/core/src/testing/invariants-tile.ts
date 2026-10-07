@@ -360,7 +360,7 @@ export const donePrIsNeverYourMove: Invariant = {
 };
 
 function onlyOpen(pane: PaneOffers): boolean {
-  return pane.lead === 'open_on_github' && !pane.approve && !pane.ask && pane.markLabel === null && pane.removeTeams.length === 0;
+  return pane.lead === 'none' && !pane.approve && !pane.ask && pane.markLabel === null && pane.removeTeams.length === 0;
 }
 
 export const doneTileOffersOnlyOpen: Invariant = {
@@ -406,7 +406,7 @@ export const snoozedAllDoneLeadsWithOpen: Invariant = {
       }
       ensure(view.offers.footer === 'open' && view.offers.markLabel === null && view.offers.snooze, `${view.tile.id}: footer ${view.offers.footer}`);
       for (const row of rows) {
-        ensure(view.offers.pane[row.key]!.lead === 'open_on_github', `${row.key}: pane leads with ${view.offers.pane[row.key]!.lead}`);
+        ensure(view.offers.pane[row.key]!.lead === 'none', `${row.key}: pane leads with ${view.offers.pane[row.key]!.lead}`);
       }
     }
   },

@@ -42,8 +42,12 @@ const recentDots = new RecentDots();
  * waits out the dwell the dot is a pie that drains clockwise over
  * OPENED_READ_DELAY_MS (`.unread-pie` in app.css), and it stays empty until
  * the dot leaves.
+ *
+ * `halo` false drops the soft coral ring around the dot, for the plain dots
+ * on the Unread group heading and in the pane's Activity. `label` names it
+ * for screen readers and the tooltip ("Unseen" on an Activity line).
  */
-export function UnreadDot(props: { shown: boolean; dotKey: string; countdown?: DotCountdown; className?: string }) {
+export function UnreadDot(props: { shown: boolean; dotKey: string; countdown?: DotCountdown; className?: string; halo?: boolean; label?: string }) {
   const { shown, dotKey } = props;
   const [rippling, setRippling] = useState(false);
   // A shown dot notes when it hides or unmounts; a hidden one ripples when its key was shown a moment ago.
@@ -58,19 +62,20 @@ export function UnreadDot(props: { shown: boolean; dotKey: string; countdown?: D
     }
   }, [shown, dotKey]);
   const look = props.shown ? 'scale-100' : 'scale-0';
+  const label = props.label ?? 'Unread';
   return (
     <span
       role={props.shown ? 'img' : undefined}
-      aria-label={props.shown ? 'Unread' : undefined}
+      aria-label={props.shown ? label : undefined}
       aria-hidden={props.shown ? undefined : true}
-      title={props.shown ? 'Unread' : undefined}
+      title={props.shown ? label : undefined}
       className={`grid size-1.5 shrink-0 ${props.className ?? ''}`}
     >
       <span
         data-countdown={props.countdown ?? undefined}
         // The dwell's length is a render-time value from opened-read.ts; the transition in app.css reads it.
         style={{ '--dwell': `${OPENED_READ_DELAY_MS}ms` } as CSSProperties}
-        className={`unread-pie col-start-1 row-start-1 rounded-full ring-2 ring-unread-soft transition-[scale] duration-275 ease-in motion-reduce:transition-none ${look}`}
+        className={`unread-pie col-start-1 row-start-1 rounded-full ${props.halo === false ? '' : 'ring-2 ring-unread-soft'} transition-[scale] duration-275 ease-in motion-reduce:transition-none ${look}`}
       />
       {rippling && !shown && (
         <span

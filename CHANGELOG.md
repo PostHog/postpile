@@ -2,6 +2,12 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## 0.26.0 (unreleased)
+
+### Changed
+
+- Reading the last news in a topic now settles step by step instead of everything changing at once: the unread marks leave together, the news strip folds away, the "Unread" label turns into "Dealt with", and the "Everything here is dealt with" box grows in with "Archive now" as the one dark button. "Archive now" shows the topic moving into the Archive in the sidebar instead of the row just disappearing.
+
 ## 0.25.0 (2026-10-06)
 
 ### Added

@@ -57,7 +57,8 @@ export function UnreadStrip(props: { view: TileView }) {
       {props.view.newBadge && (
         <span
           aria-label="New since you looked"
-          className="ml-auto flex h-4 shrink-0 items-center rounded-full bg-unread px-1.5 text-[9.5px] font-bold tracking-[0.04em] text-on-ink"
+          // Fades as soon as the strip starts to fold away (`Fold`'s data-closed), before the strip moves.
+          className="ml-auto flex h-4 shrink-0 items-center rounded-full bg-unread px-1.5 text-[9.5px] font-bold tracking-[0.04em] text-on-ink transition-[opacity,scale] duration-160 ease-out group-data-closed/fold:scale-85 group-data-closed/fold:opacity-0 motion-reduce:transition-none"
         >
           NEW
         </span>

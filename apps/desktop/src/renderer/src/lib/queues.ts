@@ -1,4 +1,4 @@
-import type { PrSummary, PrTierOrder, TileGroupOrder, TileView, TopicListItem, TopicSection, TopicSectionOrder } from '@postpile/core';
+import type { PrSummary, PrTierOrder, TileGroup, TileGroupOrder, TileView, TopicListItem, TopicSection, TopicSectionOrder } from '@postpile/core';
 import type { Bucket } from './hold-place.ts';
 
 /**
@@ -193,6 +193,22 @@ export function gridGroups(views: TileView[]): Bucket<TileView>[] {
   const awake = yoursFirst.filter((view) => view.state.kind !== 'snoozed');
   const snoozed = yoursFirst.filter((view) => view.state.kind === 'snoozed');
   return GROUP_ORDER.map((group) => ({ key: group, items: [...awake, ...snoozed].filter((view) => view.group === group) }));
+}
+
+/**
+ * The group a tile group's heading names. The selected tile keeps its place
+ * while its group changes (`useHeldPlace`), so a heading can sit over tiles
+ * that left its group: once none of them is in it any more and they all
+ * share another group, the heading names that one. "Unread 1" over the tile
+ * the read just landed on becomes "Dealt with 1" in place (2026-10-07), so
+ * no coral claims an unread that is gone. Mixed or empty: the bucket's own.
+ */
+export function headingGroup(bucket: TileGroup, groups: TileGroup[]): TileGroup {
+  const first = groups[0];
+  if (first === undefined || groups.includes(bucket)) {
+    return bucket;
+  }
+  return groups.every((group) => group === first) ? first : bucket;
 }
 
 /**
