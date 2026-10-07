@@ -240,4 +240,32 @@ describe('topic Mark read', () => {
     expect(markRead?.coveredTileIds).toEqual([quiet.tile.id]);
     expect(markRead?.skipped).toEqual([{ tileId: asks.tile.id, reason: 'asks_for_you' }]);
   });
+
+  // A merged or closed PR never gets a glance, so it must not leave the pill greyed as rechecking.
+  it('does not wait for a glance on a merged or closed PR', () => {
+    const merged = tileView({ pr: makePr({ number: 1, author: 'ada', state: 'MERGED' }) }, UNREAD);
+    const closed = tileView({ pr: makePr({ number: 2, author: 'ada', state: 'CLOSED' }) }, UNREAD);
+    expect(merged.agent.markRead).toMatchObject({ state: 'active', reason: null });
+    expect(closed.agent.markRead).toMatchObject({ state: 'active', reason: null });
+    expect(topicAgentOffers([merged, closed]).markRead).toMatchObject({ state: 'active', coveredCount: 2, totalCount: 2 });
+  });
+
+  it('still waits for the glance of an open PR', () => {
+    const open = tileView({ pr: makePr({ number: 1, author: 'ada' }) }, UNREAD);
+    expect(open.agent.markRead).toMatchObject({ state: 'greyed', reason: 'rechecking' });
+    expect(topicAgentOffers([open]).markRead).toMatchObject({ state: 'greyed', reason: 'rechecking' });
+  });
+
+  it('lets a merged PR in a tile skip the glance wait but not the open one next to it', () => {
+    const merged = makePr({ number: 1, author: 'ada', state: 'MERGED' });
+    const open = makePr({ number: 2, author: 'ada' });
+    expect(stackView([{ pr: merged }, { pr: open, verdict: 'LOOKS_SAFE', risk: 'low' }], UNREAD).agent.markRead).toMatchObject({ state: 'active' });
+    expect(stackView([{ pr: merged }, { pr: open }], UNREAD).agent.markRead).toMatchObject({ state: 'greyed', reason: 'rechecking' });
+  });
+
+  it('keeps an ask for you on the open PR next to a merged one as a block', () => {
+    const merged = makePr({ number: 1, author: 'ada', state: 'MERGED' });
+    const asks = reviewPr(2);
+    expect(stackView([{ pr: merged }, { pr: asks, verdict: 'LOOKS_SAFE', risk: 'low' }], UNREAD).agent.markRead).toMatchObject({ state: 'greyed', reason: 'asks_for_you' });
+  });
 });

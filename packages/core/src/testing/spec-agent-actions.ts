@@ -245,6 +245,9 @@ export function specMarkReadBlocks(board: PropertyBoard, key: PrKey): MarkReadBl
   if (specAsksForYou(board, key)) {
     blocks.push('asks_for_you');
   }
+  if (fullPrOf(board, key).state !== 'OPEN') {
+    return blocks;
+  }
   if (!glance.current) {
     return [...blocks, 'rechecking'];
   }

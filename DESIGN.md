@@ -5424,8 +5424,9 @@ Owner decisions (2026-09-30):
 - **Mark read skips asks.** Only actions carry ✨, never text or lines. A
   tile's Mark read is always on offer, so it stays plain: no ✨, no pill, the
   old route. Core's tile backing (the unread news holds no ask for you, and
-  every unread PR has a current glance that is not `LOOK_CLOSER`, low or
-  medium risk) only feeds the topic's "Mark N read", which covers the
+  every unread open PR has a current glance that is not `LOOK_CLOSER`, low or
+  medium risk; merged and closed PRs never get a glance, so they wait for
+  none) only feeds the topic's "Mark N read", which covers the
   unread, unsnoozed tiles whose backing is active. Tiles with an ask for you
   are skipped and stay unread. It is gone when no tile is unread; when tiles
   are unread but none qualify it shows a plain "Mark read" greyed out, with
