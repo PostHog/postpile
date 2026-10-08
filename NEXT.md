@@ -6,6 +6,13 @@ now".
 
 ## Done
 
+- Glance claim basis (2026-10-08; DESIGN.md "Batched glances" › Glance
+  claim basis): glances answer `riskBasis` and `verdictBasis` ("checked:
+  …" / "not checked: …"), the prompt forbids stating an unchecked
+  description/changes mismatch as fact, stored in `pr_glance.basis`
+  (migration 038), shown as a suffix in the MCP glance lines and as a
+  muted "not checked" tag in the app. `GLANCE_PROMPT_VERSION` g3: every
+  glance regenerates once.
 - Overlapping edits (2026-10-08; DESIGN.md "Overlapping edits"): a
   background pass reads which base-side lines open PRs edit (REST file list,
   ranges only, migration 037), and `pr_context` / `whats_on_me` say when

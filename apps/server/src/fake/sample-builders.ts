@@ -1,7 +1,7 @@
 // Small builders that keep sample-data.ts readable. Everything here fills in
 // the fields a fake does not care about with plain defaults.
 import { prKey } from '@postpile/core';
-import type { FullComment, EventKind, Glance, KeyFile, Loudness, FullPr, PrEvent, PrKey, Provenance, PrState, FullReview, ReviewDecision, ReviewState, FullReviewThread, Tile, TileKind, TileMember, TileStack, Topic, TopicKind, UserRole, Verdict } from '@postpile/core';
+import type { FullComment, EventKind, Glance, GlanceBasis, KeyFile, Loudness, FullPr, PrEvent, PrKey, Provenance, PrState, FullReview, ReviewDecision, ReviewState, FullReviewThread, Tile, TileKind, TileMember, TileStack, Topic, TopicKind, UserRole, Verdict } from '@postpile/core';
 
 export const SAMPLE_REPO = 'acme/app';
 export const SAMPLE_VIEWER = 'you';
@@ -279,6 +279,7 @@ export interface SampleGlanceInput {
   othersSaid: string;
   keyFiles?: KeyFile[];
   pullInReason?: string;
+  basis?: GlanceBasis;
 }
 
 export function sampleGlance(clock: SampleClock, number: number, input: SampleGlanceInput): Glance {
@@ -295,6 +296,7 @@ export function sampleGlance(clock: SampleClock, number: number, input: SampleGl
     inputHash: `sample-${number}`,
     model: 'sample',
     createdAt: clock.hoursAgo(0),
+    basis: input.basis ?? null,
   };
 }
 

@@ -17,6 +17,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - Agents asking PostPile (the MCP tools) now see when a full sync is running and how far it got, and `whats_on_me` says how long ago each PR was fetched, so a list read mid-sync no longer looks final.
 - `whats_on_me` and `pr_context` name bot activity ("coderabbitai updated its comment") instead of quoting bot comments full of links and badges, and prefer what a person did when there is both.
 - After a sync, PRs that wait on you get their agent glance before the others.
+- Agent glances now say which claims the agent checked against the PR's files, reviews and comments and which it only inferred, for example from the description. The MCP tools show it after the risk and for-you lines; the app marks the unchecked ones. Every glance is written again once after the update.
 
 ### Fixed
 

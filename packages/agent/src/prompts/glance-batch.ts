@@ -23,7 +23,25 @@ missing, or the verdict was misspelled. Check each entry against the shape below
 
 /** One glance entry, for the answer shapes of the glance batch and the topic digest. */
 export const GLANCE_ENTRY_SHAPE =
-  '{"prKey": "owner/repo#1", "verdict": "LOOKS_SAFE" | "LOOK_CLOSER" | "NOT_YOURS", "forYou": "...", "does": "...", "risk": "...", "othersSaid": "...", "keyFiles": [{"path": "src/app.ts", "why": "..."}]}';
+  '{"prKey": "owner/repo#1", "verdict": "LOOKS_SAFE" | "LOOK_CLOSER" | "NOT_YOURS", "forYou": "...", "does": "...", "risk": "...", "othersSaid": "...", "keyFiles": [{"path": "src/app.ts", "why": "..."}], "riskBasis": "checked: ..." | "not checked: ...", "verdictBasis": "checked: ..." | "not checked: ..."}';
+
+/**
+ * What "checked" means for riskBasis and verdictBasis (DESIGN.md "Glance
+ * claim basis"). The agent never sees the code, only the changed files
+ * list, the description, reviews and comments, so "checked" can only mean
+ * the claim follows from those. A mismatch between description and files
+ * was stated as fact on a stacked PR whose list held its parent's changes
+ * (2026-10-08): such a mismatch must be marked not checked unless it is.
+ */
+export const CLAIM_BASIS_RULE = `What you were given per PR is its description, the list of changed files with line counts,
+review states and some comments; never the code itself. A claim is "checked" only when it follows
+directly from those: a listed file, a review state, a comment. What the code does beyond file
+names, or anything taken from the description alone, is "not checked", for example
+"not checked: inferred from the description" or "not checked: files list cut off".
+The changed files can hold another PR's changes when this one is built on it: when the
+description names a PR this one is stacked on or depends on, files outside its description are
+no mismatch you checked. Never state a mismatch between the description and the changes as a
+fact unless you checked it; otherwise say it may be so and mark it not checked.`;
 
 /** What merging the PR does to the declared layer below, by that layer's state. */
 function declaredMergeLine(parent: string, state: string, shared: boolean): string {
@@ -125,6 +143,12 @@ so stay under the word limits:
 - keyFiles: up to 3 files a reviewer should open first, most important first, each as
   {"path", "why"}. Pick only from the PR's "Changed files" above and copy the path exactly;
   why is max 12 words (what to look for there). Give [] when the PR is trivial or lists no files.
+- riskBasis: how you know the risk line. "checked: " and what you checked it against, or
+  "not checked: " and why not, max 6 words after the colon.
+- verdictBasis: the same for the reason behind the verdict (what forYou and risk give as the
+  reason to look closer, or why it looks safe or is not theirs).
+
+${CLAIM_BASIS_RULE}
 
 "Approved by" marks each approver as a person or an agent (an AI review agent or other
 automation account). Both are real approvals on GitHub. Who looked is a fact you may use in the

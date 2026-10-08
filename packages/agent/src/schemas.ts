@@ -38,6 +38,13 @@ const glanceOutput = z.object({
   othersSaid: text,
   /** Paths are checked against the PR's changed files in mapGlanceAnswer. */
   keyFiles: z.array(z.object({ path: text.min(1), why: text.default('') })).default([]),
+  /**
+   * "checked: ..." or "not checked: ...", read by parseClaimBasis in
+   * mapGlanceAnswer. Never fails the glance: a missing or odd value only
+   * means no basis is shown.
+   */
+  riskBasis: z.unknown().optional(),
+  verdictBasis: z.unknown().optional(),
 });
 
 /** project: has a finish line. standing: a standard kept up with no end (core TopicKind). Missing or unknown reads as a project. */

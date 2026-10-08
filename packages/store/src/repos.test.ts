@@ -596,6 +596,31 @@ describe('GlanceRepo', () => {
     expect(store.glances.getMany([glance.prKey, 'x/y#1']).size).toBe(1);
     expect(store.glances.get('x/y#1')).toBeNull();
   });
+
+  it('keeps the claim basis, and a rewrite without one clears it', () => {
+    const glance = {
+      prKey: 'acme/app#2',
+      verdict: 'LOOK_CLOSER' as const,
+      forYou: 'The description may not cover the workflow change.',
+      does: 'Moves tests to depot',
+      risk: 'medium - runner change',
+      othersSaid: 'nobody yet',
+      keyFiles: [],
+      pullInReason: null,
+      dossierVersion: null,
+      inputHash: 'h1',
+      model: 'claude-sonnet-5-5',
+      createdAt: at(0),
+    };
+    // A glance from before g3: no basis at all.
+    store.glances.put(glance);
+    expect(store.glances.get(glance.prKey)?.basis).toBeNull();
+    const basis = { risk: { checked: true, note: 'changed files' }, verdict: { checked: false, note: 'inferred from the description' } };
+    store.glances.put({ ...glance, basis });
+    expect(store.glances.get(glance.prKey)?.basis).toEqual(basis);
+    store.glances.put({ ...glance, basis: null });
+    expect(store.glances.get(glance.prKey)?.basis).toBeNull();
+  });
 });
 
 describe('SnoozeRepo', () => {

@@ -63,6 +63,11 @@ function BoxTitle(props: { title: string; tag: string; tools?: ReactNode }) {
   );
 }
 
+/** "· for you" and "· not checked: ..." on one title line, either may be empty. */
+function joinTags(...tags: string[]): string {
+  return tags.filter((tag) => tag !== '').join(' ');
+}
+
 /** The glance's own controls on its title line, in the box's colour: they act on the glance, not on the PR. */
 const toolButton = 'text-[11px] font-medium opacity-80 hover:underline hover:opacity-100';
 
@@ -210,9 +215,11 @@ export function GlanceCard(props: GlanceCardProps) {
               tools={tools}
             />
           ) : (
-            <Box title={view.title} tag={view.tag} look={VERDICT_BOX[view.verdict]} lines={view.lines} tools={tools} />
+            <Box title={view.title} tag={joinTags(view.tag, view.unchecked)} look={VERDICT_BOX[view.verdict]} lines={view.lines} tools={tools} />
           )}
-          {!folded && view.risk && <Box title="RISK" tag={view.risk.level ? `· ${view.risk.level}` : ''} look={RISK_BOX} lines={view.risk.lines} />}
+          {!folded && view.risk && (
+            <Box title="RISK" tag={joinTags(view.risk.level ? `· ${view.risk.level}` : '', view.risk.unchecked)} look={RISK_BOX} lines={view.risk.lines} />
+          )}
           {!folded && (view.does || view.others) && (
             // Outside a box, but on the same 34 / 62 lines as the box contents.
             <div className="flex flex-col gap-2 px-3 pt-1">
