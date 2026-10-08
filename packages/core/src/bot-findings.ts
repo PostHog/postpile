@@ -110,8 +110,12 @@ function inlineFindingLine(body: string, max: number): string | null {
 /** Below this many characters a review line says too little to stand for the finding. */
 const SHORT_LINE = 40;
 
-/** Review text that only points elsewhere: "findings inline", "see the comments below". */
-const POINTS_ELSEWHERE = /\b(inline|below|see (the )?comments?)\b/i;
+/**
+ * Review text that only points elsewhere: "findings inline", "details
+ * below", "see the inline comments". Whole phrases only: a finding that
+ * just uses the word ("Inline cache invalidation is broken") stays.
+ */
+const POINTS_ELSEWHERE = /\b(findings?|comments?|details?|issues?|notes?)( are)? (inline|below)\b|\binline (findings?|comments?)\b|\bsee (the )?(inline )?comments?\b/i;
 
 /** A review body's line that says nothing of the finding itself: missing, short, or pointing at the inline comments. */
 function saysLittle(line: string | null): boolean {

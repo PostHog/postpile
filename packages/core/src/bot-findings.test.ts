@@ -80,6 +80,12 @@ describe('botFindings', () => {
       expect(botFindings(pr)).toEqual([{ by: bot, summary: 'Pin the plugin registry version.' }]);
     });
 
+    it('keeps a finding that only uses the word "inline"', () => {
+      const own = { ...review, body: 'Inline cache invalidation is broken when the plugin version changes.' };
+      const pr = makePr({ reviews: [own], comments: [inline('c1', finding)] });
+      expect(botFindings(pr)[0]!.summary).toBe('Inline cache invalidation is broken when the plugin version changes.');
+    });
+
     it('keeps a review text that says the finding itself', () => {
       const clear = { ...review, body: 'team-plugins has no write grant on acme/app, so GitHub ignores its CODEOWNERS line.' };
       const pr = makePr({ reviews: [clear], comments: [inline('c1', finding)] });

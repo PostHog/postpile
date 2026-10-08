@@ -2826,7 +2826,7 @@ review.
 Review text that only points at the inline comments (0.27.1, seen on live
 data: "Agent-driven security review - findings inline."): when the review's
 line is missing, shorter than 40 characters, or points elsewhere
-("inline", "below", "see the comments"), the finding is the first line
+("findings inline", "details below", "see the comments"; whole phrases, not the bare word), the finding is the first line
 with words of that bot's first inline comment on the same review (by
 `Comment.reviewId`; for a comment stored without one, the same bot's
 earliest inline comment at or after the review), first sentence, heading
