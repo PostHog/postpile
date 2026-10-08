@@ -228,6 +228,17 @@ export class FakeReader implements GitHubReader {
     });
   }
 
+  /** Every findPrsByNumber call, one entry per call. */
+  numberLookups: PrRef[][] = [];
+
+  async findPrsByNumber(refs: PrRef[]): Promise<(BranchPr | null)[]> {
+    this.numberLookups.push(refs);
+    return refs.map((ref) => {
+      const pr = [...this.prs.values()].find((stored) => stored.ref.repo === ref.repo && stored.ref.number === ref.number);
+      return pr && !pr.isCrossRepository ? toBranchPr(pr) : null;
+    });
+  }
+
   /** What recentActivity answers (setup sweep). */
   activity: ActivityPr[] = [];
   /** Every recentActivity call's `since`. */

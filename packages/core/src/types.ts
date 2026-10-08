@@ -612,6 +612,12 @@ export interface Stack {
   repo: string;
   /** Bottom (closest to the default branch) first. */
   prKeys: PrKey[];
+  /**
+   * Layers linked to the one below by their body ("Stacked on #12"), not by
+   * branches (DESIGN.md "Stacks declared in the body"). Missing when every
+   * link is a branch link.
+   */
+  declaredLinks?: PrKey[];
 }
 
 export type TileKind = 'single' | 'stack' | 'set';
@@ -630,6 +636,8 @@ export interface TileStack {
   id: string;
   /** Bottom (closest to the default branch) first; layer n is prKeys[n]. */
   prKeys: PrKey[];
+  /** `Stack.declaredLinks`: layers linked to the one below by their body. Missing when none. */
+  declaredLinks?: PrKey[];
 }
 
 /**

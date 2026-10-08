@@ -333,6 +333,7 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
       ],
     }),
     // lyra's two-layer stack, inside the Turbo cache set: the stack mark shows in a set too.
+    // Declared in the body: #1907 is based on master and says "Stacked on #1904".
     samplePr(clock, {
       number: 1904, title: 'Hash Turbo inputs by lockfile only', author: 'lyra', state: 'OPEN',
       size: [22, 9, 2], openedHoursAgo: 8,
@@ -341,7 +342,8 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
     samplePr(clock, {
       number: 1907, title: 'Drop the per-job Turbo cache salt', author: 'lyra', state: 'OPEN',
       size: [6, 14, 2], openedHoursAgo: 7,
-      baseRef: 'lyra/turbo-keys-1', headRef: 'lyra/turbo-keys-2', reviewerUsers: [SAMPLE_VIEWER],
+      baseRef: 'master', headRef: 'lyra/turbo-keys-2', reviewerUsers: [SAMPLE_VIEWER],
+      body: 'Stacked on #1904; the GitHub diff includes its changes. Drops the salt now that keys come from the lockfile.',
       comments: [{ id: 'issuecomment-5', author: 'lyra', body: '@you ok to drop the salt now that keys come from the lockfile?', hoursAgo: 0.8 }],
     }),
     samplePr(clock, {
@@ -993,6 +995,7 @@ function buildTiles(): Tile[] {
       'Four PRs change how Turbo caches',
       [pinged(1904, 'review_requested'), pinged(1907, 'mention'), pinged(1921, 'review_requested'), pinged(1855, 'subscribed')],
       [[1904, 1907]],
+      [1907],
     ),
     sampleTile(TOPIC.depot, 'stack', `stack:${sampleKey(1851)}`, 'rowan/depot: e2e layer waits on you', [
       // Stack layers the sync pulled in by branch: no thread, no glance, no agent call.

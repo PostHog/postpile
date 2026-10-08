@@ -1,5 +1,6 @@
 import {
   daysBefore,
+  declaredParentOf,
   deriveEvents,
   eventsSeenByTouch,
   nextWatchSince,
@@ -540,7 +541,10 @@ export class GitHubSync {
     const tracked = this.trackedPrKeys();
     const seeds = new Map<PrKey, LayerShape & { key: PrKey }>();
     const hot = Board.load(this.store, this.now().toISOString()).prs;
-    for (const pr of [...fetched, ...this.store.prs.listHeaders().filter((stored) => stored.state === 'OPEN' && hot.has(stored.key))]) {
+    // Headers carry the layer below a body declares; a fresh fetch reads it from the body.
+    const fetchedSeeds = fetched.map((pr) => ({ ...pr, declaredParent: declaredParentOf(pr) }));
+    const storedSeeds = this.store.prs.listHeaders().filter((stored) => stored.state === 'OPEN' && hot.has(stored.key));
+    for (const pr of [...fetchedSeeds, ...storedSeeds]) {
       if (tracked.has(pr.key) && !seeds.has(pr.key)) {
         seeds.set(pr.key, pr);
       }

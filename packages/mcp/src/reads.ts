@@ -20,6 +20,7 @@ import {
   type TeamMembersView,
   type RecordedSyncProgress,
   type SyncReport,
+  type TileStack,
   type TileView,
   type TopicDetail,
   type TopicListItem,
@@ -253,8 +254,22 @@ function tilesWith(topic: TopicDetail, key: PrKey): TileView[] {
   return topic.tiles.filter((view) => view.tile.members.some((member) => member.prKey === key));
 }
 
+/**
+ * "Stack" or, for a stack a PR body declares ("Stacked on #12") rather than
+ * its branches, "Stack (declared in the PR body, base is master)" for the PR
+ * that declares it and "Stack (declared in the body of acme/app#12)" for
+ * the others.
+ */
+function stackLabel(stack: TileStack, key: PrKey, baseRef: string): string {
+  const declared = stack.declaredLinks ?? [];
+  if (declared.includes(key)) {
+    return `Stack (declared in the PR body, base is ${baseRef})`;
+  }
+  return declared.length > 0 ? `Stack (declared in the body of ${declared.join(', ')})` : 'Stack';
+}
+
 /** "Stack: layer 2 of 3 (bottom first): acme/app#1851, acme/app#1902 (this PR), acme/app#1911". */
-function stackLines(tiles: TileView[], key: PrKey): string[] {
+function stackLines(tiles: TileView[], key: PrKey, baseRef: string): string[] {
   const lines: string[] = [];
   for (const view of tiles) {
     for (const stack of view.tile.stacks) {
@@ -263,7 +278,7 @@ function stackLines(tiles: TileView[], key: PrKey): string[] {
         continue;
       }
       const layers = stack.prKeys.map((k) => (k === key ? `${k} (this PR)` : k)).join(', ');
-      lines.push(`Stack: layer ${index + 1} of ${stack.prKeys.length} (bottom first): ${layers}`);
+      lines.push(`${stackLabel(stack, key, baseRef)}: layer ${index + 1} of ${stack.prKeys.length} (bottom first): ${layers}`);
     }
   }
   return [...new Set(lines)];
@@ -292,7 +307,7 @@ function prHeadLines(detail: PrDetail, tiles: TileView[], authors: Authors): str
       lines.push(view.state.muted ? 'The user muted this until someone asks them in person.' : 'The user snoozed this.');
     }
   }
-  lines.push(...stackLines(tiles, pr.key));
+  lines.push(...stackLines(tiles, pr.key, pr.baseRef));
   if (detail.viewerApproval) {
     lines.push(`You approved it on ${day(detail.viewerApproval.at)}.`);
   }

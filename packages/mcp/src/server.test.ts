@@ -84,6 +84,14 @@ describe('PostPile MCP server', () => {
     expect(reports).toEqual([['pr_context', { found: true, responseChars: text.length, error: false }]]);
   });
 
+  it('marks a stack a PR body declares on pr_context', async () => {
+    const client = await connected();
+    const declaring = fencedPart(await callText(client, 'pr_context', { pr: 'acme/app#1907' }));
+    expect(declaring).toContain('Stack (declared in the PR body, base is master): layer 2 of 2 (bottom first): acme/app#1904, acme/app#1907 (this PR)');
+    const below = fencedPart(await callText(client, 'pr_context', { pr: 'acme/app#1904' }));
+    expect(below).toContain('Stack (declared in the body of acme/app#1907): layer 1 of 2 (bottom first): acme/app#1904 (this PR), acme/app#1907');
+  });
+
   it('answers pr_context in full with the dossier and every tile', async () => {
     const client = await connected();
     const data = fencedPart(await callText(client, 'pr_context', { pr: 'acme/app#1911', detail: 'full' }));

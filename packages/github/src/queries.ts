@@ -191,6 +191,9 @@ export function branchAlias(index: number): string {
 /** Newest PRs per branch lookup, in any state: open, merged and closed layers all belong to a stack. */
 const BRANCH_PRS_PER_LOOKUP = 10;
 
+/** What a branch lookup asks of each PR: the shape the stack rules read (`BranchPr`). */
+const BRANCH_PR_FIELDS = `number state createdAt mergedAt updatedAt baseRefName headRefName isCrossRepository ${BASE_REF_CHANGES}`;
+
 /** One aliased repository lookup per branch (b0, b1, ...): the repo's default branch plus matching PRs. */
 export function buildBranchQuery(lookups: BranchLookup[]): string {
   const lines = lookups.map((lookup, index) => {
@@ -198,9 +201,17 @@ export function buildBranchQuery(lookups: BranchLookup[]): string {
     const filter = lookup.side === 'head' ? 'headRefName' : 'baseRefName';
     const prs =
       `pullRequests(${filter}: ${JSON.stringify(lookup.branch)}, first: ${BRANCH_PRS_PER_LOOKUP}, states: [OPEN, MERGED, CLOSED], ` +
-      'orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { number state createdAt mergedAt updatedAt baseRefName headRefName isCrossRepository ' +
-      `${BASE_REF_CHANGES} } }`;
+      `orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { ${BRANCH_PR_FIELDS} } }`;
     return `  ${branchAlias(index)}: repository(owner: ${JSON.stringify(owner)}, name: ${JSON.stringify(name)}) { defaultBranchRef { name } ${prs} }`;
+  });
+  return `query {\n${lines.join('\n')}\n}`;
+}
+
+/** One aliased lookup per PR (p0, p1, ...) for the branch shape alone: a layer below declared in a body. */
+export function buildBranchShapeQuery(refs: PrRef[]): string {
+  const lines = refs.map((ref, index) => {
+    const [owner, name] = ref.repo.split('/');
+    return `  ${batchAlias(index)}: repository(owner: ${JSON.stringify(owner)}, name: ${JSON.stringify(name)}) { pullRequest(number: ${ref.number}) { ${BRANCH_PR_FIELDS} } }`;
   });
   return `query {\n${lines.join('\n')}\n}`;
 }

@@ -134,6 +134,14 @@ export interface GitHubReader {
   findPrsByBranch(lookups: BranchLookup[]): Promise<BranchPr[][]>;
 
   /**
+   * The same shape as findPrsByBranch, for PRs known by number: the layer
+   * below a PR body declares ("Stacked on #12"). Answers in ref order;
+   * null for a PR the token cannot see or one from a fork.
+   * BRANCH_BATCH_SIZE PRs per query.
+   */
+  findPrsByNumber(refs: PrRef[]): Promise<(BranchPr | null)[]>;
+
+  /**
    * Setup sweep: the viewer's PRs since `since` (YYYY-MM-DD) in one GraphQL
    * request: written by them, reviewed by them, and open review requests.
    * Titles and top-level folders only, about 100 at most.

@@ -12,6 +12,14 @@ now".
   says "fetched N ago" per tile (`PrSummary.fetchedAt`); bot unread
   reasons are named, not quoted; brief `pr_context` lists no siblings in
   Unsorted; glances go to the user's-move PRs first.
+- Stacks declared in the body (2026-10-08; DESIGN.md "Stacks declared in
+  the body"): "Stacked on #N", "depends on #N" or "based on #N" in an open
+  PR's body links it to #N when no PR's branch is its base. Worked out
+  from `pr_body` on every header read, nothing stored; the walk pulls the
+  layer in by number (`findPrsByNumber`); the glance prompt says the diff
+  includes the parent and that merging lands it; MCP `pr_context` marks
+  the stack as declared. Open: the UI shows such a stack like any other
+  (no "declared" hint on the stack mark yet).
 - The rest of the PR as rows, `pr_snapshot` retired (2026-10-06, for
   0.23.0; DESIGN.md "Big inboxes" › PR storage: the rest of the PR as
   rows, and "Storage jobs"; steps 6 to 8 of normalizing the PR snapshot,

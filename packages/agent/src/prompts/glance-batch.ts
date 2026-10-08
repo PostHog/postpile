@@ -1,4 +1,4 @@
-import type { GlanceBatchInput } from '../service.ts';
+import type { GlanceBatchInput, GlanceBatchItem } from '../service.ts';
 import { renderDossier } from './dossier.ts';
 import { batchDetail, contextBlock, GITHUB_DATA_RULE, githubData, howItReached, jsonOnly, NO_CI_RULE, prDetails, viewerLine, workContextBlock } from './shared.ts';
 
@@ -25,10 +25,59 @@ missing, or the verdict was misspelled. Check each entry against the shape below
 export const GLANCE_ENTRY_SHAPE =
   '{"prKey": "owner/repo#1", "verdict": "LOOKS_SAFE" | "LOOK_CLOSER" | "NOT_YOURS", "forYou": "...", "does": "...", "risk": "...", "othersSaid": "...", "keyFiles": [{"path": "src/app.ts", "why": "..."}]}';
 
+/** What merging the PR does to the declared layer below, by that layer's state. */
+function declaredMergeLine(parent: string, state: string, shared: boolean): string {
+  if (state === 'merged') {
+    return `${parent} has merged already; GitHub's diff here can still show its changes until this PR's branch is updated.`;
+  }
+  if (state === 'closed') {
+    return `${parent} was closed without merging, yet its changes may still be in this PR: merging this PR would land them.`;
+  }
+  if (shared) {
+    return `So GitHub's diff and changed files here include ${parent}'s changes, and merging this PR also lands ${parent}.`;
+  }
+  return `It shares none of its commits with ${parent}, so its diff may not include ${parent}'s changes; if it does, merging this PR also lands ${parent}.`;
+}
+
+/**
+ * For a PR whose description declares the layer below while its base is no
+ * PR's branch (DESIGN.md "Stacks declared in the body"): GitHub's diff then
+ * holds that layer's changes too, which reads like a description that
+ * leaves things out. Empty for every other PR.
+ */
+export function declaredParentBlock(item: GlanceBatchItem): string {
+  const note = item.declaredParent;
+  if (!note) {
+    return '';
+  }
+  const parent = `#${note.number}`;
+  // Unknown commits (none stored) read as shared: the description says so, nothing says otherwise.
+  const shared = note.commits === 0 || note.sharedCommits > 0;
+  const lines = [
+    `Stack declared in the description: it names ${parent} (${note.state}) as the PR below it, but its base is no PR's branch (see Base above).`,
+    declaredMergeLine(parent, note.state, shared),
+  ];
+  if (note.sharedCommits > 0) {
+    lines.push(`${note.sharedCommits} of its ${note.commits} commits are also ${parent}'s.`);
+  }
+  if (note.sharedFiles.length > 0) {
+    const files = note.sharedFiles.slice(0, batchDetail.files).join('\n');
+    lines.push(`Changed files here that ${parent} changes too, so likely from ${parent}:\n${githubData(files)}`);
+  }
+  lines.push(
+    `Judge this PR's own layer: changes its description leaves out may come from ${parent} and are no mismatch. ` +
+      `While ${parent} is not merged, say in forYou that merging this PR also lands ${parent}.`,
+  );
+  return `\n${lines.join('\n')}`;
+}
+
 /** The pull requests, each headed by its key, with how it reached the user. */
 export function glanceSections(input: GlanceBatchInput): string {
   return input.items
-    .map((item) => `=== ${item.pr.key}\nHow it reached them: ${howItReached(item.provenance)}\n${prDetails(item.pr, input.viewer, batchDetail)}`)
+    .map(
+      (item) =>
+        `=== ${item.pr.key}\nHow it reached them: ${howItReached(item.provenance)}\n${prDetails(item.pr, input.viewer, batchDetail)}${declaredParentBlock(item)}`,
+    )
     .join('\n\n');
 }
 

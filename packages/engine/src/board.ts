@@ -145,6 +145,18 @@ export class Board {
     return stack ? (this.stackTopicIds.get(stack.id) ?? null) : null;
   }
 
+  /**
+   * The layer below this PR when its body declares it ("Stacked on #12")
+   * rather than its base branch: null for a branch link or no stack.
+   */
+  declaredParentKeyOf(key: PrKey): PrKey | null {
+    const stack = this.stackOf.get(key);
+    if (!stack?.declaredLinks?.includes(key)) {
+      return null;
+    }
+    return stack.prKeys[stack.prKeys.indexOf(key) - 1] ?? null;
+  }
+
   /** Every layer of the stack this PR is in, bottom first; just the PR when it is in none. */
   stackKeysOf(key: PrKey): PrKey[] {
     return this.stackOf.get(key)?.prKeys ?? [key];

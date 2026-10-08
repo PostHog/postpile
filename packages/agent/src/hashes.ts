@@ -181,6 +181,15 @@ export function dossierInputHash(input: DossierUpdateInput): string {
   );
 }
 
+/**
+ * The declared layer below as a trailing hash part (`GlanceBatchItem.declaredParent`):
+ * none for a PR without one, so every other glance keeps its hash; a PR with
+ * one gets a new hash in every shape, so its glance is written again with the note.
+ */
+function declaredParentPart(item: GlanceBatchItem): unknown[] {
+  return item.declaredParent ? [{ declaredParent: item.declaredParent }] : [];
+}
+
 /** The glance hash's shape since 2026-10-05, over the given discussion. */
 function glanceHash(input: GlanceBatchInput, item: GlanceBatchItem, discussion: GlanceDiscussion): string {
   const ownFeedback = input.context.recentFeedback.filter((f) => f.prKey === item.pr.key).map((f) => f.id);
@@ -202,6 +211,7 @@ function glanceHash(input: GlanceBatchInput, item: GlanceBatchItem, discussion: 
     input.context.standingRules,
     ownFeedback,
     commentEdits,
+    ...declaredParentPart(item),
   );
 }
 
@@ -253,5 +263,6 @@ export function legacyGlanceItemInputHash(input: GlanceBatchInput, item: GlanceB
     input.context.tailoring,
     input.context.standingRules,
     ownFeedback,
+    ...declaredParentPart(item),
   );
 }

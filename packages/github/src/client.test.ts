@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { GitHubClient } from './client.ts';
 import { FakeFetch, fakeTokens, loadFixture } from './fake-fetch.ts';
-import { buildBranchQuery, buildPrBatchQuery, buildUpdatedAtQuery } from './queries.ts';
+import { buildBranchQuery, buildBranchShapeQuery, buildPrBatchQuery, buildUpdatedAtQuery } from './queries.ts';
 import { PR_BATCH_SIZE } from './reader.ts';
 
 const refs = [
@@ -267,6 +267,49 @@ describe('findPrsByBranch', () => {
       headRef: 'branch-13',
       previousBaseRefs: ['alice/older', 'alice/auto'],
     });
+    expect(fake.requests).toHaveLength(1);
+  });
+});
+
+describe('findPrsByNumber', () => {
+  it('answers the branch shape per PR in ref order, null for a hidden PR or a fork', async () => {
+    const wanted = [
+      { repo: 'acme/app', number: 12 },
+      { repo: 'acme/hidden', number: 3 },
+      { repo: 'acme/app', number: 14 },
+    ];
+    const query = buildBranchShapeQuery(wanted);
+    expect(query).toContain('p0: repository(owner: "acme", name: "app") { pullRequest(number: 12) { number state createdAt');
+    expect(query).toContain('... on AutomaticBaseChangeSucceededEvent { oldBase }');
+    const node = (number: number, extra: Record<string, unknown> = {}) => ({
+      number,
+      state: 'OPEN',
+      createdAt: '2026-09-10T10:00:00Z',
+      mergedAt: null,
+      updatedAt: '2026-09-19T10:00:00Z',
+      baseRefName: 'master',
+      headRefName: `branch-${number}`,
+      isCrossRepository: false,
+      ...extra,
+    });
+    const fake = new FakeFetch([{ body: { data: { p0: { pullRequest: node(12) }, p1: null, p2: { pullRequest: node(14, { isCrossRepository: true }) } } } }]);
+
+    const found = await new GitHubClient(fakeTokens, fake.fn).findPrsByNumber(wanted);
+
+    expect(found).toEqual([
+      {
+        ref: { repo: 'acme/app', number: 12 },
+        state: 'OPEN',
+        createdAt: '2026-09-10T10:00:00.000Z',
+        mergedAt: null,
+        updatedAt: '2026-09-19T10:00:00.000Z',
+        baseRef: 'master',
+        headRef: 'branch-12',
+        previousBaseRefs: [],
+      },
+      null,
+      null,
+    ]);
     expect(fake.requests).toHaveLength(1);
   });
 });
