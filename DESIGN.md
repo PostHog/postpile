@@ -7805,7 +7805,10 @@ gives each team, and how big the user's part is.
   "team-devex owns 1 of 7 files" to each open PR's line and the effort line
   under each open PR of a your-move tile. Paths are GitHub text: inside
   the fence. Unknown CODEOWNERS says nothing about ownership; the effort
-  line then gives the PR's size and threads only.
+  line then gives the PR's size and threads only. `format: "json"` carries
+  the same per PR: `ownership: [{team, owned, total, untrusted: {paths}}]`
+  and `effort: {files, additions, deletions, prAdditions, prDeletions,
+  prFiles, openThreads}` (the area fields null without CODEOWNERS).
 - Fake mode: `SampleData.codeOwners` holds a CODEOWNERS for acme/app;
   #1932 shows one workflow file owned by team-platform.
 

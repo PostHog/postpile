@@ -121,6 +121,17 @@ describe('PostPile MCP server', () => {
     expect(queue).toContain("    effort: 1 file, +12 -4 in your team's area (PR +140 -12, 3 files)");
     const pr = fencedPart(await callText(client, 'pr_context', { pr: 'acme/app#1932' }));
     expect(pr).toContain('  team-platform: 1 of 3 files (.github/workflows/ingestion-ci.yml)');
+
+    const json = await client.callTool({ name: 'pr_context', arguments: { pr: 'acme/app#1932', format: 'json' } });
+    expect(json.structuredContent).toMatchObject({
+      prs: [
+        {
+          key: 'acme/app#1932',
+          ownership: [{ team: 'acme/team-platform', owned: 1, total: 3, untrusted: { paths: ['.github/workflows/ingestion-ci.yml'] } }],
+          effort: { files: 1, additions: 12, deletions: 4, prAdditions: 140, prDeletions: 12, prFiles: 3, openThreads: 0 },
+        },
+      ],
+    });
   });
 
   it('refuses every tool while the app is not running, and answers again once it is', async () => {
