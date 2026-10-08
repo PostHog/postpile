@@ -102,6 +102,8 @@ type PrBase = Pick<PrSummary, 'key' | 'title' | 'url' | 'author' | 'state' | 'is
 
 export interface OverlapJson {
   pr: PrKey;
+  /** "same": edits on the same lines (files hold their regions). "nearby": edits within 10 lines, none shared (files hold the other PR's close span). */
+  level: 'same' | 'nearby';
   /** The other PR's diff is capped: it may overlap in more places. */
   otherCapped: boolean;
   files: { lines: { start: number; end: number }[]; untrusted: { path: string } }[];
@@ -135,11 +137,26 @@ function authorTagJson(place: AuthorPlace, teamsKnown: boolean): PrJson['authorT
 }
 
 function overlapsJson(view: PrOverlapsView, key: PrKey): OverlapJson[] {
-  return (view.overlaps[key] ?? []).map((overlap) => ({
-    pr: overlap.other,
-    otherCapped: overlap.otherCapped,
-    files: overlap.files.map((file) => ({ lines: file.regions.map((region) => ({ start: region.start, end: region.end })), untrusted: { path: file.path } })),
-  }));
+  return (view.overlaps[key] ?? []).flatMap((overlap) => {
+    const entries: OverlapJson[] = [];
+    if (overlap.files.length > 0) {
+      entries.push({
+        pr: overlap.other,
+        level: 'same',
+        otherCapped: overlap.otherCapped,
+        files: overlap.files.map((file) => ({ lines: file.regions.map((region) => ({ start: region.start, end: region.end })), untrusted: { path: file.path } })),
+      });
+    }
+    if (overlap.nearby.length > 0) {
+      entries.push({
+        pr: overlap.other,
+        level: 'nearby',
+        otherCapped: overlap.otherCapped,
+        files: overlap.nearby.map((file) => ({ lines: [{ start: file.theirs.start, end: file.theirs.end }], untrusted: { path: file.path } })),
+      });
+    }
+    return entries;
+  });
 }
 
 function reviewsJson(states: ReviewerStates): ReviewsJson {

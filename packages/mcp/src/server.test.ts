@@ -377,7 +377,7 @@ describe('PostPile MCP server', () => {
     const engine = new FakeEngine();
     const overlaps = {
       overlaps: {
-        'acme/app#1950': [{ other: 'acme/app#1911' as const, files: [{ path: '.github/workflows/ci.yml', regions: [{ start: 600, end: 640 }] }], otherCapped: false }],
+        'acme/app#1950': [{ other: 'acme/app#1911' as const, files: [{ path: '.github/workflows/ci.yml', regions: [{ start: 600, end: 640 }] }], nearby: [], otherCapped: false }],
       },
       capped: ['acme/app#1950' as const],
     };
@@ -401,6 +401,30 @@ describe('PostPile MCP server', () => {
     expect(json.structuredContent).toMatchObject({
       prs: [{ key: 'acme/app#1950', diffCapped: true, overlaps: [{ pr: 'acme/app#1911', otherCapped: false, files: [{ lines: [{ start: 600, end: 640 }], untrusted: { path: '.github/workflows/ci.yml' } }] }] }],
     });
+  });
+
+  it('words nearby edits apart from the same lines, in the fence and in the queue', async () => {
+    const path = '.github/workflows/container-images-cd.yml';
+    const overlaps = {
+      overlaps: {
+        'acme/app#1950': [
+          { other: 'acme/app#1911' as const, files: [], nearby: [{ path, theirs: { start: 619, end: 633 }, mine: { start: 627, end: 627 } }], otherCapped: false },
+          { other: 'acme/app#1904' as const, files: [{ path: 'src/a.ts', regions: [{ start: 5, end: 9 }] }], nearby: [], otherCapped: false },
+        ],
+      },
+      capped: [],
+    };
+    const client = await connected(Object.assign(new FakeEngine(), { prOverlaps: async () => overlaps }));
+
+    const context = await callText(client, 'pr_context', { pr: 'acme/app#1950' });
+    const data = fencedPart(context);
+    expect(data).toContain(`Also edits nearby lines: acme/app#1911 by `);
+    expect(data).toContain(`${path} (619\u2013633 vs 627)`);
+    expect(data).toContain('Also edits the same lines: acme/app#1904 by ');
+    expect(context.replace(data, '')).toContain('Nearby edits:');
+
+    const queue = await callText(client, 'whats_on_me', { author_scope: 'any' });
+    expect(queue).toMatch(/acme\/app#1950 by .*· overlaps #1904 · near #1911/);
   });
 
   it('says nothing about overlaps when there are none', async () => {

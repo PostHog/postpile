@@ -30,7 +30,7 @@ describe('overlapping edits', () => {
     await h.engine.sync({ maxAgentCalls: 0 });
 
     const view = await h.engine.prOverlaps();
-    expect(view.overlaps['acme/app#1']).toEqual([{ other: 'acme/app#2', files: [{ path: FILE, regions: [{ start: 600, end: 640 }] }], otherCapped: false }]);
+    expect(view.overlaps['acme/app#1']).toEqual([{ other: 'acme/app#2', files: [{ path: FILE, regions: [{ start: 600, end: 640 }] }], nearby: [], otherCapped: false }]);
     expect(view.overlaps['acme/app#2']?.[0]?.other).toBe('acme/app#1');
     expect(view.capped).toEqual([]);
   });

@@ -6,6 +6,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ### Added
 
+- The overlap warning in the MCP tools also catches edits close to each other. Two PRs that change interleaved lines of one block (one copies a list the other changes) now show "Also edits nearby lines" in `pr_context` and "near #N" in `whats_on_me`, within 10 lines and apart from the stronger "same lines" warning. Lockfiles, changelogs, snapshots and generated files are left out of the nearby level.
 - The MCP tools warn when two open PRs edit the same lines of a file. Merging both gives no conflict, yet it can drop changes. `pr_context` names the other PR and the lines, and `whats_on_me` marks the row with "overlaps #1977". PostPile reads the changed lines of open PRs in the background, a few per sync, and keeps only line numbers.
 - The MCP tools now show reviewers. `pr_context` names who approved, who asked for changes, who is still asked (people and teams) and which agents reviewed. `whats_on_me` gives each PR a short count, like "2 human approvals, waiting on 1 team, reviewbot approved", so an agent no longer has to ask GitHub PR by PR.
 - The MCP tools tag each PR author as you, your team or outside your team, and `whats_on_me` takes `author_scope` (me, my_team, others, any) to list, for example, only PRs from outside your team.
