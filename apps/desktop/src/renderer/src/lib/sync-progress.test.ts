@@ -11,6 +11,7 @@ function progress(overrides: Partial<SyncProgress>): SyncProgress {
     agentCallsDone: 34,
     agentCallsPlanned: 82,
     fromGitHub: { prsFetched: 3, newEvents: 8 },
+    prsRead: null,
     agentCallStats: emptyAgentCallStats(),
     ...overrides,
   };

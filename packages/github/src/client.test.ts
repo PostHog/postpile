@@ -162,9 +162,12 @@ describe('fetchPrs', () => {
       { body: { data: null, errors: [{ message: 'Something went wrong' }] } },
       { body: { data: { pr0: { pullRequest: null } } } },
     ]);
-    const result = await new GitHubClient(fakeTokens, fake.fn).fetchPrsPartial(many);
+    const batches: number[] = [];
+    const result = await new GitHubClient(fakeTokens, fake.fn).fetchPrsPartial(many, (prs) => batches.push(prs));
     expect(result.errors).toEqual([`${PR_BATCH_SIZE} PRs from acme/app#1: GitHub PR batch query failed: Something went wrong`]);
     expect(result.prs.size).toBe(0);
+    // Each batch reports as it lands, a failed one with 0, for the sync's "N of M PRs read".
+    expect(batches).toEqual([0, 0]);
   });
 });
 

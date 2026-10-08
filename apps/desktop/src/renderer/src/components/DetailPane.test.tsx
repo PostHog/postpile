@@ -50,6 +50,7 @@ function summaryOf(pr: Pr): PrSummary {
     openedRead: NO_OPENED_READ,
     whatsNew: null,
     updatedAt: at(pr.ref.number),
+    fetchedAt: null,
     quietRepo: false,
     repoLabel: null,
   };

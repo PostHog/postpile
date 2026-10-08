@@ -113,6 +113,7 @@ export function buildPrSummary(input: PrSummaryInput): PrSummary {
     openedRead: openedReadCheck(input.opened),
     whatsNew: member.provenance.kind === 'found' ? null : whatsNew(pr, events, viewer),
     updatedAt: pr.updatedAt,
+    fetchedAt: input.opened.prFetchedAt,
     quietRepo: input.quietRepo,
     repoLabel: input.repoLabel,
   };

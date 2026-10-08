@@ -37,6 +37,7 @@ function summary(overrides: Partial<PrSummary> = {}): PrSummary {
     openedRead: NO_OPENED_READ,
     whatsNew: null,
     updatedAt: at(1),
+    fetchedAt: null,
     quietRepo: false,
     repoLabel: null,
     ...overrides,

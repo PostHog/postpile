@@ -78,6 +78,7 @@ function pr(overrides: Partial<PrSummary>): PrSummary {
     openedRead: NO_OPENED_READ,
     whatsNew: null,
     updatedAt: at(0),
+    fetchedAt: null,
     quietRepo: false,
     repoLabel: null,
     ...overrides,

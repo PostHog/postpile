@@ -33,6 +33,7 @@ function fakeEngine(overrides: Partial<EngineService>): EngineService {
     recordedAppVersion: notImplemented,
     databaseSchemaVersion: notImplemented,
     syncProgress: notImplemented,
+    recordedSyncProgress: notImplemented,
     pollOnce: notImplemented,
     startLivePoll: notImplemented,
     stopLivePoll: notImplemented,

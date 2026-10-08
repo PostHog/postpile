@@ -27,5 +27,8 @@
     "@postpile/engine": "workspace:*",
     "@postpile/server": "workspace:*",
     "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@postpile/store": "workspace:*"
   }
 }

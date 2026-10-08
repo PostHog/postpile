@@ -109,9 +109,11 @@ export interface GitHubReader {
   /**
    * Like fetchPrs, but a failed batch (GitHub's "Something went wrong"
    * timeout on a heavy query, a 502) only loses its own PRs: its error is
-   * listed and the other batches still count.
+   * listed and the other batches still count. `onBatch` hears how many
+   * PRs each batch brought as it lands (0 for a failed one), for the sync's
+   * progress.
    */
-  fetchPrsPartial(refs: PrRef[]): Promise<PartialPrs>;
+  fetchPrsPartial(refs: PrRef[], onBatch?: (prs: number) => void): Promise<PartialPrs>;
 
   /**
    * Older pages of a fetched PR's capped lists (`Pr.capHits`), one GraphQL

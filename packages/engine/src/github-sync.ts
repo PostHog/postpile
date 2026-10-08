@@ -10,6 +10,7 @@ import {
   threadPrKey,
   threadPrRef,
   type NotificationThread,
+  type FetchCount,
   type FullPr,
   type Pr,
   type PrEvent,
@@ -144,6 +145,8 @@ export class GitHubSync {
   private shed = new Set<PrKey>();
   /** How many the last pick left out, for the sync's log line. */
   private lastShed = 0;
+  /** The running full sync's fetch count; null outside `run`. */
+  private count: FetchCount | null = null;
 
   constructor(
     private readonly store: Store,
@@ -691,7 +694,15 @@ export class GitHubSync {
     if (refs.length === 0) {
       return new Map();
     }
-    const result = await this.reader.fetchPrsPartial(refs);
+    const count = this.count;
+    if (count) {
+      count.planned = (count.planned ?? 0) + refs.length;
+    }
+    const result = await this.reader.fetchPrsPartial(refs, (prs) => {
+      if (count) {
+        count.read += prs;
+      }
+    });
     errors.push(...result.errors.map((error) => `${what}: ${error}`));
     return result.prs;
   }
@@ -736,7 +747,8 @@ export class GitHubSync {
     return { notModified: false, pollIntervalSeconds, firstLook, viewer, fetchedPrKeys: [...fetched.keys()], newEventIds, readOnGitHub };
   }
 
-  async run(maxPrs: number): Promise<GitHubSyncResult> {
+  /** The full sync's fetch; `run` counts it. */
+  private async fetchAll(maxPrs: number): Promise<GitHubSyncResult> {
     this.beginRun();
     // Roles first: only home teams' members are teammates.
     const viewer = await this.teamMembers.attach(await this.teamRoles.attach(await this.reader.viewer()));
@@ -792,5 +804,19 @@ export class GitHubSync {
       readOnGitHub: this.takeReadOnGitHub(),
       errors,
     };
+  }
+
+  /** How far the running full sync's fetch is, a copy; null when none runs. */
+  fetchCount(): FetchCount | null {
+    return this.count ? { ...this.count } : null;
+  }
+
+  async run(maxPrs: number): Promise<GitHubSyncResult> {
+    this.count = { read: 0, planned: null };
+    try {
+      return await this.fetchAll(maxPrs);
+    } finally {
+      this.count = null;
+    }
   }
 }

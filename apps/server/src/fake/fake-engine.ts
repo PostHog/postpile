@@ -41,6 +41,7 @@ import type {
   McpConnectionView,
   SyncPhase,
   SyncProgress,
+  RecordedSyncProgress,
   MemoryCorrection,
   MemoryCorrectionKind,
   MemoryRecheckOutcome,
@@ -805,6 +806,15 @@ export class FakeEngine implements EngineService {
     return this.progress ? { ...this.progress, running: [...this.progress.running] } : null;
   }
 
+  /** The sample sync's progress as the app would store it, written just now. */
+  async recordedSyncProgress(): Promise<RecordedSyncProgress | null> {
+    if (!this.progress) {
+      return null;
+    }
+    const { startedAt, running, agentCallsDone, agentCallsPlanned, fromGitHub, prsRead } = this.progress;
+    return { startedAt, running: [...running], agentCallsDone, agentCallsPlanned, fromGitHub, prsRead, savedAt: this.timestamp() };
+  }
+
   /** A sync report with nothing fetched and no agent work. */
   private emptySyncReport(startedAt: string): SyncReport {
     return {
@@ -848,7 +858,7 @@ export class FakeEngine implements EngineService {
 
   private async runFakeSync(): Promise<SyncReport> {
     const startedAt = this.timestamp();
-    const progress: SyncProgress = { startedAt, running: [], agentCallsDone: 0, agentCallsPlanned: 0, fromGitHub: null, agentCallStats: emptyAgentCallStats() };
+    const progress: SyncProgress = { startedAt, running: [], agentCallsDone: 0, agentCallsPlanned: 0, fromGitHub: null, prsRead: null, agentCallStats: emptyAgentCallStats() };
     this.progress = progress;
     // Without claude only the fetch runs, like the engine skipping its agent jobs.
     const agentOff = this.toolStatus.agentOff();
