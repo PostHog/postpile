@@ -25,6 +25,12 @@ describe('declaredParents', () => {
     expect(numbers('Based on #12; the GitHub diff includes its ancestors.')).toEqual([12]);
   });
 
+  it('reads the markdown link form a stacking tool writes', () => {
+    const line = 'Stacked on [#112316](https://github.com/acme/app/pull/112316); the GitHub diff includes its ancestors.';
+    expect(declaredParents(line, { repo: 'acme/app', number: 112400 })).toEqual([{ number: 112316, kind: 'stack' }]);
+    expect(declaredParents('Stacked on [the cache PR](https://github.com/acme/app/pull/12)', REF)).toEqual([]);
+  });
+
   it('reads repo references and pull URLs to the same repo', () => {
     expect(numbers('Stacked on acme/app#12')).toEqual([12]);
     expect(numbers('Stacked on ACME/App#12')).toEqual([12]);

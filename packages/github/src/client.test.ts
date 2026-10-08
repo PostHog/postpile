@@ -272,7 +272,7 @@ describe('findPrsByBranch', () => {
 });
 
 describe('findPrsByNumber', () => {
-  it('answers the branch shape per PR in ref order, null for a hidden PR or a fork', async () => {
+  it('answers the branch shape per PR in ref order, null for a hidden PR, forks flagged', async () => {
     const wanted = [
       { repo: 'acme/app', number: 12 },
       { repo: 'acme/hidden', number: 3 },
@@ -306,9 +306,11 @@ describe('findPrsByNumber', () => {
         baseRef: 'master',
         headRef: 'branch-12',
         previousBaseRefs: [],
+        isCrossRepository: false,
       },
       null,
-      null,
+      // A fork PR counts when asked for by number: a body names it whatever its branch.
+      expect.objectContaining({ ref: { repo: 'acme/app', number: 14 }, isCrossRepository: true }),
     ]);
     expect(fake.requests).toHaveLength(1);
   });

@@ -24,6 +24,12 @@ export interface LayerShape {
    * commit makes it the layer below: a merge order, never a stack link.
    */
   dependsOn?: number | null;
+  /**
+   * The head branch lives in a fork: its name says nothing about this
+   * repo's branches, so the PR never links by branch, only by a body
+   * declaration. Missing reads as same-repo.
+   */
+  isCrossRepository?: boolean;
 }
 
 /**
@@ -33,7 +39,6 @@ export interface LayerShape {
  */
 export interface StackLayer extends LayerShape {
   key: PrKey;
-  isCrossRepository?: boolean;
 }
 
 const STATE_RANK: Record<PrState, number> = { OPEN: 0, MERGED: 1, CLOSED: 2 };
@@ -144,10 +149,11 @@ function parentOf<T extends StackLayer>(pr: T, byHead: Map<string, T>): T | unde
  * the PRs whose link comes from their body.
  */
 function parentsInRepo<T extends StackLayer>(layers: T[], declared: Set<T>): Map<T, T> {
-  const byHead = new Map(layers.map((pr) => [pr.headRef, pr]));
+  const sameRepo = layers.filter((pr) => !pr.isCrossRepository);
+  const byHead = new Map(sameRepo.map((pr) => [pr.headRef, pr]));
   const byNumberInRepo = new Map(layers.map((pr) => [pr.ref.number, pr]));
   const parents = new Map<T, T>();
-  for (const pr of layers) {
+  for (const pr of sameRepo) {
     const parent = parentOf(pr, byHead);
     if (parent) {
       parents.set(pr, parent);
@@ -167,7 +173,8 @@ function parentsInRepo<T extends StackLayer>(layers: T[], declared: Set<T>): Map
 }
 
 function stacksInRepo<T extends StackLayer>(repo: string, prs: T[]): Stack[] {
-  const layers = oneLayerPerHead(prs.filter((pr) => !pr.isCrossRepository));
+  // Fork PRs skip the one-per-head rule: their head names belong to the fork. They only link by declaration.
+  const layers = [...oneLayerPerHead(prs.filter((pr) => !pr.isCrossRepository)), ...prs.filter((pr) => pr.isCrossRepository)];
   const declared = new Set<T>();
   const parents = parentsInRepo(layers, declared);
   const children = new Map<T, T[]>();
@@ -222,7 +229,9 @@ function stacksInRepo<T extends StackLayer>(repo: string, prs: T[]): Stack[] {
  *
  * A PR from a fork is never a layer: its head branch lives in the fork, so
  * a name like main or patch-1 would otherwise take a real layer's place in
- * `oneLayerPerHead` or chain it to an unrelated PR.
+ * `oneLayerPerHead` or chain it to an unrelated PR. A body declaration
+ * names a PR by number, so it links fork PRs too, as the declaring PR or
+ * as the declared one: open source stacks often come from forks.
  *
  * Stacks are linear. When two PRs sit on the same parent, one continues the
  * stack (open before merged before closed, then the lowest number) and the

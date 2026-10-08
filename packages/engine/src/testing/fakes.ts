@@ -238,7 +238,7 @@ export class FakeReader implements GitHubReader {
     this.numberLookups.push(refs);
     return refs.map((ref) => {
       const pr = [...this.prs.values()].find((stored) => stored.ref.repo === ref.repo && stored.ref.number === ref.number);
-      return pr && !pr.isCrossRepository ? toBranchPr(pr) : null;
+      return pr ? { ...toBranchPr(pr), isCrossRepository: pr.isCrossRepository ?? false } : null;
     });
   }
 

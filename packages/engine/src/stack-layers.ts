@@ -175,7 +175,10 @@ export class StackLayerFinder {
             continue;
           }
           visited.add(key);
-          next.push({ from: match, direction: step.direction, anchor: step.anchor });
+          // A fork PR never links by branch, so walking on from it would only find PRs no stack keeps.
+          if (!match.isCrossRepository) {
+            next.push({ from: match, direction: step.direction, anchor: step.anchor });
+          }
           if (tracked.has(key)) {
             continue;
           }

@@ -63,6 +63,8 @@ export interface BranchPr {
   headRef: string;
   /** Base branches it had before, oldest first (GitHub moves a PR down when the layer below merges). */
   previousBaseRefs: string[];
+  /** From a fork. Branch lookups leave forks out; a lookup by number (`findPrsByNumber`) says so here. */
+  isCrossRepository?: boolean;
 }
 
 /** Every read GitHub call the app makes. Safe to use against the real API in smoke tests. */
@@ -138,7 +140,8 @@ export interface GitHubReader {
   /**
    * The same shape as findPrsByBranch, for PRs known by number: the layer
    * below a PR body declares ("Stacked on #12"). Answers in ref order;
-   * null for a PR the token cannot see or one from a fork.
+   * null for a PR the token cannot see. A fork PR counts (a number names it
+   * whatever its branch) and carries `isCrossRepository`.
    * BRANCH_BATCH_SIZE PRs per query.
    */
   findPrsByNumber(refs: PrRef[]): Promise<(BranchPr | null)[]>;
