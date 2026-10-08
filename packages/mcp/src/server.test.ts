@@ -78,6 +78,8 @@ describe('PostPile MCP server', () => {
     // Fresh sessions asked to review a PR went to gh or memory first while the block sat at the end.
     expect(paragraphs[1]).toMatch(/^Coordinating review work with other agents:\n- When asked to review, assess or decide whether to review a PR, call pr_context on it FIRST, before gh or any memory/);
     expect(paragraphs[1]).toContain('If PostPile is not running, carry on and tell the user once; do not block on it.');
+    // The newly connected process says it: an old process's update message predates the hint (0.27.0 to 0.27.1).
+    expect(instructions).toContain('Tool schemas can stay old after a reconnect');
   });
 
   it('answers pr_context briefly by default: PR, stack place, glance, tile and the topic as one line per PR', async () => {

@@ -7729,7 +7729,10 @@ their old schema in this Claude Code session until a new one starts. Seen on
 `note_pr` with its schema but kept the old schemas of the read tools (no
 `author_scope`, no `format`, `pr` a plain string); the server's `tools/list`
 was complete and a new session showed every parameter. The server takes the
-new parameters either way. `server.test.ts` checks every parameter in
+new parameters either way. The server instructions say it too ("Tool schemas
+can stay old after a reconnect"): the process that refuses is the old one,
+whose message predates the hint, while the instructions come from the new
+process right after the reconnect. `server.test.ts` checks every parameter in
 `tools/list`, so a schema the SDK cannot convert would fail there. The closed
 message still wins. Nothing is cached
 (the schema is one SQL query, the lock's version a plain file read, only the
