@@ -286,4 +286,35 @@ describe('stack layers', () => {
     expect(item?.dependsOn).toBeUndefined();
     expect(item?.declaredParent).toBeUndefined();
   });
+
+  it('fetches a fork PR declared by a markdown link and not stored yet, links it, and glances again', async () => {
+    const h = makeHarness();
+    const pinged = reviewRequestedPr(21, {
+      baseRef: 'master',
+      headRef: 'l21',
+      body: 'Stacked on [#20](https://github.com/acme/app/pull/20); the GitHub diff includes its ancestors.',
+      commits: [makeCommit({ oid: 'p1' }), makeCommit({ oid: 'c1' })],
+    });
+    topicWithPrs(h, 'depot', [pinged]);
+
+    // The first sync cannot find #20 yet: a glance without any stack note.
+    await h.engine.sync({ agentJobs: ['glances'] });
+    const first = h.agent.glanceInputs.flatMap((input) => input.items).filter((entry) => entry.pr.key === pinged.key);
+    expect(first.map((entry) => entry.declaredParent)).toEqual([undefined]);
+
+    // #20 is a draft from a fork, with a head name that means nothing here.
+    const parent = layer(20, 'master', 'main', { isDraft: true, isCrossRepository: true, commits: [makeCommit({ oid: 'p1' })] });
+    h.reader.addStackPr(parent);
+    await h.engine.sync({ agentJobs: ['glances'] });
+
+    expect(h.store.pullIns.get(parent.key)).toMatchObject({ anchorPrKey: pinged.key, reason: 'stack layer below #21, declared in its body' });
+    const topic = await h.engine.getTopic('depot');
+    const stack = topic?.tiles.find((view) => view.tile.kind === 'stack');
+    expect(stack?.tile.stacks).toEqual([{ id: `stack:${parent.key}`, prKeys: [parent.key, pinged.key], declaredLinks: [pinged.key] }]);
+    // The stack changed the glance input, so the glance ran again with the note.
+    const all = h.agent.glanceInputs.flatMap((input) => input.items).filter((entry) => entry.pr.key === pinged.key);
+    expect(all.at(-1)?.declaredParent).toMatchObject({ number: 20, state: 'draft', sharedCommits: 1 });
+    // No branch lookup on the fork's head name: the walk stops at a fork PR.
+    expect(h.reader.branchLookups.flat().some((lookup) => lookup.branch === 'main')).toBe(false);
+  });
 });

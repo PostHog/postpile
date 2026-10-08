@@ -208,7 +208,7 @@ export class GitHubClient implements GitHubReader {
     return batches.flat();
   }
 
-  /** One aliased query; a PR the token cannot see, or from a fork, answers null. */
+  /** One aliased query; a PR the token cannot see answers null. Fork PRs count, flagged. */
   private async branchShapeBatch(batch: PrRef[]): Promise<(BranchPr | null)[]> {
     const response = await this.http.graphql<RawBranchShapeResponse>(buildBranchShapeQuery(batch));
     if (!response.data) {
@@ -216,7 +216,7 @@ export class GitHubClient implements GitHubReader {
     }
     return batch.map((ref, index) => {
       const raw = response.data?.[batchAlias(index)]?.pullRequest;
-      return raw && !raw.isCrossRepository ? toBranchPr(ref.repo, raw) : null;
+      return raw ? { ...toBranchPr(ref.repo, raw), isCrossRepository: raw.isCrossRepository } : null;
     });
   }
 

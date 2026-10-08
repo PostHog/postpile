@@ -6,6 +6,11 @@ now".
 
 ## Done
 
+- Declared stacks with a fork parent (2026-10-08, for 0.27.1; DESIGN.md
+  "Stacks declared in the body"): the live case ("Stacked on [#N](pull
+  url)") parsed fine, but #N came from a fork: `findPrsByNumber` answered
+  null and `buildStacks` dropped forks. Forks now link by declaration
+  (never by branch), the lookup flags them, the walk stops at them.
 - Stacks land together (2026-10-08; DESIGN.md "Stacks land together"):
   "Merge, it is approved" gives way to the stack layer that holds it
   ("Blocked: team-security to review #12"): on a PR's row for layers

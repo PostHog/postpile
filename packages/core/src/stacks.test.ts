@@ -166,6 +166,26 @@ describe('buildStacks with layers declared in the body', () => {
     expect(buildStacks(prs)).toEqual([]);
   });
 
+  it('links fork PRs by declaration, as the declared PR and as the declaring one', () => {
+    const forkParent = makePr({ number: 1, headRef: 'main', isCrossRepository: true });
+    expect(buildStacks([forkParent, declaring(makePr({ number: 2 }), 1)])).toEqual([
+      { id: 'stack:acme/app#1', repo: 'acme/app', prKeys: ['acme/app#1', 'acme/app#2'], declaredLinks: ['acme/app#2'] },
+    ]);
+    const forkChild = declaring(makePr({ number: 4, headRef: 'main', isCrossRepository: true }), 3);
+    expect(buildStacks([makePr({ number: 3 }), forkChild]).map((stack) => stack.prKeys)).toEqual([['acme/app#3', 'acme/app#4']]);
+  });
+
+  it('still never links a fork PR by branch, even with a declaration elsewhere in the repo', () => {
+    const prs = [
+      makePr({ number: 1, headRef: 'b1' }),
+      makePr({ number: 2, baseRef: 'b1', headRef: 'b2' }),
+      // Two fork PRs on the same head name: both stay, neither takes #1's place nor links by branch.
+      makePr({ number: 3, baseRef: 'b2', headRef: 'b1', isCrossRepository: true }),
+      makePr({ number: 5, baseRef: 'master', headRef: 'b1', isCrossRepository: true }),
+    ];
+    expect(buildStacks(prs).map((stack) => stack.prKeys)).toEqual([['acme/app#1', 'acme/app#2']]);
+  });
+
   it('drops the declared link that would close a loop, keeping the rest', () => {
     const prs = [declaring(makePr({ number: 1 }), 2), declaring(makePr({ number: 2 }), 1)];
     expect(buildStacks(prs)).toEqual([

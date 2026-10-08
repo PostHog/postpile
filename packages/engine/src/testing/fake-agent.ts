@@ -62,6 +62,12 @@ function emptyConsolidation(): ConsolidationResult {
   return { topicProposals: [], areaMerges: [], factMerges: [], ruleIdeas: [], finishedTopics: [] };
 }
 
+/** Like the real hash: the declared layer below and the merge order count only when present. */
+function stackNoteParts(item: GlanceBatchItem): unknown[] {
+  const parts: unknown[] = item.declaredParent ? [{ declaredParent: item.declaredParent }] : [];
+  return item.dependsOn ? [...parts, { dependsOn: item.dependsOn }] : parts;
+}
+
 export class FakeAgent extends RunnerAgentService {
   readonly dossierInputs: DossierUpdateInput[] = [];
   readonly glanceInputs: GlanceBatchInput[] = [];
@@ -181,6 +187,7 @@ export class FakeAgent extends RunnerAgentService {
       input.context.instructions,
       input.context.tailoring,
       input.context.standingRules,
+      ...stackNoteParts(item),
     );
   }
 
@@ -200,6 +207,7 @@ export class FakeAgent extends RunnerAgentService {
       input.context.instructions,
       input.context.tailoring,
       input.context.standingRules,
+      ...stackNoteParts(item),
     );
   }
 

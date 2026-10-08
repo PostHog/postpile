@@ -2629,7 +2629,13 @@ so it only links once the two PRs are known to share a commit.
   same repo, and was open when this PR was opened (the same rule as for a
   branch link). Branch links always win. A declared link that would close
   a loop is dropped; links are tried lowest number first, so the result
-  does not depend on input order. Fork PRs never link, as before. The rule
+  does not depend on input order. Fork PRs never link by branch, as
+  before, but do link by declaration, as the declaring PR or the declared
+  one (0.27.1): a number names a PR whatever its branch, and the case
+  that motivated all this was a parent opened from a fork. In 0.27.0 the
+  number lookup answered null for a fork and `buildStacks` dropped fork
+  PRs whole, so such a parent was never fetched or linked. Fork PRs skip
+  `oneLayerPerHead` (their head names belong to the fork). The rule
   is "no PR's head is the base", not "the base is the default branch":
   PostPile does not store each repo's default branch, and a PR based on a
   release branch with no PR behind it reads the same way.
@@ -2663,7 +2669,11 @@ so it only links once the two PRs are known to share a commit.
   merge order says nothing about the dependency's own stack. Pulling it in
   stores its commits, which is what lets the shared-commit check link a
   real stack written as "depends on"; the dependency gets no tile of its
-  own. Known gaps: an untracked PR that declares a
+  own. A fork PR found by number is recorded but not walked on from:
+  it never links by branch, so its branch neighbours would only be PRs no
+  stack keeps. The walk runs in the full sync only: a poll, and so an MCP
+  `refresh_from_github`, re-reads the PR but fetches no new parent; the
+  next full sync does. Known gaps: an untracked PR that declares a
   tracked one as its parent is not found (that would need a body search),
   and a pulled-in layer's own declared parent is not followed by the walk
   (a branch lookup carries no body), though `buildStacks` links it once
