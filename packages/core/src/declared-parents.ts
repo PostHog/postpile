@@ -40,10 +40,63 @@ function withoutComments(body: string): string {
   }
 }
 
+/** One run of backticks: where it starts and how long it is. */
+interface BacktickRun {
+  start: number;
+  length: number;
+}
+
+function backtickRuns(text: string): BacktickRun[] {
+  const runs: BacktickRun[] = [];
+  let index = text.indexOf('`');
+  while (index >= 0) {
+    let end = index;
+    while (text[end] === '`') {
+      end++;
+    }
+    runs.push({ start: index, length: end - index });
+    index = text.indexOf('`', end);
+  }
+  return runs;
+}
+
+/**
+ * The text without Markdown code spans: a run of N backticks opens one and
+ * the next run of exactly N closes it ("``depends on #3``" is code too). A
+ * run with no closing partner is plain text. Each run's partner is found
+ * in one pass from the end, so many unmatched runs stay linear.
+ */
+function withoutCodeSpans(text: string): string {
+  const runs = backtickRuns(text);
+  const partner: (number | null)[] = runs.map(() => null);
+  const nextByLength = new Map<number, number>();
+  for (let index = runs.length - 1; index >= 0; index--) {
+    const length = runs[index]!.length;
+    partner[index] = nextByLength.get(length) ?? null;
+    nextByLength.set(length, index);
+  }
+  let result = '';
+  let from = 0;
+  let index = 0;
+  while (index < runs.length) {
+    const close = partner[index];
+    if (close === null || close === undefined) {
+      index++;
+      continue;
+    }
+    const open = runs[index]!;
+    const closing = runs[close]!;
+    result += `${text.slice(from, open.start)} `;
+    from = closing.start + closing.length;
+    index = close + 1;
+  }
+  return result + text.slice(from);
+}
+
 /**
  * Text a body shows that is no claim of its own: HTML comments, fenced
  * code (an unclosed fence runs to the end, as on GitHub), quoted lines
- * and inline code. Line by line, so the time stays linear.
+ * and code spans. Every step is a linear scan.
  */
 function withoutQuotedText(body: string): string {
   const kept: string[] = [];
@@ -63,9 +116,9 @@ function withoutQuotedText(body: string): string {
     if (/^ {0,3}>/.test(line)) {
       continue;
     }
-    kept.push(line.replace(/`[^`]*`/g, ' '));
+    kept.push(line);
   }
-  return kept.join('\n');
+  return withoutCodeSpans(kept.join('\n'));
 }
 
 /**
