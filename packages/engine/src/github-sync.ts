@@ -21,6 +21,7 @@ import {
   type LayerShape,
   type Viewer,
   hotSyncThreads,
+  isTracked,
   selectSyncThreads,
   threadNewsFacts,
 } from '@postpile/core';
@@ -59,6 +60,10 @@ export const WATCH_FIRST_WINDOW_MS = 60 * 60 * 1000;
 export const FRESHNESS_POLL_EVERY_MS = 60 * 1000;
 /** Merged or closed PRs stay in the freshness check this long after their last update. */
 export const FRESHNESS_CLOSED_WINDOW_MS = 24 * 60 * 60 * 1000;
+/** An open PR waiting on the viewer is fetched again once its snapshot is this old, news or not (`staleRereads`). */
+export const STALE_REREAD_AFTER_MS = 6 * 60 * 60 * 1000;
+/** At most this many such re-reads per freshness check (each full sync, and the poll once a minute). */
+export const STALE_REREADS_PER_CHECK = 5;
 /** Without a stored `since` (first run, or no last-sync marker), read threads this far back. */
 export const FIRST_READ_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 /** getThread lookups per sync for threads that left the inbox without showing up in the read list. */
@@ -615,18 +620,52 @@ export class GitHubSync {
   }
 
   /**
+   * Open PRs on tiles that wait on the viewer (their move, or unread: what
+   * whats_on_me lists) whose snapshot is older than STALE_REREAD_AFTER_MS,
+   * oldest first, at most STALE_REREADS_PER_CHECK. The freshness check only
+   * refetches a PR whose updatedAt moved, so a quiet PR kept a snapshot days
+   * old, and an agent reading "fetched 41 h ago" could not tell whether it
+   * still held. Only while the quota allows background work.
+   */
+  private staleRereads(skip: Set<PrKey>): PrRef[] {
+    if (!this.quota.allowsBackground()) {
+      return [];
+    }
+    const board = Board.load(this.store, this.now().toISOString());
+    const cutoff = new Date(this.now().getTime() - STALE_REREAD_AFTER_MS).toISOString();
+    const fetchedAt = this.store.prs.fetchedAtByKey();
+    const stale = new Map<PrKey, PrRef>();
+    for (const tile of board.allTiles()) {
+      // Live tiles only, like whats_on_me: a snoozed or done tile is not on the user's list.
+      const state = board.stateOf(tile).kind;
+      if (state === 'snoozed' || state === 'done' || (board.turnOf(tile).kind !== 'you' && state !== 'unread')) {
+        continue;
+      }
+      for (const member of tile.members) {
+        const pr = board.prs.get(member.prKey);
+        if (pr && pr.state === 'OPEN' && isTracked(member.provenance) && !skip.has(pr.key) && (fetchedAt.get(pr.key) ?? '') < cutoff) {
+          stale.set(pr.key, pr.ref);
+        }
+      }
+    }
+    const oldestFirst = [...stale.keys()].sort((a, b) => (fetchedAt.get(a) ?? '').localeCompare(fetchedAt.get(b) ?? ''));
+    return oldestFirst.slice(0, STALE_REREADS_PER_CHECK).map((key) => stale.get(key) as PrRef);
+  }
+
+  /**
    * The freshness check: one updatedAt query for every PR a tile shows.
    * Notification threads do not move for everything (the user's own
    * approve or merge, quiet PRs, threads that stay read), so without it a
    * PR could stay stale for days. Returns the PRs GitHub has newer than the
-   * store; the caller fetches them in full. The poll logs only when
-   * something moved.
+   * store, plus a few stale ones that wait on the viewer (`staleRereads`);
+   * the caller fetches them in full. The poll logs only when something
+   * moved.
    */
   private async movedPrs(skip: Set<PrKey>, origin: 'sync' | 'poll'): Promise<PrRef[]> {
     this.lastFreshnessAt = this.now().getTime();
     const refs = this.freshnessRefs(skip);
     if (refs.length === 0) {
-      return [];
+      return this.staleRereads(skip);
     }
     const remote = await this.reader.prUpdatedAts(refs);
     const stored = this.store.prs.updatedAtByKey();
@@ -638,11 +677,13 @@ export class GitHubSync {
       const was = stored.get(prKey(ref));
       return updatedAt !== undefined && (was === undefined || updatedAt > was || withoutAssignees.has(prKey(ref)));
     });
-    if (origin === 'sync' || moved.length > 0) {
+    const stale = this.staleRereads(new Set([...skip, ...moved.map(prKey)]));
+    if (origin === 'sync' || moved.length > 0 || stale.length > 0) {
       const which = moved.length > 0 ? `: ${moved.map(prKey).join(', ')}` : '';
-      this.textLog(`${origin}: freshness check, ${refs.length} PRs checked, ${moved.length} moved${which}`);
+      const old = stale.length > 0 ? `; ${stale.length} stale re-read: ${stale.map(prKey).join(', ')}` : '';
+      this.textLog(`${origin}: freshness check, ${refs.length} PRs checked, ${moved.length} moved${which}${old}`);
     }
-    return moved;
+    return [...moved, ...stale];
   }
 
   private freshnessDue(): boolean {

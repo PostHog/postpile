@@ -47,6 +47,8 @@ import {
   echo,
   fenced,
   fetchedText,
+  isOldFetch,
+  mayBeStale,
   freshness,
   glanceLines,
   leadUnreadReason,
@@ -525,6 +527,9 @@ function prFreshnessLine(detail: PrDetail, ctx: ReadContext): string {
   if (!checked) {
     return `${fetched} The app runs but no longer checks this ${detail.pr.state.toLowerCase()} PR by itself; new notifications on it still come in.`;
   }
+  if (!detail.fetchedAt || isOldFetch(detail.fetchedAt, now)) {
+    return `${fetched} The app re-reads it only when GitHub reports news on it or its update time moves, so it may be stale: call refresh_from_github before acting on it.`;
+  }
   return `${fetched} The app runs and checks GitHub for changes to it again within about 1 min, so a refresh is rarely needed.`;
 }
 
@@ -683,7 +688,10 @@ async function prContextJson(ctx: ReadContext, reads: PrRead[], failures: PrFail
   }
   const data = {
     meta: await readMeta(ctx, authors),
-    prs: reads.map((read) => prReadJson(read, authors, overlaps)),
+    prs: reads.map((read) => {
+      const pr = prReadJson(read, authors, overlaps);
+      return { ...pr, mayBeStale: mayBeStale(pr.fetchedAt, ctx.now()) };
+    }),
     topics: [...topics.values()].map((topic) => ({ ...topicJson(topic), prKeys: uniquePrs(topic.tiles).map((pr) => pr.key) })),
     errors: failures.map((failure) => ({ input: failure.input, error: failure.error.text })),
   };
@@ -1077,7 +1085,16 @@ function yourMoveGroup(prs: PrSummary[], notes: Map<PrKey, PrNotesView>): QueueG
   return allNoted ? 'noted' : 'your_move';
 }
 
-function queueJson(rows: QueueRow[], page: QueueRow[], details: Map<PrKey, PrDetail | null>, authors: Authors, options: QueueOptions, meta: MetaJson, overlaps: PrOverlapsView): object {
+function queueJson(
+  rows: QueueRow[],
+  page: QueueRow[],
+  details: Map<PrKey, PrDetail | null>,
+  authors: Authors,
+  options: QueueOptions,
+  meta: MetaJson,
+  overlaps: PrOverlapsView,
+  now: Date,
+): object {
   return {
     meta,
     filters: filtersJson(options),
@@ -1090,6 +1107,7 @@ function queueJson(rows: QueueRow[], page: QueueRow[], details: Map<PrKey, PrDet
       tile: tileJson(row.view),
       topic: { id: row.topic.topic.id },
       fetchedAt: tileFetchedAt(row.view),
+      mayBeStale: mayBeStale(tileFetchedAt(row.view), now),
       untrusted: { topicName: row.topic.topic.name },
       prs: row.view.prs.map((pr) => summaryJson(authors, pr, details.get(pr.key) ?? null, [row.view], row.topic, overlaps)),
     })),
@@ -1141,7 +1159,7 @@ export async function whatsOnMe(ctx: ReadContext, options: QueueOptions, format:
   const overlaps = await reader.prOverlaps();
   if (format === 'json') {
     const meta = await readMeta(ctx, authors);
-    return jsonAnswer([...(await header(ctx)), ...teamNote(authors)], queueJson(rows, page, details, authors, options, meta, overlaps), rows.length > 0);
+    return jsonAnswer([...(await header(ctx)), ...teamNote(authors)], queueJson(rows, page, details, authors, options, meta, overlaps, ctx.now()), rows.length > 0);
   }
   if (rows.length === 0) {
     const text = [...(await header(ctx)), ...teamNote(authors), '', `Nothing waits on the user right now (filters: ${filterWords(options)}).`].join('\n');

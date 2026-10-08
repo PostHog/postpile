@@ -20,6 +20,10 @@ now".
   bundle and in a new Claude Code session); a reconnected old session kept
   the read tools' old schemas. The update message now says a new session
   shows them; a `tools/list` test pins every parameter.
+- Stale PR re-reads (2026-10-08; DESIGN.md "Stale re-reads"): each
+  freshness check also fetches up to 5 open PRs waiting on the user whose
+  snapshot is over 6 h old; the MCP marks snapshots over 1 h "may be
+  stale" and asks for a refresh instead of "rarely needed".
 - Stacks land together (2026-10-08; DESIGN.md "Stacks land together"):
   "Merge, it is approved" gives way to the stack layer that holds it
   ("Blocked: team-security to review #12"): on a PR's row for layers
