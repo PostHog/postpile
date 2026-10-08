@@ -1851,7 +1851,8 @@ stored and before a dossier goes into a glance prompt
   files are in the hash, so the glance also follows when the parent
   merges.
 - **Merge order** (2026-10-08): a PR whose body says "depends on #N" while
-  #N is no layer below it gets `dependsOn` (`dependsOnNote`: the number and
+  #N is no lower layer of its stack (by shared commits or by branch,
+  `Board.isLayerBelow`; found by Codex review) gets `dependsOn` (`dependsOnNote`: the number and
   #N's state when it is on the board). The prompt says #N should merge
   first and that this is no stack, so #N's changes are not in the diff.
   Same hash rule: a trailing part only when present. Once shared commits
@@ -2631,7 +2632,8 @@ so it only links once the two PRs are known to share a commit.
   body, base is master)" on the PR that declares it and "Stack (declared
   in the body of acme/app#1907)" on the other layers. A "depends on" that
   is no stack shows as its own line, "Depends on acme/app#1915 (merge
-  after)", read from the PR body.
+  after)", read from the PR body, unless #N is already a lower layer of
+  its stack by branch.
 
 ## Stacks as one unit
 

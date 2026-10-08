@@ -359,6 +359,8 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
       number: 1911, title: 'Run e2e on Depot runners', author: 'rowan', state: 'OPEN',
       size: [48, 48, 5], openedHoursAgo: 6,
       baseRef: 'rowan/depot-3', headRef: 'rowan/depot-4', reviewerUsers: ['nell'],
+      // Says "depends on" the layer it sits on by branch: still a stack, no merge-order line.
+      body: 'Depends on #1902 for the cache backend.',
       reviews: [[SAMPLE_VIEWER, 'APPROVED', 'Labels match #1880.', 'sha1911-a']],
       commits: [
         { oid: 'sha1911-a', headline: 'Move Playwright jobs to Depot', hoursAgo: 5 },

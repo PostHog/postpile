@@ -97,6 +97,10 @@ describe('PostPile MCP server', () => {
     const data = fencedPart(await callText(client, 'pr_context', { pr: 'acme/app#1899' }));
     expect(data).toContain('Depends on acme/app#1915 (merge after)');
     expect(data).not.toContain('Stack');
+    // #1911 says it depends on #1902, the layer it sits on by branch: a stack, no merge-order line.
+    const layered = fencedPart(await callText(client, 'pr_context', { pr: 'acme/app#1911' }));
+    expect(layered).toContain('Stack: layer');
+    expect(layered).not.toContain('Depends on');
   });
 
   it('answers pr_context in full with the dossier and every tile', async () => {

@@ -271,4 +271,19 @@ describe('stack layers', () => {
     expect(h.store.pullIns.get(dependency.key)).toMatchObject({ reason: 'stack layer below #21, declared in its body' });
     expect(h.store.pullIns.get(below.key)).toMatchObject({ reason: 'stack layer below #21' });
   });
+
+  it('gives no merge-order note when the PR it depends on is its layer below by branch', async () => {
+    const h = makeHarness();
+    const below = layer(20, 'master', 'l20');
+    const pinged = reviewRequestedPr(21, { baseRef: 'l20', headRef: 'l21', body: 'Depends on #20' });
+    topicWithPrs(h, 'depot', [pinged]);
+    h.reader.addStackPr(below);
+
+    await h.engine.sync({ agentJobs: ['glances'] });
+
+    const item = h.agent.glanceInputs.flatMap((input) => input.items).find((entry) => entry.pr.key === pinged.key);
+    expect(item).toBeDefined();
+    expect(item?.dependsOn).toBeUndefined();
+    expect(item?.declaredParent).toBeUndefined();
+  });
 });

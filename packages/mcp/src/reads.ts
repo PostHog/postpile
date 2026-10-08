@@ -291,16 +291,23 @@ function stackLines(tiles: TileView[], key: PrKey, baseRef: string): string[] {
 }
 
 /**
- * "Depends on acme/app#12 (merge after)" when the body says so and no
- * shared commit made #12 its layer below: a merge order, not a stack.
+ * "Depends on acme/app#12 (merge after)" when the body says so and #12 is
+ * no lower layer of this PR's stack (by shared commits or by branch): a
+ * merge order, not a stack.
  */
 function dependsOnLines(pr: PrPaneView, tiles: TileView[]): string[] {
   const declared = declaredParentOf(pr);
   if (declared?.kind !== 'depends') {
     return [];
   }
-  const linked = tiles.some((view) => view.tile.stacks.some((stack) => stack.declaredLinks?.includes(pr.key)));
-  return linked ? [] : [`Depends on ${prKey({ repo: pr.ref.repo, number: declared.number })} (merge after)`];
+  const dependency = prKey({ repo: pr.ref.repo, number: declared.number });
+  const inStackBelow = tiles.some((view) =>
+    view.tile.stacks.some((stack) => {
+      const index = stack.prKeys.indexOf(dependency);
+      return index >= 0 && index < stack.prKeys.indexOf(pr.key);
+    }),
+  );
+  return inStackBelow ? [] : [`Depends on ${dependency} (merge after)`];
 }
 
 /** The PR line, whose move, why unread, stack, reviews and what is new: the start of both details. */

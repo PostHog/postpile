@@ -64,8 +64,12 @@ function withDeclaredParent(board: Board, item: GlanceBatchItem): GlanceBatchIte
   if (declared?.kind !== 'depends') {
     return item;
   }
-  const dependency = board.prs.get(prKey({ repo: item.pr.ref.repo, number: declared.number }));
-  return { ...item, dependsOn: dependsOnNote(declared.number, dependency) };
+  const dependencyKey = prKey({ repo: item.pr.ref.repo, number: declared.number });
+  // Already a layer below by branch: its changes are in the diff, so "no stack" would be false.
+  if (board.isLayerBelow(dependencyKey, item.pr.key)) {
+    return item;
+  }
+  return { ...item, dependsOn: dependsOnNote(declared.number, board.prs.get(dependencyKey)) };
 }
 
 /**
