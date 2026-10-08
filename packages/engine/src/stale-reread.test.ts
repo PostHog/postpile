@@ -39,6 +39,16 @@ describe('stale re-reads', () => {
     expect(h.store.prs.fetchedAt('acme/app#1')).toBe(new Date(NOW.getTime() + STALE_REREAD_AFTER_MS + HOUR_MS).toISOString());
   });
 
+  it('leaves a snoozed tile alone, like whats_on_me does', async () => {
+    const { h, setNow } = await syncedHarness();
+    await h.engine.snooze('pr:acme/app#1', { kind: 'until_time', until: '2099-01-01T00:00:00.000Z' });
+
+    setNow(NOW.getTime() + STALE_REREAD_AFTER_MS + HOUR_MS);
+    const from = h.reader.fetchedRefs.length;
+    await h.engine.sync({ maxAgentCalls: 0 });
+    expect(fetchedKeys(h, from)).toEqual([]);
+  });
+
   it('re-reads at most a few per check, oldest first', async () => {
     let now = NOW.getTime();
     const h = makeHarness({ now: () => new Date(now) });

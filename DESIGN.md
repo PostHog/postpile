@@ -6750,8 +6750,9 @@ standalone server never starts it.
   `updatedAt` moved, so a quiet PR kept a snapshot days old; a full sync
   on a calm inbox read 0 PRs while an agent saw "fetched 41 h ago" next to
   a move. Each freshness check now also fetches up to
-  `STALE_REREADS_PER_CHECK` (5) open PRs on tiles that wait on the user
-  (their move, or unread: what `whats_on_me` lists) whose snapshot is older
+  `STALE_REREADS_PER_CHECK` (5) open PRs on live tiles that wait on the
+  user (their move, or unread; not snoozed or done: what `whats_on_me`
+  lists) whose snapshot is older
   than `STALE_REREAD_AFTER_MS` (6 h), oldest first (`staleRereads`). Only
   while the quota allows background work. Cost: at most 5 PRs per minute
   of poll until the queue is fresh, then a trickle every 6 h.
@@ -8026,8 +8027,9 @@ spec, GitHub's, Sentry's and Linear's MCP servers. What it means here:
   hour (`OLD_FETCH_MS`) gets the "rarely needed" sentence: an older one
   says the app re-reads it only on news or a moved update time, "so it may
   be stale: call refresh_from_github before acting on it", and the list
-  marks it "(may be stale)" (2026-10-08: "fetched 41 h ago" sat next to
-  "a refresh is rarely needed").
+  marks it "(may be stale)"; JSON answers carry `mayBeStale` next to
+  `fetchedAt` (2026-10-08: "fetched 41 h ago" sat next to "a refresh is
+  rarely needed").
 
 ### Sync progress for other processes (2026-10-08)
 

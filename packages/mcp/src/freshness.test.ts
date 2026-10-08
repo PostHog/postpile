@@ -82,6 +82,13 @@ describe('MCP reads next to the running app', () => {
       'PostPile fetched this PR from GitHub 41 h ago. The app re-reads it only when GitHub reports news on it or its update time moves, so it may be stale: call refresh_from_github before acting on it.',
     );
     expect(detail).not.toContain('rarely needed');
+
+    // JSON answers carry it as a flag next to the fetch time.
+    const listJson = (await whatsOnMe(later, LIST, 'json')).structured as { rows: { fetchedAt: string; mayBeStale: boolean }[] };
+    expect(listJson.rows[0]).toMatchObject({ fetchedAt: '2026-09-01T09:50:00Z', mayBeStale: true });
+    const prJson = (await prContext(later, 'acme/app#7', 'brief', 'json')).structured as { prs: { mayBeStale: boolean }[] };
+    expect(prJson.prs[0]?.mayBeStale).toBe(true);
+    expect(((await prContext(ctx, 'acme/app#7', 'brief', 'json')).structured as { prs: { mayBeStale: boolean }[] }).prs[0]?.mayBeStale).toBe(false);
   });
 
   it('lists no siblings for a PR in Unsorted: its PRs have nothing to do with each other', async () => {

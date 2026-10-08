@@ -636,7 +636,9 @@ export class GitHubSync {
     const fetchedAt = this.store.prs.fetchedAtByKey();
     const stale = new Map<PrKey, PrRef>();
     for (const tile of board.allTiles()) {
-      if (board.turnOf(tile).kind !== 'you' && board.stateOf(tile).kind !== 'unread') {
+      // Live tiles only, like whats_on_me: a snoozed or done tile is not on the user's list.
+      const state = board.stateOf(tile).kind;
+      if (state === 'snoozed' || state === 'done' || (board.turnOf(tile).kind !== 'you' && state !== 'unread')) {
         continue;
       }
       for (const member of tile.members) {

@@ -214,6 +214,11 @@ export function isOldFetch(fetchedAt: string, now: Date): boolean {
   return now.getTime() - Date.parse(fetchedAt) > OLD_FETCH_MS;
 }
 
+/** The JSON answers' `mayBeStale`: no fetch time, or an old one (`isOldFetch`). True means: refresh_from_github before acting. */
+export function mayBeStale(fetchedAt: string | null, now: Date): boolean {
+  return fetchedAt === null || isOldFetch(fetchedAt, now);
+}
+
 /** "fetched 3 min ago" for a list row; says so when the PR has no fetch time. */
 export function fetchedText(fetchedAt: string | null, now: Date): string {
   if (!fetchedAt) {
