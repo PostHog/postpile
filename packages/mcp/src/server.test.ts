@@ -9,10 +9,9 @@ import { APP_CLOSED_MESSAGE, APP_UPDATED_MESSAGE, createMcpServer, staleServerNo
 /** Claude Code cuts tool descriptions and server instructions at this many characters, without a word. */
 const CLAUDE_CODE_CUT = 2048;
 /**
- * The instructions stay this far under the cut. The coordination block sits
- * at their end, so a cut would drop it silently; when this fails, move text
- * into the tool descriptions, never the coordination block (note_pr is a
- * deferred tool, so only the instructions reach every session).
+ * The instructions stay this far under the cut. When this fails, move text
+ * into the tool descriptions, never the coordination block: note_pr is a
+ * deferred tool, so only the instructions reach every session.
  */
 const INSTRUCTIONS_BUDGET = 1950;
 
@@ -70,13 +69,15 @@ describe('PostPile MCP server', () => {
     expect(client.getInstructions()?.length ?? 0).toBeLessThan(CLAUDE_CODE_CUT);
   });
 
-  it('keeps the instructions under budget with the coordination block intact at the end', async () => {
+  it('keeps the instructions under budget with the coordination block right after the intro', async () => {
     const client = await connected();
     const instructions = client.getInstructions() ?? '';
+    const paragraphs = instructions.split('\n\n');
 
     expect(instructions.length).toBeLessThanOrEqual(INSTRUCTIONS_BUDGET);
-    expect(instructions).toContain('Coordinating review work with other agents:');
-    expect(instructions).toMatch(/If PostPile is not running, carry on and tell the user once; do not block on it\.$/);
+    // Fresh sessions asked to review a PR went to gh or memory first while the block sat at the end.
+    expect(paragraphs[1]).toMatch(/^Coordinating review work with other agents:\n- When asked to review, assess or decide whether to review a PR, call pr_context on it FIRST, before gh or any memory/);
+    expect(paragraphs[1]).toContain('If PostPile is not running, carry on and tell the user once; do not block on it.');
   });
 
   it('answers pr_context briefly by default: PR, stack place, glance, tile and the topic as one line per PR', async () => {
