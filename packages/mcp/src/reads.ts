@@ -1,6 +1,7 @@
 // The four read tools, as plain functions over the engine's read methods.
 // Nothing here writes, syncs or calls an agent.
 import {
+  authorPlace,
   driverText,
   formatDossier,
   formatFacts,
@@ -9,9 +10,13 @@ import {
   parsePrKey,
   proposalOutcome,
   proposalOutcomeAt,
+  reviewerStates,
+  type AuthorPlace,
+  type AuthorScope,
   type PrDetail,
   type PrKey,
   type PrSummary,
+  type TeamMembersView,
   type TileView,
   type TopicDetail,
   type TopicListItem,
@@ -19,10 +24,10 @@ import {
 } from '@postpile/core';
 import type { EngineService } from '@postpile/engine';
 import { parsePrInput } from './pr-input.ts';
-import { ago, answer, briefGlanceLines, day, echo, fenced, freshness, glanceLines, prSummaryLine, stateWord, tileLine, turnText, whatsNewText, withActor } from './text.ts';
+import { ago, answer, authorTag, briefGlanceLines, day, echo, fenced, freshness, glanceLines, prSummaryLine, reviewCountsText, reviewersLine, stateWord, tileLine, turnText, whatsNewText, withActor } from './text.ts';
 
 /** The read methods the tools use; the read-only engine and the sample-data engine both have them. */
-export type PostPileReader = Pick<EngineService, 'getPr' | 'getTopic' | 'listTopics' | 'search' | 'getViewer' | 'lastSyncReport' | 'recordedAppVersion'>;
+export type PostPileReader = Pick<EngineService, 'getPr' | 'getTopic' | 'listTopics' | 'search' | 'getViewer' | 'getTeamMembers' | 'lastSyncReport' | 'recordedAppVersion'>;
 
 /** What every read needs besides the reader. */
 export interface ReadContext {
@@ -45,6 +50,7 @@ export interface ToolAnswer {
 export type Detail = 'brief' | 'full';
 export type StateFilter = 'open' | 'merged' | 'closed' | 'any';
 export type WhoseMoveFilter = 'you' | 'them' | 'any';
+export type AuthorScopeFilter = AuthorScope | 'any';
 
 /** Paging and flat filters of search_prs and whats_on_me. */
 export interface ListOptions {
@@ -54,6 +60,12 @@ export interface ListOptions {
   /** owner/name, or null for every repo. */
   repo: string | null;
   whoseMove: WhoseMoveFilter;
+}
+
+/** whats_on_me's filters: the list ones plus whose PRs. */
+export interface QueueOptions extends ListOptions {
+  /** me: the user's PRs; my_team: a home-team member's (not the user's); others: neither; any. */
+  authorScope: AuthorScopeFilter;
 }
 
 export const DEFAULT_LIMIT = 25;
@@ -81,6 +93,35 @@ async function header(reader: PostPileReader): Promise<string[]> {
   const [report, viewer] = await Promise.all([reader.lastSyncReport(), reader.getViewer()]);
   const who = viewer.login ? `It works for @${viewer.login}; "you" below means them.` : 'It does not know its user yet.';
   return [freshness(report), who];
+}
+
+/** The user's login and home-team members: the author tags and the author_scope filter read them. */
+interface Authors {
+  viewerLogin: string | null;
+  teams: TeamMembersView;
+  /** Some home team has a member list, so "outside your team" is a fact, not a guess. */
+  known: boolean;
+}
+
+async function readAuthors(reader: PostPileReader): Promise<Authors> {
+  const [viewer, teams] = await Promise.all([reader.getViewer(), reader.getTeamMembers()]);
+  const known = teams.fetchedAt !== null && teams.teams.some((team) => team.members.length > 0);
+  return { viewerLogin: viewer.login, teams, known };
+}
+
+function placeOf(authors: Authors, pr: Pick<PrSummary, 'author' | 'assignees'>): AuthorPlace {
+  return authorPlace(pr, authors.viewerLogin, authors.teams.teams);
+}
+
+/** Said once, in the header, when PRs carry no team tag. No GitHub text. */
+function teamNote(authors: Authors): string[] {
+  if (authors.known) {
+    return [];
+  }
+  if (authors.teams.fetchedAt === null) {
+    return ["PostPile has not fetched the user's team members yet (it does on its next sync), so PR authors carry no team tag."];
+  }
+  return ['The user has no home team with members in PostPile, so PR authors carry no team tag.'];
 }
 
 /** Every stored PR with this number, from the search index (topics hold every PR the app tracks). */
@@ -176,12 +217,13 @@ function stackLines(tiles: TileView[], key: PrKey): string[] {
   return [...new Set(lines)];
 }
 
-/** The PR line, whose move, why unread, stack, approvals and what is new: the start of both details. */
-function prHeadLines(detail: PrDetail, tiles: TileView[]): string[] {
+/** The PR line, whose move, why unread, stack, reviews and what is new: the start of both details. */
+function prHeadLines(detail: PrDetail, tiles: TileView[], authors: Authors): string[] {
   const { pr } = detail;
+  const by = `${pr.author}${authorTag(placeOf(authors, pr), authors.known)}`;
   const lines = [
     `${pr.key}  ${pr.title}`,
-    `${stateWord(pr.state, pr.isDraft)}, by ${pr.author}, +${pr.additions} -${pr.deletions}, updated ${day(pr.updatedAt)}`,
+    `${stateWord(pr.state, pr.isDraft)}, by ${by}, +${pr.additions} -${pr.deletions}, updated ${day(pr.updatedAt)}`,
     pr.url,
   ];
   // The move of this PR, as the detail pane shows it, not of its tile: on a set another PR's move can lead the tile.
@@ -201,17 +243,16 @@ function prHeadLines(detail: PrDetail, tiles: TileView[]): string[] {
   lines.push(...stackLines(tiles, pr.key));
   if (detail.viewerApproval) {
     lines.push(`You approved it on ${day(detail.viewerApproval.at)}.`);
-  } else if (detail.agentApprovers.length > 0) {
-    lines.push(`Approved by agents only: ${detail.agentApprovers.join(', ')}.`);
   }
+  lines.push(reviewersLine(reviewerStates(pr)));
   if (detail.whatsNew) {
     lines.push(`New since you looked: ${whatsNewText(detail.whatsNew)}`);
   }
   return lines;
 }
 
-function briefPrLines(detail: PrDetail, tiles: TileView[]): string[] {
-  const lines = prHeadLines(detail, tiles);
+function briefPrLines(detail: PrDetail, tiles: TileView[], authors: Authors): string[] {
+  const lines = prHeadLines(detail, tiles, authors);
   lines.push('', ...(detail.glance ? briefGlanceLines(detail.glance, detail.glanceStale) : [`No agent glance yet (${detail.glanceState}).`]));
   for (const view of tiles) {
     lines.push(`Its tile: ${tileLine(view)}`);
@@ -219,8 +260,8 @@ function briefPrLines(detail: PrDetail, tiles: TileView[]): string[] {
   return lines;
 }
 
-function fullPrLines(detail: PrDetail, tiles: TileView[]): string[] {
-  const lines = prHeadLines(detail, tiles);
+function fullPrLines(detail: PrDetail, tiles: TileView[], authors: Authors): string[] {
+  const lines = prHeadLines(detail, tiles, authors);
   lines.push('', ...(detail.glance ? glanceLines(detail.glance, detail.glanceStale) : [`No agent glance yet (${detail.glanceState}).`]));
   const facts = formatFacts(detail.facts);
   if (facts.length > 0) {
@@ -356,7 +397,8 @@ export async function prContext(ctx: ReadContext, input: string, detail: Detail)
   }
   const topic = pr.topicId ? await reader.getTopic(pr.topicId) : null;
   const tiles = topic ? tilesWith(topic, pr.pr.key) : [];
-  const data = detail === 'full' ? fullPrLines(pr, tiles) : briefPrLines(pr, tiles);
+  const authors = await readAuthors(reader);
+  const data = detail === 'full' ? fullPrLines(pr, tiles, authors) : briefPrLines(pr, tiles, authors);
   if (topic) {
     data.push('', ...(detail === 'full' ? fullTopicLines(topic, pr.pr.key) : briefTopicForPr(topic, pr.pr.key)));
   } else {
@@ -364,7 +406,7 @@ export async function prContext(ctx: ReadContext, input: string, detail: Detail)
   }
   const more = detail === 'brief' ? 'detail: "full" adds activity, facts and the whole topic. ' : '';
   const next = `Next: ${more}Stale? call refresh_from_github. Wrong topic? propose_topic_change.`;
-  return { text: answer(await header(reader), data, [prFreshnessLine(pr, ctx), next]), found: true };
+  return { text: answer([...(await header(reader)), ...teamNote(authors)], data, [prFreshnessLine(pr, ctx), next]), found: true };
 }
 
 /** One read per topic, all at once; topics that are gone are left out. */
@@ -478,13 +520,16 @@ function pageLines(total: number, options: ListOptions, shown: number): { head: 
   return { head, tail: rest > 0 ? [`${rest} more: offset: ${options.offset + shown}`] : [] };
 }
 
-function filterWords(options: ListOptions): string {
+function filterWords(options: ListOptions & Partial<Pick<QueueOptions, 'authorScope'>>): string {
   const words = [`state ${options.state}`];
   if (options.repo) {
     words.push(`repo ${options.repo}`);
   }
   if (options.whoseMove !== 'any') {
     words.push(`whose move ${options.whoseMove}`);
+  }
+  if (options.authorScope && options.authorScope !== 'any') {
+    words.push(`author ${options.authorScope}`);
   }
   return words.join(', ');
 }
@@ -525,51 +570,73 @@ function isLive(view: TileView): boolean {
   return view.state.kind !== 'done' && view.state.kind !== 'snoozed';
 }
 
+/** A tile matches when any of its PRs does, like the state and repo filters. */
+function scopeMatches(authors: Authors, pr: PrSummary, scope: AuthorScopeFilter): boolean {
+  return scope === 'any' || placeOf(authors, pr).scope === scope;
+}
+
+/** "acme/app#1902 by alice (outside your team) · reviews: 1 human approval, reviewbot approved": one line per PR of a queue row. */
+async function queuePrLines(reader: PostPileReader, prs: PrSummary[], authors: Authors): Promise<string[]> {
+  const details = await Promise.all(prs.map((pr) => reader.getPr(pr.key)));
+  return prs.map((pr, index) => {
+    const detail = details[index];
+    const reviews = detail ? reviewCountsText(reviewerStates(detail.pr)) : 'not stored';
+    return `  ${pr.key} by ${pr.author}${authorTag(placeOf(authors, pr), authors.known)} · reviews: ${reviews}`;
+  });
+}
+
 interface QueueRow {
   yourMove: boolean;
   text: string;
+  prs: PrSummary[];
 }
 
-export async function whatsOnMe(ctx: ReadContext, options: ListOptions): Promise<ToolAnswer> {
+export async function whatsOnMe(ctx: ReadContext, options: QueueOptions): Promise<ToolAnswer> {
   const { reader } = ctx;
   const bad = repoFilterError(options.repo);
   if (bad) {
     return bad;
   }
+  const authors = await readAuthors(reader);
+  if (!authors.known && (options.authorScope === 'my_team' || options.authorScope === 'others')) {
+    return toolError([`author_scope "${options.authorScope}" needs the user's team members. ${teamNote(authors).join(' ')} Use author_scope: "me" or "any".`]);
+  }
   const items = (await reader.listTopics(ALL_REPOS)).filter((item) => item.group === 'needs_you');
   const rows: QueueRow[] = [];
   for (const detail of await readTopics(reader, items.map((item) => item.topic.id))) {
     for (const view of detail.tiles.filter(isLive)) {
-      const matching = view.prs.filter((pr) => stateMatches(pr, options.state) && repoMatches(pr, options.repo));
+      const matching = view.prs.filter((pr) => stateMatches(pr, options.state) && repoMatches(pr, options.repo) && scopeMatches(authors, pr, options.authorScope));
       if (matching.length === 0 || !moveMatches(view, options.whoseMove)) {
         continue;
       }
       const line = `- ${view.tile.title} (${view.prs.map((pr) => pr.key).join(', ')}) · topic ${detail.topic.name} (${detail.topic.id})`;
       if (view.turn.kind === 'you') {
-        rows.push({ yourMove: true, text: `${line}\n  ${view.turn.what}` });
+        rows.push({ yourMove: true, text: `${line}\n  ${view.turn.what}`, prs: view.prs });
       } else if (view.state.kind === 'unread') {
         const reason = view.state.unreadBecause[0];
-        rows.push({ yourMove: false, text: `${line}\n  ${reason ? withActor(reason.actor, reason.summary) : 'unread'} · ${turnText(view.turn)}` });
+        rows.push({ yourMove: false, text: `${line}\n  ${reason ? withActor(reason.actor, reason.summary) : 'unread'} · ${turnText(view.turn)}`, prs: view.prs });
       }
     }
   }
   // Your move first, then unread ones where it is not.
   rows.sort((a, b) => Number(b.yourMove) - Number(a.yourMove));
   if (rows.length === 0) {
-    const text = [...(await header(reader)), '', `Nothing waits on the user right now (filters: ${filterWords(options)}).`].join('\n');
+    const text = [...(await header(reader)), ...teamNote(authors), '', `Nothing waits on the user right now (filters: ${filterWords(options)}).`].join('\n');
     return { text, found: false };
   }
   const page = rows.slice(options.offset, options.offset + options.limit);
   const { head, tail } = pageLines(rows.length, options, page.length);
   const yourMoveTotal = rows.filter((row) => row.yourMove).length;
+  // Reviews come from each PR's stored snapshot: read only for the rows on this page.
+  const shown = await Promise.all(page.map(async (row) => ({ yourMove: row.yourMove, text: [row.text, ...(await queuePrLines(reader, row.prs, authors))].join('\n') })));
   const data: string[] = [];
-  const mine = page.filter((row) => row.yourMove);
-  const others = page.filter((row) => !row.yourMove);
+  const mine = shown.filter((row) => row.yourMove);
+  const others = shown.filter((row) => !row.yourMove);
   if (mine.length > 0) {
     data.push(`Your move (${yourMoveTotal} in total):`, ...mine.map((row) => row.text));
   }
   if (others.length > 0) {
     data.push(...(data.length > 0 ? [''] : []), `Unread, not your move (${rows.length - yourMoveTotal} in total):`, ...others.map((row) => row.text));
   }
-  return { text: answer([...(await header(reader)), `${head} Filters: ${filterWords(options)}.`], data, tail), found: true };
+  return { text: answer([...(await header(reader)), ...teamNote(authors), `${head} Filters: ${filterWords(options)}.`], data, tail), found: true };
 }

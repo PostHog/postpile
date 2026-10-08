@@ -1,7 +1,7 @@
 // Team roles in fake mode: team-platform is the home team, client-approvers
 // only routes reviews to the viewer. A flip changes the sample viewer, so
 // the Team filter, faces and chips follow it like in the real app.
-import { setTeamRole, teamRolesView, withHomeTeams, type TeamRole, type TeamRoles, type TeamRolesView } from '@postpile/core';
+import { setTeamRole, teamRolesView, withHomeTeams, type TeamMembersView, type TeamRole, type TeamRoles, type TeamRolesView } from '@postpile/core';
 import type { SampleData } from './sample-data.ts';
 
 /** Whose members are the sample teammates. Other teams have none in the sample. */
@@ -22,6 +22,8 @@ export class FakeTeamRoles {
   private roles: TeamRoles;
   /** The members of the sample's home team, kept while it is not home. */
   private readonly members: string[];
+  /** The sample's member lists count as fetched when the fake engine starts. */
+  private readonly membersFetchedAt: string;
 
   constructor(
     private readonly data: SampleData,
@@ -29,10 +31,17 @@ export class FakeTeamRoles {
   ) {
     this.roles = sampleRoles(now);
     this.members = data.viewerTeamMembers;
+    this.membersFetchedAt = now().toISOString();
   }
 
   view(): TeamRolesView {
     return teamRolesView(this.data.viewerTeams, this.roles);
+  }
+
+  /** Who is on each home team, the viewer included: only team-platform has members in the sample. */
+  membersView(): TeamMembersView {
+    const teams = this.data.viewerHomeTeams.map((team) => ({ team, members: team === MEMBERS_TEAM ? [this.data.viewer, ...this.data.viewerTeamMembers] : [] }));
+    return { fetchedAt: this.membersFetchedAt, teams };
   }
 
   setRole(team: string, role: TeamRole): TeamRolesView {

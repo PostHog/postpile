@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TileView } from '@postpile/core';
-import { ago, echo, fenced, stripInvisible, tileLine, turnText } from './text.ts';
+import { ago, authorTag, echo, fenced, reviewCountsText, reviewersLine, stripInvisible, tileLine, turnText } from './text.ts';
 
 describe('mcp text', () => {
   it('fences data with a random id that the data cannot close', () => {
@@ -48,5 +48,36 @@ describe('mcp text', () => {
     expect(tileLine(view('done', 'dealt_with'))).toMatch(/^\[PR, dealt with\] Pin Node/);
     expect(tileLine(view('snoozed', 'unread'))).toMatch(/^\[PR, unread, snoozed\] Pin Node/);
     expect(tileLine(view('open', 'open'))).toMatch(/^\[PR, open\] Pin Node/);
+  });
+
+  it('names reviewers in pr_context, people and agents apart', () => {
+    const states = {
+      approvedBy: ['alice'],
+      changesRequestedBy: ['bob'],
+      pendingUsers: ['carol'],
+      pendingTeams: ['acme/team-platform', 'acme/team-security'],
+      agents: [{ name: 'reviewbot', state: 'changes_requested' as const }],
+    };
+    expect(reviewersLine(states)).toBe('Reviews: approved by alice; changes requested by bob; pending: carol, team-platform, team-security; agents: reviewbot requested changes');
+    const none = { approvedBy: [], changesRequestedBy: [], pendingUsers: [], pendingTeams: [], agents: [] };
+    expect(reviewersLine(none)).toBe('Reviews: none, and nobody is asked');
+  });
+
+  it('counts people and names agents in whats_on_me', () => {
+    const states = {
+      approvedBy: ['alice', 'dan'],
+      changesRequestedBy: ['bob'],
+      pendingUsers: ['carol', 'erin'],
+      pendingTeams: ['acme/team-platform'],
+      agents: [{ name: 'reviewbot', state: 'approved' as const }],
+    };
+    expect(reviewCountsText(states)).toBe('2 human approvals, 1 human change request, waiting on 2 people and 1 team, reviewbot approved');
+  });
+
+  it('tags the author, and leaves "outside" out while team members are unknown', () => {
+    expect(authorTag({ scope: 'me', teams: [] }, false)).toBe(' (you)');
+    expect(authorTag({ scope: 'my_team', teams: ['acme/team-platform'] }, true)).toBe(' (your team: team-platform)');
+    expect(authorTag({ scope: 'others', teams: [] }, true)).toBe(' (outside your team)');
+    expect(authorTag({ scope: 'others', teams: [] }, false)).toBe('');
   });
 });

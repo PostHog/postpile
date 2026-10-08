@@ -69,6 +69,7 @@ import type {
   SyncOptions,
   SyncReport,
   TeamRole,
+  TeamMembersView,
   TeamRolesView,
   ToolsView,
   TeachLessonResult,
@@ -1160,6 +1161,10 @@ export class Engine implements EngineService {
 
   async getTeamRoles(): Promise<TeamRolesView> {
     return this.teamRoles.view(loadViewer(this.deps.store));
+  }
+
+  async getTeamMembers(): Promise<TeamMembersView> {
+    return this.teamMembers.view(loadViewer(this.deps.store));
   }
 
   private async applyTeamRole(team: string, role: TeamRole): Promise<TeamRolesView> {

@@ -7371,9 +7371,9 @@ bundle. From the repo: `pnpm cli mcp` (`POSTPILE_FAKE=1` for sample data).
 how they answer is under "Tool design" below):
 
 - `pr_context(pr, detail)`: `owner/repo#123`, a PR URL, or `#123` when the
-  number is unique in the store. Brief (default): the PR (state, author,
-  size), whose move, why it is unread, stack layer, the viewer's approval,
-  what is new since they looked, the glance's verdict, "for you" and risk,
+  number is unique in the store. Brief (default): the PR (state, author
+  with its tag, size), whose move, why it is unread, stack layer, the
+  viewer's approval, the reviews line, what is new since they looked, the glance's verdict, "for you" and risk,
   this PR's tile, and the topic's other PRs one line each (10 at most).
   Full: the whole glance, facts, the activity list (the detail pane's, noise
   folded), then the topic: dossier (`formatDossier`, shared with the CLI)
@@ -7385,9 +7385,40 @@ how they answer is under "Tool design" below):
   suggestions and the ones decided in the last 14 days.
 - `search_prs(query, limit, offset, state, repo, whose_move)`: the search
   bar's matcher, 25 per page (100 at most).
-- `whats_on_me(limit, offset, state, repo, whose_move)`: live tiles in
-  `needs_you` topics where it is the user's move, then unread ones where it
-  is not; open PRs by default.
+- `whats_on_me(limit, offset, state, repo, whose_move, author_scope)`: live
+  tiles in `needs_you` topics where it is the user's move, then unread ones
+  where it is not; open PRs by default. Each tile lists its PRs one line
+  each: key, author with its tag, and review counts.
+
+**Reviews and author tags** (2026-10-08). An agent asked "what do I have to
+review, outside my team first" had to call `gh pr view` per PR for the
+reviewers and had no way to tell teammates apart. Both come from data the
+store already has; no new GitHub reads, no schema change.
+
+- Reviews (`reviewerStates`, core): from the stored PR's reviews and its
+  still-pending review requests (`reviewerUsers`, `reviewerTeams`). The
+  latest deciding review per reviewer wins (`latestDecidingReviews`, shared
+  with `standingApprovals`): a later approval replaces a change request, a
+  dismissal drops the reviewer, plain comments set no state. Bots and agents
+  (`isBot`) go in their own group, named without "[bot]"; a requested agent
+  without a review shows as pending. `pr_context` names everyone: "Reviews:
+  approved by alice; changes requested by bob; pending: carol, team-platform;
+  agents: reviewbot approved". `whats_on_me` keeps people as counts: "2
+  human approvals, 1 human change request, waiting on 1 person and 2 teams,
+  reviewbot approved". It reads the PRs of the shown page only. A
+  re-requested reviewer shows both their state and pending, like GitHub.
+- Author tags (`authorPlace`, core): "(you)", "(your team: team-platform)" or
+  "(outside your team)", from the PR's owners (`prOwners`: a bot PR counts as
+  its assignees) and the team member cache (`getTeamMembers`, read-only
+  view of meta `team_members` for the home teams). "Your team" means the
+  viewer's home teams only, never a team a review request names: a PR
+  from outside that asks team-platform for review is still "outside".
+- `author_scope` (me, my_team, others, any; default any) filters
+  `whats_on_me`; my_team excludes the user. A tile matches when any of its
+  PRs does, like `state` and `repo`.
+- Never fetched member lists (or no home team with members): the header says
+  so once, PRs carry only "(you)", and `author_scope` my_team / others is a
+  tool error that suggests me or any. Logins stay inside the fence.
 - `refresh_from_github(pr | topic)` and `propose_topic_change(...)`: see
   their own sections below.
 
@@ -7454,7 +7485,8 @@ spec, GitHub's, Sentry's and Linear's MCP servers. What it means here:
 - **Paging and filters** on `search_prs` and `whats_on_me`: `limit` (default
   25, max 100), `offset`, and flat optional filters `state` (open, merged,
   closed, any; default open for `whats_on_me`, any for search), `repo`
-  (`owner/name`), `whose_move` (you, them, any). A cut list ends with "N more:
+  (`owner/name`), `whose_move` (you, them, any), and on `whats_on_me` also
+  `author_scope` (me, my_team, others, any). A cut list ends with "N more:
   offset: 25". Topic reads are batched, no read per match.
 - **Errors are tool errors** (`isError: true`) with the fix and an example:
   unparseable, ambiguous or unknown PR or topic, a bad filter. "No matches" is

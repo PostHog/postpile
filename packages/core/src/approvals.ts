@@ -15,22 +15,34 @@ export interface Approvals {
 /** Reviews that set a reviewer's stance. Plain comments and pending drafts never change it. */
 const DECIDING: ReadonlySet<Review['state']> = new Set<Review['state']>(['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED']);
 
+/** What `latestDecidingReviews` reads of a review. */
+export type ReviewStance = Pick<Review, 'author' | 'state' | 'submittedAt'>;
+
+/**
+ * Each reviewer's latest deciding review (approved, changes requested or
+ * dismissed), ordered by when it was submitted, oldest first. Plain
+ * comments and pending drafts never change a reviewer's stance.
+ */
+export function latestDecidingReviews<T extends ReviewStance>(reviews: T[]): T[] {
+  const oldestFirst = reviews.filter((review) => DECIDING.has(review.state)).sort((a, b) => (a.submittedAt < b.submittedAt ? -1 : 1));
+  const latest = new Map<string, T>();
+  for (const review of oldestFirst) {
+    // Delete first so a re-approval moves the reviewer to the end.
+    latest.delete(review.author);
+    latest.set(review.author, review);
+  }
+  return [...latest.values()];
+}
+
 /**
  * Standing approvals: reviewers whose latest deciding review is an approval.
  * A later change request or dismissal takes it back, like on GitHub. Any
  * commit counts. The PR author never appears (GitHub does not let them approve).
  */
 export function standingApprovals(pr: Pr): Approvals {
-  const oldestFirst = pr.reviews
-    .filter((review) => DECIDING.has(review.state))
-    .sort((a, b) => (a.submittedAt < b.submittedAt ? -1 : 1));
-  const latest = new Map<string, Review>();
-  for (const review of oldestFirst) {
-    // Delete first so a re-approval moves the reviewer to the end.
-    latest.delete(review.author);
-    latest.set(review.author, review);
-  }
-  const approvers = [...latest.values()].filter((review) => review.state === 'APPROVED').map((review) => review.author);
+  const approvers = latestDecidingReviews(pr.reviews)
+    .filter((review) => review.state === 'APPROVED')
+    .map((review) => review.author);
   return {
     people: approvers.filter((login) => !isBot(login)),
     agents: approvers.filter((login) => isBot(login)),

@@ -69,6 +69,7 @@ import type {
   SyncOptions,
   SyncReport,
   TeamRole,
+  TeamMembersView,
   TeamRolesView,
   ToolsView,
   TeachLessonResult,
@@ -228,6 +229,8 @@ export interface EngineService {
   getViewer(): Promise<ViewerView>;
   /** The viewer's teams with their roles (home or routing only) and why. */
   getTeamRoles(): Promise<TeamRolesView>;
+  /** Who is on each home team, from the team member cache (no GitHub call); MCP tags PR authors with it. */
+  getTeamMembers(): Promise<TeamMembersView>;
   /**
    * The user flips one team's role. It sticks over later classifications.
    * The stored viewer follows right away: its home teams, and the members

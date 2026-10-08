@@ -151,6 +151,7 @@ describe('PostPile MCP server', () => {
       listTopics: (scope) => engine.listTopics(scope),
       search: (query, scope) => engine.search(query, scope),
       getViewer: () => engine.getViewer(),
+      getTeamMembers: () => engine.getTeamMembers(),
       lastSyncReport: () => engine.lastSyncReport(),
       recordedAppVersion: async () => null,
       getTopic: async (topicId) => {
@@ -177,6 +178,7 @@ describe('PostPile MCP server', () => {
       listTopics: (scope) => engine.listTopics(scope),
       search: (query, scope) => engine.search(query, scope),
       getViewer: () => engine.getViewer(),
+      getTeamMembers: () => engine.getTeamMembers(),
       lastSyncReport: () => engine.lastSyncReport(),
       recordedAppVersion: async () => null,
       getTopic: async (topicId) => {
@@ -278,5 +280,58 @@ describe('PostPile MCP server', () => {
     expect(await callText(client, 'search_prs', { query: 'turbo' })).toContain('acme/app#1902');
     expect(await callText(client, 'pr_context', { pr: '#1902' })).toContain('acme/app#1902  ');
     expect(await callText(client, 'whats_on_me')).toContain('acme/app#1902');
+  });
+
+  it('gives every queued PR its author tag and review counts, inside the fence', async () => {
+    const queue = fencedPart(await callText(await connected(), 'whats_on_me'));
+    expect(queue).toContain('acme/app#1902 by rowan (your team: team-platform) · reviews: 1 human approval, waiting on 1 person and 1 team');
+    expect(queue).toContain('acme/app#1822 by remy (outside your team) · reviews: 2 human approvals, waiting on 1 team');
+    expect(queue).toContain('acme/app#1808 by you (you) · reviews: reviewbot approved');
+  });
+
+  it('names reviewers in pr_context, agents apart', async () => {
+    const client = await connected();
+    expect(fencedPart(await callText(client, 'pr_context', { pr: 'acme/app#1902' }))).toContain('Reviews: approved by lyra; pending: you, team-platform');
+    expect(fencedPart(await callText(client, 'pr_context', { pr: 'acme/app#1808' }))).toContain('agents: reviewbot approved');
+  });
+
+  it('filters the queue by whose PRs they are', async () => {
+    const client = await connected();
+    const others = await callText(client, 'whats_on_me', { author_scope: 'others' });
+    expect(others).toContain('Filters: state open, author others.');
+    // remy is on no home team; the PR asks team-platform (a home team) for review and still counts as others.
+    expect(await callText(client, 'pr_context', { pr: 'acme/app#1822' })).toContain('pending: team-platform');
+    expect(others).toContain('acme/app#1822 by remy (outside your team)');
+    // A set matches when any of its PRs does, so a teammate's PR can still show beside an outsider's.
+    expect(others).toContain('acme/app#1855 by jude (outside your team)');
+    expect(others).not.toContain('acme/app#1870');
+    expect(others).not.toContain('(you)');
+
+    const team = await callText(client, 'whats_on_me', { author_scope: 'my_team' });
+    expect(team).toContain('acme/app#1870 by sol (your team: team-platform)');
+    expect(team).not.toContain('acme/app#1822');
+    expect(team).not.toContain('acme/app#1950');
+
+    const mine = await callText(client, 'whats_on_me', { author_scope: 'me' });
+    expect(mine).toContain('acme/app#1950');
+    expect(mine).not.toContain('acme/app#1870');
+
+    const bad = await call(client, 'whats_on_me', { author_scope: 'team' });
+    expect(bad.isError).toBe(true);
+    expect(bad.text).toContain('author_scope must be me, my_team, others or any');
+  });
+
+  it('says once when team members were never fetched, instead of tagging everyone as outside', async () => {
+    const engine = new FakeEngine();
+    const unfetched = Object.assign(engine, { getTeamMembers: async () => ({ fetchedAt: null, teams: [] }) });
+    const client = await connected(unfetched);
+    const queue = await callText(client, 'whats_on_me');
+    expect(queue.match(/has not fetched the user's team members yet/g)).toHaveLength(1);
+    expect(queue).not.toContain('outside your team');
+    expect(queue).not.toContain('(your team:');
+    expect(queue).toContain('acme/app#1950 by you (you)');
+    const refused = await call(client, 'whats_on_me', { author_scope: 'others' });
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toContain('Use author_scope: "me" or "any".');
   });
 });

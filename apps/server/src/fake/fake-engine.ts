@@ -89,6 +89,7 @@ import type {
   TopicQueues,
   UserPrState,
   TeamRole,
+  TeamMembersView,
   TeamRolesView,
   ViewerView,
   BoardShapeEvent,
@@ -1173,6 +1174,10 @@ export class FakeEngine implements EngineService {
 
   async getTeamRoles(): Promise<TeamRolesView> {
     return this.teamRoles.view();
+  }
+
+  async getTeamMembers(): Promise<TeamMembersView> {
+    return this.teamRoles.membersView();
   }
 
   async setTeamRole(team: string, role: TeamRole): Promise<TeamRolesView> {

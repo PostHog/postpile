@@ -44,6 +44,16 @@ describe('team members', () => {
     expect(report.errors).toEqual([]);
     expect(loadViewer(h.store)?.teamMembers).toEqual(['lyra', 'rowan']);
   });
+
+  it('shows the cached members per home team, and says when they were never fetched', async () => {
+    const { h } = harness();
+    expect(await h.engine.getTeamMembers()).toEqual({ fetchedAt: null, teams: [] });
+    await h.engine.sync({ maxAgentCalls: 0 });
+    expect(await h.engine.getTeamMembers()).toEqual({
+      fetchedAt: '2026-09-28T08:00:00.000Z',
+      teams: [{ team: 'acme/team-platform', members: ['lyra', viewer.login, 'rowan'] }],
+    });
+  });
 });
 
 describe('team roles during sync', () => {
