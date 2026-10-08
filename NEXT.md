@@ -15,6 +15,11 @@ now".
   "Stacks land together" › Bot change requests): a review text that says
   little or only points inline ("findings inline") is replaced by the
   bot's first inline comment on that review, "(+N more)" for the rest.
+- MCP tool schemas after an update (2026-10-08, DESIGN.md "Refuses after
+  an update"): the 0.27.0 server lists every parameter (checked on the shipped
+  bundle and in a new Claude Code session); a reconnected old session kept
+  the read tools' old schemas. The update message now says a new session
+  shows them; a `tools/list` test pins every parameter.
 - Stacks land together (2026-10-08; DESIGN.md "Stacks land together"):
   "Merge, it is approved" gives way to the stack layer that holds it
   ("Blocked: team-security to review #12"): on a PR's row for layers
