@@ -225,12 +225,12 @@ describe('planNoteSet', () => {
     expect(planNoteSet(request, world({ sameRequest: written }))).toEqual({ kind: 'unchanged', note: written });
   });
 
-  it('checks covered_by: required, not itself, same repo, stored, not closed, matching cover token', () => {
+  it('checks covered_by: required, not itself, same repo, stored (else needs_cover), not closed, matching cover token', () => {
     const covered = { ...request, kind: 'covered' as const };
     expect(planNoteSet(covered, world())).toMatchObject({ kind: 'refused', reason: expect.stringContaining('needs covered_by') });
     expect(planNoteSet({ ...covered, coveredByPrKey: KEY }, world())).toMatchObject({ reason: 'a PR cannot cover itself' });
     expect(planNoteSet({ ...covered, coveredByPrKey: 'acme/other#3' }, world())).toMatchObject({ reason: expect.stringContaining('same repo') });
-    expect(planNoteSet({ ...covered, coveredByPrKey: 'acme/app#9' }, world())).toMatchObject({ reason: expect.stringContaining('does not store') });
+    expect(planNoteSet({ ...covered, coveredByPrKey: 'acme/app#9' }, world())).toEqual({ kind: 'needs_cover', coverKey: 'acme/app#9' });
     const closed = world({ anchorOf: anchors({ [KEY]: basePr(), [COVER]: makePr({ number: 2, state: 'CLOSED' }) }) });
     expect(planNoteSet({ ...covered, coveredByPrKey: COVER }, closed)).toMatchObject({ reason: expect.stringContaining('closed without merging') });
     expect(planNoteSet({ ...covered, coveredByPrKey: COVER, coverToken: 'old' }, world())).toMatchObject({ reason: expect.stringContaining(`${COVER} changed`) });
@@ -246,6 +246,13 @@ describe('planNoteSet', () => {
     expect(plan.kind === 'insert' && plan.replaces?.id).toBe('l-old');
     expect(planNoteSet({ ...request, kind: 'in_progress', leaseMinutes: 2 }, world())).toMatchObject({ kind: 'refused' });
     expect(planNoteSet({ ...request, leaseMinutes: 30 }, world())).toMatchObject({ reason: 'lease_minutes only goes with kind in_progress' });
+  });
+
+  it('asks for an unstored covering PR only once every other check passed', () => {
+    const covered = { ...request, kind: 'covered' as const, coveredByPrKey: 'acme/app#9' };
+    expect(planNoteSet({ ...covered, token: 'old' }, world())).toMatchObject({ kind: 'refused', reason: expect.stringContaining('the PR changed') });
+    const full = world({ liveCount: { client: PR_NOTES_PER_CLIENT, total: PR_NOTES_PER_CLIENT } });
+    expect(planNoteSet(covered, full)).toMatchObject({ kind: 'refused', reason: expect.stringContaining('live notes') });
   });
 
   it('holds the per-client cap, except for a note replacing its own', () => {

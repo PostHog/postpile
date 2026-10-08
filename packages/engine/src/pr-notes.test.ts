@@ -1,5 +1,5 @@
 import type { PrDetail, PrKey } from '@postpile/core';
-import { at, makeThreadFor } from '@postpile/core/fixtures';
+import { at, makePr, makeThreadFor } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness, type Harness } from './testing/fakes.ts';
 import { reviewRequestedPr } from './testing/prs.ts';
@@ -71,5 +71,54 @@ describe('agent notes on PRs', () => {
     expect((await h.engine.getPr(first))?.notes.durable).toBeNull();
     expect(h.store.prNotes.get(set.note?.id ?? '')?.clearedBy).toBe('user');
     expect((await h.engine.livePollStatus()).changeCount).toBeGreaterThan(changesBefore);
+  });
+
+  describe('covered by a PR PostPile does not track', () => {
+    /**
+     * The parent of a stack that never notified the user: on GitHub, not in
+     * the store, and quiet for weeks, so no hot-board rule keeps it fresh.
+     */
+    const parent = (overrides: Parameters<typeof makePr>[0] = {}) => makePr({ number: 77, headRef: 'parent-work', baseRef: 'master', updatedAt: '2026-08-01T00:00:00.000Z', ...overrides });
+
+    function coveredBy(first: PrKey, token: string, cover: PrKey) {
+      return { action: 'set' as const, prKey: first, kind: 'covered' as const, note: 'reviewed with the parent', by: 'ph3 session', token, coveredByPrKey: cover, coverToken: null, leaseMinutes: null };
+    }
+
+    it('reads it from GitHub, stores it without a tile of its own and anchors the note to it', async () => {
+      const { h, first, second } = await depot();
+      h.reader.addStackPr(parent());
+      const before = await board(h, [first, second]);
+
+      const set = await h.engine.notePr(coveredBy(first, await tokenOf(h, first), 'acme/app#77'), client);
+
+      expect(set).toMatchObject({ status: 'set', note: { coveredBy: 'acme/app#77', status: 'live' } });
+      expect(h.reader.numberLookups).toContainEqual([{ repo: 'acme/app', number: 77 }]);
+      expect(h.store.prs.get('acme/app#77')?.headOid).toBe(parent().headOid);
+      expect(h.store.pullIns.get('acme/app#77')).toMatchObject({ anchorPrKey: first });
+      expect(await board(h, [first, second])).toEqual(before);
+    });
+
+    it('goes stale when the covering PR gets a new head', async () => {
+      const { h, first } = await depot();
+      h.reader.addStackPr(parent());
+      await h.engine.notePr(coveredBy(first, await tokenOf(h, first), 'acme/app#77'), client);
+
+      h.reader.addStackPr(parent({ headOid: 'pushed', updatedAt: at(60) }));
+      await h.engine.sync({ maxAgentCalls: 0 });
+
+      expect((await h.engine.getPr(first))?.notes.durable).toMatchObject({ status: 'stale', staleReasons: ['acme/app#77: head changed'] });
+    });
+
+    it('refuses a covering PR GitHub does not have, and a mismatching cover token', async () => {
+      const { h, first } = await depot();
+
+      const missing = await h.engine.notePr(coveredBy(first, await tokenOf(h, first), 'acme/app#404'), client);
+      expect(missing).toMatchObject({ status: 'refused', reason: expect.stringContaining('GitHub has no PR acme/app#404') });
+      expect(h.store.prs.get('acme/app#404')).toBeNull();
+
+      h.reader.addStackPr(parent());
+      const mismatch = await h.engine.notePr({ ...coveredBy(first, await tokenOf(h, first), 'acme/app#77'), coverToken: 'made-up' }, client);
+      expect(mismatch).toMatchObject({ status: 'refused', reason: expect.stringContaining('acme/app#77 changed since you read it') });
+    });
   });
 });

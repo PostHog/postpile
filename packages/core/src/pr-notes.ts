@@ -389,8 +389,12 @@ export type PrNoteRequest =
   | { action: 'clear'; noteId: string };
 
 export interface PrNoteResult {
-  /** refused: nothing changed, see reason; unchanged: the same note was set already (a retried request). */
-  status: 'set' | 'unchanged' | 'renewed' | 'cleared' | 'refused';
+  /**
+   * refused: nothing changed, see reason; unchanged: the same note was set
+   * already (a retried request); pending: nothing written yet, the covering
+   * PR is still being read from GitHub (see reason), call again.
+   */
+  status: 'set' | 'unchanged' | 'renewed' | 'cleared' | 'refused' | 'pending';
   note: PrNoteView | null;
   /** set: the note this one replaced in its slot. */
   replaced: PrNoteView | null;
@@ -401,6 +405,10 @@ export interface PrNoteResult {
 
 export function refusedNote(reason: string): PrNoteResult {
   return { status: 'refused', note: null, replaced: null, anchored: null, reason };
+}
+
+export function pendingNote(reason: string): PrNoteResult {
+  return { status: 'pending', note: null, replaced: null, anchored: null, reason };
 }
 
 /** Whitespace folded to single spaces: notes are one line wherever they show. */
@@ -434,6 +442,8 @@ export interface NoteSetWorld {
 export type NoteSetPlan =
   | { kind: 'refused'; reason: string }
   | { kind: 'unchanged'; note: PrNote }
+  /** Every other check passed, but PostPile does not store the covering PR: read it from GitHub, then plan again. */
+  | { kind: 'needs_cover'; coverKey: PrKey }
   /** Insert `note`; mark `replaces` superseded by it; release the idempotency key of `releaseKeyOf` (an old note of the same request that is no longer current). */
   | { kind: 'insert'; note: Omit<PrNote, 'seq'>; replaces: PrNote | null; releaseKeyOf: PrNote | null };
 
@@ -451,7 +461,9 @@ function addMinutes(iso: IsoTime, minutes: number): IsoTime {
 
 const READ_AGAIN = 'read it again with pr_context and pass the new token';
 
-function checkCover(request: Extract<PrNoteRequest, { action: 'set' }>, world: NoteSetWorld): { ok: true; anchor: NoteAnchor | null } | { ok: false; reason: string } {
+type CoverCheck = { ok: true; anchor: NoteAnchor | null } | { ok: false; reason: string } | { ok: false; missing: PrKey };
+
+function checkCover(request: Extract<PrNoteRequest, { action: 'set' }>, world: NoteSetWorld): CoverCheck {
   const cover = request.coveredByPrKey;
   if (request.kind !== 'covered') {
     return cover === null ? { ok: true, anchor: null } : { ok: false, reason: 'covered_by only goes with kind covered' };
@@ -467,11 +479,13 @@ function checkCover(request: Extract<PrNoteRequest, { action: 'set' }>, world: N
   }
   const anchor = world.anchorOf(cover);
   if (!anchor) {
-    return { ok: false, reason: `PostPile does not store ${cover}; it can only point at a PR it tracks` };
+    // Often the parent of a stack that never notified the user: the caller reads it from GitHub.
+    return { ok: false, missing: cover };
   }
   if (anchor.state === 'CLOSED') {
     return { ok: false, reason: `${cover} was closed without merging, so it covers nothing` };
   }
+  // No cover token is fine: a PR PostPile just read for this note never showed in pr_context.
   if (request.coverToken !== null && request.coverToken !== observationToken(anchor)) {
     return { ok: false, reason: `${cover} changed since you read it; ${READ_AGAIN}` };
   }
@@ -481,8 +495,9 @@ function checkCover(request: Extract<PrNoteRequest, { action: 'set' }>, world: N
 /**
  * The checks and the write of a set, as one pure step over what the store
  * holds now: the token must match the PR as stored (else the agent judged
- * a state that is gone), covered needs another stored PR in the same repo,
- * quotas hold, and the new note replaces the one in its slot.
+ * a state that is gone), quotas hold, covered needs another PR in the same
+ * repo (`needs_cover` when it is not stored yet), and the new note replaces
+ * the one in its slot.
  */
 export function planNoteSet(request: Extract<PrNoteRequest, { action: 'set' }>, world: NoteSetWorld): NoteSetPlan {
   const note = cleanNoteText(request.note);
@@ -505,10 +520,6 @@ export function planNoteSet(request: Extract<PrNoteRequest, { action: 'set' }>, 
   if (request.token !== observationToken(anchor)) {
     return { kind: 'refused', reason: `the PR changed since you read it; ${READ_AGAIN}` };
   }
-  const cover = checkCover(request, world);
-  if (!cover.ok) {
-    return { kind: 'refused', reason: cover.reason };
-  }
   const slot = noteSlot(request.kind);
   let expiresAt: IsoTime | null = null;
   if (slot === 'lease') {
@@ -529,6 +540,11 @@ export function planNoteSet(request: Extract<PrNoteRequest, { action: 'set' }>, 
   }
   if (world.liveCount.total - freed >= PR_NOTES_TOTAL) {
     return { kind: 'refused', reason: `there are ${PR_NOTES_TOTAL} live notes on open PRs already; clear some first` };
+  }
+  // Last, so a covering PR is only read from GitHub for a note that would be written.
+  const cover = checkCover(request, world);
+  if (!cover.ok) {
+    return 'missing' in cover ? { kind: 'needs_cover', coverKey: cover.missing } : { kind: 'refused', reason: cover.reason };
   }
   return {
     kind: 'insert',

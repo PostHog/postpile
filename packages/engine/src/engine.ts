@@ -129,6 +129,7 @@ import { AgentRefresher, type RefreshRun } from './agent-requests/agent-refresh.
 import { answerAgentRequest } from './agent-requests/answer.ts';
 import { AgentRequestInbox } from './agent-requests/inbox.ts';
 import { OutsideProposals } from './agent-requests/topic-change.ts';
+import { NoteCoverReader } from './note-cover.ts';
 import { PrNotes } from './pr-notes.ts';
 import { FeedbackActions } from './actions/feedback-actions.ts';
 import { InboxCleanup } from './actions/inbox-cleanup.ts';
@@ -544,7 +545,13 @@ export class Engine implements EngineService {
     this.setup = new SetupFlow(store, deps.agent, history, setupChecks, setupSweep, now);
     this.mcp = new McpConnection({ store, commands, tools: this.toolHealth, launcher: deps.mcpLauncher ?? null, now, telemetry: this.telemetry });
     this.outsideProposals = new OutsideProposals(store, now);
-    this.prNotes = new PrNotes(store, now);
+    const coverReader = new NoteCoverReader({
+      now,
+      quota: this.quota,
+      pausedReason: () => (this.setup.status().needed ? 'setup not finished' : this.toolHealth.ghOffReason()),
+      read: (cover, notedKey) => github.pullInCover(parsePrKey(cover), notedKey),
+    });
+    this.prNotes = new PrNotes(store, now, coverReader);
     this.agentRefresher = new AgentRefresher({
       now,
       quota: this.quota,

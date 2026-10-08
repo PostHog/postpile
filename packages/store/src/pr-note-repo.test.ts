@@ -75,4 +75,13 @@ describe('PrNoteRepo', () => {
     store.prNotes.renew('b', at(90));
     expect(store.prNotes.countLiveOnOpenPrs(at(30))).toBe(2);
   });
+
+  it('lists the covering PRs of current covered notes only', () => {
+    store.prNotes.insert(note({ id: 'a', idempotencyKey: 'a' }));
+    store.prNotes.insert(note({ id: 'b', prKey: 'acme/app#3', coveredByPrKey: 'acme/app#4', idempotencyKey: 'b' }));
+    store.prNotes.clear('b', at(20), 'user');
+    store.prNotes.insert(note({ id: 'c', prKey: 'acme/app#5', kind: 'no_action', coveredByPrKey: null, coverAnchor: null, idempotencyKey: 'c' }));
+
+    expect(store.prNotes.listCurrentCovers()).toEqual([{ prKey: 'acme/app#1', coveredByPrKey: 'acme/app#2' }]);
+  });
 });

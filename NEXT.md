@@ -24,6 +24,16 @@ now".
   freshness check also fetches up to 5 open PRs waiting on the user whose
   snapshot is over 6 h old; the MCP marks snapshots over 1 h "may be
   stale" and asks for a refresh instead of "rarely needed".
+- Covered by an untracked PR (2026-10-08; DESIGN.md "Agent notes on
+  PRs"): note_pr kind covered no longer refuses a covering PR PostPile
+  does not store (often a stack's parent that never notified the user).
+  The app looks it up by number, fetches it and stores it as a pull-in
+  anchored to the noted PR (no tile of its own); engine `NoteCoverReader`
+  (critical quota and paused reads refuse, 20 reads an hour, one per PR at
+  a time, "pending, retry" after 12 s). The freshness check now also
+  follows the covering PRs of current covered notes, so those notes go
+  stale on a new head. A bare `covered_by: "#N"` means #N in the noted
+  PR's repo.
 - Stacks land together (2026-10-08; DESIGN.md "Stacks land together"):
   "Merge, it is approved" gives way to the stack layer that holds it
   ("Blocked: team-security to review #12"): on a PR's row for layers

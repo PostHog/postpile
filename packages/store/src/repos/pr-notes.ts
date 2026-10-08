@@ -112,6 +112,15 @@ export class PrNoteRepo {
     ).map(toNote);
   }
 
+  /** Each current covered note's PR and covering PR: the sync keeps the covering PRs fresh, so these notes go stale when they move. */
+  listCurrentCovers(): { prKey: PrKey; coveredByPrKey: PrKey }[] {
+    const rows = all<{ pr_key: string; covered_by_pr_key: string }>(
+      this.db,
+      `SELECT DISTINCT pr_key, covered_by_pr_key FROM pr_note WHERE covered_by_pr_key IS NOT NULL AND ${CURRENT} ORDER BY pr_key`,
+    );
+    return rows.map((row) => ({ prKey: row.pr_key, coveredByPrKey: row.covered_by_pr_key }));
+  }
+
   /** Current notes whose lease has not run out, on open PRs: for the caps. `client` counts one client's only. */
   countLiveOnOpenPrs(now: string, client?: string): number {
     const byClient = client === undefined ? '' : ' AND n.client = ?';

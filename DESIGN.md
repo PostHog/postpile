@@ -8256,7 +8256,7 @@ the reporting agent and checked by Codex).
   source of truth; the notes are visible annotations next to it, not a read
   state (AGENTS.md "GitHub is the source of truth" names them).
 - **Two slots per PR.** A durable note, kind `covered` (needs `covered_by`:
-  another stored PR in the same repo, never itself) or `no_action`, and a
+  another PR in the same repo, never itself) or `no_action`, and a
   lease, kind `in_progress` (default 2 h, 5 min to 8 h). At most one current
   note per slot: a new one replaces the old one for good (`superseded_by`),
   so a lease never erases a durable note. A lease is renewed by note id
@@ -8288,6 +8288,26 @@ the reporting agent and checked by Codex).
   you read it; read it again"). The token cannot say what changed, only
   that something did. `cover_token` is optional: without it the covering
   PR's anchor is taken at write time; with it a mismatch is refused too.
+- **A covering PR PostPile does not track** (2026-10-08, fix after the
+  0.27.0 re-test). That is the main case: the covering PR is often the
+  parent of a stack that never notified the user. Once every other check
+  of the set passed (core answers `needs_cover`), the app looks the PR up
+  by number (`findPrsByNumber`), fetches it and stores it like a pulled-in
+  stack layer: a `pr_pull_in` row anchored to the noted PR, no thread and
+  no topic, so it never becomes a tile of its own; then the set is planned
+  again. No `cover_token` is needed there (the agent could not have read
+  one); a wrong one is still refused. GitHub has no such PR (or it is a
+  fork): refused, "check covered_by". GitHub reads only, and the limits
+  live in `NoteCoverReader` because every session shares one quota:
+  nothing while the quota is critical, setup is open or gh is off; 20
+  reads an hour; one read per PR at a time (a retry joins it). A read
+  slower than 12 s (the outbox waits 20 s) answers `pending` and finishes
+  in the background, so calling again with the same arguments finds the
+  PR. The freshness check also follows the covering PR of every current
+  covered note on a hot PR, whatever the hot rules say about the covering
+  PR itself; otherwise a quiet parent would never be re-read and its note
+  would never go stale. A bare `covered_by: "#N"` means #N in the noted
+  PR's repo, since covered_by has to be in that repo anyway.
 - **Write path.** `note_pr` (set, renew, clear) goes through the agent-request
   outbox like `propose_topic_change` (kind `note_pr`). A set is idempotent:
   `idempotency_key` is a hash of the request and the client, so a retry after

@@ -578,6 +578,35 @@ export class GitHubSync {
   }
 
   /**
+   * The covering PR of an agent note (note_pr kind covered) that PostPile
+   * does not store, often the parent of a stack that never notified the
+   * user. Looked up by number, then fetched and stored like a pulled-in
+   * stack layer: no thread and no topic, so it never becomes a tile of its
+   * own, and the freshness check keeps it current while the note is (see
+   * `freshnessRefs`). GitHub reads only. 'not_found' when GitHub has no
+   * such PR the token can see, or it comes from a fork.
+   */
+  async pullInCover(ref: PrRef, notedKey: PrKey): Promise<'stored' | 'not_found'> {
+    const viewer = loadViewer(this.store);
+    if (!viewer) {
+      throw new Error('PostPile has not read GitHub yet');
+    }
+    const [shape] = await this.reader.findPrsByNumber([ref]);
+    if (!shape) {
+      return 'not_found';
+    }
+    const fetchedAt = this.now().toISOString();
+    const pr = (await this.reader.fetchPrs([ref])).get(prKey(ref));
+    if (!pr) {
+      return 'not_found';
+    }
+    const reason = `covers #${parsePrKey(notedKey).number}, says an agent note`;
+    this.store.pullIns.put({ prKey: pr.key, anchorPrKey: notedKey, reason, pulledAt: fetchedAt });
+    this.storePr(pr, viewer, fetchedAt);
+    return 'stored';
+  }
+
+  /**
    * One finder request per full sync (never in the poll): the viewer's own
    * open PRs, review requests for them and their teams, and PRs involving
    * them merged in the last FOUND_MERGED_DAYS. The list replaces the stored
@@ -607,10 +636,17 @@ export class GitHubSync {
    * PRs a tile shows (pinged, found or pulled in) that are open or draft,
    * plus ones merged or closed within FRESHNESS_CLOSED_WINDOW_MS. Hot ones
    * only: a PR the board leaves out would only be fetched to be cut again.
+   * Also the covering PR of a current covered note on a hot PR, whether a
+   * tile shows it or not: without it the note never goes stale.
    */
   private freshnessRefs(skip: Set<PrKey>): PrRef[] {
     const hot = Board.load(this.store, this.now().toISOString()).prs;
     const tracked = new Set<PrKey>([...this.trackedPrKeys(), ...this.store.pullIns.listAll().keys()].filter((key) => hot.has(key)));
+    for (const cover of this.store.prNotes.listCurrentCovers()) {
+      if (hot.has(cover.prKey)) {
+        tracked.add(cover.coveredByPrKey);
+      }
+    }
     const cutoff = new Date(this.now().getTime() - FRESHNESS_CLOSED_WINDOW_MS).toISOString();
     return this.store.prs
       .listHeaders()
