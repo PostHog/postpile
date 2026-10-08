@@ -47,6 +47,7 @@ import {
   echo,
   fenced,
   fetchedText,
+  isOldFetch,
   freshness,
   glanceLines,
   leadUnreadReason,
@@ -524,6 +525,9 @@ function prFreshnessLine(detail: PrDetail, ctx: ReadContext): string {
   const checked = detail.pr.state === 'OPEN' || now.getTime() - Date.parse(detail.pr.updatedAt) < CLOSED_CHECK_WINDOW_MS;
   if (!checked) {
     return `${fetched} The app runs but no longer checks this ${detail.pr.state.toLowerCase()} PR by itself; new notifications on it still come in.`;
+  }
+  if (!detail.fetchedAt || isOldFetch(detail.fetchedAt, now)) {
+    return `${fetched} The app re-reads it only when GitHub reports news on it or its update time moves, so it may be stale: call refresh_from_github before acting on it.`;
   }
   return `${fetched} The app runs and checks GitHub for changes to it again within about 1 min, so a refresh is rarely needed.`;
 }

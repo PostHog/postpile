@@ -6746,6 +6746,15 @@ standalone server never starts it.
   the full fetch. Every full sync runs it, the poll at most once a minute
   (`FRESHNESS_POLL_EVERY_MS`). The sync always logs the counts, the poll
   when something moved.
+- Stale re-reads (2026-10-08): the freshness check only fetches a PR whose
+  `updatedAt` moved, so a quiet PR kept a snapshot days old; a full sync
+  on a calm inbox read 0 PRs while an agent saw "fetched 41 h ago" next to
+  a move. Each freshness check now also fetches up to
+  `STALE_REREADS_PER_CHECK` (5) open PRs on tiles that wait on the user
+  (their move, or unread: what `whats_on_me` lists) whose snapshot is older
+  than `STALE_REREAD_AFTER_MS` (6 h), oldest first (`staleRereads`). Only
+  while the quota allows background work. Cost: at most 5 PRs per minute
+  of poll until the queue is fresh, then a trickle every 6 h.
 - After a write: approve and comment run one normal poll cycle with that PR
   as focus (`focus.prRefs`) before they answer, so the renderer's refresh
   after the action already shows the new review state. It is serialized
@@ -8013,7 +8022,12 @@ spec, GitHub's, Sentry's and Linear's MCP servers. What it means here:
   this PR was fetched ("fetched 3 min ago") and, while the app runs, when it
   checks again ("the app checks GitHub again within 1 min"). This tells an
   agent when a refresh is pointless. `whats_on_me` says it per tile, and
-  every header says when a full sync runs.
+  every header says when a full sync runs. Only a snapshot from the last
+  hour (`OLD_FETCH_MS`) gets the "rarely needed" sentence: an older one
+  says the app re-reads it only on news or a moved update time, "so it may
+  be stale: call refresh_from_github before acting on it", and the list
+  marks it "(may be stale)" (2026-10-08: "fetched 41 h ago" sat next to
+  "a refresh is rarely needed").
 
 ### Sync progress for other processes (2026-10-08)
 

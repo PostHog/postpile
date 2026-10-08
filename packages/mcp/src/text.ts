@@ -202,9 +202,24 @@ export function leadUnreadReason<T extends Pick<UnreadReason, 'actor'>>(reasons:
   return people[people.length - 1] ?? reasons[reasons.length - 1] ?? null;
 }
 
+/**
+ * A snapshot older than this may be stale even while the app runs: the app
+ * re-reads a PR when a notification on it arrives or its GitHub update time
+ * moves (checked about once a minute), and a few old ones that wait on the
+ * user every few hours; anything that moves neither is not seen until then.
+ */
+export const OLD_FETCH_MS = 60 * 60 * 1000;
+
+export function isOldFetch(fetchedAt: string, now: Date): boolean {
+  return now.getTime() - Date.parse(fetchedAt) > OLD_FETCH_MS;
+}
+
 /** "fetched 3 min ago" for a list row; says so when the PR has no fetch time. */
 export function fetchedText(fetchedAt: string | null, now: Date): string {
-  return fetchedAt ? `fetched ${ago(fetchedAt, now)}` : 'no fetch time';
+  if (!fetchedAt) {
+    return 'no fetch time';
+  }
+  return `fetched ${ago(fetchedAt, now)}${isOldFetch(fetchedAt, now) ? ' (may be stale)' : ''}`;
 }
 
 /** "lyra: asked whether the warm-up needs a flag (+2 more), since your review on 2026-09-28". */

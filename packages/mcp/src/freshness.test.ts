@@ -69,6 +69,19 @@ describe('MCP reads next to the running app', () => {
     const list = await whatsOnMe(ctx, LIST);
     expect(list.text).toContain(TEAM_REVIEW);
     expect(list.text).toContain('acme/app#7) · topic Unsorted (unsorted) · fetched 10 min ago');
+    expect(list.text).not.toContain('may be stale');
+    expect((await prContext(ctx, 'acme/app#7', 'brief')).text).toContain('again within about 1 min, so a refresh is rarely needed.');
+  });
+
+  it('says an old snapshot may be stale, in the list and in pr_context, and asks for a refresh', async () => {
+    const later = { ...ctx, now: () => new Date('2026-09-03T03:00:00Z') };
+    const list = (await whatsOnMe(later, LIST)).text;
+    expect(list).toContain('· fetched 41 h ago (may be stale)');
+    const detail = (await prContext(later, 'acme/app#7', 'brief')).text;
+    expect(detail).toContain(
+      'PostPile fetched this PR from GitHub 41 h ago. The app re-reads it only when GitHub reports news on it or its update time moves, so it may be stale: call refresh_from_github before acting on it.',
+    );
+    expect(detail).not.toContain('rarely needed');
   });
 
   it('lists no siblings for a PR in Unsorted: its PRs have nothing to do with each other', async () => {
