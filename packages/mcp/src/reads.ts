@@ -753,13 +753,6 @@ function proposalLine(proposal: TopicProposal, topicId: string, name: (id: strin
   return `  ${when}${withdrawn}: ${proposalWords(proposal, topicId, name, outcome)}, ${who}. Reason: ${proposal.reason}`;
 }
 
-/**
- * Pending topic suggestions and the ones decided in the last 14 days, merges
- * into this topic included, so an outside agent sees what became of its
- * suggestions and does not repeat itself. The other topics' names are read
- * once each (a merged topic is archived, but still readable by id). Empty
- * when there are none.
- */
 /** Looks up the names of the other topics `proposals` name, one read each. */
 async function proposalNames(reader: PostPileReader, detail: TopicDetail, proposals: TopicProposal[]): Promise<(id: string | null) => string> {
   const ids = new Set(proposals.flatMap((proposal) => [proposal.topicId, proposal.intoTopicId]).filter((id): id is string => id !== null && id !== detail.topic.id));
@@ -770,6 +763,13 @@ async function proposalNames(reader: PostPileReader, detail: TopicDetail, propos
   return (id: string | null): string => (id === null ? 'another topic' : (names.get(id) ?? id));
 }
 
+/**
+ * Pending topic suggestions and the ones decided in the last 14 days, merges
+ * into this topic included, so an outside agent sees what became of its
+ * suggestions and does not repeat itself. The other topics' names are read
+ * once each (a merged topic is archived, but still readable by id). Empty
+ * when there are none.
+ */
 async function suggestionLines(reader: PostPileReader, detail: TopicDetail, now: Date): Promise<string[]> {
   const iso = now.toISOString();
   const proposals = [...detail.pendingProposals, ...detail.decidedProposals];

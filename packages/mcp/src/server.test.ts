@@ -545,6 +545,7 @@ describe('PostPile MCP server', () => {
       lastSyncReport: () => engine.lastSyncReport(),
       recordedSyncProgress: async () => null,
       recordedAppVersion: async () => null,
+      prOverlaps: () => engine.prOverlaps(),
     };
     const client = await connected(reader);
     const topic = await client.callTool({ name: 'topic', arguments: { topic: 'topic-depot', format: 'json' } });
