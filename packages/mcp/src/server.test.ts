@@ -43,16 +43,17 @@ function fencedPart(text: string): string {
 }
 
 describe('PostPile MCP server', () => {
-  it('lists six tools with short descriptions that say when to use them', async () => {
+  it('lists seven tools with short descriptions that say when to use them', async () => {
     const client = await connected();
     const { tools } = await client.listTools();
-    expect(tools.map((tool) => tool.name).sort()).toEqual(['pr_context', 'propose_topic_change', 'refresh_from_github', 'search_prs', 'topic', 'whats_on_me']);
+    expect(tools.map((tool) => tool.name).sort()).toEqual(['note_pr', 'pr_context', 'propose_topic_change', 'refresh_from_github', 'search_prs', 'topic', 'whats_on_me']);
     const annotations = Object.fromEntries(tools.map((tool) => [tool.name, tool.annotations]));
     for (const read of ['pr_context', 'topic', 'search_prs', 'whats_on_me']) {
       expect(annotations[read]).toMatchObject({ readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
     }
     expect(annotations.refresh_from_github).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true });
     expect(annotations.propose_topic_change).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false });
+    expect(annotations.note_pr).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false });
     for (const tool of tools) {
       expect(tool.description?.length ?? 0).toBeLessThan(CLAUDE_CODE_CUT);
       expect(tool.description).toContain('Use when:');
@@ -177,6 +178,7 @@ describe('PostPile MCP server', () => {
       lastSyncReport: () => engine.lastSyncReport(),
       recordedSyncProgress: async () => null,
       recordedAppVersion: async () => null,
+      listPrNotes: (keys) => engine.listPrNotes(keys),
       getTopic: async (topicId) => {
         const detail = await engine.getTopic(topicId);
         if (!detail || topicId !== 'topic-depot') {
@@ -206,6 +208,7 @@ describe('PostPile MCP server', () => {
       lastSyncReport: () => engine.lastSyncReport(),
       recordedSyncProgress: async () => null,
       recordedAppVersion: async () => null,
+      listPrNotes: (keys) => engine.listPrNotes(keys),
       getTopic: async (topicId) => {
         const detail = await engine.getTopic(topicId);
         const tileTurn = { kind: 'them' as const, who: 'ada', what: 'to merge on another PR', prKey: 'acme/app#1' };
@@ -481,6 +484,7 @@ describe('PostPile MCP server', () => {
       recordedSyncProgress: async () => null,
       recordedAppVersion: async () => null,
       prOverlaps: () => engine.prOverlaps(),
+      listPrNotes: (keys) => engine.listPrNotes(keys),
     };
     const client = await connected(reader);
     const preview = 'Latest unanswered thread: bob on src/cache.ts: ":+1: thanks, looks good"';
@@ -501,7 +505,7 @@ describe('PostPile MCP server', () => {
     const structured = queue.structuredContent as {
       meta: { viewer: string; teamTagsKnown: boolean };
       page: { total: number };
-      rows: { yourMove: boolean; tile: { untrusted: { title: string } }; prs: Record<string, unknown>[] }[];
+      rows: { yourMove: boolean; allNoted: boolean; tile: { untrusted: { title: string } }; prs: Record<string, unknown>[] }[];
     };
     // The fenced text carries the same JSON for clients that ignore structuredContent.
     expect(JSON.parse(fencedPart(text).split('\n')[1] ?? '')).toEqual(structured);
@@ -526,7 +530,8 @@ describe('PostPile MCP server', () => {
       expect(pr).toHaveProperty('untrusted.title');
     }
     const textQueue = fencedPart(await callText(client, 'whats_on_me'));
-    expect(structured.rows.filter((row) => row.yourMove)).toHaveLength(Number(/Your move \((\d+) in total\)/.exec(textQueue)?.[1]));
+    // A your-move tile whose PRs all carry an agent note is listed in its own group (sample data has one on #1955).
+    expect(structured.rows.filter((row) => row.yourMove && !row.allNoted)).toHaveLength(Number(/Your move \((\d+) in total\)/.exec(textQueue)?.[1]));
 
     const search = await client.callTool({ name: 'search_prs', arguments: { query: 'depot', limit: 2, format: 'json' } });
     expect(search.structuredContent).toMatchObject({ page: { offset: 0, shown: 2, nextOffset: 2 } });
@@ -575,6 +580,7 @@ describe('PostPile MCP server', () => {
       recordedSyncProgress: async () => null,
       recordedAppVersion: async () => null,
       prOverlaps: () => engine.prOverlaps(),
+      listPrNotes: (keys) => engine.listPrNotes(keys),
     };
     const client = await connected(reader);
     const topic = await client.callTool({ name: 'topic', arguments: { topic: 'topic-depot', format: 'json' } });

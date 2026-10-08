@@ -17,10 +17,12 @@ import {
   type AuthorScope,
   SYNC_PROGRESS_STALE_MS,
   type PrDetail,
+  hasLiveNote,
   type PrKey,
   type PrOverlap,
   type PrOverlapsView,
   type PrPaneView,
+  type PrNotesView,
   type PrSummary,
   type TeamMembersView,
   type RecordedSyncProgress,
@@ -32,6 +34,7 @@ import {
   type TopicProposal,
 } from '@postpile/core';
 import { UNSORTED_TOPIC_ID, type EngineService } from '@postpile/engine';
+import { contextNoteLines, notesJson, queueNoteLines, tokenLine } from './notes-text.ts';
 import { overlapLines, overlapMarker, overlapNotes } from './overlaps.ts';
 import { jsonAnswer, prJson, prUnreadReason, tileJson, topicJson, type Format, type MetaJson, type PrJson } from './json.ts';
 import { parsePrInput } from './pr-input.ts';
@@ -58,7 +61,7 @@ import {
 } from './text.ts';
 
 /** The read methods the tools use; the read-only engine and the sample-data engine both have them. */
-export type PostPileReader = Pick<EngineService, 'getPr' | 'getTopic' | 'listTopics' | 'search' | 'getViewer' | 'getTeamMembers' | 'prOverlaps' | 'lastSyncReport' | 'recordedSyncProgress' | 'recordedAppVersion'>;
+export type PostPileReader = Pick<EngineService, 'getPr' | 'getTopic' | 'listTopics' | 'search' | 'getViewer' | 'getTeamMembers' | 'prOverlaps' | 'lastSyncReport' | 'recordedSyncProgress' | 'recordedAppVersion' | 'listPrNotes'>;
 
 /** What every read needs besides the reader. */
 export interface ReadContext {
@@ -523,9 +526,10 @@ async function authorsOfOverlaps(reader: PostPileReader, overlaps: PrOverlap[]):
 }
 
 /** The PR's lines with the overlap lines after them, as pr_context prints them. */
-async function prLinesWithOverlaps(reader: PostPileReader, read: PrRead, authors: Authors, detail: Detail, overlaps: PrOverlapsView): Promise<string[]> {
+async function prLinesWithOverlaps(reader: PostPileReader, read: PrRead, authors: Authors, detail: Detail, overlaps: PrOverlapsView, now: Date): Promise<string[]> {
   const authorOf = await authorsOfOverlaps(reader, overlaps.overlaps[read.key] ?? []);
-  return [...prLines(read, authors, detail), ...overlapLines(overlaps, read.key, authorOf)];
+  const notes = contextNoteLines(read.detail.notes, now);
+  return [...prLines(read, authors, detail), ...overlapLines(overlaps, read.key, authorOf), ...(notes.length > 0 ? ['', ...notes] : [])];
 }
 
 interface PrFailure {
@@ -578,8 +582,8 @@ function prLines(read: PrRead, authors: Authors, detail: Detail): string[] {
 }
 
 /** One PR: its lines, then its topic, as pr_context always answered. */
-async function singlePrData(reader: PostPileReader, read: PrRead, authors: Authors, detail: Detail, overlaps: PrOverlapsView): Promise<string[]> {
-  const data = await prLinesWithOverlaps(reader, read, authors, detail, overlaps);
+async function singlePrData(reader: PostPileReader, read: PrRead, authors: Authors, detail: Detail, overlaps: PrOverlapsView, now: Date): Promise<string[]> {
+  const data = await prLinesWithOverlaps(reader, read, authors, detail, overlaps, now);
   const asked = new Set([read.key]);
   if (read.topic) {
     data.push('', ...(detail === 'full' ? fullTopicLines(read.topic, asked) : briefTopicForPrs(read.topic, asked)));
@@ -590,7 +594,7 @@ async function singlePrData(reader: PostPileReader, read: PrRead, authors: Autho
 }
 
 /** Several PRs: each topic once, then the lines of each PR asked about in it. */
-async function severalPrsData(reader: PostPileReader, reads: PrRead[], authors: Authors, detail: Detail, overlaps: PrOverlapsView): Promise<string[]> {
+async function severalPrsData(reader: PostPileReader, reads: PrRead[], authors: Authors, detail: Detail, overlaps: PrOverlapsView, now: Date): Promise<string[]> {
   const data: string[] = [];
   for (const group of topicGroups(reads)) {
     if (data.length > 0) {
@@ -603,7 +607,7 @@ async function severalPrsData(reader: PostPileReader, reads: PrRead[], authors: 
       data.push('Not in a topic yet:');
     }
     for (const read of group.reads) {
-      data.push('', ...(await prLinesWithOverlaps(reader, read, authors, detail, overlaps)));
+      data.push('', ...(await prLinesWithOverlaps(reader, read, authors, detail, overlaps, now)));
     }
   }
   return data;
@@ -630,7 +634,7 @@ function stackOf(read: PrRead): StackJson | null {
   return null;
 }
 
-function prReadJson(read: PrRead, authors: Authors, overlaps: PrOverlapsView): PrJson & { stack: StackJson | null; dependsOn: PrKey | null } {
+function prReadJson(read: PrRead, authors: Authors, overlaps: PrOverlapsView): PrJson & { stack: StackJson | null; dependsOn: PrKey | null; agentNotes: object } {
   const summary = read.tiles.flatMap((view) => view.prs).find((pr) => pr.key === read.key) ?? null;
   const json = prJson({
     summary,
@@ -642,7 +646,7 @@ function prReadJson(read: PrRead, authors: Authors, overlaps: PrOverlapsView): P
     topic: read.topic ? { id: read.topic.topic.id, name: read.topic.topic.name } : null,
     overlaps,
   });
-  return { ...json, stack: stackOf(read), dependsOn: dependsOnKey(read.detail.pr, read.tiles) };
+  return { ...json, stack: stackOf(read), dependsOn: dependsOnKey(read.detail.pr, read.tiles), agentNotes: notesJson(read.detail.notes) };
 }
 
 async function prContextJson(ctx: ReadContext, reads: PrRead[], failures: PrFailure[], authors: Authors, overlaps: PrOverlapsView): Promise<ToolAnswer> {
@@ -694,16 +698,17 @@ export async function prContext(ctx: ReadContext, input: string | string[], deta
     return prContextJson(ctx, reads, failures, authors, overlaps);
   }
   const single = reads.length === 1;
-  const data = single ? await singlePrData(reader, first, authors, detail, overlaps) : await severalPrsData(reader, reads, authors, detail, overlaps);
+  const now = ctx.now();
+  const data = single ? await singlePrData(reader, first, authors, detail, overlaps, now) : await severalPrsData(reader, reads, authors, detail, overlaps, now);
   const footer: string[] = [];
   if (failures.length > 0) {
     footer.push(`Could not answer for ${failures.length} of ${inputs.length}:`, ...failures.map(failureLine), '');
   }
   if (single) {
-    footer.push(...overlapNotes(overlaps, first.key), prFreshnessLine(first.detail, ctx));
+    footer.push(...overlapNotes(overlaps, first.key), prFreshnessLine(first.detail, ctx), tokenLine(first.detail.notes));
   } else {
     const notes = [...new Set(reads.flatMap((read) => overlapNotes(overlaps, read.key)))];
-    footer.push(...notes, ...reads.map((read) => `${read.key}: ${prFreshnessLine(read.detail, ctx)}`));
+    footer.push(...notes, ...reads.map((read) => `${read.key}: ${prFreshnessLine(read.detail, ctx)} ${tokenLine(read.detail.notes)}`));
   }
   const more = detail === 'brief' ? 'detail: "full" adds activity, facts and the whole topic. ' : '';
   footer.push(`Next: ${more}Stale? call refresh_from_github. Wrong topic? propose_topic_change.`);
@@ -992,14 +997,19 @@ function scopeMatches(authors: Authors, pr: PrSummary, scope: AuthorScopeFilter)
 
 /**
  * "acme/app#1902 by alice (outside your team) · reviews: 1 human approval, reviewbot approved":
- * one line per PR of a queue row, and on the user's own PR where it is
- * their move, a preview of the newest thread waiting on them.
+ * one line per PR of a queue row, its agent note under it, and on the
+ * user's own PR where it is their move, a preview of the newest thread
+ * waiting on them.
  */
-function queuePrLines(prs: PrSummary[], details: Map<PrKey, PrDetail | null>, authors: Authors, overlaps: PrOverlapsView): string[] {
+function queuePrLines(prs: PrSummary[], details: Map<PrKey, PrDetail | null>, authors: Authors, overlaps: PrOverlapsView, notes: Map<PrKey, PrNotesView>, now: Date): string[] {
   return prs.flatMap((pr) => {
     const detail = details.get(pr.key) ?? null;
     const reviews = detail ? reviewCountsText(reviewerStates(detail.pr)) : 'not stored';
     const lines = [`  ${pr.key} by ${pr.author}${authorTag(placeOf(authors, pr), authors.known)} · reviews: ${reviews}${overlapMarker(overlaps, pr.key)}`];
+    const view = notes.get(pr.key);
+    if (view) {
+      lines.push(...queueNoteLines(view, now).map((line) => `    ${line}`));
+    }
     const thread = pr.turn.kind === 'you' && detail ? waitingThreadText(detail.waitingThreads) : null;
     if (thread) {
       lines.push(`    ${thread}`);
@@ -1008,11 +1018,33 @@ function queuePrLines(prs: PrSummary[], details: Map<PrKey, PrDetail | null>, au
   });
 }
 
+/** your_move: plain your-move tiles; noted: your move, but every PR carries a live agent note; unread: unread, not your move. */
+type QueueGroup = 'your_move' | 'noted' | 'unread';
+
+const GROUP_ORDER: QueueGroup[] = ['your_move', 'noted', 'unread'];
+
+const GROUP_TITLES: Record<QueueGroup, string> = {
+  your_move: 'Your move',
+  noted: 'Your move, but an agent left a note',
+  unread: 'Unread, not your move',
+};
+
 interface QueueRow {
-  yourMove: boolean;
+  group: QueueGroup;
   text: string;
   view: TileView;
   topic: TopicDetail;
+}
+
+/** Notes are per PR, never per tile: a tile moves to "noted" only when all its PRs carry a live note. */
+function yourMoveGroup(prs: PrSummary[], notes: Map<PrKey, PrNotesView>): QueueGroup {
+  const allNoted =
+    prs.length > 0 &&
+    prs.every((pr) => {
+      const view = notes.get(pr.key);
+      return view !== undefined && hasLiveNote(view);
+    });
+  return allNoted ? 'noted' : 'your_move';
 }
 
 function queueJson(rows: QueueRow[], page: QueueRow[], details: Map<PrKey, PrDetail | null>, authors: Authors, options: QueueOptions, meta: MetaJson, overlaps: PrOverlapsView): object {
@@ -1020,9 +1052,11 @@ function queueJson(rows: QueueRow[], page: QueueRow[], details: Map<PrKey, PrDet
     meta,
     filters: filtersJson(options),
     page: pageJson(rows.length, options, page.length),
-    yourMoveTotal: rows.filter((row) => row.yourMove).length,
+    yourMoveTotal: rows.filter((row) => row.group !== 'unread').length,
     rows: page.map((row) => ({
-      yourMove: row.yourMove,
+      yourMove: row.group !== 'unread',
+      // Every PR of the tile carries a live agent note (pr_context has them).
+      allNoted: row.group === 'noted',
       tile: tileJson(row.view),
       topic: { id: row.topic.topic.id },
       fetchedAt: tileFetchedAt(row.view),
@@ -1044,7 +1078,7 @@ export async function whatsOnMe(ctx: ReadContext, options: QueueOptions, format:
   }
   const items = (await reader.listTopics(ALL_REPOS)).filter((item) => item.group === 'needs_you');
   const now = ctx.now();
-  const rows: QueueRow[] = [];
+  const candidates: { view: TileView; topic: TopicDetail; line: string }[] = [];
   for (const detail of await readTopics(reader, items.map((item) => item.topic.id))) {
     for (const view of detail.tiles.filter(isLive)) {
       const matching = view.prs.filter((pr) => stateMatches(pr, options.state) && repoMatches(pr, options.repo) && scopeMatches(authors, pr, options.authorScope));
@@ -1052,16 +1086,23 @@ export async function whatsOnMe(ctx: ReadContext, options: QueueOptions, format:
         continue;
       }
       const line = `- ${view.tile.title} (${view.prs.map((pr) => pr.key).join(', ')}) · topic ${detail.topic.name} (${detail.topic.id}) · ${fetchedText(tileFetchedAt(view), now)}`;
-      if (view.turn.kind === 'you') {
-        rows.push({ yourMove: true, text: `${line}\n  ${view.turn.what}`, view, topic: detail });
-      } else if (view.state.kind === 'unread') {
-        const reason = leadUnreadReason(view.state.unreadBecause);
-        rows.push({ yourMove: false, text: `${line}\n  ${reason ? unreadReasonText(reason) : 'unread'} · ${turnText(view.turn)}`, view, topic: detail });
-      }
+      candidates.push({ view, topic: detail, line });
     }
   }
-  // Your move first, then unread ones where it is not.
-  rows.sort((a, b) => Number(b.yourMove) - Number(a.yourMove));
+  // Agent notes for every listed PR in one read; they only regroup the list, never change a move.
+  const noteViews = await reader.listPrNotes([...new Set(candidates.flatMap(({ view }) => view.prs.map((pr) => pr.key)))]);
+  const notes = new Map(noteViews.map((view) => [view.prKey, view]));
+  const rows: QueueRow[] = [];
+  for (const { view, topic, line } of candidates) {
+    if (view.turn.kind === 'you') {
+      rows.push({ group: yourMoveGroup(view.prs, notes), text: `${line}\n  ${view.turn.what}`, view, topic });
+    } else if (view.state.kind === 'unread') {
+      const reason = leadUnreadReason(view.state.unreadBecause);
+      rows.push({ group: 'unread', text: `${line}\n  ${reason ? unreadReasonText(reason) : 'unread'} · ${turnText(view.turn)}`, view, topic });
+    }
+  }
+  // Your move first, then your move with a note on every PR, then unread ones where it is not.
+  rows.sort((a, b) => GROUP_ORDER.indexOf(a.group) - GROUP_ORDER.indexOf(b.group));
   const page = rows.slice(options.offset, options.offset + options.limit);
   // Reviews and waiting threads come from each PR's stored snapshot: read only for the rows on this page.
   const details = await readDetails(reader, page.flatMap((row) => row.view.prs.map((pr) => pr.key)));
@@ -1075,16 +1116,15 @@ export async function whatsOnMe(ctx: ReadContext, options: QueueOptions, format:
     return { text, found: false };
   }
   const { head, tail } = pageLines(rows.length, options, page.length);
-  const yourMoveTotal = rows.filter((row) => row.yourMove).length;
-  const shown = page.map((row) => ({ yourMove: row.yourMove, text: [row.text, ...queuePrLines(row.view.prs, details, authors, overlaps)].join('\n') }));
+  const shown = page.map((row) => ({ group: row.group, text: [row.text, ...queuePrLines(row.view.prs, details, authors, overlaps, notes, now)].join('\n') }));
   const data: string[] = [];
-  const mine = shown.filter((row) => row.yourMove);
-  const others = shown.filter((row) => !row.yourMove);
-  if (mine.length > 0) {
-    data.push(`Your move (${yourMoveTotal} in total):`, ...mine.map((row) => row.text));
-  }
-  if (others.length > 0) {
-    data.push(...(data.length > 0 ? [''] : []), `Unread, not your move (${rows.length - yourMoveTotal} in total):`, ...others.map((row) => row.text));
+  for (const group of GROUP_ORDER) {
+    const inGroup = shown.filter((row) => row.group === group);
+    if (inGroup.length === 0) {
+      continue;
+    }
+    const total = rows.filter((row) => row.group === group).length;
+    data.push(...(data.length > 0 ? [''] : []), `${GROUP_TITLES[group]} (${total} in total):`, ...inGroup.map((row) => row.text));
   }
   return { text: answer([...(await header(ctx)), ...teamNote(authors), `${head} Filters: ${filterWords(options)}.`], data, tail), found: true };
 }

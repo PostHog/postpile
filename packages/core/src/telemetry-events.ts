@@ -86,7 +86,7 @@ const updateErrorCode = z.string().regex(/^[A-Za-z0-9_]{1,40}$/);
 // 6. MCP server (postpile-mcp, a separate process that reads the database and asks the app for the rest)
 // -----------------------------------------------------------------------
 
-const mcpTool = z.enum(['pr_context', 'topic', 'search_prs', 'whats_on_me', 'refresh_from_github', 'propose_topic_change']);
+const mcpTool = z.enum(['pr_context', 'topic', 'search_prs', 'whats_on_me', 'refresh_from_github', 'propose_topic_change', 'note_pr']);
 const mcpConnectFrom = z.enum(['footer', 'setup']);
 const replyTarget = z.enum(['thread', 'comment']);
 

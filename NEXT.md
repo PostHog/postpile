@@ -6,6 +6,18 @@ now".
 
 ## Done
 
+- Agent notes on PRs (2026-10-08; DESIGN.md "Agent notes on PRs"): new MCP
+  tool `note_pr` (set, renew, clear) through the agent-request outbox,
+  table `pr_note` (migration 039). Durable slot (covered, no_action) and a
+  lease slot (in_progress, 2 h default, 8 h max); each note is anchored to
+  a fingerprint of the PR (head, state, draft, review requests with who
+  asked, latest review per reviewer, people's comments with the newest
+  one) and goes stale at read time with a named reason. Sets need the
+  observation token pr_context prints; retries are idempotent. Shown in
+  `pr_context`, per PR in `whats_on_me` (an all-noted your-move tile gets
+  its own group after the plain ones) and as a muted line with Clear in
+  the PR pane. Never changes whose move, unread or counts (engine test).
+  The server instructions got a short block on coordinating review work.
 - Glance claim basis (2026-10-08; DESIGN.md "Batched glances" › Glance
   claim basis): glances answer `riskBasis` and `verdictBasis` ("checked:
   …" / "not checked: …"), the prompt forbids stating an unchecked
@@ -1659,6 +1671,13 @@ the app meanwhile.
   code-manager folder migration (`legacy-data.ts`) once the move has run.
 
 ## Decided
+
+- **Agent notes on PRs are advisory and anchored to the PR's state**
+  (2026-10-08, design agreed with the reporting agent, checked by Codex;
+  DESIGN.md "Agent notes on PRs"): notes never change turn, unread, done,
+  sections or counts; one durable note and one lease per PR; staleness is
+  a state fingerprint, not timestamps, and the user's own later comment
+  stales a note too (agents write notes last). `cover_token` stays optional.
 
 - **A topic settles in steps once its last read lands; the dwell stays**
   (2026-10-07, owner, from a recording and a playable mock; DESIGN.md

@@ -26,6 +26,7 @@ import type { TileAfterRead } from './after-read.ts';
 import type { GlanceRefreshBlock, GlanceState } from './glance-state.ts';
 import type { AgentCallStats, DossierStatus, TopicRelation } from './memory.ts';
 import type { DossierView, FactChangeCounts, FactView, MemoryTarget } from './memory-views.ts';
+import type { PrNotesView } from './pr-notes.ts';
 import type { PrPaneView } from './pr-pane.ts';
 import type { PrStatus } from './pr-status.ts';
 import type { PrPrimaryAction } from './primary-action.ts';
@@ -492,12 +493,15 @@ export interface PrDetail {
   /** Ids of every tile this PR appears in. */
   tileIds: string[];
   /** Active facts about this PR or citing it, verified at read time. */
-  facts: FactView[];  /**
+  facts: FactView[];
+  /**
    * Unresolved threads whose last word waits on the viewer, newest first
    * (`waitingThreads`): the MCP answers preview the newest next to an
    * "Answer 1 thread from bob" move. The renderer does not read it.
    */
   waitingThreads: WaitingThread[];
+  /** Agent notes on the PR and its observation token (DESIGN.md "Agent notes on PRs"). Advisory: no rule reads them. */
+  notes: PrNotesView;
 }
 
 /**

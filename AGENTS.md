@@ -20,7 +20,7 @@ Read this file first. Details live elsewhere:
 1. **Tell the user what needs them, and why, at a glance.** Every tile answers four questions in fixed spots: for whom (word chip + left band), why now (actor avatar + event), status (segment pill), and whose turn (footer). Attention goes where it's the user's move, not where the unread count is highest.
 2. **Keep topics as the structure.** The agent layer's job is to cluster work into topics and remember what's going on in them (dossiers, facts). Sections (the asks Needs reply, Changes you requested, To review, Team mentioned, then You drive, Your team owns, Other work) *contain topics*. They never become a flat pile of PRs.
 3. **Memory the user can trust and correct.** The user owns `instructions.md` (changed only through accepted diffs or hand edits). The agent owns dossiers, facts and the work-context digest. Every agent claim shows its sources ("Why?") and can be rechecked or forgotten.
-4. **GitHub is the source of truth for read and unread.** The app never holds a read state GitHub doesn't have. The only local-only state is the explicit, visible pending-writes queue while writes are locked.
+4. **GitHub is the source of truth for read and unread.** The app never holds a read state GitHub doesn't have. The only local-only state is the explicit, visible pending-writes queue while writes are locked, and outside agents' notes on PRs (`note_pr`): visible, advisory annotations that never change read, unread, whose move or counts.
 
 ## Principles
 
@@ -75,7 +75,7 @@ The full dated list is under "Decided" in `NEXT.md`. Add to it when the user dec
 - `packages/github`: reader (ETag, batched GraphQL, `gh auth token`) and writer.
 - `packages/agent`: the claude CLI runner, prompts, zod schemas, models (`models.ts`).
 - `packages/engine`: sync, live poll, digest pipeline, actions, writes lock and action log, work-context sweep.
-- `packages/mcp`: MCP server: four reads (`pr_context`, `topic`, `search_prs`, `whats_on_me`) over the engine's read methods, and `refresh_from_github` / `propose_topic_change`, which ask the running app through a file outbox (`packages/engine/src/agent-requests`).
+- `packages/mcp`: MCP server: four reads (`pr_context`, `topic`, `search_prs`, `whats_on_me`) over the engine's read methods, and `refresh_from_github` / `propose_topic_change` / `note_pr`, which ask the running app through a file outbox (`packages/engine/src/agent-requests`).
 - `apps/server`: Hono API, token-protected, bound to 127.0.0.1, with the fake engine in `src/fake/`.
 - `apps/desktop`: Electron main (poll, Mac notifications) and the React renderer.
 - `apps/cli`: dev CLI (`sync`, `poll`, `sweep`, `topics`, `topic`, `pr`, `mcp`, …).

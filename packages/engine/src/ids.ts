@@ -37,3 +37,7 @@ export function newFactId(): string {
 export function newRuleProposalId(): string {
   return `r${randomBytes(5).toString('hex')}`;
 }
+
+export function newNoteId(): string {
+  return `n${randomBytes(5).toString('hex')}`;
+}

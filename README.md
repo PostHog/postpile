@@ -132,10 +132,11 @@ Homebrew links `postpile-mcp` onto your PATH. Without Homebrew, use `/Applicatio
 
 The app can do this for you. While Claude Code does not have the server, the status bar at the bottom shows "agents: not connected"; click it and pick **Add to Claude Code**, which runs `claude mcp add --scope user` with the full path. The last setup step offers the same. Nothing is added without that click. "Not now" hides the status bar item for good. The same popover shows the command for other agents.
 
-- Tools: `pr_context` (a PR and its topic), `topic`, `search_prs` and `whats_on_me` read. `refresh_from_github` and `propose_topic_change` ask the running app.
+- Tools: `pr_context` (a PR and its topic), `topic`, `search_prs` and `whats_on_me` read. `refresh_from_github`, `propose_topic_change` and `note_pr` ask the running app.
 - The four reads use the local database only, and answer only while the app runs. Answers are short by default; `detail: "full"` gives everything.
 - `refresh_from_github` has the running app re-read a PR, or a topic's open PRs, from GitHub now. It only reads, skips PRs fetched in the last minute, and allows 20 refreshes an hour across all agents.
 - `propose_topic_change` files a topic split, rename or merge as a suggestion. It shows in the Inbox as "suggested by Claude Code" and changes nothing until you accept it. Unanswered suggestions expire after 14 days.
+- `note_pr` leaves a short note on a PR that GitHub can't show: covered by another PR's review, nothing to do, or an agent is on it right now. The note shows in the PR pane, where you can clear it, and in the MCP answers. It never changes whose move it is or what is unread, and it goes out of date by itself once the PR changes.
 - Nothing the MCP server does writes to GitHub. When the app is closed, every tool says so and does nothing; the server stays up and answers again once you open the app.
 - It knows what the app knew at its last sync, and each answer says when that was. `pr_context` also says when the PR was fetched.
 - GitHub text comes back fenced and marked as data, because the calling agent may run with tools.

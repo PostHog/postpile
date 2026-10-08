@@ -19,6 +19,7 @@ import { TopicMembershipRepo } from './repos/memberships.ts';
 import { MetaRepo } from './repos/meta.ts';
 import { NotificationRepo } from './repos/notifications.ts';
 import { TopicProposalRepo } from './repos/proposals.ts';
+import { PrNoteRepo } from './repos/pr-notes.ts';
 import { PrRepo } from './repos/prs.ts';
 import { PendingWriteRepo } from './repos/pending-writes.ts';
 import { PingDecisionRepo } from './repos/ping-decisions.ts';
@@ -43,6 +44,7 @@ export class Store {
   readonly driverPicks: DriverPickRepo;
   readonly memberships: TopicMembershipRepo;
   readonly proposals: TopicProposalRepo;
+  readonly prNotes: PrNoteRepo;
   readonly sets: PrSetRepo;
   readonly glances: GlanceRepo;
   readonly snoozes: SnoozeRepo;
@@ -76,6 +78,7 @@ export class Store {
     this.driverPicks = new DriverPickRepo(db);
     this.memberships = new TopicMembershipRepo(db);
     this.proposals = new TopicProposalRepo(db);
+    this.prNotes = new PrNoteRepo(db);
     this.sets = new PrSetRepo(db);
     this.glances = new GlanceRepo(db);
     this.snoozes = new SnoozeRepo(db);

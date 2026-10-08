@@ -1,11 +1,12 @@
 import { z } from 'zod';
+import { PR_NOTE_BY_MAX, PR_NOTE_KINDS, PR_NOTE_LEASE_MAX_MINUTES, PR_NOTE_MAX, type PrNoteRequest, type PrNoteResult } from './pr-notes.ts';
 import { OUTSIDE_REASON_MAX, TOPIC_NAME_MAX, type TopicChangeRequest, type TopicChangeResult } from './topic-change-plan.ts';
 import type { IsoTime, PrKey } from './types.ts';
 
 // What outside agents may ask the running app to do through the MCP server
 // (DESIGN.md "Agent requests"): re-read PRs from GitHub now
-// (refresh_from_github), or file a topic change for the user to decide
-// (propose_topic_change). The app does the work: only it holds the GitHub
+// (refresh_from_github), file a topic change for the user to decide
+// (propose_topic_change), or leave, renew or clear a note on a PR (note_pr). The app does the work: only it holds the GitHub
 // client, the quota readings and the database's write lock.
 
 /** A PR fetched this recently is skipped as fresh. */
@@ -64,7 +65,7 @@ export const AGENT_RESULT_MAX_AGE_MS = 3600_000;
 /** `<uuid>.json`, the only names the app reads. */
 export const AGENT_REQUEST_FILE = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.json$/;
 
-export type AgentRequestKind = 'refresh' | 'propose_topic_change';
+export type AgentRequestKind = 'refresh' | 'propose_topic_change' | 'note_pr';
 
 interface AgentRequestBase {
   v: typeof AGENT_REQUEST_VERSION;
@@ -76,11 +77,13 @@ interface AgentRequestBase {
 
 export type AgentRequest =
   | (AgentRequestBase & { kind: 'refresh'; payload: AgentRefreshTarget })
-  | (AgentRequestBase & { kind: 'propose_topic_change'; payload: TopicChangeRequest });
+  | (AgentRequestBase & { kind: 'propose_topic_change'; payload: TopicChangeRequest })
+  | (AgentRequestBase & { kind: 'note_pr'; payload: PrNoteRequest });
 
 export type AgentRequestResult =
   | { v: typeof AGENT_REQUEST_VERSION; ok: true; kind: 'refresh'; refresh: AgentRefreshResult }
   | { v: typeof AGENT_REQUEST_VERSION; ok: true; kind: 'propose_topic_change'; topicChange: TopicChangeResult }
+  | { v: typeof AGENT_REQUEST_VERSION; ok: true; kind: 'note_pr'; prNote: PrNoteResult }
   | { v: typeof AGENT_REQUEST_VERSION; ok: false; error: string };
 
 const prKeySchema = z.string().regex(/^[\w.-]+\/[\w.-]+#\d+$/);
@@ -102,6 +105,29 @@ const topicChangeSchema = z
     dryRun: z.boolean(),
   })
   .strict();
+
+const noteIdSchema = z.string().min(1).max(64);
+const leaseMinutesSchema = z.number().int().min(1).max(PR_NOTE_LEASE_MAX_MINUTES).nullable();
+const tokenSchema = z.string().min(1).max(64);
+
+// Lengths are checked again after whitespace is folded (planNoteSet); these caps only keep the file small.
+const prNoteSchema = z.discriminatedUnion('action', [
+  z
+    .object({
+      action: z.literal('set'),
+      prKey: prKeySchema,
+      kind: z.enum(PR_NOTE_KINDS as [string, ...string[]]),
+      note: z.string().max(PR_NOTE_MAX * 2),
+      by: z.string().max(PR_NOTE_BY_MAX * 2),
+      token: tokenSchema,
+      coveredByPrKey: prKeySchema.nullable(),
+      coverToken: tokenSchema.nullable(),
+      leaseMinutes: leaseMinutesSchema,
+    })
+    .strict(),
+  z.object({ action: z.literal('renew'), noteId: noteIdSchema, leaseMinutes: leaseMinutesSchema }).strict(),
+  z.object({ action: z.literal('clear'), noteId: noteIdSchema }).strict(),
+]);
 
 /** The envelope, loose on v and kind so an unknown one can be answered with why. */
 const envelopeSchema = z.object({
@@ -139,6 +165,10 @@ export function parseAgentRequest(text: string): AgentRequestCheck {
   if (kind === 'propose_topic_change') {
     const change = topicChangeSchema.safeParse(payload);
     return change.success ? { ok: true, request: { ...base, kind, payload: change.data } } : { ok: false, error: 'bad propose_topic_change payload' };
+  }
+  if (kind === 'note_pr') {
+    const note = prNoteSchema.safeParse(payload);
+    return note.success ? { ok: true, request: { ...base, kind, payload: note.data as PrNoteRequest } } : { ok: false, error: 'bad note_pr payload' };
   }
   return { ok: false, error: `unknown request kind ${kind}` };
 }

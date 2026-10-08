@@ -55,6 +55,9 @@ import type {
   PingTarget,
   EventView,
   PrDetail,
+  PrNoteRequest,
+  PrNoteResult,
+  PrNotesView,
   PrKey,
   RepoOverview,
   SearchResult,
@@ -126,6 +129,7 @@ import { AgentRefresher, type RefreshRun } from './agent-requests/agent-refresh.
 import { answerAgentRequest } from './agent-requests/answer.ts';
 import { AgentRequestInbox } from './agent-requests/inbox.ts';
 import { OutsideProposals } from './agent-requests/topic-change.ts';
+import { PrNotes } from './pr-notes.ts';
 import { FeedbackActions } from './actions/feedback-actions.ts';
 import { InboxCleanup } from './actions/inbox-cleanup.ts';
 import { failed } from './actions/results.ts';
@@ -353,6 +357,7 @@ export class Engine implements EngineService {
   private readonly heldThreads = new Set<string>();
   private readonly clickedReadRetry: ClickedReadRetry;
   private readonly outsideProposals: OutsideProposals;
+  private readonly prNotes: PrNotes;
   private readonly teamMembers: TeamMembers;
   private readonly teamRoles: TeamRoleKeeper;
   /** The last queued team role flip; `setTeamRole` chains on it. */
@@ -539,6 +544,7 @@ export class Engine implements EngineService {
     this.setup = new SetupFlow(store, deps.agent, history, setupChecks, setupSweep, now);
     this.mcp = new McpConnection({ store, commands, tools: this.toolHealth, launcher: deps.mcpLauncher ?? null, now, telemetry: this.telemetry });
     this.outsideProposals = new OutsideProposals(store, now);
+    this.prNotes = new PrNotes(store, now);
     this.agentRefresher = new AgentRefresher({
       now,
       quota: this.quota,
@@ -1044,6 +1050,18 @@ export class Engine implements EngineService {
     return this.outsideProposals.propose(change, options.client);
   }
 
+  async notePr(request: PrNoteRequest, options: { client: string }): Promise<PrNoteResult> {
+    return this.prNotes.handle(request, options.client);
+  }
+
+  async clearPrNote(noteId: string): Promise<PrNoteResult> {
+    return this.prNotes.clear(noteId, 'user');
+  }
+
+  async listPrNotes(prKeys: PrKey[]): Promise<PrNotesView[]> {
+    return this.reads.listPrNotes(prKeys);
+  }
+
   startAgentRequests(): void {
     const folder = this.deps.agentRequestsFolder;
     if (this.agentRequests || !folder) {
@@ -1067,7 +1085,7 @@ export class Engine implements EngineService {
     const poll = this.livePoller?.currentStatus() ?? OFF_POLL_STATUS;
     return {
       ...poll,
-      changeCount: poll.changeCount + this.writeRefreshesDone + this.deps.markReadQueue.mirrored() + this.syncsDone + this.clickedReadRetry.decided() + this.cleanup.changeCount(),
+      changeCount: poll.changeCount + this.writeRefreshesDone + this.deps.markReadQueue.mirrored() + this.syncsDone + this.clickedReadRetry.decided() + this.cleanup.changeCount() + this.prNotes.changes(),
       syncRunning: this.syncing !== null,
       nextAutoSyncAt: this.autoSync?.nextSyncAt() ?? null,
       catchUpChanges: this.catchUps.changes(),

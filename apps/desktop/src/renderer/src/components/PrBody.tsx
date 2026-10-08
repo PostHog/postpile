@@ -10,6 +10,7 @@ import { ActivityTimeline } from './ActivityTimeline.tsx';
 import { AssignedTo } from './AssignedTo.tsx';
 import { Avatar } from './Avatar.tsx';
 import { AgentFacts } from './AgentFacts.tsx';
+import { AgentNoteLines } from './AgentNoteLines.tsx';
 import { GlanceCard } from './GlanceCard.tsx';
 import { NewSinceBox } from './NewSinceBox.tsx';
 import { ICON_WORDS, mergeQueueWord, reviewWord, stackQueueWord, type StateWord } from '../lib/pr.ts';
@@ -199,6 +200,7 @@ export function PrBody(props: PrBodyProps) {
                 <AssignedTo line={assigned} />
               </span>
             )}
+            <AgentNoteLines notes={props.detail.notes} />
           </div>
           <NewSinceBox detail={props.detail} />
           <GlanceCard detail={props.detail} summary={props.summary} view={props.view} />

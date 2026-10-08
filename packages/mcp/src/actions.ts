@@ -1,10 +1,11 @@
-// The two tools that ask the running app to do something: re-read PRs from
-// GitHub (refresh_from_github) and file a topic suggestion for the user
-// (propose_topic_change). The MCP process itself still never writes the
+// The tools that ask the running app to do something: re-read PRs from
+// GitHub (refresh_from_github), file a topic suggestion for the user
+// (propose_topic_change) and leave a note on a PR (note_pr). The MCP process itself still never writes the
 // database or GitHub; see agent-requests.ts.
-import { AGENT_REQUEST_WAIT_MS, type AgentRefreshResult, type AgentRefreshTarget, type AgentRequestResult, type PrKey, type TopicChangeKind, type TopicChangeResult } from '@postpile/core';
+import { AGENT_REQUEST_WAIT_MS, type AgentRefreshResult, type AgentRefreshTarget, type AgentRequestResult, type PrKey, type PrNoteKind, type PrNoteRequest, type PrNoteResult, type TopicChangeKind, type TopicChangeResult } from '@postpile/core';
 import type { AgentAsk, AgentRequests } from './agent-requests.ts';
 import { notTracked, resolvePr, resolveTopic, toolError, type ReadContext, type ToolAnswer } from './reads.ts';
+import { untilText } from './notes-text.ts';
 import { ago, answer, minute } from './text.ts';
 
 export interface ActionContext extends ReadContext {
@@ -249,4 +250,118 @@ export async function proposeTopicChange(ctx: ActionContext, args: ProposeArgs):
       ? [`topic(topic: "${outcomeTopic}") shows whether the user accepted or rejected it. Unanswered suggestions expire after 14 days.`]
       : ['Call again without dry_run to file it.'];
   return { text: answer([head, 'What accepting would do:'], change.preview, footer), found: true, structured: proposeStructured(change) };
+}
+
+// ---------------------------------------------------------------------------
+// note_pr
+// ---------------------------------------------------------------------------
+
+export interface NotePrArgs {
+  action: 'set' | 'renew' | 'clear';
+  pr?: string;
+  kind?: PrNoteKind;
+  note?: string;
+  by?: string;
+  token?: string;
+  covered_by?: string;
+  cover_token?: string;
+  lease_minutes?: number;
+  note_id?: string;
+}
+
+const NOTE_EXAMPLES = {
+  set: 'note_pr(pr: "acme/app#1902", kind: "covered", covered_by: "acme/app#1851", note: "reviewed together with the parent", by: "ph3 session", token: "<from pr_context>")',
+  renew: 'note_pr(action: "renew", note_id: "n3f2a1c9d0e", lease_minutes: 60)',
+  clear: 'note_pr(action: "clear", note_id: "n3f2a1c9d0e")',
+} as const;
+
+/** The set request with its PRs resolved, or the error that says what is missing. */
+async function noteSetRequest(ctx: ActionContext, args: NotePrArgs): Promise<PrNoteRequest | ToolAnswer> {
+  const example = `Example: ${NOTE_EXAMPLES.set}`;
+  if (!args.pr || !args.kind || !args.note?.trim() || !args.by?.trim() || !args.token?.trim()) {
+    return toolError([`set needs pr, kind, note, by and token (the observation token pr_context prints). ${example}`]);
+  }
+  const resolved = await resolvePr(ctx.reader, args.pr);
+  if (!resolved.ok) {
+    return resolved.error;
+  }
+  let coveredBy: PrKey | null = null;
+  if (args.covered_by?.trim()) {
+    const cover = await resolvePr(ctx.reader, args.covered_by, 'covered_by');
+    if (!cover.ok) {
+      return cover.error;
+    }
+    coveredBy = cover.key;
+  }
+  return {
+    action: 'set',
+    prKey: resolved.key,
+    kind: args.kind,
+    note: args.note,
+    by: args.by,
+    token: args.token.trim(),
+    coveredByPrKey: coveredBy,
+    coverToken: args.cover_token?.trim() || null,
+    leaseMinutes: args.lease_minutes ?? null,
+  };
+}
+
+async function noteRequest(ctx: ActionContext, args: NotePrArgs): Promise<PrNoteRequest | ToolAnswer> {
+  if (args.action === 'set') {
+    return noteSetRequest(ctx, args);
+  }
+  const noteId = args.note_id?.trim() ?? '';
+  if (noteId === '') {
+    return toolError([`${args.action} needs note_id, from pr_context or the answer that set the note. Example: ${NOTE_EXAMPLES[args.action]}`]);
+  }
+  return args.action === 'renew' ? { action: 'renew', noteId, leaseMinutes: args.lease_minutes ?? null } : { action: 'clear', noteId };
+}
+
+function noteStructured(result: PrNoteResult): Record<string, unknown> {
+  return { status: result.status, note_id: result.note?.id ?? null, expires_at: result.note?.expiresAt ?? null };
+}
+
+/** The outcome in PostPile's words (outside the fence) and the note itself (inside: its text and `by` are untrusted). */
+function noteAnswer(result: PrNoteResult, now: Date): ToolAnswer {
+  const note = result.note;
+  const head: string[] = [];
+  if (result.status === 'set' || result.status === 'unchanged') {
+    head.push(result.status === 'set' ? `Note set, id ${note?.id}.` : `This note was set already (id ${note?.id}); nothing was written twice.`);
+    head.push(`Anchored to ${result.anchored}. It goes stale by itself when that changes, also through a comment you post later: write notes last.`);
+  } else if (result.status === 'renewed') {
+    head.push(`Lease renewed, id ${note?.id}.`);
+  } else {
+    head.push(`Note ${note?.id} cleared. The note it replaced, if any, stays gone.`);
+  }
+  if (note?.expiresAt && result.status !== 'cleared') {
+    head.push(`The lease ends in ${untilText(note.expiresAt, now)} (${minute(note.expiresAt)}); renew it with note_pr(action: "renew", note_id: "${note.id}") while you work.`);
+  }
+  const data = note ? [`${note.kind}${note.coveredBy ? ` by ${note.coveredBy}` : ''}, by ${note.by}: ${note.note}`] : [];
+  if (result.replaced) {
+    data.push(`Replaced: ${result.replaced.kind} by ${result.replaced.by}: ${result.replaced.note}`);
+  }
+  return { text: data.length > 0 ? answer(head, data) : head.join('\n'), found: true, structured: noteStructured(result) };
+}
+
+export async function notePr(ctx: ActionContext, args: NotePrArgs): Promise<ToolAnswer> {
+  const request = await noteRequest(ctx, args);
+  if (!('action' in request)) {
+    return request;
+  }
+  const asked = await ask(ctx, { kind: 'note_pr', payload: request });
+  if (asked.kind === 'answer') {
+    return asked.answer;
+  }
+  if (asked.kind === 'running') {
+    return toolError([`PostPile took the request but did not answer within ${WAIT_SECONDS} s. Check pr_context in a minute; calling again with the same arguments never writes the note twice.`]);
+  }
+  const { result } = asked;
+  if (result.kind !== 'note_pr') {
+    return toolError(['PostPile answered a different request. Nothing is known about this note; check pr_context before trying again.']);
+  }
+  const outcome = result.prNote;
+  if (outcome.status === 'refused') {
+    return toolError([`Nothing changed. ${WHY}`], [outcome.reason ?? 'refused']);
+  }
+  return noteAnswer(outcome, ctx.now());
 }
