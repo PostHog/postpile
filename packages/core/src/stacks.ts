@@ -13,6 +13,11 @@ export interface LayerShape {
   updatedAt: IsoTime;
   mergedAt: IsoTime | null;
   previousBaseRefs?: string[];
+  /**
+   * The layer below the body declares (`declaredParentOf`): a PR number in
+   * the same repo. Null or missing when it declares none.
+   */
+  declaredParent?: number | null;
 }
 
 /**
@@ -86,6 +91,33 @@ export function sitsOn(child: LayerShape, parent: LayerShape): boolean {
   return (direct || movedDown) && wasOpenWhenOpened(parent, child);
 }
 
+/**
+ * `child` declares `parent` in its body as the layer below
+ * (`declaredParentOf`). It counts like a branch link, with the same rule
+ * that a merged or closed parent only counts below a PR opened while it
+ * was open. Callers try it only when no branch link exists.
+ */
+export function declaresParent(child: LayerShape, parent: LayerShape): boolean {
+  if (child.ref.repo !== parent.ref.repo || child.ref.number === parent.ref.number) {
+    return false;
+  }
+  return child.declaredParent === parent.ref.number && wasOpenWhenOpened(parent, child);
+}
+
+/** Whether walking down from `from` through `parents` reaches `target`: linking target onto from would close a loop. */
+function reaches<T>(from: T, target: T, parents: Map<T, T>): boolean {
+  const seen = new Set<T>();
+  let current: T | undefined = from;
+  while (current !== undefined && !seen.has(current)) {
+    if (current === target) {
+      return true;
+    }
+    seen.add(current);
+    current = parents.get(current);
+  }
+  return false;
+}
+
 /** The PR this one sits on. The current base wins over a former one. */
 function parentOf<T extends StackLayer>(pr: T, byHead: Map<string, T>): T | undefined {
   const refs = [pr.baseRef, ...(pr.previousBaseRefs ?? [])];
@@ -98,13 +130,44 @@ function parentOf<T extends StackLayer>(pr: T, byHead: Map<string, T>): T | unde
   return undefined;
 }
 
+/**
+ * The layer below each PR: its branch parent (`parentOf`), else the parent
+ * its body declares (`declaresParent`). Branch links win. A declared link
+ * that would close a loop is dropped; they are tried lowest number first,
+ * so the outcome does not depend on the input order. `declared` collects
+ * the PRs whose link comes from their body.
+ */
+function parentsInRepo<T extends StackLayer>(layers: T[], declared: Set<T>): Map<T, T> {
+  const byHead = new Map(layers.map((pr) => [pr.headRef, pr]));
+  const byNumberInRepo = new Map(layers.map((pr) => [pr.ref.number, pr]));
+  const parents = new Map<T, T>();
+  for (const pr of layers) {
+    const parent = parentOf(pr, byHead);
+    if (parent) {
+      parents.set(pr, parent);
+    }
+  }
+  for (const pr of [...layers].sort(byNumber)) {
+    if (parents.has(pr) || pr.declaredParent === null || pr.declaredParent === undefined) {
+      continue;
+    }
+    const parent = byNumberInRepo.get(pr.declaredParent);
+    if (parent && declaresParent(pr, parent) && !reaches(parent, pr, parents)) {
+      parents.set(pr, parent);
+      declared.add(pr);
+    }
+  }
+  return parents;
+}
+
 function stacksInRepo<T extends StackLayer>(repo: string, prs: T[]): Stack[] {
   const layers = oneLayerPerHead(prs.filter((pr) => !pr.isCrossRepository));
-  const byHead = new Map(layers.map((pr) => [pr.headRef, pr]));
+  const declared = new Set<T>();
+  const parents = parentsInRepo(layers, declared);
   const children = new Map<T, T[]>();
   const starts: T[] = [];
   for (const pr of layers) {
-    const parent = parentOf(pr, byHead);
+    const parent = parents.get(pr);
     if (!parent) {
       starts.push(pr);
       continue;
@@ -130,7 +193,12 @@ function stacksInRepo<T extends StackLayer>(repo: string, prs: T[]): Stack[] {
       starts.push(...next.slice(1));
     }
     if (chain.length >= 2 && chain.some((pr) => pr.state === 'OPEN')) {
-      stacks.push({ id: `stack:${chain[0]!.key}`, repo, prKeys: chain.map((pr) => pr.key) });
+      const stack: Stack = { id: `stack:${chain[0]!.key}`, repo, prKeys: chain.map((pr) => pr.key) };
+      const declaredLinks = chain.slice(1).filter((pr) => declared.has(pr));
+      if (declaredLinks.length > 0) {
+        stack.declaredLinks = declaredLinks.map((pr) => pr.key);
+      }
+      stacks.push(stack);
     }
   }
   return stacks;
@@ -138,7 +206,10 @@ function stacksInRepo<T extends StackLayer>(repo: string, prs: T[]): Stack[] {
 
 /**
  * Finds real stacks: PR B sits on PR A when B's base branch is A's head
- * branch in the same repo, or was until A merged (see `sitsOn`). Every
+ * branch in the same repo, or was until A merged (see `sitsOn`). Without
+ * such a branch link, B's body can declare A as the layer below
+ * ("Stacked on #A", `declaresParent`); the stack then lists B in
+ * `declaredLinks`. Every
  * layer counts whatever its state: open, draft, merged (at any age) and
  * closed, so a stack always shows whole. Only chains of two or more PRs
  * with at least one open PR are stacks.

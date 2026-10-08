@@ -1,5 +1,5 @@
 import type { FullPr } from '@postpile/core';
-import { at, makeComment, makePr, makeThreadFor } from '@postpile/core/fixtures';
+import { at, makeComment, makeCommit, makePr, makeThreadFor } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness, type Harness } from './testing/fakes.ts';
 import { reviewRequestedPr } from './testing/prs.ts';
@@ -194,5 +194,47 @@ describe('stack layers', () => {
     const topic = await h.engine.getTopic('depot');
     const stack = topic?.tiles.find((view) => view.tile.kind === 'stack');
     expect(stack?.tile.members[0]?.provenance).toEqual({ kind: 'pinged', reason: 'mention' });
+  });
+
+  it('pulls in the layer below a body declares, and walks on below it by branch', async () => {
+    const h = makeHarness();
+    const bottom = layer(19, 'master', 'l19');
+    const declared = layer(20, 'l19', 'l20', { isDraft: true });
+    const pinged = reviewRequestedPr(21, { baseRef: 'master', headRef: 'l21', body: 'Stacked on #20; the GitHub diff includes its changes.' });
+    topicWithPrs(h, 'depot', [pinged]);
+    h.reader.addStackPr(bottom);
+    h.reader.addStackPr(declared);
+
+    const report = await h.engine.sync({ maxAgentCalls: 0 });
+
+    expect(report.errors).toEqual([]);
+    expect(h.reader.numberLookups).toEqual([[{ repo: 'acme/app', number: 20 }]]);
+    expect(h.store.pullIns.get(declared.key)).toMatchObject({ anchorPrKey: pinged.key, reason: 'stack layer below #21, declared in its body' });
+    expect(h.store.pullIns.get(bottom.key)).toMatchObject({ anchorPrKey: pinged.key, reason: 'stack layer below #21' });
+    const topic = await h.engine.getTopic('depot');
+    const stack = topic?.tiles.find((view) => view.tile.kind === 'stack');
+    expect(stack?.tile.stacks).toEqual([{ id: `stack:${bottom.key}`, prKeys: [bottom.key, declared.key, pinged.key], declaredLinks: [pinged.key] }]);
+  });
+
+  it('tells the glance of a PR with a declared layer below what its diff owes that layer', async () => {
+    const h = makeHarness();
+    const declared = layer(20, 'master', 'l20', { isDraft: true, commits: [makeCommit({ oid: 'p1' })], files: [{ path: 'ci.yml', additions: 1, deletions: 0 }] });
+    const pinged = reviewRequestedPr(21, {
+      baseRef: 'master',
+      headRef: 'l21',
+      body: 'Stacked on #20',
+      commits: [makeCommit({ oid: 'p1' }), makeCommit({ oid: 'c1' })],
+      files: [
+        { path: 'app.ts', additions: 4, deletions: 0 },
+        { path: 'ci.yml', additions: 1, deletions: 0 },
+      ],
+    });
+    topicWithPrs(h, 'depot', [pinged]);
+    h.reader.addStackPr(declared);
+
+    await h.engine.sync({ agentJobs: ['glances'] });
+
+    const item = h.agent.glanceInputs.flatMap((input) => input.items).find((entry) => entry.pr.key === pinged.key);
+    expect(item?.declaredParent).toEqual({ number: 20, state: 'draft', commits: 2, sharedCommits: 1, sharedFiles: ['ci.yml'] });
   });
 });

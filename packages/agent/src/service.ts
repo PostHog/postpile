@@ -1,6 +1,7 @@
 import type {
   AmbiguousCandidate,
   ChatMessage,
+  DeclaredParentNote,
   FullComment,
   Dossier,
   DossierFlag,
@@ -391,6 +392,13 @@ export interface FactReconcileInput {
 export interface GlanceBatchItem {
   pr: Pr;
   provenance: Provenance;
+  /**
+   * The layer below its body declares, when the stack links it that way
+   * rather than by branch (DESIGN.md "Stacks declared in the body"). The
+   * prompt then says GitHub's diff includes that PR. Missing otherwise,
+   * which keeps every other glance's hash as it was.
+   */
+  declaredParent?: DeclaredParentNote;
 }
 
 /** Up to GLANCE_BATCH_SIZE PRs of one topic, each read against the topic dossier. */

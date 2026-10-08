@@ -182,6 +182,9 @@ export type RawBranchResponse = Record<
   { defaultBranchRef: { name: string } | null; pullRequests: { nodes: (RawBranchPr | null)[] } } | null
 >;
 
+/** Response of the branch shape query: p0, p1, ... one per PR. Null when the repo is not visible. */
+export type RawBranchShapeResponse = Record<string, { pullRequest: RawBranchPr | null } | null>;
+
 /** Response of the batched query: p0, p1, ... one per PR. Null when the repo is not visible. */
 export type RawBatchResponse = Record<string, { pullRequest: RawPullRequest | null } | null>;
 

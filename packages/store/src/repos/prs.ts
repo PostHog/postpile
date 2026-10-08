@@ -3,6 +3,7 @@ import {
   ActivityError,
   boardReviews,
   boardShape,
+  declaredParentOf,
   DiscussionError,
   isBodyReadByRules,
   joinActivity,
@@ -758,6 +759,7 @@ export class PrRepo {
    * parsing their snapshots took seconds.
    */
   listHeaders(): PrHeader[] {
+    const declared = this.declaredParents();
     const rows = each<HeaderRow>(
       this.db,
       `SELECT key, repo, number, state, is_draft, title, author, assignees, reviewer_users, reviewer_teams,
@@ -767,7 +769,36 @@ export class PrRepo {
     );
     const result: PrHeader[] = [];
     for (const row of rows) {
-      result.push(toHeader(row));
+      const header = toHeader(row);
+      const parent = declared.get(header.key);
+      if (parent !== undefined) {
+        header.declaredParent = parent;
+      }
+      result.push(header);
+    }
+    return result;
+  }
+
+  /**
+   * The layer below each open PR's body declares (`declaredParentOf`,
+   * DESIGN.md "Stacks declared in the body"), worked out on every read
+   * instead of stored, so a body edit or a better parser counts at once.
+   * SQL hands over only open PRs whose body has one of the words, so a
+   * read parses a handful of bodies, not every stored one. LIKE ignores
+   * ASCII case like the parser does.
+   */
+  private declaredParents(): Map<PrKey, number> {
+    const rows = each<{ key: string; repo: string; number: number; body: string }>(
+      this.db,
+      `SELECT p.key, p.repo, p.number, b.body FROM pr p JOIN pr_body b ON b.pr_key = p.key
+       WHERE p.state = 'OPEN' AND (b.body LIKE '%stacked%' OR b.body LIKE '%depends%' OR b.body LIKE '%based%')`,
+    );
+    const result = new Map<PrKey, number>();
+    for (const row of rows) {
+      const parent = declaredParentOf({ ref: { repo: row.repo, number: row.number }, state: 'OPEN', body: row.body });
+      if (parent !== null) {
+        result.set(row.key, parent);
+      }
     }
     return result;
   }

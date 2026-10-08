@@ -174,6 +174,22 @@ describe('PrRepo', () => {
     expect(headers[0]?.lastEventAt).toBeNull();
   });
 
+  it('reads the layer below an open PR body declares into its header, from the body as it is now', () => {
+    store.prs.upsert(makePr({ number: 1 }), at(1));
+    store.prs.upsert(makePr({ number: 2, body: 'Stacked on #1; the diff includes it.' }), at(1));
+    store.prs.upsert(makePr({ number: 3, body: 'Stacked on #1', state: 'MERGED', mergedAt: at(1) }), at(1));
+    store.prs.upsert(makePr({ number: 4, body: 'Based on the old parser.' }), at(1));
+    expect(store.prs.listHeaders().map((pr) => [pr.ref.number, pr.declaredParent])).toEqual([
+      [1, undefined],
+      [2, 1],
+      [3, undefined],
+      [4, undefined],
+    ]);
+
+    store.prs.upsert(makePr({ number: 2, body: 'No longer stacked.' }), at(2));
+    expect(store.prs.listHeaders()[1]?.declaredParent).toBeUndefined();
+  });
+
   it('writes header and snapshot together: a failed snapshot write rolls the header back', () => {
     store.prs.upsert(makePr({ title: 'Before' }), at(1));
     store.db.exec("CREATE TRIGGER fail_snapshot BEFORE UPDATE ON pr_snapshot BEGIN SELECT RAISE(ABORT, 'disk full'); END");

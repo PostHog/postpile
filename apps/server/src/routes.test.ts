@@ -531,7 +531,7 @@ describe('server routes over the fake engine', () => {
     const topic = (await (await app.request('/api/topics/topic-depot')).json()) as TopicDetail;
     const set = topic.tiles.find((view) => view.tile.id === 'set:turbo-cache');
     expect(set?.prs.map((pr) => pr.key)).toEqual(['acme/app#1904', 'acme/app#1907', 'acme/app#1921']);
-    expect(set?.tile.stacks).toEqual([{ id: 'stack:acme/app#1904', prKeys: ['acme/app#1904', 'acme/app#1907'] }]);
+    expect(set?.tile.stacks).toEqual([{ id: 'stack:acme/app#1904', prKeys: ['acme/app#1904', 'acme/app#1907'], declaredLinks: ['acme/app#1907'] }]);
   });
 
   it('turns a lasting chat point into tailoring once confirmed', async () => {

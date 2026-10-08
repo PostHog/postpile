@@ -1829,6 +1829,27 @@ stored and before a dossier goes into a glance prompt
   scope with `prKeys`).
   Trade-off: a glance can lag topic context ("the PR below this one
   merged") until its own PR moves.
+- **Declared layer below** (2026-10-08, "Stacks declared in the body"):
+  for a PR whose stack links it to the layer below by its body
+  (`Board.declaredParentKeyOf`), the glance item carries
+  `declaredParent` (`declaredParentNote` in core): the parent's number
+  and state, how many of this PR's commits are also the parent's, and the
+  changed files both touch. The prompt says that the base is no PR's
+  branch, that GitHub's diff therefore includes the parent's changes,
+  which files likely come from it (fenced), that merging this PR also
+  lands the parent while it is open, and to judge this PR's own layer
+  rather than call the extra files a mismatch. No shared commits (with
+  commits known) hedges: the diff may not include the parent, as "depends
+  on" can mean order only. A merged parent: its changes may still show
+  until the branch is updated. Commit lists are capped, so the count is a
+  lower bound.
+  The note is a trailing hash part only when present
+  (`declaredParentPart`), in all three hash shapes: every other glance
+  keeps its hash, and a glance of an affected PR is written again once,
+  including one that still matched the legacy shapes. No prompt version
+  bump, so nothing else regenerates. The parent's state and the shared
+  files are in the hash, so the glance also follows when the parent
+  merges.
 - Model: the glance model (`claude-sonnet-5-5` by default, `POSTPILE_GLANCE_MODEL`).
 
 ### Consolidation ("sleep-time")
@@ -2477,6 +2498,8 @@ chain shows, whatever its state.
 
 - **Linking** (`sitsOn` in core, used by the walk and by `buildStacks`): B
   sits on A when B's base branch is A's head branch, or was until A merged.
+  Without a branch link, B's body can name A instead ("Stacked on #A", see
+  "Stacks declared in the body").
   GitHub moves a stacked PR onto the next branch down when the layer below
   merges and its branch is deleted, so PR snapshots and branch lookups carry
   former base branches (`previousBaseRefs`, from `BaseRefChangedEvent` for
@@ -2522,6 +2545,60 @@ chain shows, whatever its state.
   own. Once it gets its own notification it is pinged like any other PR.
 - `SyncReport.prsPulledIn` counts the layers fetched. A failed lookup is an
   error line in the report; the rest of the sync goes on.
+
+## Stacks declared in the body (2026-10-08)
+
+Some people and stacking tools open every layer against the default branch
+and write "Stacked on #12; the GitHub diff includes its ancestors" in the
+body instead of basing the PR on the layer below. Branches then show no
+stack, so the layer below was not pulled in, the topic did not link it,
+and the glance read the extra files in GitHub's diff as a description that
+leaves things out ("claims no CI changes, yet the diff edits ci.yml"),
+when the real point is that merging this PR also lands #12.
+
+- **Parsing** (`declaredParents` in core): "stacked on", "stacked on top
+  of", "depends on", "based on", any case, followed right away by `#12`,
+  `acme/app#12` or a pull URL (a markdown link's bracket and bold marks
+  may sit around it). Only the same repo counts (ignoring case), never the
+  PR itself. Fenced and inline code, HTML comments (PR templates keep
+  their examples there) and quoted lines are skipped. `declaredParentOf`
+  takes the first one, since stacks are linear, and only for an open PR:
+  a merged PR has landed its parent already, a closed one stacks on nothing.
+- **Linking** (`declaresParent`, in `buildStacks`): a PR with no branch
+  parent takes the one its body declares, if that PR is stored, in the
+  same repo, and was open when this PR was opened (the same rule as for a
+  branch link). Branch links always win. A declared link that would close
+  a loop is dropped; links are tried lowest number first, so the result
+  does not depend on input order. Fork PRs never link, as before. The rule
+  is "no PR's head is the base", not "the base is the default branch":
+  PostPile does not store each repo's default branch, and a PR based on a
+  release branch with no PR behind it reads the same way.
+- **Nothing stored**: `PrRepo.listHeaders` works the declared parent out on
+  every read from `pr_body`. SQL hands over only open PRs whose body holds
+  "stacked", "depends" or "based" (LIKE ignores ASCII case like the
+  parser), so a read parses a handful of bodies. A body edit counts on the
+  next read with no sync step to keep a column in line, and a parser fix
+  needs no backfill. Every caller of `buildStacks` over headers (board,
+  hot set, topic assignment, set grouping, feedback) sees the same stacks.
+- **Stack shape**: `Stack.declaredLinks` and `TileStack.declaredLinks` list
+  the layers linked to the one below by their body; missing when every
+  link is a branch link, so stored and served shapes of other stacks stay
+  as they were.
+- **Walk** (`StackLayerFinder`): a seed whose below-lookup by branch finds
+  nothing and whose body declares a parent looks it up by number
+  (`GitHubReader.findPrsByNumber`, the branch lookup's fields for one PR,
+  in the same round as the branch lookups) and walks on below it by
+  branch. The pull-in reason is "stack layer below #N, declared in its
+  body". Seeds from headers carry the declared parent; PRs fetched this
+  sync read it from the body. Known gaps: an untracked PR that declares a
+  tracked one as its parent is not found (that would need a body search),
+  and a pulled-in layer's own declared parent is not followed by the walk
+  (a branch lookup carries no body), though `buildStacks` links it once
+  both are stored.
+- **Glance**: see "Batched glances" › declared layer below.
+- **MCP**: `pr_context` labels such a stack "Stack (declared in the PR
+  body, base is master)" on the PR that declares it and "Stack (declared
+  in the body of acme/app#1907)" on the other layers.
 
 ## Stacks as one unit
 

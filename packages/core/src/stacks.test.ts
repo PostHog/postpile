@@ -126,6 +126,59 @@ describe('buildStacks with forks', () => {
   });
 });
 
+/** A PR whose body declares `parent` as the layer below (`declaredParentOf`). */
+function declaring(pr: ReturnType<typeof makePr>, parent: number) {
+  return { ...pr, declaredParent: parent };
+}
+
+describe('buildStacks with layers declared in the body', () => {
+  it('links a PR on the default branch to the parent its body declares', () => {
+    const prs = [makePr({ number: 1, isDraft: true }), declaring(makePr({ number: 2 }), 1)];
+    expect(buildStacks(prs)).toEqual([
+      { id: 'stack:acme/app#1', repo: 'acme/app', prKeys: ['acme/app#1', 'acme/app#2'], declaredLinks: ['acme/app#2'] },
+    ]);
+  });
+
+  it('chains a declared link on top of a branch stack', () => {
+    const prs = [
+      makePr({ number: 1, headRef: 'b1' }),
+      makePr({ number: 2, baseRef: 'b1', headRef: 'b2' }),
+      declaring(makePr({ number: 3 }), 2),
+    ];
+    expect(buildStacks(prs)).toEqual([
+      { id: 'stack:acme/app#1', repo: 'acme/app', prKeys: ['acme/app#1', 'acme/app#2', 'acme/app#3'], declaredLinks: ['acme/app#3'] },
+    ]);
+  });
+
+  it('lets a branch link win over a declared one', () => {
+    const prs = [makePr({ number: 1, headRef: 'b1' }), makePr({ number: 5 }), declaring(makePr({ number: 2, baseRef: 'b1' }), 5)];
+    expect(buildStacks(prs)).toEqual([{ id: 'stack:acme/app#1', repo: 'acme/app', prKeys: ['acme/app#1', 'acme/app#2'] }]);
+  });
+
+  it('ignores a parent that is not stored, in another repo, or the PR itself', () => {
+    expect(buildStacks([declaring(makePr({ number: 2 }), 9)])).toEqual([]);
+    expect(buildStacks([declaring(makePr({ number: 2 }), 2)])).toEqual([]);
+    expect(buildStacks([makePr({ number: 1, repo: 'acme/infra' }), declaring(makePr({ number: 2 }), 1)])).toEqual([]);
+  });
+
+  it('leaves out a parent that merged before the PR was opened', () => {
+    const prs = [makePr({ number: 1, state: 'MERGED', mergedAt: at(5) }), declaring(makePr({ number: 2, createdAt: at(10) }), 1)];
+    expect(buildStacks(prs)).toEqual([]);
+  });
+
+  it('drops the declared link that would close a loop, keeping the rest', () => {
+    const prs = [declaring(makePr({ number: 1 }), 2), declaring(makePr({ number: 2 }), 1)];
+    expect(buildStacks(prs)).toEqual([
+      { id: 'stack:acme/app#2', repo: 'acme/app', prKeys: ['acme/app#2', 'acme/app#1'], declaredLinks: ['acme/app#1'] },
+    ]);
+  });
+
+  it('drops a declared link onto its own branch stack', () => {
+    const prs = [declaring(makePr({ number: 1, headRef: 'b1' }), 2), makePr({ number: 2, baseRef: 'b1', headRef: 'b2' })];
+    expect(buildStacks(prs)).toEqual([{ id: 'stack:acme/app#1', repo: 'acme/app', prKeys: ['acme/app#1', 'acme/app#2'] }]);
+  });
+});
+
 describe('stackTopicId', () => {
   const stack = { id: 'stack:a#1', repo: 'a', prKeys: ['a#1', 'a#2', 'a#3'] };
 

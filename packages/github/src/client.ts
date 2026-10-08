@@ -26,8 +26,8 @@ import {
   type RawReviewedPage,
   type RawTeamSizes,
 } from './team-role-reads.ts';
-import { batchAlias, branchAlias, buildBranchQuery, buildPrBatchQuery, buildUpdatedAtQuery, VIEWER_LOGIN_QUERY, VIEWER_TEAMS_QUERY } from './queries.ts';
-import type { RawBatchResponse, RawBranchResponse, RawUpdatedAtResponse, RawViewerTeams } from './raw.ts';
+import { batchAlias, branchAlias, buildBranchQuery, buildBranchShapeQuery, buildPrBatchQuery, buildUpdatedAtQuery, VIEWER_LOGIN_QUERY, VIEWER_TEAMS_QUERY } from './queries.ts';
+import type { RawBatchResponse, RawBranchResponse, RawBranchShapeResponse, RawUpdatedAtResponse, RawViewerTeams } from './raw.ts';
 import {
   BRANCH_BATCH_SIZE,
   PR_BATCH_SIZE,
@@ -203,6 +203,23 @@ export class GitHubClient implements GitHubReader {
 
   async findPrsByBranch(lookups: BranchLookup[]): Promise<BranchPr[][]> {
     const batches = await inParallel(chunk(lookups, BRANCH_BATCH_SIZE), (batch) => this.findBranchBatch(batch));
+    return batches.flat();
+  }
+
+  /** One aliased query; a PR the token cannot see, or from a fork, answers null. */
+  private async branchShapeBatch(batch: PrRef[]): Promise<(BranchPr | null)[]> {
+    const response = await this.http.graphql<RawBranchShapeResponse>(buildBranchShapeQuery(batch));
+    if (!response.data) {
+      throw graphqlFailure('branch shape query', response.errors);
+    }
+    return batch.map((ref, index) => {
+      const raw = response.data?.[batchAlias(index)]?.pullRequest;
+      return raw && !raw.isCrossRepository ? toBranchPr(ref.repo, raw) : null;
+    });
+  }
+
+  async findPrsByNumber(refs: PrRef[]): Promise<(BranchPr | null)[]> {
+    const batches = await inParallel(chunk(refs, BRANCH_BATCH_SIZE), (batch) => this.branchShapeBatch(batch));
     return batches.flat();
   }
 

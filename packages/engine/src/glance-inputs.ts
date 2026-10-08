@@ -1,5 +1,6 @@
 import type { AgentService, GlanceBatchInput, GlanceBatchItem, PromptContext } from '@postpile/agent';
 import {
+  declaredParentNote,
   isBotTalk,
   isTracked,
   prWantsGlance,
@@ -45,6 +46,13 @@ function isViewersMove(board: Board, pr: Pr): boolean {
   return turn.kind === 'you';
 }
 
+/** Adds what the PR's diff owes the layer below its body declares, when its stack links it that way. */
+function withDeclaredParent(board: Board, item: GlanceBatchItem): GlanceBatchItem {
+  const parentKey = board.declaredParentKeyOf(item.pr.key);
+  const parent = parentKey ? board.prs.get(parentKey) : undefined;
+  return parent ? { ...item, declaredParent: declaredParentNote(item.pr, parent) } : item;
+}
+
 /**
  * Pinged and found PRs in tiles that want a glance (`prWantsGlance`): the
  * PRs where it is the viewer's move first, then the rest, each part most
@@ -68,7 +76,7 @@ function itemsByUrgency(board: Board): Map<PrKey, GlanceBatchItem> {
         continue;
       }
       const part = isViewersMove(board, pr) ? yours : rest;
-      part.set(member.prKey, { pr, provenance: member.provenance });
+      part.set(member.prKey, withDeclaredParent(board, { pr, provenance: member.provenance }));
     }
   }
   return new Map([...yours, ...rest]);

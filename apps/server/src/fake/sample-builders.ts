@@ -1,7 +1,7 @@
 // Small builders that keep sample-data.ts readable. Everything here fills in
 // the fields a fake does not care about with plain defaults.
 import { prKey } from '@postpile/core';
-import type { FullComment, EventKind, Glance, KeyFile, Loudness, FullPr, PrEvent, PrKey, Provenance, PrState, FullReview, ReviewDecision, ReviewState, FullReviewThread, Tile, TileKind, TileMember, Topic, TopicKind, UserRole, Verdict } from '@postpile/core';
+import type { FullComment, EventKind, Glance, KeyFile, Loudness, FullPr, PrEvent, PrKey, Provenance, PrState, FullReview, ReviewDecision, ReviewState, FullReviewThread, Tile, TileKind, TileMember, TileStack, Topic, TopicKind, UserRole, Verdict } from '@postpile/core';
 
 export const SAMPLE_REPO = 'acme/app';
 export const SAMPLE_VIEWER = 'you';
@@ -335,14 +335,29 @@ export function pulledIn(number: number, reason: string): TileMember {
   return { prKey: sampleKey(number), provenance: { kind: 'pulled_in', reason } };
 }
 
+/** The stack, with `declaredLinks` for its layers among `declared` (PR numbers whose body names the layer below). */
+function sampleStack(id: string, prKeys: string[], declared: number[]): TileStack {
+  const declaredLinks = declared.map(sampleKey).filter((key) => prKeys.includes(key));
+  return declaredLinks.length > 0 ? { id, prKeys, declaredLinks } : { id, prKeys };
+}
+
 /**
  * A stack tile's members are its layers, bottom first, so it carries that one
  * stack. A set passes the stacks inside it as PR numbers, bottom first.
+ * `declared`: layers linked to the one below by their body, not by branches.
  */
-export function sampleTile(topicId: string, kind: TileKind, id: string, title: string, members: TileMember[], setStacks: number[][] = []): Tile {
+export function sampleTile(
+  topicId: string,
+  kind: TileKind,
+  id: string,
+  title: string,
+  members: TileMember[],
+  setStacks: number[][] = [],
+  declared: number[] = [],
+): Tile {
   if (kind === 'stack') {
-    return { id, topicId, kind, title, members, stacks: [{ id, prKeys: members.map((member) => member.prKey) }] };
+    return { id, topicId, kind, title, members, stacks: [sampleStack(id, members.map((member) => member.prKey), declared)] };
   }
-  const stacks = setStacks.map((numbers) => ({ id: `stack:${sampleKey(numbers[0]!)}`, prKeys: numbers.map(sampleKey) }));
+  const stacks = setStacks.map((numbers) => sampleStack(`stack:${sampleKey(numbers[0]!)}`, numbers.map(sampleKey), declared));
   return { id, topicId, kind, title, members, stacks };
 }

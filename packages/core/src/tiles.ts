@@ -378,7 +378,11 @@ function prTitle(input: TopicTilesInput, prKey: PrKey): string {
 }
 
 function tileStack(stack: Stack): TileStack {
-  return { id: stack.id, prKeys: [...stack.prKeys] };
+  const result: TileStack = { id: stack.id, prKeys: [...stack.prKeys] };
+  if (stack.declaredLinks) {
+    result.declaredLinks = [...stack.declaredLinks];
+  }
+  return result;
 }
 
 function stackTile(input: TopicTilesInput, stack: Stack): Tile {

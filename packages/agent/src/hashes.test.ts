@@ -123,6 +123,19 @@ describe('glanceItemInputHash', () => {
     });
   });
 
+  it('changes every shape for a PR with a declared layer below, and no other', () => {
+    const note = { number: 7, state: 'draft', commits: 3, sharedCommits: 2, sharedFiles: ['ci.yml'] };
+    const declared = { ...item, declaredParent: note };
+    const batch = glanceBatch({ items: [declared] });
+    const plain = glanceBatch({ items: [item] });
+    expect(glanceItemInputHash(glanceBatch({ items: [{ ...item, declaredParent: undefined }] }), { ...item, declaredParent: undefined })).toBe(base);
+    expect(glanceItemInputHash(batch, declared)).not.toBe(base);
+    const writtenAt = '2026-09-02T11:30:00Z';
+    expect(glanceItemInputHashWithBotTalk(batch, declared, writtenAt)).not.toBe(glanceItemInputHashWithBotTalk(plain, item, writtenAt));
+    expect(legacyGlanceItemInputHash(batch, declared, writtenAt)).not.toBe(legacyGlanceItemInputHash(plain, item, writtenAt));
+    expect(glanceItemInputHash(batch, { ...declared, declaredParent: { ...note, state: 'merged' } })).not.toBe(glanceItemInputHash(batch, declared));
+  });
+
   it('covers feedback on this PR only', () => {
     expect(glanceHash(item.pr, { context: { ...emptyContext, recentFeedback: [makeFeedback({ prKey: 'acme/app#9' })] } })).toBe(base);
     expect(glanceHash(item.pr, { context: { ...emptyContext, recentFeedback: [makeFeedback({ prKey: item.pr.key })] } })).not.toBe(base);

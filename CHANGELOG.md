@@ -8,6 +8,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 - The MCP tools now show reviewers. `pr_context` names who approved, who asked for changes, who is still asked (people and teams) and which agents reviewed. `whats_on_me` gives each PR a short count, like "2 human approvals, waiting on 1 team, reviewbot approved", so an agent no longer has to ask GitHub PR by PR.
 - The MCP tools tag each PR author as you, your team or outside your team, and `whats_on_me` takes `author_scope` (me, my_team, others, any) to list, for example, only PRs from outside your team.
+- A PR whose description says "Stacked on #12" (or "depends on" / "based on") now shows as a stack with #12 even when it targets the main branch. #12 is brought in and shown with it in the same topic, and the agent's summary knows that GitHub's diff includes #12's changes and that merging the PR also lands #12, instead of calling the extra files a mismatch with the description.
 
 ### Changed
 
