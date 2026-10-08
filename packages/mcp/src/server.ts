@@ -138,8 +138,8 @@ const noteOutput = {
   expires_at: z.string().nullable().describe('in_progress: when the lease ends'),
 };
 
-/** Writes a local note in the app, never GitHub; the same call twice writes it once. */
-const NOTE = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
+/** Writes a local note in the app, never GitHub; it may read an untracked covered_by from GitHub. The same call twice writes it once. */
+const NOTE = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true } as const;
 
 const detailSchema = z
   .enum(['brief', 'full'], { error: 'detail must be "brief" or "full", e.g. detail: "full"' })

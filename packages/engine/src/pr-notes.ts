@@ -1,5 +1,6 @@
 import {
   anchorSummary,
+  coverKeyFor,
   noteAnchor,
   observationToken,
   pendingNote,
@@ -103,7 +104,7 @@ export class PrNotes {
     const now = this.now().toISOString();
     // One transaction: the anchor the token is checked against is the one stored with the note.
     return this.store.transaction((): SetStep => {
-      const keys = request.coveredByPrKey ? [request.prKey, request.coveredByPrKey] : [request.prKey];
+      const keys = request.coveredByPrKey ? [request.prKey, coverKeyFor(request.prKey, request.coveredByPrKey)] : [request.prKey];
       const read = this.readContext(keys);
       const plan = planNoteSet(request, {
         now,

@@ -229,6 +229,8 @@ describe('planNoteSet', () => {
     const covered = { ...request, kind: 'covered' as const };
     expect(planNoteSet(covered, world())).toMatchObject({ kind: 'refused', reason: expect.stringContaining('needs covered_by') });
     expect(planNoteSet({ ...covered, coveredByPrKey: KEY }, world())).toMatchObject({ reason: 'a PR cannot cover itself' });
+    expect(planNoteSet({ ...covered, coveredByPrKey: KEY.toUpperCase() }, world())).toMatchObject({ reason: 'a PR cannot cover itself' });
+    expect(planNoteSet({ ...covered, coveredByPrKey: 'ACME/App#9' }, world())).toEqual({ kind: 'needs_cover', coverKey: 'acme/app#9' });
     expect(planNoteSet({ ...covered, coveredByPrKey: 'acme/other#3' }, world())).toMatchObject({ reason: expect.stringContaining('same repo') });
     expect(planNoteSet({ ...covered, coveredByPrKey: 'acme/app#9' }, world())).toEqual({ kind: 'needs_cover', coverKey: 'acme/app#9' });
     const closed = world({ anchorOf: anchors({ [KEY]: basePr(), [COVER]: makePr({ number: 2, state: 'CLOSED' }) }) });

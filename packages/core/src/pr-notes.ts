@@ -461,21 +461,32 @@ function addMinutes(iso: IsoTime, minutes: number): IsoTime {
 
 const READ_AGAIN = 'read it again with pr_context and pass the new token';
 
-type CoverCheck = { ok: true; anchor: NoteAnchor | null } | { ok: false; reason: string } | { ok: false; missing: PrKey };
+/**
+ * covered_by spelled with the noted PR's repo when the two repos differ
+ * only in case (GitHub ignores case there), so one PR is stored once.
+ */
+export function coverKeyFor(notedKey: PrKey, coverKey: PrKey): PrKey {
+  const noted = parsePrKey(notedKey);
+  const cover = parsePrKey(coverKey);
+  return cover.repo.toLowerCase() === noted.repo.toLowerCase() ? `${noted.repo}#${cover.number}` : coverKey;
+}
+
+/** ok: the covering PR's key (spelled with the noted PR's repo) and its anchor; null for a note that covers nothing. */
+type CoverCheck = { ok: true; key: PrKey | null; anchor: NoteAnchor | null } | { ok: false; reason: string } | { ok: false; missing: PrKey };
 
 function checkCover(request: Extract<PrNoteRequest, { action: 'set' }>, world: NoteSetWorld): CoverCheck {
-  const cover = request.coveredByPrKey;
   if (request.kind !== 'covered') {
-    return cover === null ? { ok: true, anchor: null } : { ok: false, reason: 'covered_by only goes with kind covered' };
+    return request.coveredByPrKey === null ? { ok: true, key: null, anchor: null } : { ok: false, reason: 'covered_by only goes with kind covered' };
   }
-  if (cover === null) {
+  if (request.coveredByPrKey === null) {
     return { ok: false, reason: 'kind covered needs covered_by: the PR whose review covers this one' };
+  }
+  const cover = coverKeyFor(request.prKey, request.coveredByPrKey);
+  if (parsePrKey(cover).repo !== parsePrKey(request.prKey).repo) {
+    return { ok: false, reason: `covered_by must be a PR in the same repo as ${request.prKey}` };
   }
   if (cover === request.prKey) {
     return { ok: false, reason: 'a PR cannot cover itself' };
-  }
-  if (parsePrKey(cover).repo.toLowerCase() !== parsePrKey(request.prKey).repo.toLowerCase()) {
-    return { ok: false, reason: `covered_by must be a PR in the same repo as ${request.prKey}` };
   }
   const anchor = world.anchorOf(cover);
   if (!anchor) {
@@ -489,7 +500,7 @@ function checkCover(request: Extract<PrNoteRequest, { action: 'set' }>, world: N
   if (request.coverToken !== null && request.coverToken !== observationToken(anchor)) {
     return { ok: false, reason: `${cover} changed since you read it; ${READ_AGAIN}` };
   }
-  return { ok: true, anchor };
+  return { ok: true, key: cover, anchor };
 }
 
 /**
@@ -556,7 +567,7 @@ export function planNoteSet(request: Extract<PrNoteRequest, { action: 'set' }>, 
       by,
       client: world.client,
       note,
-      coveredByPrKey: request.coveredByPrKey,
+      coveredByPrKey: cover.key,
       anchor,
       coverAnchor: cover.anchor,
       createdAt: world.now,
