@@ -2,6 +2,13 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## 0.27.0 (unreleased)
+
+### Added
+
+- The MCP tools now show reviewers. `pr_context` names who approved, who asked for changes, who is still asked (people and teams) and which agents reviewed. `whats_on_me` gives each PR a short count, like "2 human approvals, waiting on 1 team, reviewbot approved", so an agent no longer has to ask GitHub PR by PR.
+- The MCP tools tag each PR author as you, your team or outside your team, and `whats_on_me` takes `author_scope` (me, my_team, others, any) to list, for example, only PRs from outside your team.
+
 ## 0.26.0 (2026-10-07)
 
 ### Changed

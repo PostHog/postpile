@@ -38,6 +38,7 @@ import type { ReviewRequest } from './review-request.ts';
 import type { PrTier } from './pr-tier.ts';
 import type { ViewerApproval, ViewerReviewStand } from './review-request.ts';
 import type { PersonRelation, TopicPerson, TopicQueues } from './topic-queues.ts';
+import type { HomeTeamMembers } from './author-scope.ts';
 import type { DriverKind } from './topic-driver.ts';
 import type { TopicSection } from './topic-sections.ts';
 import type { TopicMove } from './topic-urgency.ts';
@@ -160,6 +161,16 @@ export interface ViewerView {
    * counts as home).
    */
   homeTeams: string[] | null;
+}
+
+/** The team member cache (engine `TeamMembers`): who is on each of the viewer's home teams. MCP tags PR authors with it. */
+export interface TeamMembersView {
+  /** When the lists were last fetched from GitHub; null when they never were (the cache is empty). */
+  fetchedAt: IsoTime | null;
+  /** Each cached home team with its members, the viewer among them. Empty without a home team or before a fetch. */
+  teams: HomeTeamMembers[];
+  /** Home teams ("org/team-slug") the cache has no list for yet, for example one the user made home since the last fetch. */
+  missingTeams: string[];
 }
 
 export interface PrSummary {

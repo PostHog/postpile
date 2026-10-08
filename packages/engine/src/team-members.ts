@@ -1,4 +1,4 @@
-import { homeTeamsOf, type IsoTime, type Viewer } from '@postpile/core';
+import { homeTeamsOf, type IsoTime, type TeamMembersView, type Viewer } from '@postpile/core';
 import type { GitHubReader } from '@postpile/github';
 import type { Store } from '@postpile/store';
 
@@ -56,6 +56,21 @@ export class TeamMembers {
       result.teams[team] = answer.notModified ? (previous ?? { etag: null, logins: [] }) : { etag: answer.etag, logins: answer.logins };
     }
     return result;
+  }
+
+  /**
+   * The cached members of each home team, read only (no GitHub call): MCP
+   * tags PR authors with it. Null `fetchedAt` when the cache is empty;
+   * home teams without a cached list are in `missingTeams`.
+   */
+  view(viewer: Viewer | null): TeamMembersView {
+    const stored = this.load();
+    const home = viewer ? homeTeamsOf(viewer) : [];
+    if (!stored) {
+      return { fetchedAt: null, teams: [], missingTeams: home };
+    }
+    const teams = home.filter((team) => team in stored.teams).map((team) => ({ team, members: stored.teams[team]?.logins ?? [] }));
+    return { fetchedAt: stored.fetchedAt, teams, missingTeams: home.filter((team) => !(team in stored.teams)) };
   }
 
   /**

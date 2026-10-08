@@ -58,6 +58,7 @@ function fakeEngine(overrides: Partial<EngineService>): EngineService {
     busyInbox: notImplemented,
     getViewer: notImplemented,
     getTeamRoles: notImplemented,
+    getTeamMembers: notImplemented,
     setTeamRole: notImplemented,
     listRepos: notImplemented,
     setRepoScope: notImplemented,

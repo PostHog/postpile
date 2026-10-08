@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { OUTSIDE_REASON_MAX, TOPIC_NAME_MAX } from '@postpile/core';
 import { proposeTopicChange, refreshFromGithub, type ActionContext } from './actions.ts';
 import type { AgentRequests } from './agent-requests.ts';
-import { DEFAULT_LIMIT, MAX_LIMIT, prContext, searchPrs, topicOverview, whatsOnMe, type ListOptions, type PostPileReader, type ToolAnswer } from './reads.ts';
+import { DEFAULT_LIMIT, MAX_LIMIT, prContext, searchPrs, topicOverview, whatsOnMe, type ListOptions, type PostPileReader, type QueueOptions, type ToolAnswer } from './reads.ts';
 
 export type McpToolName = 'pr_context' | 'topic' | 'search_prs' | 'whats_on_me' | 'refresh_from_github' | 'propose_topic_change';
 
@@ -54,7 +54,7 @@ const REFRESH = { readOnlyHint: false, destructiveHint: false, idempotentHint: t
 /** Files a suggestion in the app; the same suggestion twice is refused, so calling again changes nothing. */
 const PROPOSE = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
 
-const PR_CONTEXT_DESCRIPTION = `What PostPile knows about one PR and the topic around it: whose move it is, why it is unread, its stack position, what is new since the user looked, the agent's glance (verdict, what it means for the user, risk), when PostPile last fetched it, and the topic's other PRs. detail: "full" adds facts, the activity list, the topic dossier (goal, status, people, open questions, timeline) and every tile.
+const PR_CONTEXT_DESCRIPTION = `What PostPile knows about one PR and the topic around it: whose move it is, why it is unread, its stack position, whether the author is the user or on their team, who reviewed (approved, changes requested, still asked; agents apart), what is new since the user looked, the agent's glance (verdict, what it means for the user, risk), when PostPile last fetched it, and the topic's other PRs. detail: "full" adds facts, the activity list, the topic dossier (goal, status, people, open questions, timeline) and every tile.
 Use when: before you review, comment on, merge or change code for a PR, to learn what the user already knows and owes.
 Not for: finding PRs (search_prs, whats_on_me) or live CI status (ask GitHub).
 Example: pr_context(pr: "acme/app#1902")`;
@@ -70,11 +70,11 @@ Use when: you have a name, number or keyword and need the PR reference or its to
 Not for: the user's queue (whats_on_me), or searching GitHub itself: PostPile only knows PRs that reached the user.
 Example: search_prs(query: "turbo cache", state: "open")`;
 
-const WHATS_ON_ME_DESCRIPTION = `The user's queue as PostPile sees it: tiles where it is their move (review, reply, merge), then unread ones where it is not, each with its topic and what happened.
-Filters: state (open, merged, closed, any; default open), repo (owner/name), whose_move (you, them, any). Page with limit (max 100) and offset.
+const WHATS_ON_ME_DESCRIPTION = `The user's queue as PostPile sees it: tiles where it is their move (review, reply, merge), then unread ones where it is not, each with its topic and what happened. Each PR gets a line with its author, tagged (you), (your team: ...) or (outside your team), and its reviews: human approvals and change requests as counts, who is still asked, agents by name.
+Filters: state (open, merged, closed, any; default open), repo (owner/name), whose_move (you, them, any), author_scope (me, my_team, others, any; "your team" means the user's home teams, never a team a review request names). A tile matches when any of its PRs does. Page with limit (max 100) and offset.
 Use when: the user asks what to do next or what waits on them, or you plan a work session.
 Not for: one PR's details (pr_context).
-Example: whats_on_me(whose_move: "you", limit: 10)`;
+Example: whats_on_me(whose_move: "you", author_scope: "others", limit: 10)`;
 
 const REFRESH_DESCRIPTION = `Ask the running PostPile app to re-read one PR, or one topic's open PRs (at most 10), from GitHub now. GitHub reads only, never a write. Waits up to 20 s and says what was fetched and what came back with new activity; PRs fetched in the last minute are skipped as fresh. Needs the app running. At most 20 refreshes an hour across all agents, one at a time; only single PRs while the user's GitHub quota is low.
 Use when: pr_context says the PR was fetched a while ago and the app will not check it soon, and you are about to act on its state.
@@ -143,6 +143,15 @@ interface ListArgs {
 function listOptions(args: ListArgs): ListOptions {
   const repo = args.repo?.trim();
   return { limit: args.limit, offset: args.offset, state: args.state, repo: repo ? repo : null, whoseMove: args.whose_move };
+}
+
+const authorScopeSchema = z
+  .enum(['me', 'my_team', 'others', 'any'], { error: 'author_scope must be me, my_team, others or any, e.g. author_scope: "others"' })
+  .default('any')
+  .describe("Whose PRs: me (the user's), my_team (a home-team member's, not the user's), others (neither), any (default)");
+
+function queueOptions(args: ListArgs & { author_scope: QueueOptions['authorScope'] }): QueueOptions {
+  return { ...listOptions(args), authorScope: args.author_scope };
 }
 
 /** Stdout is the protocol channel: anything else printing there would corrupt it, so console.log goes to stderr. */
@@ -267,10 +276,10 @@ export function createMcpServer(reader: PostPileReader, options: McpServerOption
     {
       title: 'What waits on the user',
       description: WHATS_ON_ME_DESCRIPTION,
-      inputSchema: listShape('open'),
+      inputSchema: { ...listShape('open'), author_scope: authorScopeSchema },
       annotations: READ_ONLY,
     },
-    (args) => reply('whats_on_me', () => whatsOnMe(ctx, listOptions(args))),
+    (args) => reply('whats_on_me', () => whatsOnMe(ctx, queueOptions(args))),
   );
 
   server.registerTool(
