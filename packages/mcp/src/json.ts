@@ -104,6 +104,8 @@ export interface PrJson {
     glanceRisk: string | null;
     /** The newest thread waiting on the user, its last comment cut to a short line. */
     latestThread: { author: string; path: string; preview: string | null } | null;
+    /** Each bot's standing change request and one line of what it found (`PrDetail.botFindings`); empty without the snapshot. */
+    botFindings: { by: string; summary: string }[];
   };
 }
 
@@ -256,6 +258,7 @@ export function prJson(input: PrJsonInput): PrJson {
       glanceForYou: summary?.forYou ?? glance?.forYou ?? null,
       glanceRisk: glance?.risk ?? null,
       latestThread: newest ? { author: newest.author, path: newest.path, preview: newest.body === null ? null : commentPreview(newest.body) } : null,
+      botFindings: (detail?.botFindings ?? []).map((finding) => ({ by: finding.by, summary: finding.summary })),
     },
   };
 }

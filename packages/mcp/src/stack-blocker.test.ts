@@ -70,5 +70,10 @@ describe('MCP: stack blockers and bot findings', () => {
     const finding = 'reviewbot[bot] asks for changes: acme/team-platform has no write access, so GitHub ignores its CODEOWNERS line.';
     expect(text).toContain(finding);
     expect(text.indexOf(finding)).toBeGreaterThan(text.indexOf('<postpile-data'));
+    // The JSON answer carries it too, under "untrusted": it is GitHub text.
+    const json = (await prContext(ctx, 'acme/app#3', 'brief', 'json')).structured as { prs: { untrusted: { botFindings: unknown } }[] };
+    expect(json.prs[0]?.untrusted.botFindings).toEqual([
+      { by: 'reviewbot[bot]', summary: 'acme/team-platform has no write access, so GitHub ignores its CODEOWNERS line.' },
+    ]);
   });
 });
