@@ -2728,6 +2728,80 @@ A PR that is a stack layer is never shown apart from its stack.
   for a stack inside a set. The light blue is the one accent-family use
   outside selection and focus, chosen by the user.
 
+## Stacks land together (2026-10-08)
+
+"Merge, it is approved" on a stack must mean the stack can land. Reported
+2026-10-08: an agent reading the MCP saw "Merge, it is approved" on a
+two-layer stack whose upper layer still waited on a team's review
+(GitHub: review required), so the stack could not land. The tile took the
+bottom layer's merge (your move) over the upper layer's "Waiting on"
+(their move), and nothing said the two belong together.
+
+Which layers gate which:
+
+- A layer merges on top of the layers below it: its base is the branch of
+  the layer under it, so it cannot land before them. Layers below gate a
+  layer always.
+- A lower layer can merge alone (GitHub moves the next layer onto the
+  default branch). Whether the author wants that is not in the data; the
+  usual way here is the whole stack at once (`gh stack merge`, a merge
+  queue taking the stack). So upper layers do not gate a lower layer's own
+  row, but they gate the stack as a whole.
+
+The rules (core `stack-readiness.ts`, used by `whose-turn.ts`):
+
+- **What holds a layer** (`layerHold`): merged, closed and queued layers
+  hold nothing (a closed layer no longer lands with the stack; a queued one
+  is landing). Then, first match: a draft (the author marks it ready), a
+  failed merge-queue run (the author re-submits), a standing change
+  request (the author addresses it, or the reviewer re-reviews once asked
+  again, as `standingChanges`), and only while GitHub does not say
+  approved: the first pending reviewer, user before team ("and N more"),
+  else "needs an approving review" when GitHub requires one and nobody is
+  asked. The order follows whose turn on your own PR, so the stack and
+  the layer's own row name the same person.
+- **A PR's row** (`PrSummary.turn`, the detail pane, `pr_context`'s move):
+  your approved PR in a stack gets "Merge, it is approved" only while no
+  layer below it is held; else the lowest held layer below names the move.
+- **The tile** (`whoseTurn`, the footer, `whats_on_me`, `pr_context`'s
+  "Its tile:" line): a row's merge move also gives way to the lowest held
+  layer above it, so the tile speaks for the whole stack. The tile then
+  ranks it like any other turn.
+- **Words**: someone else's part is a `them` turn with the lead
+  "Blocked:", "Blocked: team-security to review #12", "Blocked: ada to
+  address carol's changes on #12", "Blocked: ada to mark #12 ready for
+  review". Your own part is your move: "Address ada's changes on #12"
+  (`address_changes`), "Mark #12 ready for review" or "Re-submit #12 to the
+  merge queue" (`merge`), "Review #12" or "Re-review #12". Without a
+  person: "Blocked: #12 needs an approving review" (no face, like the
+  merge queue). The turn's `prKey` is the holding layer, so the tile's
+  lead PR and "Open on GitHub" go there. No " on #n": the words name it.
+- Only the approved-merge move changes. Re-submitting to the merge queue,
+  "Waiting on", and "to merge" on someone else's stack stay as they are.
+  Tiers and Done still read the PR alone: the merge move is never urgent
+  and holding it changes neither.
+- Works on any stack a tile holds (`Tile.stacks`), whether git branches
+  or something else found it.
+- Property tests: `expectedStackHold` in `testing/spec-rules.ts` restates
+  the hold; the row spec takes the layers below, the tile invariants the
+  layers above.
+
+**Bot change requests say what they found.** "Address
+reviewbot[bot]'s changes" hides what the bot wants, and that is often no
+code change (reported the same day: a security bot flagged that a team
+had no write grant on the repo, so GitHub ignored its CODEOWNERS line; the
+fix was an org-admin grant). `PrDetail.botFindings` (core
+`bot-findings.ts`) holds, per bot whose standing review asks for changes,
+one line from its newest change request: the first sentence of the first
+plain text line, else of the first heading, with HTML comments, code
+blocks, images (badges), link targets, bare URLs and markdown marks
+removed, at most 120 characters. Rules only, no agent call. The board
+reads leave bot review bodies out, so only the PR detail (which reads the
+PR whole) has it. `pr_context` prints it under the move, inside the data
+fence: "reviewbot[bot] asks for changes: …". The tile footer does not show
+it (it has no review bodies); the pane's activity list already shows the
+review.
+
 ## Topic placement: relation and area
 
 Every topic gets a placement, so a long topic list sorts itself by whose
@@ -4037,7 +4111,10 @@ draft), `merge`. No CI move: `fix_ci` ("Fix failing CI") was dropped
      on sol" (`WhoseTurn.lead`), "and N more" when several are asked. Your
      own team asked by CODEOWNERS counts as a reviewer here, never as a
      review for you.
-   - you: approved and not a draft ("Merge, it is approved"). Not in the
+   - you: approved and not a draft ("Merge, it is approved"), unless a
+     stack layer it lands with holds it back; then the move names that
+     layer ("Blocked: team-security to review #12", see "Stacks land
+     together"). Not in the
      first rule list; added so an approved own PR does not read as nothing.
    - else none.
 4. On someone else's PR (after the merge queue, rule 3):

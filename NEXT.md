@@ -6,6 +6,12 @@ now".
 
 ## Done
 
+- Stacks land together (2026-10-08; DESIGN.md "Stacks land together"):
+  "Merge, it is approved" gives way to the stack layer that holds it
+  ("Blocked: team-security to review #12"): on a PR's row for layers
+  below, on the tile for the whole stack (core `stack-readiness.ts`, spec
+  `expectedStackHold`). `PrDetail.botFindings` (core `bot-findings.ts`):
+  `pr_context` shows one line of what a bot's change request found.
 - MCP review ownership and effort (2026-10-08; DESIGN.md "MCP server" ›
   Review ownership and effort): CODEOWNERS per repo of open PRs, read once
   a day in one aliased GraphQL query (default branch, three places), kept

@@ -57,6 +57,14 @@ export function eventsOf(board: PropertyBoard, key: PrKey): PrEvent[] {
   return board.events.get(key) ?? [];
 }
 
+/** The layers below and above a PR in its tile's stack, bottom first, from `Tile.stacks`; both empty outside a stack. */
+export function stackLayersOf(board: PropertyBoard, view: TileView, key: PrKey): { below: FullPr[]; above: FullPr[] } {
+  const keys = view.tile.stacks.find((stack) => stack.prKeys.includes(key))?.prKeys ?? [];
+  const index = keys.indexOf(key);
+  const layers = (part: PrKey[]) => part.flatMap((layer) => board.fullPrs.get(layer) ?? []);
+  return index < 0 ? { below: [], above: [] } : { below: layers(keys.slice(0, index)), above: layers(keys.slice(index + 1)) };
+}
+
 /** Pinged or found, not a pulled-in layer: spelled out here, not read from `isTracked`. */
 export function isTrackedHere(provenance: Provenance): boolean {
   return provenance.kind !== 'pulled_in';

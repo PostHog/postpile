@@ -111,6 +111,7 @@ import {
   activityList,
   whatsNew,
   agentOnlyApprovers,
+  botFindings,
   standingApprovals,
   UNDO_WINDOW_MS,
   viewerApproval,
@@ -172,6 +173,7 @@ import {
   prPaneView,
   prStatus,
   prWhoseTurn,
+  stackLayersAround,
   isReReviewMove,
   driverPickRefusal,
   searchTopics,
@@ -712,6 +714,7 @@ export class FakeEngine implements EngineService {
           now: this.timestamp(),
           pendingWrite: pending.get(pr.key) ?? null,
           opened: this.openedReadInput(pr.key),
+          layersBelow: stackLayersAround(tile.stacks, pr.key, prsByKey).below,
         },
       ];
     });
@@ -1388,6 +1391,7 @@ export class FakeEngine implements EngineService {
       viewerApproval: viewerApproval(pr, this.data.userStates.find((state) => state.prKey === prKey) ?? null, this.viewer().login),
       viewerReview: viewerReviewStand(pr, this.viewer()),
       agentApprovers: agentOnlyApprovers(standingApprovals(pr)),
+      botFindings: botFindings(pr),
       topicId: this.data.membership.get(prKey) ?? null,
       tileIds: this.data.tiles.filter((tile) => tile.members.some((member) => member.prKey === prKey)).map((tile) => tile.id),
       facts: this.memory.prFacts(prKey),

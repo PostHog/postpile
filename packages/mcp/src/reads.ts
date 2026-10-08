@@ -353,15 +353,19 @@ function prHeadLines(detail: PrDetail, tiles: TileView[], authors: Authors): str
   if (thread) {
     lines.push(thread);
   }
-  for (const view of tiles) {
-    const unread = view.state.unreadBecause.filter((reason) => reason.prKey === pr.key);
-    for (const reason of unread) {
-      lines.push(`Unread for you: ${unreadReasonText(reason)} (${day(reason.at)})`);
-    }
-    if (view.state.kind === 'snoozed') {
-      lines.push(view.state.muted ? 'The user muted this until someone asks them in person.' : 'The user snoozed this.');
-    }
+  // "Address <bot>'s changes" alone hides what the bot wants; its review's first sentence says (no agent call).
+  for (const finding of detail.botFindings) {
+    lines.push(`${finding.by} asks for changes: ${finding.summary}`);
   }
+  for (const view of tiles) {
+  const unread = view.state.unreadBecause.filter((reason) => reason.prKey === pr.key);
+  for (const reason of unread) {
+    lines.push(`Unread for you: ${unreadReasonText(reason)} (${day(reason.at)})`);
+  }
+  if (view.state.kind === 'snoozed') {
+    lines.push(view.state.muted ? 'The user muted this until someone asks them in person.' : 'The user snoozed this.');
+  }
+}
   lines.push(...stackLines(tiles, pr.key, pr.baseRef));
   lines.push(...dependsOnLines(pr, tiles));
   if (detail.viewerApproval) {

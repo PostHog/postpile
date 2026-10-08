@@ -56,6 +56,12 @@ export interface PrSummaryInput {
   pendingWrite: TilePendingWrite | null;
   /** What the "opened in PostPile" rule reads of this PR, gathered like the server's check does it (`openedReadCheck`). */
   opened: OpenedReadInput;
+  /**
+   * The layers below this PR in its tile's stack, bottom first
+   * (`stackLayersAround`): one held back holds this PR's merge too. Absent
+   * or empty outside a stack.
+   */
+  layersBelow?: Pr[];
 }
 
 /** The PR facts every consumer reads (`PrFacts`); without a viewer nothing is aimed at anyone. */
@@ -107,9 +113,9 @@ export function buildPrSummary(input: PrSummaryInput): PrSummary {
     done: isPrDone(pr, userState, viewer, events, notYours, input.lastReadAt),
     ownTeamRequests: viewer ? ownTeamRequests(pr, viewer) : [],
     pendingWrite: input.pendingWrite,
-    turn: viewer ? prWhoseTurn({ pr, events, userState, viewer, notYours }) : NO_TURN,
+    turn: viewer ? prWhoseTurn({ pr, events, userState, viewer, notYours, layersBelow: input.layersBelow }) : NO_TURN,
     facts: prFacts(pr, events, viewer),
-    afterRead: prAfterMarkRead({ pr, events, userState, viewer, notYours, tracked: isTracked(member.provenance), readAt: input.now }),
+    afterRead: prAfterMarkRead({ pr, events, userState, viewer, notYours, tracked: isTracked(member.provenance), readAt: input.now, layersBelow: input.layersBelow }),
     openedRead: openedReadCheck(input.opened),
     whatsNew: member.provenance.kind === 'found' ? null : whatsNew(pr, events, viewer),
     updatedAt: pr.updatedAt,

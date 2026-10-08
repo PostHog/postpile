@@ -7,13 +7,13 @@ import type { PrTier } from '../pr-tier.ts';
 // Test helpers over the raw snapshot: every stored body (`FullPr`).
 import type { FullPr as Pr, PrEvent } from '../types.ts';
 import { tileListRank } from '../tile-view.ts';
-import type { TileView } from '../views.ts';
+import type { PrSummary, TileView } from '../views.ts';
 import { tileViewOf, tileViewsOf, type PropertyBoard } from './build-board.ts';
-import { describeTurn, ensure, eventsOf, expectedUnreadRows, isNews, fullPrOf, sameMove, trackedMembers, trackedRows, type Invariant } from './invariant.ts';
+import { describeTurn, ensure, eventsOf, expectedUnreadRows, isNews, fullPrOf, sameMove, stackLayersOf, trackedMembers, trackedRows, type Invariant } from './invariant.ts';
 import { editAsks } from './spec-events.ts';
 import { isBotThreadAnswer, isCarrierEvent } from './spec-facts.ts';
 import { expectedFooter, expectedGitHubLink, expectedLeadPr, expectedMarkLabel, expectedPane, expectedPrimaryAction } from './spec-offers.ts';
-import { expectedDone, expectedSnoozePhase, isUnseenMergeWithoutViewer } from './spec-rules.ts';
+import { expectedDone, expectedSnoozePhase, expectedStackHold, isUnseenMergeWithoutViewer, type ExpectedTurn } from './spec-rules.ts';
 
 const TURN_RANK: Record<WhoseTurnKind, number> = { you: 0, them: 1, none: 2 };
 
@@ -263,21 +263,57 @@ function tileWords(turn: WhoseTurn, where: string): string {
   return turn.kind === 'them' && turn.lead === 'Waiting on' ? [turn.what, where].filter((part) => part !== '').join(' ') : `${turn.what} ${where}`;
 }
 
-/** The tile's turn is the most urgent turn of its tracked PRs, names the same move as that PR's row, in the row's words plus the PR on a multi-PR tile. */
+/** A spec hold as a turn about its layer (`on`). */
+function heldTurn(hold: Exclude<ExpectedTurn, { kind: 'none' }>): WhoseTurn {
+  if (hold.kind === 'you') {
+    return { kind: 'you', move: hold.move, who: null, what: hold.what, prKey: hold.on! };
+  }
+  return { kind: 'them', who: hold.who, what: hold.what, prKey: hold.on!, ...(hold.lead ? { lead: hold.lead } : {}) };
+}
+
+/** What one tracked row puts up for its tile, and whether a stack layer holds it (the words then name the layer). */
+interface TileCandidate {
+  row: PrSummary;
+  turn: WhoseTurn;
+  held: boolean;
+}
+
+/**
+ * The turn each tracked row puts up for its tile: its own, except that
+ * merging a stack layer becomes the spec's hold of a layer above it, the
+ * move that lands the whole stack (DESIGN "Stacks land together").
+ */
+function tileCandidates(board: PropertyBoard, view: TileView): TileCandidate[] {
+  return trackedRows(view).map((row) => {
+    const approvedMerge = row.turn.kind === 'you' && row.turn.move === 'merge' && row.turn.what === 'Merge, it is approved';
+    const hold = approvedMerge && board.viewer ? expectedStackHold(stackLayersOf(board, view, row.key).above, board.viewer) : null;
+    if (hold && hold.kind !== 'none') {
+      return { row, turn: heldTurn(hold), held: true };
+    }
+    // A row whose merge a layer below holds names that layer already.
+    return { row, turn: row.turn, held: row.turn.prKey !== null && row.turn.prKey !== row.key };
+  });
+}
+
+/**
+ * The tile's turn is the most urgent turn its tracked PRs put up, names the
+ * same move, in the row's words plus the PR on a multi-PR tile. A held
+ * merge names the layer that holds it in its own words.
+ */
 export const tileTurnIsAPrTurn: Invariant = {
   name: 'the tile turn is the most urgent turn of one of its tracked PRs, in its words',
   check(board, views) {
     for (const view of views) {
-      const rows = trackedRows(view);
-      const best = Math.min(...rows.map((row) => TURN_RANK[row.turn.kind]), TURN_RANK.none);
+      const candidates = tileCandidates(board, view);
+      const best = Math.min(...candidates.map((candidate) => TURN_RANK[candidate.turn.kind]), TURN_RANK.none);
       ensure(TURN_RANK[view.turn.kind] === best, `${view.tile.id}: tile turn ${view.turn.kind}, most urgent row turn rank ${best}`);
       if (view.turn.kind === 'none') {
         continue;
       }
-      const row = rows.find((candidate) => candidate.key === view.turn.prKey);
-      ensure(row !== undefined, `${view.tile.id}: tile turn names ${view.turn.prKey}, no tracked row`);
-      ensure(sameMove(row!.turn, view.turn), `${view.tile.id}: tile turn ${describeTurn(view.turn)}, row turn ${describeTurn(row!.turn)}`);
-      const what = tileWords(row!.turn, view.tile.members.length > 1 ? `on #${fullPrOf(board, row!.key).ref.number}` : '');
+      const match = candidates.find((candidate) => candidate.turn.prKey === view.turn.prKey && sameMove(candidate.turn, view.turn));
+      ensure(match !== undefined, `${view.tile.id}: tile turn ${describeTurn(view.turn)} is no tracked row's turn`);
+      const where = view.tile.members.length > 1 && !match!.held ? `on #${fullPrOf(board, match!.row.key).ref.number}` : '';
+      const what = tileWords(match!.turn, where);
       ensure(view.turn.what === what, `${view.tile.id}: tile says "${view.turn.what}", expected "${what}"`);
     }
   },
@@ -295,12 +331,13 @@ export const tileTurnFollowsNewestNews: Invariant = {
       if (view.turn.kind === 'none') {
         continue;
       }
-      const tied = trackedRows(view).filter((row) => row.turn.kind === view.turn.kind);
+      const tied = tileCandidates(board, view).filter((candidate) => candidate.turn.kind === view.turn.kind);
       const newestNews = (key: string) => eventsOf(board, key).filter(isNews).map((event) => event.at).sort().at(-1) ?? '';
-      const newest = tied.map((row) => newestNews(row.key)).sort().at(-1) ?? '';
-      const withNewest = tied.filter((row) => newestNews(row.key) === newest);
+      const newest = tied.map((candidate) => newestNews(candidate.row.key)).sort().at(-1) ?? '';
+      const withNewest = tied.filter((candidate) => newestNews(candidate.row.key) === newest);
       if (withNewest.length === 1 || newest === '') {
-        ensure(view.turn.prKey === withNewest[0]!.key, `${view.tile.id}: turn on ${view.turn.prKey}, newest news on ${withNewest[0]!.key}`);
+        const about = withNewest[0]!.turn.prKey;
+        ensure(view.turn.prKey === about, `${view.tile.id}: turn on ${view.turn.prKey}, newest news on ${withNewest[0]!.row.key} (turn on ${about})`);
       }
     }
   },

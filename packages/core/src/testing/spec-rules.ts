@@ -115,10 +115,14 @@ export function openAsk(pr: Pr, events: PrEvent[], viewer: Viewer, kinds: readon
 // Whose turn
 // ---------------------------------------------------------------------------
 
-/** A move and the footer's words for it (a single-PR tile: no " on #n"); `lead` only for "Waiting on". */
+/**
+ * A move and the footer's words for it (a single-PR tile: no " on #n");
+ * `lead` only for "Waiting on" and "Blocked:". `on` names the stack layer
+ * that holds a merge back; absent, the move is about the PR itself.
+ */
 export type ExpectedTurn =
-  | { kind: 'you'; move: YourMove; what: string }
-  | { kind: 'them'; who: string | null; what: string; lead?: string }
+  | { kind: 'you'; move: YourMove; what: string; on?: PrKey }
+  | { kind: 'them'; who: string | null; what: string; lead?: string; on?: PrKey }
   | { kind: 'none'; what: '' };
 
 const NONE: ExpectedTurn = { kind: 'none', what: '' };
@@ -141,6 +145,8 @@ export interface TurnInput {
   viewer: Viewer;
   userState: UserPrState | null;
   notYours: boolean;
+  /** The layers below the PR in its tile's stack, bottom first; absent outside a stack. */
+  layersBelow?: Pr[];
 }
 
 /** How an ask reads alone ("Answer ada's question") and after "Review, ada ..." when a review is owed too. */
@@ -195,6 +201,66 @@ function queueTurn(input: TurnInput): ExpectedTurn | null {
 }
 
 /**
+ * What holds one stack layer back from merging (DESIGN "Stacks land
+ * together"), as the move that lands the stack: nothing once merged or
+ * closed or in a merge queue; a draft to mark ready; a failed queue run to
+ * re-submit; a change request to address, or to re-review once its
+ * reviewer was asked again; without an approval the first pending reviewer
+ * ("and N more"), else an approval nobody was asked for. The viewer's own
+ * part is their move, anyone else's reads "Blocked: <who> ...".
+ */
+function layerHoldTurn(pr: Pr, viewer: Viewer): ExpectedTurn | null {
+  if (pr.state !== 'OPEN') {
+    return null;
+  }
+  const number = `#${pr.ref.number}`;
+  const owner = namedOwner(pr);
+  const blocked = (who: string, what: string): ExpectedTurn => ({ kind: 'them', who, what, lead: 'Blocked:', on: pr.key });
+  const yours = (move: YourMove, what: string): ExpectedTurn => ({ kind: 'you', move, what, on: pr.key });
+  if (pr.isDraft) {
+    return isViewerLogin(viewer, owner) ? yours('merge', `Mark ${number} ready for review`) : blocked(owner, `to mark ${number} ready for review`);
+  }
+  const queue = specMergeQueue(pr);
+  if (queue?.state === 'failed') {
+    return isViewerLogin(viewer, owner) ? yours('merge', `Re-submit ${number} to the merge queue`) : blocked(owner, `to re-submit ${number} to the merge queue`);
+  }
+  if (queue !== null || inGitHubQueue(pr)) {
+    return null;
+  }
+  const standing = standingChangesBy(pr);
+  if (standing.length > 0) {
+    const waiting = standing.find((reviewer) => !askedToReReview(pr, reviewer));
+    if (waiting === undefined) {
+      return isViewerLogin(viewer, standing[0]!) ? yours('re_review', `Re-review ${number}`) : blocked(standing[0]!, `to re-review ${number}`);
+    }
+    return isViewerLogin(viewer, owner) ? yours('address_changes', `Address ${waiting}'s changes on ${number}`) : blocked(owner, `to address ${waiting}'s changes on ${number}`);
+  }
+  if (pr.reviewDecision === 'APPROVED') {
+    return null;
+  }
+  const reviewers = [...pr.reviewerUsers, ...pr.reviewerTeams];
+  if (reviewers.length > 0) {
+    const more = reviewers.length > 1 ? `and ${reviewers.length - 1} more ` : '';
+    return isViewerLogin(viewer, reviewers[0]!) ? yours('review', `Review ${number}`) : blocked(reviewers[0]!, `${more}to review ${number}`);
+  }
+  if (pr.reviewDecision === 'REVIEW_REQUIRED' || pr.reviewDecision === 'CHANGES_REQUESTED') {
+    return { kind: 'them', who: null, what: `Blocked: ${number} needs an approving review`, on: pr.key };
+  }
+  return null;
+}
+
+/** The lowest of these stack layers (bottom first) that holds a merge back, as the move; null when all of them can land. */
+export function expectedStackHold(layers: Pr[], viewer: Viewer): ExpectedTurn | null {
+  for (const layer of layers) {
+    const hold = layerHoldTurn(layer, viewer);
+    if (hold) {
+      return hold;
+    }
+  }
+  return null;
+}
+
+/**
  * The viewer's own open PR, after the merge queue: threads to answer, then changes to address
  * (their reviewers' move once every one was asked again after a push),
  * then waiting on the pending reviewers, then merging an approved PR.
@@ -214,7 +280,11 @@ function ownPrTurn(input: TurnInput): ExpectedTurn {
   if (reviewers.length > 0) {
     return { kind: 'them', who: reviewers[0]!, what: reviewers.length > 1 ? `and ${reviewers.length - 1} more` : '', lead: 'Waiting on' };
   }
-  return pr.reviewDecision === 'APPROVED' ? you('merge', 'Merge, it is approved') : NONE;
+  if (pr.reviewDecision !== 'APPROVED') {
+    return NONE;
+  }
+  // A layer lands on top of the layers below it: one held back holds this merge too.
+  return expectedStackHold(input.layersBelow ?? [], viewer) ?? you('merge', 'Merge, it is approved');
 }
 
 /** Where the changes requests (other than `except`'s) leave the owner: re-review once every reviewer was asked again, else whose to address first. */

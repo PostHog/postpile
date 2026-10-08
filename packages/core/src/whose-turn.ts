@@ -12,6 +12,7 @@ import { sameLogin } from './mentions.ts';
 import { mergeQueueState } from './merge-queue.ts';
 import { isPrOwner, prOwner } from './pr-owners.ts';
 import { isQueued } from './pr-status.ts';
+import { firstBlocker, stackLayersAround, type StackBlocker } from './stack-readiness.ts';
 import {
   changesRequestedBy,
   isApprovedByViewer,
@@ -104,6 +105,8 @@ interface PrContext {
   where: string;
   /** The agent's glance says the PR is not the viewer's. */
   notYours: boolean;
+  /** The open and landed layers below this PR in its stack, bottom first; empty outside a stack. */
+  layersBelow: Pr[];
 }
 
 function you(ctx: PrContext, move: YourMove, what: string): WhoseTurn {
@@ -131,6 +134,38 @@ function plural(count: number, word: string): string {
 
 function isViewer(ctx: PrContext, login: string): boolean {
   return sameLogin(login, ctx.viewer.login);
+}
+
+/** Words before the name when a stack layer holds the merge: "Blocked: team-security to review #12". */
+const BLOCKED_LEAD = 'Blocked:';
+
+/**
+ * The move that lands a stack when a layer holds it back (DESIGN.md
+ * "Stacks land together"): it names that layer and who has to move. The
+ * viewer's own move on it ("Address ada's changes on #12") is a `you`
+ * turn; anyone else's a `them` turn with the lead "Blocked:". Always about
+ * the holding layer, so the words name it and get no " on #n".
+ */
+function blockedTurn(viewer: Viewer, blocker: StackBlocker): WhoseTurn {
+  const { pr, hold } = blocker;
+  const number = `#${pr.ref.number}`;
+  const mine = hold.kind !== 'approval' && sameLogin(hold.who, viewer.login);
+  const blocked = (who: string, what: string): WhoseTurn => ({ kind: 'them', who, what, prKey: pr.key, lead: BLOCKED_LEAD });
+  const yours = (move: YourMove, what: string): WhoseTurn => ({ kind: 'you', move, who: null, what, prKey: pr.key });
+  switch (hold.kind) {
+    case 'draft':
+      return mine ? yours('merge', `Mark ${number} ready for review`) : blocked(hold.who, `to mark ${number} ready for review`);
+    case 'queue_failed':
+      return mine ? yours('merge', `Re-submit ${number} to the merge queue`) : blocked(hold.who, `to re-submit ${number} to the merge queue`);
+    case 'changes':
+      return mine ? yours('address_changes', `Address ${hold.by}'s changes on ${number}`) : blocked(hold.who, `to address ${hold.by}'s changes on ${number}`);
+    case 're_review':
+      return mine ? yours('re_review', `Re-review ${number}`) : blocked(hold.who, `to re-review ${number}`);
+    case 'review':
+      return mine ? yours('review', `Review ${number}`) : blocked(hold.who, `${hold.more > 0 ? `and ${hold.more} more ` : ''}to review ${number}`);
+    case 'approval':
+      return { kind: 'them', who: null, what: `${BLOCKED_LEAD} ${number} needs an approving review`, prKey: pr.key };
+  }
 }
 
 /**
@@ -307,7 +342,9 @@ function ownPrTurn(ctx: PrContext): WhoseTurn {
     return waitingOn(ctx, reviewers[0]!, reviewers.length - 1);
   }
   if (!pr.isDraft && pr.reviewDecision === 'APPROVED') {
-    return you(ctx, 'merge', MERGE_APPROVED_MOVE);
+    // A layer lands only on top of the layers below it: one of them held back holds this one too.
+    const below = firstBlocker(ctx.layersBelow);
+    return below ? blockedTurn(ctx.viewer, below) : you(ctx, 'merge', MERGE_APPROVED_MOVE);
   }
   return NO_TURN;
 }
@@ -426,8 +463,8 @@ function prTurn(ctx: PrContext): WhoseTurn {
 }
 
 /** Whose move it is on one PR, as a single-PR tile would say it (tracked or not). */
-export function prWhoseTurn(input: { pr: Pr; events: PrEvent[]; userState: UserPrState | null; viewer: Viewer; notYours?: boolean }): WhoseTurn {
-  return prTurn({ ...input, where: '', notYours: input.notYours ?? false });
+export function prWhoseTurn(input: { pr: Pr; events: PrEvent[]; userState: UserPrState | null; viewer: Viewer; notYours?: boolean; layersBelow?: Pr[] }): WhoseTurn {
+  return prTurn({ ...input, where: '', notYours: input.notYours ?? false, layersBelow: input.layersBelow ?? [] });
 }
 
 /** When the newest unseen loud event on the PR happened, '' when there is none. */
@@ -459,9 +496,16 @@ export function isMergeApprovedMove(turn: WhoseTurn): boolean {
   return turn.kind === 'you' && turn.move === 'merge';
 }
 
+/** The move is merging an approved own PR, not re-submitting it to the merge queue. */
+function isApprovedMerge(turn: WhoseTurn): boolean {
+  return turn.kind === 'you' && turn.move === 'merge' && turn.what.startsWith(MERGE_APPROVED_MOVE);
+}
+
 /**
  * Whose move it is on a tile. Each pinged or found PR gets a turn by the rules in
- * DESIGN.md; the tile takes the most urgent one (you over them over none).
+ * DESIGN.md; merging a stack layer becomes the stack's blocker while a layer
+ * above it is held back ("Stacks land together"). The tile takes the most
+ * urgent one (you over them over none).
  * On a tie the PR with the newest unseen loud event wins, so the footer
  * talks about the same PR as the unread strip; else the first in tile order.
  * Multi-PR tiles name the PR.
@@ -480,14 +524,21 @@ export function whoseTurn(input: WhoseTurnInput): WhoseTurn {
       continue;
     }
     const events = input.events.get(pr.key) ?? [];
-    const turn = prTurn({
+    const layers = stackLayersAround(input.tile.stacks, pr.key, input.prs);
+    let turn = prTurn({
       pr,
       events,
       userState: input.userStates.get(pr.key) ?? null,
       viewer,
       where: multi ? ` on #${pr.ref.number}` : '',
       notYours: input.notYours?.has(pr.key) ?? false,
+      layersBelow: layers.below,
     });
+    // The tile speaks for the whole stack: merging stays the move only while every layer it ships with can land too.
+    const above = isApprovedMerge(turn) ? firstBlocker(layers.above) : null;
+    if (above) {
+      turn = blockedTurn(viewer, above);
+    }
     const news = newestUnseenLoudAt(events);
     const moreUrgent = TURN_ORDER[turn.kind] < TURN_ORDER[best.kind];
     const sameButNewer = turn.kind !== 'none' && turn.kind === best.kind && news > bestNews;

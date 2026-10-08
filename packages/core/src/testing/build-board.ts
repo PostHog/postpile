@@ -15,6 +15,7 @@ import { sameLogin } from '../mentions.ts';
 import { isTracked } from '../provenance.ts';
 import { applyReadPlan, planRead, prReadScope, type ReadCause } from '../read-plan.ts';
 import { snoozeWrites } from '../snooze.ts';
+import { stackLayersAround } from '../stack-readiness.ts';
 import { buildStacks } from '../stacks.ts';
 import { OUTSIDE_DRIVER, TEAM_DRIVER } from '../topic-driver.ts';
 import { buildTopicTiles, deriveTileState } from '../tiles.ts';
@@ -982,6 +983,7 @@ function prRowInputs(board: PropertyBoard, tile: Tile, state: TileState, viewer:
         now: board.now,
         pendingWrite: board.pendingWrites.get(pr.key) ?? null,
         opened: openedInputOf(board, pr, viewer),
+        layersBelow: stackLayersAround(tile.stacks, pr.key, board.prs).below,
       },
     ];
   });

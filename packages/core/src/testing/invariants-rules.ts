@@ -28,7 +28,7 @@ import { prAsOf } from '../pr-as-of.ts';
 import type { Pr, PrEvent, PrKey, Verdict } from '../types.ts';
 import type { PrSummary, TileView } from '../views.ts';
 import type { PropertyBoard } from './build-board.ts';
-import { ensure, eventsOf, fullPrOf, type Invariant } from './invariant.ts';
+import { ensure, eventsOf, fullPrOf, stackLayersOf, type Invariant } from './invariant.ts';
 import { SPEC_ADDRESSED_KINDS } from './spec-events.ts';
 import { isAutomationLogin, isViewerTeam, newestTouch, pendingRequest, specOwnerRelation, specOwners, specRelation, specSnapshotAt } from './spec-facts.ts';
 import {
@@ -136,11 +136,14 @@ export const forWhomMatchesTheSpec: Invariant = {
 export const turnMatchesTheSpec: Invariant = {
   name: 'whose move on each PR is the spec move, whom a them turn waits on, and its words',
   check(board, views) {
-    for (const row of allRows(views)) {
-      const expected = expectedTurn(turnInput(board, row.key));
-      const want = turnLine({ ...expected, who: expected.kind === 'them' ? expected.who : null });
-      ensure(turnLine(row.turn) === want, `${row.key}: ${turnLine(row.turn)}, expected ${want}`);
-      ensure(row.turn.prKey === (row.turn.kind === 'none' ? null : row.key), `${row.key}: turn names ${row.turn.prKey}`);
+    for (const view of views) {
+      for (const row of view.prs) {
+        const expected = expectedTurn({ ...turnInput(board, row.key), layersBelow: stackLayersOf(board, view, row.key).below });
+        const want = turnLine({ ...expected, who: expected.kind === 'them' ? expected.who : null });
+        ensure(turnLine(row.turn) === want, `${row.key}: ${turnLine(row.turn)}, expected ${want}`);
+        const about = expected.kind === 'none' ? null : (expected.on ?? row.key);
+        ensure(row.turn.prKey === about, `${row.key}: turn names ${row.turn.prKey}, expected ${about}`);
+      }
     }
   },
 };

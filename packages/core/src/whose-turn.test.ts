@@ -3,7 +3,7 @@ import { at, makeComment, makeCommit, makeEvent, makePr, makeReview, makeThread,
 import type { Pr, PrEvent, Tile, UserPrState, Viewer } from './types.ts';
 import { mergeQueueFailureAt, mergeQueueState } from './merge-queue.ts';
 import { prStatus } from './pr-status.ts';
-import { isMergeApprovedMove, whoseTurn, YOUR_MOVE_ORDER, type WhoseTurn } from './whose-turn.ts';
+import { isMergeApprovedMove, prWhoseTurn, whoseTurn, YOUR_MOVE_ORDER, type WhoseTurn } from './whose-turn.ts';
 
 const me = viewer.login;
 
@@ -407,6 +407,70 @@ describe('whoseTurn: multi-PR tiles', () => {
       what: 'to merge on #1',
       prKey: approved.key,
     });
+  });
+});
+
+describe('whoseTurn: stacks land together', () => {
+  const bottom = makePr({ number: 1, author: me, reviewDecision: 'APPROVED' });
+  const top = makePr({ number: 2, author: me, reviewDecision: 'REVIEW_REQUIRED', reviewerTeams: ['acme/team-security'] });
+
+  function stackTile(layers: Pr[], tracked: Pr[] = layers): Tile {
+    return {
+      id: `stack:${layers[0]!.key}`,
+      topicId: 'topic-1',
+      kind: 'stack',
+      title: 'stack',
+      members: layers.map((pr) => ({
+        prKey: pr.key,
+        provenance: tracked.includes(pr) ? { kind: 'pinged', reason: 'author' } : { kind: 'pulled_in', reason: 'stack layer above #1' },
+      })),
+      stacks: [{ id: `stack:${layers[0]!.key}`, prKeys: layers.map((pr) => pr.key) }],
+    };
+  }
+
+  it('names the layer above that holds the stack instead of "Merge, it is approved"', () => {
+    expect(turnOf(stackTile([bottom, top]), [bottom, top])).toEqual({
+      kind: 'them',
+      who: 'acme/team-security',
+      what: 'to review #2',
+      lead: 'Blocked:',
+      prKey: top.key,
+    });
+    // Also when the held layer is only pulled in.
+    expect(turnOf(stackTile([bottom, top], [bottom]), [bottom, top])).toMatchObject({ kind: 'them', who: 'acme/team-security', what: 'to review #2' });
+  });
+
+  it('keeps the merge once every layer can land, or the upper layer merged', () => {
+    const approvedTop = { ...top, reviewDecision: 'APPROVED' as const, reviewerTeams: [] };
+    expect(turnOf(stackTile([bottom, approvedTop]), [bottom, approvedTop])).toMatchObject({ kind: 'you', move: 'merge', what: 'Merge, it is approved on #1' });
+    const mergedTop = { ...top, state: 'MERGED' as const };
+    expect(turnOf(stackTile([bottom, mergedTop]), [bottom, mergedTop])).toMatchObject({ kind: 'you', move: 'merge' });
+  });
+
+  it('lets a lower layer merge alone on its own row, but never an upper layer whose base still waits', () => {
+    expect(prWhoseTurn({ pr: bottom, events: [], userState: null, viewer, layersBelow: [] })).toMatchObject({ kind: 'you', move: 'merge' });
+    const heldBottom = { ...bottom, reviewDecision: 'REVIEW_REQUIRED' as const, reviewerUsers: ['ada'] };
+    const approvedTop = { ...top, reviewDecision: 'APPROVED' as const, reviewerTeams: [] };
+    expect(prWhoseTurn({ pr: approvedTop, events: [], userState: null, viewer, layersBelow: [heldBottom] })).toEqual({
+      kind: 'them',
+      who: 'ada',
+      what: 'to review #1',
+      lead: 'Blocked:',
+      prKey: heldBottom.key,
+    });
+    expect(prWhoseTurn({ pr: approvedTop, events: [], userState: null, viewer, layersBelow: [] })).toMatchObject({ kind: 'you', move: 'merge' });
+  });
+
+  it("makes the holding layer the viewer's move when it is theirs to fix", () => {
+    const draftTop = { ...top, isDraft: true, reviewerTeams: [] };
+    expect(turnOf(stackTile([bottom, draftTop], [bottom]), [bottom, draftTop])).toEqual({ kind: 'you', move: 'merge', who: null, what: 'Mark #2 ready for review', prKey: draftTop.key });
+    const changesTop = { ...top, reviewerTeams: [], reviewDecision: 'CHANGES_REQUESTED' as const, reviews: [makeReview({ author: 'ada', state: 'CHANGES_REQUESTED' })] };
+    expect(turnOf(stackTile([bottom, changesTop], [bottom]), [bottom, changesTop])).toMatchObject({ kind: 'you', move: 'address_changes', what: "Address ada's changes on #2" });
+  });
+
+  it('says a layer needs an approval when nobody is asked', () => {
+    const unasked = { ...top, reviewerTeams: [] };
+    expect(turnOf(stackTile([bottom, unasked], [bottom]), [bottom, unasked])).toEqual({ kind: 'them', who: null, what: 'Blocked: #2 needs an approving review', prKey: unasked.key });
   });
 });
 

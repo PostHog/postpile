@@ -65,6 +65,8 @@ export interface PrAfterReadInput {
   /** Pinged or found in its tile, so a mark-read handles it. A pulled-in stack layer only gets its events seen and is never done. */
   tracked: boolean;
   readAt: IsoTime;
+  /** The layers below it in its tile's stack, bottom first, as its row's turn reads them. */
+  layersBelow?: Pr[];
 }
 
 /**
@@ -84,6 +86,6 @@ export function prAfterMarkRead(input: PrAfterReadInput): TileAfterRead {
   const events = after.events.get(key) ?? [];
   const userState = after.userStates.get(key) ?? null;
   const done = input.tracked && isPrDone(input.pr, userState, input.viewer, events, input.notYours);
-  const turn = input.viewer ? prWhoseTurn({ pr: input.pr, events, userState, viewer: input.viewer, notYours: input.notYours }) : NO_TURN;
+  const turn = input.viewer ? prWhoseTurn({ pr: input.pr, events, userState, viewer: input.viewer, notYours: input.notYours, layersBelow: input.layersBelow }) : NO_TURN;
   return { done, turn };
 }
