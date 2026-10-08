@@ -7,7 +7,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Viewer } from '@postpile/core';
-import { makePr, makeReview, makeThreadFor } from '@postpile/core/fixtures';
+import { makeComment, makePr, makeReview, makeThreadFor } from '@postpile/core/fixtures';
 import { createEngine, type EngineService } from '@postpile/engine';
 import { Store } from '@postpile/store';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -79,5 +79,34 @@ describe('MCP: stack blockers and bot findings', () => {
     expect(json.prs[0]?.untrusted.botFindings).toEqual([
       { by: 'reviewbot[bot]', summary: 'acme/team-platform has no write access, so GitHub ignores its CODEOWNERS line.' },
     ]);
+  });
+
+  it('reads the finding from the inline comment when the review text only points there, after a store round trip', async () => {
+    // Seen in 0.27.0 on live data: "<bot> asks for changes: Agent-driven security review - findings inline."
+    const bot = 'guardbot[bot]';
+    const review = makeReview({ id: 'rev-4', author: bot, state: 'CHANGES_REQUESTED', body: 'Automated policy review - findings inline.', submittedAt: UPDATED });
+    const comment = makeComment({
+      id: 'c-4',
+      author: bot,
+      kind: 'review_comment',
+      path: 'src/plugins.ts',
+      threadId: 'th-4',
+      reviewId: 'rev-4',
+      createdAt: UPDATED,
+      body: '**The plugin allowlist is never checked: team-plugins has no write grant.**\n\nSo GitHub ignores its CODEOWNERS line.',
+    });
+    const pr = makePr({
+      number: 4,
+      author: 'alice',
+      reviewDecision: 'CHANGES_REQUESTED',
+      reviews: [review],
+      comments: [comment],
+      threads: [{ id: 'th-4', path: 'src/plugins.ts', isResolved: false, comments: [comment] }],
+      updatedAt: UPDATED,
+    });
+    app.prs.upsert(pr, UPDATED);
+    app.notifications.upsertMany([makeThreadFor(pr, { reason: 'author' })]);
+    const text = (await prContext(ctx, 'acme/app#4', 'brief')).text;
+    expect(text).toContain('guardbot[bot] asks for changes: The plugin allowlist is never checked: team-plugins has no write grant.');
   });
 });

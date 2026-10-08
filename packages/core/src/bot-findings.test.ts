@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { botFindings, FINDING_MAX, findingLine } from './bot-findings.ts';
-import { at, makePr, makeReview } from './fixtures.ts';
+import { at, makeComment, makePr, makeReview } from './fixtures.ts';
+import type { FullComment } from './types.ts';
 
 describe('findingLine', () => {
   it('takes the first sentence of the first text line, past the heading and badges', () => {
@@ -50,6 +51,46 @@ describe('botFindings', () => {
       ],
     });
     expect(botFindings(pr)).toEqual([{ by: 'reviewbot[bot]', summary: 'Grant team-platform write access.' }]);
+  });
+
+  describe('when the review text only points at its inline comments', () => {
+    const bot = 'guardbot[bot]';
+    const review = makeReview({ id: 'rev-9', author: bot, state: 'CHANGES_REQUESTED', body: 'Automated policy review - findings inline.', submittedAt: at(20) });
+    const inline = (id: string, body: string, overrides: Partial<FullComment> = {}): FullComment =>
+      makeComment({ id, author: bot, kind: 'review_comment', path: 'src/policy.ts', threadId: `t-${id}`, reviewId: 'rev-9', createdAt: at(20), body, ...overrides });
+    const finding = '### The plugin allowlist is never checked: team-plugins has no write grant, so its CODEOWNERS line is ignored.\n\nDetails follow.';
+
+    it('takes the first inline comment of that review, with how many more there are', () => {
+      const pr = makePr({ reviews: [review], comments: [inline('c1', finding), inline('c2', 'Second finding.', { createdAt: at(21) })] });
+      const summary = botFindings(pr)[0]!.summary;
+      expect(summary.startsWith('The plugin allowlist is never checked: team-plugins has no write grant')).toBe(true);
+      expect(summary.endsWith(' (+1 more)')).toBe(true);
+      expect(summary.length).toBeLessThanOrEqual(FINDING_MAX);
+    });
+
+    it("never takes another author's comment, and falls back to the review text without inline findings", () => {
+      const pr = makePr({ reviews: [review], comments: [inline('c1', 'A person wrote this.', { author: 'ada' })] });
+      expect(botFindings(pr)).toEqual([{ by: bot, summary: 'Automated policy review - findings inline.' }]);
+    });
+
+    it("uses the bot's inline comments at or after the review when they carry no review id", () => {
+      const older = inline('c0', 'An older finding.', { reviewId: undefined, createdAt: at(5) });
+      const after = inline('c1', 'Pin the plugin registry version.', { reviewId: undefined, createdAt: at(20) });
+      const pr = makePr({ reviews: [review], comments: [older, after] });
+      expect(botFindings(pr)).toEqual([{ by: bot, summary: 'Pin the plugin registry version.' }]);
+    });
+
+    it('keeps a finding that only uses the word "inline"', () => {
+      const own = { ...review, body: 'Inline cache invalidation is broken when the plugin version changes.' };
+      const pr = makePr({ reviews: [own], comments: [inline('c1', finding)] });
+      expect(botFindings(pr)[0]!.summary).toBe('Inline cache invalidation is broken when the plugin version changes.');
+    });
+
+    it('keeps a review text that says the finding itself', () => {
+      const clear = { ...review, body: 'team-plugins has no write grant on acme/app, so GitHub ignores its CODEOWNERS line.' };
+      const pr = makePr({ reviews: [clear], comments: [inline('c1', finding)] });
+      expect(botFindings(pr)[0]!.summary).toBe('team-plugins has no write grant on acme/app, so GitHub ignores its CODEOWNERS line.');
+    });
   });
 
   it('drops a bot whose newest verdict is no longer a change request', () => {
