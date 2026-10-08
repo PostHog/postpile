@@ -31,6 +31,7 @@ export * from './for-whom.ts';
 export * from './approvals.ts';
 export * from './reviewer-states.ts';
 export * from './author-scope.ts';
+export * from './codeowners.ts';
 export * from './merge-queue.ts';
 export * from './pr-status.ts';
 export * from './pr-pane.ts';

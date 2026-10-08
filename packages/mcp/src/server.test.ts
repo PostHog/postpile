@@ -114,6 +114,15 @@ describe('PostPile MCP server', () => {
     expect(data).toContain('<- this PR');
   });
 
+  it('tells which files pull in a team review and sizes the review, inside the fence', async () => {
+    const client = await connected();
+    const queue = fencedPart(await callText(client, 'whats_on_me'));
+    expect(queue).toContain('acme/app#1932 by ines (outside your team) · reviews: waiting on 1 team · team-platform owns 1 of 3 files');
+    expect(queue).toContain("    effort: 1 file, +12 -4 in your team's area (PR +140 -12, 3 files)");
+    const pr = fencedPart(await callText(client, 'pr_context', { pr: 'acme/app#1932' }));
+    expect(pr).toContain('  team-platform: 1 of 3 files (.github/workflows/ingestion-ci.yml)');
+  });
+
   it('refuses every tool while the app is not running, and answers again once it is', async () => {
     let running = false;
     const reports: ToolCallReport[] = [];

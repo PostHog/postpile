@@ -21,6 +21,7 @@ import type {
   BranchLookup,
   BranchPr,
   CapFill,
+  CodeOwnersFile,
   GitHubReader,
   PartialPrs,
   PrDiffRead,
@@ -279,6 +280,16 @@ export class FakeReader implements GitHubReader {
 
   async probeNotifications(): Promise<string | null> {
     return this.notificationsProblem;
+  }
+
+  /** CODEOWNERS per repo (lower case) for codeOwnersFiles; a repo missing here has none. */
+  codeOwners = new Map<string, CodeOwnersFile>();
+  /** Every codeOwnersFiles call's repos. */
+  codeOwnersCalls: string[][] = [];
+
+  async codeOwnersFiles(repos: string[]): Promise<Map<string, CodeOwnersFile | null>> {
+    this.codeOwnersCalls.push(repos);
+    return new Map(repos.map((repo) => [repo, this.codeOwners.get(repo) ?? null]));
   }
 
   /** Member counts for teamSizes; a team missing here has an unknown size. */

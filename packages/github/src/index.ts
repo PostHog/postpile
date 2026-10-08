@@ -14,6 +14,7 @@ export {
   type ThreadsSinceResult,
 } from './reader.ts';
 export type { GitHubWriter } from './writer.ts';
+export { CODE_OWNERS_BATCH_SIZE, CODE_OWNERS_PATHS, type CodeOwnersFile } from './code-owners.ts';
 export { buildFoundQuery, foundRefs, FOUND_CAP, type FoundRef } from './found.ts';
 export { GhCliTokenSource, GhTokenError, type TokenSource } from './token.ts';
 export { GitHubError, type FetchFn } from './http.ts';
