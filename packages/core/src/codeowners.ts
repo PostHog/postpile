@@ -143,14 +143,15 @@ export function ownersOfPath(rules: CodeownersRule[], path: string): string[] {
   return [];
 }
 
-/** A CODEOWNERS owner ("org/slug" or a login) is `who` ("org/slug", a bare slug, or a login). */
-function isOwner(owner: string, who: string): boolean {
-  const wanted = who.toLowerCase();
+/** A CODEOWNERS owner is `team` ("org/slug", or the bare slug a review request sometimes carries). */
+function isTeamOwner(owner: string, team: string): boolean {
+  const wanted = team.toLowerCase();
   return owner === wanted || (!wanted.includes('/') && owner.endsWith(`/${wanted}`));
 }
 
-function ownedBy(fileOwners: Map<PrFile, string[]>, who: string): PrFile[] {
-  return [...fileOwners].filter(([, owners]) => owners.some((owner) => isOwner(owner, who))).map(([file]) => file);
+/** Files whose owners include one that `matches`. */
+function ownedBy(fileOwners: Map<PrFile, string[]>, matches: (owner: string) => boolean): PrFile[] {
+  return [...fileOwners].filter(([, owners]) => owners.some(matches)).map(([file]) => file);
 }
 
 type OwnershipPr = Pick<Pr, 'files' | 'changedFiles' | 'reviewerTeams'>;
@@ -168,22 +169,23 @@ export function reviewOwnership(rules: CodeownersRule[], pr: OwnershipPr, viewer
   }
   const fileOwners = new Map(pr.files.map((file) => [file, ownersOfPath(rules, file.path)]));
   const home = viewer ? homeTeamsOf(viewer) : [];
-  const owners: OwnedFiles[] = pr.reviewerTeams.map((team) => ({ owner: team, requested: true, files: ownedBy(fileOwners, team) }));
+  const ownedByTeam = (team: string) => ownedBy(fileOwners, (owner) => isTeamOwner(owner, team));
+  const owners: OwnedFiles[] = pr.reviewerTeams.map((team) => ({ owner: team, requested: true, files: ownedByTeam(team) }));
   for (const team of home) {
-    if (owners.some((entry) => sameLogin(entry.owner, team))) {
+    // A requested bare slug and the home team's "org/slug" are one team.
+    if (owners.some((entry) => isOwnTeam(entry.owner, [team]))) {
       continue;
     }
-    const files = ownedBy(fileOwners, team);
+    const files = ownedByTeam(team);
     if (files.length > 0) {
       owners.push({ owner: team, requested: false, files });
     }
   }
   const viewerTeams = viewer?.teams ?? [];
-  const mine = [...home, ...pr.reviewerTeams.filter((team) => isOwnTeam(team, viewerTeams))];
-  if (viewer) {
-    mine.push(viewer.login);
-  }
-  const yours = pr.files.filter((file) => mine.some((who) => (fileOwners.get(file) ?? []).some((owner) => isOwner(owner, who))));
+  const myTeams = [...home, ...pr.reviewerTeams.filter((team) => isOwnTeam(team, viewerTeams))];
+  // The viewer's login only ever matches a user owner exactly: "@org/<login>" is a team, not them.
+  const isMine = (owner: string) => myTeams.some((team) => isTeamOwner(owner, team)) || (viewer !== null && owner === viewer.login.toLowerCase());
+  const yours = ownedBy(fileOwners, isMine);
   return { owners, yours, filesListed: pr.files.length, filesTotal: Math.max(pr.changedFiles, pr.files.length) };
 }
 

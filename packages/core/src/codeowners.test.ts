@@ -145,6 +145,16 @@ describe('reviewOwnership', () => {
     expect(reviewOwnership(rules, pr, viewer)?.owners[0]?.files.map((f) => f.path)).toEqual(['.github/workflows/ci.yml']);
   });
 
+  it('lists a requested bare slug once, not again as the home team', () => {
+    const pr = makePr({ files, changedFiles: 4, reviewerTeams: ['team-devex'] });
+    expect(reviewOwnership(rules, pr, viewer)?.owners.map((entry) => [entry.owner, entry.requested])).toEqual([['team-devex', true]]);
+  });
+
+  it('never reads a team named like the viewer as the viewer', () => {
+    const named = parseCodeowners('/src/ @acme/viewer');
+    expect(reviewOwnership(named, makePr({ files, changedFiles: 4 }), viewer)?.yours).toEqual([]);
+  });
+
   it('says how many files GitHub listed against the total', () => {
     const pr = makePr({ files, changedFiles: 250 });
     expect(reviewOwnership(rules, pr, null)).toMatchObject({ filesListed: 4, filesTotal: 250, owners: [], yours: [] });
