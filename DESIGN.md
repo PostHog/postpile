@@ -7401,7 +7401,9 @@ store already has; no new GitHub reads, no schema change.
   with `standingApprovals`): a later approval replaces a change request, a
   dismissal drops the reviewer, plain comments set no state. Bots and agents
   (`isBot`) go in their own group, named without "[bot]"; a requested agent
-  without a review shows as pending. `pr_context` names everyone: "Reviews:
+  without a review shows as pending, a re-requested one keeps its state and
+  says "asked again". Reviews by deleted accounts (empty login) are dropped:
+  several of them cannot be told apart. `pr_context` names everyone: "Reviews:
   approved by alice; changes requested by bob; pending: carol, team-platform;
   agents: reviewbot approved". `whats_on_me` keeps people as counts: "2
   human approvals, 1 human change request, waiting on 1 person and 2 teams,
@@ -7416,8 +7418,8 @@ store already has; no new GitHub reads, no schema change.
 - `author_scope` (me, my_team, others, any; default any) filters
   `whats_on_me`; my_team excludes the user. A tile matches when any of its
   PRs does, like `state` and `repo`.
-- Never fetched member lists (or no home team with members): the header says
-  so once, PRs carry only "(you)", and `author_scope` my_team / others is a
+- Never fetched member lists, a home team the cache has no list for yet
+  (named in the note), or no home team with members: the header says so once, PRs carry only "(you)", and `author_scope` my_team / others is a
   tool error that suggests me or any. Logins stay inside the fence.
 - `refresh_from_github(pr | topic)` and `propose_topic_change(...)`: see
   their own sections below.

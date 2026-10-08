@@ -19,8 +19,8 @@ describe('reviewerStates', () => {
       pendingUsers: ['carol'],
       pendingTeams: ['acme/team-platform', 'acme/team-security'],
       agents: [
-        { name: 'reviewbot', state: 'changes_requested' },
-        { name: 'copilot-reviewer', state: 'pending' },
+        { name: 'reviewbot', state: 'changes_requested', pending: false },
+        { name: 'copilot-reviewer', state: null, pending: true },
       ],
     });
   });
@@ -57,11 +57,29 @@ describe('reviewerStates', () => {
     expect(reviewerStates(pr).approvedBy).toEqual(['alice']);
   });
 
-  it('shows a requested agent that already reviewed by its review only', () => {
+  it('keeps a re-requested agent its earlier state and lists it as pending, like a person', () => {
     const pr = makePr({
-      reviews: [makeReview({ id: 'r1', author: 'reviewbot[bot]', state: 'APPROVED', submittedAt: at(1) })],
-      reviewerUsers: ['reviewbot[bot]'],
+      reviews: [
+        makeReview({ id: 'r1', author: 'reviewbot[bot]', state: 'APPROVED', submittedAt: at(1) }),
+        makeReview({ id: 'r2', author: 'alice', state: 'CHANGES_REQUESTED', submittedAt: at(2) }),
+      ],
+      reviewerUsers: ['reviewbot[bot]', 'alice'],
     });
-    expect(reviewerStates(pr).agents).toEqual([{ name: 'reviewbot', state: 'approved' }]);
+    expect(reviewerStates(pr)).toMatchObject({
+      changesRequestedBy: ['alice'],
+      pendingUsers: ['alice'],
+      agents: [{ name: 'reviewbot', state: 'approved', pending: true }],
+    });
+  });
+
+  it('drops reviews by deleted accounts instead of showing a blank agent', () => {
+    const pr = makePr({
+      reviews: [
+        makeReview({ id: 'r1', author: '', state: 'APPROVED', submittedAt: at(1) }),
+        makeReview({ id: 'r2', author: '', state: 'CHANGES_REQUESTED', submittedAt: at(2) }),
+        makeReview({ id: 'r3', author: 'alice', state: 'APPROVED', submittedAt: at(3) }),
+      ],
+    });
+    expect(reviewerStates(pr)).toEqual({ approvedBy: ['alice'], changesRequestedBy: [], pendingUsers: [], pendingTeams: [], agents: [] });
   });
 });

@@ -56,9 +56,14 @@ describe('mcp text', () => {
       changesRequestedBy: ['bob'],
       pendingUsers: ['carol'],
       pendingTeams: ['acme/team-platform', 'acme/team-security'],
-      agents: [{ name: 'reviewbot', state: 'changes_requested' as const }],
+      agents: [
+        { name: 'reviewbot', state: 'changes_requested' as const, pending: true },
+        { name: 'lintbot', state: null, pending: true },
+      ],
     };
-    expect(reviewersLine(states)).toBe('Reviews: approved by alice; changes requested by bob; pending: carol, team-platform, team-security; agents: reviewbot requested changes');
+    expect(reviewersLine(states)).toBe(
+      'Reviews: approved by alice; changes requested by bob; pending: carol, team-platform, team-security; agents: reviewbot requested changes, asked again, lintbot pending',
+    );
     const none = { approvedBy: [], changesRequestedBy: [], pendingUsers: [], pendingTeams: [], agents: [] };
     expect(reviewersLine(none)).toBe('Reviews: none, and nobody is asked');
   });
@@ -69,7 +74,7 @@ describe('mcp text', () => {
       changesRequestedBy: ['bob'],
       pendingUsers: ['carol', 'erin'],
       pendingTeams: ['acme/team-platform'],
-      agents: [{ name: 'reviewbot', state: 'approved' as const }],
+      agents: [{ name: 'reviewbot', state: 'approved' as const, pending: false }],
     };
     expect(reviewCountsText(states)).toBe('2 human approvals, 1 human change request, waiting on 2 people and 1 team, reviewbot approved');
   });

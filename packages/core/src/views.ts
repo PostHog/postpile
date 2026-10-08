@@ -167,8 +167,10 @@ export interface ViewerView {
 export interface TeamMembersView {
   /** When the lists were last fetched from GitHub; null when they never were (the cache is empty). */
   fetchedAt: IsoTime | null;
-  /** Each home team with its members, the viewer among them. Empty without a home team or before a fetch. */
+  /** Each cached home team with its members, the viewer among them. Empty without a home team or before a fetch. */
   teams: HomeTeamMembers[];
+  /** Home teams ("org/team-slug") the cache has no list for yet, for example one the user made home since the last fetch. */
+  missingTeams: string[];
 }
 
 export interface PrSummary {

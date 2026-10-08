@@ -24,7 +24,7 @@ import {
 } from '@postpile/core';
 import type { EngineService } from '@postpile/engine';
 import { parsePrInput } from './pr-input.ts';
-import { ago, answer, authorTag, briefGlanceLines, day, echo, fenced, freshness, glanceLines, prSummaryLine, reviewCountsText, reviewersLine, stateWord, tileLine, turnText, whatsNewText, withActor } from './text.ts';
+import { ago, answer, authorTag, teamSlug, briefGlanceLines, day, echo, fenced, freshness, glanceLines, prSummaryLine, reviewCountsText, reviewersLine, stateWord, tileLine, turnText, whatsNewText, withActor } from './text.ts';
 
 /** The read methods the tools use; the read-only engine and the sample-data engine both have them. */
 export type PostPileReader = Pick<EngineService, 'getPr' | 'getTopic' | 'listTopics' | 'search' | 'getViewer' | 'getTeamMembers' | 'lastSyncReport' | 'recordedAppVersion'>;
@@ -99,13 +99,13 @@ async function header(reader: PostPileReader): Promise<string[]> {
 interface Authors {
   viewerLogin: string | null;
   teams: TeamMembersView;
-  /** Some home team has a member list, so "outside your team" is a fact, not a guess. */
+  /** Every home team has a cached member list, so "outside your team" is a fact, not a guess. */
   known: boolean;
 }
 
 async function readAuthors(reader: PostPileReader): Promise<Authors> {
   const [viewer, teams] = await Promise.all([reader.getViewer(), reader.getTeamMembers()]);
-  const known = teams.fetchedAt !== null && teams.teams.some((team) => team.members.length > 0);
+  const known = teams.fetchedAt !== null && teams.missingTeams.length === 0 && teams.teams.some((team) => team.members.length > 0);
   return { viewerLogin: viewer.login, teams, known };
 }
 
@@ -120,6 +120,10 @@ function teamNote(authors: Authors): string[] {
   }
   if (authors.teams.fetchedAt === null) {
     return ["PostPile has not fetched the user's team members yet (it does on its next sync), so PR authors carry no team tag."];
+  }
+  if (authors.teams.missingTeams.length > 0) {
+    const missing = authors.teams.missingTeams.map(teamSlug).join(', ');
+    return [`PostPile has no member list yet for ${missing} (it fetches it on its next sync), so PR authors carry no team tag.`];
   }
   return ['The user has no home team with members in PostPile, so PR authors carry no team tag.'];
 }

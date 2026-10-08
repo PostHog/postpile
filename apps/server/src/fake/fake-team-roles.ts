@@ -41,7 +41,7 @@ export class FakeTeamRoles {
   /** Who is on each home team, the viewer included: only team-platform has members in the sample. */
   membersView(): TeamMembersView {
     const teams = this.data.viewerHomeTeams.map((team) => ({ team, members: team === MEMBERS_TEAM ? [this.data.viewer, ...this.data.viewerTeamMembers] : [] }));
-    return { fetchedAt: this.membersFetchedAt, teams };
+    return { fetchedAt: this.membersFetchedAt, teams, missingTeams: [] };
   }
 
   setRole(team: string, role: TeamRole): TeamRolesView {

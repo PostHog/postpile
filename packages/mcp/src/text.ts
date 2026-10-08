@@ -182,15 +182,22 @@ export function authorTag(place: AuthorPlace, teamsKnown: boolean): string {
   return place.scope === 'my_team' ? ` (your team: ${place.teams.map(teamSlug).join(', ')})` : ' (outside your team)';
 }
 
-const AGENT_STATE_WORDS: Record<AgentReviewer['state'], string> = {
+const AGENT_STATE_WORDS: Record<NonNullable<AgentReviewer['state']>, string> = {
   approved: 'approved',
   changes_requested: 'requested changes',
-  pending: 'pending',
 };
+
+/** "reviewbot approved", "copilot pending", "reviewbot approved, asked again". */
+function agentText(agent: AgentReviewer): string {
+  if (agent.state === null) {
+    return `${agent.name} pending`;
+  }
+  return `${agent.name} ${AGENT_STATE_WORDS[agent.state]}${agent.pending ? ', asked again' : ''}`;
+}
 
 /** "reviewbot approved, copilot pending". */
 function agentWords(agents: AgentReviewer[]): string {
-  return agents.map((agent) => `${agent.name} ${AGENT_STATE_WORDS[agent.state]}`).join(', ');
+  return agents.map(agentText).join(', ');
 }
 
 /** pr_context: "Reviews: approved by alice; changes requested by bob; pending: carol, team-platform; agents: reviewbot approved". */

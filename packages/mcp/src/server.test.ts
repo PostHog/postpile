@@ -321,9 +321,22 @@ describe('PostPile MCP server', () => {
     expect(bad.text).toContain('author_scope must be me, my_team, others or any');
   });
 
+  it('treats a home team without a cached list as unknown, and names it', async () => {
+    const engine = new FakeEngine();
+    const partial = Object.assign(engine, {
+      getTeamMembers: async () => ({ fetchedAt: '2026-10-01T00:00:00.000Z', teams: [{ team: 'acme/team-platform', members: ['you', 'sol'] }], missingTeams: ['acme/team-web'] }),
+    });
+    const client = await connected(partial);
+    const queue = await callText(client, 'whats_on_me');
+    expect(queue.match(/no member list yet for team-web/g)).toHaveLength(1);
+    expect(queue).not.toContain('outside your team');
+    expect(queue).not.toContain('(your team:');
+    expect((await call(client, 'whats_on_me', { author_scope: 'my_team' })).isError).toBe(true);
+  });
+
   it('says once when team members were never fetched, instead of tagging everyone as outside', async () => {
     const engine = new FakeEngine();
-    const unfetched = Object.assign(engine, { getTeamMembers: async () => ({ fetchedAt: null, teams: [] }) });
+    const unfetched = Object.assign(engine, { getTeamMembers: async () => ({ fetchedAt: null, teams: [], missingTeams: [] }) });
     const client = await connected(unfetched);
     const queue = await callText(client, 'whats_on_me');
     expect(queue.match(/has not fetched the user's team members yet/g)).toHaveLength(1);

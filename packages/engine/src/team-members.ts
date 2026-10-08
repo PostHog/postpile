@@ -60,15 +60,17 @@ export class TeamMembers {
 
   /**
    * The cached members of each home team, read only (no GitHub call): MCP
-   * tags PR authors with it. Null `fetchedAt` when the cache is empty.
+   * tags PR authors with it. Null `fetchedAt` when the cache is empty;
+   * home teams without a cached list are in `missingTeams`.
    */
   view(viewer: Viewer | null): TeamMembersView {
     const stored = this.load();
-    if (!stored || !viewer) {
-      return { fetchedAt: stored?.fetchedAt ?? null, teams: [] };
+    const home = viewer ? homeTeamsOf(viewer) : [];
+    if (!stored) {
+      return { fetchedAt: null, teams: [], missingTeams: home };
     }
-    const teams = homeTeamsOf(viewer).map((team) => ({ team, members: stored.teams[team]?.logins ?? [] }));
-    return { fetchedAt: stored.fetchedAt, teams };
+    const teams = home.filter((team) => team in stored.teams).map((team) => ({ team, members: stored.teams[team]?.logins ?? [] }));
+    return { fetchedAt: stored.fetchedAt, teams, missingTeams: home.filter((team) => !(team in stored.teams)) };
   }
 
   /**

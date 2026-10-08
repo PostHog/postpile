@@ -47,11 +47,12 @@ describe('team members', () => {
 
   it('shows the cached members per home team, and says when they were never fetched', async () => {
     const { h } = harness();
-    expect(await h.engine.getTeamMembers()).toEqual({ fetchedAt: null, teams: [] });
+    expect(await h.engine.getTeamMembers()).toEqual({ fetchedAt: null, teams: [], missingTeams: [] });
     await h.engine.sync({ maxAgentCalls: 0 });
     expect(await h.engine.getTeamMembers()).toEqual({
       fetchedAt: '2026-09-28T08:00:00.000Z',
       teams: [{ team: 'acme/team-platform', members: ['lyra', viewer.login, 'rowan'] }],
+      missingTeams: [],
     });
   });
 });
