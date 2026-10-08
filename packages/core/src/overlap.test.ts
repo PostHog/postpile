@@ -150,4 +150,11 @@ describe('findOverlaps', () => {
     b.files.push({ path: 'src/b.ts', ranges: [{ start: 5, end: 6 }] });
     expect(findOverlaps([a, b], never).get('acme/app#1')?.[0]?.files.map((file) => file.path).sort()).toEqual(['.github/workflows/ci.yml', 'src/b.ts']);
   });
+
+  it('lists same-line overlaps before nearby ones, and handles odd paths', () => {
+    const odd = 'dir/we\nird.yml';
+    const mk = (key: string, ranges: [number, number][]) => ({ ...edits(key, ranges), files: [{ path: odd, ranges: ranges.map(([start, end]) => ({ start, end })) }] });
+    const result = findOverlaps([mk('acme/app#1', [[50, 50]]), mk('acme/app#2', [[58, 58]]), mk('acme/app#3', [[50, 50]])], never);
+    expect(result.get('acme/app#1')?.map((overlap) => overlap.other)).toEqual(['acme/app#3', 'acme/app#2']);
+  });
 });

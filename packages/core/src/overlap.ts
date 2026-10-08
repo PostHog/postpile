@@ -252,23 +252,22 @@ export function findOverlaps(
   margin: number = OVERLAP_MARGIN,
   nearbyMargin: number = NEARBY_MARGIN,
 ): Map<PrKey, PrOverlap[]> {
-  const byFile = new Map<string, PrEdits[]>();
+  const byFile = new Map<string, { path: string; sharing: PrEdits[] }>();
   for (const pr of prs) {
     for (const file of pr.files) {
       const id = `${pr.repo}\n${pr.baseRef}\n${file.path}`;
-      const list = byFile.get(id);
-      if (list === undefined) {
-        byFile.set(id, [pr]);
+      const bucket = byFile.get(id);
+      if (bucket === undefined) {
+        byFile.set(id, { path: file.path, sharing: [pr] });
       } else {
-        list.push(pr);
+        bucket.sharing.push(pr);
       }
     }
   }
 
   // Per ordered pair, the files found so far: a pair shares several files, each in its own bucket.
   const pairs = new Map<string, { a: PrKey; b: PrKey; files: FileOverlap[]; nearby: FileNearby[]; otherCapped: boolean }>();
-  for (const [id, sharing] of byFile) {
-    const path = id.slice(id.lastIndexOf('\n') + 1);
+  for (const { path, sharing } of byFile.values()) {
     for (const a of sharing) {
       const mine = new Map(a.files.map((file) => [file.path, file.ranges]));
       for (const b of sharing) {
@@ -295,7 +294,8 @@ export function findOverlaps(
     result.set(pair.a, list);
   }
   for (const list of result.values()) {
-    list.sort((x, y) => x.other.localeCompare(y.other));
+    // Same lines before nearby, so a display cap never hides the stronger kind.
+    list.sort((x, y) => Number(y.files.length > 0) - Number(x.files.length > 0) || x.other.localeCompare(y.other));
   }
   return result;
 }
