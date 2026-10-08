@@ -33,6 +33,7 @@ import {
 } from '@postpile/core';
 import { UNSORTED_TOPIC_ID, type EngineService } from '@postpile/engine';
 import { overlapLines, overlapMarker, overlapNotes } from './overlaps.ts';
+import { jsonAnswer, prJson, prUnreadReason, tileJson, topicJson, type Format, type MetaJson, type PrJson } from './json.ts';
 import { parsePrInput } from './pr-input.ts';
 import {
   ago,
@@ -51,6 +52,7 @@ import {
   tileLine,
   turnText,
   unreadReasonText,
+  waitingThreadText,
   whatsNewText,
   withActor,
 } from './text.ts';
@@ -72,7 +74,7 @@ export interface ToolAnswer {
   found: boolean;
   /** A tool error (isError): the call could not be answered as asked. The text says how to fix it. */
   isError?: boolean;
-  /** Small machine-readable result for the two tools that ask the app; the reads never set it. */
+  /** Machine-readable result: always for the two tools that ask the app, for the reads with format: "json". */
   structured?: Record<string, unknown>;
 }
 
@@ -99,6 +101,8 @@ export interface QueueOptions extends ListOptions {
 
 export const DEFAULT_LIMIT = 25;
 export const MAX_LIMIT = 100;
+/** pr_context answers for at most this many PRs per call. */
+export const MAX_PRS_PER_CALL = 10;
 /** Brief pr_context: the topic's other PRs, one line each, at most this many. */
 const BRIEF_OTHER_PRS = 10;
 /** Brief topic: one line per tile, at most this many. */
@@ -148,6 +152,18 @@ async function header(ctx: ReadContext): Promise<string[]> {
   }
   lines.push(viewer.login ? `It works for @${viewer.login}; "you" below means them.` : 'It does not know its user yet.');
   return lines;
+}
+
+/** The header's facts for a JSON answer: the same reads, no GitHub text. */
+async function readMeta(ctx: ReadContext, authors: Authors): Promise<MetaJson> {
+  const { reader } = ctx;
+  const [report, progress] = await Promise.all([reader.lastSyncReport(), reader.recordedSyncProgress()]);
+  return {
+    lastSyncFinishedAt: report?.finishedAt ?? null,
+    syncRunning: runningSync(progress, report, ctx) !== null,
+    viewer: authors.viewerLogin,
+    teamTagsKnown: authors.known,
+  };
 }
 
 /** The user's login and home-team members: the author tags and the author_scope filter read them. */
@@ -295,10 +311,10 @@ function stackLines(tiles: TileView[], key: PrKey, baseRef: string): string[] {
  * no lower layer of this PR's stack (by shared commits or by branch): a
  * merge order, not a stack.
  */
-function dependsOnLines(pr: PrPaneView, tiles: TileView[]): string[] {
+function dependsOnKey(pr: PrPaneView, tiles: TileView[]): PrKey | null {
   const declared = declaredParentOf(pr);
   if (declared?.kind !== 'depends') {
-    return [];
+    return null;
   }
   const dependency = prKey({ repo: pr.ref.repo, number: declared.number });
   const inStackBelow = tiles.some((view) =>
@@ -307,7 +323,12 @@ function dependsOnLines(pr: PrPaneView, tiles: TileView[]): string[] {
       return index >= 0 && index < stack.prKeys.indexOf(pr.key);
     }),
   );
-  return inStackBelow ? [] : [`Depends on ${dependency} (merge after)`];
+  return inStackBelow ? null : dependency;
+}
+
+function dependsOnLines(pr: PrPaneView, tiles: TileView[]): string[] {
+  const dependency = dependsOnKey(pr, tiles);
+  return dependency ? [`Depends on ${dependency} (merge after)`] : [];
 }
 
 /** The PR line, whose move, why unread, stack, reviews and what is new: the start of both details. */
@@ -323,6 +344,10 @@ function prHeadLines(detail: PrDetail, tiles: TileView[], authors: Authors): str
   const row = tiles.flatMap((view) => view.prs).find((summary) => summary.key === pr.key);
   if (row) {
     lines.push(turnText(row.turn));
+  }
+  const thread = waitingThreadText(detail.waitingThreads);
+  if (thread) {
+    lines.push(thread);
   }
   for (const view of tiles) {
     const unread = view.state.unreadBecause.filter((reason) => reason.prKey === pr.key);
@@ -382,8 +407,8 @@ function topicHeadLine(detail: TopicDetail): string {
   return `Topic: ${topic.name} (id ${topic.id}, ${topic.status}), driver ${driverText(detail.driver)}, the user is ${topic.userRole}`;
 }
 
-/** The topic's name, dossier and every tile with its PRs. `thisPr` is marked when given. */
-function fullTopicLines(detail: TopicDetail, thisPr: PrKey | null): string[] {
+/** The topic's name, dossier and every tile with its PRs. The PRs asked about are marked. */
+function fullTopicLines(detail: TopicDetail, asked: ReadonlySet<PrKey>): string[] {
   const { topic } = detail;
   const lines = [topicHeadLine(detail)];
   if (topic.summary) {
@@ -399,7 +424,7 @@ function fullTopicLines(detail: TopicDetail, thisPr: PrKey | null): string[] {
   for (const view of detail.tiles) {
     lines.push(`  ${tileLine(view)}`);
     for (const pr of view.prs) {
-      lines.push(`    ${prSummaryLine(pr)}${pr.key === thisPr ? '  <- this PR' : ''}`);
+      lines.push(`    ${prSummaryLine(pr)}${asked.has(pr.key) ? (asked.size === 1 ? '  <- this PR' : '  <- asked about') : ''}`);
     }
   }
   if (detail.setChanges.length > 0) {
@@ -408,12 +433,12 @@ function fullTopicLines(detail: TopicDetail, thisPr: PrKey | null): string[] {
   return lines;
 }
 
-/** Brief pr_context: the topic's name and its other PRs, one line each. Unsorted is no topic: its PRs have nothing to do with each other. */
-function briefTopicForPr(detail: TopicDetail, thisPr: PrKey): string[] {
+/** Brief pr_context: the topic's name and its other PRs (not asked about), one line each. Unsorted is no topic: its PRs have nothing to do with each other. */
+function briefTopicForPrs(detail: TopicDetail, asked: ReadonlySet<PrKey>): string[] {
   if (detail.topic.id === UNSORTED_TOPIC_ID) {
     return ['In Unsorted (not a real topic; each sync places these PRs in one): no siblings listed.'];
   }
-  const others = uniquePrs(detail.tiles).filter((pr) => pr.key !== thisPr);
+  const others = uniquePrs(detail.tiles).filter((pr) => !asked.has(pr.key));
   const lines = [topicHeadLine(detail)];
   if (others.length === 0) {
     return [...lines, 'No other PRs in this topic.'];
@@ -482,6 +507,14 @@ function prFreshnessLine(detail: PrDetail, ctx: ReadContext): string {
   return `${fetched} The app runs and checks GitHub for changes to it again within about 1 min, so a refresh is rarely needed.`;
 }
 
+/** One PR pr_context answers for, with its topic and the tiles it sits in. */
+interface PrRead {
+  key: PrKey;
+  detail: PrDetail;
+  topic: TopicDetail | null;
+  tiles: TileView[];
+}
+
 /** The stored authors of the PRs a PR overlaps with; one that is not stored has none. */
 async function authorsOfOverlaps(reader: PostPileReader, overlaps: PrOverlap[]): Promise<Map<PrKey, string>> {
   const shown = overlaps.slice(0, 5);
@@ -489,30 +522,192 @@ async function authorsOfOverlaps(reader: PostPileReader, overlaps: PrOverlap[]):
   return new Map(shown.flatMap((overlap, index) => details[index] ? [[overlap.other, details[index].pr.author] as const] : []));
 }
 
-export async function prContext(ctx: ReadContext, input: string, detail: Detail): Promise<ToolAnswer> {
-  const { reader } = ctx;
+/** The PR's lines with the overlap lines after them, as pr_context prints them. */
+async function prLinesWithOverlaps(reader: PostPileReader, read: PrRead, authors: Authors, detail: Detail, overlaps: PrOverlapsView): Promise<string[]> {
+  const authorOf = await authorsOfOverlaps(reader, overlaps.overlaps[read.key] ?? []);
+  return [...prLines(read, authors, detail), ...overlapLines(overlaps, read.key, authorOf)];
+}
+
+interface PrFailure {
+  input: string;
+  error: ToolAnswer;
+}
+
+type PrReadResult = { ok: true; read: PrRead } | ({ ok: false } & PrFailure);
+
+/** Reads one PR and its topic; `topics` shares topic reads between the PRs of one call. */
+async function readPr(reader: PostPileReader, input: string, topics: Map<string, Promise<TopicDetail | null>>): Promise<PrReadResult> {
   const resolved = await resolvePr(reader, input);
   if (!resolved.ok) {
-    return resolved.error;
+    return { ok: false, input, error: resolved.error };
   }
-  const pr = await reader.getPr(resolved.key);
-  if (!pr) {
-    return notTracked(resolved.key);
+  const detail = await reader.getPr(resolved.key);
+  if (!detail) {
+    return { ok: false, input, error: notTracked(resolved.key) };
   }
-  const topic = pr.topicId ? await reader.getTopic(pr.topicId) : null;
-  const tiles = topic ? tilesWith(topic, pr.pr.key) : [];
-  const authors = await readAuthors(reader);
-  const data = detail === 'full' ? fullPrLines(pr, tiles, authors) : briefPrLines(pr, tiles, authors);
-  const overlaps = await reader.prOverlaps();
-  data.push(...overlapLines(overlaps, pr.pr.key, await authorsOfOverlaps(reader, overlaps.overlaps[pr.pr.key] ?? [])));
-  if (topic) {
-    data.push('', ...(detail === 'full' ? fullTopicLines(topic, pr.pr.key) : briefTopicForPr(topic, pr.pr.key)));
+  let topic: TopicDetail | null = null;
+  if (detail.topicId) {
+    if (!topics.has(detail.topicId)) {
+      topics.set(detail.topicId, reader.getTopic(detail.topicId));
+    }
+    topic = (await topics.get(detail.topicId)) ?? null;
+  }
+  return { ok: true, read: { key: resolved.key, detail, topic, tiles: topic ? tilesWith(topic, resolved.key) : [] } };
+}
+
+/** '- "#999": PostPile tracks no PR #999. ...': one PR pr_context could not answer for, the caller's input echoed. */
+function failureLine(failure: PrFailure): string {
+  return `- "${echo(failure.input)}": ${failure.error.text.replace(/\s*\n\s*/g, ' ')}`;
+}
+
+/** The PRs asked about, grouped by topic in the order asked; PRs in no topic last. */
+function topicGroups(reads: PrRead[]): { topic: TopicDetail | null; reads: PrRead[] }[] {
+  const groups = new Map<string, { topic: TopicDetail | null; reads: PrRead[] }>();
+  for (const read of reads) {
+    const id = read.topic?.topic.id ?? '';
+    const group = groups.get(id) ?? { topic: read.topic, reads: [] };
+    group.reads.push(read);
+    groups.set(id, group);
+  }
+  return [...groups.values()].sort((a, b) => Number(a.topic === null) - Number(b.topic === null));
+}
+
+/** The PR's lines, brief or full. */
+function prLines(read: PrRead, authors: Authors, detail: Detail): string[] {
+  return detail === 'full' ? fullPrLines(read.detail, read.tiles, authors) : briefPrLines(read.detail, read.tiles, authors);
+}
+
+/** One PR: its lines, then its topic, as pr_context always answered. */
+async function singlePrData(reader: PostPileReader, read: PrRead, authors: Authors, detail: Detail, overlaps: PrOverlapsView): Promise<string[]> {
+  const data = await prLinesWithOverlaps(reader, read, authors, detail, overlaps);
+  const asked = new Set([read.key]);
+  if (read.topic) {
+    data.push('', ...(detail === 'full' ? fullTopicLines(read.topic, asked) : briefTopicForPrs(read.topic, asked)));
   } else {
     data.push('', 'Not in a topic yet.');
   }
+  return data;
+}
+
+/** Several PRs: each topic once, then the lines of each PR asked about in it. */
+async function severalPrsData(reader: PostPileReader, reads: PrRead[], authors: Authors, detail: Detail, overlaps: PrOverlapsView): Promise<string[]> {
+  const data: string[] = [];
+  for (const group of topicGroups(reads)) {
+    if (data.length > 0) {
+      data.push('', '----', '');
+    }
+    const asked = new Set(group.reads.map((read) => read.key));
+    if (group.topic) {
+      data.push(...(detail === 'full' ? fullTopicLines(group.topic, asked) : briefTopicForPrs(group.topic, asked)));
+    } else {
+      data.push('Not in a topic yet:');
+    }
+    for (const read of group.reads) {
+      data.push('', ...(await prLinesWithOverlaps(reader, read, authors, detail, overlaps)));
+    }
+  }
+  return data;
+}
+
+interface StackJson {
+  /** 1 is the bottom layer. */
+  layer: number;
+  of: number;
+  /** Bottom first. */
+  prKeys: PrKey[];
+}
+
+/** The PR's first stack; null when it is in none. */
+function stackOf(read: PrRead): StackJson | null {
+  for (const view of read.tiles) {
+    for (const stack of view.tile.stacks) {
+      const index = stack.prKeys.indexOf(read.key);
+      if (index >= 0) {
+        return { layer: index + 1, of: stack.prKeys.length, prKeys: stack.prKeys };
+      }
+    }
+  }
+  return null;
+}
+
+function prReadJson(read: PrRead, authors: Authors, overlaps: PrOverlapsView): PrJson & { stack: StackJson | null; dependsOn: PrKey | null } {
+  const summary = read.tiles.flatMap((view) => view.prs).find((pr) => pr.key === read.key) ?? null;
+  const json = prJson({
+    summary,
+    detail: read.detail,
+    place: placeOf(authors, read.detail.pr),
+    teamsKnown: authors.known,
+    reviews: reviewerStates(read.detail.pr),
+    unread: prUnreadReason(read.tiles, read.key),
+    topic: read.topic ? { id: read.topic.topic.id, name: read.topic.topic.name } : null,
+    overlaps,
+  });
+  return { ...json, stack: stackOf(read), dependsOn: dependsOnKey(read.detail.pr, read.tiles) };
+}
+
+async function prContextJson(ctx: ReadContext, reads: PrRead[], failures: PrFailure[], authors: Authors, overlaps: PrOverlapsView): Promise<ToolAnswer> {
+  const topics = new Map<string, TopicDetail>();
+  for (const read of reads) {
+    if (read.topic) {
+      topics.set(read.topic.topic.id, read.topic);
+    }
+  }
+  const data = {
+    meta: await readMeta(ctx, authors),
+    prs: reads.map((read) => prReadJson(read, authors, overlaps)),
+    topics: [...topics.values()].map((topic) => ({ ...topicJson(topic), prKeys: uniquePrs(topic.tiles).map((pr) => pr.key) })),
+    errors: failures.map((failure) => ({ input: failure.input, error: failure.error.text })),
+  };
+  return jsonAnswer([...(await header(ctx)), ...teamNote(authors)], data);
+}
+
+/**
+ * pr_context for one PR or several (at most MAX_PRS_PER_CALL). A PR that
+ * cannot be read is listed with its error; the call fails only when none
+ * can. Several PRs print each topic once, then each PR's lines.
+ */
+export async function prContext(ctx: ReadContext, input: string | string[], detail: Detail, format: Format = 'text'): Promise<ToolAnswer> {
+  const inputs = typeof input === 'string' ? [input] : input;
+  const { reader } = ctx;
+  const topicReads = new Map<string, Promise<TopicDetail | null>>();
+  const results = await Promise.all(inputs.map((input) => readPr(reader, input, topicReads)));
+  const failures: PrFailure[] = [];
+  const reads: PrRead[] = [];
+  for (const result of results) {
+    if (!result.ok) {
+      failures.push(result);
+    } else if (!reads.some((read) => read.key === result.read.key)) {
+      reads.push(result.read);
+    }
+  }
+  const [first] = reads;
+  if (!first) {
+    const [only] = failures;
+    if (failures.length === 1 && only) {
+      return only.error;
+    }
+    return toolError([`None of the ${failures.length} PRs could be read:`, ...failures.map(failureLine)]);
+  }
+  const authors = await readAuthors(reader);
+  const overlaps = await reader.prOverlaps();
+  if (format === 'json') {
+    return prContextJson(ctx, reads, failures, authors, overlaps);
+  }
+  const single = reads.length === 1;
+  const data = single ? await singlePrData(reader, first, authors, detail, overlaps) : await severalPrsData(reader, reads, authors, detail, overlaps);
+  const footer: string[] = [];
+  if (failures.length > 0) {
+    footer.push(`Could not answer for ${failures.length} of ${inputs.length}:`, ...failures.map(failureLine), '');
+  }
+  if (single) {
+    footer.push(...overlapNotes(overlaps, first.key), prFreshnessLine(first.detail, ctx));
+  } else {
+    const notes = [...new Set(reads.flatMap((read) => overlapNotes(overlaps, read.key)))];
+    footer.push(...notes, ...reads.map((read) => `${read.key}: ${prFreshnessLine(read.detail, ctx)}`));
+  }
   const more = detail === 'brief' ? 'detail: "full" adds activity, facts and the whole topic. ' : '';
-  const next = `Next: ${more}Stale? call refresh_from_github. Wrong topic? propose_topic_change.`;
-  return { text: answer([...(await header(ctx)), ...teamNote(authors)], data, [...overlapNotes(overlaps, pr.pr.key), prFreshnessLine(pr, ctx), next]), found: true };
+  footer.push(`Next: ${more}Stale? call refresh_from_github. Wrong topic? propose_topic_change.`);
+  return { text: answer([...(await header(ctx)), ...teamNote(authors)], data, footer), found: true };
 }
 
 /** One read per topic, all at once; topics that are gone are left out. */
@@ -580,7 +775,43 @@ async function suggestionLines(reader: PostPileReader, detail: TopicDetail, now:
   return ['', `Topic suggestions (pending, and decided in the last ${OUTSIDE_PROPOSAL_DAYS} days):`, ...proposals.map((proposal) => proposalLine(proposal, detail.topic.id, name, iso))];
 }
 
-export async function topicOverview(ctx: ReadContext, input: string, detail: Detail): Promise<ToolAnswer> {
+/** The stored snapshot of each PR, read once each, all at once: reviews, risk and waiting threads come from it. */
+async function readDetails(reader: PostPileReader, keys: PrKey[]): Promise<Map<PrKey, PrDetail | null>> {
+  const unique = [...new Set(keys)];
+  const details = await Promise.all(unique.map((key) => reader.getPr(key)));
+  return new Map(unique.map((key, index) => [key, details[index] ?? null]));
+}
+
+/** A PR row of a tile as JSON, with its snapshot when it was read. */
+function summaryJson(authors: Authors, pr: PrSummary, detail: PrDetail | null, tiles: TileView[], topic: TopicDetail, overlaps: PrOverlapsView): PrJson {
+  return prJson({
+    summary: pr,
+    detail,
+    place: placeOf(authors, pr),
+    teamsKnown: authors.known,
+    reviews: detail ? reviewerStates(detail.pr) : null,
+    unread: prUnreadReason(tiles, pr.key),
+    topic: { id: topic.topic.id, name: topic.topic.name },
+    overlaps,
+  });
+}
+
+/** topic as JSON: the topic and its dossier's lines, every tile, every PR once. Detail makes no difference. */
+async function topicJsonAnswer(ctx: ReadContext, topic: TopicDetail): Promise<ToolAnswer> {
+  const authors = await readAuthors(ctx.reader);
+  const prs = uniquePrs(topic.tiles);
+  const details = await readDetails(ctx.reader, prs.map((pr) => pr.key));
+  const overlaps = await ctx.reader.prOverlaps();
+  const data = {
+    meta: await readMeta(ctx, authors),
+    topic: topicJson(topic),
+    tiles: topic.tiles.map(tileJson),
+    prs: prs.map((pr) => summaryJson(authors, pr, details.get(pr.key) ?? null, topic.tiles, topic, overlaps)),
+  };
+  return jsonAnswer(await header(ctx), data);
+}
+
+export async function topicOverview(ctx: ReadContext, input: string, detail: Detail, format: Format = 'text'): Promise<ToolAnswer> {
   const { reader } = ctx;
   const match = await resolveTopic(reader, input);
   if (!match.ok) {
@@ -590,7 +821,10 @@ export async function topicOverview(ctx: ReadContext, input: string, detail: Det
   if (!topic) {
     return toolError([`Topic ${match.item.topic.id} is gone. Look it up again with whats_on_me or search_prs.`]);
   }
-  const data = [...(detail === 'full' ? fullTopicLines(topic, null) : briefTopicLines(topic)), ...(await suggestionLines(reader, topic, ctx.now()))];
+  if (format === 'json') {
+    return topicJsonAnswer(ctx, topic);
+  }
+  const data = [...(detail === 'full' ? fullTopicLines(topic, new Set()) : briefTopicLines(topic)), ...(await suggestionLines(reader, topic, ctx.now()))];
   const footer = detail === 'brief' ? ['Next: detail: "full" adds people, timeline, recent changes and every PR; pr_context for one PR.'] : [];
   return { text: answer(await header(ctx), data, footer), found: true };
 }
@@ -640,7 +874,38 @@ function filterWords(options: ListOptions & Partial<Pick<QueueOptions, 'authorSc
   return words.join(', ');
 }
 
-export async function searchPrs(ctx: ReadContext, query: string, options: ListOptions): Promise<ToolAnswer> {
+/** "Showing 26-50 of 80." as JSON. */
+function pageJson(total: number, options: ListOptions, shown: number): { total: number; offset: number; shown: number; nextOffset: number | null } {
+  const next = options.offset + shown;
+  return { total, offset: options.offset, shown, nextOffset: shown > 0 && next < total ? next : null };
+}
+
+/** The filters as the caller passed them, for a JSON answer. */
+function filtersJson(options: ListOptions & Partial<Pick<QueueOptions, 'authorScope'>>): Record<string, string | null> {
+  return { state: options.state, repo: options.repo, whoseMove: options.whoseMove, ...(options.authorScope ? { authorScope: options.authorScope } : {}) };
+}
+
+/** One search hit: the PR's row, the tile it was found in and its topic. */
+interface SearchRow {
+  pr: PrSummary;
+  view: TileView;
+  topic: TopicDetail;
+}
+
+async function searchJson(ctx: ReadContext, rows: SearchRow[], page: SearchRow[], options: ListOptions): Promise<ToolAnswer> {
+  const authors = await readAuthors(ctx.reader);
+  const details = await readDetails(ctx.reader, page.map((row) => row.pr.key));
+  const overlaps = await ctx.reader.prOverlaps();
+  const data = {
+    meta: await readMeta(ctx, authors),
+    filters: filtersJson(options),
+    page: pageJson(rows.length, options, page.length),
+    prs: page.map((row) => summaryJson(authors, row.pr, details.get(row.pr.key) ?? null, [row.view], row.topic, overlaps)),
+  };
+  return jsonAnswer(await header(ctx), data, rows.length > 0);
+}
+
+export async function searchPrs(ctx: ReadContext, query: string, options: ListOptions, format: Format = 'text'): Promise<ToolAnswer> {
   const { reader } = ctx;
   const bad = repoFilterError(options.repo);
   if (bad) {
@@ -648,7 +913,7 @@ export async function searchPrs(ctx: ReadContext, query: string, options: ListOp
   }
   const result = await reader.search(query, ALL_REPOS);
   const wanted = new Map(result.topics.map((match) => [match.topicId, new Set(match.prKeys)]));
-  const rows: string[] = [];
+  const rows: SearchRow[] = [];
   const seen = new Set<PrKey>();
   for (const detail of await readTopics(reader, result.topics.map((match) => match.topicId))) {
     const keys = wanted.get(detail.topic.id) ?? new Set<PrKey>();
@@ -658,28 +923,31 @@ export async function searchPrs(ctx: ReadContext, query: string, options: ListOp
           continue;
         }
         seen.add(pr.key);
-        rows.push(`${prSummaryLine(pr)}  · topic ${detail.topic.name} (${detail.topic.id}) · ${turnText(pr.turn)}`);
+        rows.push({ pr, view, topic: detail });
       }
     }
+  }
+  const page = rows.slice(options.offset, options.offset + options.limit);
+  if (format === 'json') {
+    return searchJson(ctx, rows, page, options);
   }
   if (rows.length === 0) {
     // Matches that the filters dropped: say which filters, so the caller can widen them.
     const filters = result.topics.length > 0 ? ` with ${filterWords(options)}` : '';
     return { text: `No PR matches "${echo(query)}"${filters}. Every word must appear in the title, #number, author, repo, branch or topic name.`, found: false };
   }
-  const page = rows.slice(options.offset, options.offset + options.limit);
+  const lines = page.map((row) => `${prSummaryLine(row.pr)}  · topic ${row.topic.topic.name} (${row.topic.topic.id}) · ${turnText(row.pr.turn)}`);
   const { head, tail } = pageLines(rows.length, options, page.length);
-  return { text: answer([...(await header(ctx)), `${head} Filters: ${filterWords(options)}.`], page, tail), found: true };
+  return { text: answer([...(await header(ctx)), `${head} Filters: ${filterWords(options)}.`], lines, tail), found: true };
 }
 
-/** "fetched 2 min ago": the oldest fetch of the tile's PRs, so a tile never reads fresher than its stalest PR. */
-function tileFetchedText(view: TileView, now: Date): string {
+/** The oldest fetch of the tile's PRs, so a tile never reads fresher than its stalest PR; null when one has no fetch time. */
+function tileFetchedAt(view: TileView): string | null {
   const times = view.prs.map((pr) => pr.fetchedAt);
   if (times.some((time) => time === null)) {
-    return fetchedText(null, now);
+    return null;
   }
-  const oldest = (times as string[]).reduce((a, b) => (a < b ? a : b));
-  return fetchedText(oldest, now);
+  return (times as string[]).reduce((a, b) => (a < b ? a : b));
 }
 
 function isLive(view: TileView): boolean {
@@ -691,23 +959,49 @@ function scopeMatches(authors: Authors, pr: PrSummary, scope: AuthorScopeFilter)
   return scope === 'any' || placeOf(authors, pr).scope === scope;
 }
 
-/** "acme/app#1902 by alice (outside your team) · reviews: 1 human approval, reviewbot approved": one line per PR of a queue row. */
-async function queuePrLines(reader: PostPileReader, prs: PrSummary[], authors: Authors, overlaps: PrOverlapsView): Promise<string[]> {
-  const details = await Promise.all(prs.map((pr) => reader.getPr(pr.key)));
-  return prs.map((pr, index) => {
-    const detail = details[index];
+/**
+ * "acme/app#1902 by alice (outside your team) · reviews: 1 human approval, reviewbot approved":
+ * one line per PR of a queue row, and on the user's own PR where it is
+ * their move, a preview of the newest thread waiting on them.
+ */
+function queuePrLines(prs: PrSummary[], details: Map<PrKey, PrDetail | null>, authors: Authors, overlaps: PrOverlapsView): string[] {
+  return prs.flatMap((pr) => {
+    const detail = details.get(pr.key) ?? null;
     const reviews = detail ? reviewCountsText(reviewerStates(detail.pr)) : 'not stored';
-    return `  ${pr.key} by ${pr.author}${authorTag(placeOf(authors, pr), authors.known)} · reviews: ${reviews}${overlapMarker(overlaps, pr.key)}`;
+    const lines = [`  ${pr.key} by ${pr.author}${authorTag(placeOf(authors, pr), authors.known)} · reviews: ${reviews}${overlapMarker(overlaps, pr.key)}`];
+    const thread = pr.turn.kind === 'you' && detail ? waitingThreadText(detail.waitingThreads) : null;
+    if (thread) {
+      lines.push(`    ${thread}`);
+    }
+    return lines;
   });
 }
 
 interface QueueRow {
   yourMove: boolean;
   text: string;
-  prs: PrSummary[];
+  view: TileView;
+  topic: TopicDetail;
 }
 
-export async function whatsOnMe(ctx: ReadContext, options: QueueOptions): Promise<ToolAnswer> {
+function queueJson(rows: QueueRow[], page: QueueRow[], details: Map<PrKey, PrDetail | null>, authors: Authors, options: QueueOptions, meta: MetaJson, overlaps: PrOverlapsView): object {
+  return {
+    meta,
+    filters: filtersJson(options),
+    page: pageJson(rows.length, options, page.length),
+    yourMoveTotal: rows.filter((row) => row.yourMove).length,
+    rows: page.map((row) => ({
+      yourMove: row.yourMove,
+      tile: tileJson(row.view),
+      topic: { id: row.topic.topic.id },
+      fetchedAt: tileFetchedAt(row.view),
+      untrusted: { topicName: row.topic.topic.name },
+      prs: row.view.prs.map((pr) => summaryJson(authors, pr, details.get(pr.key) ?? null, [row.view], row.topic, overlaps)),
+    })),
+  };
+}
+
+export async function whatsOnMe(ctx: ReadContext, options: QueueOptions, format: Format = 'text'): Promise<ToolAnswer> {
   const { reader } = ctx;
   const bad = repoFilterError(options.repo);
   if (bad) {
@@ -726,27 +1020,32 @@ export async function whatsOnMe(ctx: ReadContext, options: QueueOptions): Promis
       if (matching.length === 0 || !moveMatches(view, options.whoseMove)) {
         continue;
       }
-      const line = `- ${view.tile.title} (${view.prs.map((pr) => pr.key).join(', ')}) · topic ${detail.topic.name} (${detail.topic.id}) · ${tileFetchedText(view, now)}`;
+      const line = `- ${view.tile.title} (${view.prs.map((pr) => pr.key).join(', ')}) · topic ${detail.topic.name} (${detail.topic.id}) · ${fetchedText(tileFetchedAt(view), now)}`;
       if (view.turn.kind === 'you') {
-        rows.push({ yourMove: true, text: `${line}\n  ${view.turn.what}`, prs: view.prs });
+        rows.push({ yourMove: true, text: `${line}\n  ${view.turn.what}`, view, topic: detail });
       } else if (view.state.kind === 'unread') {
         const reason = leadUnreadReason(view.state.unreadBecause);
-        rows.push({ yourMove: false, text: `${line}\n  ${reason ? unreadReasonText(reason) : 'unread'} · ${turnText(view.turn)}`, prs: view.prs });
+        rows.push({ yourMove: false, text: `${line}\n  ${reason ? unreadReasonText(reason) : 'unread'} · ${turnText(view.turn)}`, view, topic: detail });
       }
     }
   }
   // Your move first, then unread ones where it is not.
   rows.sort((a, b) => Number(b.yourMove) - Number(a.yourMove));
+  const page = rows.slice(options.offset, options.offset + options.limit);
+  // Reviews and waiting threads come from each PR's stored snapshot: read only for the rows on this page.
+  const details = await readDetails(reader, page.flatMap((row) => row.view.prs.map((pr) => pr.key)));
+  const overlaps = await reader.prOverlaps();
+  if (format === 'json') {
+    const meta = await readMeta(ctx, authors);
+    return jsonAnswer([...(await header(ctx)), ...teamNote(authors)], queueJson(rows, page, details, authors, options, meta, overlaps), rows.length > 0);
+  }
   if (rows.length === 0) {
     const text = [...(await header(ctx)), ...teamNote(authors), '', `Nothing waits on the user right now (filters: ${filterWords(options)}).`].join('\n');
     return { text, found: false };
   }
-  const page = rows.slice(options.offset, options.offset + options.limit);
   const { head, tail } = pageLines(rows.length, options, page.length);
   const yourMoveTotal = rows.filter((row) => row.yourMove).length;
-  // Reviews come from each PR's stored snapshot: read only for the rows on this page.
-  const overlaps = await reader.prOverlaps();
-  const shown = await Promise.all(page.map(async (row) => ({ yourMove: row.yourMove, text: [row.text, ...(await queuePrLines(reader, row.prs, authors, overlaps))].join('\n') })));
+  const shown = page.map((row) => ({ yourMove: row.yourMove, text: [row.text, ...queuePrLines(row.view.prs, details, authors, overlaps)].join('\n') }));
   const data: string[] = [];
   const mine = shown.filter((row) => row.yourMove);
   const others = shown.filter((row) => !row.yourMove);

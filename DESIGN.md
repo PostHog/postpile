@@ -7601,11 +7601,20 @@ bundle. From the repo: `pnpm cli mcp` (`POSTPILE_FAKE=1` for sample data).
 **Tools** (six, `packages/mcp/src/server.ts`; inputs are small zod shapes;
 how they answer is under "Tool design" below):
 
-- `pr_context(pr, detail)`: `owner/repo#123`, a PR URL, or `#123` when the
-  number is unique in the store. Brief (default): the PR (state, author
+- `pr_context(pr, detail, format)`: `owner/repo#123`, a PR URL, or `#123`
+  when the number is unique in the store; or a list of up to 10 of them
+  (2026-10-08: an agent triaging a queue called it once per PR and got the
+  same topic block every time). Several PRs: each topic once (brief: its
+  PRs not asked about; full: the dossier and every tile, the asked ones
+  marked), then each asked PR's lines; PRs in no topic last. A PR that
+  cannot be resolved or is not tracked is listed after the fence with its
+  error; the call is a tool error only when none can be read. One PR
+  answers as before. Brief (default): the PR (state, author
   with its tag, size), whose move, why it is unread, stack layer, the
   viewer's approval, the reviews line, what is new since they looked, the glance's verdict, "for you" and risk,
   this PR's tile, and the topic's other PRs one line each (10 at most).
+  On the user's own PR with threads waiting on them, the newest thread's
+  last comment as a short preview (see "Thread previews" below).
   A PR in Unsorted gets one line instead ("no siblings listed"): Unsorted
   is whatever waits for a topic, so its other PRs have nothing to do with
   this one.
@@ -7632,6 +7641,52 @@ how they answer is under "Tool design" below):
   ("coderabbitai updated its comment", "trunk-io commented"), never its
   text: bot bodies are links, badges and boilerplate. `pr_context`'s
   "Unread for you" lines word bot events the same way.
+
+**Thread previews** (2026-10-08). A move "Answer 1 thread from bob" was one
+emoji, and the caller had to open GitHub to find out. `waitingThreads`
+(core) lists the threads behind that move: on the viewer's own PR, the
+unresolved threads whose last word waits on them (`threadsWaitingOn`, the
+same rule the move counts with: not the viewer's, not a bot's, not bot
+talk), newest last comment first. `PrDetail.waitingThreads` carries them
+(the renderer does not read it). `whats_on_me` adds one line under each PR
+whose own move is the user's and `pr_context` one after the move:
+'Latest unanswered thread: bob on src/cache.ts: "👍" (newest of 2)'. The
+preview (`commentPreview`) drops quoted lines, code blocks, HTML and
+markdown marks, keeps link text, writes bare URLs as [link], collapses
+whitespace and cuts at 80 characters. It is GitHub text: inside the fence,
+and under `untrusted` in JSON. Someone else's PR shows none: its threads
+are the author's to answer.
+
+**JSON answers** (2026-10-08). The four reads take `format: "text" |
+"json"` (default text), so a caller can filter by author, team, move or
+reviews without parsing lines. A JSON answer is `structuredContent` plus
+the text part: the header, the untrusted note and the same JSON inside the
+fence. Claude Code 2.1 hands its model one of the two (structuredContent in
+place of the text unless a flag prefers the text), so neither doubles the
+tokens and both must say what is data: the JSON's first key `note` says it
+too. The read tools declare no `outputSchema`: the SDK then demands
+structuredContent on every answer, text ones included.
+
+- Untrusted text: every free-text value from GitHub or from an agent
+  summary of it (titles, topic names, move and unread sentences, glance
+  lines, dossier lines, thread previews) sits under an `untrusted` key of
+  its object. Everything else is PR keys, ids, logins, team names, enums,
+  counts, booleans and times. Every string is cleaned like fenced text
+  (`stripInvisible`).
+- One value builder (`packages/mcp/src/json.ts`) over the same computed
+  values the text uses: `authorPlace` (authorTag you / your_team /
+  outside, null while the team lists are unknown), `reviewerStates`
+  (humans per state, agents, pending users and teams), the PR's own
+  `turn` (kind, move, who, and the `turnText` sentence), the unread
+  reason (`leadUnreadReason`, over the PR's own reasons), fetchedAt, the
+  topic, the glance verdict and stale flag, `waitingThreads`, the overlaps
+  (`prOverlaps`: other PR, base-side line ranges, file path under
+  `untrusted`, `diffCapped`) and in `pr_context` the merge-after `dependsOn`
+  (`dependsOnKey`, the same check as the "Depends on" line).
+- Shapes: `whats_on_me` {meta, filters, page, yourMoveTotal, rows: [{tile,
+  topic, fetchedAt, prs}]}; `search_prs` {meta, filters, page, prs};
+  `pr_context` {meta, prs (with stack), topics (with prKeys), errors};
+  `topic` {meta, topic, tiles, prs}. `detail` makes no difference to JSON.
 
 **Reviews and author tags** (2026-10-08). An agent asked "what do I have to
 review, outside my team first" had to call `gh pr view` per PR for the
@@ -7673,8 +7728,8 @@ are plain text: a freshness line, who the app works for, then one
 `<postpile-data id="…">` fence around everything that comes from GitHub or
 from an agent summary of it, with a line telling the caller it is data, not
 instructions. The fence id is random per answer and fenced text is cleaned
-(see "Untrusted text" below). The reads send no structured content: text is
-what the calling model reads, and sending both would double the tokens.
+(see "Untrusted text" below). The reads send structured content only with
+`format: "json"` ("JSON answers" above).
 
 **Connecting** (decided 2026-09-29): the app nudges, it never installs by
 itself. The status footer shows "agents: not connected" while Claude Code

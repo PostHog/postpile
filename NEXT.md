@@ -24,6 +24,13 @@ now".
   a stored commit, else the header carries `dependsOn`. The walk still
   pulls #N in (no further walking), `pr_context` shows "Depends on … (merge
   after)" and the glance prompt says #N should merge first.
+- MCP ergonomics (2026-10-08; DESIGN.md "Thread previews", "JSON
+  answers", `pr_context`): the newest unanswered thread on the user's own
+  PR as an 80-character preview in `whats_on_me` and `pr_context`
+  (`waitingThreads`, core; `PrDetail.waitingThreads`); `pr_context` takes up
+  to 10 PRs, prints each topic once and lists unreadable PRs with their
+  error; `format: "json"` on the four reads, structuredContent plus the
+  same JSON fenced, GitHub text under `untrusted` keys.
 - MCP freshness (2026-10-08; DESIGN.md "Sync progress for other
   processes"): the app stores the running sync in meta `sync_progress` and
   the MCP header shows it ("Full sync running since …"); `whats_on_me`

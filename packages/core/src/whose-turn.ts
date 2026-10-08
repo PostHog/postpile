@@ -25,7 +25,7 @@ import {
   viewerRequestedChanges,
   type ReviewRequest,
 } from './review-request.ts';
-import type { EventKind, Pr, PrEvent, PrKey, Tile, UserPrState, Viewer } from './types.ts';
+import type { EventKind, Pr, PrEvent, PrKey, ReviewThread, Tile, UserPrState, Viewer } from './types.ts';
 
 export type WhoseTurnKind = 'you' | 'them' | 'none';
 
@@ -240,16 +240,21 @@ function reviewText(ctx: PrContext, ask: ReviewRequest, verb: 'Review' | 'Re-rev
   return by && !isViewer(ctx, by) ? `${verb}, ${by} asked` : verb;
 }
 
-/** Unresolved threads whose last word is someone else's (not the viewer's, not a bot's, not bot talk like "fixed" to a review bot). */
-function threadsWaitingOnViewer(ctx: PrContext): { count: number; from: string | null } {
-  const lastAuthors: string[] = [];
-  for (const thread of ctx.pr.threads) {
+/**
+ * Unresolved threads whose last word is someone else's (not the viewer's,
+ * not a bot's, not bot talk like "fixed" to a review bot), in the PR's
+ * thread order. The "Answer 2 threads from mira" move counts them; the MCP
+ * answers preview their last comment (`waitingThreads`).
+ */
+export function threadsWaitingOn(pr: Pr, viewerLogin: string): ReviewThread[] {
+  return pr.threads.filter((thread) => {
     const last = thread.comments[thread.comments.length - 1];
-    if (thread.isResolved || !last || isViewer(ctx, last.author) || isBot(last.author) || talksToBot(last, ctx.pr)) {
-      continue;
-    }
-    lastAuthors.push(last.author);
-  }
+    return !thread.isResolved && last !== undefined && !sameLogin(last.author, viewerLogin) && !isBot(last.author) && !talksToBot(last, pr);
+  });
+}
+
+function threadsWaitingOnViewer(ctx: PrContext): { count: number; from: string | null } {
+  const lastAuthors = threadsWaitingOn(ctx.pr, ctx.viewer.login).map((thread) => thread.comments[thread.comments.length - 1]!.author);
   const everyone = new Set(lastAuthors.map((login) => login.toLowerCase()));
   return { count: lastAuthors.length, from: everyone.size === 1 ? lastAuthors[0]! : null };
 }

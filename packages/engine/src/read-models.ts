@@ -18,6 +18,7 @@ import {
   standingApprovals,
   viewerApproval,
   viewerReviewStand,
+  waitingThreads,
   agentPrFacts,
   buildPrSummary,
   buildTileView,
@@ -722,6 +723,7 @@ export class ReadModels {
       topicId: board.topicIdOf(key),
       tileIds: [...tileIds],
       facts: this.memory.prFacts(key),
+      waitingThreads: waitingThreads(pr, viewer),
     };
   }
 

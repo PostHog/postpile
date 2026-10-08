@@ -11,6 +11,9 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - The MCP tools tag each PR author as you, your team or outside your team, and `whats_on_me` takes `author_scope` (me, my_team, others, any) to list, for example, only PRs from outside your team.
 - A PR whose description says "Stacked on #12" (or "based on #12") now shows as a stack with #12 even when it targets the main branch. #12 is brought in and shown with it in the same topic, and the agent's summary knows that GitHub's diff includes #12's changes and that merging the PR also lands #12, instead of calling the extra files a mismatch with the description.
 - "Depends on #12" in a description only counts as a stack when the two PRs share commits. Otherwise it is a merge order: `pr_context` shows "Depends on acme/app#12 (merge after)" and the agent's summary says #12 should merge first, without claiming #12's changes are in the diff.
+- `whats_on_me` and `pr_context` show a short preview of the newest unanswered review thread on your own PR, so "Answer 1 thread from bob" tells an agent whether it is a question or a thumbs up.
+- `pr_context` takes a list of up to 10 PRs: each topic prints once, and a PR it cannot read is listed with the reason instead of failing the call.
+- The four MCP reads take `format: "json"` for agents that filter by author, team, move or reviews. GitHub text in it sits under `untrusted` keys.
 
 ### Changed
 

@@ -15,6 +15,7 @@ import {
   type SyncReport,
   type TileView,
   type UnreadReason,
+  type WaitingThread,
   type WhatsNew,
   type WhoseTurn,
 } from '@postpile/core';
@@ -356,4 +357,48 @@ export function reviewCountsText(states: ReviewerStates): string {
 export function echo(input: string): string {
   const line = stripInvisible(input.replace(/\s+/g, ' ').trim());
   return line.length > 100 ? `${line.slice(0, 100)}…` : line;
+}
+
+/** How many characters of a comment a thread preview shows. */
+export const PREVIEW_CHARS = 80;
+
+/**
+ * A comment in one short line, so a caller can tell an emoji or a "thanks"
+ * from a question: quoted lines, code blocks, HTML and markdown marks
+ * dropped, links reduced to their text, whitespace collapsed, cut to
+ * `max` characters. GitHub text: it goes inside the fence.
+ */
+export function commentPreview(body: string, max: number = PREVIEW_CHARS): string {
+  const text = stripInvisible(body)
+    .replace(/```[\s\S]*?(```|$)/g, ' [code] ')
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/^\s*>.*$/gm, ' ')
+    .replace(/^\s*#+\s+/gm, '')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, ' [image] ')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/<img\b[^>]*>/gi, ' [image] ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/https?:\/\/\S+/g, '[link]')
+    .replace(/`|\*\*|__|~~/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (text === '') {
+    return '(nothing but quotes, code or markup)';
+  }
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+}
+
+/**
+ * 'Latest unanswered thread: bob on src/cache.ts: "👍" (newest of 2)': the
+ * newest of the threads that wait on the viewer (`waitingThreads`). Null
+ * when none waits. GitHub text: it goes inside the fence.
+ */
+export function waitingThreadText(threads: WaitingThread[]): string | null {
+  const newest = threads[0];
+  if (!newest) {
+    return null;
+  }
+  const preview = newest.body === null ? '(text not stored)' : `"${commentPreview(newest.body)}"`;
+  const more = threads.length > 1 ? ` (newest of ${threads.length})` : '';
+  return `Latest unanswered thread: ${newest.author} on ${newest.path}: ${preview}${more}`;
 }
