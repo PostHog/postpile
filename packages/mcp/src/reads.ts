@@ -53,6 +53,7 @@ import {
   prSummaryLine, reviewCountsText, reviewersLine,
   stateWord,
   syncRunningLine,
+  landableText,
   tileLine,
   turnText,
   unreadReasonText,
@@ -391,6 +392,10 @@ function briefPrLines(detail: PrDetail, tiles: TileView[], authors: Authors): st
   lines.push('', ...(detail.glance ? briefGlanceLines(detail.glance, detail.glanceStale) : [`No agent glance yet (${detail.glanceState}).`]));
   for (const view of tiles) {
     lines.push(`Its tile: ${tileLine(view)}`);
+    const landable = landableText(view);
+    if (landable) {
+      lines.push(`  ${landable}`);
+    }
   }
   return lines;
 }
@@ -647,7 +652,7 @@ function stackOf(read: PrRead): StackJson | null {
   return null;
 }
 
-function prReadJson(read: PrRead, authors: Authors, overlaps: PrOverlapsView): PrJson & { stack: StackJson | null; dependsOn: PrKey | null; agentNotes: object } {
+function prReadJson(read: PrRead, authors: Authors, overlaps: PrOverlapsView): PrJson & { stack: StackJson | null; dependsOn: PrKey | null; agentNotes: object; landableBelow: PrKey[] } {
   const summary = read.tiles.flatMap((view) => view.prs).find((pr) => pr.key === read.key) ?? null;
   const json = prJson({
     summary,
@@ -659,7 +664,14 @@ function prReadJson(read: PrRead, authors: Authors, overlaps: PrOverlapsView): P
     topic: read.topic ? { id: read.topic.topic.id, name: read.topic.topic.name } : null,
     overlaps,
   });
-  return { ...json, stack: stackOf(read), dependsOn: dependsOnKey(read.detail.pr, read.tiles), agentNotes: notesJson(read.detail.notes) };
+  return {
+    ...json,
+    stack: stackOf(read),
+    dependsOn: dependsOnKey(read.detail.pr, read.tiles),
+    agentNotes: notesJson(read.detail.notes),
+    // Its tile waits on someone else's block on a stack layer: these layers below can land alone.
+    landableBelow: [...new Set(read.tiles.flatMap((view) => view.landableBelow))],
+  };
 }
 
 async function prContextJson(ctx: ReadContext, reads: PrRead[], failures: PrFailure[], authors: Authors, overlaps: PrOverlapsView): Promise<ToolAnswer> {
@@ -1116,7 +1128,9 @@ export async function whatsOnMe(ctx: ReadContext, options: QueueOptions, format:
       rows.push({ group: yourMoveGroup(view.prs, notes), text: `${line}\n  ${view.turn.what}`, view, topic });
     } else if (view.state.kind === 'unread') {
       const reason = leadUnreadReason(view.state.unreadBecause);
-      rows.push({ group: 'unread', text: `${line}\n  ${reason ? unreadReasonText(reason) : 'unread'} · ${turnText(view.turn)}`, view, topic });
+      const landable = landableText(view);
+      const extra = landable ? `\n  ${landable}` : '';
+      rows.push({ group: 'unread', text: `${line}\n  ${reason ? unreadReasonText(reason) : 'unread'} · ${turnText(view.turn)}${extra}`, view, topic });
     }
   }
   // Your move first, then your move with a note on every PR, then unread ones where it is not.

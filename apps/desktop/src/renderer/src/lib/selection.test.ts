@@ -79,6 +79,7 @@ function tile(id: string, prKeys: string[], state: TileState = { kind: 'open', u
     tier: 'rest',
     people: [],
     turn: { kind: 'none', who: null, what: '', prKey: null },
+    landableBelow: [],
     afterRead: { done: false, turn: { kind: 'none', who: null, what: '', prKey: null } },
     pendingWrite: null,
     quietRepo: false,

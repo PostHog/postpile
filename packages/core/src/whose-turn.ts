@@ -12,7 +12,7 @@ import { sameLogin } from './mentions.ts';
 import { mergeQueueState } from './merge-queue.ts';
 import { isPrOwner, prOwner } from './pr-owners.ts';
 import { isQueued } from './pr-status.ts';
-import { firstBlocker, stackLayersAround, type StackBlocker } from './stack-readiness.ts';
+import { firstBlocker, landableBelow, stackLayersAround, type StackBlocker } from './stack-readiness.ts';
 import {
   changesRequestedBy,
   isApprovedByViewer,
@@ -494,6 +494,28 @@ export function isReReviewMove(turn: WhoseTurn): boolean {
  */
 export function isMergeApprovedMove(turn: WhoseTurn): boolean {
   return turn.kind === 'you' && turn.move === 'merge';
+}
+
+/** Someone else holds a stack layer back: "Blocked: team-security to review #12", or "Blocked: #12 needs an approving review". */
+export function isBlockedTurn(turn: WhoseTurn): boolean {
+  return turn.kind === 'them' && (turn.lead === BLOCKED_LEAD || (turn.who === null && turn.what.startsWith(BLOCKED_LEAD)));
+}
+
+/**
+ * While a tile's move is someone else's block on a stack layer, the layers
+ * below it that can land alone (`landableBelow`), bottom first. Only words
+ * for the MCP: it never changes the move, its rank or the tile.
+ */
+export function tileLandableBelow(tile: Tile, turn: WhoseTurn, prs: ReadonlyMap<PrKey, Pr>): PrKey[] {
+  if (!isBlockedTurn(turn) || turn.prKey === null) {
+    return [];
+  }
+  const stack = tile.stacks.find((candidate) => candidate.prKeys.includes(turn.prKey!));
+  if (!stack) {
+    return [];
+  }
+  const layers = stack.prKeys.flatMap((key) => prs.get(key) ?? []);
+  return landableBelow(layers).map((pr) => pr.key);
 }
 
 /** The move is merging an approved own PR, not re-submitting it to the merge queue. */

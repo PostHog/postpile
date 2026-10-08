@@ -260,6 +260,19 @@ export function prSummaryLine(pr: PrSummary): string {
 }
 
 /** The tile's head line: its kind, its group as the app names it ("dealt with", never "done"), snoozed, muted or neither, and whose move. */
+/**
+ * While a stack waits on someone else, the layers below that can land
+ * alone: "acme/app#1 can land alone (approved)". Null when there are none.
+ */
+export function landableText(view: Pick<TileView, 'landableBelow'>): string | null {
+  const keys = view.landableBelow;
+  if (keys.length === 0) {
+    return null;
+  }
+  const names = keys.length === 1 ? keys[0]! : `${keys.slice(0, -1).join(', ')} and ${keys[keys.length - 1]}`;
+  return `${names} can land alone (approved)`;
+}
+
 export function tileLine(view: TileView): string {
   const kind = view.tile.kind === 'single' ? 'PR' : view.tile.kind;
   const snoozed = view.state.kind === 'snoozed' ? (view.state.muted ? ', muted' : ', snoozed') : '';

@@ -277,6 +277,8 @@ export interface TileJson {
   whoseMove: MoveJson;
   unread: UnreadJson | null;
   prKeys: PrKey[];
+  /** While the move is someone else's block on a stack layer: the layers below it that can land alone, bottom first. */
+  landableBelow: PrKey[];
   untrusted: { title: string; whoseMove: string; unreadReason: string | null };
 }
 
@@ -290,6 +292,7 @@ export function tileJson(view: TileView): TileJson {
     whoseMove: moveJson(view.turn),
     unread: unreadJson(lead),
     prKeys: view.prs.map((pr) => pr.key),
+    landableBelow: view.landableBelow,
     untrusted: { title: view.tile.title, whoseMove: turnText(view.turn), unreadReason: lead ? unreadReasonText(lead) : null },
   };
 }

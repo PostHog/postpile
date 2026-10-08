@@ -298,6 +298,12 @@ export interface TileView {
   /** Whose move it is on the tile. */
   turn: WhoseTurn;
   /**
+   * While `turn` is someone else's block on a stack layer, the layers below
+   * it that can land alone, bottom first (`tileLandableBelow`, DESIGN.md
+   * "Stacks land together"). The MCP says so; the app shows nothing.
+   */
+  landableBelow: PrKey[];
+  /**
    * What a mark-read would leave (`tileAfterMarkRead`): done or not, and
    * whose move. The tile's button says "Done for now" only when it is done.
    */

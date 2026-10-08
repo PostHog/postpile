@@ -27,7 +27,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ### Fixed
 
-- A stack no longer says "Merge, it is approved" while one of its layers still waits. The tile and the MCP tools name what holds it instead, like "Blocked: team-security to review #12". A lower layer that can merge on its own still says so on its own row.
+- A stack no longer says "Merge, it is approved" while one of its layers still waits. The tile and the MCP tools name what holds it instead, like "Blocked: team-security to review #12". A lower layer that can merge on its own still says so on its own row, and the MCP tools add a line like "acme/app#1 can land alone (approved)".
 - `pr_context` shows what a bot's change request found in one line, so "Address reviewbot's changes" says what the bot wants, even when the fix is not a code change.
 - `pr_context` no longer lists the same unrelated PRs as "Other PRs in this topic" for every PR that has no topic yet.
 

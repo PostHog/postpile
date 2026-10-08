@@ -84,6 +84,26 @@ export function firstBlocker(layers: Pr[]): StackBlocker | null {
   return null;
 }
 
+/** An open layer GitHub would merge now on its own: approved, not a draft, nothing held, and not already in a merge queue. */
+function canLandAlone(pr: Pr): boolean {
+  return pr.state === 'OPEN' && pr.reviewDecision === 'APPROVED' && layerHold(pr) === null && mergeQueueState(pr) === null && !isQueued(pr);
+}
+
+/**
+ * The layers below a stack's lowest held layer that can land on their own
+ * (bottom first), while the stack as a whole waits. Empty when no layer is
+ * held or the bottom layer is: then nothing lands alone. Layers below the
+ * lowest held one are never held themselves, so the list only leaves out
+ * merged, closed, queued and unapproved ones.
+ */
+export function landableBelow(layers: Pr[]): Pr[] {
+  const held = layers.findIndex((pr) => layerHold(pr) !== null);
+  if (held <= 0) {
+    return [];
+  }
+  return layers.slice(0, held).filter(canLandAlone);
+}
+
 /**
  * The other layers of the stack a PR is in, as the tile holds them:
  * `below` (bottom first) land before it or with it, `above` (bottom first)

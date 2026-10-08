@@ -50,6 +50,10 @@ describe('MCP: stack blockers and bot findings', () => {
     expect(bottomText).toContain('Your move: Merge, it is approved');
     expect(bottomText).toContain('Its tile: ');
     expect(bottomText).toContain('Blocked: acme/team-security to review #2');
+    // The approved bottom layer can still go in on its own; said once, under the tile line.
+    expect(bottomText).toContain('Blocked: acme/team-security to review #2\n  acme/app#1 can land alone (approved)');
+    const json = (await prContext(ctx, 'acme/app#2', 'brief', 'json')).structured as { prs: { landableBelow: unknown }[] };
+    expect(json.prs[0]?.landableBelow).toEqual(['acme/app#1']);
     // Not the user's move: the stack waits on the team, so it no longer reads as a merge waiting on them.
     expect((await whatsOnMe(ctx, LIST)).text).not.toContain('Merge, it is approved');
   });

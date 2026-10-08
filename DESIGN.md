@@ -2782,6 +2782,17 @@ The rules (core `stack-readiness.ts`, used by `whose-turn.ts`):
   and holding it changes neither.
 - Works on any stack a tile holds (`Tile.stacks`), whether git branches
   or something else found it.
+- **What can land alone** (2026-10-08, Julian, for the release): while the
+  tile's move is someone else's block ("Blocked: …") and the lowest held
+  layer is above the bottom, the layers below it that GitHub would merge
+  now (open, approved, not a draft, nothing pending, not queued) are named
+  once: "acme/app#1 can land alone (approved)", several in one line,
+  bottom first (core `landableBelow`, `TileView.landableBelow`). Words
+  only: the move, its rank, sections, counts and the app tile stay as they
+  are, and it is never a `you` move. The MCP says it under "Its tile:" in
+  `pr_context`, as a sub-line of the tile in `whats_on_me`, and as
+  `landableBelow` on the tile and PR entries in JSON. The app shows
+  nothing: the PR pane has no secondary spot for it.
 - Property tests: `expectedStackHold` in `testing/spec-rules.ts` restates
   the hold; the row spec takes the layers below, the tile invariants the
   layers above.

@@ -102,6 +102,7 @@ const stackView: TileView = withOffers({
   tier: 'to_review',
   people: [],
   turn: NO_TURN,
+  landableBelow: [],
   afterRead: { done: false, turn: NO_TURN },
   pendingWrite: null,
   quietRepo: false,

@@ -25,7 +25,7 @@ import type { GlanceRefreshBlock, GlanceState } from './glance-state.ts';
 import { tileVerdict } from './tile-verdict.ts';
 import type { GlanceGap, PrFacts, PrSummary, TilePendingWrite, TileView } from './views.ts';
 import { whatsNew } from './whats-new.ts';
-import { NO_TURN, prWhoseTurn, unansweredAsk, whoseTurn } from './whose-turn.ts';
+import { NO_TURN, prWhoseTurn, tileLandableBelow, unansweredAsk, whoseTurn } from './whose-turn.ts';
 import { tileWhy, whyHere } from './why-here.ts';
 
 export interface PrSummaryInput {
@@ -209,6 +209,7 @@ export function buildTileView(input: TileViewInput): TileView {
     tier: tileTier(prs.map((pr) => pr.tier)),
     people: tilePeople(memberPrs, viewer?.login ?? null),
     turn,
+    landableBelow: tileLandableBelow(tile, turn, input.prsByKey),
     afterRead,
     pendingWrite: input.pendingWrite,
     offers,

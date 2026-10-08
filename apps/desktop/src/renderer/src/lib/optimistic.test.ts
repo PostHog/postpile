@@ -57,6 +57,7 @@ function unreadTile(prs: PrSummary[]): TileView {
     tier: 'to_review',
     people: [],
     turn: REVIEW,
+    landableBelow: [],
     afterRead: { done: true, turn: NONE },
     pendingWrite: null,
     quietRepo: false,
