@@ -4,7 +4,6 @@ import { claimBasisText, parseClaimBasis } from './glance-basis.ts';
 describe('parseClaimBasis', () => {
   it('reads checked with what it was checked against', () => {
     expect(parseClaimBasis('checked: changed files')).toEqual({ checked: true, note: 'changed files' });
-    expect(parseClaimBasis('Checked')).toEqual({ checked: true, note: '' });
     expect(parseClaimBasis('checked - review by @alice')).toEqual({ checked: true, note: 'review by @alice' });
   });
 
@@ -21,6 +20,11 @@ describe('parseClaimBasis', () => {
     expect(parseClaimBasis('')).toBeNull();
     expect(parseClaimBasis('mostly checked')).toBeNull();
     expect(parseClaimBasis('checkedness unknown')).toBeNull();
+  });
+
+  it('is null for a checked that names no evidence', () => {
+    expect(parseClaimBasis('Checked')).toBeNull();
+    expect(parseClaimBasis('checked: ')).toBeNull();
   });
 
   it('cuts a long note', () => {

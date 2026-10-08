@@ -11,8 +11,9 @@ function cleanNote(text: string): string {
 /**
  * Reads the agent's "checked: <against what>" or "not checked: <why>"
  * (DESIGN.md "Glance claim basis"). "unchecked" counts as not checked.
- * Anything else is null, so a garbled basis shows nothing rather than a
- * wrong "checked".
+ * A bare "checked" names no evidence, so it is null like anything else
+ * unreadable: only "checked: <against what>" earns the word (Codex review
+ * on #158). A garbled basis shows nothing rather than a wrong "checked".
  */
 export function parseClaimBasis(value: unknown): ClaimBasis | null {
   if (typeof value !== 'string') {
@@ -23,8 +24,9 @@ export function parseClaimBasis(value: unknown): ClaimBasis | null {
     return { checked: false, note: cleanNote(notChecked[1]!) };
   }
   const checked = /^\s*checked\b[\s:,.\-–—]*(.*)$/is.exec(value);
-  if (checked) {
-    return { checked: true, note: cleanNote(checked[1]!) };
+  const evidence = checked ? cleanNote(checked[1]!) : '';
+  if (evidence) {
+    return { checked: true, note: evidence };
   }
   return null;
 }

@@ -1804,7 +1804,8 @@ stored and before a dossier goes into a glance prompt
     "checked: / not checked:" prefix is easy to write and to read back
     (`parseClaimBasis` in core). `checked` carries what it was checked
     against too (Codex review of the design: an empty "checked" says
-    nothing about the evidence). Parsing never fails a glance: a missing
+    nothing about the evidence), and a bare "checked" without it reads as
+    null (Codex review on #158). Parsing never fails a glance: a missing
     or garbled side is null and shows nothing, never "checked".
   - *Storage.* `pr_glance.basis` (migration 038), nullable JSON
     `GlanceBasis` `{risk, verdict}`, each `{checked, note}` or null; one
