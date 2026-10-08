@@ -9,6 +9,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - Agents asked to review one PR now check PostPile for other agents' notes first, before reading the PR on GitHub. The rule sat at the end of the MCP instructions and most sessions skipped it.
 - "Stacked on #12" now also works when #12 was opened from a fork. The next full sync fetches #12 and shows the two PRs as one stack; before, a parent from a fork was never fetched.
 - `pr_context` shows a bot's real finding when its change request only says "findings inline": the line now comes from the bot's first inline comment, with "(+N more)" when there are several.
+- After a PostPile update, the MCP tools' "reconnect" message now also says that a Claude Code session keeps the old parameter lists of tools it already knew until a new session starts. The new parameters (`author_scope`, `format`, several PRs in `pr_context`) work anyway.
 
 ## 0.27.0 (2026-10-08)
 

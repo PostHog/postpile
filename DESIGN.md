@@ -7723,7 +7723,15 @@ takes the lock; old locks have none and count as unknown) differs from this
 process's own. A version that is unknown on either side never counts, so dev
 runs with equal strings stay quiet. On a mismatch every tool returns the
 tool error "PostPile was updated. Run /mcp and reconnect postpile to load the
-new version." The closed message still wins. Nothing is cached
+new version.", followed by a sentence that tools which gained parameters keep
+their old schema in this Claude Code session until a new one starts. Seen on
+0.27.0 (2026-10-08): after a reconnect, Claude Code 2.1 listed the new tool
+`note_pr` with its schema but kept the old schemas of the read tools (no
+`author_scope`, no `format`, `pr` a plain string); the server's `tools/list`
+was complete and a new session showed every parameter. The server takes the
+new parameters either way. `server.test.ts` checks every parameter in
+`tools/list`, so a schema the SDK cannot convert would fail there. The closed
+message still wins. Nothing is cached
 (the schema is one SQL query, the lock's version a plain file read, only the
 ps liveness of the running check is kept for 5 s), since a kept "no mismatch"
 would let calls through right after an upgrade; a mismatch is permanent. Reason for

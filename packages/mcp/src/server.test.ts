@@ -152,6 +152,28 @@ describe('PostPile MCP server', () => {
     });
   });
 
+  // Clients learn parameters only from tools/list: a parameter missing there is unusable, whatever the server accepts.
+  it('lists every parameter of every tool in tools/list', async () => {
+    const client = await connected();
+    const { tools } = await client.listTools();
+    const properties = Object.fromEntries(tools.map((tool) => [tool.name, Object.keys(tool.inputSchema.properties ?? {}).sort()]));
+    expect(properties).toEqual({
+      pr_context: ['detail', 'format', 'pr'],
+      topic: ['detail', 'format', 'topic'],
+      search_prs: ['format', 'limit', 'offset', 'query', 'repo', 'state', 'whose_move'],
+      whats_on_me: ['author_scope', 'format', 'limit', 'offset', 'repo', 'state', 'whose_move'],
+      refresh_from_github: ['pr', 'topic'],
+      propose_topic_change: ['dry_run', 'into_topic', 'kind', 'name', 'prs', 'reason', 'topic'],
+      note_pr: ['action', 'by', 'cover_token', 'covered_by', 'kind', 'lease_minutes', 'note', 'note_id', 'pr', 'token'],
+    });
+    const schemaOf = (name: string) => tools.find((tool) => tool.name === name)?.inputSchema.properties ?? {};
+    expect(schemaOf('pr_context').pr).toMatchObject({ anyOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' }, maxItems: 10 }] });
+    for (const name of ['pr_context', 'topic', 'search_prs', 'whats_on_me']) {
+      expect(schemaOf(name).format).toMatchObject({ type: 'string', enum: ['text', 'json'] });
+    }
+    expect(schemaOf('whats_on_me').author_scope).toMatchObject({ type: 'string', enum: ['me', 'my_team', 'others', 'any'] });
+  });
+
   it('refuses every tool while the app is not running, and answers again once it is', async () => {
     let running = false;
     const reports: ToolCallReport[] = [];
