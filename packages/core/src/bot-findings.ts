@@ -5,6 +5,7 @@
 // call: the first sentence of the first plain text line, else the first
 // heading. DESIGN.md "Stacks land together" › Bot change requests.
 import { isBot } from './bots.ts';
+import { stripHtmlComments } from './html-comments.ts';
 import { sameLogin } from './mentions.ts';
 import { changesRequestedByAll } from './review-request.ts';
 import type { FullPr } from './types.ts';
@@ -20,11 +21,23 @@ export interface BotFinding {
   summary: string;
 }
 
-/** Markdown and HTML that never carry the finding: comments, tags, images (badges), and the link around them. */
+/** The text without fenced code blocks; an unclosed fence hides the rest. Line by line, no regex over the whole text. */
+function withoutCodeBlocks(text: string): string {
+  const kept: string[] = [];
+  let inCode = false;
+  for (const line of text.split('\n')) {
+    if (line.trimStart().startsWith('```')) {
+      inCode = !inCode;
+    } else if (!inCode) {
+      kept.push(line);
+    }
+  }
+  return kept.join('\n');
+}
+
+/** Markdown and HTML that never carry the finding: comments, code blocks, tags, images (badges), and the link around them. */
 function stripMarkup(text: string): string {
-  return text
-    .replace(/<!--[\s\S]*?-->/g, '')
-    .replace(/```[\s\S]*?(```|$)/g, '')
+  return withoutCodeBlocks(stripHtmlComments(text))
     .replace(/<[^>]+>/g, ' ')
     .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
     .replace(/\[\s*\]\([^)]*\)/g, '')
