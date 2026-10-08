@@ -7540,7 +7540,37 @@ is `EngineService.prOverlaps`):
   data): "Also edits the same lines: acme/app#1977 by bob, path lines
   600-640". Outside the fence: one sentence saying the second merge can
   drop or undo lines of the first.
-- `whats_on_me`, per PR row: "overlaps #1977" (numbers only).
+- `whats_on_me`, per PR row: "overlaps #1977" (numbers only), and "near
+  #1980" for the nearby level below.
+
+**Nearby level** (2026-10-08, after the first version missed the case that
+motivated it). Reported: PR X inserted before old line 627 and replaced line
+1351; PR Y removed line 619 and inserted before 620, 621, 632 and 633. No old
+line is shared and the edits interleave in one YAML block, but X copies a
+list that Y changes. Margin 3 reported nothing (the closest edits are 4 to 5
+lines apart). Two changes:
+- **Insertions are zero-width positions.** A pure insertion before old line
+  n is stored as `{ start: n, end: n - 1 }` and touches lines n-1 and n, so
+  it sits at distance 0 from an edit on either. Every insertion of a patch
+  takes part, once. Rows stored by the first version hold an insertion as
+  the two-line range `[n-1, n]`; they compare the same way and are replaced
+  at the PR's next push.
+- **A weaker "nearby" level.** Same file, edits within 10 old lines of each
+  other (`NEARBY_MARGIN`), and no exact overlap in that file. "Same lines"
+  (margin 3) stays the strong level and wins per file. `pr_context` says
+  "Also edits nearby lines: acme/app#Y by bob, path (619-633 vs 627)" (the
+  other PR's close edits against the asked PR's) and `whats_on_me` says
+  "near #Y". The earlier decision not to report plain "same file" stands:
+  10 lines is a block, not a file.
+- **Noise list, nearby level only:** lockfiles (`pnpm-lock.yaml`,
+  `package-lock.json`, `yarn.lock`, `Cargo.lock`, `poetry.lock`, `uv.lock`,
+  `go.sum`, `Gemfile.lock`), `CHANGELOG*`, snapshots (`__snapshots__/`,
+  `*.snap`) and generated files (a `/generated/` folder, `.generated.`,
+  `.gen.`, `.pb.go`, `_pb2.py`, `.min.js`, `.min.css`; `isNoisyPath`). Two
+  PRs edit these near each other all the time and nothing is wrong. The
+  same lines of them are still reported.
+- Also fixed: a pair of PRs sharing several files reported only the first
+  file; every shared file is kept now.
 
 ## MCP server
 
