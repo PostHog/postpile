@@ -8,7 +8,7 @@ import { isBot } from './bots.ts';
 import { stripHtmlComments } from './html-comments.ts';
 import { sameLogin } from './mentions.ts';
 import { changesRequestedByAll } from './review-request.ts';
-import type { FullPr } from './types.ts';
+import type { FullComment, FullPr, FullReview } from './types.ts';
 
 /** The longest finding line, in characters, "…" included. */
 export const FINDING_MAX = 120;
@@ -70,14 +70,14 @@ function firstSentence(line: string): string {
   return end < 0 ? line : line.slice(0, end + 1);
 }
 
-/** Cut at a word boundary to `FINDING_MAX` with "…". */
-function capped(line: string): string {
-  if (line.length <= FINDING_MAX) {
+/** Cut at a word boundary to `max` characters with "…". */
+function capped(line: string, max: number = FINDING_MAX): string {
+  if (line.length <= max) {
     return line;
   }
-  const cut = line.slice(0, FINDING_MAX - 1);
+  const cut = line.slice(0, max - 1);
   const space = cut.lastIndexOf(' ');
-  return `${(space > FINDING_MAX / 2 ? cut.slice(0, space) : cut).trimEnd()}…`;
+  return `${(space > max / 2 ? cut.slice(0, space) : cut).trimEnd()}…`;
 }
 
 /**
@@ -86,19 +86,82 @@ function capped(line: string): string {
  * less than its first sentence), with markdown, links and badges removed,
  * at most `FINDING_MAX` characters. Null when nothing with words is left.
  */
-export function findingLine(body: string): string | null {
+export function findingLine(body: string, max: number = FINDING_MAX): string | null {
   const lines = stripMarkup(body).split('\n');
   const isHeading = (line: string) => /^\s*#{1,6}\s/.test(line) || /^\s*\*\*[^*]+\*\*\s*:?\s*$/.test(line);
   const text = lines.find((line) => !isHeading(line) && hasWords(plainLine(line)));
   const heading = lines.find((line) => isHeading(line) && hasWords(plainLine(line)));
   const chosen = text ?? heading;
-  return chosen === undefined ? null : capped(firstSentence(plainLine(chosen)));
+  return chosen === undefined ? null : capped(firstSentence(plainLine(chosen)), max);
+}
+
+/**
+ * The first line of an inline finding: its first line with words, heading
+ * or not (a bot's inline comment leads with the finding itself), first
+ * sentence, at most `max` characters.
+ */
+function inlineFindingLine(body: string, max: number): string | null {
+  const line = stripMarkup(body)
+    .split('\n')
+    .find((candidate) => hasWords(plainLine(candidate)));
+  return line === undefined ? null : capped(firstSentence(plainLine(line)), max);
+}
+
+/** Below this many characters a review line says too little to stand for the finding. */
+const SHORT_LINE = 40;
+
+/** Review text that only points elsewhere: "findings inline", "see the comments below". */
+const POINTS_ELSEWHERE = /\b(inline|below|see (the )?comments?)\b/i;
+
+/** A review body's line that says nothing of the finding itself: missing, short, or pointing at the inline comments. */
+function saysLittle(line: string | null): boolean {
+  return line === null || line.length < SHORT_LINE || POINTS_ELSEWHERE.test(line);
+}
+
+/**
+ * The bot's inline comments that carry a review's findings, oldest first:
+ * those naming the review (`Comment.reviewId`), else (a comment stored
+ * without the id) the same bot's inline comments without one, posted at or
+ * after the review. Never another author's.
+ */
+function inlineFindingsOf(review: FullReview, pr: FullPr): FullComment[] {
+  const own = pr.comments
+    .filter((comment) => comment.kind === 'review_comment' && sameLogin(comment.author, review.author))
+    .toSorted((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const named = own.filter((comment) => comment.reviewId === review.id);
+  if (named.length > 0) {
+    return named;
+  }
+  // A stored row without the id can read as null rather than missing.
+  return own.filter((comment) => (comment.reviewId ?? null) === null && comment.createdAt >= review.submittedAt);
+}
+
+/**
+ * A change request's finding: the review text's line, unless it says
+ * little ("Security review - findings inline."); then the first inline
+ * comment's first line, with "(+N more)" for the other inline findings,
+ * all within `FINDING_MAX`. Falls back to the review's own line.
+ */
+function changeRequestFinding(review: FullReview, pr: FullPr): string | null {
+  const own = findingLine(review.body);
+  if (!saysLittle(own)) {
+    return own;
+  }
+  const inline = inlineFindingsOf(review, pr);
+  const first = inline.findIndex((comment) => inlineFindingLine(comment.body, FINDING_MAX) !== null);
+  if (first < 0) {
+    return own;
+  }
+  const more = inline.length - 1;
+  const suffix = more > 0 ? ` (+${more} more)` : '';
+  return `${inlineFindingLine(inline[first]!.body, FINDING_MAX - suffix.length)}${suffix}`;
 }
 
 /**
  * Each bot whose standing review asks for changes (`changesRequestedByAll`,
  * the order whose turn names them in), with its newest change request's
- * finding. Left out when that review has no text with words.
+ * finding (`changeRequestFinding`: its text, or its first inline comment
+ * when the text only points there). Left out when neither has words.
  */
 export function botFindings(pr: FullPr): BotFinding[] {
   const findings: BotFinding[] = [];
@@ -107,7 +170,7 @@ export function botFindings(pr: FullPr): BotFinding[] {
       .filter((review) => review.state === 'CHANGES_REQUESTED' && sameLogin(review.author, login))
       .toSorted((a, b) => a.submittedAt.localeCompare(b.submittedAt));
     const newest = requests.at(-1);
-    const summary = newest === undefined ? null : findingLine(newest.body);
+    const summary = newest === undefined ? null : changeRequestFinding(newest, pr);
     if (summary !== null) {
       findings.push({ by: login, summary });
     }

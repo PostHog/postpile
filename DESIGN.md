@@ -2823,6 +2823,18 @@ fence: "reviewbot[bot] asks for changes: …". The tile footer does not show
 it (it has no review bodies); the pane's activity list already shows the
 review.
 
+Review text that only points at the inline comments (0.27.1, seen on live
+data: "Agent-driven security review - findings inline."): when the review's
+line is missing, shorter than 40 characters, or points elsewhere
+("inline", "below", "see the comments"), the finding is the first line
+with words of that bot's first inline comment on the same review (by
+`Comment.reviewId`; for a comment stored without one, the same bot's
+earliest inline comment at or after the review), first sentence, heading
+or not, since an inline finding leads with the finding itself. Several
+inline comments add "(+N more)", all within the 120 characters. Never
+another author's comment. Without an inline comment with words, the
+review's own line stays.
+
 ## Topic placement: relation and area
 
 Every topic gets a placement, so a long topic list sorts itself by whose

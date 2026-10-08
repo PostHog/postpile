@@ -8,6 +8,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 - Agents asked to review one PR now check PostPile for other agents' notes first, before reading the PR on GitHub. The rule sat at the end of the MCP instructions and most sessions skipped it.
 - "Stacked on #12" now also works when #12 was opened from a fork. The next full sync fetches #12 and shows the two PRs as one stack; before, a parent from a fork was never fetched.
+- `pr_context` shows a bot's real finding when its change request only says "findings inline": the line now comes from the bot's first inline comment, with "(+N more)" when there are several.
 
 ## 0.27.0 (2026-10-08)
 

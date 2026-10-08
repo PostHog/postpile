@@ -11,6 +11,10 @@ now".
   url)") parsed fine, but #N came from a fork: `findPrsByNumber` answered
   null and `buildStacks` dropped forks. Forks now link by declaration
   (never by branch), the lookup flags them, the walk stops at them.
+- Bot findings from inline comments (2026-10-08, 0.27.1; DESIGN.md
+  "Stacks land together" › Bot change requests): a review text that says
+  little or only points inline ("findings inline") is replaced by the
+  bot's first inline comment on that review, "(+N more)" for the rest.
 - Stacks land together (2026-10-08; DESIGN.md "Stacks land together"):
   "Merge, it is approved" gives way to the stack layer that holds it
   ("Blocked: team-security to review #12"): on a PR's row for layers
