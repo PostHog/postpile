@@ -742,6 +742,8 @@ export class GitHubSync {
     }
     refs.push(...(await this.movedPrsFromPoll(picked)));
     if (!notifications.changed && refs.length === 0) {
+      // A quiet inbox still drains the diffs a sync left over (a query, and a request only when one is missing).
+      await this.diffReader().run('poll', DIFF_POLL_PRS);
       return { notModified: true, pollIntervalSeconds, firstLook, viewer: null, fetchedPrKeys: [], newEventIds: [], readOnGitHub: [] };
     }
     let viewer = loadViewer(this.store);

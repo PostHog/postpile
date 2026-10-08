@@ -83,4 +83,17 @@ describe('overlapping edits', () => {
     await h.engine.sync({ maxAgentCalls: 0 });
     expect(h.store.prDiffs.openWithoutCurrentDiff()).toHaveLength(0);
   });
+
+  it('reads left-over diffs on a poll where nothing else changed', async () => {
+    const { h } = harnessWithTwoPrs();
+    h.reader.diffError = new Error('boom');
+    await h.engine.sync({ maxAgentCalls: 0 });
+    h.reader.diffError = null;
+    await h.engine.pollOnce();
+
+    const quiet = await h.engine.pollOnce();
+
+    expect(quiet).toMatchObject({ kind: 'done', prsUpdated: 0 });
+    expect(h.store.prDiffs.openWithoutCurrentDiff()).toHaveLength(0);
+  });
 });
