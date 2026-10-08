@@ -7653,7 +7653,7 @@ whose own move is the user's and `pr_context` one after the move:
 'Latest unanswered thread: bob on src/cache.ts: "👍" (newest of 2)'. The
 preview (`commentPreview`) drops quoted lines, code blocks, HTML and
 markdown marks, keeps link text, writes bare URLs as [link], collapses
-whitespace and cuts at 80 characters. It is GitHub text: inside the fence,
+whitespace and cuts at 80 code points (never half an emoji). It is GitHub text: inside the fence,
 and under `untrusted` in JSON. Someone else's PR shows none: its threads
 are the author's to answer.
 
@@ -7686,7 +7686,9 @@ structuredContent on every answer, text ones included.
 - Shapes: `whats_on_me` {meta, filters, page, yourMoveTotal, rows: [{tile,
   topic, fetchedAt, prs}]}; `search_prs` {meta, filters, page, prs};
   `pr_context` {meta, prs (with stack), topics (with prKeys), errors};
-  `topic` {meta, topic, tiles, prs}. `detail` makes no difference to JSON.
+  `topic` {meta, topic, tiles, prs, suggestions (pending and recently
+  decided, with their outcome, so a JSON caller does not repeat a rejected
+  one)}. `detail` makes no difference to JSON.
 
 **Reviews and author tags** (2026-10-08). An agent asked "what do I have to
 review, outside my team first" had to call `gh pr view` per PR for the

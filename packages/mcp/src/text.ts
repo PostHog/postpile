@@ -385,7 +385,9 @@ export function commentPreview(body: string, max: number = PREVIEW_CHARS): strin
   if (text === '') {
     return '(nothing but quotes, code or markup)';
   }
-  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+  // By code points, so an emoji at the cut is kept or dropped whole, never halved.
+  const chars = [...text];
+  return chars.length > max ? `${chars.slice(0, max - 1).join('')}…` : text;
 }
 
 /**

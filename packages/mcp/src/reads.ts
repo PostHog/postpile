@@ -760,19 +760,49 @@ function proposalLine(proposal: TopicProposal, topicId: string, name: (id: strin
  * once each (a merged topic is archived, but still readable by id). Empty
  * when there are none.
  */
+/** Looks up the names of the other topics `proposals` name, one read each. */
+async function proposalNames(reader: PostPileReader, detail: TopicDetail, proposals: TopicProposal[]): Promise<(id: string | null) => string> {
+  const ids = new Set(proposals.flatMap((proposal) => [proposal.topicId, proposal.intoTopicId]).filter((id): id is string => id !== null && id !== detail.topic.id));
+  const names = new Map<string, string>([[detail.topic.id, detail.topic.name]]);
+  for (const other of await readTopics(reader, [...ids])) {
+    names.set(other.topic.id, other.topic.name);
+  }
+  return (id: string | null): string => (id === null ? 'another topic' : (names.get(id) ?? id));
+}
+
 async function suggestionLines(reader: PostPileReader, detail: TopicDetail, now: Date): Promise<string[]> {
   const iso = now.toISOString();
   const proposals = [...detail.pendingProposals, ...detail.decidedProposals];
   if (proposals.length === 0) {
     return [];
   }
-  const ids = new Set(proposals.flatMap((proposal) => [proposal.topicId, proposal.intoTopicId]).filter((id): id is string => id !== null && id !== detail.topic.id));
-  const names = new Map<string, string>([[detail.topic.id, detail.topic.name]]);
-  for (const other of await readTopics(reader, [...ids])) {
-    names.set(other.topic.id, other.topic.name);
-  }
-  const name = (id: string | null): string => (id === null ? 'another topic' : (names.get(id) ?? id));
+  const name = await proposalNames(reader, detail, proposals);
   return ['', `Topic suggestions (pending, and decided in the last ${OUTSIDE_PROPOSAL_DAYS} days):`, ...proposals.map((proposal) => proposalLine(proposal, detail.topic.id, name, iso))];
+}
+
+/** The same suggestions as JSON: outcome and ids plain, the words and the reason untrusted. */
+async function suggestionsJson(reader: PostPileReader, detail: TopicDetail, now: Date): Promise<object[]> {
+  const iso = now.toISOString();
+  const proposals = [...detail.pendingProposals, ...detail.decidedProposals];
+  if (proposals.length === 0) {
+    return [];
+  }
+  const name = await proposalNames(reader, detail, proposals);
+  return proposals.map((proposal) => {
+    const outcome = proposalOutcome(proposal, iso);
+    return {
+      id: proposal.id,
+      kind: proposal.kind,
+      outcome,
+      createdAt: proposal.createdAt,
+      decidedAt: outcome === 'pending' ? null : (proposalOutcomeAt(proposal, iso) ?? null),
+      source: proposal.source,
+      topicId: proposal.topicId,
+      intoTopicId: proposal.intoTopicId,
+      prKeys: proposal.prKeys,
+      untrusted: { change: proposalWords(proposal, detail.topic.id, name, outcome), by: proposalSourceWords(proposal), reason: proposal.reason },
+    };
+  });
 }
 
 /** The stored snapshot of each PR, read once each, all at once: reviews, risk and waiting threads come from it. */
@@ -807,6 +837,7 @@ async function topicJsonAnswer(ctx: ReadContext, topic: TopicDetail): Promise<To
     topic: topicJson(topic),
     tiles: topic.tiles.map(tileJson),
     prs: prs.map((pr) => summaryJson(authors, pr, details.get(pr.key) ?? null, topic.tiles, topic, overlaps)),
+    suggestions: await suggestionsJson(ctx.reader, topic, ctx.now()),
   };
   return jsonAnswer(await header(ctx), data);
 }

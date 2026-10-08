@@ -504,6 +504,7 @@ describe('PostPile MCP server', () => {
     const topic = await client.callTool({ name: 'topic', arguments: { topic: 'topic-depot', format: 'json' } });
     expect(topic.structuredContent).toMatchObject({ topic: { id: 'topic-depot', untrusted: { name: 'Move CI to Depot', goal: expect.stringContaining('Run CI on Depot runners') } } });
     expect((topic.structuredContent as { tiles: unknown[] }).tiles).toHaveLength(4);
+    expect(topic.structuredContent).toHaveProperty('suggestions');
     const prContextJson = await client.callTool({ name: 'pr_context', arguments: { pr: ['acme/app#1911', '#999999'], format: 'json' } });
     expect(prContextJson.structuredContent).toMatchObject({
       prs: [{ key: 'acme/app#1911', stack: { prKeys: expect.arrayContaining(['acme/app#1911']) } }],
@@ -512,5 +513,43 @@ describe('PostPile MCP server', () => {
     });
     const noMatch = await client.callTool({ name: 'search_prs', arguments: { query: 'nothing matches this at all', format: 'json' } });
     expect(noMatch.structuredContent).toMatchObject({ page: { total: 0 }, prs: [] });
+  });
+
+  it('lists topic suggestions and their outcome in topic JSON, so a JSON caller does not repeat a rejected one', async () => {
+    const engine = new FakeEngine();
+    const rejected = {
+      id: 'p1',
+      kind: 'rename' as const,
+      topicId: 'topic-depot',
+      name: 'Depot runners',
+      intoTopicId: null,
+      fromArea: null,
+      prKeys: [],
+      reason: 'Shorter name',
+      status: 'rejected' as const,
+      createdAt: '2026-10-07T09:00:00.000Z',
+      decidedAt: '2026-10-07T10:00:00.000Z',
+      source: 'agent' as const,
+      client: 'claude-code',
+    };
+    const reader: PostPileReader = {
+      getPr: (key) => engine.getPr(key),
+      getTopic: async (topicId) => {
+        const detail = await engine.getTopic(topicId);
+        return detail && { ...detail, pendingProposals: [], decidedProposals: [rejected] };
+      },
+      listTopics: (scope) => engine.listTopics(scope),
+      search: (query, scope) => engine.search(query, scope),
+      getViewer: () => engine.getViewer(),
+      getTeamMembers: () => engine.getTeamMembers(),
+      lastSyncReport: () => engine.lastSyncReport(),
+      recordedSyncProgress: async () => null,
+      recordedAppVersion: async () => null,
+    };
+    const client = await connected(reader);
+    const topic = await client.callTool({ name: 'topic', arguments: { topic: 'topic-depot', format: 'json' } });
+    expect(topic.structuredContent).toMatchObject({
+      suggestions: [{ id: 'p1', kind: 'rename', outcome: 'rejected', source: 'agent', untrusted: { change: 'rename to "Depot runners"', reason: 'Shorter name' } }],
+    });
   });
 });

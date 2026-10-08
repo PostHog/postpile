@@ -124,6 +124,10 @@ describe('mcp text', () => {
     const long = commentPreview('word '.repeat(40));
     expect(long).toHaveLength(80);
     expect(long.endsWith('…')).toBe(true);
+    // An emoji at the cut is never split into half a surrogate pair.
+    const emoji = commentPreview(`${'a'.repeat(78)}👍 and more`);
+    expect(emoji).toBe(`${'a'.repeat(78)}👍…`);
+    expect(emoji.isWellFormed()).toBe(true);
   });
 
   it('names the newest thread waiting on the user and how many wait', () => {
