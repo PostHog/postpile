@@ -1,4 +1,4 @@
-import type { Glance, IsoTime, KeyFile, Pr, PrKey } from '@postpile/core';
+import { parseClaimBasis, type Glance, type GlanceBasis, type IsoTime, type KeyFile, type Pr, type PrKey } from '@postpile/core';
 import type { z } from 'zod';
 import type { glanceBatchOutput } from './schemas.ts';
 import { glanceBatchItemOutput } from './schemas.ts';
@@ -67,6 +67,13 @@ export function keyFilesFor(answered: KeyFile[], pr: Pr): KeyFile[] {
   return kept.slice(0, KEY_FILES_MAX);
 }
 
+/** Both sides read on their own, so one garbled side keeps the other; null when neither is readable. */
+export function glanceBasisFor(riskBasis: unknown, verdictBasis: unknown): GlanceBasis | null {
+  const risk = parseClaimBasis(riskBasis);
+  const verdict = parseClaimBasis(verdictBasis);
+  return risk || verdict ? { risk, verdict } : null;
+}
+
 /**
  * Checks every entry on its own, so one bad entry costs one PR, not the
  * batch. Entries for PRs not in the batch and repeats are dropped; whatever
@@ -109,6 +116,7 @@ export function mapGlanceAnswer(answer: GlanceBatchAnswer, input: GlanceBatchInp
       model: stamp.model,
       createdAt: stamp.createdAt,
       headOid: item.pr.headOid,
+      basis: glanceBasisFor(value.riskBasis, value.verdictBasis),
     });
   }
   const missing = keys.filter((key) => !done.has(key));

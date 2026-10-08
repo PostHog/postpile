@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { Glance, KeyFile, PrKey, Verdict } from '@postpile/core';
+import type { Glance, GlanceBasis, KeyFile, PrKey, Verdict } from '@postpile/core';
 import { all, one, placeholders, run } from '../sql.ts';
 
 interface GlanceRow {
@@ -17,6 +17,8 @@ interface GlanceRow {
   model: string;
   created_at: string;
   head_oid: string | null;
+  /** JSON GlanceBasis; NULL before g3 or when the answer gave none. */
+  basis: string | null;
 }
 
 function toGlance(row: GlanceRow): Glance {
@@ -34,6 +36,7 @@ function toGlance(row: GlanceRow): Glance {
     model: row.model,
     createdAt: row.created_at,
     headOid: row.head_oid,
+    basis: row.basis === null ? null : (JSON.parse(row.basis) as GlanceBasis),
   };
 }
 
@@ -62,13 +65,13 @@ export class GlanceRepo {
     run(
       this.db,
       `INSERT INTO pr_glance
-         (pr_key, verdict, for_you, does, risk, others_said, key_files, pull_in_reason, dossier_version, input_hash, model, created_at, head_oid)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         (pr_key, verdict, for_you, does, risk, others_said, key_files, pull_in_reason, dossier_version, input_hash, model, created_at, head_oid, basis)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (pr_key) DO UPDATE SET
          verdict = excluded.verdict, for_you = excluded.for_you, does = excluded.does, risk = excluded.risk,
          others_said = excluded.others_said, key_files = excluded.key_files, pull_in_reason = excluded.pull_in_reason,
          dossier_version = excluded.dossier_version, input_hash = excluded.input_hash, model = excluded.model, created_at = excluded.created_at,
-         head_oid = excluded.head_oid`,
+         head_oid = excluded.head_oid, basis = excluded.basis`,
       glance.prKey,
       glance.verdict,
       glance.forYou,
@@ -82,6 +85,7 @@ export class GlanceRepo {
       glance.model,
       glance.createdAt,
       glance.headOid ?? null,
+      glance.basis ? JSON.stringify(glance.basis) : null,
     );
   }
 }

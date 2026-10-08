@@ -1,4 +1,4 @@
-import type { ForWhom, Glance, Verdict } from '@postpile/core';
+import type { ClaimBasis, ForWhom, Glance, Verdict } from '@postpile/core';
 import { forWhomLabel } from './why.ts';
 
 /** "!" main point, "?" what to check, "▲" a risk. */
@@ -15,9 +15,11 @@ export interface Assessment {
   title: string;
   /** "· for you", "· for team-devex", "· your PR"; empty when for nobody in particular or not yours. */
   tag: string;
+  /** "· not checked: inferred from the description" for the verdict's reason; empty when checked or not recorded. */
+  unchecked: string;
   lines: AssessmentLine[];
   /** Null when there is no risk content at all, or the level is low (the verdict box covers it). */
-  risk: { level: string; lines: AssessmentLine[] } | null;
+  risk: { level: string; unchecked: string; lines: AssessmentLine[] } | null;
   does: string;
   others: string;
 }
@@ -57,6 +59,19 @@ function tagFor(verdict: Verdict, forWhom: ForWhom | null): string {
   return `· ${forWhomLabel(forWhom).replace(/^For /, 'for ').replace(/^Your PR$/, 'your PR')}`;
 }
 
+/**
+ * The muted note for a claim the agent says it did not check. A checked
+ * claim shows nothing: the box is calm by default, and the MCP answers
+ * carry both sides (DESIGN.md "Glance claim basis"). Same words as core's
+ * claimBasisText; the renderer imports no runtime code from core.
+ */
+function uncheckedNote(basis: ClaimBasis | null | undefined): string {
+  if (!basis || basis.checked) {
+    return '';
+  }
+  return basis.note ? `· not checked: ${basis.note}` : '· not checked';
+}
+
 /** The for-you lines: the first sentence is the main point, later ones that ask for a check get "?". */
 function youLines(forYou: string): AssessmentLine[] {
   return sentences(forYou)
@@ -87,8 +102,9 @@ export function assessment(glance: Glance, forWhom: ForWhom | null): Assessment 
     verdict: glance.verdict,
     title: TITLES[glance.verdict],
     tag: tagFor(glance.verdict, forWhom),
+    unchecked: uncheckedNote(glance.basis?.verdict),
     lines: youLines(glance.forYou),
-    risk: hasRisk ? { level: risk.level, lines } : null,
+    risk: hasRisk ? { level: risk.level, unchecked: uncheckedNote(glance.basis?.risk), lines } : null,
     does: glance.does.trim(),
     others: glance.othersSaid.trim(),
   };

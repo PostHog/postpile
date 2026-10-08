@@ -262,6 +262,16 @@ describe('glanceBatchPrompt, answer shape', () => {
     expect(prompt).toContain('Pick only from the PR\'s "Changed files"');
     expect(prompt).toContain('"keyFiles": [{"path"');
   });
+
+  it('asks which claims were checked, and never to state an unchecked mismatch as fact', () => {
+    const prompt = oneGlancePrompt(makePr(), { kind: 'pinged', reason: 'author' });
+    expect(prompt).toContain('"riskBasis": "checked: ..." | "not checked: ..."');
+    expect(prompt).toContain('"verdictBasis": "checked: ..." | "not checked: ..."');
+    expect(prompt).toContain('never the code itself');
+    expect(prompt).toContain('not checked: inferred from the description');
+    expect(prompt).toContain('stacked on or depends on');
+    expect(prompt).toContain('Never state a mismatch between the description and the changes as a\nfact unless you checked it');
+  });
 });
 
 describe('setGroupingPrompt', () => {

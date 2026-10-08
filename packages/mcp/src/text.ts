@@ -5,8 +5,9 @@
 // cannot fake the closing tag.
 import { randomBytes } from 'node:crypto';
 import {
+  claimBasisText,
   isBot,
-  TILE_GROUP_LABELS, type AgentReviewer, type AuthorPlace, type EventKind,
+  TILE_GROUP_LABELS, type AgentReviewer, type AuthorPlace, type ClaimBasis, type EventKind,
   type FetchCount,
   type Glance,
   type Pr,
@@ -217,16 +218,30 @@ function glanceHead(glance: Glance, stale: boolean): string {
   return `Agent glance (${glance.verdict}${stale ? ', STALE: the PR or the instructions moved since' : ''}, ${day(glance.createdAt)}):`;
 }
 
+/** " (checked: changed files)", " (not checked: inferred from the description)"; empty on glances before g3. */
+function basisSuffix(basis: ClaimBasis | null | undefined): string {
+  return basis ? ` (${claimBasisText(basis)})` : '';
+}
+
+/** forYou carries the reason behind the verdict, so it gets the verdict's basis. */
+function forYouLine(glance: Glance): string {
+  return `  for you: ${glance.forYou}${basisSuffix(glance.basis?.verdict)}`;
+}
+
+function riskLine(glance: Glance): string {
+  return `  risk: ${glance.risk}${basisSuffix(glance.basis?.risk)}`;
+}
+
 /** Brief: the verdict, what it means for the user, and the risk. */
 export function briefGlanceLines(glance: Glance, stale: boolean): string[] {
-  return [glanceHead(glance, stale), `  for you: ${glance.forYou}`, `  risk: ${glance.risk}`];
+  return [glanceHead(glance, stale), forYouLine(glance), riskLine(glance)];
 }
 
 export function glanceLines(glance: Glance, stale: boolean): string[] {
   const lines = [glanceHead(glance, stale)];
-  lines.push(`  for you: ${glance.forYou}`);
+  lines.push(forYouLine(glance));
   lines.push(`  does: ${glance.does}`);
-  lines.push(`  risk: ${glance.risk}`);
+  lines.push(riskLine(glance));
   lines.push(`  others said: ${glance.othersSaid}`);
   for (const file of glance.keyFiles) {
     lines.push(`  look at first: ${file.path} (${file.why})`);

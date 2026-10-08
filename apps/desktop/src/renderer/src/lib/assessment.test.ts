@@ -47,6 +47,7 @@ describe('assessment', () => {
     const view = assessment(glance, { kind: 'you' });
     expect(view.risk).toEqual({
       level: 'medium',
+      unchecked: '',
       lines: [{ mark: '▲', text: 'A retry loop with no cap could spin forever.' }],
     });
   });
@@ -61,6 +62,7 @@ describe('assessment', () => {
     expect(assessment({ ...glance, risk: 'High. Drops a table.' }, null).risk?.level).toBe('high');
     expect(assessment({ ...glance, risk: 'Jobs could share cache entries.' }, null).risk).toEqual({
       level: '',
+      unchecked: '',
       lines: [{ mark: '▲', text: 'Jobs could share cache entries.' }],
     });
   });
@@ -76,5 +78,16 @@ describe('assessment', () => {
     expect(assessment(glance, { kind: 'own' }).tag).toBe('· your PR');
     expect(assessment(glance, { kind: 'none' }).tag).toBe('');
     expect(assessment({ ...glance, verdict: 'NOT_YOURS' }, { kind: 'you' })).toMatchObject({ title: 'NOT YOURS', tag: '' });
+  });
+
+  it('notes only the claims the agent did not check, nothing on older glances', () => {
+    const basis = { risk: { checked: false, note: 'inferred from the description' }, verdict: { checked: true, note: 'changed files' } };
+    const view = assessment({ ...glance, basis }, null);
+    expect(view.unchecked).toBe('');
+    expect(view.risk?.unchecked).toBe('· not checked: inferred from the description');
+    const verdictOnly = assessment({ ...glance, basis: { risk: null, verdict: { checked: false, note: '' } } }, null);
+    expect(verdictOnly.unchecked).toBe('· not checked');
+    expect(verdictOnly.risk?.unchecked).toBe('');
+    expect(assessment(glance, null)).toMatchObject({ unchecked: '', risk: { unchecked: '' } });
   });
 });

@@ -735,6 +735,25 @@ export interface KeyFile {
   why: string;
 }
 
+/**
+ * How the agent says it established one glance claim (2026-10-08).
+ * checked: the claim follows from what the prompt gave it (the changed
+ * files list, description, reviews, comments), never from reading the code.
+ * note: what it was checked against, or why it was not, in a few words.
+ */
+export interface ClaimBasis {
+  checked: boolean;
+  note: string;
+}
+
+/** The basis of the claims a reader acts on; either side null when the answer left it out. */
+export interface GlanceBasis {
+  /** The risk line. */
+  risk: ClaimBasis | null;
+  /** The reason behind the verdict (what forYou and risk give as the reason). */
+  verdict: ClaimBasis | null;
+}
+
 /** The agent's per-PR "approve at a glance" summary. */
 export interface Glance {
   prKey: PrKey;
@@ -759,6 +778,8 @@ export interface Glance {
    * glances stored before it was recorded.
    */
   headOid?: string | null;
+  /** Which claims the agent checked. Missing or null on glances written before g3. */
+  basis?: GlanceBasis | null;
 }
 
 // ---------------------------------------------------------------------------

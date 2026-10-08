@@ -25,8 +25,13 @@ export const DOSSIER_PROMPT_VERSION = 'd2';
  * once to get them; sets and topic summaries stay as they are. Dropping CI
  * (NO_CI_RULE, 2026-09-29) kept g2: a glance that talks about CI goes stale
  * on the PR's next push, review or human comment, so no mass regeneration.
+ * g3 (2026-10-08) asks for riskBasis and verdictBasis (checked or not, and
+ * why), so every glance regenerates once more: on a typical database about
+ * 75 glance targets, 18 per call, so about 5 calls on the next full sync,
+ * well under its call cap. The older hash shapes carry the version too, so
+ * none of them keeps a g2 glance current.
  */
-export const GLANCE_PROMPT_VERSION = 'g2';
+export const GLANCE_PROMPT_VERSION = 'g3';
 
 // Input hashes decide when a stored answer is stale. They cover what the
 // answer depends on, not every byte of the prompt: a bot comment must not

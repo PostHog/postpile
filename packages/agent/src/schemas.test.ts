@@ -42,3 +42,20 @@ describe('glanceBatchItemOutput keyFiles', () => {
     expect(glanceBatchItemOutput.safeParse({ ...entry, keyFiles: [{ why: 'x' }] }).success).toBe(false);
   });
 });
+
+describe('glanceBatchItemOutput claim basis', () => {
+  const entry = { prKey: 'acme/app#1', verdict: 'LOOK_CLOSER', forYou: 'Check the workflow.', does: 'Moves CI.', risk: 'medium - runner', othersSaid: 'nobody yet' };
+
+  it('parses an answer from before g3, without any basis', () => {
+    const parsed = glanceBatchItemOutput.parse(entry);
+    expect(parsed.riskBasis).toBeUndefined();
+    expect(parsed.verdictBasis).toBeUndefined();
+  });
+
+  it('passes the basis strings through, and never fails the entry over an odd one', () => {
+    const parsed = glanceBatchItemOutput.parse({ ...entry, riskBasis: 'checked: changed files', verdictBasis: 'not checked: inferred from the description' });
+    expect(parsed.riskBasis).toBe('checked: changed files');
+    expect(parsed.verdictBasis).toBe('not checked: inferred from the description');
+    expect(glanceBatchItemOutput.safeParse({ ...entry, riskBasis: { checked: true }, verdictBasis: null }).success).toBe(true);
+  });
+});

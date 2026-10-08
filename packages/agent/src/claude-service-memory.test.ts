@@ -461,6 +461,7 @@ describe('RunnerAgentService.glanceBatch', () => {
         model: 'claude-sonnet-5-5',
         createdAt: NOW,
         headOid: input.items[0]!.pr.headOid,
+        basis: null,
       },
     ]);
     expect(result.missing).toEqual(['acme/app#2', 'acme/app#3']);
@@ -523,6 +524,26 @@ describe('RunnerAgentService.glanceBatch', () => {
       { path: 'a.ts', why: 'entry point' },
       { path: 'b.ts', why: 'b' },
       { path: 'c.ts', why: 'c' },
+    ]);
+  });
+
+  it('reads which claims the agent checked, each side on its own', async () => {
+    const { runner, service } = setup();
+    runner.answer('glance_batch', {
+      glances: [
+        { prKey: 'acme/app#1', ...glanceEntry, riskBasis: 'checked: changed files', verdictBasis: 'not checked: inferred from the description' },
+        { prKey: 'acme/app#2', ...glanceEntry, riskBasis: 'probably fine', verdictBasis: 'Not checked' },
+        { prKey: 'acme/app#3', ...glanceEntry, riskBasis: 42 },
+      ],
+    });
+
+    const result = await service.glanceBatch(glanceInput());
+
+    expect(result.missing).toEqual([]);
+    expect(result.glances.map((glance) => glance.basis)).toEqual([
+      { risk: { checked: true, note: 'changed files' }, verdict: { checked: false, note: 'inferred from the description' } },
+      { risk: null, verdict: { checked: false, note: '' } },
+      null,
     ]);
   });
 

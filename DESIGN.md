@@ -1775,11 +1775,49 @@ stored and before a dossier goes into a glance prompt
   context block once, then one section per PR (`batchDetail` limits, smaller
   than v1's `fullDetail`: body 1500, 15 files, last 8 human comments at 300
   chars), each headed by its PrKey and how it reached the user.
-- Answer: `{"glances": [{prKey, verdict, forYou, does, risk, othersSaid, keyFiles}, ...]}`.
+- Answer: `{"glances": [{prKey, verdict, forYou, does, risk, othersSaid, keyFiles, riskBasis, verdictBasis}, ...]}`.
   `keyFiles` (2026-09-29, optional, default []): up to 3 `{path, why}`, the
   changed files to open first; `keyFilesFor` keeps only paths among the PR's
   files (a leading "./" is forgiven), drops repeats and caps at 3. Stored as
   JSON in `pr_glance.key_files` (migration 016).
+- **Glance claim basis** (2026-10-08, g3): `riskBasis` and `verdictBasis`
+  say how the agent knows the risk line and the reason behind the verdict:
+  `"checked: <against what>"` or `"not checked: <why>"`, a few words after
+  the colon. Reason: a Look closer glance stated "the description claims no
+  CI changes, yet the diff edits a workflow" as fact, and half of it was
+  wrong: the extra files were a parent PR's, in a stack the PR body
+  declared. The reader could not tell what the agent had looked at from
+  what it guessed.
+  - *What "checked" means.* The glance never sees the code, only the
+    description, the changed files list (15 at most, then "... and N more"),
+    review states and the last human comments (`batchDetail`). "Checked"
+    means the claim follows from those directly; what the code does, or
+    anything from the description alone, is "not checked"
+    (`CLAIM_BASIS_RULE`). The prompt also says a mismatch between
+    description and changes is never stated as fact unless checked, and
+    that the files of a PR stacked on another can hold the parent's
+    changes. It is the model's own statement, not proof: a "checked" can
+    still be wrong, but an inference no longer reads like a finding.
+  - *Shape.* Two fixed claims with one string each, not a free list of
+    claims: the model fills two short fields reliably, and the reader
+    knows where each one belongs (risk line, verdict reason). The
+    "checked: / not checked:" prefix is easy to write and to read back
+    (`parseClaimBasis` in core). `checked` carries what it was checked
+    against too (Codex review of the design: an empty "checked" says
+    nothing about the evidence), and a bare "checked" without it reads as
+    null (Codex review on #158). Parsing never fails a glance: a missing
+    or garbled side is null and shows nothing, never "checked".
+  - *Storage.* `pr_glance.basis` (migration 038), nullable JSON
+    `GlanceBasis` `{risk, verdict}`, each `{checked, note}` or null; one
+    column since both are written and read together (Codex agreed). Older
+    rows stay NULL (`Glance.basis` optional) and render as before.
+  - *Shown.* MCP: the risk line and the for-you line (which carries the
+    verdict's reason) get a suffix, `risk: medium - … (checked: changed
+    files)` / `for you: … (not checked: inferred from the description)`,
+    in brief and full answers, inside the data fence. App: only the
+    unchecked side, as a muted tag on the verdict or risk box title (`·
+    not checked: inferred from the description`), the same small tag the
+    risk level uses; a checked claim adds nothing, so the box stays calm.
   The outer object is parsed with `glanceBatchOutput`; each entry on its own
   with `glanceBatchItemOutput`. Entries for PRs not in the batch or
   duplicated are dropped. `GlanceBatchResult.missing` = asked for but absent
@@ -1807,8 +1845,10 @@ stored and before a dossier goes into a glance prompt
   (timeout, process error), which the engine catches per batch.
 - `glanceItemInputHash` per PR: v1 snapshot fields, provenance, topic name,
   instructions, tailoring, standing rules, feedback on that PR, model, and
-  `GLANCE_PROMPT_VERSION` (g2 since key files, so every glance regenerates
-  once; sets and topic summaries keep their hashes). Never the other PRs in
+  `GLANCE_PROMPT_VERSION` (g2 since key files, g3 since the claim basis;
+  each bump regenerates every glance once on the next full sync, about 5
+  calls for 75 glance targets, well under the run's call cap; sets and
+  topic summaries keep their hashes). Never the other PRs in
   the batch. Stored glances get `dossierVersion`.
 - **Glance hash** (2026-10-05): the dossier version is out. With it, every
   dossier rewrite left every glance in the topic out of date, though the

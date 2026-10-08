@@ -882,6 +882,10 @@ function buildGlances(clock: SampleClock): Glance[] {
         { path: '.github/workflows/turbo-warm-up.yml', why: 'New job with DEPOT_TOKEN and a retry.' },
         { path: 'bin/turbo-cache-env.sh', why: 'Sets TURBO_API for every job.' },
       ],
+      basis: {
+        risk: { checked: false, note: 'inferred from the description' },
+        verdict: { checked: true, note: 'changed files and comments' },
+      },
     }),
     sampleGlance(clock, 1904, {
       verdict: 'LOOKS_SAFE',
