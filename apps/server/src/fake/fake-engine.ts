@@ -90,6 +90,7 @@ import type {
   TopicQueues,
   UserPrState,
   TeamRole,
+  PrOverlapsView,
   TeamMembersView,
   TeamRolesView,
   ViewerView,
@@ -1184,6 +1185,11 @@ export class FakeEngine implements EngineService {
 
   async getTeamRoles(): Promise<TeamRolesView> {
     return this.teamRoles.view();
+  }
+
+  /** Sample data has no diffs, so nothing overlaps. */
+  async prOverlaps(): Promise<PrOverlapsView> {
+    return { overlaps: {}, capped: [] };
   }
 
   async getTeamMembers(): Promise<TeamMembersView> {

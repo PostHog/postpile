@@ -23,6 +23,7 @@ import { PrRepo } from './repos/prs.ts';
 import { PendingWriteRepo } from './repos/pending-writes.ts';
 import { PingDecisionRepo } from './repos/ping-decisions.ts';
 import { PullInRepo } from './repos/pull-ins.ts';
+import { PrDiffRepo } from './repos/pr-diffs.ts';
 import { FoundPrRepo } from './repos/found-prs.ts';
 import { RuleProposalRepo } from './repos/rule-proposals.ts';
 import { PrSetRepo } from './repos/sets.ts';
@@ -56,6 +57,7 @@ export class Store {
   readonly agentCalls: AgentCallRepo;
   readonly instructions: InstructionsRepo;
   readonly pullIns: PullInRepo;
+  readonly prDiffs: PrDiffRepo;
   readonly foundPrs: FoundPrRepo;
   readonly pingDecisions: PingDecisionRepo;
   readonly macPings: MacPingRepo;
@@ -88,6 +90,7 @@ export class Store {
     this.agentCalls = new AgentCallRepo(db);
     this.instructions = new InstructionsRepo(db);
     this.pullIns = new PullInRepo(db);
+    this.prDiffs = new PrDiffRepo(db);
     this.foundPrs = new FoundPrRepo(db);
     this.pingDecisions = new PingDecisionRepo(db);
     this.macPings = new MacPingRepo(db);

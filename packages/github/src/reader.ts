@@ -1,5 +1,6 @@
 import type { ActivityPr, IsoTime, NotificationThread, FullPr, PrKey, PrRef, PrState, ReviewedPr, Viewer, ViewerTeamSize } from '@postpile/core';
 import type { FoundRef } from './found.ts';
+import type { PrDiffRead } from './pr-diff.ts';
 
 export interface PartialPrs {
   prs: Map<PrKey, FullPr>;
@@ -147,6 +148,12 @@ export interface GitHubReader {
    * Titles and top-level folders only, about 100 at most.
    */
   recentActivity(since: string): Promise<ActivityPr[]>;
+
+  /**
+   * The base-side line ranges a PR edits (REST file list; GraphQL has no
+   * patches). Ranges only, no patch text. Throws on a failed request.
+   */
+  readPrDiff(ref: PrRef): Promise<PrDiffRead>;
 
   /** One file's text from a repo's default branch. Null when it is missing or the repo is not visible. */
   readRepoFile(repo: string, path: string): Promise<string | null>;

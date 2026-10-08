@@ -1,6 +1,7 @@
 import { tmpdir } from 'node:os';
 import type { AgentService } from '@postpile/agent';
 import type {
+  PrOverlapsView,
   ListScope,
   ActionLogEntry,
   ActionResult,
@@ -177,6 +178,7 @@ import { SetupFlow } from './setup/setup-flow.ts';
 import { SetupSweep } from './setup/setup-sweep.ts';
 import { SyncRun, type DigestStoredOptions } from './sync-run.ts';
 import { TeamMembers } from './team-members.ts';
+import { readPrOverlaps } from './pr-overlaps.ts';
 import { saveViewerFollowingRoles } from './team-role-events.ts';
 import { TeamRoleKeeper } from './team-roles.ts';
 import { ToolHealth } from './tools/tool-health.ts';
@@ -1167,6 +1169,10 @@ export class Engine implements EngineService {
 
   async getTeamRoles(): Promise<TeamRolesView> {
     return this.teamRoles.view(loadViewer(this.deps.store));
+  }
+
+  async prOverlaps(): Promise<PrOverlapsView> {
+    return readPrOverlaps(this.deps.store);
   }
 
   async getTeamMembers(): Promise<TeamMembersView> {

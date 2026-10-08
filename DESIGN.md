@@ -7400,6 +7400,76 @@ and a scratch data dir sends one `telemetry_test` event (distinct id
 `postpile-dev-check`) and flushes; that event is not part of the catalogue
 the app sends in normal use.
 
+## Overlapping edits (2026-10-08)
+
+Reported from real triage: two open PRs by different authors edited the same
+block of one workflow file. Neither PR conflicted with the other on a
+merge, but one had copied a list from before the other's additions, so
+merging both silently dropped entries. A line like "also edited by #1977,
+same file, overlapping lines 600-640" would have caught it. So PostPile says
+it.
+
+**What counts.** Two open PRs in one repo, on one base branch, whose edited
+base-side lines in the same file are within 3 lines of each other
+(`findOverlaps` in core `overlap.ts`, `OVERLAP_MARGIN`). Reasons:
+- Base-side (old) line numbers are the ones both PRs share. New-side line
+  numbers differ per PR, so they cannot be compared.
+- The edited lines come from the patch body, not from the `@@` headers: a
+  header spans three lines of unchanged context on each side, which would
+  make PRs look like neighbours that are not. A run of removed or replaced
+  lines is that run of old lines; a pure insertion is the gap it lands in
+  (the two old lines around it). `changedRanges` reads the patch and keeps
+  only these ranges.
+- The 3-line margin catches the case that started this (a list extended
+  just above or below the other PR's lines) while leaving a file that two
+  PRs touch at lines 10 and 400 alone.
+- One base branch only: a PR on `release` and one on `main` number the same
+  file differently. Merge bases can still differ between two PRs on one
+  base branch, so the wording says "edits the same lines" and "look at
+  both", never "will conflict".
+- Stack mates are skipped (`stacks.ts`): a stack's layers overlap by design.
+- "Same file, different lines" is not reported. It is the common case on
+  busy files (lockfiles, changelogs) and would be noise.
+- A renamed file counts at its old path, where other PRs edit it. An added
+  file has no base lines and is left out.
+
+**Where the lines come from.** GraphQL's `files` has no patch text, so a
+background pass (`DiffReader`, engine `diff-reader.ts`) reads the REST
+file list (`GET /pulls/N/files`, up to 10 pages of 100 files), parses each
+patch into ranges and drops the text. It runs after a sync and after a poll
+stored PRs, for open PRs whose diff is missing or was read at another head
+or base: at most 30 PRs per sync and 5 per poll, newest first, nothing
+while the GitHub quota is low (`GitHubQuota.allowsBackground`). A PR alone
+on its repo and base branch is skipped, as nothing could overlap it. A
+failed request ends the pass and the next run tries again. Cost: one REST
+request per open PR per push, after a one-off fill.
+
+**Storage** (migration 037, second opinion from Codex before building):
+`pr_diff` (one row per PR read: head, base, capped flag) and `pr_hunk` (one
+row per changed file: path and ranges as json). Ranges only, never patch
+text. Derived from GitHub: it may be dropped any time and is read again.
+Rows read at another head or base than the PR has now are not used, so a
+push never shows old ranges. `pr_hunk` cascades from `pr_diff`, which
+cascades from `pr`. Codex's points taken in: parse the patch body instead
+of trusting headers, compare only within one base branch, key renames by
+the old path, the cascade chain, and "capped is not none". Left out: checking
+the head again after paging (a push in between shows up as a stale diff on
+the next run) and a merge-base column (the REST list has none).
+
+**Capped diffs.** A diff is capped when GitHub left a changed file's patch
+out (huge files, often lockfiles) or the PR has more than 1000 files.
+`pr_context` then says "May overlap more (diff capped)", so silence is never
+read as "no overlap". `whats_on_me` stays quiet about it: capped PRs are
+common enough that a marker on every row would be noise.
+
+**Where it shows.** Only in the MCP, no new UI surface (the engine method
+is `EngineService.prOverlaps`):
+- `pr_context`, inside the fence (PR numbers, authors and paths are GitHub
+  data): "Also edits the same lines: acme/app#1977 by bob, path lines
+  600-640". Outside the fence: one sentence saying the second merge can
+  drop or undo lines of the first.
+- `whats_on_me`, per PR row: "overlaps #1977" (numbers only).
+
 ## MCP server
 
 Other agents on the machine (Claude Code in a checkout, say) can ask

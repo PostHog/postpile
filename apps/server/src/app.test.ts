@@ -60,6 +60,7 @@ function fakeEngine(overrides: Partial<EngineService>): EngineService {
     getViewer: notImplemented,
     getTeamRoles: notImplemented,
     getTeamMembers: notImplemented,
+    prOverlaps: notImplemented,
     setTeamRole: notImplemented,
     listRepos: notImplemented,
     setRepoScope: notImplemented,

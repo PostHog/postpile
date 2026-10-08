@@ -15,6 +15,7 @@ import type {
 } from '@postpile/core';
 import type { RendererExceptionProps } from '@postpile/core';
 import type { IsoTime } from '@postpile/core';
+import { prKey } from '@postpile/core';
 import { FakeTimers, viewer as fixtureViewer } from '@postpile/core/fixtures';
 import type {
   BranchLookup,
@@ -22,6 +23,7 @@ import type {
   CapFill,
   GitHubReader,
   PartialPrs,
+  PrDiffRead,
   GitHubWriter,
   NotificationConditions,
   NotificationsResult,
@@ -243,6 +245,21 @@ export class FakeReader implements GitHubReader {
   activity: ActivityPr[] = [];
   /** Every recentActivity call's `since`. */
   activityCalls: string[] = [];
+  /** What readPrDiff answers per PR key; a PR missing here has an empty diff. */
+  diffs = new Map<PrKey, PrDiffRead>();
+  /** Every readPrDiff call as a PR key. */
+  diffCalls: PrKey[] = [];
+  /** Set to make readPrDiff throw, like a network error. */
+  diffError: Error | null = null;
+
+  async readPrDiff(ref: PrRef): Promise<PrDiffRead> {
+    this.diffCalls.push(prKey(ref));
+    if (this.diffError) {
+      throw this.diffError;
+    }
+    return this.diffs.get(prKey(ref)) ?? { files: [], capped: false };
+  }
+
   /** File texts by "owner/name:path" for readRepoFile. */
   files = new Map<string, string>();
   /** Every readRepoFile call as "owner/name:path". */

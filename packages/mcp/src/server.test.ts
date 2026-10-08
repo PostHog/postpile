@@ -160,6 +160,7 @@ describe('PostPile MCP server', () => {
       search: (query, scope) => engine.search(query, scope),
       getViewer: () => engine.getViewer(),
       getTeamMembers: () => engine.getTeamMembers(),
+      prOverlaps: () => engine.prOverlaps(),
       lastSyncReport: () => engine.lastSyncReport(),
       recordedSyncProgress: async () => null,
       recordedAppVersion: async () => null,
@@ -188,6 +189,7 @@ describe('PostPile MCP server', () => {
       search: (query, scope) => engine.search(query, scope),
       getViewer: () => engine.getViewer(),
       getTeamMembers: () => engine.getTeamMembers(),
+      prOverlaps: () => engine.prOverlaps(),
       lastSyncReport: () => engine.lastSyncReport(),
       recordedSyncProgress: async () => null,
       recordedAppVersion: async () => null,
@@ -356,5 +358,38 @@ describe('PostPile MCP server', () => {
     const refused = await call(client, 'whats_on_me', { author_scope: 'others' });
     expect(refused.isError).toBe(true);
     expect(refused.text).toContain('Use author_scope: "me" or "any".');
+  });
+
+  it('names open PRs that edit the same lines, inside the fence, and marks them in the queue', async () => {
+    const engine = new FakeEngine();
+    const overlaps = {
+      overlaps: {
+        'acme/app#1950': [{ other: 'acme/app#1911' as const, files: [{ path: '.github/workflows/ci.yml', regions: [{ start: 600, end: 640 }] }], otherCapped: false }],
+      },
+      capped: ['acme/app#1950' as const],
+    };
+    const client = await connected(Object.assign(engine, { prOverlaps: async () => overlaps }));
+
+    const context = await callText(client, 'pr_context', { pr: 'acme/app#1950' });
+    const data = fencedPart(context);
+    expect(data).toContain('Also edits the same lines: acme/app#1911 by ');
+    expect(data).toContain('.github/workflows/ci.yml lines 600–640');
+    // Our own notes stay outside the fence.
+    const outside = context.replace(data, '');
+    expect(outside).toContain('Overlapping edits:');
+    expect(outside).toContain('May overlap more (diff capped)');
+    expect(outside).not.toContain('ci.yml');
+
+    const queue = await callText(client, 'whats_on_me', { author_scope: 'any' });
+    expect(queue).toMatch(/acme\/app#1950 by .*· overlaps #1911/);
+    expect(queue).not.toContain('ci.yml');
+  });
+
+  it('says nothing about overlaps when there are none', async () => {
+    const client = await connected();
+    const context = await callText(client, 'pr_context', { pr: 'acme/app#1950' });
+    expect(context).not.toContain('same lines');
+    expect(context).not.toContain('diff capped');
+    expect(await callText(client, 'whats_on_me')).not.toContain('overlaps #');
   });
 });

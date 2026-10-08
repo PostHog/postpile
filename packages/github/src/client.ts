@@ -13,6 +13,7 @@ import {
 import { GitHubHttp, graphqlFailure, type FetchFn, type GraphQLResult } from './http.ts';
 import { isoTime, toBranchPr, toPr } from './normalize.ts';
 import { fillCappedLists } from './cap-fill.ts';
+import { readPrDiff, type PrDiffRead } from './pr-diff.ts';
 import { buildFoundQuery, foundRefs, type FoundRef, type RawFoundResponse } from './found.ts';
 import { getThread, listNotifications, listThreadsSince } from './notifications.ts';
 import { activityPrs, buildActivityQuery, probeNotifications, readRepoFile, type RawActivityResponse } from './setup-reads.ts';
@@ -250,6 +251,10 @@ export class GitHubClient implements GitHubReader {
       throw graphqlFailure('activity query', response.errors);
     }
     return activityPrs(response.data);
+  }
+
+  readPrDiff(ref: PrRef): Promise<PrDiffRead> {
+    return readPrDiff(this.http, ref);
   }
 
   readRepoFile(repo: string, path: string): Promise<string | null> {
