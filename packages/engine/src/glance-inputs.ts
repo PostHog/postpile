@@ -3,10 +3,12 @@ import {
   isBotTalk,
   isTracked,
   prWantsGlance,
+  prWhoseTurn,
   TILE_STATE_ORDER,
   withoutStaleClaims,
   type DossierVersion,
   type Glance,
+  type Pr,
   type PrKey,
   type Topic,
   type Viewer,
@@ -28,26 +30,48 @@ interface TopicParts {
   context: PromptContext;
 }
 
+/** It is the viewer's move on this PR alone (`prWhoseTurn`); never before a viewer is stored. */
+function isViewersMove(board: Board, pr: Pr): boolean {
+  if (!board.viewer) {
+    return false;
+  }
+  const turn = prWhoseTurn({
+    pr,
+    events: board.events.get(pr.key) ?? [],
+    userState: board.userStates.get(pr.key) ?? null,
+    viewer: board.viewer,
+    notYours: board.notYours.has(pr.key),
+  });
+  return turn.kind === 'you';
+}
+
 /**
- * Pinged and found PRs in tiles that want a glance (`prWantsGlance`), most urgent tile first. Pulled-in stack layers
- * get no glance: they are context for the pinged PR, not work of their own.
+ * Pinged and found PRs in tiles that want a glance (`prWantsGlance`): the
+ * PRs where it is the viewer's move first, then the rest, each part most
+ * urgent tile first. After a sync the glance job works in this order, so
+ * a PR waiting on the user gets its glance before the others (2026-10-08).
+ * Pulled-in stack layers get no glance: they are context for the pinged
+ * PR, not work of their own.
  */
 function itemsByUrgency(board: Board): Map<PrKey, GlanceBatchItem> {
   const tiles = board
     .allTiles()
     .map((tile) => ({ tile, priority: TILE_STATE_ORDER[board.stateOf(tile).kind] }))
     .sort((a, b) => a.priority - b.priority);
-  const result = new Map<PrKey, GlanceBatchItem>();
+  const yours = new Map<PrKey, GlanceBatchItem>();
+  const rest = new Map<PrKey, GlanceBatchItem>();
   for (const { tile } of tiles) {
     for (const member of tile.members) {
       const pr = board.prs.get(member.prKey);
-      if (!pr || !isTracked(member.provenance) || result.has(member.prKey) || !prWantsGlance(pr, board.events.get(pr.key) ?? [])) {
+      const seen = yours.has(member.prKey) || rest.has(member.prKey);
+      if (!pr || !isTracked(member.provenance) || seen || !prWantsGlance(pr, board.events.get(pr.key) ?? [])) {
         continue;
       }
-      result.set(member.prKey, { pr, provenance: member.provenance });
+      const part = isViewersMove(board, pr) ? yours : rest;
+      part.set(member.prKey, { pr, provenance: member.provenance });
     }
   }
-  return result;
+  return new Map([...yours, ...rest]);
 }
 
 /** PRs that should have a glance (open, pinged or found, in a tile), for the read models' glance state. */
