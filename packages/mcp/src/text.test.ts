@@ -93,6 +93,7 @@ describe('mcp text', () => {
   it('words a bot event by what it did, never by its text', () => {
     expect(unreadReasonText(reason('coderabbitai[bot]', 'comment_edited', 'Walkthrough https://example.com/stack'))).toBe('coderabbitai updated its comment');
     expect(unreadReasonText(reason('trunk-io', 'bot_comment', '![badge](https://example.com/badge.svg)'))).toBe('trunk-io commented');
+    expect(unreadReasonText(reason('trunk-io[bot]', 'merged_without_review', 'merged without your review'))).toBe('trunk-io merged it without your review');
     expect(unreadReasonText(reason('lyra', 'comment', 'lyra commented: does this need a flag?'))).toBe('lyra commented: does this need a flag?');
   });
 
@@ -106,9 +107,11 @@ describe('mcp text', () => {
   });
 
   it('says what a running sync does with numbers and step names only', () => {
-    const progress = { startedAt: '2026-10-07T12:02:00Z', running: [], agentCallsDone: 0, agentCallsPlanned: 0, fromGitHub: null, savedAt: '2026-10-07T12:02:05Z' };
+    const progress = { startedAt: '2026-10-07T12:02:00Z', running: [], agentCallsDone: 0, agentCallsPlanned: 0, fromGitHub: null, prsRead: null, savedAt: '2026-10-07T12:02:05Z' };
     expect(syncRunningLine({ ...progress, running: ['fetch'] })).toBe(
-      'Full sync running since 2026-10-07 12:02 UTC: step fetch; still reading GitHub. Lists, moves and glances can still change until it finishes.',
+      'Full sync running since 2026-10-07 12:02 UTC: step fetch; reading the GitHub inbox. Lists, moves and glances can still change until it finishes.',
     );
+    expect(syncRunningLine({ ...progress, running: ['fetch'], prsRead: { read: 12, planned: null } })).toContain('step fetch; 12 PRs read from GitHub so far.');
+    expect(syncRunningLine({ ...progress, running: ['fetch'], prsRead: { read: 12, planned: 40 } })).toContain('step fetch; 12 of 40 PRs read from GitHub.');
   });
 });

@@ -542,8 +542,21 @@ export interface SyncProgress {
   agentCallsPlanned: number;
   /** What the fetch brought from GitHub; null until it finished. Nothing new means the agent works on what the poll already stored. */
   fromGitHub: { prsFetched: number; newEvents: number } | null;
+  /** How far the running fetch is (`FetchCount`); null before it started and once `fromGitHub` is set. */
+  prsRead: FetchCount | null;
   /** The calls done so far, per kind, for the tooltip. */
   agentCallStats: AgentCallStats;
+}
+
+/**
+ * PRs the running full sync's fetch read from GitHub so far, and how many
+ * it plans to read: null while it still reads the inbox and has not picked
+ * them yet. The plan grows as the fetch adds PRs that moved and found PRs.
+ * Stack layers are not counted. A failed batch is planned but never read.
+ */
+export interface FetchCount {
+  read: number;
+  planned: number | null;
 }
 
 /**
@@ -559,6 +572,7 @@ export interface RecordedSyncProgress {
   agentCallsDone: number;
   agentCallsPlanned: number;
   fromGitHub: { prsFetched: number; newEvents: number } | null;
+  prsRead: FetchCount | null;
   /** When the app wrote it last. */
   savedAt: IsoTime;
 }

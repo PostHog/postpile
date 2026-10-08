@@ -111,6 +111,7 @@ describe('MCP reads next to the running app', () => {
       agentCallsDone: 3,
       agentCallsPlanned: 9,
       fromGitHub: { prsFetched: 40, newEvents: 12 },
+      prsRead: null,
       savedAt: '2026-09-01T09:59:58Z',
     };
     app.meta.set('sync_progress', JSON.stringify(progress));

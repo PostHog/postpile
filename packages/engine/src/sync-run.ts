@@ -292,6 +292,7 @@ export class SyncRun {
       agentCallsDone: this.live.stats.total,
       agentCallsPlanned: this.live.budget.granted(),
       fromGitHub: this.live.fromGitHub,
+      prsRead: this.live.fromGitHub === null ? this.github.fetchCount() : null,
       agentCallStats: this.live.stats,
     };
   }

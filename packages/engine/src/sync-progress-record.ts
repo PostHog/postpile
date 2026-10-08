@@ -23,6 +23,7 @@ function recordedParts(progress: SyncProgress): Omit<RecordedSyncProgress, 'save
     agentCallsDone: progress.agentCallsDone,
     agentCallsPlanned: progress.agentCallsPlanned,
     fromGitHub: progress.fromGitHub,
+    prsRead: progress.prsRead,
   };
 }
 

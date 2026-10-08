@@ -811,8 +811,8 @@ export class FakeEngine implements EngineService {
     if (!this.progress) {
       return null;
     }
-    const { startedAt, running, agentCallsDone, agentCallsPlanned, fromGitHub } = this.progress;
-    return { startedAt, running: [...running], agentCallsDone, agentCallsPlanned, fromGitHub, savedAt: this.timestamp() };
+    const { startedAt, running, agentCallsDone, agentCallsPlanned, fromGitHub, prsRead } = this.progress;
+    return { startedAt, running: [...running], agentCallsDone, agentCallsPlanned, fromGitHub, prsRead, savedAt: this.timestamp() };
   }
 
   /** A sync report with nothing fetched and no agent work. */
@@ -858,7 +858,7 @@ export class FakeEngine implements EngineService {
 
   private async runFakeSync(): Promise<SyncReport> {
     const startedAt = this.timestamp();
-    const progress: SyncProgress = { startedAt, running: [], agentCallsDone: 0, agentCallsPlanned: 0, fromGitHub: null, agentCallStats: emptyAgentCallStats() };
+    const progress: SyncProgress = { startedAt, running: [], agentCallsDone: 0, agentCallsPlanned: 0, fromGitHub: null, prsRead: null, agentCallStats: emptyAgentCallStats() };
     this.progress = progress;
     // Without claude only the fetch runs, like the engine skipping its agent jobs.
     const agentOff = this.toolStatus.agentOff();

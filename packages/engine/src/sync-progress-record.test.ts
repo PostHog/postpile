@@ -2,6 +2,7 @@ import { emptyAgentCallStats, SYNC_PROGRESS_HEARTBEAT_MS, type SyncProgress } fr
 import { Store } from '@postpile/store';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { loadSyncProgress, SyncProgressRecorder } from './sync-progress-record.ts';
+import { makePr, makeThreadFor } from '@postpile/core/fixtures';
 import { makeHarness } from './testing/fakes.ts';
 
 describe('SyncProgressRecorder', () => {
@@ -13,7 +14,7 @@ describe('SyncProgressRecorder', () => {
   beforeEach(() => {
     store = Store.open(':memory:');
     nowMs = Date.parse('2026-09-01T10:00:00Z');
-    progress = { startedAt: '2026-09-01T10:00:00Z', running: ['fetch'], agentCallsDone: 0, agentCallsPlanned: 0, fromGitHub: null, agentCallStats: emptyAgentCallStats() };
+    progress = { startedAt: '2026-09-01T10:00:00Z', running: ['fetch'], agentCallsDone: 0, agentCallsPlanned: 0, fromGitHub: null, prsRead: null, agentCallStats: emptyAgentCallStats() };
     recorder = new SyncProgressRecorder(store, () => new Date(nowMs), () => progress, () => {});
   });
 
@@ -30,6 +31,7 @@ describe('SyncProgressRecorder', () => {
       agentCallsDone: 0,
       agentCallsPlanned: 0,
       fromGitHub: null,
+      prsRead: null,
       savedAt: '2026-09-01T10:00:00.000Z',
     });
 
@@ -63,5 +65,23 @@ describe('a full sync and its stored progress', () => {
     expect(seenWhileRunning).toMatchObject({ running: ['fetch'], fromGitHub: null });
     expect(loadSyncProgress(h.store)).toBeNull();
     expect(await h.engine.lastSyncReport()).not.toBeNull();
+  });
+
+  it('counts the PRs the fetch read against the ones it planned, while it reads them', async () => {
+    const h = makeHarness();
+    for (const number of [1, 2, 3]) {
+      const pr = makePr({ number, reviewerUsers: ['viewer'] });
+      h.reader.addPr(pr, makeThreadFor(pr));
+    }
+    const counts: unknown[] = [];
+    const fetchPrs = h.reader.fetchPrs.bind(h.reader);
+    h.reader.fetchPrs = async (refs) => {
+      counts.push((await h.engine.syncProgress())?.prsRead);
+      return fetchPrs(refs);
+    };
+    await h.engine.sync({ maxAgentCalls: 0 });
+    // Planned once the fetch picked its PRs, nothing read yet while the batch is out.
+    expect(counts[0]).toEqual({ read: 0, planned: 3 });
+    expect(loadSyncProgress(h.store)).toBeNull();
   });
 });

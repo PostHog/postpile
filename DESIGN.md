@@ -1765,10 +1765,12 @@ stored and before a dossier goes into a glance prompt
 - Per topic, `planGlanceBatches` splits the PRs needing a glance into
   batches of `GLANCE_BATCH_SIZE` (18), in the order of `itemsByUrgency`:
   the PRs where it is the user's move (`prWhoseTurn`) first, then by tile
-  state, unread first. Topics start their glances in the order of their
-  first PR in that list. Reason (2026-10-08): after a sync, new PRs that
-  waited on the user still said "No agent glance yet (queued)" while
-  others were glanced first.
+  state, unread first, so they land in a topic's first batch. Across
+  topics this is not a strict order: each topic's batches wait for its own
+  dossier, and the one that settles first takes the budget first (Codex
+  review on #154; a cross-topic queue was judged too much for now).
+  Reason (2026-10-08): after a sync, new PRs that waited on the user still
+  said "No agent glance yet (queued)" while others were glanced first.
 - One `glanceBatch` call per batch: rendered dossier once, the user's
   context block once, then one section per PR (`batchDetail` limits, smaller
   than v1's `fullDetail`: body 1500, 15 files, last 8 human comments at 300
@@ -7539,8 +7541,8 @@ connection writing next to the MCP's read-only one.
 
 - The app stores the running sync in meta `sync_progress`
   (`SyncProgressRecorder`, `RecordedSyncProgress`): start time, running
-  phases, PRs read from GitHub once the fetch is done, agent calls done and
-  planned, and `savedAt`. Written at the start and on every phase change;
+  phases, PRs read so far and planned while the fetch runs, PRs read once
+  it is done, agent calls done and planned, and `savedAt`. Written at the start and on every phase change;
   else checked every 5 s and written only when a count moved, or every
   `SYNC_PROGRESS_HEARTBEAT_MS` (1 min) regardless. Removed after the sync
   report is stored, crashed or held sync included. A failed write only
@@ -7552,10 +7554,14 @@ connection writing next to the MCP's read-only one.
 - The MCP header then adds, outside the fence and with numbers and step
   names only: "Full sync running since 2026-10-07 12:02 UTC: step dossiers,
   glances; 120 PRs read from GitHub; 14 of 40 agent calls done so far.
-  Lists, moves and glances can still change until it finishes." The fetch
-  reports no count while it runs ("still reading GitHub"), so there is no
-  "40 of 120 PRs" figure. After the sync the first line reads "Its last full
-  sync finished at …".
+  Lists, moves and glances can still change until it finishes." During the
+  fetch step the count comes from `GitHubSync.fetchCount()` (`FetchCount`):
+  "reading the GitHub inbox" before it picked its PRs, then "12 of 40 PRs
+  read from GitHub" (the plan grows as moved and found PRs join; each batch
+  reports through `fetchPrsPartial`'s `onBatch` as it lands; stack layers
+  are not counted), or "12 PRs read from GitHub so far" while no plan is
+  known. After the sync the first line reads "Its last full sync finished
+  at …".
 - **Descriptions** say what it returns, "Use when / Not for", and one example;
   answers end with a next step where one fits (`pr_context`: "Stale? call
   refresh_from_github. Wrong topic? propose_topic_change."). Claude Code cuts

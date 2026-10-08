@@ -7,6 +7,7 @@ import { randomBytes } from 'node:crypto';
 import {
   isBot,
   TILE_GROUP_LABELS, type AgentReviewer, type AuthorPlace, type EventKind,
+  type FetchCount,
   type Glance,
   type Pr,
   type PrSummary, type ReviewerStates, type RecordedSyncProgress,
@@ -88,9 +89,20 @@ export function freshness(report: SyncReport | null): string {
  * run, how many PRs the fetch read and how far the agent work is. Only
  * numbers and step names, never GitHub text.
  */
+/** "12 of 40 PRs read from GitHub so far", "12 PRs read from GitHub so far" before the total is known, or the inbox step before that. */
+function fetchingText(count: FetchCount | null): string {
+  if (count === null || (count.planned === null && count.read === 0)) {
+    return 'reading the GitHub inbox';
+  }
+  if (count.planned === null) {
+    return `${count.read} PRs read from GitHub so far`;
+  }
+  return `${count.read} of ${count.planned} PRs read from GitHub`;
+}
+
 export function syncRunningLine(progress: RecordedSyncProgress): string {
   const steps = progress.running.length > 0 ? `step ${progress.running.join(', ')}` : 'between steps';
-  const github = progress.fromGitHub === null ? 'still reading GitHub' : `${progress.fromGitHub.prsFetched} PRs read from GitHub`;
+  const github = progress.fromGitHub === null ? fetchingText(progress.prsRead) : `${progress.fromGitHub.prsFetched} PRs read from GitHub`;
   const agent = progress.agentCallsPlanned > 0 ? `; ${progress.agentCallsDone} of ${progress.agentCallsPlanned} agent calls done so far` : '';
   return `Full sync running since ${minute(progress.startedAt)}: ${steps}; ${github}${agent}. Lists, moves and glances can still change until it finishes.`;
 }
@@ -135,25 +147,42 @@ export function withActor(actor: string, summary: string): string {
   return summary.toLowerCase().startsWith(actor.toLowerCase()) ? summary : `${actor}: ${summary}`;
 }
 
-/** What a bot did, in a few words: its comment bodies are links, badges and boilerplate, so they are never quoted. */
-const BOT_DID: Partial<Record<EventKind, string>> = {
+/**
+ * What a bot did, in a few words, for every event kind: its comment bodies
+ * are links, badges and boilerplate, so they are never quoted. A Record, so
+ * a new kind cannot fall back to a wrong word.
+ */
+const BOT_DID: Record<EventKind, string> = {
+  mention: 'mentioned you',
+  team_mention: 'mentioned your team',
+  review_requested: 'requested a review',
+  review_request_removed: 'removed a review request',
+  reply_to_user: 'replied to you',
+  question_to_user: 'asked you something',
+  comment: 'commented',
   review_approved: 'approved',
   review_changes_requested: 'requested changes',
   review_commented: 'posted a review',
-  comment_edited: 'updated its comment',
   commits_pushed: 'pushed commits',
-  commits_after_approval: 'pushed commits',
+  commits_after_approval: 'pushed commits after your approval',
   force_pushed: 'force-pushed',
-  merge_queue: 'updated its merge queue status',
   merged: 'merged it',
+  merged_without_review: 'merged it without your review',
   closed: 'closed it',
+  reopened: 'reopened it',
+  ready_for_review: 'marked it ready for review',
+  converted_to_draft: 'turned it into a draft',
   deploy: 'reported a deploy',
+  merge_queue: 'updated its merge queue status',
+  bot_comment: 'commented',
+  comment_edited: 'updated its comment',
+  look_closer: 'flagged it for a closer look',
 };
 
 /** "coderabbitai updated its comment": a bot's event without its text. */
 function botEventText(reason: Pick<UnreadReason, 'actor' | 'kind'>): string {
   const name = reason.actor === '' ? 'Automation' : reason.actor.replace(/\[bot\]$/i, '');
-  return `${name} ${BOT_DID[reason.kind] ?? 'commented'}`;
+  return `${name} ${BOT_DID[reason.kind]}`;
 }
 
 /** One unread reason in a line: a person's event with its summary, a bot's (`isBot`) by what it did only. */

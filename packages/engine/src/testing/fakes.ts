@@ -195,10 +195,12 @@ export class FakeReader implements GitHubReader {
     return result;
   }
 
-  async fetchPrsPartial(refs: PrRef[]): Promise<PartialPrs> {
+  async fetchPrsPartial(refs: PrRef[], onBatch: (prs: number) => void = () => {}): Promise<PartialPrs> {
     const failing = refs.filter((ref) => this.failingPrs.has(`${ref.repo}#${ref.number}`));
     const prs = await this.fetchPrs(refs.filter((ref) => !failing.includes(ref)));
     const errors = failing.map((ref) => `1 PRs from ${ref.repo}#${ref.number}: GitHub PR batch query failed: Something went wrong`);
+    // One batch for the whole call.
+    onBatch(prs.size);
     return { prs, errors };
   }
 
