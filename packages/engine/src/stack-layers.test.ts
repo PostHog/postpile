@@ -237,4 +237,38 @@ describe('stack layers', () => {
     const item = h.agent.glanceInputs.flatMap((input) => input.items).find((entry) => entry.pr.key === pinged.key);
     expect(item?.declaredParent).toEqual({ number: 20, state: 'draft', commits: 2, sharedCommits: 1, sharedFiles: ['ci.yml'] });
   });
+
+  it('pulls in the PR a body depends on without making a stack, and links it once they share a commit', async () => {
+    const h = makeHarness();
+    const below = layer(19, 'master', 'l19');
+    const dependency = layer(20, 'l19', 'l20', { commits: [makeCommit({ oid: 'api' })] });
+    const pinged = reviewRequestedPr(21, { baseRef: 'master', headRef: 'l21', body: 'Depends on #20 for the new endpoint.', commits: [makeCommit({ oid: 'ui' })] });
+    topicWithPrs(h, 'depot', [pinged]);
+    h.reader.addStackPr(below);
+    h.reader.addStackPr(dependency);
+
+    await h.engine.sync({ agentJobs: ['glances'] });
+
+    expect(h.store.pullIns.get(dependency.key)).toMatchObject({ anchorPrKey: pinged.key, reason: '#21 depends on it' });
+    // A merge order says nothing about the dependency's own stack.
+    expect(h.store.pullIns.get(below.key)).toBeNull();
+    const topic = await h.engine.getTopic('depot');
+    expect(topic?.tiles.map((view) => view.tile.kind)).toEqual(['single']);
+    const item = h.agent.glanceInputs.flatMap((input) => input.items).find((entry) => entry.pr.key === pinged.key);
+    expect(item?.dependsOn).toMatchObject({ number: 20 });
+    expect(item?.declaredParent).toBeUndefined();
+
+    // The branch turns out to carry #20's commit: the next read links them, no extra step.
+    const rebuilt = { ...pinged, updatedAt: at(30), commits: [makeCommit({ oid: 'api' }), makeCommit({ oid: 'ui' })] };
+    h.store.prs.upsert(rebuilt, at(30));
+    const later = await h.engine.getTopic('depot');
+    const stack = later?.tiles.find((view) => view.tile.kind === 'stack');
+    expect(stack?.tile.stacks).toEqual([{ id: `stack:${dependency.key}`, prKeys: [dependency.key, pinged.key], declaredLinks: [pinged.key] }]);
+
+    // And the next sync walks on below it, now a layer.
+    h.reader.addStackPr(rebuilt);
+    await h.engine.sync({ maxAgentCalls: 0 });
+    expect(h.store.pullIns.get(dependency.key)).toMatchObject({ reason: 'stack layer below #21, declared in its body' });
+    expect(h.store.pullIns.get(below.key)).toMatchObject({ reason: 'stack layer below #21' });
+  });
 });

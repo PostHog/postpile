@@ -92,6 +92,13 @@ describe('PostPile MCP server', () => {
     expect(below).toContain('Stack (declared in the body of acme/app#1907): layer 1 of 2 (bottom first): acme/app#1904 (this PR), acme/app#1907');
   });
 
+  it('shows "depends on" without shared commits as a merge order on pr_context, not as a stack', async () => {
+    const client = await connected();
+    const data = fencedPart(await callText(client, 'pr_context', { pr: 'acme/app#1899' }));
+    expect(data).toContain('Depends on acme/app#1915 (merge after)');
+    expect(data).not.toContain('Stack');
+  });
+
   it('answers pr_context in full with the dossier and every tile', async () => {
     const client = await connected();
     const data = fencedPart(await callText(client, 'pr_context', { pr: 'acme/app#1911', detail: 'full' }));

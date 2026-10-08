@@ -1,8 +1,11 @@
 import type { AgentService, GlanceBatchInput, GlanceBatchItem, PromptContext } from '@postpile/agent';
 import {
   declaredParentNote,
+  declaredParentOf,
+  dependsOnNote,
   isBotTalk,
   isTracked,
+  prKey,
   prWantsGlance,
   prWhoseTurn,
   TILE_STATE_ORDER,
@@ -46,11 +49,23 @@ function isViewersMove(board: Board, pr: Pr): boolean {
   return turn.kind === 'you';
 }
 
-/** Adds what the PR's diff owes the layer below its body declares, when its stack links it that way. */
+/**
+ * Adds what the PR's diff owes the layer below its body declares, when its
+ * stack links it that way; else, when the body says it depends on a PR,
+ * the merge order.
+ */
 function withDeclaredParent(board: Board, item: GlanceBatchItem): GlanceBatchItem {
   const parentKey = board.declaredParentKeyOf(item.pr.key);
   const parent = parentKey ? board.prs.get(parentKey) : undefined;
-  return parent ? { ...item, declaredParent: declaredParentNote(item.pr, parent) } : item;
+  if (parent) {
+    return { ...item, declaredParent: declaredParentNote(item.pr, parent) };
+  }
+  const declared = parentKey ? null : declaredParentOf(item.pr);
+  if (declared?.kind !== 'depends') {
+    return item;
+  }
+  const dependency = board.prs.get(prKey({ repo: item.pr.ref.repo, number: declared.number }));
+  return { ...item, dependsOn: dependsOnNote(declared.number, dependency) };
 }
 
 /**

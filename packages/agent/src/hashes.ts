@@ -187,7 +187,9 @@ export function dossierInputHash(input: DossierUpdateInput): string {
  * one gets a new hash in every shape, so its glance is written again with the note.
  */
 function declaredParentPart(item: GlanceBatchItem): unknown[] {
-  return item.declaredParent ? [{ declaredParent: item.declaredParent }] : [];
+  const parts: unknown[] = item.declaredParent ? [{ declaredParent: item.declaredParent }] : [];
+  // The same for a merge order ("depends on #N"), added after it so existing hashes stay as they are.
+  return item.dependsOn ? [...parts, { dependsOn: item.dependsOn }] : parts;
 }
 
 /** The glance hash's shape since 2026-10-05, over the given discussion. */

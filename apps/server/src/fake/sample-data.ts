@@ -392,6 +392,8 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
     samplePr(clock, {
       number: 1899, title: 'Rename workflow files to ci-*.yml', author: 'rowan', state: 'OPEN',
       size: [0, 0, 9], openedHoursAgo: 48, queued: true,
+      // A merge order, not a stack: pr_context shows "Depends on acme/app#1915 (merge after)".
+      body: 'Depends on #1915: the renamed workflows read DEPOT_TOKEN.',
       reviews: [[SAMPLE_VIEWER, 'APPROVED'], ['lyra', 'APPROVED'], ['nell', 'APPROVED']],
     }),
     samplePr(clock, {

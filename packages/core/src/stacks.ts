@@ -15,9 +15,15 @@ export interface LayerShape {
   previousBaseRefs?: string[];
   /**
    * The layer below the body declares (`declaredParentOf`): a PR number in
-   * the same repo. Null or missing when it declares none.
+   * the same repo. "Depends on #N" only counts once the two PRs share a
+   * commit. Null or missing when it declares none.
    */
   declaredParent?: number | null;
+  /**
+   * The PR the body says must merge first ("depends on #N") while no shared
+   * commit makes it the layer below: a merge order, never a stack link.
+   */
+  dependsOn?: number | null;
 }
 
 /**

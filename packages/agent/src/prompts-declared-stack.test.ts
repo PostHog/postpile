@@ -1,4 +1,4 @@
-import type { DeclaredParentNote } from '@postpile/core';
+import type { DeclaredParentNote, DependsOnNote } from '@postpile/core';
 import { describe, expect, it } from 'vitest';
 import { glanceBatchPrompt } from './prompts/glance-batch.ts';
 import type { GlanceBatchItem } from './service.ts';
@@ -6,8 +6,8 @@ import { emptyContext, makePr, viewer } from './test-fixtures.ts';
 
 const PR = makePr({ ref: { repo: 'acme/app', number: 21 }, body: 'Stacked on #20. No CI changes in this layer.' });
 
-function prompt(declaredParent?: DeclaredParentNote): string {
-  const item: GlanceBatchItem = { pr: PR, provenance: { kind: 'pinged', reason: 'review_requested' }, declaredParent };
+function prompt(declaredParent?: DeclaredParentNote, dependsOn?: DependsOnNote): string {
+  const item: GlanceBatchItem = { pr: PR, provenance: { kind: 'pinged', reason: 'review_requested' }, declaredParent, dependsOn };
   return glanceBatchPrompt({ topic: null, dossier: null, items: [item], viewer, context: emptyContext, attempt: 1 });
 }
 
@@ -35,5 +35,13 @@ describe('glance prompt for a stack declared in the body', () => {
 
   it('adds nothing for a PR without one', () => {
     expect(prompt()).not.toContain('Stack declared in the description');
+  });
+
+  it('calls a "depends on" without shared commits a merge order, not a stack', () => {
+    const text = prompt(undefined, { number: 20, state: 'open' });
+    expect(text).toContain('Merge order declared in the description: it depends on #20 (open), which should merge first.');
+    expect(text).toContain("so this is no stack and #20's changes are not in this PR's diff");
+    expect(text).not.toContain('Stack declared in the description');
+    expect(prompt(undefined, { number: 20, state: null })).toContain('it depends on #20, which should merge first.');
   });
 });

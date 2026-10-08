@@ -2,6 +2,7 @@ import type {
   AmbiguousCandidate,
   ChatMessage,
   DeclaredParentNote,
+  DependsOnNote,
   FullComment,
   Dossier,
   DossierFlag,
@@ -399,6 +400,11 @@ export interface GlanceBatchItem {
    * which keeps every other glance's hash as it was.
    */
   declaredParent?: DeclaredParentNote;
+  /**
+   * The PR its body says must merge first ("depends on #N") when that is no
+   * layer below it: a merge order the prompt mentions. Missing otherwise.
+   */
+  dependsOn?: DependsOnNote;
 }
 
 /** Up to GLANCE_BATCH_SIZE PRs of one topic, each read against the topic dossier. */

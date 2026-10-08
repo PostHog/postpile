@@ -9,6 +9,7 @@ import {
   joinActivity,
   joinDiscussion,
   joinText,
+  prKey,
   prTeamMentions,
   splitActivity,
   splitDiscussion,
@@ -770,35 +771,52 @@ export class PrRepo {
     const result: PrHeader[] = [];
     for (const row of rows) {
       const header = toHeader(row);
-      const parent = declared.get(header.key);
-      if (parent !== undefined) {
-        header.declaredParent = parent;
+      const declaration = declared.get(header.key);
+      if (declaration?.links) {
+        header.declaredParent = declaration.number;
+      } else if (declaration) {
+        header.dependsOn = declaration.number;
       }
       result.push(header);
     }
     return result;
   }
 
+  /** Whether two stored PRs list a commit in common (`pr_commit`, keyed by PR and oid). */
+  private shareCommits(key: PrKey, otherKey: PrKey): boolean {
+    const row = one<{ shared: number }>(
+      this.db,
+      `SELECT EXISTS (SELECT 1 FROM pr_commit a JOIN pr_commit b ON b.pr_key = ? AND b.oid = a.oid WHERE a.pr_key = ?) AS shared`,
+      otherKey,
+      key,
+    );
+    return row?.shared === 1;
+  }
+
   /**
-   * The layer below each open PR's body declares (`declaredParentOf`,
-   * DESIGN.md "Stacks declared in the body"), worked out on every read
-   * instead of stored, so a body edit or a better parser counts at once.
-   * SQL hands over only open PRs whose body has one of the words, so a
-   * read parses a handful of bodies, not every stored one. LIKE ignores
-   * ASCII case like the parser does.
+   * The PR each open PR's body declares (`declaredParentOf`, DESIGN.md
+   * "Stacks declared in the body"), worked out on every read instead of
+   * stored, so a body edit, a better parser or commits fetched later count
+   * at once. `links`: it counts as the layer below, always for "stacked on"
+   * / "based on", for "depends on" only once the two PRs share a stored
+   * commit (else it is a merge order). SQL hands over only open PRs whose
+   * body has one of the words, so a read parses a handful of bodies, not
+   * every stored one. LIKE ignores ASCII case like the parser does.
    */
-  private declaredParents(): Map<PrKey, number> {
+  private declaredParents(): Map<PrKey, { number: number; links: boolean }> {
     const rows = each<{ key: string; repo: string; number: number; body: string }>(
       this.db,
       `SELECT p.key, p.repo, p.number, b.body FROM pr p JOIN pr_body b ON b.pr_key = p.key
        WHERE p.state = 'OPEN' AND (b.body LIKE '%stacked%' OR b.body LIKE '%depends%' OR b.body LIKE '%based%')`,
     );
-    const result = new Map<PrKey, number>();
+    const result = new Map<PrKey, { number: number; links: boolean }>();
     for (const row of rows) {
       const parent = declaredParentOf({ ref: { repo: row.repo, number: row.number }, state: 'OPEN', body: row.body });
-      if (parent !== null) {
-        result.set(row.key, parent);
+      if (parent === null) {
+        continue;
       }
+      const links = parent.kind === 'stack' || this.shareCommits(row.key, prKey({ repo: row.repo, number: parent.number }));
+      result.set(row.key, { number: parent.number, links });
     }
     return result;
   }

@@ -40,22 +40,36 @@ function lookupKey(lookup: BranchLookup): string {
 }
 
 /**
- * The layer below the body of the step's PR declares, looked up by number
- * (`findPrsByNumber`). Only a seed has one: a layer found by branch comes
- * without its body.
+ * The PR the body of the step's PR declares, looked up by number
+ * (`findPrsByNumber`): the layer below, else the PR it depends on. Only a
+ * seed has one: a layer found by branch comes without its body.
  */
 function declaredLookup(step: Step): PrRef | null {
-  const parent = step.from.declaredParent;
-  if (step.direction !== 'below' || parent === null || parent === undefined) {
+  const number = step.from.declaredParent ?? step.from.dependsOn;
+  if (step.direction !== 'below' || number === null || number === undefined) {
     return null;
   }
-  return { repo: step.from.ref.repo, number: parent };
+  return { repo: step.from.ref.repo, number };
 }
 
-/** What a step's lookups answered: PRs by branch, and the declared layer below by number. */
+/** What a step's lookups answered: PRs by branch, and the declared PR by number. */
 interface StepAnswers {
   byBranch: BranchPr[];
   declared: BranchPr | null;
+}
+
+/**
+ * The PR a seed's body says must merge first, while no shared commit makes
+ * it the layer below. Pulled in once, so its commits get stored and the
+ * next header read can tell whether it is a stack after all; never walked
+ * on from, since a merge order says nothing about its neighbours.
+ */
+function dependencyFor(step: Step, answers: StepAnswers): BranchPr | null {
+  const dependsOn = step.from.dependsOn;
+  if (step.direction !== 'below' || dependsOn === null || dependsOn === undefined || answers.declared?.ref.number !== dependsOn) {
+    return null;
+  }
+  return answers.declared;
 }
 
 /**
@@ -74,7 +88,8 @@ function layersFor(step: Step, answers: StepAnswers): BranchPr[] {
     return [byBranch];
   }
   const declared = answers.declared;
-  return declared && declaresParent(step.from, declared) ? [declared] : [];
+  const isLayer = declared !== null && declared.ref.number === step.from.declaredParent && declaresParent(step.from, declared);
+  return isLayer ? [declared] : [];
 }
 
 /** A seed of the walk: a stored PR as the stack rules read it, a full snapshot or its header. */
@@ -167,6 +182,15 @@ export class StackLayerFinder {
           const declared = match === stepAnswers.declared ? ', declared in its body' : '';
           const reason = `stack layer ${step.direction} #${step.anchor.number}${declared}`;
           found.push({ ref: match.ref, updatedAt: match.updatedAt, pullIn: { prKey: key, anchorPrKey: prKey(step.anchor), reason, pulledAt: at } });
+        }
+        const dependency = dependencyFor(step, stepAnswers);
+        const dependencyKey = dependency ? prKey(dependency.ref) : null;
+        if (dependency && dependencyKey && !visited.has(dependencyKey)) {
+          visited.add(dependencyKey);
+          if (!tracked.has(dependencyKey)) {
+            const reason = `#${step.anchor.number} depends on it`;
+            found.push({ ref: dependency.ref, updatedAt: dependency.updatedAt, pullIn: { prKey: dependencyKey, anchorPrKey: prKey(step.anchor), reason, pulledAt: at } });
+          }
         }
       });
       steps = next;
