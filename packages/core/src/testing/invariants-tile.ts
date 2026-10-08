@@ -310,11 +310,15 @@ export const tileTurnIsAPrTurn: Invariant = {
       if (view.turn.kind === 'none') {
         continue;
       }
-      const match = candidates.find((candidate) => candidate.turn.prKey === view.turn.prKey && sameMove(candidate.turn, view.turn));
-      ensure(match !== undefined, `${view.tile.id}: tile turn ${describeTurn(view.turn)} is no tracked row's turn`);
-      const where = view.tile.members.length > 1 && !match!.held ? `on #${fullPrOf(board, match!.row.key).ref.number}` : '';
-      const what = tileWords(match!.turn, where);
-      ensure(view.turn.what === what, `${view.tile.id}: tile says "${view.turn.what}", expected "${what}"`);
+      // Two rows can put up the same move on one PR (a failed queue run on a layer, and the merge it holds above): either may lead.
+      const matches = candidates.filter((candidate) => candidate.turn.prKey === view.turn.prKey && sameMove(candidate.turn, view.turn));
+      ensure(matches.length > 0, `${view.tile.id}: tile turn ${describeTurn(view.turn)} is no tracked row's turn`);
+      const wordsOf = (candidate: TileCandidate) => {
+        const where = view.tile.members.length > 1 && !candidate.held ? `on #${fullPrOf(board, candidate.row.key).ref.number}` : '';
+        return tileWords(candidate.turn, where);
+      };
+      const expected = matches.map(wordsOf);
+      ensure(expected.includes(view.turn.what), `${view.tile.id}: tile says "${view.turn.what}", expected one of ${JSON.stringify(expected)}`);
     }
   },
 };

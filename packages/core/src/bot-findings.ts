@@ -35,13 +35,18 @@ function withoutCodeBlocks(text: string): string {
   return kept.join('\n');
 }
 
-/** Markdown and HTML that never carry the finding: comments, code blocks, tags, images (badges), and the link around them. */
+/**
+ * Markdown and HTML that never carry the finding: comments, code blocks,
+ * tags, images (badges), and the link around them. Each pattern's middle
+ * excludes its own opener ("<", "[", "("), so a text full of openers is
+ * still read in linear time (GitHub text is anyone's input).
+ */
 function stripMarkup(text: string): string {
   return withoutCodeBlocks(stripHtmlComments(text))
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
-    .replace(/\[\s*\]\([^)]*\)/g, '')
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/<[^<>]+>/g, ' ')
+    .replace(/!\[[^[\]]*\]\([^()]*\)/g, '')
+    .replace(/\[\s*\]\([^()]*\)/g, '')
+    .replace(/\[([^[\]]*)\]\([^()]*\)/g, '$1')
     .replace(/https?:\/\/\S+/g, '');
 }
 

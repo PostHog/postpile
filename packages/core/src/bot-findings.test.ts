@@ -28,6 +28,12 @@ describe('findingLine', () => {
     expect(line.endsWith('word…')).toBe(true);
   });
 
+  it('stays fast on text full of openers', () => {
+    const started = Date.now();
+    findingLine(`${'<'.repeat(30_000)}${'['.repeat(30_000)}${'!['.repeat(30_000)}`);
+    expect(Date.now() - started).toBeLessThan(500);
+  });
+
   it('is null without words', () => {
     expect(findingLine('<!-- marker -->\n![badge](https://img.example/b.svg)\n---')).toBeNull();
     expect(findingLine('')).toBeNull();
