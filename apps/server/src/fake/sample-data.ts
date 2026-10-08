@@ -35,7 +35,20 @@ export interface SampleData {
   userStates: UserPrState[];
   /** PR -> topic. PRs pulled into another topic's tile keep their own topic. */
   membership: Map<PrKey, string>;
+  /** CODEOWNERS text per repo, like the engine's daily read; a repo missing here has none. */
+  codeOwners: Map<string, string>;
 }
+
+/** acme/app's CODEOWNERS: the workflows and build scripts are the viewer's team's, the rest is someone else's. */
+const SAMPLE_CODEOWNERS = [
+  '# Sample CODEOWNERS (fake mode)',
+  '*                   @acme/team-core',
+  '/.github/           @acme/team-platform',
+  '/bin/               @acme/team-platform',
+  '/turbo.json         @acme/team-platform',
+  '/docs/              @acme/docs',
+  '/modules/billing/   @acme/team-billing',
+].join('\n');
 
 const TOPIC = {
   depot: 'topic-depot',
@@ -448,6 +461,12 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
       number: 1932, title: 'RFC: self-hosted runners for ingestion CI', author: 'ines', state: 'OPEN',
       size: [140, 12, 3], openedHoursAgo: 20, reviewerTeams: ['acme/team-platform'],
       body: 'Ingestion jobs need more memory than Depot offers. This RFC adds a runner pool and one workflow change.',
+      // One workflow file is team-platform's (sample CODEOWNERS): the review it pulls in is small.
+      files: [
+        ['rfcs/0042-ingestion-runners.md', 110, 0],
+        ['infra/runners/ingestion.tf', 18, 8],
+        ['.github/workflows/ingestion-ci.yml', 12, 4],
+      ],
     }),
     samplePr(clock, {
       number: 1940, title: 'Release desktop 2.3', author: 'mae', state: 'OPEN',
@@ -1194,5 +1213,6 @@ export function buildSampleData(now: Date): SampleData {
     proposals: buildProposals(clock),
     userStates: buildUserStates(clock),
     membership: buildMembership(tiles),
+    codeOwners: new Map([['acme/app', SAMPLE_CODEOWNERS]]),
   };
 }

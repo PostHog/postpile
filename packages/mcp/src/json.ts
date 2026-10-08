@@ -7,7 +7,9 @@
 // glance lines, comment previews), sits under an `untrusted` key. Everything
 // else is ids, PR keys, logins, team names, enums, counts and times.
 import {
+  fileLines,
   type AuthorPlace,
+  type ReviewOwnership,
   type PrOverlapsView,
   type EventKind,
   type PrDetail,
@@ -84,6 +86,14 @@ export interface PrJson {
   overlaps: OverlapJson[];
   /** GitHub left part of this PR's diff out, so the overlap check saw only part of it. */
   diffCapped: boolean;
+  /**
+   * Files CODEOWNERS gives each requested team and the user's home teams
+   * (`reviewOwnership`); `total` is GitHub's file count. Null on a closed or
+   * merged PR, or when CODEOWNERS is unknown. Paths are GitHub text.
+   */
+  ownership: OwnershipJson[] | null;
+  /** The review's rough size; null on a closed or merged PR or an unread snapshot. */
+  effort: EffortJson | null;
   untrusted: {
     title: string;
     /** "Your move: Review", the same sentence as the text answers. Null with whoseMove. */
@@ -99,6 +109,24 @@ export interface PrJson {
 
 /** The common fields of a tile's PR row and the PR pane's view. */
 type PrBase = Pick<PrSummary, 'key' | 'title' | 'url' | 'author' | 'state' | 'isDraft'>;
+
+export interface OwnershipJson {
+  team: string;
+  owned: number;
+  total: number;
+  untrusted: { paths: string[] };
+}
+
+/** files, additions and deletions count the user's teams' area; null when CODEOWNERS is unknown. */
+export interface EffortJson {
+  files: number | null;
+  additions: number | null;
+  deletions: number | null;
+  prAdditions: number;
+  prDeletions: number;
+  prFiles: number;
+  openThreads: number;
+}
 
 export interface OverlapJson {
   pr: PrKey;
@@ -159,6 +187,28 @@ function overlapsJson(view: PrOverlapsView, key: PrKey): OverlapJson[] {
   });
 }
 
+function ownershipJson(ownership: ReviewOwnership): OwnershipJson[] {
+  return ownership.owners.map((entry) => ({
+    team: entry.owner,
+    owned: entry.files.length,
+    total: ownership.filesTotal,
+    untrusted: { paths: entry.files.map((file) => file.path) },
+  }));
+}
+
+function effortJson(detail: PrDetail): EffortJson {
+  const yours = detail.ownership ? fileLines(detail.ownership.yours) : null;
+  return {
+    files: detail.ownership ? detail.ownership.yours.length : null,
+    additions: yours?.additions ?? null,
+    deletions: yours?.deletions ?? null,
+    prAdditions: detail.pr.additions,
+    prDeletions: detail.pr.deletions,
+    prFiles: detail.pr.changedFiles,
+    openThreads: detail.openThreads,
+  };
+}
+
 function reviewsJson(states: ReviewerStates): ReviewsJson {
   return {
     humans: { approved: states.approvedBy, changesRequested: states.changesRequestedBy },
@@ -178,6 +228,7 @@ export function prJson(input: PrJsonInput): PrJson {
   const verdict = summary?.verdict ?? glance?.verdict ?? null;
   const stale = summary?.glanceStale ?? detail?.glanceStale ?? false;
   const newest = detail?.waitingThreads[0] ?? null;
+  const open = base.state === 'OPEN';
   return {
     key: base.key,
     url: base.url,
@@ -195,6 +246,8 @@ export function prJson(input: PrJsonInput): PrJson {
     glance: verdict ? { verdict, stale } : null,
     overlaps: overlapsJson(input.overlaps, base.key),
     diffCapped: input.overlaps.capped.includes(base.key),
+    ownership: open && detail?.ownership ? ownershipJson(detail.ownership) : null,
+    effort: open && detail ? effortJson(detail) : null,
     untrusted: {
       title: base.title,
       whoseMove: summary ? turnText(summary.turn) : null,

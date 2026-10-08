@@ -4,6 +4,7 @@ import {
   eventsSeenByTouch,
   nextWatchSince,
   ownEventsOnReadThread,
+  parsePrKey,
   planRead,
   prKey,
   prReadScope,
@@ -30,6 +31,7 @@ import { Board } from './board.ts';
 import { readHotSet, threadsByPrKey } from './hot-set.ts';
 import { CAP_FILL_POLL_PRS, CAP_FILL_SYNC_PRS, CapFiller } from './cap-fill.ts';
 import { DIFF_POLL_PRS, DIFF_SYNC_PRS, DiffReader } from './diff-reader.ts';
+import { CodeOwnersKeeper } from './code-owners.ts';
 import { errorText } from './errors.ts';
 import { LessonKeeper } from './lessons/lesson-keeper.ts';
 import { StackLayerFinder } from './stack-layers.ts';
@@ -133,6 +135,7 @@ export class GitHubSync {
   private readonly layers: StackLayerFinder;
   private readonly lessons: LessonKeeper;
   private readonly teamMembers: TeamMembers;
+  private readonly codeOwners: CodeOwnersKeeper;
   private readonly teamRoles: TeamRoleKeeper;
   /** PRs reconciled with GitHub's read time or the viewer's last touch during the current run; taken by run() and poll(). */
   private readOnGitHub = new Set<PrKey>();
@@ -165,6 +168,7 @@ export class GitHubSync {
     this.layers = new StackLayerFinder(reader, now);
     this.lessons = new LessonKeeper(store, now);
     this.teamMembers = new TeamMembers(store, reader, now);
+    this.codeOwners = new CodeOwnersKeeper(store, reader, now);
     this.teamRoles = new TeamRoleKeeper(store, reader, now, quota, textLog);
   }
 
@@ -760,6 +764,22 @@ export class GitHubSync {
     return { notModified: false, pollIntervalSeconds, firstLook, viewer, fetchedPrKeys: [...fetched.keys()], newEventIds, readOnGitHub };
   }
 
+  /**
+   * CODEOWNERS of every repo with an open PR, each read at most once a day
+   * (`CodeOwnersKeeper`). A nicety: a failed read is logged, never a sync error.
+   */
+  private async refreshCodeOwners(): Promise<void> {
+    const repos = [...this.store.prs.stateByKey()].filter(([, state]) => state === 'OPEN').map(([key]) => parsePrKey(key).repo);
+    try {
+      const read = await this.codeOwners.refresh(repos);
+      if (read.length > 0) {
+        this.textLog(`sync: read CODEOWNERS of ${read.length} repos`);
+      }
+    } catch (error) {
+      this.textLog(`sync: CODEOWNERS read failed: ${errorText(error)}`);
+    }
+  }
+
   /** The full sync's fetch; `run` counts it. */
   private async fetchAll(maxPrs: number): Promise<GitHubSyncResult> {
     this.beginRun();
@@ -802,6 +822,7 @@ export class GitHubSync {
       errors.push(`stack layers: ${errorText(error)}`);
     }
     await this.diffReader().run('sync', DIFF_SYNC_PRS);
+    await this.refreshCodeOwners();
     // Only now: a run that threw above keeps the list for the next sync.
     this.store.meta.delete(POLLED_KEY);
     this.reconcileTouches(viewer);

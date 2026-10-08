@@ -6,6 +6,15 @@ now".
 
 ## Done
 
+- MCP review ownership and effort (2026-10-08; DESIGN.md "MCP server" ›
+  Review ownership and effort): CODEOWNERS per repo of open PRs, read once
+  a day in one aliased GraphQL query (default branch, three places), kept
+  in meta `code_owners:<repo>`; `parseCodeowners` / `reviewOwnership` in
+  core. `pr_context` says which files each requested team (and the user's
+  home teams) own, `whats_on_me` adds "team-x owns N of M files" and an
+  effort line on your-move PRs (lines and files in your teams' area, PR
+  size, open threads). Capped file lists (100) are said; unknown
+  CODEOWNERS says nothing.
 - Agent notes on PRs (2026-10-08; DESIGN.md "Agent notes on PRs"): new MCP
   tool `note_pr` (set, renew, clear) through the agent-request outbox,
   table `pr_note` (migration 039). Durable slot (covered, no_action) and a

@@ -14,6 +14,7 @@ import { GitHubHttp, graphqlFailure, type FetchFn, type GraphQLResult } from './
 import { isoTime, toBranchPr, toPr } from './normalize.ts';
 import { fillCappedLists } from './cap-fill.ts';
 import { readPrDiff, type PrDiffRead } from './pr-diff.ts';
+import { buildCodeOwnersQuery, CODE_OWNERS_BATCH_SIZE, codeOwnersFiles, type CodeOwnersFile, type RawCodeOwnersResponse } from './code-owners.ts';
 import { buildFoundQuery, foundRefs, type FoundRef, type RawFoundResponse } from './found.ts';
 import { getThread, listNotifications, listThreadsSince } from './notifications.ts';
 import { activityPrs, buildActivityQuery, probeNotifications, readRepoFile, type RawActivityResponse } from './setup-reads.ts';
@@ -263,6 +264,21 @@ export class GitHubClient implements GitHubReader {
 
   probeNotifications(): Promise<string | null> {
     return probeNotifications(this.http);
+  }
+
+  /** A repo the token cannot see nulls its alias next to an error; the others still count. */
+  async codeOwnersFiles(repos: string[]): Promise<Map<string, CodeOwnersFile | null>> {
+    const result = new Map<string, CodeOwnersFile | null>();
+    for (const batch of chunk(repos, CODE_OWNERS_BATCH_SIZE)) {
+      const response = await this.http.graphql<RawCodeOwnersResponse>(buildCodeOwnersQuery(batch));
+      if (!response.data) {
+        throw graphqlFailure('CODEOWNERS query', response.errors);
+      }
+      for (const [repo, file] of codeOwnersFiles(batch, response.data)) {
+        result.set(repo, file);
+      }
+    }
+    return result;
   }
 
   /** Partial data (an org behind SAML) is used as is, like the viewer's teams. */

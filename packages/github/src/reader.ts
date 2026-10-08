@@ -1,4 +1,5 @@
 import type { ActivityPr, IsoTime, NotificationThread, FullPr, PrKey, PrRef, PrState, ReviewedPr, Viewer, ViewerTeamSize } from '@postpile/core';
+import type { CodeOwnersFile } from './code-owners.ts';
 import type { FoundRef } from './found.ts';
 import type { PrDiffRead } from './pr-diff.ts';
 
@@ -157,6 +158,14 @@ export interface GitHubReader {
 
   /** One file's text from a repo's default branch. Null when it is missing or the repo is not visible. */
   readRepoFile(repo: string, path: string): Promise<string | null>;
+
+  /**
+   * Each repo's CODEOWNERS from its default branch: the first of
+   * .github/CODEOWNERS, CODEOWNERS, docs/CODEOWNERS, as GitHub looks. One
+   * GraphQL query per CODE_OWNERS_BATCH_SIZE repos. Null: the repo has
+   * none. A repo the token cannot see is left out of the map.
+   */
+  codeOwnersFiles(repos: string[]): Promise<Map<string, CodeOwnersFile | null>>;
 
   /** Team roles: the viewer's teams ("org/slug") with member counts, one GraphQL request. */
   teamSizes(login: string): Promise<ViewerTeamSize[]>;

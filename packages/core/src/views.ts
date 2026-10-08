@@ -49,6 +49,7 @@ import type { WhoseTurn } from './whose-turn.ts';
 import type { WhatsNew } from './whats-new.ts';
 import type { WhyCode } from './why-here.ts';
 import type { ForWhom } from './for-whom.ts';
+import type { ReviewOwnership } from './codeowners.ts';
 
 export type TopicGroup = 'needs_you' | 'quiet';
 
@@ -502,6 +503,14 @@ export interface PrDetail {
   waitingThreads: WaitingThread[];
   /** Agent notes on the PR and its observation token (DESIGN.md "Agent notes on PRs"). Advisory: no rule reads them. */
   notes: PrNotesView;
+  /**
+   * Who CODEOWNERS hands the changed files to (`reviewOwnership`): the
+   * requested teams and the viewer's. Null when the repo's CODEOWNERS is
+   * not fetched yet, missing or unreadable: then nothing is said.
+   */
+  ownership: ReviewOwnership | null;
+  /** Unresolved review threads the viewer is in or that wait on them (`viewerOpenThreads`). */
+  openThreads: number;
 }
 
 /**

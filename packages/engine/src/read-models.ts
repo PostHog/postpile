@@ -99,10 +99,14 @@ import {
   type BoardShapeEvent,
   type BusyInboxView,
   type PrHeader,
+  reviewOwnership,
+  viewerOpenThreads,
+  type ReviewOwnership,
 } from '@postpile/core';
 import type { AgentService } from '@postpile/agent';
 import type { Store } from '@postpile/store';
 import { Board, UNSORTED_TOPIC_ID } from './board.ts';
+import { loadCodeOwnersRules } from './code-owners.ts';
 import { RetireGate } from './consolidation/retire-gate.ts';
 import { debugNotificationRows, quietReadViews } from './debug-notifications.ts';
 import { glanceGapKey } from './digest/glance-batches.ts';
@@ -729,12 +733,20 @@ export class ReadModels {
       facts: this.memory.prFacts(key),
       waitingThreads: waitingThreads(pr, viewer),
       notes: this.notes.viewFor(pr),
+      ownership: this.ownership(pr, viewer),
+      openThreads: viewer ? viewerOpenThreads(pr, viewer.login) : 0,
     };
   }
 
   /** The notes of the PRs among `keys` that have any (whats_on_me). */
   listPrNotes(keys: PrKey[]): PrNotesView[] {
     return this.notes.viewsFor(keys);
+  }
+
+  /** The PR's files as its repo's stored CODEOWNERS hands them out; null when that is unknown. */
+  private ownership(pr: Pr, viewer: Viewer | null): ReviewOwnership | null {
+    const rules = loadCodeOwnersRules(this.store, pr.ref.repo);
+    return rules ? reviewOwnership(rules, pr, viewer) : null;
   }
 
   /** Every stored event of a PR, oldest first, with its display state: the CLI's `pr` command. The pane reads `activity`. */

@@ -80,6 +80,8 @@ function detailOf(pr: Pr, activity: ActivityList = activityList([], null)): PrDe
     facts: [],
     waitingThreads: [],
     notes: { prKey: pr.key, token: 't', durable: null, lease: null, replaced: null },
+    ownership: null,
+    openThreads: 0,
   };
 }
 

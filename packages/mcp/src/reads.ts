@@ -37,6 +37,7 @@ import { UNSORTED_TOPIC_ID, type EngineService } from '@postpile/engine';
 import { contextNoteLines, notesJson, queueNoteLines, tokenLine } from './notes-text.ts';
 import { overlapLines, overlapMarker, overlapNotes } from './overlaps.ts';
 import { jsonAnswer, prJson, prUnreadReason, tileJson, topicJson, type Format, type MetaJson, type PrJson } from './json.ts';
+import { effortText, ownershipLines, ownershipShort } from './ownership-text.ts';
 import { parsePrInput } from './pr-input.ts';
 import {
   ago,
@@ -373,8 +374,16 @@ function prHeadLines(detail: PrDetail, tiles: TileView[], authors: Authors): str
   return lines;
 }
 
+/** Who CODEOWNERS hands the files to and the effort, on an open PR; `all` lists every owned path. */
+function reviewSizeLines(detail: PrDetail, all: boolean): string[] {
+  if (detail.pr.state !== 'OPEN') {
+    return [];
+  }
+  return [...ownershipLines(detail.ownership, all), effortText(detail.pr, detail.ownership, detail.openThreads)];
+}
+
 function briefPrLines(detail: PrDetail, tiles: TileView[], authors: Authors): string[] {
-  const lines = prHeadLines(detail, tiles, authors);
+  const lines = [...prHeadLines(detail, tiles, authors), ...reviewSizeLines(detail, false)];
   lines.push('', ...(detail.glance ? briefGlanceLines(detail.glance, detail.glanceStale) : [`No agent glance yet (${detail.glanceState}).`]));
   for (const view of tiles) {
     lines.push(`Its tile: ${tileLine(view)}`);
@@ -383,7 +392,7 @@ function briefPrLines(detail: PrDetail, tiles: TileView[], authors: Authors): st
 }
 
 function fullPrLines(detail: PrDetail, tiles: TileView[], authors: Authors): string[] {
-  const lines = prHeadLines(detail, tiles, authors);
+  const lines = [...prHeadLines(detail, tiles, authors), ...reviewSizeLines(detail, true)];
   lines.push('', ...(detail.glance ? glanceLines(detail.glance, detail.glanceStale) : [`No agent glance yet (${detail.glanceState}).`]));
   const facts = formatFacts(detail.facts);
   if (facts.length > 0) {
@@ -996,19 +1005,24 @@ function scopeMatches(authors: Authors, pr: PrSummary, scope: AuthorScopeFilter)
 }
 
 /**
- * "acme/app#1902 by alice (outside your team) · reviews: 1 human approval, reviewbot approved":
- * one line per PR of a queue row, its agent note under it, and on the
- * user's own PR where it is their move, a preview of the newest thread
+ * "acme/app#1902 by alice (outside your team) · reviews: 1 human approval,
+ * reviewbot approved · team-devex owns 1 of 7 files": one line per PR of a
+ * queue row, its agent note under it, on the user's move an effort line
+ * under each open PR, and on their own PR a preview of the newest thread
  * waiting on them.
  */
-function queuePrLines(prs: PrSummary[], details: Map<PrKey, PrDetail | null>, authors: Authors, overlaps: PrOverlapsView, notes: Map<PrKey, PrNotesView>, now: Date): string[] {
+function queuePrLines(prs: PrSummary[], details: Map<PrKey, PrDetail | null>, authors: Authors, overlaps: PrOverlapsView, notes: Map<PrKey, PrNotesView>, now: Date, yourMove: boolean): string[] {
   return prs.flatMap((pr) => {
     const detail = details.get(pr.key) ?? null;
     const reviews = detail ? reviewCountsText(reviewerStates(detail.pr)) : 'not stored';
-    const lines = [`  ${pr.key} by ${pr.author}${authorTag(placeOf(authors, pr), authors.known)} · reviews: ${reviews}${overlapMarker(overlaps, pr.key)}`];
+    const owners = detail?.pr.state === 'OPEN' ? ownershipShort(detail.ownership) : '';
+    const lines = [`  ${pr.key} by ${pr.author}${authorTag(placeOf(authors, pr), authors.known)} · reviews: ${reviews}${overlapMarker(overlaps, pr.key)}${owners ? ` · ${owners}` : ''}`];
     const view = notes.get(pr.key);
     if (view) {
       lines.push(...queueNoteLines(view, now).map((line) => `    ${line}`));
+    }
+    if (yourMove && detail?.pr.state === 'OPEN') {
+      lines.push(`    ${effortText(detail.pr, detail.ownership, detail.openThreads)}`);
     }
     const thread = pr.turn.kind === 'you' && detail ? waitingThreadText(detail.waitingThreads) : null;
     if (thread) {
@@ -1116,7 +1130,7 @@ export async function whatsOnMe(ctx: ReadContext, options: QueueOptions, format:
     return { text, found: false };
   }
   const { head, tail } = pageLines(rows.length, options, page.length);
-  const shown = page.map((row) => ({ group: row.group, text: [row.text, ...queuePrLines(row.view.prs, details, authors, overlaps, notes, now)].join('\n') }));
+  const shown = page.map((row) => ({ group: row.group, text: [row.text, ...queuePrLines(row.view.prs, details, authors, overlaps, notes, now, row.group !== 'unread')].join('\n') }));
   const data: string[] = [];
   for (const group of GROUP_ORDER) {
     const inGroup = shown.filter((row) => row.group === group);

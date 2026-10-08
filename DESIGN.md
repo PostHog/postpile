@@ -7755,6 +7755,68 @@ store already has; no new GitHub reads, no schema change.
 - `refresh_from_github(pr | topic)`, `propose_topic_change(...)` and
   `note_pr(...)`: see their own sections below.
 
+**Review ownership and effort** (2026-10-08). A team review request said
+nothing about which files made it fire: an agent triaging the queue ran
+`gh` per PR to find out, and a 5-minute check of one workflow file looked
+the same as a full review. Now the answers say which files CODEOWNERS
+gives each team, and how big the user's part is.
+
+- CODEOWNERS read (`CodeOwnersKeeper`, engine; `codeOwnersFiles`, reader):
+  for the repos of open PRs, at the end of a full sync, each repo at most
+  once a day. One aliased GraphQL query per 30 repos asks the default
+  branch (`HEAD:`) for `.github/CODEOWNERS`, `CODEOWNERS` and
+  `docs/CODEOWNERS` at once, first found wins, as GitHub looks. So a day
+  costs one request for a normal board, where REST with ETags would cost up
+  to three per repo (a 404 per missing place). Read-only like every reader
+  call. Kept in meta `code_owners:<owner/name>` (text, path, blob oid,
+  fetch time), no new table: the text is small and only read per PR. A
+  repo without the file, one the token cannot see, or a file GitHub cuts
+  off (`isTruncated`) is stored as unknown and waits a day too. A failed
+  request stores nothing, is logged, and never fails the sync.
+- Default branch, not each PR's base: GitHub uses the base branch's file,
+  but stacked layers' bases are short-lived branches that carry the
+  default branch's CODEOWNERS almost always, and one read per repo keeps
+  the count fixed.
+- Parsing and matching (`parseCodeowners`, `reviewOwnership`, core): last
+  matching line wins; gitignore-style patterns (`*`, `**`, `?`, a trailing
+  `/` for a directory, a leading or inner `/` anchors to the root); a
+  pattern covers everything under a file or directory it names, except
+  when its last segment has a wildcard (`docs/*` owns docs/a.md, not
+  docs/b/c.md, as GitHub documents). Lines with `!`, `[ ]` or `\` are
+  skipped, like GitHub skips them. Owners are compared lower case; emails
+  are dropped. A requested bare slug matches its "org/slug" owner.
+- Which teams: the requested teams (`reviewerTeams`), then the viewer's
+  home teams, each only when CODEOWNERS gives it at least one file. No "0
+  files" lines (Julian, 2026-10-08): CODEOWNERS only, shown only when it
+  attributes files. Repos that route reviews another way (owners.yaml
+  files a bot resolves, say) show nothing, by design; there "0 files"
+  for nearly every request misled. "Your team's area" (`yours`) is what
+  the home teams, the viewer's own teams requested on this PR (routing
+  ones too: that request is why it is their move) and their own login
+  own.
+- Files are the stored list (`pr_file`), which the reader caps at 100
+  (`files(first: 100)`). When GitHub's count is higher the answers say
+  "only the first 100 checked". A PR that changed files but has no stored
+  list gets nothing (`reviewOwnership` answers null).
+- Open threads (`viewerOpenThreads`): unresolved threads the viewer wrote
+  in, plus on their own PR the ones whose last word is someone else's and
+  not a bot's.
+- Shown: `pr_context` on an open PR, one line per team, "team-devex: 1 of
+  7 files (.github/workflows/ci.yml)", up to 3 paths then "+N more" in
+  brief, every path in full, then "effort: 1 file, +12 -3 in your team's
+  area (PR +410 -120, 23 files); 2 open threads". `whats_on_me` adds
+  "team-devex owns 1 of 7 files" to each open PR's line and the effort line
+  under each open PR of a your-move tile. Paths are GitHub text: inside
+  the fence. Unknown CODEOWNERS says nothing about ownership. The effort
+  line always gives the PR's size and open threads; the "in your team's
+  area" part only when that area has files. `format: "json"` carries
+  the same per PR: `ownership: [{team, owned, total, untrusted: {paths}}]`
+  and `effort: {files, additions, deletions, prAdditions, prDeletions,
+  prFiles, openThreads}` (the area fields null without CODEOWNERS); teams
+  owning no file are left out of `ownership` there too.
+- Fake mode: `SampleData.codeOwners` holds a CODEOWNERS for acme/app;
+  #1932 shows one workflow file owned by team-platform.
+
 Reads cover every repo (`listTopics` / `search` with `{ allRepos: true }`),
 whatever repo the window has chosen; quiet repos stay quiet. Read answers
 are plain text: a freshness line, who the app works for, then one

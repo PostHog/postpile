@@ -116,6 +116,10 @@ import {
   viewerApproval,
   viewerReviewStand,
   waitingThreads,
+  parseCodeowners,
+  reviewOwnership,
+  viewerOpenThreads,
+  type ReviewOwnership,
   agentPrFacts,
   agentApproveRefusal,
   agentApproveSkip,
@@ -1389,7 +1393,15 @@ export class FakeEngine implements EngineService {
       facts: this.memory.prFacts(prKey),
       waitingThreads: waitingThreads(pr, this.viewer()),
       notes: this.prNotes.viewFor(prKey),
+      ownership: this.ownershipOf(pr),
+      openThreads: viewerOpenThreads(pr, this.data.viewer),
     };
+  }
+
+  /** Like the engine: the sample CODEOWNERS of the PR's repo, null for a repo without one. */
+  private ownershipOf(pr: FullPr): ReviewOwnership | null {
+    const text = this.data.codeOwners.get(pr.ref.repo);
+    return text === undefined ? null : reviewOwnership(parseCodeowners(text), pr, this.viewer());
   }
 
   async listPrEvents(prKey: PrKey): Promise<EventView[]> {
