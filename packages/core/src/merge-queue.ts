@@ -6,6 +6,7 @@
 // not know reads by its leading emoji; text without a known one reads as
 // nothing: never guess a queue state. Rules only, no IO.
 import { isTrunkBot } from './bots.ts';
+import { stripHtmlComments } from './html-comments.ts';
 import { prKey } from './keys.ts';
 import type { Comment, IsoTime, Pr, PrKey } from './types.ts';
 
@@ -63,7 +64,7 @@ function isStatusComment(comment: Comment): boolean {
  * plain space, and emoji variation selectors go.
  */
 function firstLine(body: string): string {
-  const visible = body.replace(/<!--[\s\S]*?-->/g, '').replaceAll('\uFE0F', '');
+  const visible = stripHtmlComments(body).replaceAll('\uFE0F', '');
   const line = visible.split('\n').find((part) => part.trim() !== '') ?? '';
   return line.replace(/\s+/g, ' ').trim();
 }

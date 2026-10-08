@@ -66,7 +66,9 @@ export const toReviewMatchesReviewMove: Invariant = {
       const review = row.turn.kind === 'you' && row.turn.move === 'review';
       // A request while your changes request stands is a Re-review, under
       // Changes you requested (decided 2026-09-30), so Review is always To review.
-      if (review) {
+      // A merge held by a layer below can be "Review #11" on #12's row: that
+      // review belongs to #11's tier ("Stacks land together"), not this row's.
+      if (review && row.turn.prKey === row.key) {
         ensure(row.tier === 'to_review', `${row.key}: move Review, tier ${row.tier}`);
       }
       if (row.tier === 'to_review' && !review) {

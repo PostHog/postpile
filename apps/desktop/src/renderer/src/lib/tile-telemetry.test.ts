@@ -54,6 +54,7 @@ function view(prs: PrSummary[], forWhom: TileView['forWhom'] = { kind: 'you' }):
     tier: 'to_review',
     people: [],
     turn: { kind: 'none', who: null, what: '', prKey: null },
+    landableBelow: [],
     afterRead: { done: false, turn: { kind: 'none', who: null, what: '', prKey: null } },
     pendingWrite: null,
     quietRepo: false,

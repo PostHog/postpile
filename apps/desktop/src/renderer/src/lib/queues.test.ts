@@ -95,6 +95,7 @@ function tile(id: string, tier: PrTier, prs: PrSummary[] = []): TileView {
     tier,
     people: [],
     turn: { kind: 'none', who: null, what: '', prKey: null },
+    landableBelow: [],
     afterRead: { done: false, turn: { kind: 'none', who: null, what: '', prKey: null } },
     pendingWrite: null,
     quietRepo: false,

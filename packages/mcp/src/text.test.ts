@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { EventKind, TileView } from '@postpile/core';
-import { ago, authorTag, commentPreview, echo, fenced, reviewCountsText, reviewersLine, leadUnreadReason, stripInvisible, syncRunningLine, tileLine, turnText, unreadReasonText, waitingThreadText } from './text.ts';
+import { ago, authorTag, commentPreview, echo, fenced, landableText, reviewCountsText, reviewersLine, leadUnreadReason, stripInvisible, syncRunningLine, tileLine, turnText, unreadReasonText, waitingThreadText } from './text.ts';
 
 function reason(actor: string, kind: EventKind, summary: string) {
   return { actor, kind, summary };
@@ -136,5 +136,11 @@ describe('mcp text', () => {
     expect(waitingThreadText([thread])).toBe('Latest unanswered thread: bob on src/cache.ts: "👍"');
     expect(waitingThreadText([thread, { ...thread, threadId: 't2', body: null }])).toBe('Latest unanswered thread: bob on src/cache.ts: "👍" (newest of 2)');
     expect(waitingThreadText([{ ...thread, body: null }])).toContain('(text not stored)');
+  });
+
+  it('names the stack layers that can land alone, bottom first, or nothing', () => {
+    expect(landableText({ landableBelow: [] })).toBeNull();
+    expect(landableText({ landableBelow: ['acme/app#1'] })).toBe('acme/app#1 can land alone (approved)');
+    expect(landableText({ landableBelow: ['acme/app#1', 'acme/app#2', 'acme/app#3'] })).toBe('acme/app#1, acme/app#2 and acme/app#3 can land alone (approved)');
   });
 });

@@ -15,6 +15,7 @@ import {
   whatsNew,
   unreadPrKeysOf,
   agentOnlyApprovers,
+  botFindings,
   standingApprovals,
   viewerApproval,
   viewerReviewStand,
@@ -36,6 +37,7 @@ import {
   prPaneView,
   prStatus,
   prWhoseTurn,
+  stackLayersAround,
   isReReviewMove,
   repoOverview,
   searchTopics,
@@ -335,6 +337,7 @@ export class ReadModels {
           now: board.now,
           pendingWrite: pending.get(pr.key) ?? null,
           opened: opened.of(pr.key),
+          layersBelow: stackLayersAround(tile.stacks, pr.key, board.prs).below,
         },
       ];
     });
@@ -709,13 +712,14 @@ export class ReadModels {
     const stale = this.staleGlances(board, [key]).has(key);
     const gap = this.glanceGap(key, glance !== null);
     const wanted = glanceTargetKeys(board);
+    // The activity list shows a folded bot review's comments by their first line and checks bot text for mentions of
+    // you, and a bot's change request says what it found: bodies the board leaves out, so it reads this one PR whole.
+    const full = this.store.prs.getFull(key);
     return {
       pr: prPaneView(pr),
       status: prStatus(pr),
       fetchedAt: this.store.prs.fetchedAt(key),
-      // The activity list shows a folded bot review's comments by their first line and checks bot text for mentions of
-      // you: bodies the board leaves out, so it reads this one PR whole.
-      activity: activityList(events, viewer, news?.anchor.at ?? null, this.store.prs.getFull(key), board.threads.get(key) ?? null),
+      activity: activityList(events, viewer, news?.anchor.at ?? null, full, board.threads.get(key) ?? null),
       whatsNew: news,
       glance,
       glanceStale: stale,
@@ -728,6 +732,7 @@ export class ReadModels {
       viewerApproval: viewerApproval(pr, board.userStates.get(key) ?? null, loadViewer(this.store)?.login),
       viewerReview: viewerReviewStand(pr, viewer),
       agentApprovers: agentOnlyApprovers(standingApprovals(pr)),
+      botFindings: full === null ? [] : botFindings(full),
       topicId: board.topicIdOf(key),
       tileIds: [...tileIds],
       facts: this.memory.prFacts(key),

@@ -25,6 +25,7 @@ import type { WaitingThread } from './waiting-threads.ts';
 import type { TileAfterRead } from './after-read.ts';
 import type { GlanceRefreshBlock, GlanceState } from './glance-state.ts';
 import type { AgentCallStats, DossierStatus, TopicRelation } from './memory.ts';
+import type { BotFinding } from './bot-findings.ts';
 import type { DossierView, FactChangeCounts, FactView, MemoryTarget } from './memory-views.ts';
 import type { PrNotesView } from './pr-notes.ts';
 import type { PrPaneView } from './pr-pane.ts';
@@ -297,6 +298,12 @@ export interface TileView {
   /** Whose move it is on the tile. */
   turn: WhoseTurn;
   /**
+   * While `turn` is someone else's block on a stack layer, the layers below
+   * it that can land alone, bottom first (`tileLandableBelow`, DESIGN.md
+   * "Stacks land together"). The MCP says so; the app shows nothing.
+   */
+  landableBelow: PrKey[];
+  /**
    * What a mark-read would leave (`tileAfterMarkRead`): done or not, and
    * whose move. The tile's button says "Done for now" only when it is done.
    */
@@ -490,6 +497,12 @@ export interface PrDetail {
    * "approved by reviewbot (agent)" with it.
    */
   agentApprovers: string[];
+  /**
+   * Each bot whose standing review asks for changes, with a line of what it
+   * found (`botFindings`), so "Address <bot>'s changes" can say what the
+   * bot wants. From the stored review text; empty when none.
+   */
+  botFindings: BotFinding[];
   topicId: string | null;
   /** Ids of every tile this PR appears in. */
   tileIds: string[];

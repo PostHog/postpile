@@ -59,6 +59,7 @@ function setView(prs: PrSummary[], unreadKeys: string[] = []): TileView {
     tier: 'to_review',
     people: [],
     turn: { kind: 'none', who: null, what: '', prKey: null },
+    landableBelow: [],
     afterRead: { done: false, turn: { kind: 'none', who: null, what: '', prKey: null } },
     pendingWrite: null,
     quietRepo: false,
