@@ -2561,7 +2561,10 @@ when the real point is that merging this PR also lands #12.
   `acme/app#12` or a pull URL (a markdown link's bracket and bold marks
   may sit around it). Only the same repo counts (ignoring case), never the
   PR itself. Fenced and inline code, HTML comments (PR templates keep
-  their examples there) and quoted lines are skipped. `declaredParentOf`
+  their examples there) and quoted lines are skipped; an unclosed comment or
+  fence hides the rest, as on GitHub. Stripping is a plain linear scan and
+  the reference pattern is bounded (CodeQL flagged a lazy comment regex as
+  polynomial ReDoS). `declaredParentOf`
   takes the first one, since stacks are linear, and only for an open PR:
   a merged PR has landed its parent already, a closed one stacks on nothing.
 - **Linking** (`declaresParent`, in `buildStacks`): a PR with no branch

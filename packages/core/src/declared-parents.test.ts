@@ -51,6 +51,21 @@ describe('declaredParents', () => {
   });
 });
 
+describe('declaredParents on hostile bodies', () => {
+  it('stays fast on many unclosed comments, fences and phrases', () => {
+    const started = performance.now();
+    expect(declaredParents('<!--'.repeat(50_000), REF)).toEqual([]);
+    expect(declaredParents('```\n'.repeat(50_000), REF)).toEqual([]);
+    expect(declaredParents(`${'stacked on '.repeat(20_000)}#12`, REF)).toEqual([12]);
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+
+  it('hides the rest of the body after an unclosed comment or fence', () => {
+    expect(declaredParents('Stacked on #3\n<!-- Stacked on #4', REF)).toEqual([3]);
+    expect(declaredParents('```\nStacked on #4', REF)).toEqual([]);
+  });
+});
+
 describe('declaredParentOf', () => {
   it('takes the first declared parent of an open PR', () => {
     expect(declaredParentOf({ ref: REF, state: 'OPEN', body: 'Stacked on #12, depends on #9' })).toBe(12);

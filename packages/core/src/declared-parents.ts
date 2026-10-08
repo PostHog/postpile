@@ -11,19 +11,61 @@ import type { Pr, PrRef, PrState } from './types.ts';
 /** "stacked on", "stacked on top of", "depends on", "based on", in any case. */
 const PHRASE = String.raw`\b(?:stacked\s+on(?:\s+top\s+of)?|depends\s+on|based\s+on)`;
 
-/** "#12", "acme/app#12" or a pull URL; a markdown link's "[" and bold or italic marks may sit around it. */
-const REFERENCE = String.raw`[*_]*\s*:?\s*[*_]*\s*\[?\s*(?:https?://github\.com/([\w.-]+/[\w.-]+)/pull/(\d+)|([\w.-]+/[\w.-]+)?#(\d+))`;
+/**
+ * "#12", "acme/app#12" or a pull URL; spaces, a colon, a markdown link's "["
+ * and bold or italic marks may sit in between. Bounded, so no input makes
+ * the match slow.
+ */
+const REFERENCE = String.raw`[\s*_:\[]{0,12}(?:https?://github\.com/([\w.-]+/[\w.-]+)/pull/(\d+)|([\w.-]+/[\w.-]+)?#(\d+))`;
 
 /**
- * Text a body shows that is no claim of its own: fenced code, inline code,
- * HTML comments (PR templates keep their examples there) and quoted lines.
+ * The body without HTML comments (PR templates keep their examples there).
+ * An unclosed comment hides the rest, as on GitHub. A plain scan, not a
+ * regex: a lazy match over many unclosed "<!--" takes quadratic time.
+ */
+function withoutComments(body: string): string {
+  let result = '';
+  let from = 0;
+  for (;;) {
+    const start = body.indexOf('<!--', from);
+    if (start < 0) {
+      return result + body.slice(from);
+    }
+    result += `${body.slice(from, start)} `;
+    const end = body.indexOf('-->', start + 4);
+    if (end < 0) {
+      return result;
+    }
+    from = end + 3;
+  }
+}
+
+/**
+ * Text a body shows that is no claim of its own: HTML comments, fenced
+ * code (an unclosed fence runs to the end, as on GitHub), quoted lines
+ * and inline code. Line by line, so the time stays linear.
  */
 function withoutQuotedText(body: string): string {
-  return body
-    .replace(/<!--[\s\S]*?-->/g, ' ')
-    .replace(/^ {0,3}(```|~~~)[\s\S]*?^ {0,3}\1/gm, ' ')
-    .replace(/`[^`\n]*`/g, ' ')
-    .replace(/^ {0,3}>.*$/gm, ' ');
+  const kept: string[] = [];
+  let fence: string | null = null;
+  for (const line of withoutComments(body).split('\n')) {
+    const marker = /^ {0,3}(```|~~~)/.exec(line)?.[1] ?? null;
+    if (fence !== null) {
+      if (marker === fence) {
+        fence = null;
+      }
+      continue;
+    }
+    if (marker !== null) {
+      fence = marker;
+      continue;
+    }
+    if (/^ {0,3}>/.test(line)) {
+      continue;
+    }
+    kept.push(line.replace(/`[^`]*`/g, ' '));
+  }
+  return kept.join('\n');
 }
 
 /**
