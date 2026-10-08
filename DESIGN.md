@@ -1850,6 +1850,14 @@ stored and before a dossier goes into a glance prompt
   bump, so nothing else regenerates. The parent's state and the shared
   files are in the hash, so the glance also follows when the parent
   merges.
+- **Merge order** (2026-10-08): a PR whose body says "depends on #N" while
+  #N is no lower layer of its stack (by shared commits or by branch,
+  `Board.isLayerBelow`; found by Codex review) gets `dependsOn` (`dependsOnNote`: the number and
+  #N's state when it is on the board). The prompt says #N should merge
+  first and that this is no stack, so #N's changes are not in the diff.
+  Same hash rule: a trailing part only when present. Once shared commits
+  link the pair, the item carries `declaredParent` instead and the hash
+  moves, so the glance is written again as a stack.
 - Model: the glance model (`claude-sonnet-5-5` by default, `POSTPILE_GLANCE_MODEL`).
 
 ### Consolidation ("sleep-time")
@@ -2556,6 +2564,11 @@ and the glance read the extra files in GitHub's diff as a description that
 leaves things out ("claims no CI changes, yet the diff edits ci.yml"),
 when the real point is that merging this PR also lands #12.
 
+"Depends on #12" is weaker (2026-10-08, from review): it often means only
+a merge order, like a frontend PR waiting for its API PR, with no commits
+in common. Calling that pair a stack says something false about the diff,
+so it only links once the two PRs are known to share a commit.
+
 - **Parsing** (`declaredParents` in core): "stacked on", "stacked on top
   of", "depends on", "based on", any case, followed right away by `#12`,
   `acme/app#12` or a pull URL (a markdown link's bracket and bold marks
@@ -2564,9 +2577,12 @@ when the real point is that merging this PR also lands #12.
   their examples there) and quoted lines are skipped; an unclosed comment or
   fence hides the rest, as on GitHub. Stripping is a plain linear scan and
   the reference pattern is bounded (CodeQL flagged a lazy comment regex as
-  polynomial ReDoS). `declaredParentOf`
-  takes the first one, since stacks are linear, and only for an open PR:
-  a merged PR has landed its parent already, a closed one stacks on nothing.
+  polynomial ReDoS). Each declaration carries its kind: `stack` for
+  "stacked on", "stacked on top of" and "based on", `depends` for
+  "depends on". `declaredParentOf` takes the first `stack` one, else the
+  first `depends` one (stacks are linear, and "stacked on" is the
+  stronger claim), and only for an open PR: a merged PR has landed its
+  parent already, a closed one stacks on nothing.
 - **Linking** (`declaresParent`, in `buildStacks`): a PR with no branch
   parent takes the one its body declares, if that PR is stored, in the
   same repo, and was open when this PR was opened (the same rule as for a
@@ -2576,6 +2592,13 @@ when the real point is that merging this PR also lands #12.
   is "no PR's head is the base", not "the base is the default branch":
   PostPile does not store each repo's default branch, and a PR based on a
   release branch with no PR behind it reads the same way.
+- **"Depends on"**: links only when the two stored PRs share a commit
+  (`pr_commit`, one EXISTS query per such PR). Then the header carries it
+  as `declaredParent` like a stack declaration. Otherwise the header
+  carries `dependsOn` instead, which never links: `Stack` has no new link
+  type. Commits fetched later (a rebase onto the dependency, or the
+  dependency's first fetch) count on the next header read, so the next
+  board build links the pair with no extra trigger.
 - **Nothing stored**: `PrRepo.listHeaders` works the declared parent out on
   every read from `pr_body`. SQL hands over only open PRs whose body holds
   "stacked", "depends" or "based" (LIKE ignores ASCII case like the
@@ -2592,8 +2615,14 @@ when the real point is that merging this PR also lands #12.
   (`GitHubReader.findPrsByNumber`, the branch lookup's fields for one PR,
   in the same round as the branch lookups) and walks on below it by
   branch. The pull-in reason is "stack layer below #N, declared in its
-  body". Seeds from headers carry the declared parent; PRs fetched this
-  sync read it from the body. Known gaps: an untracked PR that declares a
+  body". Seeds come from headers, also for PRs fetched this sync (they
+  are stored by then), so the walk reads declarations the way
+  `buildStacks` does. A `dependsOn` seed pulls the dependency in by number
+  too (reason "#N depends on it"), but the walk does not go on from it: a
+  merge order says nothing about the dependency's own stack. Pulling it in
+  stores its commits, which is what lets the shared-commit check link a
+  real stack written as "depends on"; the dependency gets no tile of its
+  own. Known gaps: an untracked PR that declares a
   tracked one as its parent is not found (that would need a body search),
   and a pulled-in layer's own declared parent is not followed by the walk
   (a branch lookup carries no body), though `buildStacks` links it once
@@ -2601,7 +2630,10 @@ when the real point is that merging this PR also lands #12.
 - **Glance**: see "Batched glances" › declared layer below.
 - **MCP**: `pr_context` labels such a stack "Stack (declared in the PR
   body, base is master)" on the PR that declares it and "Stack (declared
-  in the body of acme/app#1907)" on the other layers.
+  in the body of acme/app#1907)" on the other layers. A "depends on" that
+  is no stack shows as its own line, "Depends on acme/app#1915 (merge
+  after)", read from the PR body, unless #N is already a lower layer of
+  its stack by branch.
 
 ## Stacks as one unit
 

@@ -5,11 +5,25 @@ import type { Pr, PrRef, PrState } from './types.ts';
  * Some stacking tools and people open every layer against the default
  * branch and write "Stacked on #12" in the body instead of basing the PR
  * on the layer below. Branches then say nothing about the stack; the body
- * does.
+ * does. "Depends on #12" is weaker: often only a merge order (a frontend
+ * PR waiting for its API PR), with no commits in common.
  */
 
-/** "stacked on", "stacked on top of", "depends on", "based on", in any case. */
-const PHRASE = String.raw`\b(?:stacked\s+on(?:\s+top\s+of)?|depends\s+on|based\s+on)`;
+/**
+ * What a declaration claims: `stack` ("stacked on", "stacked on top of",
+ * "based on") says this PR's branch is built on the other one; `depends`
+ * ("depends on") only says the other one must merge first.
+ */
+export type DeclarationKind = 'stack' | 'depends';
+
+/** One PR a body names, and how. */
+export interface DeclaredParent {
+  number: number;
+  kind: DeclarationKind;
+}
+
+/** The phrases, in any case; the first group tells the kind. */
+const PHRASE = String.raw`\b(stacked\s+on(?:\s+top\s+of)?|depends\s+on|based\s+on)`;
 
 /**
  * "#12", "acme/app#12" or a pull URL; spaces, a colon, a markdown link's "["
@@ -122,41 +136,44 @@ function withoutQuotedText(body: string): string {
 }
 
 /**
- * The PR numbers a body declares as the layer below, in the order they
+ * The PRs a body names as built on or depended on, in the order they
  * appear: "Stacked on #12", "depends on acme/app#12", "based on
- * https://github.com/acme/app/pull/12". Only PRs in the same repo count
- * (compared ignoring case), never the PR itself, each number once. Code,
- * HTML comments and quoted lines are skipped.
+ * https://github.com/acme/app/pull/12", each with its kind. Only PRs in
+ * the same repo count (compared ignoring case), never the PR itself, each
+ * number once (its first mention). Code, HTML comments and quoted lines
+ * are skipped.
  */
-export function declaredParents(body: string, ref: PrRef): number[] {
+export function declaredParents(body: string, ref: PrRef): DeclaredParent[] {
   const pattern = new RegExp(PHRASE + REFERENCE, 'gi');
   const repo = ref.repo.toLowerCase();
-  const numbers: number[] = [];
+  const found: DeclaredParent[] = [];
   for (const match of withoutQuotedText(body).matchAll(pattern)) {
-    const otherRepo = match[1] ?? match[3];
-    const number = Number(match[2] ?? match[4]);
+    const kind: DeclarationKind = match[1]!.toLowerCase().startsWith('depends') ? 'depends' : 'stack';
+    const otherRepo = match[2] ?? match[4];
+    const number = Number(match[3] ?? match[5]);
     if (otherRepo !== undefined && otherRepo.toLowerCase() !== repo) {
       continue;
     }
-    if (number === ref.number || numbers.includes(number)) {
+    if (number === ref.number || found.some((declared) => declared.number === number)) {
       continue;
     }
-    numbers.push(number);
+    found.push({ number, kind });
   }
-  return numbers;
+  return found;
 }
 
 /**
- * The layer below an open PR's body declares: the first one it names.
- * Stacks are linear, so only one counts. Null for a merged or closed PR:
- * once it merged it has landed its parent too, and a closed one stacks on
- * nothing.
+ * The one PR an open PR's body declares: the first `stack` one, else the
+ * first `depends` one, since "stacked on" is the stronger claim and stacks
+ * are linear. Null for a merged or closed PR: once it merged it has landed
+ * its parent too, and a closed one stacks on nothing.
  */
-export function declaredParentOf(pr: { ref: PrRef; state: PrState; body: string }): number | null {
+export function declaredParentOf(pr: { ref: PrRef; state: PrState; body: string }): DeclaredParent | null {
   if (pr.state !== 'OPEN') {
     return null;
   }
-  return declaredParents(pr.body, pr.ref)[0] ?? null;
+  const declared = declaredParents(pr.body, pr.ref);
+  return declared.find((entry) => entry.kind === 'stack') ?? declared[0] ?? null;
 }
 
 /** What the glance prompt says about a PR whose body declares the layer below (`declaredParentNote`). */
@@ -170,6 +187,22 @@ export interface DeclaredParentNote {
   sharedCommits: number;
   /** This PR's changed files the parent changes too, in this PR's order. */
   sharedFiles: string[];
+}
+
+/**
+ * What the glance prompt says about a PR whose body says it depends on
+ * another one that is no layer below it (no shared commit known): a merge
+ * order only.
+ */
+export interface DependsOnNote {
+  number: number;
+  /** "open", "draft", "merged" or "closed"; null when it is not on the board that built the glance. */
+  state: string | null;
+}
+
+/** The note for a PR whose body says it depends on `number`; `dependency` when it is stored. */
+export function dependsOnNote(number: number, dependency: Pick<Pr, 'state' | 'isDraft'> | undefined): DependsOnNote {
+  return { number, state: dependency ? stateWord(dependency) : null };
 }
 
 function stateWord(pr: Pick<Pr, 'state' | 'isDraft'>): string {

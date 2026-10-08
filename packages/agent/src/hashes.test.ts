@@ -136,6 +136,13 @@ describe('glanceItemInputHash', () => {
     expect(glanceItemInputHash(batch, { ...declared, declaredParent: { ...note, state: 'merged' } })).not.toBe(glanceItemInputHash(batch, declared));
   });
 
+  it('changes for a PR with a merge order ("depends on"), and with its state', () => {
+    const depending = { ...item, dependsOn: { number: 7, state: 'open' } };
+    const batch = glanceBatch({ items: [depending] });
+    expect(glanceItemInputHash(batch, depending)).not.toBe(base);
+    expect(glanceItemInputHash(batch, { ...depending, dependsOn: { number: 7, state: 'merged' } })).not.toBe(glanceItemInputHash(batch, depending));
+  });
+
   it('covers feedback on this PR only', () => {
     expect(glanceHash(item.pr, { context: { ...emptyContext, recentFeedback: [makeFeedback({ prKey: 'acme/app#9' })] } })).toBe(base);
     expect(glanceHash(item.pr, { context: { ...emptyContext, recentFeedback: [makeFeedback({ prKey: item.pr.key })] } })).not.toBe(base);

@@ -71,12 +71,32 @@ export function declaredParentBlock(item: GlanceBatchItem): string {
   return `\n${lines.join('\n')}`;
 }
 
+/**
+ * For a PR whose description says it depends on another PR that is no
+ * layer below it (no commit in common known): a merge order, not a stack.
+ * Empty for every other PR.
+ */
+export function dependsOnBlock(item: GlanceBatchItem): string {
+  const note = item.dependsOn;
+  if (!note) {
+    return '';
+  }
+  const other = `#${note.number}`;
+  if (note.state === null) {
+    return `\nMerge order declared in the description: it depends on ${other}, which should merge first. PostPile knows of no commits they share, so treat it as no stack.`;
+  }
+  return (
+    `\nMerge order declared in the description: it depends on ${other} (${note.state}), which should merge first. ` +
+    `They share no commits PostPile knows of, so this is no stack and ${other}'s changes are not in this PR's diff.`
+  );
+}
+
 /** The pull requests, each headed by its key, with how it reached the user. */
 export function glanceSections(input: GlanceBatchInput): string {
   return input.items
     .map(
       (item) =>
-        `=== ${item.pr.key}\nHow it reached them: ${howItReached(item.provenance)}\n${prDetails(item.pr, input.viewer, batchDetail)}${declaredParentBlock(item)}`,
+        `=== ${item.pr.key}\nHow it reached them: ${howItReached(item.provenance)}\n${prDetails(item.pr, input.viewer, batchDetail)}${declaredParentBlock(item)}${dependsOnBlock(item)}`,
     )
     .join('\n\n');
 }

@@ -11,6 +11,12 @@ now".
   ranges only, migration 037), and `pr_context` / `whats_on_me` say when
   another open PR in the repo edits the same lines of a file, skipping stack
   mates; a capped diff says "may overlap more". MCP only, no app UI.
+- "Depends on" is a merge order, not a stack (2026-10-08; DESIGN.md
+  "Stacks declared in the body"): the parser tags each declaration
+  `stack` or `depends`; "depends on #N" links only once the two PRs share
+  a stored commit, else the header carries `dependsOn`. The walk still
+  pulls #N in (no further walking), `pr_context` shows "Depends on … (merge
+  after)" and the glance prompt says #N should merge first.
 - MCP freshness (2026-10-08; DESIGN.md "Sync progress for other
   processes"): the app stores the running sync in meta `sync_progress` and
   the MCP header shows it ("Full sync running since …"); `whats_on_me`

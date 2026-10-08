@@ -157,6 +157,13 @@ export class Board {
     return stack.prKeys[stack.prKeys.indexOf(key) - 1] ?? null;
   }
 
+  /** `below` is a lower layer of the stack `key` is in, however they are linked. */
+  isLayerBelow(below: PrKey, key: PrKey): boolean {
+    const layers = this.stackOf.get(key)?.prKeys ?? [];
+    const index = layers.indexOf(below);
+    return index >= 0 && index < layers.indexOf(key);
+  }
+
   /** Every layer of the stack this PR is in, bottom first; just the PR when it is in none. */
   stackKeysOf(key: PrKey): PrKey[] {
     return this.stackOf.get(key)?.prKeys ?? [key];

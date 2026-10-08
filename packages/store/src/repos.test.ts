@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { boardShape, type PrSet, type Topic } from '@postpile/core';
-import { at, makeEvent, makePr, makeThreadFor } from '@postpile/core/fixtures';
+import { at, makeCommit, makeEvent, makePr, makeThreadFor } from '@postpile/core/fixtures';
 import { Store } from './index.ts';
 
 let store: Store;
@@ -188,6 +188,22 @@ describe('PrRepo', () => {
 
     store.prs.upsert(makePr({ number: 2, body: 'No longer stacked.' }), at(2));
     expect(store.prs.listHeaders()[1]?.declaredParent).toBeUndefined();
+  });
+
+  it('reads "depends on" as a merge order until the two PRs share a stored commit', () => {
+    store.prs.upsert(makePr({ number: 1, commits: [makeCommit({ oid: 'api' })] }), at(1));
+    store.prs.upsert(makePr({ number: 2, body: 'Depends on #1', commits: [makeCommit({ oid: 'ui' })] }), at(1));
+    store.prs.upsert(makePr({ number: 3, body: 'Depends on #9' }), at(1));
+    const shape = () => store.prs.listHeaders().map((pr) => [pr.ref.number, pr.declaredParent, pr.dependsOn]);
+    expect(shape()).toEqual([
+      [1, undefined, undefined],
+      [2, undefined, 1],
+      [3, undefined, 9],
+    ]);
+
+    // Once the commits show #2 is built on #1, the next read links it: nothing else needs to run.
+    store.prs.upsert(makePr({ number: 2, body: 'Depends on #1', commits: [makeCommit({ oid: 'api' }), makeCommit({ oid: 'ui' })] }), at(2));
+    expect(shape()[1]).toEqual([2, 1, undefined]);
   });
 
   it('writes header and snapshot together: a failed snapshot write rolls the header back', () => {
