@@ -59,7 +59,8 @@ function segmentSource(segment: string): string {
     } else if (char === '?') {
       source += '[^/]';
     } else {
-      source += char.replace(/[.+^${}()|]/g, '\\$&');
+      // Every regex special, even ones `codeownersPatternRegex` already refuses, so the escape stands on its own.
+      source += char.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
     }
   }
   return source;
