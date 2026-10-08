@@ -113,3 +113,4 @@ export * from './telemetry-sync.ts';
 // node:crypto, and this barrel is also type-checked from the renderer's
 // browser tsconfig (import type only, but tsc still resolves the whole
 // module graph). Import it from '@postpile/core/telemetry-identity' instead.
+export * from './overlap.ts';

@@ -1,4 +1,5 @@
 import type {
+  PrOverlapsView,
   ActionLogEntry,
   ActionResult,
   AgentActionFrom,
@@ -237,6 +238,12 @@ export interface EngineService {
   getViewer(): Promise<ViewerView>;
   /** The viewer's teams with their roles (home or routing only) and why. */
   getTeamRoles(): Promise<TeamRolesView>;
+  /**
+   * Open PRs that edit the same lines of a file as another open PR in the
+   * repo (DESIGN.md "Overlapping edits"), from the diffs the sync read.
+   * Stack mates are left out. Local, no GitHub call.
+   */
+  prOverlaps(): Promise<PrOverlapsView>;
   /** Who is on each home team, from the team member cache (no GitHub call); MCP tags PR authors with it. */
   getTeamMembers(): Promise<TeamMembersView>;
   /**

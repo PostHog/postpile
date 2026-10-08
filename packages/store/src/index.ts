@@ -7,6 +7,7 @@ export { NotificationRepo } from './repos/notifications.ts';
 export { PrRepo } from './repos/prs.ts';
 export { ACTIVITY_READY_KEY, DISCUSSION_READY_KEY, NEWEST_ROWS_VERSION, READY_KEYS, ROWS, TEXT_READY_KEY, type RowsCollection } from './repos/pr-rows.ts';
 export { PullInRepo } from './repos/pull-ins.ts';
+export { PrDiffRepo, type PrDiffInput, type WantedDiff } from './repos/pr-diffs.ts';
 export { FoundPrRepo } from './repos/found-prs.ts';
 export { PingDecisionRepo, type PingDecisionCounts } from './repos/ping-decisions.ts';
 export { ActionLogRepo } from './repos/action-log.ts';

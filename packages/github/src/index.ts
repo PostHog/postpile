@@ -18,5 +18,6 @@ export { buildFoundQuery, foundRefs, FOUND_CAP, type FoundRef } from './found.ts
 export { GhCliTokenSource, GhTokenError, type TokenSource } from './token.ts';
 export { GitHubError, type FetchFn } from './http.ts';
 export { GitHubClient } from './client.ts';
+export { DIFF_MAX_PAGES, type PrDiffRead } from './pr-diff.ts';
 export { GitHubWriteClient } from './write-client.ts';
 export { activityPrs, buildActivityQuery, ACTIVITY_SEARCH_SIZES } from './setup-reads.ts';

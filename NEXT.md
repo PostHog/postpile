@@ -6,6 +6,11 @@ now".
 
 ## Done
 
+- Overlapping edits (2026-10-08; DESIGN.md "Overlapping edits"): a
+  background pass reads which base-side lines open PRs edit (REST file list,
+  ranges only, migration 037), and `pr_context` / `whats_on_me` say when
+  another open PR in the repo edits the same lines of a file, skipping stack
+  mates; a capped diff says "may overlap more". MCP only, no app UI.
 - MCP freshness (2026-10-08; DESIGN.md "Sync progress for other
   processes"): the app stores the running sync in meta `sync_progress` and
   the MCP header shows it ("Full sync running since …"); `whats_on_me`

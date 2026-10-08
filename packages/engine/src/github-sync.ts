@@ -30,6 +30,7 @@ import { writeReadPlan } from './actions/local-change.ts';
 import { Board } from './board.ts';
 import { readHotSet, threadsByPrKey } from './hot-set.ts';
 import { CAP_FILL_POLL_PRS, CAP_FILL_SYNC_PRS, CapFiller } from './cap-fill.ts';
+import { DIFF_POLL_PRS, DIFF_SYNC_PRS, DiffReader } from './diff-reader.ts';
 import { errorText } from './errors.ts';
 import { LessonKeeper } from './lessons/lesson-keeper.ts';
 import { StackLayerFinder } from './stack-layers.ts';
@@ -688,6 +689,11 @@ export class GitHubSync {
     return new CapFiller(this.reader, this.store, this.quota, origin, budget, this.textLog);
   }
 
+  /** Reads which lines open PRs edit, after they are stored (DiffReader): a few per run. */
+  private diffReader(): DiffReader {
+    return new DiffReader(this.reader, this.store, this.quota, this.now, this.textLog);
+  }
+
   /**
    * The full sync's fetch: a failed batch (GitHub's "Something went wrong"
    * timeout on a heavy query, a 502) lands in `errors` and its PRs stay
@@ -746,6 +752,7 @@ export class GitHubSync {
     const fetchedAt = this.now().toISOString();
     const fetched = await this.capFiller('poll', CAP_FILL_POLL_PRS).fill(refs.length > 0 ? await this.reader.fetchPrs(refs) : new Map<PrKey, FullPr>());
     const newEventIds = this.storeAll(fetched, viewer, fetchedAt);
+    await this.diffReader().run('poll', DIFF_POLL_PRS);
     this.rememberPolled([...fetched.keys()]);
     const readOnGitHub = this.takeReadOnGitHub();
     return { notModified: false, pollIntervalSeconds, firstLook, viewer, fetchedPrKeys: [...fetched.keys()], newEventIds, readOnGitHub };
@@ -792,6 +799,7 @@ export class GitHubSync {
     } catch (error) {
       errors.push(`stack layers: ${errorText(error)}`);
     }
+    await this.diffReader().run('sync', DIFF_SYNC_PRS);
     // Only now: a run that threw above keeps the list for the next sync.
     this.store.meta.delete(POLLED_KEY);
     this.reconcileTouches(viewer);

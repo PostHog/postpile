@@ -16,6 +16,8 @@ import {
   SYNC_PROGRESS_STALE_MS,
   type PrDetail,
   type PrKey,
+  type PrOverlap,
+  type PrOverlapsView,
   type PrSummary,
   type TeamMembersView,
   type RecordedSyncProgress,
@@ -27,6 +29,7 @@ import {
   type TopicProposal,
 } from '@postpile/core';
 import { UNSORTED_TOPIC_ID, type EngineService } from '@postpile/engine';
+import { overlapLines, overlapMarker, overlapNotes } from './overlaps.ts';
 import { parsePrInput } from './pr-input.ts';
 import {
   ago,
@@ -50,7 +53,7 @@ import {
 } from './text.ts';
 
 /** The read methods the tools use; the read-only engine and the sample-data engine both have them. */
-export type PostPileReader = Pick<EngineService, 'getPr' | 'getTopic' | 'listTopics' | 'search' | 'getViewer' | 'getTeamMembers' | 'lastSyncReport' | 'recordedSyncProgress' | 'recordedAppVersion'>;
+export type PostPileReader = Pick<EngineService, 'getPr' | 'getTopic' | 'listTopics' | 'search' | 'getViewer' | 'getTeamMembers' | 'prOverlaps' | 'lastSyncReport' | 'recordedSyncProgress' | 'recordedAppVersion'>;
 
 /** What every read needs besides the reader. */
 export interface ReadContext {
@@ -455,6 +458,13 @@ function prFreshnessLine(detail: PrDetail, ctx: ReadContext): string {
   return `${fetched} The app runs and checks GitHub for changes to it again within about 1 min, so a refresh is rarely needed.`;
 }
 
+/** The stored authors of the PRs a PR overlaps with; one that is not stored has none. */
+async function authorsOfOverlaps(reader: PostPileReader, overlaps: PrOverlap[]): Promise<Map<PrKey, string>> {
+  const shown = overlaps.slice(0, 5);
+  const details = await Promise.all(shown.map((overlap) => reader.getPr(overlap.other)));
+  return new Map(shown.flatMap((overlap, index) => details[index] ? [[overlap.other, details[index].pr.author] as const] : []));
+}
+
 export async function prContext(ctx: ReadContext, input: string, detail: Detail): Promise<ToolAnswer> {
   const { reader } = ctx;
   const resolved = await resolvePr(reader, input);
@@ -469,6 +479,8 @@ export async function prContext(ctx: ReadContext, input: string, detail: Detail)
   const tiles = topic ? tilesWith(topic, pr.pr.key) : [];
   const authors = await readAuthors(reader);
   const data = detail === 'full' ? fullPrLines(pr, tiles, authors) : briefPrLines(pr, tiles, authors);
+  const overlaps = await reader.prOverlaps();
+  data.push(...overlapLines(overlaps, pr.pr.key, await authorsOfOverlaps(reader, overlaps.overlaps[pr.pr.key] ?? [])));
   if (topic) {
     data.push('', ...(detail === 'full' ? fullTopicLines(topic, pr.pr.key) : briefTopicForPr(topic, pr.pr.key)));
   } else {
@@ -476,7 +488,7 @@ export async function prContext(ctx: ReadContext, input: string, detail: Detail)
   }
   const more = detail === 'brief' ? 'detail: "full" adds activity, facts and the whole topic. ' : '';
   const next = `Next: ${more}Stale? call refresh_from_github. Wrong topic? propose_topic_change.`;
-  return { text: answer([...(await header(ctx)), ...teamNote(authors)], data, [prFreshnessLine(pr, ctx), next]), found: true };
+  return { text: answer([...(await header(ctx)), ...teamNote(authors)], data, [...overlapNotes(overlaps, pr.pr.key), prFreshnessLine(pr, ctx), next]), found: true };
 }
 
 /** One read per topic, all at once; topics that are gone are left out. */
@@ -656,12 +668,12 @@ function scopeMatches(authors: Authors, pr: PrSummary, scope: AuthorScopeFilter)
 }
 
 /** "acme/app#1902 by alice (outside your team) · reviews: 1 human approval, reviewbot approved": one line per PR of a queue row. */
-async function queuePrLines(reader: PostPileReader, prs: PrSummary[], authors: Authors): Promise<string[]> {
+async function queuePrLines(reader: PostPileReader, prs: PrSummary[], authors: Authors, overlaps: PrOverlapsView): Promise<string[]> {
   const details = await Promise.all(prs.map((pr) => reader.getPr(pr.key)));
   return prs.map((pr, index) => {
     const detail = details[index];
     const reviews = detail ? reviewCountsText(reviewerStates(detail.pr)) : 'not stored';
-    return `  ${pr.key} by ${pr.author}${authorTag(placeOf(authors, pr), authors.known)} · reviews: ${reviews}`;
+    return `  ${pr.key} by ${pr.author}${authorTag(placeOf(authors, pr), authors.known)} · reviews: ${reviews}${overlapMarker(overlaps, pr.key)}`;
   });
 }
 
@@ -709,7 +721,8 @@ export async function whatsOnMe(ctx: ReadContext, options: QueueOptions): Promis
   const { head, tail } = pageLines(rows.length, options, page.length);
   const yourMoveTotal = rows.filter((row) => row.yourMove).length;
   // Reviews come from each PR's stored snapshot: read only for the rows on this page.
-  const shown = await Promise.all(page.map(async (row) => ({ yourMove: row.yourMove, text: [row.text, ...(await queuePrLines(reader, row.prs, authors))].join('\n') })));
+  const overlaps = await reader.prOverlaps();
+  const shown = await Promise.all(page.map(async (row) => ({ yourMove: row.yourMove, text: [row.text, ...(await queuePrLines(reader, row.prs, authors, overlaps))].join('\n') })));
   const data: string[] = [];
   const mine = shown.filter((row) => row.yourMove);
   const others = shown.filter((row) => !row.yourMove);
