@@ -143,7 +143,7 @@ export class PrNotes {
       return pendingNote(`PostPile is still reading ${cover} from GitHub; call note_pr again with the same arguments in a minute`);
     }
     if (read.kind === 'not_found') {
-      return refusedNote(`GitHub has no PR ${cover} that PostPile can read (or it comes from a fork); check covered_by`);
+      return refusedNote(`GitHub has no PR ${cover} that PostPile can read; check covered_by`);
     }
     return refusedNote(read.kind === 'blocked' ? read.reason : `PostPile does not store ${cover}`);
   }

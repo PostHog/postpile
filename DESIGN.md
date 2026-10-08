@@ -8296,8 +8296,9 @@ the reporting agent and checked by Codex).
   stack layer: a `pr_pull_in` row anchored to the noted PR, no thread and
   no topic, so it never becomes a tile of its own; then the set is planned
   again. No `cover_token` is needed there (the agent could not have read
-  one); a wrong one is still refused. GitHub has no such PR (or it is a
-  fork): refused, "check covered_by". GitHub reads only, and the limits
+  one); a wrong one is still refused. A PR opened from a fork covers like
+  any other. GitHub has no such PR: refused, "check covered_by". GitHub
+  reads only, and the limits
   live in `NoteCoverReader` because every session shares one quota:
   nothing while the quota is critical, setup is open or gh is off; 20
   reads an hour; one read per PR at a time (a retry joins it). A read

@@ -583,8 +583,8 @@ export class GitHubSync {
    * user. Looked up by number, then fetched and stored like a pulled-in
    * stack layer: no thread and no topic, so it never becomes a tile of its
    * own, and the freshness check keeps it current while the note is (see
-   * `freshnessRefs`). GitHub reads only. 'not_found' when GitHub has no
-   * such PR the token can see, or it comes from a fork.
+   * `freshnessRefs`). GitHub reads only. A PR from a fork counts like any
+   * other. 'not_found' when GitHub has no such PR the token can see.
    */
   async pullInCover(ref: PrRef, notedKey: PrKey): Promise<'stored' | 'not_found'> {
     const viewer = loadViewer(this.store);
