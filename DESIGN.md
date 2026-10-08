@@ -8274,7 +8274,13 @@ the reporting agent and checked by Codex).
   a GitHub post needs no note; session name in `by`; don't block when
   PostPile is closed), since `note_pr` is a deferred tool in some clients and
   only the instructions reach every session. The details stay in the tool
-  description.
+  description. The block comes right after the one-line intro, and its first
+  rule names the trigger and the competitor: asked to review, assess or decide
+  whether to review a PR, call pr_context FIRST, before gh or any memory. With
+  the block at the end and a softer "read it with pr_context", fresh sessions
+  asked about one PR went straight to gh or memory (1 of 3 checked notes,
+  2026-10-08). A test keeps the block in second place and the text under 1950
+  characters (Claude Code cuts at 2048 without a word).
 - Store: `pr_note` (migration 039). Built: core `pr-notes.ts`
   (`noteAnchor`, `anchorChanges`, `observationToken`, `planNoteSet` /
   `planNoteRenew` / `planNoteClear`, `prNotesView`), `PrNoteRepo`, engine
