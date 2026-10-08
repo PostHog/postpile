@@ -41,6 +41,7 @@ import type {
   McpConnectionView,
   SyncPhase,
   SyncProgress,
+  RecordedSyncProgress,
   MemoryCorrection,
   MemoryCorrectionKind,
   MemoryRecheckOutcome,
@@ -803,6 +804,15 @@ export class FakeEngine implements EngineService {
 
   async syncProgress(): Promise<SyncProgress | null> {
     return this.progress ? { ...this.progress, running: [...this.progress.running] } : null;
+  }
+
+  /** The sample sync's progress as the app would store it, written just now. */
+  async recordedSyncProgress(): Promise<RecordedSyncProgress | null> {
+    if (!this.progress) {
+      return null;
+    }
+    const { startedAt, running, agentCallsDone, agentCallsPlanned, fromGitHub } = this.progress;
+    return { startedAt, running: [...running], agentCallsDone, agentCallsPlanned, fromGitHub, savedAt: this.timestamp() };
   }
 
   /** A sync report with nothing fetched and no agent work. */

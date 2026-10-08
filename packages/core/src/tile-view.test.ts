@@ -102,6 +102,7 @@ function row(number: number, overrides: Partial<PrSummary> = {}): PrSummary {
     openedRead: NO_OPENED_READ,
     whatsNew: null,
     updatedAt: at(number),
+    fetchedAt: null,
     quietRepo: false,
     repoLabel: null,
     ...overrides,

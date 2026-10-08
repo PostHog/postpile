@@ -38,6 +38,7 @@ import type {
   McpConnectFrom,
   McpConnectionView,
   SyncProgress,
+  RecordedSyncProgress,
   MemoryCorrection,
   MemoryRecheckRequest,
   MemoryRecheckResult,
@@ -104,6 +105,13 @@ export interface EngineService {
   databaseSchemaVersion(): Promise<number | null>;
   /** The sync in flight (phases, agent calls done and planned so far); null when none runs. */
   syncProgress(): Promise<SyncProgress | null>;
+  /**
+   * The sync in flight as the process running it last stored it (meta
+   * sync_progress), for readers in another process: the MCP server. Null
+   * when none was stored. A leftover of a crashed app stays until the next
+   * sync: readers check `savedAt` against SYNC_PROGRESS_STALE_MS.
+   */
+  recordedSyncProgress(): Promise<RecordedSyncProgress | null>;
 
   /**
    * One fast-poll cycle: conditional inbox read, and on a change a light

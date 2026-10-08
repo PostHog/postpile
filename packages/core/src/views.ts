@@ -246,6 +246,8 @@ export interface PrSummary {
   /** What changed since the viewer's last touch (`whatsNew`), for the why-now strip; null on a first look or with nothing new. */
   whatsNew: WhatsNew | null;
   updatedAt: IsoTime;
+  /** When PostPile last fetched this PR from GitHub; null when it has no stored snapshot. MCP lists say "fetched N ago" from it. */
+  fetchedAt: IsoTime | null;
   /** In a quiet repo ("Let it go stale"): tier rest, never urgent, never pings. */
   quietRepo: boolean;
   /**
@@ -543,6 +545,32 @@ export interface SyncProgress {
   /** The calls done so far, per kind, for the tooltip. */
   agentCallStats: AgentCallStats;
 }
+
+/**
+ * A running sync's progress as the app stored it for other processes (meta
+ * sync_progress), for the MCP server's header: `SyncProgress` without the
+ * per-kind stats, plus when it was written. The app rewrites it while the
+ * sync runs (on a change, at most every few seconds, and at least every
+ * SYNC_PROGRESS_HEARTBEAT_MS) and removes it when the sync ends.
+ */
+export interface RecordedSyncProgress {
+  startedAt: IsoTime;
+  running: SyncPhase[];
+  agentCallsDone: number;
+  agentCallsPlanned: number;
+  fromGitHub: { prsFetched: number; newEvents: number } | null;
+  /** When the app wrote it last. */
+  savedAt: IsoTime;
+}
+
+/** The running app rewrites the recorded sync progress at least this often, changed or not. */
+export const SYNC_PROGRESS_HEARTBEAT_MS = 60_000;
+
+/**
+ * A recorded sync progress not rewritten for this long is a leftover of an
+ * app that stopped mid-sync (a crash or a kill): readers ignore it.
+ */
+export const SYNC_PROGRESS_STALE_MS = 3 * SYNC_PROGRESS_HEARTBEAT_MS;
 
 export interface SyncReport {
   startedAt: IsoTime;

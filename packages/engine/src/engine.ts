@@ -44,6 +44,7 @@ import type {
   McpConnectionView,
   McpLauncher,
   SyncProgress,
+  RecordedSyncProgress,
   MemoryCorrection,
   MemoryRecheckRequest,
   MemoryRecheckResult,
@@ -170,6 +171,7 @@ import { ReadModels } from './read-models.ts';
 import { loadRepoSettings, saveRepoSettings } from './repo-settings.ts';
 import type { EngineService } from './service.ts';
 import { loadLastSyncReport } from './last-sync-report.ts';
+import { loadSyncProgress } from './sync-progress-record.ts';
 import { SetupChecks, systemCommands, type CommandRunner } from './setup/setup-checks.ts';
 import { SetupFlow } from './setup/setup-flow.ts';
 import { SetupSweep } from './setup/setup-sweep.ts';
@@ -1074,6 +1076,10 @@ export class Engine implements EngineService {
 
   async syncProgress(): Promise<SyncProgress | null> {
     return this.syncRun.progress();
+  }
+
+  async recordedSyncProgress(): Promise<RecordedSyncProgress | null> {
+    return loadSyncProgress(this.deps.store);
   }
 
   async lastSyncReport(): Promise<SyncReport | null> {

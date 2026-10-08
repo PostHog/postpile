@@ -63,6 +63,7 @@ function pr(key: string): PrSummary {
     openedRead: NO_OPENED_READ,
     whatsNew: null,
     updatedAt: at(0),
+    fetchedAt: null,
     quietRepo: false,
     repoLabel: null,
   };

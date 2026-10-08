@@ -23,6 +23,7 @@ import { TopicTidy } from './digest/topic-tidy.ts';
 import { errorText } from './errors.ts';
 import type { GitHubQuota, QuotaRunStats } from './github-quota.ts';
 import { saveLastSyncReport, syncReportLogLines } from './last-sync-report.ts';
+import { SyncProgressRecorder } from './sync-progress-record.ts';
 import type { GitHubSync, GitHubSyncResult } from './github-sync.ts';
 import type { MarkReadQueue } from './mark-read-queue.ts';
 import { FactVerifier } from './memory/fact-verifier.ts';
@@ -327,6 +328,10 @@ export class SyncRun {
     const budget = new AgentBudget(options.maxAgentCalls ?? Number.POSITIVE_INFINITY, report.agentCallStats);
     const live: LiveSync = { startedAt, phases, budget, stats: report.agentCallStats, fromGitHub: null };
     this.live = live;
+    // For the MCP server, which reads the database from its own process.
+    const recorder = new SyncProgressRecorder(store, now, () => this.progress(), this.log);
+    recorder.start();
+    phases.onChange(() => recorder.save());
     try {
       const tidyTried = await this.tidyFirst(options.agentJobs, { phases, budget, tally, errors });
       // The first sync into an empty store is a baseline: none of it is news to ping about.
@@ -367,7 +372,12 @@ export class SyncRun {
       callLog.end();
       this.live = null;
     }
-    return this.finishRun(report, phases, tally, options, crashed, held);
+    try {
+      return this.finishRun(report, phases, tally, options, crashed, held);
+    } finally {
+      // After the report is stored, so a reader never sees neither.
+      recorder.stop();
+    }
   }
 
   /** Everything after the fetch: the agent digest, the quiet reads, then the retire steps. */

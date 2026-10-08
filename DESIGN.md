@@ -1763,7 +1763,12 @@ stored and before a dossier goes into a glance prompt
 ### Batched glances
 
 - Per topic, `planGlanceBatches` splits the PRs needing a glance into
-  batches of `GLANCE_BATCH_SIZE` (18), unread first.
+  batches of `GLANCE_BATCH_SIZE` (18), in the order of `itemsByUrgency`:
+  the PRs where it is the user's move (`prWhoseTurn`) first, then by tile
+  state, unread first. Topics start their glances in the order of their
+  first PR in that list. Reason (2026-10-08): after a sync, new PRs that
+  waited on the user still said "No agent glance yet (queued)" while
+  others were glanced first.
 - One `glanceBatch` call per batch: rendered dossier once, the user's
   context block once, then one section per PR (`batchDetail` limits, smaller
   than v1's `fullDetail`: body 1500, 15 files, last 8 human comments at 300
@@ -7335,8 +7340,10 @@ tool error, "PostPile isn't running. Open the PostPile app, then ask again."
 The process stays up and answers again after the app opens, no reconnect.
 Reason: the owner wants the MCP to follow the app, and data from a closed app
 only gets staler. POSTPILE_FAKE=1 skips the check. The data is as fresh as the app's last sync and poll; every
-answer says when the last full sync finished, and `pr_context` when the PR
-was fetched. The two tools that change something ask the running app
+answer says when the last full sync finished, `whats_on_me` when each
+tile's PRs were fetched, and `pr_context` when the PR was fetched. While
+the app runs a full sync, the header says so (see "Sync progress for
+other processes" below). The two tools that change something ask the running app
 ("Agent requests" below). Stdout is the protocol, so `console.log` goes to
 stderr (`routeConsoleToStderr`).
 
@@ -7375,6 +7382,9 @@ how they answer is under "Tool design" below):
   with its tag, size), whose move, why it is unread, stack layer, the
   viewer's approval, the reviews line, what is new since they looked, the glance's verdict, "for you" and risk,
   this PR's tile, and the topic's other PRs one line each (10 at most).
+  A PR in Unsorted gets one line instead ("no siblings listed"): Unsorted
+  is whatever waits for a topic, so its other PRs have nothing to do with
+  this one.
   Full: the whole glance, facts, the activity list (the detail pane's, noise
   folded), then the topic: dossier (`formatDossier`, shared with the CLI)
   and every tile with its PRs. After the fence: when the PR was fetched and
@@ -7389,6 +7399,15 @@ how they answer is under "Tool design" below):
   tiles in `needs_you` topics where it is the user's move, then unread ones
   where it is not; open PRs by default. Each tile lists its PRs one line
   each: key, author with its tag, and review counts.
+  The tile line ends with "fetched N ago",
+  the oldest fetch of its PRs (`PrSummary.fetchedAt`, the same
+  `pr.fetched_at` that `pr_context` reads), so a list read during a sync
+  shows which moves are about to be rechecked. An unread tile's reason is
+  its newest person's event (`leadUnreadReason`: the most important class,
+  newest within it), and a bot's event (`isBot`) only by what it did
+  ("coderabbitai updated its comment", "trunk-io commented"), never its
+  text: bot bodies are links, badges and boilerplate. `pr_context`'s
+  "Unread for you" lines word bot events the same way.
 
 **Reviews and author tags** (2026-10-08). An agent asked "what do I have to
 review, outside my team first" had to call `gh pr view` per PR for the
@@ -7498,7 +7517,45 @@ spec, GitHub's, Sentry's and Linear's MCP servers. What it means here:
 - **Freshness per answer**: besides the last full sync, `pr_context` says when
   this PR was fetched ("fetched 3 min ago") and, while the app runs, when it
   checks again ("the app checks GitHub again within 1 min"). This tells an
-  agent when a refresh is pointless.
+  agent when a refresh is pointless. `whats_on_me` says it per tile, and
+  every header says when a full sync runs.
+
+### Sync progress for other processes (2026-10-08)
+
+The MCP server reads the database through its own read-only connection, so
+it cannot ask the app's `SyncRun.progress()`. Reported: while the app ran
+its start sync, `whats_on_me` said "as of its last full sync at 12:02" on
+every call while its list grew from 5 to 20 items, and a tile it called
+"Your move: Review for team-devex" was "Nobody's move" in `pr_context`
+seconds later. The reads were right each time (tiles and moves are derived
+on every read, also across processes: `Board.load` reuses a Board only
+while `Store.changeVersion`, which takes `PRAGMA data_version`, stays the
+same); the data moved between the calls. The sync was fetching PRs and
+writing glances, and either flips a team request: a refetch that drops
+the request, or a NOT_YOURS glance, which holds it (`teamRequestHold`).
+Nothing in the answers said a sync was running or how old each PR was.
+`packages/mcp/src/freshness.test.ts` checks both paths with the app's
+connection writing next to the MCP's read-only one.
+
+- The app stores the running sync in meta `sync_progress`
+  (`SyncProgressRecorder`, `RecordedSyncProgress`): start time, running
+  phases, PRs read from GitHub once the fetch is done, agent calls done and
+  planned, and `savedAt`. Written at the start and on every phase change;
+  else checked every 5 s and written only when a count moved, or every
+  `SYNC_PROGRESS_HEARTBEAT_MS` (1 min) regardless. Removed after the sync
+  report is stored, crashed or held sync included. A failed write only
+  logs. No new table: one small row, read by key.
+- Readers (`recordedSyncProgress`) ignore a leftover: the app is not running
+  (`postpile.lock`), the record was not rewritten for
+  `SYNC_PROGRESS_STALE_MS` (3 min: the app was killed mid-sync), or a sync
+  report of that sync or a later one is stored.
+- The MCP header then adds, outside the fence and with numbers and step
+  names only: "Full sync running since 2026-10-07 12:02 UTC: step dossiers,
+  glances; 120 PRs read from GitHub; 14 of 40 agent calls done so far.
+  Lists, moves and glances can still change until it finishes." The fetch
+  reports no count while it runs ("still reading GitHub"), so there is no
+  "40 of 120 PRs" figure. After the sync the first line reads "Its last full
+  sync finished at …".
 - **Descriptions** say what it returns, "Use when / Not for", and one example;
   answers end with a next step where one fits (`pr_context`: "Stale? call
   refresh_from_github. Wrong topic? propose_topic_change."). Claude Code cuts

@@ -7,8 +7,14 @@ import { SYNC_PHASES, type SyncPhase, type SyncPhaseTimings } from '@postpile/co
 export class PhaseClock {
   private readonly startedAt = new Map<SyncPhase, number>();
   private readonly durations: SyncPhaseTimings = {};
+  private changed: () => void = () => {};
 
   constructor(private readonly now: () => Date) {}
+
+  /** Told whenever a phase starts or ends (the stored sync progress). One listener; a later call replaces it. */
+  onChange(listener: () => void): void {
+    this.changed = listener;
+  }
 
   /**
    * Runs work as the given phase. work() is called synchronously, so a job
@@ -16,10 +22,12 @@ export class PhaseClock {
    */
   async time<T>(phase: SyncPhase, work: () => Promise<T>): Promise<T> {
     this.startedAt.set(phase, this.now().getTime());
+    this.changed();
     try {
       return await work();
     } finally {
       this.durations[phase] = this.now().getTime() - (this.startedAt.get(phase) ?? 0);
+      this.changed();
     }
   }
 

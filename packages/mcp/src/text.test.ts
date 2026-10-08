@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import type { TileView } from '@postpile/core';
-import { ago, authorTag, echo, fenced, reviewCountsText, reviewersLine, stripInvisible, tileLine, turnText } from './text.ts';
+import type { EventKind, TileView } from '@postpile/core';
+import { ago, authorTag, echo, fenced, reviewCountsText, reviewersLine, leadUnreadReason, stripInvisible, syncRunningLine, tileLine, turnText, unreadReasonText } from './text.ts';
+
+function reason(actor: string, kind: EventKind, summary: string) {
+  return { actor, kind, summary };
+}
 
 describe('mcp text', () => {
   it('fences data with a random id that the data cannot close', () => {
@@ -84,5 +88,27 @@ describe('mcp text', () => {
     expect(authorTag({ scope: 'my_team', teams: ['acme/team-platform'] }, true)).toBe(' (your team: team-platform)');
     expect(authorTag({ scope: 'others', teams: [] }, true)).toBe(' (outside your team)');
     expect(authorTag({ scope: 'others', teams: [] }, false)).toBe('');
+  });
+
+  it('words a bot event by what it did, never by its text', () => {
+    expect(unreadReasonText(reason('coderabbitai[bot]', 'comment_edited', 'Walkthrough https://example.com/stack'))).toBe('coderabbitai updated its comment');
+    expect(unreadReasonText(reason('trunk-io', 'bot_comment', '![badge](https://example.com/badge.svg)'))).toBe('trunk-io commented');
+    expect(unreadReasonText(reason('lyra', 'comment', 'lyra commented: does this need a flag?'))).toBe('lyra commented: does this need a flag?');
+  });
+
+  it('leads an unread tile with its newest person event, else its bot headline', () => {
+    const person = reason('lyra', 'comment', 'lyra commented');
+    const bot = reason('coderabbitai[bot]', 'comment_edited', 'bot text');
+    // Least important first, headline last.
+    expect(leadUnreadReason([person, bot])).toBe(person);
+    expect(leadUnreadReason([bot])).toBe(bot);
+    expect(leadUnreadReason([])).toBeNull();
+  });
+
+  it('says what a running sync does with numbers and step names only', () => {
+    const progress = { startedAt: '2026-10-07T12:02:00Z', running: [], agentCallsDone: 0, agentCallsPlanned: 0, fromGitHub: null, savedAt: '2026-10-07T12:02:05Z' };
+    expect(syncRunningLine({ ...progress, running: ['fetch'] })).toBe(
+      'Full sync running since 2026-10-07 12:02 UTC: step fetch; still reading GitHub. Lists, moves and glances can still change until it finishes.',
+    );
   });
 });

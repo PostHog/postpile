@@ -9,6 +9,16 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - The MCP tools now show reviewers. `pr_context` names who approved, who asked for changes, who is still asked (people and teams) and which agents reviewed. `whats_on_me` gives each PR a short count, like "2 human approvals, waiting on 1 team, reviewbot approved", so an agent no longer has to ask GitHub PR by PR.
 - The MCP tools tag each PR author as you, your team or outside your team, and `whats_on_me` takes `author_scope` (me, my_team, others, any) to list, for example, only PRs from outside your team.
 
+### Changed
+
+- Agents asking PostPile (the MCP tools) now see when a full sync is running and how far it got, and `whats_on_me` says how long ago each PR was fetched, so a list read mid-sync no longer looks final.
+- `whats_on_me` and `pr_context` name bot activity ("coderabbitai updated its comment") instead of quoting bot comments full of links and badges, and prefer what a person did when there is both.
+- After a sync, PRs that wait on you get their agent glance before the others.
+
+### Fixed
+
+- `pr_context` no longer lists the same unrelated PRs as "Other PRs in this topic" for every PR that has no topic yet.
+
 ## 0.26.0 (2026-10-07)
 
 ### Changed

@@ -13,21 +13,43 @@ import {
   reviewerStates,
   type AuthorPlace,
   type AuthorScope,
+  SYNC_PROGRESS_STALE_MS,
   type PrDetail,
   type PrKey,
   type PrSummary,
   type TeamMembersView,
+  type RecordedSyncProgress,
+  type SyncReport,
   type TileView,
   type TopicDetail,
   type TopicListItem,
   type TopicProposal,
 } from '@postpile/core';
-import type { EngineService } from '@postpile/engine';
+import { UNSORTED_TOPIC_ID, type EngineService } from '@postpile/engine';
 import { parsePrInput } from './pr-input.ts';
-import { ago, answer, authorTag, teamSlug, briefGlanceLines, day, echo, fenced, freshness, glanceLines, prSummaryLine, reviewCountsText, reviewersLine, stateWord, tileLine, turnText, whatsNewText, withActor } from './text.ts';
+import {
+  ago,
+  answer, authorTag, teamSlug,
+  briefGlanceLines,
+  day,
+  echo,
+  fenced,
+  fetchedText,
+  freshness,
+  glanceLines,
+  leadUnreadReason,
+  prSummaryLine, reviewCountsText, reviewersLine,
+  stateWord,
+  syncRunningLine,
+  tileLine,
+  turnText,
+  unreadReasonText,
+  whatsNewText,
+  withActor,
+} from './text.ts';
 
 /** The read methods the tools use; the read-only engine and the sample-data engine both have them. */
-export type PostPileReader = Pick<EngineService, 'getPr' | 'getTopic' | 'listTopics' | 'search' | 'getViewer' | 'getTeamMembers' | 'lastSyncReport' | 'recordedAppVersion'>;
+export type PostPileReader = Pick<EngineService, 'getPr' | 'getTopic' | 'listTopics' | 'search' | 'getViewer' | 'getTeamMembers' | 'lastSyncReport' | 'recordedSyncProgress' | 'recordedAppVersion'>;
 
 /** What every read needs besides the reader. */
 export interface ReadContext {
@@ -89,10 +111,36 @@ export function toolError(lines: string[], fencedData: string[] = []): ToolAnswe
   return { text, found: false, isError: true };
 }
 
-async function header(reader: PostPileReader): Promise<string[]> {
-  const [report, viewer] = await Promise.all([reader.lastSyncReport(), reader.getViewer()]);
-  const who = viewer.login ? `It works for @${viewer.login}; "you" below means them.` : 'It does not know its user yet.';
-  return [freshness(report), who];
+/**
+ * The full sync the app runs right now, as it recorded it; null when none
+ * runs. A record is a leftover, never shown, when the app is closed, when
+ * the app stopped rewriting it (SYNC_PROGRESS_STALE_MS: it crashed or was
+ * killed mid-sync), or when a report of that sync is stored already.
+ */
+function runningSync(progress: RecordedSyncProgress | null, report: SyncReport | null, ctx: ReadContext): RecordedSyncProgress | null {
+  if (progress === null || !ctx.appRunning()) {
+    return null;
+  }
+  if (ctx.now().getTime() - Date.parse(progress.savedAt) > SYNC_PROGRESS_STALE_MS) {
+    return null;
+  }
+  if (report !== null && report.startedAt >= progress.startedAt) {
+    return null;
+  }
+  return progress;
+}
+
+/** Outside the fence: the last full sync, the one running now if any, and whom the app works for. No GitHub text. */
+async function header(ctx: ReadContext): Promise<string[]> {
+  const { reader } = ctx;
+  const [report, viewer, progress] = await Promise.all([reader.lastSyncReport(), reader.getViewer(), reader.recordedSyncProgress()]);
+  const lines = [freshness(report)];
+  const running = runningSync(progress, report, ctx);
+  if (running) {
+    lines.push(syncRunningLine(running));
+  }
+  lines.push(viewer.login ? `It works for @${viewer.login}; "you" below means them.` : 'It does not know its user yet.');
+  return lines;
 }
 
 /** The user's login and home-team members: the author tags and the author_scope filter read them. */
@@ -238,7 +286,7 @@ function prHeadLines(detail: PrDetail, tiles: TileView[], authors: Authors): str
   for (const view of tiles) {
     const unread = view.state.unreadBecause.filter((reason) => reason.prKey === pr.key);
     for (const reason of unread) {
-      lines.push(`Unread for you: ${withActor(reason.actor, reason.summary)} (${day(reason.at)})`);
+      lines.push(`Unread for you: ${unreadReasonText(reason)} (${day(reason.at)})`);
     }
     if (view.state.kind === 'snoozed') {
       lines.push(view.state.muted ? 'The user muted this until someone asks them in person.' : 'The user snoozed this.');
@@ -318,8 +366,11 @@ function fullTopicLines(detail: TopicDetail, thisPr: PrKey | null): string[] {
   return lines;
 }
 
-/** Brief pr_context: the topic's name and its other PRs, one line each. */
+/** Brief pr_context: the topic's name and its other PRs, one line each. Unsorted is no topic: its PRs have nothing to do with each other. */
 function briefTopicForPr(detail: TopicDetail, thisPr: PrKey): string[] {
+  if (detail.topic.id === UNSORTED_TOPIC_ID) {
+    return ['In Unsorted (not a real topic; each sync places these PRs in one): no siblings listed.'];
+  }
   const others = uniquePrs(detail.tiles).filter((pr) => pr.key !== thisPr);
   const lines = [topicHeadLine(detail)];
   if (others.length === 0) {
@@ -410,7 +461,7 @@ export async function prContext(ctx: ReadContext, input: string, detail: Detail)
   }
   const more = detail === 'brief' ? 'detail: "full" adds activity, facts and the whole topic. ' : '';
   const next = `Next: ${more}Stale? call refresh_from_github. Wrong topic? propose_topic_change.`;
-  return { text: answer([...(await header(reader)), ...teamNote(authors)], data, [prFreshnessLine(pr, ctx), next]), found: true };
+  return { text: answer([...(await header(ctx)), ...teamNote(authors)], data, [prFreshnessLine(pr, ctx), next]), found: true };
 }
 
 /** One read per topic, all at once; topics that are gone are left out. */
@@ -490,7 +541,7 @@ export async function topicOverview(ctx: ReadContext, input: string, detail: Det
   }
   const data = [...(detail === 'full' ? fullTopicLines(topic, null) : briefTopicLines(topic)), ...(await suggestionLines(reader, topic, ctx.now()))];
   const footer = detail === 'brief' ? ['Next: detail: "full" adds people, timeline, recent changes and every PR; pr_context for one PR.'] : [];
-  return { text: answer(await header(reader), data, footer), found: true };
+  return { text: answer(await header(ctx), data, footer), found: true };
 }
 
 /** A bad repo filter, or null when it is fine. */
@@ -567,7 +618,17 @@ export async function searchPrs(ctx: ReadContext, query: string, options: ListOp
   }
   const page = rows.slice(options.offset, options.offset + options.limit);
   const { head, tail } = pageLines(rows.length, options, page.length);
-  return { text: answer([...(await header(reader)), `${head} Filters: ${filterWords(options)}.`], page, tail), found: true };
+  return { text: answer([...(await header(ctx)), `${head} Filters: ${filterWords(options)}.`], page, tail), found: true };
+}
+
+/** "fetched 2 min ago": the oldest fetch of the tile's PRs, so a tile never reads fresher than its stalest PR. */
+function tileFetchedText(view: TileView, now: Date): string {
+  const times = view.prs.map((pr) => pr.fetchedAt);
+  if (times.some((time) => time === null)) {
+    return fetchedText(null, now);
+  }
+  const oldest = (times as string[]).reduce((a, b) => (a < b ? a : b));
+  return fetchedText(oldest, now);
 }
 
 function isLive(view: TileView): boolean {
@@ -606,6 +667,7 @@ export async function whatsOnMe(ctx: ReadContext, options: QueueOptions): Promis
     return toolError([`author_scope "${options.authorScope}" needs the user's team members. ${teamNote(authors).join(' ')} Use author_scope: "me" or "any".`]);
   }
   const items = (await reader.listTopics(ALL_REPOS)).filter((item) => item.group === 'needs_you');
+  const now = ctx.now();
   const rows: QueueRow[] = [];
   for (const detail of await readTopics(reader, items.map((item) => item.topic.id))) {
     for (const view of detail.tiles.filter(isLive)) {
@@ -613,19 +675,19 @@ export async function whatsOnMe(ctx: ReadContext, options: QueueOptions): Promis
       if (matching.length === 0 || !moveMatches(view, options.whoseMove)) {
         continue;
       }
-      const line = `- ${view.tile.title} (${view.prs.map((pr) => pr.key).join(', ')}) · topic ${detail.topic.name} (${detail.topic.id})`;
+      const line = `- ${view.tile.title} (${view.prs.map((pr) => pr.key).join(', ')}) · topic ${detail.topic.name} (${detail.topic.id}) · ${tileFetchedText(view, now)}`;
       if (view.turn.kind === 'you') {
         rows.push({ yourMove: true, text: `${line}\n  ${view.turn.what}`, prs: view.prs });
       } else if (view.state.kind === 'unread') {
-        const reason = view.state.unreadBecause[0];
-        rows.push({ yourMove: false, text: `${line}\n  ${reason ? withActor(reason.actor, reason.summary) : 'unread'} · ${turnText(view.turn)}`, prs: view.prs });
+        const reason = leadUnreadReason(view.state.unreadBecause);
+        rows.push({ yourMove: false, text: `${line}\n  ${reason ? unreadReasonText(reason) : 'unread'} · ${turnText(view.turn)}`, prs: view.prs });
       }
     }
   }
   // Your move first, then unread ones where it is not.
   rows.sort((a, b) => Number(b.yourMove) - Number(a.yourMove));
   if (rows.length === 0) {
-    const text = [...(await header(reader)), ...teamNote(authors), '', `Nothing waits on the user right now (filters: ${filterWords(options)}).`].join('\n');
+    const text = [...(await header(ctx)), ...teamNote(authors), '', `Nothing waits on the user right now (filters: ${filterWords(options)}).`].join('\n');
     return { text, found: false };
   }
   const page = rows.slice(options.offset, options.offset + options.limit);
@@ -642,5 +704,5 @@ export async function whatsOnMe(ctx: ReadContext, options: QueueOptions): Promis
   if (others.length > 0) {
     data.push(...(data.length > 0 ? [''] : []), `Unread, not your move (${rows.length - yourMoveTotal} in total):`, ...others.map((row) => row.text));
   }
-  return { text: answer([...(await header(reader)), ...teamNote(authors), `${head} Filters: ${filterWords(options)}.`], data, tail), found: true };
+  return { text: answer([...(await header(ctx)), ...teamNote(authors), `${head} Filters: ${filterWords(options)}.`], data, tail), found: true };
 }

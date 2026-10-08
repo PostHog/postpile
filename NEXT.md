@@ -6,6 +6,12 @@ now".
 
 ## Done
 
+- MCP freshness (2026-10-08; DESIGN.md "Sync progress for other
+  processes"): the app stores the running sync in meta `sync_progress` and
+  the MCP header shows it ("Full sync running since …"); `whats_on_me`
+  says "fetched N ago" per tile (`PrSummary.fetchedAt`); bot unread
+  reasons are named, not quoted; brief `pr_context` lists no siblings in
+  Unsorted; glances go to the user's-move PRs first.
 - The rest of the PR as rows, `pr_snapshot` retired (2026-10-06, for
   0.23.0; DESIGN.md "Big inboxes" › PR storage: the rest of the PR as
   rows, and "Storage jobs"; steps 6 to 8 of normalizing the PR snapshot,
