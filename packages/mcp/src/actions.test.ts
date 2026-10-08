@@ -5,7 +5,8 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { FakeEngine } from '@postpile/server';
 import { describe, expect, it } from 'vitest';
-import { FileAgentRequests, InMemoryAgentRequests, type AgentRequests } from './agent-requests.ts';
+import { AGENT_REQUEST_VERSION, pendingNote } from '@postpile/core';
+import { FileAgentRequests, InMemoryAgentRequests, type AgentAsk, type AgentRequests } from './agent-requests.ts';
 import { clientName, createMcpServer, type McpToolName } from './server.ts';
 
 interface Called {
@@ -283,6 +284,27 @@ describe('note_pr', () => {
       durable: { kind: 'no_action', status: 'live', untrusted: { by: 'review session', client: 'claude-code', note: expect.stringContaining('browser version') } },
       lease: null,
     });
+  });
+
+  it('takes a bare covered_by number in the noted PR repo, and says when the covering PR is still being read', async () => {
+    const asked: AgentAsk[] = [];
+    const pending: AgentRequests = {
+      ask: async (request) => {
+        asked.push(request);
+        return { kind: 'answered', result: { v: AGENT_REQUEST_VERSION, ok: true, kind: 'note_pr', prNote: pendingNote('PostPile is still reading acme/app#4242 from GitHub') } };
+      },
+    };
+    const engine = new FakeEngine();
+    const client = await connected(engine, pending);
+    const token = await tokenOf(client, 'acme/app#1904');
+
+    const result = await call(client, 'note_pr', { pr: 'acme/app#1904', kind: 'covered', covered_by: '#4242', note: 'Reviewed with the parent', by: 'ph3 session', token });
+
+    expect(asked[0]?.payload).toMatchObject({ coveredByPrKey: 'acme/app#4242', coverToken: null });
+    expect(result.isError).toBe(false);
+    expect(result.text.startsWith('Not set yet: PostPile is still reading covered_by from GitHub.')).toBe(true);
+    expect(fencedPart(result.text)).toContain('still reading acme/app#4242');
+    expect(result.structured).toMatchObject({ status: 'pending', note_id: null });
   });
 
   it('says what a set needs', async () => {

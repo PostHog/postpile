@@ -1,7 +1,9 @@
 import {
   anchorSummary,
+  coverKeyFor,
   noteAnchor,
   observationToken,
+  pendingNote,
   planNoteClear,
   planNoteRenew,
   planNoteSet,
@@ -20,6 +22,13 @@ import {
 } from '@postpile/core';
 import type { Store } from '@postpile/store';
 import { newNoteId } from './ids.ts';
+import type { CoverRead } from './note-cover.ts';
+
+/** Reads a covering PR PostPile does not store (`NoteCoverReader`); null where nothing can be read (tests without GitHub). */
+export type CoverReader = { read: (cover: PrKey, notedKey: PrKey) => Promise<CoverRead> } | null;
+
+/** What one set transaction came to: the answer, or the covering PR it needs first. */
+type SetStep = { kind: 'done'; result: PrNoteResult } | { kind: 'needs_cover'; coverKey: PrKey };
 
 /**
  * Agent notes on PRs (DESIGN.md "Agent notes on PRs"): note_pr's set,
@@ -35,6 +44,7 @@ export class PrNotes {
   constructor(
     private readonly store: Store,
     private readonly now: () => Date,
+    private readonly covers: CoverReader = null,
   ) {}
 
   /** Moves on every note write; added to the live poll's change count. */
@@ -90,11 +100,11 @@ export class PrNotes {
     return prNoteView(note, read);
   }
 
-  private set(request: Extract<PrNoteRequest, { action: 'set' }>, client: string): PrNoteResult {
+  private setStep(request: Extract<PrNoteRequest, { action: 'set' }>, client: string): SetStep {
     const now = this.now().toISOString();
     // One transaction: the anchor the token is checked against is the one stored with the note.
-    return this.store.transaction(() => {
-      const keys = request.coveredByPrKey ? [request.prKey, request.coveredByPrKey] : [request.prKey];
+    return this.store.transaction((): SetStep => {
+      const keys = request.coveredByPrKey ? [request.prKey, coverKeyFor(request.prKey, request.coveredByPrKey)] : [request.prKey];
       const read = this.readContext(keys);
       const plan = planNoteSet(request, {
         now,
@@ -106,10 +116,13 @@ export class PrNotes {
         newId: newNoteId,
       });
       if (plan.kind === 'refused') {
-        return refusedNote(plan.reason);
+        return { kind: 'done', result: refusedNote(plan.reason) };
+      }
+      if (plan.kind === 'needs_cover') {
+        return plan;
       }
       if (plan.kind === 'unchanged') {
-        return { status: 'unchanged', note: prNoteView(plan.note, read), replaced: null, anchored: anchorSummary(plan.note.anchor), reason: null };
+        return { kind: 'done', result: { status: 'unchanged', note: prNoteView(plan.note, read), replaced: null, anchored: anchorSummary(plan.note.anchor), reason: null } };
       }
       if (plan.releaseKeyOf) {
         this.store.prNotes.releaseKey(plan.releaseKeyOf.id);
@@ -120,8 +133,37 @@ export class PrNotes {
       const seq = this.store.prNotes.insert(plan.note);
       this.written += 1;
       const replaced = plan.replaces ? prNoteView({ ...plan.replaces, supersededBy: plan.note.id }, read) : null;
-      return { status: 'set', note: prNoteView({ ...plan.note, seq }, read), replaced, anchored: anchorSummary(plan.note.anchor), reason: null };
+      return { kind: 'done', result: { status: 'set', note: prNoteView({ ...plan.note, seq }, read), replaced, anchored: anchorSummary(plan.note.anchor), reason: null } };
     });
+  }
+
+  /** What a covering PR read that stored nothing means for the note. */
+  private coverOutcome(read: CoverRead, cover: PrKey): PrNoteResult {
+    if (read.kind === 'pending') {
+      return pendingNote(`PostPile is still reading ${cover} from GitHub; call note_pr again with the same arguments in a minute`);
+    }
+    if (read.kind === 'not_found') {
+      return refusedNote(`GitHub has no PR ${cover} that PostPile can read; check covered_by`);
+    }
+    return refusedNote(read.kind === 'blocked' ? read.reason : `PostPile does not store ${cover}`);
+  }
+
+  /**
+   * A set. A covering PR PostPile does not store is read from GitHub first
+   * (`NoteCoverReader`, outside the transaction), then the set is planned
+   * again against the store as it is then.
+   */
+  private async set(request: Extract<PrNoteRequest, { action: 'set' }>, client: string): Promise<PrNoteResult> {
+    const first = this.setStep(request, client);
+    if (first.kind === 'done') {
+      return first.result;
+    }
+    const read = this.covers ? await this.covers.read(first.coverKey, request.prKey) : ({ kind: 'blocked', reason: `PostPile does not store ${first.coverKey}` } as const);
+    if (read.kind !== 'stored') {
+      return this.coverOutcome(read, first.coverKey);
+    }
+    const second = this.setStep(request, client);
+    return second.kind === 'done' ? second.result : refusedNote(`PostPile could not store ${second.coverKey}`);
   }
 
   private renew(noteId: string, minutes: number | null): PrNoteResult {
@@ -156,7 +198,7 @@ export class PrNotes {
   }
 
   /** note_pr from an outside agent, through the agent-request outbox. */
-  handle(request: PrNoteRequest, client: string): PrNoteResult {
+  async handle(request: PrNoteRequest, client: string): Promise<PrNoteResult> {
     if (request.action === 'set') {
       return this.set(request, client);
     }

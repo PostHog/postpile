@@ -87,6 +87,10 @@ export class FakePrNotes {
     if (plan.kind === 'refused') {
       return refusedNote(plan.reason);
     }
+    // Sample data has no GitHub to read a covering PR from.
+    if (plan.kind === 'needs_cover') {
+      return refusedNote(`the sample data has no PR ${plan.coverKey}, and the sample-data engine reads nothing from GitHub`);
+    }
     if (plan.kind === 'unchanged') {
       return { status: 'unchanged', note: prNoteView(plan.note, read), replaced: null, anchored: anchorSummary(plan.note.anchor), reason: null };
     }

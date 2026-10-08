@@ -11,6 +11,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - `pr_context` shows a bot's real finding when its change request only says "findings inline": the line now comes from the bot's first inline comment, with "(+N more)" when there are several.
 - After a PostPile update, the MCP tools' "reconnect" message now also says that a Claude Code session keeps the old parameter lists of tools it already knew until a new session starts. The new parameters (`author_scope`, `format`, several PRs in `pr_context`) work anyway.
 - The MCP tools no longer tell agents a refresh is rarely needed for a PR PostPile last read hours ago: old snapshots are marked "may be stale" with a hint to refresh. PRs that wait on you are also read again every few hours even when nothing new arrived on them.
+- `note_pr` with kind "covered" now accepts a covering PR that PostPile does not track yet, such as the parent of a stack you were never pinged on. PostPile reads that PR from GitHub, keeps it up to date without showing it as a tile, and the note goes out of date when the covering PR changes.
 
 ## 0.27.0 (2026-10-08)
 

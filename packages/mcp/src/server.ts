@@ -110,6 +110,7 @@ const NOTE_DESCRIPTION = `Leave a short note on a PR for the user and other agen
 Advisory only: a note never hides a move, marks nothing read or done and changes no counts. whats_on_me shows it on the PR's line; the user sees it in the PR pane and can clear it.
 One durable note (covered or no_action) and one lease per PR; a new one replaces the old one in its slot. Renew a lease by note_id while you work; clear a note by note_id when it no longer holds.
 Read the PR with pr_context first: set needs the observation token it prints, and is refused when the PR changed since.
+covered_by may be a PR PostPile does not track yet, often the parent of a stack: the app then reads it from GitHub (it counts against the user's GitHub quota) and no cover_token is needed. If that read takes long, the answer is pending: call again with the same arguments.
 A note is anchored to the PR's state (head, reviews, review requests, people's comments) and goes stale by itself when that changes. Your own later comment or review counts too (it is posted through the user's account): write the note LAST, after any GitHub post.
 Use when: you finished a review or triage without a GitHub write, or found the PR covered elsewhere (no_action, covered); a review or triage will take more than a few minutes (in_progress).
 Not for: a review or comment you post on GitHub (PostPile reads it), work that only writes code, or reminders to the user.
@@ -130,13 +131,15 @@ const proposeOutput = {
 };
 
 const noteOutput = {
-  status: z.enum(['set', 'unchanged', 'renewed', 'cleared']).describe('unchanged: the same note was set already, nothing written twice'),
+  status: z
+    .enum(['set', 'unchanged', 'renewed', 'cleared', 'pending'])
+    .describe('unchanged: the same note was set already, nothing written twice; pending: nothing written yet, PostPile is still reading covered_by from GitHub, call again'),
   note_id: z.string().nullable(),
   expires_at: z.string().nullable().describe('in_progress: when the lease ends'),
 };
 
-/** Writes a local note in the app, never GitHub; the same call twice writes it once. */
-const NOTE = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
+/** Writes a local note in the app, never GitHub; it may read an untracked covered_by from GitHub. The same call twice writes it once. */
+const NOTE = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true } as const;
 
 const detailSchema = z
   .enum(['brief', 'full'], { error: 'detail must be "brief" or "full", e.g. detail: "full"' })

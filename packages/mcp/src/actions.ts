@@ -2,9 +2,10 @@
 // GitHub (refresh_from_github), file a topic suggestion for the user
 // (propose_topic_change) and leave a note on a PR (note_pr). The MCP process itself still never writes the
 // database or GitHub; see agent-requests.ts.
-import { AGENT_REQUEST_WAIT_MS, type AgentRefreshResult, type AgentRefreshTarget, type AgentRequestResult, type PrKey, type PrNoteKind, type PrNoteRequest, type PrNoteResult, type TopicChangeKind, type TopicChangeResult } from '@postpile/core';
+import { AGENT_REQUEST_WAIT_MS, parsePrKey, type AgentRefreshResult, type AgentRefreshTarget, type AgentRequestResult, type PrKey, type PrNoteKind, type PrNoteRequest, type PrNoteResult, type TopicChangeKind, type TopicChangeResult } from '@postpile/core';
 import type { AgentAsk, AgentRequests } from './agent-requests.ts';
-import { notTracked, resolvePr, resolveTopic, toolError, type ReadContext, type ToolAnswer } from './reads.ts';
+import { parsePrInput } from './pr-input.ts';
+import { notTracked, resolvePr, resolveTopic, toolError, type ReadContext, type ResolvedPr, type ToolAnswer } from './reads.ts';
 import { untilText } from './notes-text.ts';
 import { ago, answer, minute } from './text.ts';
 
@@ -275,6 +276,19 @@ const NOTE_EXAMPLES = {
   clear: 'note_pr(action: "clear", note_id: "n3f2a1c9d0e")',
 } as const;
 
+/**
+ * covered_by as a PR key. A bare "#1851" means that number in the noted
+ * PR's repo (covered_by must be in the same repo anyway), so it works for a
+ * PR PostPile does not track yet: the app reads that one from GitHub.
+ */
+async function resolveCover(ctx: ActionContext, input: string, notedKey: PrKey): Promise<ResolvedPr> {
+  const parsed = parsePrInput(input);
+  if (parsed?.kind === 'number') {
+    return { ok: true, key: `${parsePrKey(notedKey).repo}#${parsed.number}` };
+  }
+  return resolvePr(ctx.reader, input, 'covered_by');
+}
+
 /** The set request with its PRs resolved, or the error that says what is missing. */
 async function noteSetRequest(ctx: ActionContext, args: NotePrArgs): Promise<PrNoteRequest | ToolAnswer> {
   const example = `Example: ${NOTE_EXAMPLES.set}`;
@@ -287,7 +301,7 @@ async function noteSetRequest(ctx: ActionContext, args: NotePrArgs): Promise<PrN
   }
   let coveredBy: PrKey | null = null;
   if (args.covered_by?.trim()) {
-    const cover = await resolvePr(ctx.reader, args.covered_by, 'covered_by');
+    const cover = await resolveCover(ctx, args.covered_by, resolved.key);
     if (!cover.ok) {
       return cover.error;
     }
@@ -362,6 +376,10 @@ export async function notePr(ctx: ActionContext, args: NotePrArgs): Promise<Tool
   const outcome = result.prNote;
   if (outcome.status === 'refused') {
     return toolError([`Nothing changed. ${WHY}`], [outcome.reason ?? 'refused']);
+  }
+  if (outcome.status === 'pending') {
+    const head = ['Not set yet: PostPile is still reading covered_by from GitHub. Call note_pr again with the same arguments in a minute; the note is never written twice.', WHY];
+    return { text: answer(head, [outcome.reason ?? 'pending']), found: true, structured: noteStructured(outcome) };
   }
   return noteAnswer(outcome, ctx.now());
 }

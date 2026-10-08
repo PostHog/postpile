@@ -59,7 +59,7 @@ describe('PostPile MCP server', () => {
     }
     expect(annotations.refresh_from_github).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true });
     expect(annotations.propose_topic_change).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false });
-    expect(annotations.note_pr).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false });
+    expect(annotations.note_pr).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true });
     for (const tool of tools) {
       expect(tool.description?.length ?? 0).toBeLessThan(CLAUDE_CODE_CUT);
       expect(tool.description).toContain('Use when:');
