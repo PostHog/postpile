@@ -119,6 +119,7 @@ describe('PostPile MCP server', () => {
     const queue = fencedPart(await callText(client, 'whats_on_me'));
     expect(queue).toContain('acme/app#1932 by ines (outside your team) · reviews: waiting on 1 team · team-platform owns 1 of 3 files');
     expect(queue).toContain("    effort: 1 file, +12 -4 in your team's area (PR +140 -12, 3 files)");
+    expect(queue).not.toMatch(/owns 0 of|nothing in your team/);
     const pr = fencedPart(await callText(client, 'pr_context', { pr: 'acme/app#1932' }));
     expect(pr).toContain('  team-platform: 1 of 3 files (.github/workflows/ingestion-ci.yml)');
 

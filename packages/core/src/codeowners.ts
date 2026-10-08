@@ -31,9 +31,10 @@ export interface OwnedFiles {
 /** `reviewOwnership`: the PR's files as CODEOWNERS hands them out. */
 export interface ReviewOwnership {
   /**
-   * The requested teams (even when they own none of the files: then the
-   * request did not come from CODEOWNERS), then the viewer's home teams
-   * that own at least one file.
+   * The requested teams, then the viewer's home teams, each only when it
+   * owns at least one file. A team with none is left out: repos that route
+   * reviews another way (owners files a bot reads) would show "0 files"
+   * for nearly every request, which misleads.
    */
   owners: OwnedFiles[];
   /** Files owned by the viewer's part: their home teams, their requested teams and their own login. Each file once. */
@@ -170,10 +171,10 @@ export function reviewOwnership(rules: CodeownersRule[], pr: OwnershipPr, viewer
   const fileOwners = new Map(pr.files.map((file) => [file, ownersOfPath(rules, file.path)]));
   const home = viewer ? homeTeamsOf(viewer) : [];
   const ownedByTeam = (team: string) => ownedBy(fileOwners, (owner) => isTeamOwner(owner, team));
-  const owners: OwnedFiles[] = pr.reviewerTeams.map((team) => ({ owner: team, requested: true, files: ownedByTeam(team) }));
+  const owners: OwnedFiles[] = pr.reviewerTeams.map((team) => ({ owner: team, requested: true, files: ownedByTeam(team) })).filter((entry) => entry.files.length > 0);
   for (const team of home) {
     // A requested bare slug and the home team's "org/slug" are one team.
-    if (owners.some((entry) => isOwnTeam(entry.owner, [team]))) {
+    if (pr.reviewerTeams.some((requested) => isOwnTeam(requested, [team]))) {
       continue;
     }
     const files = ownedByTeam(team);

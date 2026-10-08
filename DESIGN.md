@@ -7785,9 +7785,12 @@ gives each team, and how big the user's part is.
   docs/b/c.md, as GitHub documents). Lines with `!`, `[ ]` or `\` are
   skipped, like GitHub skips them. Owners are compared lower case; emails
   are dropped. A requested bare slug matches its "org/slug" owner.
-- Which teams: every requested team (`reviewerTeams`), even with 0 files
-  (then the request did not come from CODEOWNERS), then the viewer's home
-  teams that own at least one file. "Your team's area" (`yours`) is what
+- Which teams: the requested teams (`reviewerTeams`), then the viewer's
+  home teams, each only when CODEOWNERS gives it at least one file. No "0
+  files" lines (Julian, 2026-10-08): CODEOWNERS only, shown only when it
+  attributes files. Repos that route reviews another way (owners.yaml
+  files a bot resolves, say) show nothing, by design; there "0 files"
+  for nearly every request misled. "Your team's area" (`yours`) is what
   the home teams, the viewer's own teams requested on this PR (routing
   ones too: that request is why it is their move) and their own login
   own.
@@ -7804,11 +7807,13 @@ gives each team, and how big the user's part is.
   area (PR +410 -120, 23 files); 2 open threads". `whats_on_me` adds
   "team-devex owns 1 of 7 files" to each open PR's line and the effort line
   under each open PR of a your-move tile. Paths are GitHub text: inside
-  the fence. Unknown CODEOWNERS says nothing about ownership; the effort
-  line then gives the PR's size and threads only. `format: "json"` carries
+  the fence. Unknown CODEOWNERS says nothing about ownership. The effort
+  line always gives the PR's size and open threads; the "in your team's
+  area" part only when that area has files. `format: "json"` carries
   the same per PR: `ownership: [{team, owned, total, untrusted: {paths}}]`
   and `effort: {files, additions, deletions, prAdditions, prDeletions,
-  prFiles, openThreads}` (the area fields null without CODEOWNERS).
+  prFiles, openThreads}` (the area fields null without CODEOWNERS); teams
+  owning no file are left out of `ownership` there too.
 - Fake mode: `SampleData.codeOwners` holds a CODEOWNERS for acme/app;
   #1932 shows one workflow file owned by team-platform.
 

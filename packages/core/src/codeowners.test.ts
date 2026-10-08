@@ -117,12 +117,11 @@ describe('reviewOwnership', () => {
   const viewer: Viewer = { login: 'viewer', teams: ['acme/team-devex', 'acme/reviewers'], homeTeams: ['acme/team-devex'] };
   const files = [file('.github/workflows/ci.yml', 12, 3), file('src/app.ts', 300, 100), file('src/b.ts', 50, 10), file('docs/x.md', 4, 0)];
 
-  it('lists each requested team, even one owning nothing, then home teams that own files', () => {
+  it('lists the requested teams, then home teams, each only when it owns files', () => {
     const pr = makePr({ files, changedFiles: 4, reviewerTeams: ['acme/team-core', 'acme/reviewers'] });
     const ownership = reviewOwnership(rules, pr, viewer);
     expect(ownership?.owners.map((entry) => [entry.owner, entry.requested, entry.files.map((f) => f.path)])).toEqual([
       ['acme/team-core', true, ['src/app.ts', 'src/b.ts']],
-      ['acme/reviewers', true, []],
       ['acme/team-devex', false, ['.github/workflows/ci.yml']],
     ]);
   });

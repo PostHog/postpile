@@ -40,7 +40,7 @@ describe('ownership text', () => {
 
   it("sizes the user's part against the whole PR, with the open threads", () => {
     expect(effortText(size, ownership, 2)).toBe("effort: 1 file, +12 -3 in your team's area (PR +410 -120, 7 files); 2 open threads");
-    expect(effortText(size, { ...ownership, yours: [] }, 0)).toBe("effort: nothing in your team's area (PR +410 -120, 7 files)");
+    expect(effortText(size, { ...ownership, yours: [] }, 0)).toBe('effort: PR +410 -120, 7 files');
     expect(effortText(size, null, 1)).toBe('effort: PR +410 -120, 7 files; 1 open thread');
   });
 });

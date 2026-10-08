@@ -59,16 +59,17 @@ export function ownershipShort(ownership: ReviewOwnership | null): string {
 
 /**
  * "effort: 1 file, +12 -3 in your team's area (PR +410 -120, 23 files); 2
- * open threads". Without CODEOWNERS only the PR's size and the threads.
+ * open threads". The area part only when CODEOWNERS gives the user's teams
+ * at least one file; the PR's size and the threads always.
  */
 export function effortText(size: PrSize, ownership: ReviewOwnership | null, openThreads: number): string {
   const total = `PR +${size.additions} -${size.deletions}, ${files(size.changedFiles)}`;
   const threads = openThreads > 0 ? `; ${openThreads} open ${openThreads === 1 ? 'thread' : 'threads'}` : '';
-  if (!ownership) {
+  if (!ownership || ownership.yours.length === 0) {
     return `effort: ${total}${threads}`;
   }
   const lines = fileLines(ownership.yours);
-  const area = ownership.yours.length === 0 ? "nothing in your team's area" : `${files(ownership.yours.length)}, +${lines.additions} -${lines.deletions} in your team's area`;
+  const area = `${files(ownership.yours.length)}, +${lines.additions} -${lines.deletions} in your team's area`;
   const capped = ownership.filesListed < ownership.filesTotal ? `, only the first ${ownership.filesListed} checked` : '';
   return `effort: ${area} (${total}${capped})${threads}`;
 }
