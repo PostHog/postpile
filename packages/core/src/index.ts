@@ -37,6 +37,7 @@ export * from './pr-pane.ts';
 export * from './tile-people.ts';
 export * from './changes-answered.ts';
 export * from './whose-turn.ts';
+export * from './waiting-threads.ts';
 export * from './after-read.ts';
 export * from './read-plan.ts';
 export * from './pending-write.ts';

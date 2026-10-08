@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { EventKind, TileView } from '@postpile/core';
-import { ago, authorTag, echo, fenced, reviewCountsText, reviewersLine, leadUnreadReason, stripInvisible, syncRunningLine, tileLine, turnText, unreadReasonText } from './text.ts';
+import { ago, authorTag, commentPreview, echo, fenced, reviewCountsText, reviewersLine, leadUnreadReason, stripInvisible, syncRunningLine, tileLine, turnText, unreadReasonText, waitingThreadText } from './text.ts';
 
 function reason(actor: string, kind: EventKind, summary: string) {
   return { actor, kind, summary };
@@ -113,5 +113,28 @@ describe('mcp text', () => {
     );
     expect(syncRunningLine({ ...progress, running: ['fetch'], prsRead: { read: 12, planned: null } })).toContain('step fetch; 12 PRs read from GitHub so far.');
     expect(syncRunningLine({ ...progress, running: ['fetch'], prsRead: { read: 12, planned: 40 } })).toContain('step fetch; 12 of 40 PRs read from GitHub.');
+  });
+
+  it('previews a comment in one short line without markup', () => {
+    expect(commentPreview('👍')).toBe('👍');
+    expect(commentPreview('> did you mean this?\n\nYes, **exactly**.\n\n```ts\nconst a = 1;\n```')).toBe('Yes, exactly. [code]');
+    expect(commentPreview('See [the docs](https://example.com/docs) and https://example.com/x `flag_name`')).toBe('See the docs and [link] flag_name');
+    expect(commentPreview('![screenshot](https://example.com/a.png)')).toBe('[image]');
+    expect(commentPreview('> only a quote')).toBe('(nothing but quotes, code or markup)');
+    const long = commentPreview('word '.repeat(40));
+    expect(long).toHaveLength(80);
+    expect(long.endsWith('…')).toBe(true);
+    // An emoji at the cut is never split into half a surrogate pair.
+    const emoji = commentPreview(`${'a'.repeat(78)}👍 and more`);
+    expect(emoji).toBe(`${'a'.repeat(78)}👍…`);
+    expect(emoji.isWellFormed()).toBe(true);
+  });
+
+  it('names the newest thread waiting on the user and how many wait', () => {
+    const thread = { threadId: 't1', path: 'src/cache.ts', author: 'bob', at: '2026-10-01T10:00:00Z', body: '👍', url: 'https://github.com/acme/app/pull/1#r1' };
+    expect(waitingThreadText([])).toBeNull();
+    expect(waitingThreadText([thread])).toBe('Latest unanswered thread: bob on src/cache.ts: "👍"');
+    expect(waitingThreadText([thread, { ...thread, threadId: 't2', body: null }])).toBe('Latest unanswered thread: bob on src/cache.ts: "👍" (newest of 2)');
+    expect(waitingThreadText([{ ...thread, body: null }])).toContain('(text not stored)');
   });
 });

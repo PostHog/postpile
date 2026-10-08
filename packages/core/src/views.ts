@@ -21,6 +21,7 @@ import type {
   Verdict,
 } from './types.ts';
 import type { ActivityList } from './activity.ts';
+import type { WaitingThread } from './waiting-threads.ts';
 import type { TileAfterRead } from './after-read.ts';
 import type { GlanceRefreshBlock, GlanceState } from './glance-state.ts';
 import type { AgentCallStats, DossierStatus, TopicRelation } from './memory.ts';
@@ -491,7 +492,12 @@ export interface PrDetail {
   /** Ids of every tile this PR appears in. */
   tileIds: string[];
   /** Active facts about this PR or citing it, verified at read time. */
-  facts: FactView[];
+  facts: FactView[];  /**
+   * Unresolved threads whose last word waits on the viewer, newest first
+   * (`waitingThreads`): the MCP answers preview the newest next to an
+   * "Answer 1 thread from bob" move. The renderer does not read it.
+   */
+  waitingThreads: WaitingThread[];
 }
 
 /**

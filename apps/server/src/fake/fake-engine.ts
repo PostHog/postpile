@@ -112,6 +112,7 @@ import {
   UNDO_WINDOW_MS,
   viewerApproval,
   viewerReviewStand,
+  waitingThreads,
   agentPrFacts,
   agentApproveRefusal,
   agentApproveSkip,
@@ -1379,6 +1380,7 @@ export class FakeEngine implements EngineService {
       topicId: this.data.membership.get(prKey) ?? null,
       tileIds: this.data.tiles.filter((tile) => tile.members.some((member) => member.prKey === prKey)).map((tile) => tile.id),
       facts: this.memory.prFacts(prKey),
+      waitingThreads: waitingThreads(pr, this.viewer()),
     };
   }
 

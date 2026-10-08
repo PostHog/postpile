@@ -78,6 +78,7 @@ function detailOf(pr: Pr, activity: ActivityList = activityList([], null)): PrDe
     topicId: 'topic-1',
     tileIds: ['stack:acme/app#11'],
     facts: [],
+    waitingThreads: [],
   };
 }
 
