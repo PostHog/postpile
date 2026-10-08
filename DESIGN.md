@@ -1219,6 +1219,7 @@ and only recomputes on change.
 | topic | `topic`: name, summary, tailoring, driver, user_role, status | summary mirrors the latest `dossier.summary` |
 | topic membership | `topic_membership`: pr -> topic, `assigned_by` agent/user, reason | never automatically; a user assignment is never replaced by the agent |
 | topic proposals | `topic_proposal`: new_topic / rename / merge, pending until the user decides; `source` consolidation or agent (migration 017, see "propose_topic_change") | - |
+| agent notes on PRs | `pr_note`: an outside agent's advisory note per PR, durable slot and lease slot, anchored to the PR's state (migration 039, see "Agent notes on PRs") | stale at read time when the PR's anchor differs; replaced, cleared or (lease) expired |
 | sets | `pr_set` + `pr_set_member` with combined take and per-member reason; `removed_at` keeps "not related" members | agent regroups; removed members never come back with the rest, a corrected set the agent drops is kept as dissolved |
 | feedback | `feedback`: not_mine / not_related / wrong_topic / unmute / tailoring_kept / tailoring_once | append-only; newest 10 per topic go into prompts |
 | event overrides | `pr_event.override_*` with reason | kept across re-derivation |
@@ -7721,8 +7722,8 @@ store already has; no new GitHub reads, no schema change.
 - Never fetched member lists, a home team the cache has no list for yet
   (named in the note), or no home team with members: the header says so once, PRs carry only "(you)", and `author_scope` my_team / others is a
   tool error that suggests me or any. Logins stay inside the fence.
-- `refresh_from_github(pr | topic)` and `propose_topic_change(...)`: see
-  their own sections below.
+- `refresh_from_github(pr | topic)`, `propose_topic_change(...)` and
+  `note_pr(...)`: see their own sections below.
 
 Reads cover every repo (`listTopics` / `search` with `{ allRepos: true }`),
 whatever repo the window has chosen; quiet repos stay quiet. Read answers
@@ -7878,7 +7879,7 @@ outbox in the data folder, no port and no token (the app's HTTP token can
 approve PRs, so it is never handed to other processes).
 
 - The MCP process writes `<data folder>/agent-requests/<uuid>.json` (temp file,
-  then rename): `{v: 1, kind: "refresh" | "propose_topic_change", createdAt,
+  then rename): `{v: 1, kind: "refresh" | "propose_topic_change" | "note_pr", createdAt,
   expiresAt, client, payload}`. `client` is the MCP client's name from the
   initialize handshake (`clientInfo.name`, e.g. "claude-code").
 - The app watches the folder (and scans it at start), validates with zod,
@@ -8011,6 +8012,94 @@ for now (Julian, 2026-09-29: "okay, don't do now").
   archives its source topic, so decisions list merges on the target too
   ("merged in from <source>"), and the propose answer for a merge points
   at the target's `topic(...)` for the outcome.
+
+### Agent notes on PRs (`note_pr`)
+
+An outside agent learns things PostPile cannot see: a PR is already covered
+by a review on its parent, it looked and nothing is needed, or a session is
+reviewing it right now. Without a place to say so, the PR stays "Your move"
+and the next agent (or the user) does the same work again. `note_pr` lets an
+agent leave a short, visible note for that (2026-10-08, design agreed with
+the reporting agent and checked by Codex).
+
+- **Advisory only.** A note never changes whose move, unread, done, handled,
+  sections, counts or which actions show. No rule reads it. GitHub stays the
+  source of truth; the notes are visible annotations next to it, not a read
+  state (AGENTS.md "GitHub is the source of truth" names them).
+- **Two slots per PR.** A durable note, kind `covered` (needs `covered_by`:
+  another stored PR in the same repo, never itself) or `no_action`, and a
+  lease, kind `in_progress` (default 2 h, 5 min to 8 h). At most one current
+  note per slot: a new one replaces the old one for good (`superseded_by`),
+  so a lease never erases a durable note. A lease is renewed by note id
+  (extends `expires_at`, never re-anchors) and ends at `now >= expires_at`.
+  A lease is not a lock: a second agent's lease replaces the first, and
+  pr_context shows what it replaced (history of one). Clearing by note id
+  (the agent, or the user in the PR pane) never brings back an older note.
+  Order is the autoincrement `seq`, never `created_at`.
+- **Anchored to the PR's state, not to a time.** `noteAnchor` (core) takes
+  the head, state, draft flag, pending review requests with who asked
+  (latest `review_requested` item, bots included, so an assigner bot's
+  request counts), the latest review per reviewer (id and state, dismissed
+  included, any actor) and the people's comments (issue and review-thread
+  comments: count plus the newest id and author; bot comments and every
+  edit are left out, so CodeRabbit summaries and Trunk badges don't stale a
+  note). A note is stale when the PR's anchor now differs, worded from the
+  diff: "head changed" (a SHA change proves only that, never "2 pushes"),
+  "new review from X", "review from X dismissed", "review requested from X
+  by Y", "ready for review" / "back to draft", "merged" / "closed", "new
+  comment by X". A covered note also keeps the covering PR's anchor and is
+  stale when that PR changed, is no longer stored, or was closed without
+  merging. Staleness is derived at read time, so a PR that returns to
+  exactly the anchored state makes the note live again (accepted). Agents
+  post through the user's account, so their own later comment stales their
+  note: the tool description says to write the note last.
+- **Observation token.** pr_context prints a short hash of the PR's anchor
+  outside the fence. A set must pass it; the app recomputes the anchor in
+  the transaction that inserts and refuses a mismatch ("the PR changed since
+  you read it; read it again"). The token cannot say what changed, only
+  that something did. `cover_token` is optional: without it the covering
+  PR's anchor is taken at write time; with it a mismatch is refused too.
+- **Write path.** `note_pr` (set, renew, clear) goes through the agent-request
+  outbox like `propose_topic_change` (kind `note_pr`). A set is idempotent:
+  `idempotency_key` is a hash of the request and the client, so a retry after
+  the 20 s timeout finds the note it wrote ("unchanged"). The key is released
+  once the note is no longer current. Caps in the app: 100 live notes on open
+  PRs per client and 300 in total (a note replacing one in its slot frees
+  that place). `note`, `by` and `client` are untrusted: whitespace folded,
+  280 / 60 characters, inside the fence in MCP answers, plain text in the
+  app. The client name is self-reported, not a credential.
+- **Reads.** One query loads the notes of the shown PRs (current ones plus
+  the newest replaced one per PR) and the anchors of those PRs and their
+  covering PRs. Note writes count into the live poll's `changeCount`, so the
+  renderer refetches; lease ends are checked against now at read time.
+  - `whats_on_me`: per PR, never per tile. A your-move tile whose PRs all
+    carry a live note moves to "Your move, but an agent left a note", listed
+    after the plain your-move tiles; a mixed tile stays in place. Each PR
+    line gets its note under it ("agent note (ph3 session, 40 min ago):
+    covered by acme/app#1851: …", "ph3 session is on it, 40 min ago, lease
+    ends in 1 h 20: …"); a stale one says so in a few words.
+  - `pr_context`: the current notes with ids and who wrote them, the
+    covering PR's fetch age, stale reasons, an ended lease, the replaced
+    note, and the token in the footer. With format: "json" each PR carries
+    `agentNotes` (`observationToken`, `durable`, `lease`, `replaced`; note
+    text, `by`, client and stale reasons under `untrusted`), and
+    `whats_on_me` rows carry `allNoted`.
+  - App: a muted "Agent note: …" line under the PR pane's header with a
+    quiet Clear button ("out of date: head changed" when stale; an ended
+    lease is left out). No change to ordering, sections or counts. The tile
+    shows nothing (kept minimal).
+- **Server instructions** carry a short "Coordinating review work with other
+  agents" block (read pr_context first and respect a live note; lease long
+  reviews; record no_action / covered when finishing without a GitHub write;
+  a GitHub post needs no note; session name in `by`; don't block when
+  PostPile is closed), since `note_pr` is a deferred tool in some clients and
+  only the instructions reach every session. The details stay in the tool
+  description.
+- Store: `pr_note` (migration 039). Built: core `pr-notes.ts`
+  (`noteAnchor`, `anchorChanges`, `observationToken`, `planNoteSet` /
+  `planNoteRenew` / `planNoteClear`, `prNotesView`), `PrNoteRepo`, engine
+  `PrNotes`, `FakePrNotes` over the same planners (sample data has one
+  no_action note on #1955).
 
 ## Fixes from the codebase review (2026-09-29)
 

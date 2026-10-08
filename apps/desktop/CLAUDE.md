@@ -447,6 +447,8 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   `DossierPanel`, `TopicRepo` on the owner line), `InboxPane`, `TileGrid`, `Tile`, `PrRow` (+ `AssignedTo`, also in `PrBody`), `NotificationsPane` (+ `NotificationRow`), `HandledQuietlyPane`,
   `DetailPane` (+ `DetailContext`, `PrBody` with `OpenOnGitHub`,
   `GlanceCard`, `ReviewRow`, `PaneHousekeeping`, `Composer`, `KeyFiles`,
+  `AgentNoteLines` (an outside agent's note under the header, muted, quiet
+  Clear through `useActions().clearPrNote`, local; words in `lib/agent-notes.ts`),
   `PrDescription`, `PrFacts`, `ReviewList`, `NewSinceBox` (the digest
   under the title, "Reply ↓" jumps), `AgentFacts`, `ActivityTimeline`
   (every line, Reply and React on people's comments, `FoldedLine` for

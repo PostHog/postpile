@@ -66,6 +66,7 @@ import {
   type Pr,
   type EventView,
   type PrDetail,
+  type PrNotesView,
   type PrKey,
   type MacNotification,
   type PingTarget,
@@ -113,6 +114,7 @@ import { pingClickTargetOnBoard, placeOnBoard } from './live/ping-target.ts';
 import { loadRepoSettings } from './repo-settings.ts';
 import { loadViewer } from './viewer-meta.ts';
 import { OpenedReadInputs } from './writes/opened-read-inputs.ts';
+import { PrNotes } from './pr-notes.ts';
 import type { PendingWrites } from './writes/pending-writes.ts';
 
 function isUnsortedTopic(topicId: string): boolean {
@@ -165,6 +167,7 @@ function glanceBehindDossier(store: Store, topicId: string | null, glance: Glanc
 
 export class ReadModels {
   private readonly memory: MemoryReads;
+  private readonly notes: PrNotes;
 
   constructor(
     private readonly store: Store,
@@ -175,6 +178,7 @@ export class ReadModels {
     private readonly glanceStatus: GlanceStatusSource = NO_GLANCE_STATUS,
   ) {
     this.memory = new MemoryReads(store, now);
+    this.notes = new PrNotes(store, now);
   }
 
   /** The words the UI shows for a PR's glance (`glanceStateOf`). */
@@ -724,7 +728,13 @@ export class ReadModels {
       tileIds: [...tileIds],
       facts: this.memory.prFacts(key),
       waitingThreads: waitingThreads(pr, viewer),
+      notes: this.notes.viewFor(pr),
     };
+  }
+
+  /** The notes of the PRs among `keys` that have any (whats_on_me). */
+  listPrNotes(keys: PrKey[]): PrNotesView[] {
+    return this.notes.viewsFor(keys);
   }
 
   /** Every stored event of a PR, oldest first, with its display state: the CLI's `pr` command. The pane reads `activity`. */

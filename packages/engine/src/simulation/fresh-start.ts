@@ -31,6 +31,7 @@ export const KEPT_TABLES: Record<string, string> = {
   action_log: 'history of GitHub writes; no agent output, nothing in the digest reads it',
   pending_write: 'unsent mark-reads; nothing in the digest reads them',
   feedback: 'only rows tied to no topic, set or tile stay (see startFresh)',
+  pr_note: "outside agents' notes on PRs; advisory, no digest or rule reads them",
 };
 
 /** Removed completely, with why. Tables missing in the schema (pr_set_change before it exists) are skipped. */

@@ -31,6 +31,7 @@ import type {
   PrApproveResult,
   PrDetail,
   PrKey,
+  PrNoteResult,
   RepoOverview,
   ReviewNoteKind,
   ReviewNoteSource,
@@ -251,6 +252,8 @@ export interface Actions {
   markTopicSeen(topicId: string): Promise<void>;
   /** "Archive now" on a topic with nothing left. Local, not a GitHub write. */
   archiveTopic(topicId: string): Promise<void>;
+  /** Clear on an agent note in the PR pane. Local, not a GitHub write; only a refusal shows a toast. */
+  clearPrNote(prKey: PrKey, noteId: string): Promise<void>;
   /** The header's driver menu: a choice's value, null for Reset to automatic. Local, not a GitHub write. */
   setTopicDriver(topicId: string, driver: string | null): Promise<void>;
   /** Returns the agent's draft, or null when drafting failed. */
@@ -647,6 +650,20 @@ export function ActionsProvider(props: { children: ReactNode }) {
     }
   }
 
+  async function clearPrNote(prKey: PrKey, noteId: string): Promise<void> {
+    try {
+      const path = `/api/pr-notes/${encodeURIComponent(noteId)}/clear`;
+      const result = await withBusy(`clearPrNote:${noteId}`, () => request<PrNoteResult>('POST', path));
+      // The line going away is the confirmation.
+      if (result.status === 'refused') {
+        show('error', `Could not clear the note: ${result.reason ?? 'refused'}`);
+      }
+      await queryClient.invalidateQueries({ queryKey: queryKeys.pr(prKey) });
+    } catch (error) {
+      show('error', `Could not clear the note: ${errorText(error)}`);
+    }
+  }
+
   async function setTopicDriver(topicId: string, driver: string | null): Promise<void> {
     try {
       const path = `/api/topics/${encodeURIComponent(topicId)}/driver`;
@@ -1023,6 +1040,7 @@ export function ActionsProvider(props: { children: ReactNode }) {
     hideMcpConnect: () => run('mcp:not-now', null, () => request('POST', '/api/mcp-connection/not-now')),
     markTopicSeen,
     archiveTopic,
+    clearPrNote,
     setTopicDriver,
     markOpenedRead,
     refreshGlanceOnLook,

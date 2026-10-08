@@ -58,6 +58,7 @@ export * from './topic-exclusions.ts';
 export * from './proposal-quality.ts';
 export * from './agent-requests.ts';
 export * from './topic-change-plan.ts';
+export * from './pr-notes.ts';
 export * from './topic-roles.ts';
 export * from './deferred-queue.ts';
 export * from './memory.ts';

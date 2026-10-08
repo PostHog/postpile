@@ -11,11 +11,15 @@ import {
   type AgentRefreshTarget,
   type AgentRequest,
   type AgentRequestResult,
+  type PrNoteRequest,
   type TopicChangeRequest,
 } from '@postpile/core';
 import { answerAgentRequest, type EngineService } from '@postpile/engine';
 
-export type AgentAsk = { kind: 'refresh'; payload: AgentRefreshTarget } | { kind: 'propose_topic_change'; payload: TopicChangeRequest };
+export type AgentAsk =
+  | { kind: 'refresh'; payload: AgentRefreshTarget }
+  | { kind: 'propose_topic_change'; payload: TopicChangeRequest }
+  | { kind: 'note_pr'; payload: PrNoteRequest };
 
 /**
  * What came of a request:
@@ -41,7 +45,13 @@ function envelope(ask: AgentAsk, client: string, now: Date): AgentRequest {
     expiresAt: new Date(now.getTime() + AGENT_REQUEST_TTL_MS).toISOString(),
     client,
   } as const;
-  return ask.kind === 'refresh' ? { ...base, kind: 'refresh', payload: ask.payload } : { ...base, kind: 'propose_topic_change', payload: ask.payload };
+  if (ask.kind === 'refresh') {
+    return { ...base, kind: 'refresh', payload: ask.payload };
+  }
+  if (ask.kind === 'note_pr') {
+    return { ...base, kind: 'note_pr', payload: ask.payload };
+  }
+  return { ...base, kind: 'propose_topic_change', payload: ask.payload };
 }
 
 export interface FileAgentRequestsOptions {
@@ -140,7 +150,7 @@ export class FileAgentRequests implements AgentRequests {
  */
 export class InMemoryAgentRequests implements AgentRequests {
   constructor(
-    private readonly engine: Pick<EngineService, 'refreshNow' | 'proposeTopicChange'>,
+    private readonly engine: Pick<EngineService, 'refreshNow' | 'proposeTopicChange' | 'notePr'>,
     private readonly now: () => Date = () => new Date(),
   ) {}
 

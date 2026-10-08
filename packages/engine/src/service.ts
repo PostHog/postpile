@@ -54,6 +54,9 @@ import type {
   EventView,
   PrDetail,
   PrKey,
+  PrNoteRequest,
+  PrNoteResult,
+  PrNotesView,
   RepoOverview,
   ReviewNoteKind,
   ReviewNoteSource,
@@ -186,6 +189,17 @@ export interface EngineService {
    * would do, stacks included. Never applies it.
    */
   proposeTopicChange(change: TopicChangeRequest, options: { client: string }): Promise<TopicChangeResult>;
+  /**
+   * note_pr from an outside agent (DESIGN.md "Agent notes on PRs"): sets,
+   * renews or clears an advisory note on a PR. A set needs the PR's
+   * observation token from pr_context and is refused when the PR moved
+   * since. Never changes whose move, unread, sections or counts.
+   */
+  notePr(request: PrNoteRequest, options: { client: string }): Promise<PrNoteResult>;
+  /** The PR pane's Clear on an agent note; cleared by "user". */
+  clearPrNote(noteId: string): Promise<PrNoteResult>;
+  /** The notes of the PRs among `prKeys` that have any, in one read (whats_on_me). */
+  listPrNotes(prKeys: PrKey[]): Promise<PrNotesView[]>;
   /**
    * Answers agent requests from MCP processes (DESIGN.md "Agent requests"):
    * watches `<data folder>/agent-requests` while the desktop app runs. A

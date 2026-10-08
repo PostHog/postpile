@@ -54,6 +54,9 @@ import type {
   NotificationLanding,
   PendingProposals,
   PrDetail,
+  PrNoteRequest,
+  PrNoteResult,
+  PrNotesView,
   PrEvent,
   PrKey,
   RepoOverview,
@@ -217,6 +220,7 @@ import { FakeSetup } from './fake-setup.ts';
 import { FakeTeamRoles } from './fake-team-roles.ts';
 import { FakeMcp } from './fake-mcp.ts';
 import { FakeTopicChanges } from './fake-topic-changes.ts';
+import { FakePrNotes } from './fake-pr-notes.ts';
 import { fakeQuota, type FakeQuotaLevel } from './fake-quota.ts';
 import { FakeTools, type FakeToolProblem } from './fake-tools.ts';
 import { FakeWorkContext } from './fake-work-context.ts';
@@ -365,6 +369,7 @@ export class FakeEngine implements EngineService {
   private readonly toolStatus: FakeTools;
   private readonly mcp: FakeMcp;
   private readonly topicChanges: FakeTopicChanges;
+  private readonly prNotes: FakePrNotes;
   private readonly agentRefresher: AgentRefresher;
   private readonly checkDelayMs: number;
   private lastSync: SyncReport | null = null;
@@ -432,6 +437,8 @@ export class FakeEngine implements EngineService {
     this.checkDelayMs = options.setupStepMs ?? 700;
     this.memory = new FakeMemory(this.data, this.now);
     this.topicChanges = new FakeTopicChanges(this.data, this.now);
+    this.prNotes = new FakePrNotes(this.data, this.now, (key) => this.fetchedAtOf(key));
+    this.prNotes.seed();
     this.agentRefresher = new AgentRefresher({
       now: this.now,
       quota: this.quota,
@@ -1381,6 +1388,7 @@ export class FakeEngine implements EngineService {
       tileIds: this.data.tiles.filter((tile) => tile.members.some((member) => member.prKey === prKey)).map((tile) => tile.id),
       facts: this.memory.prFacts(prKey),
       waitingThreads: waitingThreads(pr, this.viewer()),
+      notes: this.prNotes.viewFor(prKey),
     };
   }
 
@@ -2012,6 +2020,18 @@ export class FakeEngine implements EngineService {
     return this.topicChanges.propose(change, options.client);
   }
 
+  async notePr(request: PrNoteRequest, options: { client: string }): Promise<PrNoteResult> {
+    return this.prNotes.handle(request, options.client);
+  }
+
+  async clearPrNote(noteId: string): Promise<PrNoteResult> {
+    return this.prNotes.clear(noteId, 'user');
+  }
+
+  async listPrNotes(prKeys: PrKey[]): Promise<PrNotesView[]> {
+    return this.prNotes.viewsFor(prKeys);
+  }
+
   /** Sample data has no data folder: the MCP server over sample data answers agent requests in memory instead. */
   startAgentRequests(): void {}
 
@@ -2312,7 +2332,7 @@ export class FakeEngine implements EngineService {
     const poll = this.livePoller?.currentStatus() ?? OFF_POLL_STATUS;
     return {
       ...poll,
-      changeCount: poll.changeCount + this.cleanup.changeCount(),
+      changeCount: poll.changeCount + this.cleanup.changeCount() + this.prNotes.changes(),
       syncRunning: this.syncing !== null,
       nextAutoSyncAt: this.autoSync?.nextSyncAt() ?? null,
       catchUpChanges: this.catchUp.changes(),

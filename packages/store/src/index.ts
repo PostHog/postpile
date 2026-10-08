@@ -19,6 +19,7 @@ export { TopicRepo } from './repos/topics.ts';
 export { DriverPickRepo } from './repos/driver-picks.ts';
 export { TopicMembershipRepo } from './repos/memberships.ts';
 export { TopicProposalRepo } from './repos/proposals.ts';
+export { PrNoteRepo } from './repos/pr-notes.ts';
 export { PrSetRepo } from './repos/sets.ts';
 export { GlanceRepo } from './repos/glances.ts';
 export { SnoozeRepo } from './repos/snoozes.ts';

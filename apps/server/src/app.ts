@@ -385,6 +385,8 @@ export function createApp(
     const body = z.object({ driver: z.string().min(1).nullable() }).parse(await c.req.json());
     return c.json(await engine.setTopicDriver(c.req.param('id'), body.driver));
   });
+  // The PR pane's Clear on an agent note. Local, not a GitHub write.
+  app.post('/api/pr-notes/:id/clear', async (c) => c.json(await engine.clearPrNote(c.req.param('id'))));
   app.get('/api/proposals', async (c) => c.json(await engine.listProposals()));
   app.post('/api/proposals/:id', async (c) => {
     const body = z.object({ accept: z.boolean() }).parse(await c.req.json());

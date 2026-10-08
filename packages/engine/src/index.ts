@@ -49,3 +49,4 @@ export { ArmDatabase } from './simulation/arm-database.ts';
 export { readArmSnapshot, type ArmSnapshot, type SnapshotCall, type SnapshotDossier, type SnapshotTile } from './simulation/snapshot.ts';
 export { runSimulatedRound } from './simulation/round.ts';
 export { STACK_DEPTH } from './stack-layers.ts';
+export { PrNotes } from './pr-notes.ts';

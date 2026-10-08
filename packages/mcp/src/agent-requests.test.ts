@@ -36,6 +36,30 @@ describe('FileAgentRequests', () => {
     }
   });
 
+  it('carries note_pr both ways: a retry writes once, a token from an older state is refused', async () => {
+    const dir = folder();
+    const engine = new FakeEngine();
+    const app = new AgentRequestInbox({ folder: dir, handle: (request) => answerAgentRequest(engine, request), log: () => {}, rescanMs: 20 });
+    app.start();
+    try {
+      const outbox = new FileAgentRequests({ folder: dir, appRunning: () => true, pollMs: 10 });
+      const token = (await engine.getPr('acme/app#1902'))?.notes.token ?? '';
+      const payload = { action: 'set', prKey: 'acme/app#1902', kind: 'no_action', note: 'nothing to do', by: 'ph3 session', token, coveredByPrKey: null, coverToken: null, leaseMinutes: null } as const;
+
+      const first = await outbox.ask({ kind: 'note_pr', payload }, 'claude-code');
+      expect(first).toMatchObject({ kind: 'answered', result: { ok: true, kind: 'note_pr', prNote: { status: 'set' } } });
+      const retry = await outbox.ask({ kind: 'note_pr', payload }, 'claude-code');
+      expect(retry).toMatchObject({ kind: 'answered', result: { ok: true, kind: 'note_pr', prNote: { status: 'unchanged' } } });
+      expect((await engine.listPrNotes(['acme/app#1902']))[0]?.durable?.client).toBe('claude-code');
+
+      const old = await outbox.ask({ kind: 'note_pr', payload: { ...payload, token: 'older' } }, 'claude-code');
+      expect(old).toMatchObject({ kind: 'answered', result: { ok: true, kind: 'note_pr', prNote: { status: 'refused', reason: expect.stringContaining('changed since you read it') } } });
+      expect(readdirSync(dir)).toEqual([]);
+    } finally {
+      app.stop();
+    }
+  });
+
   it('withdraws a request the app never took, and tells a taken one apart', async () => {
     const dir = folder();
     const outbox = new FileAgentRequests({ folder: dir, appRunning: () => true, waitMs: 50, pollMs: 10 });

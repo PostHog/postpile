@@ -79,6 +79,7 @@ function detailOf(pr: Pr, activity: ActivityList = activityList([], null)): PrDe
     tileIds: ['stack:acme/app#11'],
     facts: [],
     waitingThreads: [],
+    notes: { prKey: pr.key, token: 't', durable: null, lease: null, replaced: null },
   };
 }
 
