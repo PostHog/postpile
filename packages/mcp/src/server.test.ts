@@ -399,7 +399,7 @@ describe('PostPile MCP server', () => {
 
     const json = await client.callTool({ name: 'pr_context', arguments: { pr: 'acme/app#1950', format: 'json' } });
     expect(json.structuredContent).toMatchObject({
-      prs: [{ key: 'acme/app#1950', diffCapped: true, overlaps: [{ pr: 'acme/app#1911', otherCapped: false, files: [{ lines: [{ start: 600, end: 640 }], untrusted: { path: '.github/workflows/ci.yml' } }] }] }],
+      prs: [{ key: 'acme/app#1950', diffCapped: true, overlaps: [{ pr: 'acme/app#1911', level: 'same', otherCapped: false, files: [{ lines: [{ start: 600, end: 640 }], untrusted: { path: '.github/workflows/ci.yml' } }] }] }],
     });
   });
 
@@ -425,6 +425,11 @@ describe('PostPile MCP server', () => {
 
     const queue = await callText(client, 'whats_on_me', { author_scope: 'any' });
     expect(queue).toMatch(/acme\/app#1950 by .*· overlaps #1904 · near #1911/);
+
+    const json = await client.callTool({ name: 'pr_context', arguments: { pr: 'acme/app#1950', format: 'json' } });
+    expect(json.structuredContent).toMatchObject({
+      prs: [{ overlaps: [{ pr: 'acme/app#1911', level: 'nearby', files: [{ lines: [{ start: 619, end: 633 }], untrusted: { path } }] }, { pr: 'acme/app#1904', level: 'same' }] }],
+    });
   });
 
   it('says nothing about overlaps when there are none', async () => {
