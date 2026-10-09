@@ -30,9 +30,24 @@ export class ProposalActions {
     }
   }
 
+  /**
+   * An accepted move: the proposal's PRs, whole stacks included, join an
+   * existing topic, like "Move to topic…" in the app. whyStale made sure the
+   * target is still active. The topic chat stays where it is, as on a split.
+   */
+  private moveToTopic(proposal: TopicProposal, intoTopicId: string, at: string): void {
+    const board = Board.load(this.store, at);
+    const prKeys = new Set(proposal.prKeys.flatMap((key) => board.movesWith(key)));
+    for (const prKey of prKeys) {
+      this.store.memberships.assign({ prKey, topicId: intoTopicId, assignedBy: 'user', reason: proposal.reason, createdAt: at });
+    }
+  }
+
   private applyAccepted(proposal: TopicProposal, at: string): void {
     if (proposal.kind === 'new_topic' || proposal.kind === 'split') {
       this.createTopic(proposal, at);
+    } else if (proposal.kind === 'move' && proposal.intoTopicId) {
+      this.moveToTopic(proposal, proposal.intoTopicId, at);
     } else if (proposal.kind === 'rename' && proposal.topicId && proposal.name) {
       this.store.topics.rename(proposal.topicId, cleanTopicName(proposal.name), at);
     } else if (proposal.kind === 'merge' && proposal.topicId && proposal.intoTopicId) {
@@ -53,9 +68,10 @@ export class ProposalActions {
 
   /**
    * Why accepting no longer fits, or null. Topics move on after a proposal
-   * is filed: its topic may be merged or retired, a split's PRs may have
-   * moved elsewhere. An outside agent's split must also leave a PR behind;
-   * consolidation may propose emptying a topic on purpose.
+   * is filed: its topic may be merged or retired, a split's or move's PRs
+   * may have moved elsewhere, a move's target may be gone. An outside
+   * agent's split or move must also leave a PR behind; consolidation may
+   * propose emptying a topic on purpose.
    */
   whyStale(proposal: TopicProposal, at: string): string | null {
     if (hasEmptyTopicName(proposal)) {
@@ -70,7 +86,10 @@ export class ProposalActions {
     if (proposal.kind === 'merge' && (!this.isActive(proposal.intoTopicId) || proposal.intoTopicId === proposal.topicId)) {
       return 'the topic to merge into is no longer active';
     }
-    if (proposal.kind !== 'split') {
+    if (proposal.kind === 'move' && (!this.isActive(proposal.intoTopicId) || proposal.intoTopicId === proposal.topicId)) {
+      return 'the topic to move into is no longer active';
+    }
+    if (proposal.kind !== 'split' && proposal.kind !== 'move') {
       return null;
     }
     const board = Board.forTopic(this.store, at, proposal.topicId ?? '');

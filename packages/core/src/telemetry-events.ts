@@ -54,7 +54,7 @@ const driverPickKind = z.enum(['you', 'teammate', 'team', 'outside', 'automatic'
 // -----------------------------------------------------------------------
 
 const recheckOutcome = z.enum(['keep', 'fix', 'drop']);
-const proposalKind = z.enum(['topic_merge', 'rename', 'topic_split', 'rule', 'instructions']);
+const proposalKind = z.enum(['topic_merge', 'rename', 'topic_split', 'topic_move', 'rule', 'instructions']);
 // Who filed a topic proposal: the app's consolidation or an outside agent (MCP propose_topic_change).
 const proposalSource = z.enum(['consolidation', 'agent', 'upgrade']);
 
@@ -162,7 +162,7 @@ export const TELEMETRY_EVENTS = {
   // The user's Accept on a recheck outcome (keep, fix or drop the line).
   recheck_resolved: z.object({ outcome: recheckOutcome }).strict(),
   memory_corrected: NO_PROPS,
-  // source only for topic proposals (topic_merge, rename, topic_split).
+  // source only for topic proposals (topic_merge, rename, topic_split, topic_move).
   proposal_resolved: z.object({ kind: proposalKind, accepted: z.boolean(), source: proposalSource.optional() }).strict(),
   instructions_edited: NO_PROPS,
 

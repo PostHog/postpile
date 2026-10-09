@@ -49,4 +49,12 @@ describe('outside topic proposals', () => {
     expect(sameTopicChange(proposal({ kind: 'merge', name: null, intoTopicId: 'x' }), proposal({ kind: 'merge', name: null, intoTopicId: 'y' }))).toBe(false);
     expect(sameTopicChange(proposal({ kind: 'split' }), proposal({ kind: 'rename' }))).toBe(false);
   });
+
+  it('count two moves as the same only with the same source, target and PRs', () => {
+    const move = (overrides: Partial<TopicProposal>) => proposal({ kind: 'move', name: null, intoTopicId: 'x', prKeys: ['acme/app#1', 'acme/app#2'], ...overrides });
+    expect(sameTopicChange(move({}), move({ prKeys: ['acme/app#2', 'acme/app#1'] }))).toBe(true);
+    expect(sameTopicChange(move({}), move({ prKeys: ['acme/app#1'] }))).toBe(false);
+    expect(sameTopicChange(move({}), move({ intoTopicId: 'y' }))).toBe(false);
+    expect(sameTopicChange(move({}), move({ topicId: 'topic-b' }))).toBe(false);
+  });
 });

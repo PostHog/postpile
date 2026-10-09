@@ -1218,7 +1218,7 @@ and only recomputes on change.
 | glance | `pr_glance`, latest per PR + `input_hash`, `model`, `dossier_version` | PR snapshot moves (not CI: checks are in no prompt and no hash), instructions, tailoring, standing rules or feedback on that PR change. Not the dossier version since 2026-10-05 ("Glance hash" below). Reads recompute the hash and flag a mismatch as `glanceStale` |
 | topic | `topic`: name, summary, tailoring, driver, user_role, status | summary mirrors the latest `dossier.summary` |
 | topic membership | `topic_membership`: pr -> topic, `assigned_by` agent/user, reason | never automatically; a user assignment is never replaced by the agent |
-| topic proposals | `topic_proposal`: new_topic / rename / merge, pending until the user decides; `source` consolidation or agent (migration 017, see "propose_topic_change") | - |
+| topic proposals | `topic_proposal`: new_topic / rename / merge / split / move, pending until the user decides; `source` consolidation or agent (migration 017, see "propose_topic_change") | - |
 | agent notes on PRs | `pr_note`: an outside agent's advisory note per PR, durable slot and lease slot, anchored to the PR's state (migration 039, see "Agent notes on PRs") | stale at read time when the PR's anchor differs; replaced, cleared or (lease) expired |
 | sets | `pr_set` + `pr_set_member` with combined take and per-member reason; `removed_at` keeps "not related" members | agent regroups; removed members never come back with the rest, a corrected set the agent drops is kept as dissolved |
 | feedback | `feedback`: not_mine / not_related / wrong_topic / unmute / tailoring_kept / tailoring_once | append-only; newest 10 per topic go into prompts |
@@ -7517,7 +7517,7 @@ topic names are never event props.
    `recheck_resolved` (outcome keep/fix/drop: the user's Accept in the
    recheck dialog, sent with the correction as `fromRecheck`),
    `memory_corrected`, `proposal_resolved`
-   (kind `topic_merge` / `rename` / `topic_split` / `rule` / `instructions`;
+   (kind `topic_merge` / `rename` / `topic_split` / `topic_move` / `rule` / `instructions`;
    source `consolidation` / `agent` on topic proposals), `instructions_edited`.
 5. *Health*: `sync_completed` (duration_ms, prs_fetched, new_events,
    agent_calls, agent_failures, cost_usd rounded to cents, stopped_at_cap,
@@ -8193,14 +8193,29 @@ this document), and an outside agent's view can be steered by PR text anyone
 wrote. Auto-applying small splits from outside agents was raised and left out
 for now (Julian, 2026-09-29: "okay, don't do now").
 
-- Params: `topic`, `kind` (`split`, `rename`, `merge`), `prs` (for split: the
-  PRs to move), `name` (split: the new topic; rename: the new name),
-  `into_topic` (merge), `reason` (required, up to 300 characters), `dry_run`
-  (default false).
-- Checks in the app: the topic is active; split PRs belong to it and at least
-  one PR stays behind (moving all of them is a rename or merge); the same
-  change is not pending already and was not rejected before (the answer says
-  "rejected on 2026-09-20, don't propose it again").
+- Params: `topic`, `kind` (`split`, `move`, `rename`, `merge`), `prs` (split
+  and move: the PRs to move), `name` (split: the new topic; rename: the new
+  name), `into_topic` (move: the existing topic the PRs go to; merge: the
+  topic to merge into), `reason` (required, up to 300 characters), `dry_run`
+  (default false). split moves PRs into a NEW topic, move into an EXISTING
+  one, merge moves the whole topic.
+- Checks in the app: the topic is active; split and move PRs belong to it and
+  at least one PR stays behind (moving all of them is a rename or merge); a
+  move's target is another active topic; the same change is not pending
+  already and was not rejected before (the answer says "rejected on
+  2026-09-20, don't propose it again").
+- Why move exists (2026-10-09): the app could already move PRs into an
+  existing topic ("Wrong topic" › "Move to topic…"), agents could not. They
+  fell back to a rename plus whole-topic merges, which move PRs that belong
+  where they are. An accepted move does what "Move to topic…" does: each
+  moved PR, its stack included, is assigned to the target by the user, with
+  the proposal's reason. The topic chat stays with the source, as on a
+  split. "The same move" is the same source, target and set of PRs, so a
+  rejected move of #1 does not block moving #2.
+- `prs_moved` in the answer counts every PR accepting would move to another
+  topic, stack layers included: a split's and move's PRs, and all of a
+  merged topic's PRs (until 0.27.1 a merge said 0, which agents read as
+  "moves nothing"). A rename is 0.
 - The answer always previews what accepting would do, stacks included ("#1902
   brings #1851 and #1911 along", via `Board.movesWith`), and whether it was
   filed or only a dry run.

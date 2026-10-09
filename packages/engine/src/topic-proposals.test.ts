@@ -125,6 +125,40 @@ describe('accepting a topic proposal', () => {
     expect((await h.engine.decideTopicProposal('all', false)).ok).toBe(true);
   });
 
+  it('moves a whole stack into an existing topic with a move, and keeps the chat where it is', async () => {
+    const { h } = clockedHarness();
+    const { bottom, top, lone } = await depotWithStack(h);
+    h.store.topics.create({ ...h.store.topics.get('depot')!, id: 'other', name: 'Other' });
+    h.store.proposals.add(proposal({ id: 'mv', kind: 'move', name: null, intoTopicId: 'other', prKeys: [top.key], reason: 'belongs to the other work' }));
+
+    expect((await h.engine.decideTopicProposal('mv', true)).ok).toBe(true);
+
+    expect(h.store.memberships.get(bottom.key)).toMatchObject({ topicId: 'other', assignedBy: 'user', reason: 'belongs to the other work' });
+    expect(h.store.memberships.get(top.key)?.topicId).toBe('other');
+    expect(h.store.memberships.get(lone.key)?.topicId).toBe('depot');
+    expect(h.store.topics.get('depot')?.status).toBe('active');
+    expect(h.store.proposals.get('mv')?.status).toBe('accepted');
+    expect(h.telemetry.events).toContainEqual({ event: 'proposal_resolved', props: { kind: 'topic_move', accepted: true, source: 'agent' } });
+  });
+
+  it('refuses a move whose PRs left the topic or that would empty it, and withdraws one whose target was archived', async () => {
+    const { h } = clockedHarness();
+    const { bottom, top, lone } = await depotWithStack(h);
+    h.store.topics.create({ ...h.store.topics.get('depot')!, id: 'other', name: 'Other' });
+    h.store.topics.create({ ...h.store.topics.get('depot')!, id: 'gone', name: 'Gone' });
+    h.store.proposals.add(proposal({ id: 'left', kind: 'move', name: null, intoTopicId: 'other', prKeys: [lone.key] }));
+    h.store.proposals.add(proposal({ id: 'all', kind: 'move', name: null, intoTopicId: 'other', prKeys: [top.key, lone.key] }));
+    h.store.proposals.add(proposal({ id: 'archived', kind: 'move', name: null, intoTopicId: 'gone', prKeys: [top.key] }));
+    changeTopicStatus(h.store, 'gone', 'archive', '2026-09-02T12:00:00.000Z');
+
+    expect(h.store.proposals.get('archived')?.status).toBe('withdrawn');
+    expect((await h.engine.decideTopicProposal('all', true)).message).toContain('no PR would stay behind');
+    h.store.memberships.assign({ prKey: lone.key, topicId: 'other', assignedBy: 'user', reason: '', createdAt: '2026-09-02T12:00:00.000Z' });
+    expect((await h.engine.decideTopicProposal('left', true)).message).toBe(`Can't accept: ${lone.key} left the topic since. Nothing changed; reject it instead.`);
+    expect(h.store.memberships.get(bottom.key)?.topicId).toBe('depot');
+    expect((await h.engine.decideTopicProposal('left', false)).ok).toBe(true);
+  });
+
   it('refuses an expired outside proposal', async () => {
     const { h, setNow } = clockedHarness();
     await depotWithStack(h);
@@ -147,7 +181,7 @@ describe('proposeTopicChange from an outside agent', () => {
 
     expect(result).toMatchObject({ status: 'filed', movedPrKeys: [bottom.key, top.key], reason: null });
     expect(result.preview).toContain(`${top.key} brings ${bottom.key} along (same stack).`);
-    expect(result.preview).toContain('1 PR stay in "depot".');
+    expect(result.preview).toContain('1 PR stays in "depot".');
     expect(h.store.proposals.get(result.proposalId!)).toMatchObject({ kind: 'split', source: 'agent', client: 'claude-code', status: 'pending', prKeys: [top.key] });
     expect(h.store.memberships.get(top.key)?.topicId).toBe('depot');
     expect(h.store.memberships.get(lone.key)?.topicId).toBe('depot');
@@ -155,6 +189,24 @@ describe('proposeTopicChange from an outside agent', () => {
 
     const again = await h.engine.proposeTopicChange(change, client);
     expect(again).toMatchObject({ status: 'refused', reason: expect.stringContaining('pending already') });
+  });
+
+  it('files a move into an existing topic, and counts every PR a merge would move', async () => {
+    const { h } = clockedHarness();
+    const { bottom, top, lone } = await depotWithStack(h);
+    topicWithPrs(h, 'other', [reviewRequestedPr(7)]);
+    await h.engine.sync({ maxAgentCalls: 0 });
+
+    const move = await h.engine.proposeTopicChange({ topicId: 'depot', kind: 'move', prKeys: [top.key], name: null, intoTopicId: 'other', reason: 'same work', dryRun: false }, client);
+
+    expect(move).toMatchObject({ status: 'filed', movedPrKeys: [bottom.key, top.key] });
+    expect(move.preview[0]).toBe(`Move 2 PRs from "depot" into "other": ${bottom.key}, ${top.key}.`);
+    expect(h.store.proposals.get(move.proposalId!)).toMatchObject({ kind: 'move', name: null, intoTopicId: 'other', prKeys: [top.key], status: 'pending' });
+    expect(h.store.memberships.get(top.key)?.topicId).toBe('depot');
+
+    const merge = await h.engine.proposeTopicChange({ topicId: 'depot', kind: 'merge', prKeys: [], name: null, intoTopicId: 'other', reason: 'same work', dryRun: true }, client);
+    expect(merge.movedPrKeys).toEqual(expect.arrayContaining([bottom.key, top.key, lone.key]));
+    expect(merge.movedPrKeys).toHaveLength(3);
   });
 
   it('only previews on a dry run, and refuses a PR from another topic', async () => {

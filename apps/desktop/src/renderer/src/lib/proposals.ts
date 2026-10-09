@@ -1,6 +1,6 @@
 import type { TopicProposal } from '@postpile/core';
 
-/** One line for a topic proposal. topicName looks up names for renames and merges. */
+/** One line for a topic proposal. topicName looks up names for renames, merges and moves. */
 export function proposalText(proposal: TopicProposal, topicName: (topicId: string) => string): string {
   const topic = proposal.topicId ? `"${topicName(proposal.topicId)}"` : 'the topic';
   if (proposal.kind === 'rename') {
@@ -15,6 +15,11 @@ export function proposalText(proposal: TopicProposal, topicName: (topicId: strin
   }
   if (proposal.kind === 'split') {
     return `Split "${proposal.name ?? ''}" out of ${topic}`;
+  }
+  if (proposal.kind === 'move') {
+    const into = proposal.intoTopicId ? `"${topicName(proposal.intoTopicId)}"` : 'another topic';
+    const count = proposal.prKeys.length;
+    return `Move ${count} ${count === 1 ? 'PR' : 'PRs'} from ${topic} into ${into}`;
   }
   return `New topic "${proposal.name ?? ''}"`;
 }

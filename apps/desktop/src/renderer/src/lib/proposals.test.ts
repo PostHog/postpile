@@ -34,6 +34,13 @@ describe('proposalText', () => {
     expect(proposalText(proposal({ name: 'Vite' }), (id) => names[id] ?? id)).toBe('Rename "Frontend build" to "Vite"');
   });
 
+  it('counts the PRs of a move and names both topics', () => {
+    expect(proposalText(proposal({ kind: 'move', intoTopicId: 'b', prKeys: ['acme/app#1', 'acme/app#2'] }), (id) => names[id] ?? id)).toBe(
+      'Move 2 PRs from "Frontend build" into "Move CI to Depot"',
+    );
+    expect(proposalText(proposal({ kind: 'move', intoTopicId: 'b', prKeys: ['acme/app#1'] }), (id) => names[id] ?? id)).toBe('Move 1 PR from "Frontend build" into "Move CI to Depot"');
+  });
+
   it('names both areas of an area merge', () => {
     expect(proposalText(proposal({ kind: 'area_merge', topicId: null, name: 'CI', fromArea: 'CI & tests' }), (id) => names[id] ?? id)).toBe(
       'Fold area "CI & tests" into "CI"',

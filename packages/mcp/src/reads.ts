@@ -768,6 +768,12 @@ function proposalWords(proposal: TopicProposal, topicId: string, name: (id: stri
   if (proposal.kind === 'split') {
     return `split "${proposal.name ?? ''}" out (${proposal.prKeys.join(', ')})`;
   }
+  if (proposal.kind === 'move' && proposal.intoTopicId === topicId) {
+    return `${outcome === 'accepted' ? 'moved' : 'move'} in from "${name(proposal.topicId)}" (${proposal.prKeys.join(', ')})`;
+  }
+  if (proposal.kind === 'move') {
+    return `move into "${name(proposal.intoTopicId)}" (${proposal.prKeys.join(', ')})`;
+  }
   if (proposal.kind === 'area_merge') {
     return `fold area "${proposal.fromArea ?? ''}" into "${proposal.name ?? ''}"`;
   }

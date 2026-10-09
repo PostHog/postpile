@@ -50,17 +50,29 @@ function normalized(text: string | null): string {
   return (text ?? '').trim().toLowerCase();
 }
 
+type TopicChangeFields = Pick<TopicProposal, 'kind' | 'topicId' | 'name' | 'intoTopicId' | 'prKeys'>;
+
+function samePrKeys(a: string[], b: string[]): boolean {
+  const left = new Set(a);
+  const right = new Set(b);
+  return left.size === right.size && [...left].every((key) => right.has(key));
+}
+
 /**
- * The same change to the same topic: a merge into the same topic, a rename
- * or split to the same name (case and spaces aside). Used to refuse an
- * outside proposal that is pending already or was rejected before.
+ * The same change to the same topic: a merge into the same topic, a move of
+ * the same PRs into the same topic, a rename or split to the same name
+ * (case and spaces aside). Used to refuse an outside proposal that is
+ * pending already or was rejected before.
  */
-export function sameTopicChange(a: Pick<TopicProposal, 'kind' | 'topicId' | 'name' | 'intoTopicId'>, b: Pick<TopicProposal, 'kind' | 'topicId' | 'name' | 'intoTopicId'>): boolean {
+export function sameTopicChange(a: TopicChangeFields, b: TopicChangeFields): boolean {
   if (a.kind !== b.kind || a.topicId !== b.topicId) {
     return false;
   }
   if (a.kind === 'merge') {
     return a.intoTopicId === b.intoTopicId;
+  }
+  if (a.kind === 'move') {
+    return a.intoTopicId === b.intoTopicId && samePrKeys(a.prKeys, b.prKeys);
   }
   return normalized(a.name) === normalized(b.name);
 }

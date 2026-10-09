@@ -16,17 +16,17 @@ export const OUTSIDE_PROPOSALS_PER_DAY = 20;
 export const OUTSIDE_REASON_MAX = 300;
 export const TOPIC_NAME_MAX = 100;
 
-export type TopicChangeKind = 'split' | 'rename' | 'merge';
+export type TopicChangeKind = 'split' | 'move' | 'rename' | 'merge';
 
 /** What an outside agent asks for; PRs and topics already resolved to keys and ids. */
 export interface TopicChangeRequest {
   topicId: string;
   kind: TopicChangeKind;
-  /** split: the PRs to move out. */
+  /** split and move: the PRs to move out. */
   prKeys: PrKey[];
   /** split: the new topic's name; rename: the new name. */
   name: string | null;
-  /** merge: the topic to merge into. */
+  /** move: the existing topic the PRs go to; merge: the topic to merge into. */
   intoTopicId: string | null;
   reason: string;
   /** Check and preview only, file nothing. */
@@ -40,7 +40,7 @@ export interface TopicChangeResult {
   /** What accepting would do, one line each. Carries topic names, which come from GitHub text: fence it. */
   preview: string[];
   reason: string | null;
-  /** split: every PR accepting would move, stack layers included. */
+  /** split, move and merge: every PR accepting would move, stack layers included. Empty for a rename. */
   movedPrKeys: PrKey[];
 }
 
@@ -99,8 +99,11 @@ function checkFields(change: TopicChangeRequest): string | null {
   if ((change.kind === 'split' || change.kind === 'rename') && cleanTopicName(name) === '') {
     return `${EMPTY_TOPIC_NAME}.`;
   }
-  if (change.kind === 'split' && change.prKeys.length === 0) {
-    return 'split needs prs: the PRs to move out of the topic.';
+  if ((change.kind === 'split' || change.kind === 'move') && change.prKeys.length === 0) {
+    return `${change.kind} needs prs: the PRs to move out of the topic.`;
+  }
+  if (change.kind === 'move' && !change.intoTopicId) {
+    return 'move needs into_topic: the existing topic the PRs go to.';
   }
   if (change.kind === 'merge' && !change.intoTopicId) {
     return 'merge needs into_topic: the topic to merge into.';
@@ -136,10 +139,19 @@ function checkCaps(topicId: string, snapshot: TopicChangeSnapshot): string | nul
   return null;
 }
 
-function splitPlan(change: TopicChangeRequest, snapshot: TopicChangeSnapshot, topic: TopicSnapshot): TopicChangePlan {
+/** The PRs a split or move takes out of its topic: the asked ones with their stacks, and the ones that stay. */
+interface MovedPrs {
+  moved: PrKey[];
+  /** "X brings Y along (same stack)." lines for the preview. */
+  along: string[];
+  staying: PrKey[];
+}
+
+/** Refuses PRs from other topics; otherwise collects every PR that moves, whole stacks included. */
+function movedPrs(change: TopicChangeRequest, snapshot: TopicChangeSnapshot, topic: TopicSnapshot): MovedPrs | string {
   const outside = change.prKeys.filter((key) => snapshot.topicIdOf(key) !== topic.id);
   if (outside.length > 0) {
-    return refused(`${list(outside)} ${outside.length === 1 ? 'is' : 'are'} not in "${topic.name}"; a split only moves PRs out of their own topic.`);
+    return `${list(outside)} ${outside.length === 1 ? 'is' : 'are'} not in "${topic.name}"; a ${change.kind} only moves PRs out of their own topic.`;
   }
   const moved: PrKey[] = [];
   const along: string[] = [];
@@ -156,20 +168,60 @@ function splitPlan(change: TopicChangeRequest, snapshot: TopicChangeSnapshot, to
     }
   }
   const staying = snapshot.members.filter((key) => !moved.includes(key));
-  if (staying.length === 0) {
+  return { moved, along, staying };
+}
+
+function stayLine(staying: PrKey[], topic: TopicSnapshot): string {
+  return `${plural(staying.length, 'PR')} ${staying.length === 1 ? 'stays' : 'stay'} in "${topic.name}".`;
+}
+
+function splitPlan(change: TopicChangeRequest, snapshot: TopicChangeSnapshot, topic: TopicSnapshot): TopicChangePlan {
+  const prs = movedPrs(change, snapshot, topic);
+  if (typeof prs === 'string') {
+    return refused(prs);
+  }
+  if (prs.staying.length === 0) {
     return refused(`That would move every PR out of "${topic.name}"; propose a rename or a merge instead.`);
   }
   const name = cleanTopicName(change.name ?? '');
   return {
     ok: true,
-    movedPrKeys: moved,
-    preview: [`Split ${plural(moved.length, 'PR')} out of "${topic.name}" into a new topic "${name}": ${moved.join(', ')}.`, ...along, `${plural(staying.length, 'PR')} stay in "${topic.name}".`],
+    movedPrKeys: prs.moved,
+    preview: [
+      `Split ${plural(prs.moved.length, 'PR')} out of "${topic.name}" into a new topic "${name}": ${prs.moved.join(', ')}.`,
+      ...prs.along,
+      stayLine(prs.staying, topic),
+    ],
+  };
+}
+
+function movePlan(change: TopicChangeRequest, snapshot: TopicChangeSnapshot, topic: TopicSnapshot): TopicChangePlan {
+  const into = snapshot.intoTopic;
+  if (!into || into.status !== 'active' || into.id === topic.id) {
+    return refused(`into_topic must be another active topic; ${change.intoTopicId} is not.`);
+  }
+  const prs = movedPrs(change, snapshot, topic);
+  if (typeof prs === 'string') {
+    return refused(prs);
+  }
+  if (prs.staying.length === 0) {
+    return refused(`That would move every PR out of "${topic.name}"; propose a merge instead.`);
+  }
+  return {
+    ok: true,
+    movedPrKeys: prs.moved,
+    preview: [
+      `Move ${plural(prs.moved.length, 'PR')} from "${topic.name}" into "${into.name}": ${prs.moved.join(', ')}.`,
+      ...prs.along,
+      stayLine(prs.staying, topic),
+    ],
   };
 }
 
 /**
  * The checks of an outside topic change, in order: the fields, the topic
- * (active, the PRs in it, at least one PR stays), repeats (pending already,
+ * (active, the PRs in it, at least one PR stays; a move's target another
+ * active topic), repeats (pending already,
  * rejected before), then the caps. On success, the preview of what
  * accepting would do, stacks included.
  */
@@ -194,7 +246,9 @@ export function planTopicChange(change: TopicChangeRequest, snapshot: TopicChang
     if (!into || into.status !== 'active' || into.id === topic.id) {
       return refused(`into_topic must be another active topic; ${change.intoTopicId} is not.`);
     }
-    plan = { ok: true, movedPrKeys: [], preview: [`Merge "${topic.name}" (${plural(snapshot.members.length, 'PR')}) into "${into.name}"; "${topic.name}" is archived.`] };
+    plan = { ok: true, movedPrKeys: snapshot.members, preview: [`Merge "${topic.name}" (${plural(snapshot.members.length, 'PR')}) into "${into.name}"; "${topic.name}" is archived.`] };
+  } else if (change.kind === 'move') {
+    plan = movePlan(change, snapshot, topic);
   } else {
     plan = splitPlan(change, snapshot, topic);
   }

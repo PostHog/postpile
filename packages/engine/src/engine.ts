@@ -283,17 +283,20 @@ export interface EngineDeps {
 }
 
 /**
- * proposal_resolved tracks a topic merge, a rename or a split (DESIGN.md
- * "Agent trust"; splits since outside agents can suggest them); new_topic
- * has no slot in that event's kind enum, so it is left untracked rather
- * than mapped to something misleading.
+ * proposal_resolved tracks a topic merge, a rename, a split or a move
+ * (DESIGN.md "Agent trust"; splits and moves since outside agents can
+ * suggest them); new_topic has no slot in that event's kind enum, so it is
+ * left untracked rather than mapped to something misleading.
  */
-function topicProposalTelemetryKind(kind: TopicProposalKind | undefined): 'topic_merge' | 'rename' | 'topic_split' | null {
+function topicProposalTelemetryKind(kind: TopicProposalKind | undefined): 'topic_merge' | 'rename' | 'topic_split' | 'topic_move' | null {
   if (kind === 'merge' || kind === 'area_merge') {
     return 'topic_merge';
   }
   if (kind === 'split') {
     return 'topic_split';
+  }
+  if (kind === 'move') {
+    return 'topic_move';
   }
   return kind === 'rename' ? 'rename' : null;
 }
