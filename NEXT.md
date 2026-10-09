@@ -6,6 +6,14 @@ now".
 
 ## Done
 
+- Agents propose moves (2026-10-09, for 0.27.2; DESIGN.md
+  "propose_topic_change"): `propose_topic_change` gets kind `move` (PRs
+  into an existing topic, `into_topic`), with the split's checks (PRs in
+  the source, stacks whole, one PR stays) and the merge's target check.
+  Accept assigns the PRs like "Move to topic…". No migration: kind is
+  free text and `into_topic_id` / `pr_keys_json` exist. Telemetry
+  `proposal_resolved` gets `topic_move`. Also `prs_moved` now counts a
+  merge's PRs instead of 0.
 - Declared stacks with a fork parent (2026-10-08, for 0.27.1; DESIGN.md
   "Stacks declared in the body"): the live case ("Stacked on [#N](pull
   url)") parsed fine, but #N came from a fork: `findPrsByNumber` answered

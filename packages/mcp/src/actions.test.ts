@@ -188,6 +188,9 @@ describe('propose_topic_change', () => {
     expect(noName.text).toContain('rename needs name: the new name. Example: propose_topic_change(topic: "depot", kind: "rename"');
     expect((await call(client, 'propose_topic_change', { topic: 'depot', kind: 'split', name: 'x', reason: 'r' })).text).toContain('split needs prs');
     expect((await call(client, 'propose_topic_change', { topic: 'depot', kind: 'merge', reason: 'r' })).text).toContain('merge needs into_topic');
+    expect((await call(client, 'propose_topic_change', { topic: 'depot', kind: 'move', into_topic: 'ci', reason: 'r' })).text).toContain('move needs prs');
+    const noTarget = await call(client, 'propose_topic_change', { topic: 'depot', kind: 'move', prs: ['#1915'], reason: 'r' });
+    expect(noTarget.text).toContain('move needs into_topic: the existing topic the PRs go to (for a new topic, use kind "split"). Example: propose_topic_change(topic: "depot", kind: "move"');
     const noReason = await call(client, 'propose_topic_change', { topic: 'depot', kind: 'rename', name: 'x', reason: '' });
     expect(noReason.isError).toBe(true);
     expect(noReason.text).toContain('reason is required');
@@ -195,10 +198,34 @@ describe('propose_topic_change', () => {
     expect(outside.text).toContain('acme/app#1822 is not in "Move CI to Depot"');
   });
 
-  it('merges into another topic found by name', async () => {
+  it('merges into another topic found by name, and counts the PRs it moves', async () => {
     const client = await connected();
     const result = await call(client, 'propose_topic_change', { topic: 'frontend', kind: 'merge', into_topic: 'migrations', reason: 'same people', dry_run: true });
     expect(result.text).toContain('Merge "Frontend build" (2 PRs) into "Migrations"; "Frontend build" is archived.');
+    expect(result.structured).toEqual({ status: 'dry_run', proposal_id: null, prs_moved: 2 });
+  });
+
+  it('moves PRs into an existing topic: preview, filing, the outcome on both topics and Accept', async () => {
+    const engine = new FakeEngine();
+    const client = await connected(engine);
+    const move = { topic: 'topic-dev-env', kind: 'move', prs: ['#1960'], into_topic: 'CI & tests', reason: 'It is CI work.' };
+
+    const dry = await call(client, 'propose_topic_change', { ...move, dry_run: true });
+    expect(dry.structured).toEqual({ status: 'dry_run', proposal_id: null, prs_moved: 1 });
+    expect(fencedPart(dry.text)).toContain('Move 1 PR from "Dev env" into "CI & tests": acme/app#1960.');
+    expect(fencedPart(dry.text)).toContain('2 PRs stay in "Dev env".');
+    expect(outsideFence(dry.text)).not.toMatch(/Dev env|CI & tests|acme\/app/);
+
+    const filed = await call(client, 'propose_topic_change', move);
+    expect(filed.structured).toMatchObject({ status: 'filed', prs_moved: 1 });
+    const proposal = (await engine.listProposals()).topics.find((candidate) => candidate.id === filed.structured?.proposal_id);
+    expect(proposal).toMatchObject({ kind: 'move', topicId: 'topic-dev-env', intoTopicId: 'topic-ci-tests', name: null, prKeys: ['acme/app#1960'] });
+    expect((await call(client, 'topic', { topic: 'topic-dev-env' })).text).toContain('move into "CI & tests" (acme/app#1960)');
+    expect(fencedPart((await call(client, 'propose_topic_change', move)).text)).toContain('The same change is pending already');
+
+    expect((await engine.decideTopicProposal(String(filed.structured?.proposal_id), true)).ok).toBe(true);
+    expect((await engine.getTopic('topic-ci-tests'))?.tiles.some((view) => view.tile.members.some((member) => member.prKey === 'acme/app#1960'))).toBe(true);
+    expect(fencedPart((await call(client, 'topic', { topic: 'topic-ci-tests' })).text)).toMatch(/accepted on \d{4}-\d\d-\d\d: moved in from "Dev env" \(acme\/app#1960\)/);
   });
 });
 

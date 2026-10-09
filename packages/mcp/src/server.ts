@@ -100,11 +100,12 @@ Not for: polling (the app checks GitHub about every minute while it runs), or CI
 Pass exactly one of pr or topic.
 Example: refresh_from_github(pr: "acme/app#1902")`;
 
-const PROPOSE_DESCRIPTION = `File a topic change for the user to decide in PostPile's Inbox: split PRs out into a new topic, rename a topic, or merge it into another. Never applied by itself: the user accepts or rejects it. The answer previews what accepting would do (a stack moves as a whole) and says whether it was filed; dry_run: true only previews.
-Checks: the topic is active, split PRs belong to it and at least one PR stays, the same change is not pending and was not rejected before. At most 3 pending suggestions per topic, 10 in total, 20 a day; unanswered ones expire after 14 days. topic lists earlier outcomes.
+const PROPOSE_DESCRIPTION = `File a topic change for the user to decide in PostPile's Inbox: split moves PRs into a NEW topic (name), move moves PRs into an EXISTING topic (into_topic), merge moves a whole topic into another (into_topic), rename renames it. Never applied by itself: the user accepts or rejects it. The answer previews what accepting would do (a stack moves as a whole) and says whether it was filed; dry_run: true only previews.
+Checks: the topic is active, split and move PRs belong to it and at least one PR stays, the same change is not pending and was not rejected before. At most 3 pending suggestions per topic, 10 in total, 20 a day; unanswered ones expire after 14 days. topic lists earlier outcomes.
 Use when: you know from the code or the user that PRs belong to different work, or a topic's name no longer fits.
 Not for: small taste differences, or changes the user did not ask about and would not care for.
-Example: propose_topic_change(topic: "depot", kind: "split", prs: ["acme/app#1902"], name: "Turbo cache", reason: "Cache work is separate from the runner move")`;
+Example: propose_topic_change(topic: "depot", kind: "split", prs: ["acme/app#1902"], name: "Turbo cache", reason: "Cache work is separate from the runner move")
+Example: propose_topic_change(topic: "depot", kind: "move", prs: ["acme/app#1911"], into_topic: "frontend build", reason: "It only changes the frontend build")`;
 
 const NOTE_DESCRIPTION = `Leave a short note on a PR for the user and other agents: facts GitHub does not show. kind "covered": another PR's review covers this one (covered_by, same repo); "no_action": you looked and nothing is needed; "in_progress": you are on it right now (a lease, default ${PR_NOTE_LEASE_DEFAULT_MINUTES} min, ${PR_NOTE_LEASE_MIN_MINUTES} to ${PR_NOTE_LEASE_MAX_MINUTES}).
 Advisory only: a note never hides a move, marks nothing read or done and changes no counts. whats_on_me shows it on the PR's line; the user sees it in the PR pane and can clear it.
@@ -127,7 +128,7 @@ const refreshOutput = {
 const proposeOutput = {
   status: z.enum(['filed', 'dry_run']),
   proposal_id: z.string().nullable(),
-  prs_moved: z.number().int().describe('split: PRs accepting would move, stack layers included'),
+  prs_moved: z.number().int().describe('split, move and merge: PRs accepting would move to another topic, stack layers included; 0 for a rename'),
 };
 
 const noteOutput = {
@@ -357,10 +358,12 @@ export function createMcpServer(reader: PostPileReader, options: McpServerOption
       description: PROPOSE_DESCRIPTION,
       inputSchema: {
         topic: z.string().describe('The topic to change: an id or part of its name'),
-        kind: z.enum(['split', 'rename', 'merge'], { error: 'kind must be split, rename or merge, e.g. kind: "split"' }),
-        prs: z.array(z.string()).max(50).optional().describe('split: the PRs to move into the new topic'),
+        kind: z
+          .enum(['split', 'move', 'rename', 'merge'], { error: 'kind must be split, move, rename or merge, e.g. kind: "move"' })
+          .describe('split: PRs into a new topic; move: PRs into an existing topic; merge: the whole topic into another; rename'),
+        prs: z.array(z.string()).max(50).optional().describe('split and move: the PRs to move out of the topic'),
         name: z.string().max(TOPIC_NAME_MAX, { error: `name must be at most ${TOPIC_NAME_MAX} characters` }).optional().describe("split: the new topic's name; rename: the new name"),
-        into_topic: z.string().optional().describe('merge: the topic to merge into'),
+        into_topic: z.string().optional().describe('move: the existing topic the PRs go to; merge: the topic to merge into'),
         reason: z
           .string()
           .min(1, { error: 'reason is required: one or two sentences the user reads in the Inbox' })

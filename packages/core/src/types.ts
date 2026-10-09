@@ -517,7 +517,7 @@ export interface TopicMembership {
 }
 
 /** split: move prKeys out of topicId into a new topic called name. One proposal per new part. */
-export type TopicProposalKind = 'new_topic' | 'rename' | 'merge' | 'split' | 'area_merge';
+export type TopicProposalKind = 'new_topic' | 'rename' | 'merge' | 'split' | 'move' | 'area_merge';
 /**
  * withdrawn: the app took it back because a topic it names is no longer
  * active. Not the user's decision, so it never reads as a rejection.
@@ -534,15 +534,15 @@ export type ProposalSource = 'consolidation' | 'agent' | 'upgrade';
 export interface TopicProposal {
   id: string;
   kind: TopicProposalKind;
-  /** new_topic: null. rename/merge: the topic being changed. */
+  /** new_topic: null. rename/merge/split/move: the topic being changed. */
   topicId: string | null;
   /** new_topic/rename/split: the proposed name. */
   name: string | null;
-  /** merge: the topic to merge into. */
+  /** merge: the topic to merge into. move: the existing topic the PRs go to. */
   intoTopicId: string | null;
   /** area_merge: the area folded into `name`. topicId is null. */
   fromArea: string | null;
-  /** new_topic: the PRs that triggered it. split: the PRs to move. */
+  /** new_topic: the PRs that triggered it. split/move: the PRs to move. */
   prKeys: PrKey[];
   reason: string;
   status: ProposalStatus;

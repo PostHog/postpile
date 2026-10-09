@@ -29,9 +29,9 @@ function fail(message: string): ActionResult {
 
 /**
  * Topic proposals on sample data, in memory: the Inbox's list, Accept and
- * Reject (renames, merges, splits and area folds), and the recent outcomes
- * the MCP topic tool shows. A stack is one tile here, so a split moves whole
- * tiles, like `Board.movesWith` moves whole stacks in the real engine.
+ * Reject (renames, merges, splits, moves and area folds), and the recent outcomes
+ * the MCP topic tool shows. A stack is one tile here, so a split or move
+ * moves whole tiles, like `Board.movesWith` moves whole stacks in the real engine.
  */
 export class FakeTopicChanges {
   constructor(
@@ -115,10 +115,10 @@ export class FakeTopicChanges {
       id: `proposal-agent-${this.data.proposals.length + 1}`,
       kind: change.kind,
       topicId: change.topicId,
-      name: change.kind === 'merge' || change.name === null ? null : cleanTopicName(change.name),
-      intoTopicId: change.kind === 'merge' ? change.intoTopicId : null,
+      name: change.kind === 'merge' || change.kind === 'move' || change.name === null ? null : cleanTopicName(change.name),
+      intoTopicId: change.kind === 'merge' || change.kind === 'move' ? change.intoTopicId : null,
       fromArea: null,
-      prKeys: change.kind === 'split' ? change.prKeys : [],
+      prKeys: change.kind === 'split' || change.kind === 'move' ? change.prKeys : [],
       reason: change.reason.trim(),
       status: 'pending',
       createdAt: now,
@@ -130,7 +130,7 @@ export class FakeTopicChanges {
     return { status: 'filed', proposalId: proposal.id, preview: plan.preview, reason: null, movedPrKeys: plan.movedPrKeys };
   }
 
-  /** The tiles a split moves: every tile of the topic holding one of its PRs. */
+  /** The tiles a split or move takes: every tile of the topic holding one of its PRs. */
   splitTiles(topicId: string, prKeys: PrKey[]): Tile[] {
     return this.tilesOf(topicId).filter((tile) => tile.members.some((member) => prKeys.includes(member.prKey)));
   }
@@ -149,7 +149,10 @@ export class FakeTopicChanges {
     if (proposal.kind === 'merge' && !this.isActive(proposal.intoTopicId)) {
       return 'the topic to merge into is no longer active';
     }
-    if (proposal.kind === 'split' && proposal.topicId) {
+    if (proposal.kind === 'move' && (!this.isActive(proposal.intoTopicId) || proposal.intoTopicId === proposal.topicId)) {
+      return 'the topic to move into is no longer active';
+    }
+    if ((proposal.kind === 'split' || proposal.kind === 'move') && proposal.topicId) {
       const members = new Set(this.topicPrKeys(proposal.topicId));
       if (!proposal.prKeys.every((key) => members.has(key))) {
         return 'some of its PRs left the topic since';
@@ -196,6 +199,9 @@ export class FakeTopicChanges {
     if (proposal.kind === 'split' && topic && proposal.name) {
       this.split(topic.id, proposal.name, proposal.prKeys);
     }
+    if (proposal.kind === 'move' && topic && proposal.intoTopicId) {
+      this.moveTiles(topic.id, proposal.intoTopicId, proposal.prKeys);
+    }
     if (proposal.kind === 'area_merge' && proposal.fromArea && proposal.name) {
       for (const moved of this.data.topics.filter((candidate) => candidate.area === proposal.fromArea)) {
         moved.area = proposal.name;
@@ -222,18 +228,23 @@ export class FakeTopicChanges {
     }
   }
 
+  /** Moves the tiles holding these PRs, and their members, from one topic to another. */
+  private moveTiles(fromTopicId: string, intoTopicId: string, prKeys: PrKey[]): void {
+    for (const tile of this.splitTiles(fromTopicId, prKeys)) {
+      tile.topicId = intoTopicId;
+      for (const member of tile.members) {
+        if (this.data.membership.get(member.prKey) === fromTopicId) {
+          this.data.membership.set(member.prKey, intoTopicId);
+        }
+      }
+    }
+  }
+
   /** A new topic in the same area with the tiles holding these PRs. */
   private split(fromTopicId: string, name: string, prKeys: PrKey[]): void {
     const from = this.data.topics.find((candidate) => candidate.id === fromTopicId);
     const id = `topic-split-${this.data.topics.length + 1}`;
     this.data.topics.push({ ...newTopic(id, name, this.timestamp()), area: from?.area ?? null });
-    for (const tile of this.splitTiles(fromTopicId, prKeys)) {
-      tile.topicId = id;
-      for (const member of tile.members) {
-        if (this.data.membership.get(member.prKey) === fromTopicId) {
-          this.data.membership.set(member.prKey, id);
-        }
-      }
-    }
+    this.moveTiles(fromTopicId, id, prKeys);
   }
 }

@@ -97,7 +97,7 @@ const refreshTargetSchema = z.discriminatedUnion('kind', [
 const topicChangeSchema = z
   .object({
     topicId: topicIdSchema,
-    kind: z.enum(['split', 'rename', 'merge']),
+    kind: z.enum(['split', 'move', 'rename', 'merge']),
     prKeys: z.array(prKeySchema).max(50),
     name: z.string().max(TOPIC_NAME_MAX).nullable(),
     intoTopicId: topicIdSchema.nullable(),

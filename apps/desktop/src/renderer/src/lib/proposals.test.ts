@@ -34,6 +34,10 @@ describe('proposalText', () => {
     expect(proposalText(proposal({ name: 'Vite' }), (id) => names[id] ?? id)).toBe('Rename "Frontend build" to "Vite"');
   });
 
+  it('names both topics of a move, without a count that would miss stack layers', () => {
+    expect(proposalText(proposal({ kind: 'move', intoTopicId: 'b', prKeys: ['acme/app#1'] }), (id) => names[id] ?? id)).toBe('Move PRs from "Frontend build" into "Move CI to Depot"');
+  });
+
   it('names both areas of an area merge', () => {
     expect(proposalText(proposal({ kind: 'area_merge', topicId: null, name: 'CI', fromArea: 'CI & tests' }), (id) => names[id] ?? id)).toBe(
       'Fold area "CI & tests" into "CI"',

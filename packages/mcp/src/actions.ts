@@ -166,6 +166,7 @@ export interface ProposeArgs {
 
 const PROPOSE_EXAMPLES: Record<TopicChangeKind, string> = {
   split: 'propose_topic_change(topic: "depot", kind: "split", prs: ["acme/app#1902"], name: "Turbo cache", reason: "...")',
+  move: 'propose_topic_change(topic: "depot", kind: "move", prs: ["acme/app#1902"], into_topic: "frontend build", reason: "...")',
   rename: 'propose_topic_change(topic: "depot", kind: "rename", name: "Depot runners", reason: "...")',
   merge: 'propose_topic_change(topic: "frontend build", kind: "merge", into_topic: "depot", reason: "...")',
 };
@@ -197,6 +198,12 @@ export async function proposeTopicChange(ctx: ActionContext, args: ProposeArgs):
   if (args.kind === 'split' && (args.prs ?? []).length === 0) {
     return toolError([`split needs prs: the PRs to move into the new topic. ${example}`]);
   }
+  if (args.kind === 'move' && (args.prs ?? []).length === 0) {
+    return toolError([`move needs prs: the PRs to move into the existing topic. ${example}`]);
+  }
+  if (args.kind === 'move' && !args.into_topic?.trim()) {
+    return toolError([`move needs into_topic: the existing topic the PRs go to (for a new topic, use kind "split"). ${example}`]);
+  }
   if (args.kind === 'merge' && !args.into_topic?.trim()) {
     return toolError([`merge needs into_topic: the topic to merge into. ${example}`]);
   }
@@ -205,14 +212,14 @@ export async function proposeTopicChange(ctx: ActionContext, args: ProposeArgs):
     return topic.error;
   }
   let intoTopicId: string | null = null;
-  if (args.kind === 'merge') {
+  if (args.kind === 'merge' || args.kind === 'move') {
     const into = await resolveTopic(ctx.reader, args.into_topic ?? '', 'into_topic');
     if (!into.ok) {
       return into.error;
     }
     intoTopicId = into.item.topic.id;
   }
-  const prKeys = args.kind === 'split' ? await resolvePrs(ctx, args.prs ?? []) : [];
+  const prKeys = args.kind === 'split' || args.kind === 'move' ? await resolvePrs(ctx, args.prs ?? []) : [];
   if (!Array.isArray(prKeys)) {
     return prKeys;
   }
@@ -220,7 +227,7 @@ export async function proposeTopicChange(ctx: ActionContext, args: ProposeArgs):
     topicId: topic.item.topic.id,
     kind: args.kind,
     prKeys,
-    name: args.kind === 'merge' ? null : name,
+    name: args.kind === 'merge' || args.kind === 'move' ? null : name,
     intoTopicId,
     reason: args.reason.trim(),
     dryRun: args.dry_run,

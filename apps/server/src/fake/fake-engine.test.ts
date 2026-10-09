@@ -242,6 +242,29 @@ describe('FakeEngine memory', () => {
   });
 });
 
+describe('FakeEngine topic moves', () => {
+  it('moves the tiles of the PRs into an existing topic on accept, like the engine', async () => {
+    const engine = new FakeEngine();
+    const change = { topicId: 'topic-ci-tests', kind: 'move' as const, prKeys: ['acme/app#1822'], name: null, intoTopicId: 'topic-depot', reason: 'runner work', dryRun: false };
+    const filed = await engine.proposeTopicChange(change, { client: 'claude-code' });
+    expect(filed).toMatchObject({ status: 'filed', movedPrKeys: ['acme/app#1822'] });
+
+    expect((await engine.decideTopicProposal(filed.proposalId ?? '', true)).ok).toBe(true);
+
+    expect((await engine.getPr('acme/app#1822'))?.topicId).toBe('topic-depot');
+    expect((await engine.getPr('acme/app#1945'))?.topicId).toBe('topic-ci-tests');
+  });
+
+  it('refuses to accept a move whose PRs left the topic since', async () => {
+    const engine = new FakeEngine();
+    const change = { topicId: 'topic-ci-tests', kind: 'move' as const, prKeys: ['acme/app#1822'], name: null, intoTopicId: 'topic-depot', reason: 'runner work', dryRun: false };
+    const filed = await engine.proposeTopicChange(change, { client: 'claude-code' });
+    expect((await engine.decideTopicProposal('proposal-split-sharding', true)).ok).toBe(true);
+
+    expect((await engine.decideTopicProposal(filed.proposalId ?? '', true)).message).toBe("Can't accept: some of its PRs left the topic since. Nothing changed; reject it instead.");
+  });
+});
+
 describe('FakeEngine rechecks', () => {
   it('cycles holds, fix and drop so every dialog state can be seen', async () => {
     const engine = new FakeEngine({ recheckDelayMs: 0 });

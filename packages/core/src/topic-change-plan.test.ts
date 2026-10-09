@@ -73,9 +73,58 @@ describe('planTopicChange', () => {
     const into = { id: 'ci', name: 'CI & tests', status: 'active' as const };
     expect(planTopicChange(change({ kind: 'merge', prKeys: [], name: null, intoTopicId: 'ci' }), snapshot({ intoTopic: into }))).toMatchObject({
       ok: true,
+      movedPrKeys: ['acme/app#1851', 'acme/app#1902', 'acme/app#1911', 'acme/app#1904', 'acme/app#1921'],
       preview: ['Merge "Move CI to Depot" (5 PRs) into "CI & tests"; "Move CI to Depot" is archived.'],
     });
     expect(planTopicChange(change({ kind: 'merge', prKeys: [], name: null, intoTopicId: 'ci' }), snapshot({ intoTopic: { ...into, status: 'retired' } }))).toMatchObject({ ok: false });
+  });
+
+  describe('move', () => {
+    const ci = { id: 'ci', name: 'CI & tests', status: 'active' as const };
+    const move = (overrides: Partial<TopicChangeRequest> = {}) => change({ kind: 'move', name: null, intoTopicId: 'ci', ...overrides });
+
+    it('previews a move into an existing topic with the stack it brings along and what stays', () => {
+      expect(planTopicChange(move({ prKeys: ['acme/app#1902', 'acme/app#1904'] }), snapshot({ intoTopic: ci }))).toEqual({
+        ok: true,
+        movedPrKeys: ['acme/app#1851', 'acme/app#1902', 'acme/app#1911', 'acme/app#1904'],
+        preview: [
+          'Move 4 PRs from "Move CI to Depot" into "CI & tests": acme/app#1851, acme/app#1902, acme/app#1911, acme/app#1904.',
+          'acme/app#1902 brings acme/app#1851 and acme/app#1911 along (same stack).',
+          '1 PR stays in "Move CI to Depot".',
+        ],
+      });
+    });
+
+    it('refuses PRs from another topic and a move that empties the topic', () => {
+      expect(planTopicChange(move({ prKeys: ['acme/app#1822'] }), snapshot({ intoTopic: ci }))).toEqual({
+        ok: false,
+        reason: 'acme/app#1822 is not in "Move CI to Depot"; a move only moves PRs out of their own topic.',
+      });
+      expect(planTopicChange(move({ prKeys: ['acme/app#1902', 'acme/app#1904', 'acme/app#1921'] }), snapshot({ intoTopic: ci }))).toEqual({
+        ok: false,
+        reason: 'That would move every PR out of "Move CI to Depot"; propose a merge instead.',
+      });
+    });
+
+    it('needs an active target that is not the source', () => {
+      const notActive = { ok: false, reason: 'into_topic must be another active topic; ci is not.' };
+      expect(planTopicChange(move(), snapshot())).toEqual(notActive);
+      expect(planTopicChange(move(), snapshot({ intoTopic: { ...ci, status: 'archived' } }))).toEqual(notActive);
+      expect(planTopicChange(move({ intoTopicId: 'depot' }), snapshot({ intoTopic: { id: 'depot', name: 'Move CI to Depot', status: 'active' } }))).toMatchObject({ ok: false });
+      expect(planTopicChange(move({ intoTopicId: null }), snapshot())).toEqual({ ok: false, reason: 'move needs into_topic: the existing topic the PRs go to.' });
+      expect(planTopicChange(move({ prKeys: [] }), snapshot({ intoTopic: ci }))).toEqual({ ok: false, reason: 'move needs prs: the PRs to move out of the topic.' });
+    });
+
+    it('refuses the same move pending or rejected, and lets a different PR set or target through', () => {
+      const same = filed({ kind: 'move', name: null, intoTopicId: 'ci', prKeys: ['acme/app#1904', 'acme/app#1902'] });
+      const request = move({ prKeys: ['acme/app#1902', 'acme/app#1904'] });
+      expect(planTopicChange(request, snapshot({ intoTopic: ci, proposals: [same] }))).toMatchObject({ ok: false, reason: expect.stringContaining('pending already') });
+      const rejected = { ...same, status: 'rejected' as const, decidedAt: '2026-09-20T08:00:00.000Z' };
+      expect(planTopicChange(request, snapshot({ intoTopic: ci, proposals: [rejected] }))).toMatchObject({ ok: false, reason: expect.stringContaining('rejected this change') });
+      expect(planTopicChange(move({ prKeys: ['acme/app#1904'] }), snapshot({ intoTopic: ci, proposals: [rejected] })).ok).toBe(true);
+      const elsewhere = { ...rejected, intoTopicId: 'docs' };
+      expect(planTopicChange(request, snapshot({ intoTopic: ci, proposals: [elsewhere] })).ok).toBe(true);
+    });
   });
 
   it('checks the fields and that the topic is active', () => {

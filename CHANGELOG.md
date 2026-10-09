@@ -2,6 +2,16 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## 0.27.2 (unreleased)
+
+### Added
+
+- Agents can suggest moving PRs into an existing topic: `propose_topic_change` takes kind `move` with `prs` and `into_topic`. Before, agents could only split PRs into a new topic or merge whole topics, so they fell back to renames and merges. The Inbox shows it as "Move PRs from … into …"; accepting it does what "Move to topic…" does.
+
+### Fixed
+
+- `propose_topic_change` now reports how many PRs a merge moves in `prs_moved`. It said 0, which read as "the merge moves nothing".
+
 ## 0.27.1 (2026-10-08)
 
 ### Fixed
