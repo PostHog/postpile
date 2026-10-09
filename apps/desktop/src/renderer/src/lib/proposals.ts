@@ -17,9 +17,9 @@ export function proposalText(proposal: TopicProposal, topicName: (topicId: strin
     return `Split "${proposal.name ?? ''}" out of ${topic}`;
   }
   if (proposal.kind === 'move') {
+    // No count: prKeys holds only the PRs the agent named, and Accept also moves their stack layers.
     const into = proposal.intoTopicId ? `"${topicName(proposal.intoTopicId)}"` : 'another topic';
-    const count = proposal.prKeys.length;
-    return `Move ${count} ${count === 1 ? 'PR' : 'PRs'} from ${topic} into ${into}`;
+    return `Move PRs from ${topic} into ${into}`;
   }
   return `New topic "${proposal.name ?? ''}"`;
 }

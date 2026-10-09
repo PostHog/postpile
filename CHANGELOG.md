@@ -6,7 +6,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ### Added
 
-- Agents can suggest moving PRs into an existing topic: `propose_topic_change` takes kind `move` with `prs` and `into_topic`. Before, agents could only split PRs into a new topic or merge whole topics, so they fell back to renames and merges. The Inbox shows it as "Move 2 PRs from … into …"; accepting it does what "Move to topic…" does.
+- Agents can suggest moving PRs into an existing topic: `propose_topic_change` takes kind `move` with `prs` and `into_topic`. Before, agents could only split PRs into a new topic or merge whole topics, so they fell back to renames and merges. The Inbox shows it as "Move PRs from … into …"; accepting it does what "Move to topic…" does.
 
 ### Fixed
 
