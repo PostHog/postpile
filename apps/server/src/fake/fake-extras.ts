@@ -1,6 +1,7 @@
 import type { SampleClock } from './sample-builders.ts';
 import type { SampleData } from './sample-data.ts';
 import { appendSamplePack } from './sample-pack-append.ts';
+import { buildPanePack } from './sample-pack-pane.ts';
 import { buildStacksPack } from './sample-pack-stacks.ts';
 
 /**
@@ -27,5 +28,8 @@ export function addFakeExtras(data: SampleData, clock: SampleClock, extras: Set<
   // Each pack adds its topics, PRs, events, glances, tiles and membership here.
   if (extras.has('stacks')) {
     appendSamplePack(data, buildStacksPack(clock));
+  }
+  if (extras.has('pane')) {
+    appendSamplePack(data, buildPanePack(clock));
   }
 }

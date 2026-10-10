@@ -2559,6 +2559,10 @@ Env switches:
   ranking, Search indexing, Session export, Query result cache, Flag
   cleanup and Lockfile bumps (#2101 to #2166), for stack tiles, per-layer
   writes, "Blocked:" on a stack, the agent Approve on stacks and a bot set.
+  `pane`: topic Webhook delivery (#2201 to #2204), for the PR pane: a
+  folded bot review, a bot body cut like a stored snapshot, markdown and a
+  long token in a comment, raw HTML that must stay inert, and
+  instruction-like text as prompt-injection test data.
 - `POSTPILE_MAX_AGENT_CALLS`: agent-call cap for syncs and consolidations
   without an explicit cap (launch, "Sync now", `/api/consolidate`, and the
   CLI without `--max-agent-calls`), default 150 (was 30).
