@@ -13,6 +13,7 @@ export { ActionLog } from './writes/action-log.ts';
 export { NEW_COMMITS_SINCE_LOOKED } from './actions/pr-actions.ts';
 export { approveNoteBody, nextApproveOpener } from './actions/review-note.ts';
 export { topicChatId } from './actions/chat-actions.ts';
+export { muteMessage, readMessage, unmuteMessage } from './actions/results.ts';
 export { catchUpCapFromEnv, createEngine, pingCapFromEnv, type CreateEngineOptions } from './create.ts';
 export { AutoSyncSchedule, BACKLOG_SYNC_MINUTES, DEFAULT_AUTO_SYNC_MINUTES, type AutoSyncOptions } from './auto-sync.ts';
 export { GitHubQuota, quotaFetch, type QuotaRunStats } from './github-quota.ts';

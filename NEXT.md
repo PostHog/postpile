@@ -1325,8 +1325,8 @@ now".
 - Search matches title, number, author, repo, head branch, topic name and
   area only (no PR body, comments or labels) and does not highlight the
   matched text. Filter state and history are not kept across restarts.
-- Recheck: not run against the real agent yet; the fake answers cycle
-  holds / fix / drop after 1.5s. The daily cap (40) is a guess. A fix of a
+- Recheck: not run against the real agent yet; the fake answers by the
+  claim's state after 1.5s (fresh holds; stale is fixed or dropped). The daily cap (40) is a guess. A fix of a
   fact keeps the old refs; no new ref points at the evidence in `why`.
 - Whose turn is rules only and still rough: "you
   commented on the head" only looks at reviews, and the own-PR "Merge, it is
@@ -2591,8 +2591,10 @@ Env switches:
   ```
 - `POSTPILE_FAKE_LIVE=1` (with `POSTPILE_FAKE=1`): the standalone server
   starts the fake live poll and the auto sync like Electron main, so the
-  footer reads "live · every 60s" in a browser too. No Mac notifications;
-  pings show in the debug view only.
+  footer reads "live · every 60s" in a browser too. They also start on
+  their own with `POSTPILE_FAKE_QUOTA` or `gh-offline`, which the real app
+  shows through its poll; `POSTPILE_FAKE_LIVE=0` keeps them off. No Mac
+  notifications; pings show in the debug view only.
 - `POSTPILE_FAKE_EXTRA`: with `POSTPILE_FAKE=1`, comma-separated sample
   packs on top of the default sample, which stays as it is
   (`apps/server/src/fake/fake-extras.ts`; `calm` replaces it). `stacks`:
@@ -2655,9 +2657,17 @@ Env switches:
   ```
   POSTPILE_FAKE=1 POSTPILE_FAKE_SETUP=1 POSTPILE_TOKEN=devtok PORT=4877 pnpm server
   ```
+- `POSTPILE_FAKE_INTERRUPTIONS=unchosen` (with `POSTPILE_FAKE=1`): start
+  without an Interruptions pick, like an older install, so the prompt
+  shows. By default the sample starts with the pick made (Never), like an
+  install that finished setup. `POSTPILE_FAKE_SETUP=1` also starts without
+  one; its Accept sends the pick.
 - `POSTPILE_FAKE_MISSING` (with `POSTPILE_FAKE=1`): simulates missing
   tools, comma separated `gh`, `gh-auth`, `gh-token`, `gh-offline`,
-  `claude`, `claude-auth`, `claude-limit`:
+  `claude`, `claude-auth`, `claude-limit`. `gh` and `gh-auth` read as a
+  first run (no topics, proposals or counts), like `POSTPILE_FAKE_SETUP=1`
+  until its first sync. `gh-offline` fails every sync and poll with a
+  fetch error. Without claude the setup draft fails into the blank draft:
 
   ```
   POSTPILE_FAKE=1 POSTPILE_FAKE_MISSING=gh,claude POSTPILE_TOKEN=devtok PORT=4877 pnpm server

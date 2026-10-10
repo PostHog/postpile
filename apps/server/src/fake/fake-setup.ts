@@ -1,4 +1,5 @@
 import {
+  blankSetupDraft,
   changedHeadings,
   claimKey,
   formatInstructionsSections,
@@ -27,6 +28,7 @@ import {
   type Viewer,
 } from '@postpile/core';
 import type { FakeInstructions } from './fake-instructions.ts';
+import { headingFor } from './fake-placement.ts';
 
 function samplePr(repo: string, number: number, role: ActivityPr['role'], title: string, dirs: string[], state: ActivityPr['state'] = 'MERGED'): ActivityPr {
   return {
@@ -163,6 +165,8 @@ export interface FakeSetupDeps {
   forced: boolean;
   /** Base delay of the canned checks, sweep lines and refine. Tests pass 0. */
   stepMs: number;
+  /** The claude headline while the agent is off (POSTPILE_FAKE_MISSING=claude or claude-auth); null otherwise. */
+  agentOff: () => string | null;
 }
 
 function delay(ms: number): Promise<void> {
@@ -173,12 +177,13 @@ function delay(ms: number): Promise<void> {
  * The setup flow for FakeEngine: canned checks, a sweep that walks its
  * lines after short delays, a canned draft built with the real rules
  * (setupSources, mapSetupDraft), a refine that files the user's point
- * under Preferences, and an accept that writes to the in-memory
- * instructions. Nothing touches GitHub, the agent or the disk.
+ * under the section it is about, and an accept that writes to the in-memory
+ * instructions. Without claude the draft fails into the engine's blank
+ * draft. Nothing touches GitHub, the agent or the disk.
  */
 export class FakeSetup {
   private flag: { flag: 'done' | 'skipped'; at: string } | null = null;
-  private sweep: { startedAt: string; finishedAt: string | null; lines: SetupSweepLine[]; draft: SetupDraft | null } | null = null;
+  private sweep: { startedAt: string; finishedAt: string | null; lines: SetupSweepLine[]; draft: SetupDraft | null; error: string | null } | null = null;
   private running: Promise<void> | null = null;
   private readonly material: SetupMaterial;
 
@@ -216,11 +221,26 @@ export class FakeSetup {
     return mapSetupDraft({ answer: SAMPLE_ANSWER, sources, repos: rankActivityRepos(this.material.prs), model: 'opus' });
   }
 
+  /** Like SetupSweep.draft when the agent call fails: a failed line, the error, and the engine's blank draft. */
+  private failedDraft(job: NonNullable<FakeSetup['sweep']>, line: SetupSweepLine, agentOff: string): SetupDraft {
+    const message = `The agent could not write a draft: ${agentOff}`;
+    line.text = message;
+    line.state = 'failed';
+    job.error = message;
+    const reason = 'No agent draft this time. Start from these headings and write it in your words.';
+    return blankSetupDraft(setupSources(this.material), rankActivityRepos(this.material.prs), reason);
+  }
+
   private async walk(job: NonNullable<FakeSetup['sweep']>): Promise<void> {
     for (const [index, line] of SWEEP_SCRIPT.entries()) {
       const shown: SetupSweepLine = { step: line.step, text: line.running, state: 'running' };
       job.lines.push(shown);
       await delay(this.deps.stepMs * (STEP_WEIGHTS[index] ?? 1));
+      const agentOff = this.deps.agentOff();
+      if (line.step === 'draft' && agentOff !== null) {
+        job.draft = this.failedDraft(job, shown, agentOff);
+        return;
+      }
       shown.text = line.done;
       shown.state = line.state;
     }
@@ -229,7 +249,7 @@ export class FakeSetup {
 
   startSweep(): SetupSweepView {
     if (!this.running) {
-      const job = { startedAt: this.deps.now().toISOString(), finishedAt: null as string | null, lines: [] as SetupSweepLine[], draft: null as SetupDraft | null };
+      const job = { startedAt: this.deps.now().toISOString(), finishedAt: null as string | null, lines: [] as SetupSweepLine[], draft: null as SetupDraft | null, error: null as string | null };
       this.sweep = job;
       this.running = this.walk(job).finally(() => {
         job.finishedAt = this.deps.now().toISOString();
@@ -250,13 +270,17 @@ export class FakeSetup {
       finishedAt: this.sweep.finishedAt,
       lines: this.sweep.lines.map((line) => ({ ...line })),
       draft: this.sweep.draft,
-      error: null,
+      error: this.sweep.error,
       current: { text: current.text, version: current.version },
       teamRoles: this.deps.teamRoles(),
     };
   }
 
-  /** Stand-in for setup_refine: keeps the edits and files the user's words as a new line under Preferences. */
+  /**
+   * Stand-in for setup_refine: keeps the edits and files the user's words as
+   * a new line under the section they are about (by keywords, see
+   * fake-placement.ts), Preferences when none fits.
+   */
   async refine(request: SetupRefineRequest): Promise<SetupRefineResult> {
     const previous = this.sweep?.draft ?? null;
     if (!previous || this.running) {
@@ -264,8 +288,9 @@ export class FakeSetup {
     }
     await delay(this.deps.stepMs * 2);
     const point = request.message.trim().replace(/^[-*]\s*/, '');
+    const heading = headingFor(point, request.sections.map((section) => section.heading), 'Preferences');
     const edits = request.sections.map((section) =>
-      section.heading === 'Preferences' ? { ...section, body: `${section.body.trim()}\n- ${point}`.trim() } : section,
+      section.heading === heading ? { ...section, body: `${section.body.trim()}\n- ${point}`.trim() } : section,
     );
     const userLines = new Set([...userWrittenLines(request.sections, previous), claimKey(point)]);
     const agentSources = new Map(previous.sections.flatMap((section) => section.claims.map((claim) => [claimKey(claim.text), claim.sourceIds] as const)));
@@ -284,7 +309,7 @@ export class FakeSetup {
     const draft = mapSetupDraft({ answer, sources: previous.sources, repos: previous.repos, model: previous.model, userLines });
     this.sweep!.draft = draft;
     const changedSections = changedHeadings(formatInstructionsSections(request.sections), formatInstructionsSections(draft.sections));
-    return { ok: true, message: 'Added your point under Preferences (sample data).', draft, changedSections };
+    return { ok: true, message: `Added your point under ${heading} (sample data).`, draft, changedSections };
   }
 
   /**

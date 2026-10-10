@@ -10,6 +10,10 @@ import type {
   LessonView,
 } from '@postpile/core';
 import { SampleClock } from './sample-builders.ts';
+import { cleanPoint, nearDuplicate, withPointPlaced } from './fake-placement.ts';
+
+/** Where a point goes when no heading is about it: what the user wants to hear about. */
+const DEFAULT_HEADING = 'What I care about';
 
 /** The general chat's tile id, as in the real engine. */
 const CHAT_ID = 'instructions';
@@ -50,9 +54,10 @@ export interface FakeInstructionsDeps {
 
 /**
  * instructions.md for FakeEngine, kept in memory: three sample versions (found
- * on disk, one from chat, one hand edit) and a canned proposal that appends
- * the user's point, or a lesson's line, as a new line. Nothing is ever
- * written to disk.
+ * on disk, one from chat, one hand edit) and a canned proposal that puts the
+ * user's point, or a lesson's line, under the heading it fits and notices
+ * when a line already says it (fake-placement.ts). Nothing is ever written
+ * to disk.
  */
 export class FakeInstructions {
   private readonly versions: InstructionsVersion[] = [];
@@ -97,28 +102,40 @@ export class FakeInstructions {
     return this.chat.find((message) => message.id === id) ?? this.deps.findTileMessage(id);
   }
 
-  /** The new text with `line` as a new last line, against the latest version. */
-  private appended(line: string): Pick<InstructionsProposal, 'baseVersion' | 'baseText' | 'text' | 'summary' | 'dossiersToRefresh'> {
+  /** The new text with `line` under the heading it fits, against the latest version. */
+  private placed(line: string): Pick<InstructionsProposal, 'baseVersion' | 'baseText' | 'text' | 'summary' | 'dossiersToRefresh'> {
     const latest = this.latest();
     const baseText = latest?.text ?? '';
+    const placed = withPointPlaced(baseText, line, DEFAULT_HEADING);
+    const where = placed.heading === null ? '' : ` under ${placed.heading}`;
     return {
       baseVersion: latest?.version ?? null,
       baseText,
-      text: `${baseText.trimEnd()}\n- ${line}\n`.trimStart(),
-      summary: `Added: ${line.length > 80 ? `${line.slice(0, 79)}…` : line}`,
+      text: placed.text,
+      summary: `Added${where}: ${line.length > 80 ? `${line.slice(0, 79)}…` : line}`,
       dossiersToRefresh: this.deps.dossiersToRefresh(),
     };
   }
 
-  /** Stand-in for the agent: the user's message becomes a new last line. */
-  private proposalFrom(message: ChatMessage): InstructionsProposal {
-    const line = message.text.trim().replace(/^[-*]\s*/, '');
-    return { ...this.appended(line), sourceChatMessageId: message.id, sourceLessonId: null };
+  /** The line of the latest version that already says the user's point, or null. */
+  private alreadySaid(point: string): string | null {
+    return nearDuplicate(this.latest()?.text ?? '', point);
   }
 
-  /** Stand-in for the agent on "Use across topics": the lesson's line becomes a new last line. */
+  /** Stand-in for the agent: the user's message becomes a line under the heading it fits. */
+  private proposalFrom(message: ChatMessage): InstructionsProposal {
+    return { ...this.placed(cleanPoint(message.text)), sourceChatMessageId: message.id, sourceLessonId: null };
+  }
+
+  /** Stand-in for the agent's answer to a point the instructions already hold: no proposal, and why. */
+  private alreadySaidReply(message: ChatMessage): string | null {
+    const line = this.alreadySaid(cleanPoint(message.text));
+    return line === null ? null : `Your instructions already say this: "${line}"`;
+  }
+
+  /** Stand-in for the agent on "Use across topics": the lesson's line goes under the heading it fits. */
   proposalFromLesson(lesson: LessonView): InstructionsProposal {
-    return { ...this.appended(lesson.text), sourceChatMessageId: null, sourceLessonId: lesson.id };
+    return { ...this.placed(lesson.text), sourceChatMessageId: null, sourceLessonId: lesson.id };
   }
 
   private sourceText(version: InstructionsVersion): string | null {
@@ -145,6 +162,10 @@ export class FakeInstructions {
 
   chatMessage(text: string): InstructionsChatReply {
     const userMessage = this.addMessage('user', text);
+    const already = this.alreadySaidReply(userMessage);
+    if (already !== null) {
+      return { message: this.addMessage('agent', already), proposal: null };
+    }
     const proposal = this.proposalFrom(userMessage);
     return { message: this.addMessage('agent', `Proposed: ${proposal.summary}`), proposal };
   }
@@ -152,6 +173,10 @@ export class FakeInstructions {
   propose(message: ChatMessage): InstructionsProposalReply {
     if (message.role !== 'user') {
       return { reply: 'Only your own messages can change your instructions.', proposal: null };
+    }
+    const already = this.alreadySaidReply(message);
+    if (already !== null) {
+      return { reply: already, proposal: null };
     }
     return { reply: 'Proposed.', proposal: this.proposalFrom(message) };
   }

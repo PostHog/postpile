@@ -74,12 +74,17 @@ function sampleThreads(topics: Topic[]): WorkContextThread[] {
 /**
  * "What you're working on" for FakeEngine: one sample digest linked to the
  * sample topics. Refresh takes a moment and stamps a new version; Forget
- * marks the thread like the real engine does. Nothing reads ~/.claude.
+ * marks the thread like the real engine does, and the next Refresh leaves
+ * it out, like the real sweep that hands forgotten titles to the agent.
+ * Nothing reads ~/.claude.
  */
 export class FakeWorkContext {
   private version = 3;
   private createdAt: string;
+  /** Threads of the current version the user forgot, by index. */
   private readonly forgotten = new Set<number>();
+  /** Titles forgotten in an earlier version: every later sweep leaves them out. */
+  private readonly leftOut = new Set<string>();
   private running = false;
   /** Saved skip list; sample data has no config file, so it lives in memory. Undefined until saved. */
   private savedSkip: string[] | undefined = undefined;
@@ -92,6 +97,11 @@ export class FakeWorkContext {
     private readonly env: NodeJS.ProcessEnv = process.env,
   ) {
     this.createdAt = new SampleClock(now()).hoursAgo(3);
+  }
+
+  /** The current version's threads: the sample's, without the ones forgotten before the last sweep. */
+  private threads(): WorkContextThread[] {
+    return sampleThreads(this.topics).filter((thread) => !this.leftOut.has(thread.title));
   }
 
   private skipSettings() {
@@ -109,7 +119,7 @@ export class FakeWorkContext {
         summary: SUMMARY,
         lastSeenAt: this.createdAt,
         inputStats: { ...STATS, skipPatterns: skip.patterns },
-        threads: sampleThreads(this.topics).map((thread, index) => ({
+        threads: this.threads().map((thread, index) => ({
           index,
           title: thread.title,
           detail: thread.detail,
@@ -136,13 +146,22 @@ export class FakeWorkContext {
     this.running = true;
     await new Promise((resolve) => setTimeout(resolve, this.refreshDelayMs));
     this.running = false;
+    const threads = this.threads();
+    for (const index of this.forgotten) {
+      const title = threads[index]?.title;
+      if (title !== undefined) {
+        this.leftOut.add(title);
+      }
+    }
+    this.forgotten.clear();
     this.version += 1;
     this.createdAt = this.now().toISOString();
-    return { ok: true, message: `Work context v${this.version} (sample data)`, version: this.version, stats: STATS };
+    const message = `Work context v${this.version}: ${this.threads().length} threads from ${STATS.sentChars} chars (sample data)`;
+    return { ok: true, message, version: this.version, stats: STATS };
   }
 
   forget(input: WorkThreadForget): { result: ActionResult; undo: () => void } | null {
-    const thread = sampleThreads(this.topics)[input.index];
+    const thread = this.threads()[input.index];
     if (input.version !== this.version || !thread) {
       return null;
     }

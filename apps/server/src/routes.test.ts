@@ -172,8 +172,14 @@ describe('server routes over the fake engine', () => {
     expect((await post<RepoOverview>(app, '/api/repos/scope', { repo: null })).json.scope).toBeNull();
   });
 
+  it('starts with the interruptions pick made, like an install that finished setup', async () => {
+    expect(await (await appWithFake().request('/api/interruptions')).json()).toMatchObject({ mode: 'never', chosen: true });
+    const setup = appWithFake(new FakeEngine({ syncStepMs: 0, forceSetup: true }));
+    expect(await (await setup.request('/api/interruptions')).json()).toMatchObject({ mode: 'never', chosen: false });
+  });
+
   it('keeps the interruptions pick, never by default', async () => {
-    const app = appWithFake();
+    const app = appWithFake(new FakeEngine({ syncStepMs: 0, interruptionsUnchosen: true }));
     expect(await (await app.request('/api/interruptions')).json()).toEqual({ mode: 'never', chosen: false, roundupTimes: ['9:30', '13:30', '16:30'] });
     const put = (body: unknown) => app.request('/api/interruptions', { method: 'PUT', body: JSON.stringify(body), headers: { 'content-type': 'application/json' } });
     expect(await (await put({ mode: 'batches' })).json()).toMatchObject({ mode: 'batches', chosen: true });
@@ -552,7 +558,8 @@ describe('server routes over the fake engine', () => {
     const sourceChatMessageId = reply.json.lastingPoint?.sourceChatMessageId;
     const proposed = await post<InstructionsProposalReply>(app, '/api/instructions/proposals', { sourceChatMessageId });
     const proposal = proposed.json.proposal;
-    expect(proposal?.text).toContain('- From now on flag every CI timeout change');
+    // Placed under the heading it is about, without the filler opener, like the agent would.
+    expect(proposal?.text).toContain('- Flag every CI timeout change.\n\n# What to skip');
     expect(proposal?.sourceChatMessageId).toBe(sourceChatMessageId);
 
     const saved = await post<InstructionsSaveResult>(app, '/api/instructions', { proposal, text: proposal?.text });
@@ -569,7 +576,7 @@ describe('server routes over the fake engine', () => {
   it('proposes from the general instructions chat', async () => {
     const app = appWithFake();
     const chat = await post<InstructionsChatReply>(app, '/api/instructions/chat', { message: 'Skip docs-only PRs' });
-    expect(chat.json.proposal?.summary).toBe('Added: Skip docs-only PRs');
+    expect(chat.json.proposal?.summary).toBe('Added under What to skip: Skip docs-only PRs.');
     const history = (await (await app.request('/api/instructions/chat')).json()) as unknown[];
     expect(history.length).toBeGreaterThanOrEqual(4);
   });
