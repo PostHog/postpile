@@ -26,7 +26,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - The footer counts "unread tiles", says "notified" instead of "pinged", and no longer says the mark-read queue is empty while the lock holds pending writes. The lock badge reads "N pending", and its buttons read "Unlock and discard" and "Discard, stay locked".
 - The sidebar cleanup line has "Clean up…" and "Clear these N" on separate lines instead of two buttons both named "Clear".
 - "You approved now ago" and similar labels read "just now"; the "New since you looked" fold reads "Show a deploy"; a mixed fold says "quiet events"; counts say "1 tile" and "1 open PR in Dealt with".
-- The tile menu names what a move acts on ("Move #1907" or "Move the 5-PR stack"), the remove-team confirm says it also marks the thread read, and the Snooze toast says the thread is still unread on GitHub.
+- The tile menu names what a move acts on ("Move #1907" or "Move the 5-PR stack"), the remove-team confirm says it also marks the thread read, and the Snooze toast says the thread is still unread on GitHub when it is (a tile you already read says nothing about GitHub).
 - The Instructions page shows one "Run setup" after a skip, and the Handled quietly page has a shorter intro and clearer reasons.
 - The browser console no longer logs a Content-Security-Policy violation on every load.
 

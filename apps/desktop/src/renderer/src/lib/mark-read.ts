@@ -53,9 +53,10 @@ export function markReadNotice(input: MarkReadNoticeInput): MarkReadNotice {
 }
 
 /**
- * The toast after a snooze: the tile is quiet in PostPile but the thread
- * stays unread on GitHub (GitHub unread is PostPile unread), so say so.
+ * The toast after a snooze. Snoozing is local, so an unread tile stays unread
+ * on GitHub (GitHub unread is PostPile unread) and the toast says so. A tile
+ * that was already read says nothing about GitHub: the snooze changed nothing there.
  */
-export function snoozeMessage(message: string, ok: boolean): string {
-  return ok ? `${message.replace(/\.$/, '')}. Still unread on GitHub.` : message;
+export function snoozeMessage(message: string, ok: boolean, unreadOnGitHub: boolean): string {
+  return ok && unreadOnGitHub ? `${message.replace(/\.$/, '')}. Still unread on GitHub.` : message;
 }

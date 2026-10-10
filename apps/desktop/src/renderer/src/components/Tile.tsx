@@ -348,6 +348,7 @@ export function Tile(props: TileProps) {
             <SnoozeMenu
               tileId={tile.id}
               snoozed={state.kind === 'snoozed'}
+              unread={view.group === 'unread'}
               muted={state.muted === true}
               partlyMuted={state.partlyMuted === true}
               unmuteRest={view.offers.unmuteRest}

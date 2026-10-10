@@ -20,13 +20,17 @@ describe('moveWords', () => {
 });
 
 describe('snoozeMessage', () => {
-  it('says the thread is still unread on GitHub', () => {
-    expect(snoozeMessage('Snoozed', true)).toBe('Snoozed. Still unread on GitHub.');
-    expect(snoozeMessage('Snoozed.', true)).toBe('Snoozed. Still unread on GitHub.');
+  it('says the thread is still unread on GitHub when it is', () => {
+    expect(snoozeMessage('Snoozed', true, true)).toBe('Snoozed. Still unread on GitHub.');
+    expect(snoozeMessage('Snoozed.', true, true)).toBe('Snoozed. Still unread on GitHub.');
+  });
+
+  it('leaves GitHub out for a tile that was already read', () => {
+    expect(snoozeMessage('Snoozed.', true, false)).toBe('Snoozed.');
   });
 
   it('keeps a failure as it is', () => {
-    expect(snoozeMessage('Could not snooze', false)).toBe('Could not snooze');
+    expect(snoozeMessage('Could not snooze', false, true)).toBe('Could not snooze');
   });
 });
 
