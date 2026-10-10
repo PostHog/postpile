@@ -234,6 +234,7 @@ import type { FakeExtra } from './fake-extras.ts';
 import { fakeQuota, type FakeQuotaLevel } from './fake-quota.ts';
 import { FakeTools, type FakeToolProblem } from './fake-tools.ts';
 import { FakeWorkContext } from './fake-work-context.ts';
+import { FakeTileFeedback } from './fake-tile-feedback.ts';
 import { FakeLivePoll } from './fake-live.ts';
 import { FakeMemory } from './fake-memory.ts';
 import { FakeCleanup } from './fake-cleanup.ts';
@@ -415,6 +416,7 @@ export class FakeEngine implements EngineService {
   /** The last approve note opener, so the canned drafts rotate like the engine's. */
   private lastApproveOpener: string | null = null;
   private readonly workContext: FakeWorkContext;
+  private readonly tileFeedback: FakeTileFeedback;
   private readonly setup: FakeSetup;
   private readonly teamRoles: FakeTeamRoles;
   private readonly toolStatus: FakeTools;
@@ -491,6 +493,7 @@ export class FakeEngine implements EngineService {
     this.mcp = new FakeMcp(() => this.toolStatus.view().claude.state, this.now, options.setupStepMs ?? 700);
     this.checkDelayMs = options.setupStepMs ?? 700;
     this.memory = new FakeMemory(this.data, this.now, options.extras);
+    this.tileFeedback = new FakeTileFeedback(this.data, this.now);
     this.topicChanges = new FakeTopicChanges(this.data, this.now);
     const noteCover = new FakeNoteCover(this.data, this.now, (key) => this.fetchedAt.set(key, this.timestamp()));
     // The engine's own reader: its hourly cap, quota check and pending answer, over the sample's stand-in for GitHub.
@@ -2076,39 +2079,54 @@ export class FakeEngine implements EngineService {
     return ok('fake: comment kept locally, nothing sent to GitHub');
   }
 
+  /** The PRs a correction is logged about, like FeedbackActions.aboutKeys. */
+  private feedbackAbout(input: FeedbackInput, key: PrKey | null, tile: Tile): Array<PrKey | null> {
+    if (input.kind === 'not_mine' && !key) {
+      return tile.members.map((member) => member.prKey);
+    }
+    if (input.kind === 'wrong_topic' && key) {
+      return this.tileFeedback.movesWith(tile, key);
+    }
+    return [key];
+  }
+
+  /** Like FeedbackActions.giveFeedback: logged, then applied to the sample tiles the way the next tile build would show it. */
   async giveFeedback(input: FeedbackInput): Promise<ActionResult> {
     const tile = this.findTile(input.tileId);
     if (!tile) {
       return fail(`no tile ${input.tileId}`);
     }
-    this.recordFeedback({
-      kind: input.kind,
-      topicId: tile.topicId,
-      tileId: tile.id,
-      prKey: input.prKey,
-      setId: setIdFromTileId(tile.id),
-      eventId: null,
-      note: input.note,
-    });
-    if (input.kind === 'not_related' && input.prKey) {
-      // A set never tears a layer out of its stack: a stack layer takes its whole stack along.
-      const prKey = input.prKey;
-      const stack = tile.stacks.find((candidate) => candidate.prKeys.includes(prKey));
-      const dropped = stack ? stack.prKeys : [prKey];
-      tile.members = tile.members.filter((member) => !dropped.includes(member.prKey));
-      tile.stacks = tile.stacks.filter((candidate) => candidate !== stack);
-      return ok('Removed from the set');
-    }
-    if (input.kind === 'wrong_topic' && input.targetTopicId) {
-      tile.topicId = input.targetTopicId;
-      return ok('Moved');
+    const key = input.prKey ?? (tile.members.length === 1 ? tile.members[0]!.prKey : null);
+    const setId = setIdFromTileId(tile.id);
+    const shownIn = (key ? this.data.membership.get(key) : null) ?? tile.topicId;
+    const topicId = shownIn === UNSORTED_TOPIC_ID ? null : shownIn;
+    for (const about of this.feedbackAbout(input, key, tile)) {
+      this.recordFeedback({ kind: input.kind, topicId, tileId: tile.id, prKey: about, setId, eventId: null, note: input.note });
     }
     if (input.kind === 'not_mine') {
       // Like the engine: a mark-read of the PR (or the whole tile) with undo.
-      const keys = input.prKey ? [input.prKey] : tile.members.map((member) => member.prKey);
+      const keys = key ? [key] : tile.members.map((member) => member.prKey);
       return this.markedRead(this.markPrsRead(keys, keys, 'tile', tile.id), 'Noted: not yours, marked read');
     }
-    return ok('feedback noted');
+    if (input.kind === 'not_related') {
+      if (!setId || !key) {
+        return fail('"Not related" needs a set tile and the PR to drop');
+      }
+      this.tileFeedback.leaveSet(tile, key);
+      return ok('Removed from the set');
+    }
+    if (!key) {
+      return fail('"Wrong topic" needs the PR');
+    }
+    const keys = this.tileFeedback.movesWith(tile, key);
+    if (input.targetTopicId === null) {
+      this.tileFeedback.move(tile, keys, UNSORTED_TOPIC_ID);
+      return ok('Will be re-sorted on the next sync');
+    }
+    if (!this.tileFeedback.move(tile, keys, input.targetTopicId)) {
+      return fail(`no topic ${input.targetTopicId}`);
+    }
+    return ok('Moved');
   }
 
   async unmuteEvent(eventId: string): Promise<ActionResult> {
