@@ -15,7 +15,8 @@ export type Command =
   | { name: 'mcp'; api?: string }
   | { name: 'simulate-start'; options: SimulateStartOptions }
   | { name: 'simulate-round'; options: SimulateRoundOptions }
-  | { name: 'help' };
+  /** problem: what was wrong with the command line, printed above the usage (exit 2); null when help was asked for. */
+  | { name: 'help'; problem: string | null };
 
 export const usage = `usage: postpile <command>
 
@@ -34,7 +35,8 @@ export const usage = `usage: postpile <command>
   topics               list topics with unread counts
   topic <id>           show a topic: dossier, changes since seen, tiles
   pr <owner/repo#n>    show one PR: glance, facts and events
-  mcp                  read-only MCP server on stdin/stdout (always without the lock): claude mcp add postpile -- pnpm -C <repo> cli mcp
+  mcp                  MCP server on stdin/stdout (always without the lock): claude mcp add postpile -- pnpm -C <repo> cli mcp
+                       never writes to GitHub; agents can leave notes on PRs and suggest topic changes, the user accepts or clears them
     --api <url>          sample data only: share the engine of a running POSTPILE_FAKE=1 server (token in POSTPILE_TOKEN)
   simulate-start --from <db> [flags]  a new user's first syncs on a copy, once per agent pipeline; writes report.md
     --days <n>           only threads of the last n days (default 7)
@@ -120,39 +122,59 @@ function parseConsolidateFlags(flags: string[]): ConsolidateOptions | null {
   return options;
 }
 
+/** Commands that take no arguments at all. */
+const PLAIN_COMMANDS = ['topics', 'mcp', 'poll', 'sweep', 'setup-draft', 'tools'] as const;
+
+function isPlainCommand(name: string): name is (typeof PLAIN_COMMANDS)[number] {
+  return (PLAIN_COMMANDS as readonly string[]).includes(name);
+}
+
+/** Usage with a line saying what was wrong. */
+function badUsage(problem: string): Command {
+  return { name: 'help', problem };
+}
+
+function badFlags(name: string, flags: string[]): Command {
+  return badUsage(flags.length === 0 ? `${name} is missing flags` : `bad flags for ${name}: ${flags.join(' ')}`);
+}
+
 export function parseArgs(argv: string[]): Command {
   const [name, arg, ...rest] = argv;
+  if (name === undefined || name === 'help' || name === '--help' || name === '-h') {
+    return { name: 'help', problem: null };
+  }
   if (name === 'sync') {
     const options = parseSyncFlags(argv.slice(1));
-    return options ? { name, options } : { name: 'help' };
+    return options ? { name, options } : badFlags(name, argv.slice(1));
   }
   if (name === 'consolidate') {
     const options = parseConsolidateFlags(argv.slice(1));
-    return options ? { name, options } : { name: 'help' };
+    return options ? { name, options } : badFlags(name, argv.slice(1));
   }
   if (name === 'simulate-start') {
     const options = parseSimulateStartFlags(argv.slice(1));
-    return options ? { name, options } : { name: 'help' };
+    return options ? { name, options } : badFlags(name, argv.slice(1));
   }
   // Hidden: simulate-start runs it as a child process per arm and round.
   if (name === 'simulate-round') {
     const options = parseSimulateRoundFlags(argv.slice(1));
-    return options ? { name, options } : { name: 'help' };
+    return options ? { name, options } : badFlags(name, argv.slice(1));
   }
   const [apiUrl] = rest;
-  if (name === 'mcp' && arg === '--api' && rest.length === 1 && apiUrl !== undefined && /^https?:\/\//.test(apiUrl)) {
-    return { name, api: apiUrl.replace(/\/+$/, '') };
+  if (name === 'mcp' && arg === '--api') {
+    const valid = rest.length === 1 && apiUrl !== undefined && /^https?:\/\//.test(apiUrl);
+    return valid ? { name, api: apiUrl.replace(/\/+$/, '') } : badUsage('mcp --api needs one http(s) URL');
   }
-  if ((name === 'topics' || name === 'mcp' || name === 'poll' || name === 'sweep' || name === 'setup-draft' || name === 'tools') && arg === undefined) {
-    return { name };
+  if (isPlainCommand(name)) {
+    return arg === undefined ? { name } : badUsage(`${name} takes no arguments`);
   }
-  if (name === 'topic' && arg && rest.length === 0) {
-    return { name, topicId: arg };
+  if (name === 'topic') {
+    return arg && rest.length === 0 ? { name, topicId: arg } : badUsage('topic needs one topic id, e.g. topic topic-depot');
   }
-  if (name === 'pr' && arg && rest.length === 0) {
-    return { name, prKey: arg };
+  if (name === 'pr') {
+    return arg && rest.length === 0 ? { name, prKey: arg } : badUsage('pr needs one PR key, e.g. pr acme/app#1902');
   }
-  return { name: 'help' };
+  return badUsage(`unknown command ${name}`);
 }
 
 /** Commands that only read the store, so they may run next to the app with --read-only. */

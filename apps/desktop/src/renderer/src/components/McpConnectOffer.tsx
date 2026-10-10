@@ -18,8 +18,9 @@ export function McpConnectOffer(props: { view: McpConnectionView; from: McpConne
   const variant = props.from === 'setup' ? 'secondary' : 'primary';
   return (
     <div className="flex flex-col gap-2.5">
-      <p className="text-[12px] leading-snug text-ink-2">
-        Claude Code and other agents can ask PostPile what it knows about a PR and its topic. Read-only: it never writes to GitHub or changes the app.
+      {/* whitespace-normal: the footer popover sits in a nowrap row. */}
+      <p className="text-[12px] leading-snug whitespace-normal text-ink-2">
+        Claude Code and other agents can ask PostPile what it knows about a PR and its topic. It never writes to GitHub. Agents can leave notes on PRs and suggest topic changes; you accept or clear them.
       </p>
       <div className="flex items-center gap-1.5">
         <Button variant={variant} disabled={busy || blocked !== null} title={blocked ?? `Runs ${props.view.addCommand}`} onClick={() => void actions.connectMcp(props.from)}>
