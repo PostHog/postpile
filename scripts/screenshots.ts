@@ -35,7 +35,7 @@ const TILE_ROWS = 'article:has-text("rowan/depot: cache layer")';
 // Each shot is one feature, cropped tight. Run one with: pnpm screenshots <name>
 const SHOTS: Shot[] = [
   { name: 'topic-row', selector: 'nav[aria-label="Topics"] button:has-text("Move CI to Depot")' },
-  { name: 'queues', selector: '[role="group"][aria-label="Filter topics"]' },
+  { name: 'queues', selector: '[role="group"][aria-label="Show topics with"]' },
   { name: 'tile', selector: 'article:has-text("DEPOT_TOKEN went in")' },
   { name: 'stack', selector: `${TILE_ROWS} >> text=#1851 >> xpath=../../..` },
   { name: 'glance', selector: `${DETAILS} div.rounded-box:has-text("Look closer") >> xpath=..`, setup: selectFirstTile },
