@@ -1325,8 +1325,8 @@ now".
 - Search matches title, number, author, repo, head branch, topic name and
   area only (no PR body, comments or labels) and does not highlight the
   matched text. Filter state and history are not kept across restarts.
-- Recheck: not run against the real agent yet; the fake answers cycle
-  holds / fix / drop after 1.5s. The daily cap (40) is a guess. A fix of a
+- Recheck: not run against the real agent yet; the fake answers by the
+  claim's state after 1.5s (fresh holds; stale is fixed or dropped). The daily cap (40) is a guess. A fix of a
   fact keeps the old refs; no new ref points at the evidence in `why`.
 - Whose turn is rules only and still rough: "you
   commented on the head" only looks at reviews, and the own-PR "Merge, it is

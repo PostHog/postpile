@@ -44,7 +44,6 @@ import type {
   RecordedSyncProgress,
   MemoryCorrection,
   MemoryCorrectionKind,
-  MemoryRecheckOutcome,
   MemoryRecheckRequest,
   MemoryRecheckResult,
   MemorySources,
@@ -237,6 +236,7 @@ import { FakeWorkContext } from './fake-work-context.ts';
 import { FakeTileFeedback } from './fake-tile-feedback.ts';
 import { FakeLivePoll } from './fake-live.ts';
 import { FakeMemory } from './fake-memory.ts';
+import { sampleRecheckAnswer } from './fake-recheck.ts';
 import { FakeCleanup } from './fake-cleanup.ts';
 import { isSampleMergedThread, sampleMergedVerdict, sampleThreads } from './fake-notifications.ts';
 import { samplePingDecisions, sampleQuietReads } from './fake-quiet.ts';
@@ -348,8 +348,6 @@ const FAKE_LINE_MESSAGES: Record<MemoryCorrectionKind, string> = {
 /** Sample glances that read as older than the PR (its last push came after), for the stale verdict box. */
 const STALE_SAMPLE_GLANCES = new Set<PrKey>(['acme/app#1904']);
 
-const RECHECK_CYCLE: MemoryRecheckOutcome[] = ['holds', 'fix', 'drop'];
-
 /** How long before start the sample PRs count as fetched. */
 const SAMPLE_FETCH_AGE_MS = 4 * 60_000;
 
@@ -454,7 +452,6 @@ export class FakeEngine implements EngineService {
   private tidyPending: boolean;
   private syncing: Promise<SyncReport> | null = null;
   private progress: SyncProgress | null = null;
-  private recheckCount = 0;
   // The repo menu's choices; in memory like the lock, gone on restart.
   private repoSettings: RepoSettings = DEFAULT_REPO_SETTINGS;
   // Inbox catch-up, in memory: every fake start counts as a first run, so the start dialog shows.
@@ -995,6 +992,10 @@ export class FakeEngine implements EngineService {
       }
     }
     this.heldSync = false;
+    if (agentOff === null) {
+      // Like the engine's delta: corrections since a topic's dossier make the sync rewrite it.
+      this.memory.rewriteAfterFeedback(this.feedback);
+    }
     this.lastSync = {
       startedAt,
       finishedAt: this.timestamp(),
@@ -2340,8 +2341,10 @@ export class FakeEngine implements EngineService {
   }
 
   /**
-   * Canned answers after a short wait, cycling holds / fix / drop so every
-   * dialog state can be seen. No agent, no cap.
+   * Canned answers after a short wait, by the claim's state like the real
+   * recheck: a fresh line holds, a stale or out-of-date one is fixed or
+   * dropped (sampleRecheckAnswer). A glance recheck reads the glance's own
+   * staleness. No agent, no cap.
    */
   async recheckMemory(request: MemoryRecheckRequest): Promise<MemoryRecheckResult> {
     const agentOff = this.toolStatus.agentOff();
@@ -2350,13 +2353,10 @@ export class FakeEngine implements EngineService {
     }
     await new Promise((resolve) => setTimeout(resolve, this.recheckDelayMs));
     await this.writes.delay();
-    const outcome = RECHECK_CYCLE[this.recheckCount % RECHECK_CYCLE.length] ?? 'holds';
-    this.recheckCount += 1;
-    if (outcome === 'fix') {
-      return { status: 'answered', outcome, text: `${request.text.replace(/\.$/, '')} (sample correction).`, why: 'Sample answer: a newer comment on the PR says otherwise.' };
+    if (request.prKey) {
+      return sampleRecheckAnswer(request.text, this.isGlanceStale(request.prKey) ? 'head_moved' : null, 'glance');
     }
-    const why = outcome === 'holds' ? 'Sample answer: the newest review and comments still say the same.' : 'Sample answer: the PR this came from was closed and nobody picked it up.';
-    return { status: 'answered', outcome, text: request.text, why };
+    return sampleRecheckAnswer(request.text, this.memory.claimIssue(request), 'claim');
   }
 
   async getMemorySources(target: MemoryTarget): Promise<MemorySources | null> {

@@ -27,6 +27,7 @@ import {
   type Viewer,
 } from '@postpile/core';
 import type { FakeInstructions } from './fake-instructions.ts';
+import { headingFor } from './fake-placement.ts';
 
 function samplePr(repo: string, number: number, role: ActivityPr['role'], title: string, dirs: string[], state: ActivityPr['state'] = 'MERGED'): ActivityPr {
   return {
@@ -256,7 +257,11 @@ export class FakeSetup {
     };
   }
 
-  /** Stand-in for setup_refine: keeps the edits and files the user's words as a new line under Preferences. */
+  /**
+   * Stand-in for setup_refine: keeps the edits and files the user's words as
+   * a new line under the section they are about (by keywords, see
+   * fake-placement.ts), Preferences when none fits.
+   */
   async refine(request: SetupRefineRequest): Promise<SetupRefineResult> {
     const previous = this.sweep?.draft ?? null;
     if (!previous || this.running) {
@@ -264,8 +269,9 @@ export class FakeSetup {
     }
     await delay(this.deps.stepMs * 2);
     const point = request.message.trim().replace(/^[-*]\s*/, '');
+    const heading = headingFor(point, request.sections.map((section) => section.heading), 'Preferences');
     const edits = request.sections.map((section) =>
-      section.heading === 'Preferences' ? { ...section, body: `${section.body.trim()}\n- ${point}`.trim() } : section,
+      section.heading === heading ? { ...section, body: `${section.body.trim()}\n- ${point}`.trim() } : section,
     );
     const userLines = new Set([...userWrittenLines(request.sections, previous), claimKey(point)]);
     const agentSources = new Map(previous.sections.flatMap((section) => section.claims.map((claim) => [claimKey(claim.text), claim.sourceIds] as const)));
@@ -284,7 +290,7 @@ export class FakeSetup {
     const draft = mapSetupDraft({ answer, sources: previous.sources, repos: previous.repos, model: previous.model, userLines });
     this.sweep!.draft = draft;
     const changedSections = changedHeadings(formatInstructionsSections(request.sections), formatInstructionsSections(draft.sections));
-    return { ok: true, message: 'Added your point under Preferences (sample data).', draft, changedSections };
+    return { ok: true, message: `Added your point under ${heading} (sample data).`, draft, changedSections };
   }
 
   /**

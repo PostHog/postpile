@@ -558,7 +558,8 @@ describe('server routes over the fake engine', () => {
     const sourceChatMessageId = reply.json.lastingPoint?.sourceChatMessageId;
     const proposed = await post<InstructionsProposalReply>(app, '/api/instructions/proposals', { sourceChatMessageId });
     const proposal = proposed.json.proposal;
-    expect(proposal?.text).toContain('- From now on flag every CI timeout change');
+    // Placed under the heading it is about, without the filler opener, like the agent would.
+    expect(proposal?.text).toContain('- Flag every CI timeout change.\n\n# What to skip');
     expect(proposal?.sourceChatMessageId).toBe(sourceChatMessageId);
 
     const saved = await post<InstructionsSaveResult>(app, '/api/instructions', { proposal, text: proposal?.text });
@@ -575,7 +576,7 @@ describe('server routes over the fake engine', () => {
   it('proposes from the general instructions chat', async () => {
     const app = appWithFake();
     const chat = await post<InstructionsChatReply>(app, '/api/instructions/chat', { message: 'Skip docs-only PRs' });
-    expect(chat.json.proposal?.summary).toBe('Added: Skip docs-only PRs');
+    expect(chat.json.proposal?.summary).toBe('Added under What to skip: Skip docs-only PRs.');
     const history = (await (await app.request('/api/instructions/chat')).json()) as unknown[];
     expect(history.length).toBeGreaterThanOrEqual(4);
   });

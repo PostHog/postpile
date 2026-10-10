@@ -266,15 +266,22 @@ describe('FakeEngine topic moves', () => {
 });
 
 describe('FakeEngine rechecks', () => {
-  it('cycles holds, fix and drop so every dialog state can be seen', async () => {
+  it('answers by the claim\'s state: a fresh line holds, a stale one is fixed or dropped', async () => {
     const engine = new FakeEngine({ recheckDelayMs: 0 });
-    const request = { factId: null, topicId: 'topic-depot', text: 'rowan drives it.', target: null };
-    const outcomes = [];
-    for (let i = 0; i < 4; i += 1) {
+    const outcome = async (request: Parameters<FakeEngine['recheckMemory']>[0]) => {
       const result = await engine.recheckMemory(request);
-      outcomes.push(result.status === 'answered' ? result.outcome : result.status);
-    }
-    expect(outcomes).toEqual(['holds', 'fix', 'drop', 'holds']);
+      return result.status === 'answered' ? result.outcome : result.status;
+    };
+    const version = (await engine.getTopic('topic-depot'))?.dossier?.version ?? 0;
+    const line = (path: string) => ({ factId: null, topicId: 'topic-depot', text: 'a line', target: { kind: 'dossier_line' as const, topicId: 'topic-depot', version, path } });
+    expect(await outcome(line('goal'))).toBe('holds');
+    expect(await outcome(line('goal'))).toBe('holds');
+    // The thread behind it was resolved on GitHub.
+    expect(await outcome(line('openQuestions[2]'))).toBe('drop');
+    // Written before the latest push.
+    expect(await outcome({ factId: 'fact-1902-status', topicId: null, text: 'a fact', target: { kind: 'fact', factId: 'fact-1902-status' } })).toBe('fix');
+    expect(await outcome({ factId: null, topicId: null, text: 'the glance', target: null, prKey: 'acme/app#1904' })).toBe('fix');
+    expect(await outcome({ factId: null, topicId: null, text: 'the glance', target: null, prKey: 'acme/app#1822' })).toBe('holds');
   });
 
   it('replaces a fact on an accepted fix and undoes it', async () => {
