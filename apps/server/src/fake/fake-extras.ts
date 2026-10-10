@@ -1,3 +1,4 @@
+import { addMcpPack } from './fake-mcp-pack.ts';
 import type { SampleClock } from './sample-builders.ts';
 import type { SampleData } from './sample-data.ts';
 
@@ -23,7 +24,7 @@ export function fakeExtras(value: string | undefined): Set<FakeExtra> {
 /** Adds each asked-for pack to the sample, after the default topics and PRs. */
 export function addFakeExtras(data: SampleData, clock: SampleClock, extras: Set<FakeExtra>): void {
   // Each pack adds its topics, PRs, events, glances, tiles and membership here.
-  void data;
-  void clock;
-  void extras;
+  if (extras.has('mcp')) {
+    addMcpPack(data, clock);
+  }
 }

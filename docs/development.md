@@ -116,6 +116,7 @@ Environment variables. The packaged app only sees them when you start its binary
 - `POSTPILE_FAKE_QUOTA`: with `POSTPILE_FAKE=1`, `low` or `critical` simulates a GitHub quota that is low or nearly used
 - `POSTPILE_FAKE_BUSY=1`: with `POSTPILE_FAKE=1`, `GET /api/busy-inbox` reports a busy inbox (the board cap cut the hot set) with invented numbers, for building the busy inbox card
 - `POSTPILE_FAKE_LOCKED=1`: with `POSTPILE_FAKE=1`, the sample starts with GitHub writes locked (it starts with them on, like the packaged app)
+- `POSTPILE_FAKE_EXTRA`: with `POSTPILE_FAKE=1`, opt-in sample packs on top of the default sample (comma separated). `mcp`: diffs for the overlap check, so `pr_context` and `whats_on_me` report overlapping edits (#1902 and sol's new #2301 on the same workflow lines, a nearby pair, a lockfile pair and stack mates that stay quiet, one capped diff)
 - `POSTPILE_PROFILE=dev`: the dev database and config folders; `POSTPILE_DATA_DIR` moves the data folder, `POSTPILE_DB` points at a database file
 - `POSTPILE_READ_ONLY=1`: real reads, every GitHub write refused, the write lock cannot be opened. Without it, dev runs (`pnpm desktop`, `pnpm server`, `pnpm cli`) still start with writes locked until the footer lock is opened; only the packaged app has them on by default
 - `POSTPILE_SYNC_ON_START=0`, `POSTPILE_MAX_AGENT_CALLS=0`: no sync at start, no agent calls

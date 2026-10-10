@@ -2561,6 +2561,10 @@ Env switches:
   account.
 - `POSTPILE_FAKE_LOCKED=1`: with `POSTPILE_FAKE=1`, the sample starts with
   GitHub writes locked (it starts with them on, like the packaged app).
+- `POSTPILE_FAKE_EXTRA`: with `POSTPILE_FAKE=1`, opt-in sample packs
+  (comma separated). `mcp`: diffs for the overlap check (#1902 and sol's
+  #2301 on the same lines, a nearby pair, a quiet lockfile pair and stack
+  mates, one capped diff), for MCP checks of overlapping edits.
 - `POSTPILE_MAX_AGENT_CALLS`: agent-call cap for syncs and consolidations
   without an explicit cap (launch, "Sync now", `/api/consolidate`, and the
   CLI without `--max-agent-calls`), default 150 (was 30).

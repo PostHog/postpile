@@ -174,6 +174,7 @@ import {
   prStatus,
   prWhoseTurn,
   stackLayersAround,
+  findOverlaps,
   isReReviewMove,
   driverPickRefusal,
   searchTopics,
@@ -1205,9 +1206,15 @@ export class FakeEngine implements EngineService {
     return this.teamRoles.view();
   }
 
-  /** Sample data has no diffs, so nothing overlaps. */
+  /** Like the engine: open PRs' diffs only, stack mates left out. The default sample has no diffs; POSTPILE_FAKE_EXTRA=mcp adds some. */
   async prOverlaps(): Promise<PrOverlapsView> {
-    return { overlaps: {}, capped: [] };
+    const open = new Set(this.data.prs.filter((pr) => pr.state === 'OPEN').map((pr) => pr.key));
+    const edits = this.data.prEdits.filter((entry) => open.has(entry.prKey));
+    const sameStack = (a: PrKey, b: PrKey) => this.data.tiles.some((tile) => tile.stacks.some((stack) => stack.prKeys.includes(a) && stack.prKeys.includes(b)));
+    return {
+      overlaps: Object.fromEntries(findOverlaps(edits, sameStack)),
+      capped: edits.filter((entry) => entry.capped).map((entry) => entry.prKey),
+    };
   }
 
   async getTeamMembers(): Promise<TeamMembersView> {

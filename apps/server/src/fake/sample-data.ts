@@ -1,7 +1,7 @@
 // The "Move CI to Depot" sample from the design rounds, as domain objects.
 // Used by FakeEngine so the server, CLI and desktop app run without GitHub or
 // the agent.
-import type { FullPr, Glance, PrEvent, PrKey, PrSet, Tile, Topic, TopicProposal, UserPrState } from '@postpile/core';
+import type { FullPr, Glance, PrEdits, PrEvent, PrKey, PrSet, Tile, Topic, TopicProposal, UserPrState } from '@postpile/core';
 import { addFakeExtras, type FakeExtra } from './fake-extras.ts';
 import {
   found,
@@ -38,6 +38,8 @@ export interface SampleData {
   membership: Map<PrKey, string>;
   /** CODEOWNERS text per repo, like the engine's daily read; a repo missing here has none. */
   codeOwners: Map<string, string>;
+  /** Changed line ranges per PR, like the sync's diff read. None in the default sample, so nothing overlaps. */
+  prEdits: PrEdits[];
 }
 
 /** acme/app's CODEOWNERS: the workflows and build scripts are the viewer's team's, the rest is someone else's. */
@@ -1215,6 +1217,7 @@ export function buildSampleData(now: Date, extras: Set<FakeExtra> = new Set()): 
     userStates: buildUserStates(clock),
     membership: buildMembership(tiles),
     codeOwners: new Map([['acme/app', SAMPLE_CODEOWNERS]]),
+    prEdits: [],
   };
   addFakeExtras(data, clock, extras);
   return data;
