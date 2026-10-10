@@ -82,7 +82,9 @@ export function formatTopic(detail: TopicDetail): string {
     }
     for (const pr of view.prs) {
       const verdict = pr.verdict ? `${pr.verdict}${pr.glanceStale ? ', stale' : ''}` : 'no glance';
-      lines.push(`    ${pr.key}  ${pr.title}  (${pr.provenance.kind}, ${verdict})`);
+      // A merged or closed layer says so; otherwise it reads like an open one.
+      const state = pr.state === 'OPEN' ? '' : `${pr.state.toLowerCase()}, `;
+      lines.push(`    ${pr.key}  ${pr.title}  (${state}${pr.provenance.kind}, ${verdict})`);
     }
   }
   if (detail.setChanges.length > 0) {

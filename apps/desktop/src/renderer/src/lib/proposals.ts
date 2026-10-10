@@ -36,15 +36,18 @@ const CLIENT_NAMES: Record<string, string> = {
 
 /**
  * Who suggested a topic change from outside the app ("Claude Code"; an
- * unknown client is "an outside agent"), or null for the app's own
- * consolidation.
+ * unknown client shows its own name, "an outside agent" when it sent none),
+ * or null for the app's own consolidation.
  */
 export function suggestedBy(proposal: TopicProposal): string | null {
   if (proposal.source !== 'agent') {
     return null;
   }
-  const client = proposal.client ?? '';
-  return Object.hasOwn(CLIENT_NAMES, client) ? (CLIENT_NAMES[client] ?? 'an outside agent') : 'an outside agent';
+  const client = (proposal.client ?? '').trim().slice(0, 40);
+  if (Object.hasOwn(CLIENT_NAMES, client)) {
+    return CLIENT_NAMES[client] ?? client;
+  }
+  return client === '' ? 'an outside agent' : client;
 }
 
 /** The Inbox card's meta line: "topic · suggested by Claude Code · 2h ago", or "topic · 2h ago" for the app's own. */

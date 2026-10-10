@@ -1,4 +1,4 @@
-import { isMachineComment } from './bots.ts';
+import { isBot, isMachineComment } from './bots.ts';
 import { parsePrKey } from './keys.ts';
 import type { IsoTime, Pr, PrKey, PrState, ReviewState } from './types.ts';
 
@@ -267,6 +267,13 @@ export interface PrNoteView {
   coveredBy: PrKey | null;
   /** When PostPile last fetched the covering PR; null when it is not stored. */
   coverFetchedAt: IsoTime | null;
+  /**
+   * Whether a person (not a bot) has reviewed the covering PR, as stored
+   * now; null when the note covers nothing or the cover is not stored. A
+   * covered note is accepted either way: it is advisory, so the PR pane and
+   * pr_context say "no review yet" instead of refusing it.
+   */
+  coverReviewed: boolean | null;
   createdAt: IsoTime;
   expiresAt: IsoTime | null;
   status: PrNoteStatus;
@@ -281,7 +288,11 @@ export interface PrNotesView {
   token: string;
   durable: PrNoteView | null;
   lease: PrNoteView | null;
-  /** The newest note another one replaced (history of one): "replaced covered by ph3 session". */
+  /**
+   * The newest note another one replaced (history of one): "replaced covered
+   * by ph3 session". Null once the note that replaced it is gone too, so a
+   * "Replaced:" line never dangles under no note.
+   */
   replaced: PrNoteView | null;
 }
 
@@ -320,6 +331,16 @@ export function noteStaleReasons(note: Pick<PrNote, 'prKey' | 'anchor' | 'covere
   return [...reasons, ...coverReasons.map((reason) => `${note.coveredByPrKey}: ${reason}`)];
 }
 
+/** A person (not a bot) has a review on the PR the anchor fingerprints. */
+function hasHumanReview(anchor: NoteAnchor): boolean {
+  return anchor.reviews.some((review) => !isBot(review.reviewer));
+}
+
+function coverReviewed(note: Pick<PrNote, 'coveredByPrKey'>, read: NoteReadContext): boolean | null {
+  const cover = note.coveredByPrKey ? read.anchorOf(note.coveredByPrKey) : null;
+  return cover ? hasHumanReview(cover) : null;
+}
+
 export function prNoteView(note: PrNote, read: NoteReadContext): PrNoteView {
   const reasons = noteStaleReasons(note, read.anchorOf);
   let status: PrNoteStatus = reasons.length > 0 ? 'stale' : 'live';
@@ -334,6 +355,7 @@ export function prNoteView(note: PrNote, read: NoteReadContext): PrNoteView {
     note: note.note,
     coveredBy: note.coveredByPrKey,
     coverFetchedAt: note.coveredByPrKey ? read.fetchedAtOf(note.coveredByPrKey) : null,
+    coverReviewed: coverReviewed(note, read),
     createdAt: note.createdAt,
     expiresAt: note.expiresAt,
     status,
@@ -343,14 +365,17 @@ export function prNoteView(note: PrNote, read: NoteReadContext): PrNoteView {
 
 /**
  * One PR's notes from its stored rows (current ones and replaced ones, any
- * order): the current note of each slot, and the newest replaced note.
+ * order): the current note of each slot, and the newest replaced note while
+ * the note that replaced it is still current.
  */
 export function prNotesView(prKey: PrKey, token: string, notes: PrNote[], read: NoteReadContext): PrNotesView {
   const own = notes.filter((note) => note.prKey === prKey).toSorted((a, b) => a.seq - b.seq);
   const current = (slot: PrNoteSlot) => own.filter((note) => note.slot === slot && isCurrentNote(note)).at(-1) ?? null;
   const durable = current('durable');
   const lease = current('lease');
-  const replaced = own.filter((note) => note.supersededBy !== null).at(-1) ?? null;
+  const newestReplaced = own.filter((note) => note.supersededBy !== null).at(-1) ?? null;
+  const replacedByCurrent = newestReplaced !== null && (newestReplaced.supersededBy === durable?.id || newestReplaced.supersededBy === lease?.id);
+  const replaced = replacedByCurrent ? newestReplaced : null;
   return {
     prKey,
     token,
@@ -392,15 +417,18 @@ export interface PrNoteResult {
   /**
    * refused: nothing changed, see reason; unchanged: the same note was set
    * already (a retried request); pending: nothing written yet, the covering
-   * PR is still being read from GitHub (see reason), call again.
+   * PR is still being read from GitHub (see reason), call again;
+   * already_cleared: a clear of a note cleared before, see `cleared`.
    */
-  status: 'set' | 'unchanged' | 'renewed' | 'cleared' | 'refused' | 'pending';
+  status: 'set' | 'unchanged' | 'renewed' | 'cleared' | 'already_cleared' | 'refused' | 'pending';
   note: PrNoteView | null;
   /** set: the note this one replaced in its slot. */
   replaced: PrNoteView | null;
   /** set: what the note is anchored to (`anchorSummary`). */
   anchored: string | null;
   reason: string | null;
+  /** cleared and already_cleared: who cleared the note ("user" for the PR pane's Clear, else the client) and when. */
+  cleared?: { by: string; at: IsoTime } | null;
 }
 
 export function refusedNote(reason: string): PrNoteResult {
@@ -606,18 +634,30 @@ export function planNoteRenew(note: PrNote | null, requestedMinutes: number | nu
   return { kind: 'renew', expiresAt: note.expiresAt !== null && note.expiresAt > extended ? note.expiresAt : extended };
 }
 
-export type NoteClearPlan = { kind: 'refused'; reason: string } | { kind: 'clear' } | { kind: 'already' };
+export type NoteClearPlan = { kind: 'refused'; reason: string } | { kind: 'clear' } | { kind: 'already'; by: string; at: IsoTime };
 
-/** Clearing a note never brings back the one it replaced. Clearing twice answers like the first time. */
+/**
+ * Clearing a note never brings back the one it replaced. Clearing twice
+ * changes nothing and says who cleared it first, so an agent learns that the
+ * user removed its note in the app.
+ */
 export function planNoteClear(note: PrNote | null): NoteClearPlan {
   if (!note) {
     return { kind: 'refused', reason: 'no note with that id' };
   }
   if (note.clearedAt !== null) {
-    return { kind: 'already' };
+    return { kind: 'already', by: note.clearedBy ?? 'unknown', at: note.clearedAt };
   }
   if (note.supersededBy !== null) {
     return { kind: 'refused', reason: 'another note replaced it already' };
   }
   return { kind: 'clear' };
+}
+
+/** The answer to a clear the plan allowed: `cleared` now by `by`, or cleared before (the plan says by whom). */
+export function clearedNoteResult(plan: Exclude<NoteClearPlan, { kind: 'refused' }>, note: PrNoteView, by: string, now: IsoTime): PrNoteResult {
+  if (plan.kind === 'already') {
+    return { status: 'already_cleared', note, replaced: null, anchored: null, reason: null, cleared: { by: plan.by, at: plan.at } };
+  }
+  return { status: 'cleared', note, replaced: null, anchored: null, reason: null, cleared: { by, at: now } };
 }

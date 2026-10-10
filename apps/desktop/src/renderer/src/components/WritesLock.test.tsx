@@ -52,7 +52,7 @@ describe('WritesLock', () => {
 
   it('adds the count while mark-reads from the locked days wait, and lists them on a click', () => {
     const lock = renderLock({ ...on, pending: [pendingWrite] });
-    expect(lock.textContent).toBe('1');
+    expect(lock.textContent).toBe('1 pending');
     fireEvent.click(lock);
     const popover = screen.getByRole('dialog', { name: 'Pending GitHub writes' });
     expect(popover.textContent).toContain('Move CI to Depot');
@@ -65,7 +65,7 @@ describe('WritesLock', () => {
     expect(lock.textContent).toBe('read-only');
     expect(lock.className).not.toMatch(/amber|status-bad|unread|honey/);
     fireEvent.click(lock);
-    expect(screen.getByRole('dialog', { name: 'Allow GitHub writes' }).textContent).toContain('Mark-read and approvals will reach GitHub.');
+    expect(screen.getByRole('dialog', { name: 'Allow GitHub writes' }).textContent).toContain('Mark-read, approvals, comments and reactions will reach GitHub.');
   });
 
   it('cannot unlock under POSTPILE_READ_ONLY=1 and says why', () => {

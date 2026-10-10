@@ -30,19 +30,19 @@ describe('syncProgressText', () => {
   const now = new Date('2026-09-28T10:02:10.000Z');
 
   it('says what GitHub brought, then calls done over calls planned so far, and the time', () => {
-    expect(syncProgressText(progress({}), now)).toBe('syncing · 8 new on GitHub · agent calls 34/82 · 2m');
+    expect(syncProgressText(progress({}), now)).toBe('syncing · 8 new on GitHub · agent calls 34 of 82 so far · 2m');
   });
 
   it('says PRs were updated when GitHub changed them without a new event', () => {
     expect(syncProgressText(progress({ fromGitHub: { prsFetched: 2, newEvents: 0 } }), now)).toBe(
-      'syncing · 2 PRs updated on GitHub · agent calls 34/82 · 2m',
+      'syncing · 2 PRs updated on GitHub · agent calls 34 of 82 so far · 2m',
     );
     expect(syncProgressDetail(progress({ fromGitHub: { prsFetched: 1, newEvents: 0 } }))).toContain('GitHub: 1 PR updated');
   });
 
   it('says nothing new on GitHub when the poll already stored everything', () => {
     expect(syncProgressText(progress({ fromGitHub: { prsFetched: 0, newEvents: 0 } }), now)).toBe(
-      'syncing · nothing new on GitHub · agent calls 34/82 · 2m',
+      'syncing · nothing new on GitHub · agent calls 34 of 82 so far · 2m',
     );
   });
 

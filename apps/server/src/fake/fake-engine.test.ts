@@ -219,7 +219,8 @@ describe('FakeEngine memory', () => {
     const change = { topicId: 'topic-depot', kind: 'split' as const, prKeys: ['acme/app#1902'], name: 'Depot stack', intoTopicId: null, reason: 'one stack', dryRun: true };
     const dry = await engine.proposeTopicChange(change, { client: 'claude-code' });
     expect(dry.status).toBe('dry_run');
-    expect(dry.preview.join('\n')).toContain('acme/app#1902 brings acme/app#1851, acme/app#1862, acme/app#1911 and acme/app#1930 along (same stack).');
+    expect(dry.preview.join('\n')).toContain('acme/app#1902 brings acme/app#1911 along (same stack).');
+    expect(dry.preview.join('\n')).toContain('Merged and closed layers of the same stack go along too: acme/app#1851, acme/app#1862 and acme/app#1930.');
 
     const filed = await engine.proposeTopicChange({ ...change, dryRun: false }, { client: 'claude-code' });
     expect(filed.status).toBe('filed');

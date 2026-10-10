@@ -146,6 +146,20 @@ export function topicRowId(item: TopicListItem): string {
 }
 
 /**
+ * The section the sidebar draws a topic's row under, its held place
+ * included, so the breadcrumb names the same one (BOARD-A-07). A dealt-with
+ * row counts for its section. Null when the row is not in the buckets
+ * (the Archive, a search that hides it).
+ */
+export function rowSection(buckets: Bucket<TopicListItem>[], topicId: string): TopicSection | null {
+  const bucket = buckets.find((candidate) => candidate.items.some((item) => item.topic.id === topicId));
+  if (bucket === undefined) {
+    return null;
+  }
+  return SECTION_ORDER.find((section) => bucket.key === section || bucket.key === dealtKey(section)) ?? null;
+}
+
+/**
  * Inside To review: reviews for you (personal requests and team requests on
  * a teammate's PR, both "For you") before routed team requests. Inside
  * Changes you requested: tiles on your move (the author addressed the
@@ -209,6 +223,22 @@ export function headingGroup(bucket: TileGroup, groups: TileGroup[]): TileGroup 
     return bucket;
   }
   return groups.every((group) => group === first) ? first : bucket;
+}
+
+/** Group names on screen. "Dealt with" is the tile state `done`; a topic with nothing left goes to the Archive. */
+export const GROUP_LABELS: Record<TileGroup, string> = { unread: 'Unread', open: 'Open', dealt_with: 'Dealt with' };
+
+/**
+ * The words of a group heading: the name of `headingGroup`, unless that
+ * group already has its own heading on screen. Then the renamed heading
+ * says what just happened instead ("Just read" over the tile the read
+ * landed on), so a topic never shows two "Dealt with" headings (BOARD-A-10).
+ */
+export function headingLabel(bucket: TileGroup, shown: TileGroup, onScreen: TileGroup[]): string {
+  if (shown === bucket || !onScreen.includes(shown)) {
+    return GROUP_LABELS[shown];
+  }
+  return bucket === 'unread' ? 'Just read' : `Now ${GROUP_LABELS[shown].toLowerCase()}`;
 }
 
 /**

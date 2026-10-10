@@ -39,11 +39,45 @@ export class FeedbackActions {
   }
 
   /**
+   * Ends a set the user took a PR out of once it holds fewer than two units,
+   * like an agent change: one stack and nothing else is just that stack.
+   */
+  private endSetIfTooSmall(setId: string, topicId: string, at: string): void {
+    const left = this.store.sets.get(setId);
+    if (left?.status === 'active' && setUnitCount(left.members, stackByPrKey(buildStacks(this.store.prs.listHeaders()))) < 2) {
+      this.store.sets.dissolve(setId, at);
+    }
+    if (this.store.sets.get(setId)?.status === 'dissolved') {
+      this.store.sets.recordChange({ setId, topicId, by: 'user', at, prKey: null, kind: 'ended', reason: 'fewer than two PRs left' });
+    }
+  }
+
+  /**
+   * Moved PRs leave the sets of every other topic right away, the way the
+   * next set pass would ("moved to another topic"). Without this the old
+   * topic's set tile kept showing them next to their new tile until then.
+   */
+  private leaveOtherSets(keys: PrKey[], targetTopicId: string | null): void {
+    const at = this.now().toISOString();
+    for (const key of keys) {
+      for (const set of this.store.sets.listActiveForPr(key)) {
+        if (set.topicId === targetTopicId) {
+          continue;
+        }
+        this.store.sets.removeMember(set.id, key, at);
+        this.store.sets.recordChange({ setId: set.id, topicId: set.topicId, by: 'user', at, prKey: key, kind: 'left', reason: 'moved to another topic' });
+        this.endSetIfTooSmall(set.id, set.topicId, at);
+      }
+    }
+  }
+
+  /**
    * "Wrong topic": move it when the user said where, otherwise let the next
    * sync re-sort it. A stack moves as one: every layer with a topic or a
    * thread goes along (`keys`), pulled-in layers follow on their own. The
    * logged feedback keeps every moved layer out of the old topic for good
    * (`TopicExclusions`); a pick puts it where the user said, as theirs.
+   * Either way the moved PRs leave the old topic's sets at once.
    */
   private wrongTopic(keys: PrKey[], targetTopicId: string | null, note: string): ActionResult {
     if (targetTopicId !== null) {
@@ -51,6 +85,7 @@ export class FeedbackActions {
       if (!target) {
         return failed(`no topic ${targetTopicId}`);
       }
+      this.leaveOtherSets(keys, targetTopicId);
       changeTopicStatus(this.store, targetTopicId, 'revive', this.now().toISOString());
       for (const key of keys) {
         this.store.memberships.assign({
@@ -63,6 +98,7 @@ export class FeedbackActions {
       }
       return ok('Moved');
     }
+    this.leaveOtherSets(keys, null);
     keys.forEach((key) => this.store.memberships.remove(key));
     return ok('Will be re-sorted on the next sync');
   }
@@ -110,16 +146,8 @@ export class FeedbackActions {
         for (const layer of board.stackKeysOf(key)) {
           this.store.sets.removeMember(setId, layer, at);
         }
-        // Ends by units, like an agent change: one stack and nothing else is just that stack.
-        const left = this.store.sets.get(setId);
-        if (left?.status === 'active' && setUnitCount(left.members, stackByPrKey(buildStacks(this.store.prs.listHeaders()))) < 2) {
-          this.store.sets.dissolve(setId, at);
-        }
-        const change = { setId, topicId: tile.topicId, by: 'user' as const, at };
-        this.store.sets.recordChange({ ...change, prKey: key, kind: 'left', reason: input.note.trim() || 'you said not related' });
-        if (this.store.sets.get(setId)?.status === 'dissolved') {
-          this.store.sets.recordChange({ ...change, prKey: null, kind: 'ended', reason: 'fewer than two PRs left' });
-        }
+        this.store.sets.recordChange({ setId, topicId: tile.topicId, by: 'user', at, prKey: key, kind: 'left', reason: input.note.trim() || 'you said not related' });
+        this.endSetIfTooSmall(setId, tile.topicId, at);
         return ok('Removed from the set');
       }
       if (!key) {

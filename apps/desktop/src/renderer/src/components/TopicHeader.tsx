@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { DossierStatus, DossierView, TopicDetail, TopicListItem, TopicProposal, UserRole } from '@postpile/core';
+import type { DossierStatus, DossierView, TopicDetail, TopicListItem, TopicProposal, TopicSection, UserRole } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { fixedText, statusLabel } from '../lib/memory.ts';
 import { lineTarget } from '../lib/sources.ts';
@@ -145,11 +145,12 @@ interface Crumb {
 
 /**
  * Topics › section › area. The section is the one the sidebar lists the topic
- * under (core's `TopicDetail.section`, the Archive for a retired topic), with
- * the same label and dot.
+ * under, with the same label and dot: `rowSection` while the sidebar holds the
+ * row in its old place (a tile stays selected), else core's
+ * `TopicDetail.section` (the Archive for a retired topic).
  */
-function breadcrumbs(detail: TopicDetail): Crumb[] {
-  const look = sectionLook(detail.section);
+function breadcrumbs(detail: TopicDetail, rowSection: TopicSection | null): Crumb[] {
+  const look = sectionLook(rowSection ?? detail.section);
   const crumbs: Crumb[] = [{ label: look.label, dot: look.dot }];
   if (detail.placement?.area) {
     crumbs.push({ label: detail.placement.area, dot: null });
@@ -175,12 +176,19 @@ function PrCountPill(props: { detail: TopicDetail }) {
 }
 
 /** Breadcrumb, name, who drives (a menu that moves the topic), the dossier (or the plain summary before one exists), what the user told the agent and the lessons waiting for a decision. */
-export function TopicHeader(props: { detail: TopicDetail; topics: TopicListItem[]; onAskAgent: () => void; agentOpen: boolean }) {
+export function TopicHeader(props: {
+  detail: TopicDetail;
+  topics: TopicListItem[];
+  /** The section the sidebar draws this topic's row under, null when it draws none. */
+  rowSection: TopicSection | null;
+  onAskAgent: () => void;
+  agentOpen: boolean;
+}) {
   const { topic, pendingProposals, dossier, placement, driver, repoLine } = props.detail;
   const actions = useActions();
   // Only a whole-topic catch-up rewrites the dossier; a glance-only refresh on look does not (server decides).
   const updating = updatingNow({ syncing: actions.syncing, writing: props.detail.memoryUpdating });
-  const crumbs = breadcrumbs(props.detail);
+  const crumbs = breadcrumbs(props.detail, props.rowSection);
   return (
     <div className="flex flex-col">
       <div className="flex items-center gap-[5px] text-[11px] text-hint">

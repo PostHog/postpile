@@ -13,6 +13,7 @@ function note(overrides: Partial<PrNoteView> = {}): PrNoteView {
     note: 'reviewed with the parent',
     coveredBy: 'acme/app#1851',
     coverFetchedAt: '2026-10-08T11:50:00Z',
+    coverReviewed: true,
     createdAt: '2026-10-08T11:20:00Z',
     expiresAt: null,
     status: 'live',
@@ -33,10 +34,26 @@ describe('agentNoteLines', () => {
       },
       NOW,
     );
-    expect(lines).toEqual([
+    expect(lines).toMatchObject([
       { noteId: 'n1', text: 'covered by acme/app#1851 · ph3 session · 40m: reviewed with the parent', stale: 'head changed' },
       { noteId: 'l1', text: 'on it now · ph3 session · 40m: reviewing', stale: null },
     ]);
+    expect(lines[0]?.title).toBe('Agent note: covered by acme/app#1851 · ph3 session · 40m: reviewed with the parent\nOut of date: head changed');
+    expect(lines[1]?.title).toMatch(/^Agent note: on it now · ph3 session · 40m: reviewing\nLease ends at \d\d:\d\d$/);
+  });
+
+  it('says a covering PR has no review yet, and that a stale lease was on it', () => {
+    const lines = agentNoteLines(
+      {
+        prKey: 'acme/app#1902',
+        token: 't',
+        durable: note({ coverReviewed: false }),
+        lease: note({ id: 'l1', kind: 'in_progress', coveredBy: null, coverReviewed: null, note: 'reviewing', status: 'stale', staleReasons: ['new review from alice'], expiresAt: '2026-10-08T13:00:00Z' }),
+        replaced: null,
+      },
+      NOW,
+    );
+    expect(lines.map((line) => line.text)).toEqual(['covered by acme/app#1851 (no review yet) · ph3 session · 40m: reviewed with the parent', 'was on it · ph3 session · 40m: reviewing']);
   });
 
   it('leaves out an ended lease', () => {

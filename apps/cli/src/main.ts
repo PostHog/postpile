@@ -55,38 +55,61 @@ async function simulateRound(options: SimulateRoundOptions): Promise<string> {
   return formatSync(report);
 }
 
-async function runCommand(engine: EngineService, command: Command): Promise<string> {
+/** What a command printed, and whether it found what it was asked for; not ok exits 1. */
+interface CommandOutput {
+  text: string;
+  ok: boolean;
+}
+
+function done(text: string): CommandOutput {
+  return { text, ok: true };
+}
+
+async function runCommand(engine: EngineService, command: Command): Promise<CommandOutput> {
   switch (command.name) {
     case 'sync':
-      return formatSync(await engine.sync(command.options));
+      return done(formatSync(await engine.sync(command.options)));
     case 'consolidate':
-      return formatConsolidation(await engine.consolidate(command.options));
+      return done(formatConsolidation(await engine.consolidate(command.options)));
     case 'poll':
-      return formatPoll(await engine.pollOnce());
+      return done(formatPoll(await engine.pollOnce()));
     case 'sweep': {
       const result = await engine.sweepWorkContext();
-      return formatSweep(result, await engine.getWorkContext());
+      return done(formatSweep(result, await engine.getWorkContext()));
     }
     case 'setup-draft':
-      return setupDraft(engine);
-    case 'tools':
-      return formatTools(await engine.checkTools());
+      return done(await setupDraft(engine));
+    case 'tools': {
+      // Not ok while sync is off, so scripts can check gh and claude by the exit code.
+      const view = await engine.checkTools();
+      return { text: formatTools(view), ok: view.canSync };
+    }
     case 'topics':
-      return formatTopics(await engine.listTopics());
+      return done(formatTopics(await engine.listTopics()));
     case 'topic': {
       const detail = await engine.getTopic(command.topicId);
-      return detail ? formatTopic(detail) : `no topic ${command.topicId}`;
+      return detail ? done(formatTopic(detail)) : { text: `no topic ${command.topicId}`, ok: false };
     }
     case 'pr': {
       const detail = await engine.getPr(command.prKey);
-      return detail ? formatPr(detail, await engine.listPrEvents(command.prKey)) : `no PR ${command.prKey} in the store`;
+      return detail ? done(formatPr(detail, await engine.listPrEvents(command.prKey))) : { text: `no PR ${command.prKey} in the store`, ok: false };
     }
     case 'mcp':
     case 'simulate-start':
     case 'simulate-round':
     case 'help':
-      return usage;
+      return done(usage);
   }
+}
+
+/** Usage on stdout when asked for; after a bad command line, the problem and usage on stderr with exit code 2. */
+function printHelp(problem: string | null): void {
+  if (problem === null) {
+    console.log(usage);
+    return;
+  }
+  console.error(`${problem}\n\n${usage}`);
+  process.exitCode = 2;
 }
 
 async function main(): Promise<void> {
@@ -95,7 +118,7 @@ async function main(): Promise<void> {
     throw new Error(error);
   }
   if (command.name === 'help') {
-    console.log(usage);
+    printHelp(command.problem);
     return;
   }
   if (command.name === 'mcp' && command.api !== undefined) {
@@ -124,7 +147,11 @@ async function main(): Promise<void> {
   // Refuses (DataDirLockedError, exit 1) while the app or a server holds the database, unless --read-only.
   const engine = engineFromEnv({ lockKind: 'cli', withoutLock: readOnly });
   try {
-    console.log(await runCommand(engine, withCallCap(command, syncCallCapFromEnv(process.env.POSTPILE_MAX_AGENT_CALLS))));
+    const output = await runCommand(engine, withCallCap(command, syncCallCapFromEnv(process.env.POSTPILE_MAX_AGENT_CALLS)));
+    console.log(output.text);
+    if (!output.ok) {
+      process.exitCode = 1;
+    }
     // The CLI never holds a mark-read in an undo window, but flush in case an action queued one.
     await engine.flushPendingWrites();
   } finally {

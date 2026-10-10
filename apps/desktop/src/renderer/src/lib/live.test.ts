@@ -37,6 +37,7 @@ describe('liveLabel', () => {
 
 describe('quotaLabel', () => {
   const resumeAt = new Date(2026, 8, 28, 14, 5).toISOString();
+  const sameDay = new Date(2026, 8, 28, 9, 0);
 
   it('stays quiet while the quota is fine', () => {
     expect(quotaLabel(undefined)).toBeNull();
@@ -46,15 +47,20 @@ describe('quotaLabel', () => {
   it('says background sync waits until the reset, and the poll slows', () => {
     const quota = { level: 'low' as const, resource: 'graphql' as const, remainingPercent: 40, resumeAt, pollSeconds: 60 };
     const status: LivePollStatus = { ...running, intervalSeconds: 30, githubPollIntervalSeconds: null, everySeconds: 30, githubQuota: quota };
-    expect(quotaLabel(status)).toMatchObject({ text: 'GitHub quota low: background sync paused until 14:05', warn: true });
+    expect(quotaLabel(status, sameDay)).toMatchObject({ text: 'GitHub quota low: sync paused until 14:05 today', warn: true });
     expect(quotaLabel(status)?.title).toMatch(/^GraphQL: 40% of the hourly limit left/);
     expect(liveLabel(status, now).text).toBe('live · every 60s');
   });
 
   it('says the live poll waits too when the quota is nearly used', () => {
     const status: LivePollStatus = { ...running, githubQuota: { level: 'critical', resource: 'core', remainingPercent: 12, resumeAt, pollSeconds: null } };
-    expect(quotaLabel(status)?.text).toBe('GitHub quota nearly used: background sync and live poll paused until 14:05');
+    expect(quotaLabel(status, sameDay)?.text).toBe('GitHub quota nearly used: sync and poll paused until 14:05 today');
     expect(quotaLabel(status)?.title).toMatch(/^REST: 12%/);
+  });
+
+  it('names the day when the reset is not today', () => {
+    const status: LivePollStatus = { ...running, githubQuota: { level: 'low', resource: 'core', remainingPercent: 30, resumeAt, pollSeconds: 60 } };
+    expect(quotaLabel(status, new Date(2026, 8, 27, 20, 0))?.text).toBe('GitHub quota low: sync paused until 14:05 on Sep 28');
   });
 });
 

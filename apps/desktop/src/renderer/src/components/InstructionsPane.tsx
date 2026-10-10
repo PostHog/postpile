@@ -65,18 +65,22 @@ export function InstructionsPane(props: { onOpenTopic: (topicId: string) => void
   const instructions = useInstructions();
   const setup = useSetupStatus();
   const data = instructions.data;
+  const skipped = setup.data?.flag === 'skipped';
   return (
     <main className="pane-scroll flex min-w-0 flex-col gap-[18px] overflow-auto pl-[26px] pr-[16px] py-[22px]">
       <div className="flex flex-col gap-1.5">
         <div className="flex max-w-[680px] items-center gap-3">
           <h1 className="text-[23px] leading-tight font-[650] tracking-[-0.022em]">Your instructions</h1>
-          <Button
-            className="ml-auto"
-            onClick={props.onRunSetup}
-            title="The agent drafts your instructions from your recent GitHub activity, ownership files and work context. Shown as a diff; nothing changes until you accept."
-          >
-            Run setup again
-          </Button>
+          {/* After a skip the banner below holds the one "Run setup"; two buttons for one flow read as two actions. */}
+          {!skipped && (
+            <Button
+              className="ml-auto"
+              onClick={props.onRunSetup}
+              title="The agent drafts your instructions from your recent GitHub activity, ownership files and work context. Shown as a diff; nothing changes until you accept."
+            >
+              Run setup again
+            </Button>
+          )}
         </div>
         <p className="max-w-[680px] text-[13px] text-ink-2">
           What the agent knows about you and how you work, in your words. It goes into every prompt, above anything the agent learned. The agent only
@@ -84,7 +88,7 @@ export function InstructionsPane(props: { onOpenTopic: (topicId: string) => void
         </p>
         {data && <InstructionsFileLine path={data.path} />}
       </div>
-      {setup.data?.flag === 'skipped' && <SkippedSetupBanner onRunSetup={props.onRunSetup} />}
+      {skipped && <SkippedSetupBanner onRunSetup={props.onRunSetup} />}
       {instructions.error && <p className="text-xs text-status-bad">Could not load your instructions: {instructions.error.message}</p>}
       <Section title="Change something">
         <InstructionsChat />

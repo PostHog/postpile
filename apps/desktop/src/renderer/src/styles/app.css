@@ -212,12 +212,15 @@
     word swaps at +160ms (word-*), the footer at +240ms (footer-*), "Archive
     now" rises at +640ms and one sheen passes over it at +960ms (archive-*).
     The sidebar's unread bubble shrinks out with its dot (bubble-out). All
-    `both`: before its delay a step shows where it starts. Crossfade and the
-    callers skip them with reduced motion.
+    The -in steps are `backwards`, not `both` (2026-10-10): a finished
+    `both` animation keeps a stacking context on the element, which traps the
+    z-20 tile menu inside it so the next tile paints over the menu. The
+    keyframes only name the start state, so nothing is lost at the end.
+    Crossfade and the callers skip them with reduced motion.
   */
-  --animate-word-in: word-in 220ms ease-out 160ms both;
+  --animate-word-in: word-in 220ms ease-out 160ms backwards;
   --animate-word-out: word-out 220ms ease-out 160ms both;
-  --animate-footer-in: footer-in 240ms ease-out 240ms both;
+  --animate-footer-in: footer-in 240ms ease-out 240ms backwards;
   --animate-footer-out: footer-out 220ms ease-out 240ms both;
   --animate-archive-rise: archive-rise 300ms cubic-bezier(0.2, 0.8, 0.2, 1.2) 640ms both;
   --animate-archive-sheen: archive-sheen 700ms ease-in-out 960ms both;

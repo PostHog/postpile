@@ -96,6 +96,7 @@ export function PaneHousekeeping(props: PaneHousekeepingProps) {
         <SnoozeMenu
           tileId={tileId}
           snoozed={view.state.kind === 'snoozed'}
+          unread={view.group === 'unread'}
           muted={view.state.muted === true}
           partlyMuted={view.state.partlyMuted === true}
           size="md"

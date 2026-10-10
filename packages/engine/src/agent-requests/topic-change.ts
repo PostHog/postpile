@@ -33,6 +33,7 @@ export class OutsideProposals {
       topicIdOf: (key) => board.topicIdOf(key),
       // Every layer: the whole stack shows wherever the moved layers go.
       movesWith: (key) => board.stackKeysOf(key),
+      isDone: (key) => (board.prs.get(key)?.state ?? 'OPEN') !== 'OPEN',
       proposals: this.store.proposals.listForTopic(change.topicId),
       pendingFromAgents: this.store.proposals.listPendingFromAgents(),
       filedLastDay: this.store.proposals.countFromAgentsSince(new Date(Date.parse(at) - DAY_MS).toISOString()),

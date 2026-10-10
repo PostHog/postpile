@@ -59,7 +59,7 @@ import type {
 import { capNote } from '../lib/agent-stats.ts';
 import { writeBlockedReason, type GithubWrite } from '../lib/guard.ts';
 import { approvedMessage, batchMarkReadMessage } from '../lib/agent-actions.ts';
-import { markReadNotice } from '../lib/mark-read.ts';
+import { markReadNotice, snoozeMessage } from '../lib/mark-read.ts';
 import { approvedDetail, markedReadPr, markedReadTile, mutedTile, snoozedTile, withApprovedPrs, withTile, withTiles } from '../lib/optimistic.ts';
 import { newerReport } from '../lib/sync-report.ts';
 import { teamRoleNotice } from '../lib/team-roles.ts';
@@ -191,7 +191,7 @@ export interface Actions {
    */
   markPrRead(tileId: string, prKey: PrKey, afterRead: TileAfterRead): Promise<void>;
   /** A `muted` condition is Mute: also a mark-read and a GitHub unsubscribe, guarded as `mute`. */
-  snooze(tileId: string, condition: SnoozeCondition): Promise<void>;
+  snooze(tileId: string, condition: SnoozeCondition, unread: boolean): Promise<void>;
   /**
    * `muted`: any tracked PR of the tile is muted (`TileState.muted` or
    * `partlyMuted`), so this is also Unmute, which subscribes again on GitHub
@@ -989,20 +989,21 @@ export function ActionsProvider(props: { children: ReactNode }) {
     },
     markPrRead: async (tileId, prKey, afterRead) => {
       const shape: NoticeShape = (result) => {
-        const notice = markReadNotice({ message: result.message, ok: result.ok, writesOn: writes?.enabled ?? false, afterRead });
+        const notice = markReadNotice({ message: result.message, ok: result.ok, writesOn: writes?.enabled ?? false, afterRead, prKey });
         return { message: notice.message, snoozeTileId: null };
       };
       const optimistic = writes?.enabled ? () => changeTile(tileId, (view) => markedReadPr(view, prKey)) : null;
       await run(`markPr:${tileId}:${prKey}`, 'markRead', () => request('POST', `${tilePrPath(tileId, prKey)}/mark-read`), shape, optimistic);
     },
-    snooze: async (tileId, condition) => {
+    snooze: async (tileId, condition, unread) => {
       // A mute also marks read and unsubscribes on GitHub: guarded like a mark-read, pending while locked.
       if (condition.kind === 'muted') {
         const writesOn = writes?.enabled ?? false;
         await run(`snooze:${tileId}`, 'mute', () => request('POST', `${tilePath(tileId)}/snooze`, { condition }), null, () => changeTile(tileId, (view) => mutedTile(view, writesOn)));
         return;
       }
-      await run(`snooze:${tileId}`, null, () => request('POST', `${tilePath(tileId)}/snooze`, { condition }), null, () => changeTile(tileId, snoozedTile));
+      const shape: NoticeShape = (result) => ({ message: snoozeMessage(result.message, result.ok, unread), snoozeTileId: null });
+      await run(`snooze:${tileId}`, null, () => request('POST', `${tilePath(tileId)}/snooze`, { condition }), shape, () => changeTile(tileId, snoozedTile));
     },
     unsnooze: async (tileId, muted = false) => {
       // Unmute subscribes again on GitHub: the same guard as the mute.

@@ -5,7 +5,7 @@
 import type { PrNotesView, PrNoteView } from '@postpile/core';
 import { ago } from './text.ts';
 
-/** "1 h 20", "45 min", "under a minute": how long until `iso`. */
+/** "1 h 20 min", "2 h", "45 min", "under a minute": how long until `iso`. */
 export function untilText(iso: string, now: Date): string {
   const minutes = Math.floor((Date.parse(iso) - now.getTime()) / 60_000);
   if (minutes < 1) {
@@ -15,16 +15,21 @@ export function untilText(iso: string, now: Date): string {
     return `${minutes} min`;
   }
   const rest = minutes % 60;
-  return rest === 0 ? `${Math.floor(minutes / 60)} h` : `${Math.floor(minutes / 60)} h ${rest}`;
+  return rest === 0 ? `${Math.floor(minutes / 60)} h` : `${Math.floor(minutes / 60)} h ${rest} min`;
 }
 
-/** "covered by acme/app#1851" or "no action needed". */
+/** "covered by acme/app#1851", "covered by acme/app#1851 (no review yet)" or "no action needed". */
 function durableWords(note: PrNoteView): string {
-  return note.kind === 'covered' ? `covered by ${note.coveredBy ?? 'another PR'}` : 'no action needed';
+  if (note.kind !== 'covered') {
+    return 'no action needed';
+  }
+  const noReview = note.coverReviewed === false ? ' (no review yet)' : '';
+  return `covered by ${note.coveredBy ?? 'another PR'}${noReview}`;
 }
 
+/** The app's words for a stale note, so the PR pane and the answers agree. */
 function staleWords(note: PrNoteView): string {
-  return `stale: ${note.staleReasons.join('; ')}`;
+  return `out of date: ${note.staleReasons.join('; ')}`;
 }
 
 /**
@@ -92,9 +97,9 @@ function noteJson(note: PrNoteView | null): object | null {
   if (!note) {
     return null;
   }
-  const { id, kind, coveredBy, coverFetchedAt, createdAt, expiresAt, status, staleReasons } = note;
+  const { id, kind, coveredBy, coverFetchedAt, coverReviewed, createdAt, expiresAt, status, staleReasons } = note;
   // The note, the agent's label and its client name are agent-written: untrusted, like GitHub text.
-  return { id, kind, coveredBy, coverFetchedAt, createdAt, expiresAt, status, untrusted: { note: note.note, by: note.by, client: note.client, staleReasons } };
+  return { id, kind, coveredBy, coverFetchedAt, coverReviewed, createdAt, expiresAt, status, untrusted: { note: note.note, by: note.by, client: note.client, staleReasons } };
 }
 
 /** pr_context's JSON: the observation token and the notes, free text under "untrusted". */

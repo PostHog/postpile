@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { stackPlaceLabel, stackPlaces, stackPlaceTitle } from './stacks.ts';
+import { moveSubject, stackPlaceLabel, stackPlaces, stackPlaceTitle } from './stacks.ts';
 
 describe('stackPlaces', () => {
   const stack = { id: 'stack:acme/app#1', prKeys: ['acme/app#1', 'acme/app#2', 'acme/app#3'] };
@@ -28,5 +28,22 @@ describe('stack mark text', () => {
     expect(stackPlaceLabel({ layer: 1, of: 3, builtOn: null })).toBe('1/3');
     expect(stackPlaceTitle({ layer: 1, of: 3, builtOn: null })).toBe('Layer 1 of 3 in a stack (bottom of the stack)');
     expect(stackPlaceTitle({ layer: 2, of: 3, builtOn: 'acme/app#1862' })).toBe('Layer 2 of 3 in a stack (built on #1862)');
+  });
+});
+
+describe('moveSubject', () => {
+  const stacks = [{ id: 'stack:acme/app#1', prKeys: ['acme/app#1', 'acme/app#2', 'acme/app#3'] }, { id: 'stack:acme/app#9', prKeys: ['acme/app#9'] }];
+
+  it('names the whole stack for a layer, since a stack moves as one', () => {
+    expect(moveSubject(stacks, 'acme/app#2', null)).toBe('the 3-PR stack');
+  });
+
+  it('names a lone PR by number, also when it is the only PR of its tile', () => {
+    expect(moveSubject(stacks, 'acme/app#9', null)).toBe('#9');
+    expect(moveSubject([], null, 'acme/app#4')).toBe('#4');
+  });
+
+  it('falls back to words when no PR is known', () => {
+    expect(moveSubject([], null, null)).toBe('this PR');
   });
 });

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { InterruptionsMode, SetupCurrentInstructions, SetupDraft, SetupFitNote, SetupSectionEdit } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { useInterruptions } from '../api/interruptions.ts';
-import { useSetupSweep } from '../api/setup.ts';
+import { useSetupStatus, useSetupSweep } from '../api/setup.ts';
 import { sendTelemetry } from '../api/telemetry.ts';
 import {
   applyFitFix,
@@ -12,6 +12,7 @@ import {
   pickMainRepo,
   picksAfterRefine,
   picksFromDraft,
+  setupHeading,
   toggleQuiet,
   type SetupFitFix,
   type SetupFitState,
@@ -68,6 +69,7 @@ export function SetupFlow(props: {
 }) {
   const actions = useActions();
   const sweep = useSetupSweep(props.step === 'sweep');
+  const setupDone = useSetupStatus().data?.flag === 'done';
   const [review, setReview] = useState<Review | null>(null);
   const interruptions = useInterruptions().data;
   // The "Your day" pick; until the user picks, the stored mode (Never while it loads).
@@ -220,10 +222,10 @@ export function SetupFlow(props: {
   return (
     <main className="pane-scroll col-span-2 flex min-w-0 flex-col gap-[18px] overflow-auto pl-[26px] pr-[16px] py-[22px]">
       <div className="flex flex-col gap-2">
-        <h1 className="text-[23px] leading-tight font-[650] tracking-[-0.022em]">{props.rerun ? 'Run setup again' : 'Welcome to PostPile'}</h1>
+        <h1 className="text-[23px] leading-tight font-[650] tracking-[-0.022em]">{setupHeading(props.rerun, setupDone)}</h1>
         <p className="max-w-[720px] text-[13px] text-ink-2">
           {props.rerun
-            ? 'The agent drafts your instructions again from your recent GitHub activity. You see it as a diff against your current file; nothing changes until you accept.'
+            ? `The agent drafts your instructions ${setupDone ? 'again ' : ''}from your recent GitHub activity. You see it as a diff against your current file; nothing changes until you accept.`
             : 'An agent helps you write your instructions: who you are, what you own, what should reach you. It reads your recent GitHub activity and drafts them; you review and edit before anything is saved.'}
         </p>
         <SetupSteps current={step} />

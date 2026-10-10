@@ -288,3 +288,11 @@ export function acceptPlan(input: AcceptPlanInput): string[] {
   lines.push('Then syncs your GitHub notifications and opens your topics.');
   return lines;
 }
+
+/** "Welcome to PostPile" on a first run; from the instructions pane "Run setup again" once setup was done, else "Run setup" (it was skipped, so there is no "again"). */
+export function setupHeading(rerun: boolean, setupDone: boolean): string {
+  if (!rerun) {
+    return 'Welcome to PostPile';
+  }
+  return setupDone ? 'Run setup again' : 'Run setup';
+}

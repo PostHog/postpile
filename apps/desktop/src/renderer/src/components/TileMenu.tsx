@@ -1,6 +1,6 @@
 import type { TileView, TopicListItem } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
-import { prNumber } from '../lib/tiles.ts';
+import { moveSubject } from '../lib/stacks.ts';
 import type { ButtonVariant } from './Button.tsx';
 import { Menu, type MenuItem } from './Menu.tsx';
 import { MovePicker } from './MovePicker.tsx';
@@ -9,7 +9,7 @@ import { markReadNote } from '../lib/guard.ts';
 interface TileMenuProps {
   view: TileView;
   topics: TopicListItem[];
-  /** "Wrong topic" moves one PR: the selected one, else the tile's lead. */
+  /** "Wrong topic" acts on one PR (the selected one, else the tile's lead), or on its whole stack. */
   prKey: string | null;
   /** Matches the footer's other buttons (`joined` inside the tile footer's joined control). */
   variant?: ButtonVariant;
@@ -19,7 +19,7 @@ interface TileMenuProps {
 export function TileMenu(props: TileMenuProps) {
   const actions = useActions();
   const { tile } = props.view;
-  const which = props.view.prs.length > 1 && props.prKey ? `#${prNumber(props.prKey)} ` : '';
+  const subject = moveSubject(tile.stacks, props.prKey, props.view.prs[0]?.key ?? null);
 
   function wrongTopic(targetTopicId: string | null, pickedFrom?: 'suggestion' | 'search') {
     void actions.feedback({ kind: 'wrong_topic', tileId: tile.id, prKey: props.prKey, targetTopicId, pickedFrom, note: '' });
@@ -37,9 +37,9 @@ export function TileMenu(props: TileMenuProps) {
     : [];
   const items: MenuItem[] = [
     ...notMine,
-    { label: `Wrong topic: re-sort ${which}on next sync`, onSelect: () => wrongTopic(null) },
+    { label: `Not in this topic (re-sort ${subject} on next sync)`, onSelect: () => wrongTopic(null) },
     {
-      label: `Move ${which}to topic…`,
+      label: `Move ${subject} to topic…`,
       onSelect: () => undefined,
       panel: (close) => (
         <MovePicker

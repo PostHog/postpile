@@ -124,6 +124,13 @@ const REPO_PATTERN = /^[\w.-]+\/[\w.-]+$/;
 
 const NOT_TRACKED_HINT = "It only knows PRs that reached the user's GitHub inbox, their own PRs and their review requests.";
 
+/** Said in a JSON answer's header when the caller asked for full detail, which only text answers have. */
+const JSON_IGNORES_DETAIL = 'detail: "full" applies to text answers only; this JSON has the brief facts. For facts, activity and the dossier, call again with format: "text".';
+
+function jsonDetailNote(detail: Detail): string[] {
+  return detail === 'full' ? [JSON_IGNORES_DETAIL] : [];
+}
+
 export function toolError(lines: string[], fencedData: string[] = []): ToolAnswer {
   const text = fencedData.length > 0 ? [...lines, fenced(fencedData)].join('\n') : lines.join('\n');
   return { text, found: false, isError: true };
@@ -157,7 +164,7 @@ async function header(ctx: ReadContext): Promise<string[]> {
   if (running) {
     lines.push(syncRunningLine(running));
   }
-  lines.push(viewer.login ? `It works for @${viewer.login}; "you" below means them.` : 'It does not know its user yet.');
+  lines.push(viewer.login ? `PostPile's user is @${viewer.login}; "you" below means @${viewer.login}.` : 'It does not know its user yet.');
   return lines;
 }
 
@@ -222,6 +229,16 @@ async function keysWithNumber(reader: PostPileReader, number: number): Promise<P
 
 export type ResolvedPr = { ok: true; key: PrKey } | { ok: false; error: ToolAnswer };
 
+/**
+ * The key as PostPile stores it. GitHub owner and repo names ignore case
+ * and agents copy them from URLs and prose, so "ACME/APP#1932" finds
+ * acme/app#1932. A key PostPile does not store comes back as typed.
+ */
+async function storedSpelling(reader: PostPileReader, key: PrKey): Promise<PrKey> {
+  const stored = await keysWithNumber(reader, parsePrKey(key).number);
+  return stored.find((candidate) => candidate.toLowerCase() === key.toLowerCase()) ?? key;
+}
+
 /** A PR reference as the tools take it, to a key. The error says how to pass it instead. */
 export async function resolvePr(reader: PostPileReader, input: string, param = 'pr'): Promise<ResolvedPr> {
   const parsed = parsePrInput(input);
@@ -232,7 +249,7 @@ export async function resolvePr(reader: PostPileReader, input: string, param = '
     };
   }
   if (parsed.kind === 'key') {
-    return { ok: true, key: parsed.key };
+    return { ok: true, key: await storedSpelling(reader, parsed.key) };
   }
   const keys = await keysWithNumber(reader, parsed.number);
   if (keys.length === 1) {
@@ -679,7 +696,7 @@ function prReadJson(read: PrRead, authors: Authors, overlaps: PrOverlapsView): P
   };
 }
 
-async function prContextJson(ctx: ReadContext, reads: PrRead[], failures: PrFailure[], authors: Authors, overlaps: PrOverlapsView): Promise<ToolAnswer> {
+async function prContextJson(ctx: ReadContext, reads: PrRead[], failures: PrFailure[], authors: Authors, overlaps: PrOverlapsView, detail: Detail): Promise<ToolAnswer> {
   const topics = new Map<string, TopicDetail>();
   for (const read of reads) {
     if (read.topic) {
@@ -695,7 +712,7 @@ async function prContextJson(ctx: ReadContext, reads: PrRead[], failures: PrFail
     topics: [...topics.values()].map((topic) => ({ ...topicJson(topic), prKeys: uniquePrs(topic.tiles).map((pr) => pr.key) })),
     errors: failures.map((failure) => ({ input: failure.input, error: failure.error.text })),
   };
-  return jsonAnswer([...(await header(ctx)), ...teamNote(authors)], data);
+  return jsonAnswer([...(await header(ctx)), ...teamNote(authors), ...jsonDetailNote(detail)], data);
 }
 
 /**
@@ -728,7 +745,7 @@ export async function prContext(ctx: ReadContext, input: string | string[], deta
   const authors = await readAuthors(reader);
   const overlaps = await reader.prOverlaps();
   if (format === 'json') {
-    return prContextJson(ctx, reads, failures, authors, overlaps);
+    return prContextJson(ctx, reads, failures, authors, overlaps, detail);
   }
   const single = reads.length === 1;
   const now = ctx.now();
@@ -870,8 +887,8 @@ function summaryJson(authors: Authors, pr: PrSummary, detail: PrDetail | null, t
   });
 }
 
-/** topic as JSON: the topic and its dossier's lines, every tile, every PR once. Detail makes no difference. */
-async function topicJsonAnswer(ctx: ReadContext, topic: TopicDetail): Promise<ToolAnswer> {
+/** topic as JSON: the topic and its dossier's lines, every tile, every PR once. Detail makes no difference (the header says so). */
+async function topicJsonAnswer(ctx: ReadContext, topic: TopicDetail, detail: Detail): Promise<ToolAnswer> {
   const authors = await readAuthors(ctx.reader);
   const prs = uniquePrs(topic.tiles);
   const details = await readDetails(ctx.reader, prs.map((pr) => pr.key));
@@ -883,7 +900,7 @@ async function topicJsonAnswer(ctx: ReadContext, topic: TopicDetail): Promise<To
     prs: prs.map((pr) => summaryJson(authors, pr, details.get(pr.key) ?? null, topic.tiles, topic, overlaps)),
     suggestions: await suggestionsJson(ctx.reader, topic, ctx.now()),
   };
-  return jsonAnswer(await header(ctx), data);
+  return jsonAnswer([...(await header(ctx)), ...jsonDetailNote(detail)], data);
 }
 
 export async function topicOverview(ctx: ReadContext, input: string, detail: Detail, format: Format = 'text'): Promise<ToolAnswer> {
@@ -897,7 +914,7 @@ export async function topicOverview(ctx: ReadContext, input: string, detail: Det
     return toolError([`Topic ${match.item.topic.id} is gone. Look it up again with whats_on_me or search_prs.`]);
   }
   if (format === 'json') {
-    return topicJsonAnswer(ctx, topic);
+    return topicJsonAnswer(ctx, topic, detail);
   }
   const data = [...(detail === 'full' ? fullTopicLines(topic, new Set()) : briefTopicLines(topic)), ...(await suggestionLines(reader, topic, ctx.now()))];
   const footer = detail === 'brief' ? ['Next: detail: "full" adds people, timeline, recent changes and every PR; pr_context for one PR.'] : [];
@@ -1046,7 +1063,9 @@ function queuePrLines(prs: PrSummary[], details: Map<PrKey, PrDetail | null>, au
     const detail = details.get(pr.key) ?? null;
     const reviews = detail ? reviewCountsText(reviewerStates(detail.pr)) : 'not stored';
     const owners = detail?.pr.state === 'OPEN' ? ownershipShort(detail.ownership) : '';
-    const lines = [`  ${pr.key} by ${pr.author}${authorTag(placeOf(authors, pr), authors.known)} · reviews: ${reviews}${overlapMarker(overlaps, pr.key)}${owners ? ` · ${owners}` : ''}`];
+    // A merged or closed layer of a live tile says so: only the open ones are there to act on.
+    const state = pr.state === 'OPEN' ? '' : ` (${stateWord(pr.state, pr.isDraft)})`;
+    const lines = [`  ${pr.key}${state} by ${pr.author}${authorTag(placeOf(authors, pr), authors.known)} · reviews: ${reviews}${overlapMarker(overlaps, pr.key)}${owners ? ` · ${owners}` : ''}`];
     const view = notes.get(pr.key);
     if (view) {
       lines.push(...queueNoteLines(view, now).map((line) => `    ${line}`));

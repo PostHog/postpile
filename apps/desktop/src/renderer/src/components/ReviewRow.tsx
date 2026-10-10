@@ -3,7 +3,7 @@ import { useActions } from '../api/actions.tsx';
 import { useViewer } from '../api/viewer.ts';
 import { approveButton, approveStateGlyphs, type ApproveButtonInput, type ApproveButtonLook } from '../lib/approve.ts';
 import { reviewRowLabel, type ReviewRowTone } from '../lib/review-row.ts';
-import { ageLabel } from '../lib/time.ts';
+import { whenLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
 import { Button, splitSeamClasses } from './Button.tsx';
 import { Composer, useCompose } from './Composer.tsx';
@@ -17,7 +17,7 @@ function approveTitle(input: ApproveButtonInput, look: ApproveButtonLook, blocke
     return action;
   }
   const after = look.headMoved ? '; commits came after, but your approval still counts' : '';
-  return `You already approved ${ageLabel(approvedAt, now)} ago${after}. Approving again is harmless. ${action}`;
+  return `You already approved ${whenLabel(approvedAt, now)}${after}. Approving again is harmless. ${action}`;
 }
 
 const COMMENT_REVIEW_TITLE =

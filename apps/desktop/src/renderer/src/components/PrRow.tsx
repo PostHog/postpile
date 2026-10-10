@@ -98,10 +98,11 @@ export function PrRow(props: PrRowProps) {
   const opened = useOpenedReadState();
   const countdown = props.place === 'tile' ? dotCountdown(opened, pr.key) : null;
   const assigned = assigneeLine(pr.author, pr.assignees, viewerLogin);
-  // The detail pane's list (an @container) keeps its titles readable when the pane is narrow: below 480px
-  // "assigned to" goes first (the body's "opened by" line still names the open PR's assignees), below 400px the author's face too.
+  // The detail pane's list (an @container) keeps its titles readable when the pane is narrow: below 520px the "for whom" chip goes, below 480px
+  // "assigned to" goes next (the body's "opened by" line still names the open PR's assignees), below 400px the author's face too.
   const assignedDrop = props.place === 'detail' ? '@max-[480px]:hidden' : '';
   const avatarDrop = props.place === 'detail' ? '@max-[400px]:hidden' : '';
+  const chipDrop = props.place === 'detail' ? '@max-[520px]:hidden' : '';
   return (
     <button
       type="button"
@@ -118,7 +119,12 @@ export function PrRow(props: PrRowProps) {
       <span className="shrink-0 font-mono text-[11px] text-hint">#{prNumber(pr.key)}</span>
       {props.stackPlace && <StackMark place={props.stackPlace} greyed={props.greyed} />}
       {props.showTitle && <span className={`min-w-0 truncate ${titleLook(props, greyed)}`}>{pr.title}</span>}
-      {props.showForWhom && <ForWhomChip forWhom={pr.forWhom} code={pr.why} provenance={pr.provenance} greyed={greyed} size="row" />}
+      {props.showForWhom && (
+        // Under 520px in the pane's list the title matters more than the chip (the pane's other lines still say who it is for).
+        <span className={`flex shrink-0 ${chipDrop}`}>
+          <ForWhomChip forWhom={pr.forWhom} code={pr.why} provenance={pr.provenance} greyed={greyed} size="row" />
+        </span>
+      )}
       {pr.repoLabel && <RepoLabel label={pr.repoLabel} />}
       <span className="ml-auto flex shrink-0 items-center gap-2.5 pl-1">
         {word && <StateWordLabel word={word} />}

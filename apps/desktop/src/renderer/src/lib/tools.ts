@@ -1,5 +1,5 @@
 import type { ClaudeState, GhState, ToolStatus, ToolsView } from '@postpile/core';
-import { ageLabel, clockLabel } from './time.ts';
+import { clockLabel, whenLabel } from './time.ts';
 
 // What the renderer shows about gh and claude (DESIGN.md "Missing tools").
 // The words and fix commands come from the server; this only picks where.
@@ -41,15 +41,14 @@ export function retryLine(retryAt: string | null, now: Date): string {
   return `Trying again at ${clockLabel(at)}, in ${minutes} min.`;
 }
 
-/** "Checked 2m ago. Looks again by itself at 15:42." */
+/** "Checked 2m ago. Checks again at 15:42." */
 export function checkLine(view: ToolsView, now: Date): string {
   const parts: string[] = [];
   if (view.checkedAt) {
-    const age = ageLabel(view.checkedAt, now);
-    parts.push(age === 'now' ? 'Checked just now.' : `Checked ${age} ago.`);
+    parts.push(`Checked ${whenLabel(view.checkedAt, now)}.`);
   }
   if (view.nextCheckAt) {
-    parts.push(`Looks again by itself at ${clockLabel(new Date(view.nextCheckAt))}.`);
+    parts.push(`Checks again at ${clockLabel(new Date(view.nextCheckAt))}.`);
   }
   return parts.join(' ');
 }
@@ -69,10 +68,10 @@ export function toolsFooter(view: ToolsView | undefined): ToolsFooter | null {
   if (notice.gh) {
     parts.push({ text: 'sync off', title: notice.gh.headline });
   } else if (view.gh.state === 'offline') {
-    parts.push({ text: 'GitHub unreachable', title: `${view.gh.headline}. ${view.gh.detail}` });
+    parts.push({ text: 'GitHub unreachable', title: `${view.gh.headline}. Check your network; PostPile tries again by itself. ${view.gh.detail}`.trim() });
   }
   if (notice.claude) {
-    parts.push({ text: notice.claude.state === 'limited' ? 'agent paused' : 'rules only', title: notice.claude.headline });
+    parts.push({ text: notice.claude.state === 'limited' ? 'agent paused' : 'rules only', title: `${notice.claude.headline}. Tiles and notifications still work on rules; topics, dossiers and glances wait.` });
   }
   if (parts.length === 0) {
     return null;

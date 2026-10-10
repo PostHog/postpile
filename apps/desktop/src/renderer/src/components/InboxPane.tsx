@@ -20,7 +20,7 @@ function Card(props: { title: string; meta: string; reason: string; onDecide: (a
           Accept
         </Button>
         <Button disabled={props.busy} onClick={() => props.onDecide(false)}>
-          Decline
+          Reject
         </Button>
       </div>
     </div>

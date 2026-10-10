@@ -49,6 +49,12 @@ describe('pr helpers', () => {
     expect(mergeStatus(approved, [])).toBe('approved');
   });
 
+  // 2026-10-10 (B-A-12): "approved" next to a team still waiting read as a contradiction.
+  it('names who is still asked on an approved PR', () => {
+    const approved = { ...prPaneView(makePr({ reviewDecision: 'APPROVED' })), reviewerTeams: ['acme/team-platform'], reviewerUsers: ['tove'] };
+    expect(mergeStatus(approved, [])).toBe('approved · team-platform, tove still asked');
+  });
+
   it('names agents in words', () => {
     expect(approvedText([])).toBe('approved');
     expect(approvedText(['reviewbot'])).toBe('approved by reviewbot (agent)');

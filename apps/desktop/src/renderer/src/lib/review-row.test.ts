@@ -7,6 +7,11 @@ function input(overrides: Partial<ReviewRowInput> = {}): ReviewRowInput {
 }
 
 describe('reviewRowLabel', () => {
+  it('never says "now ago" for an approval a moment old', () => {
+    const label = reviewRowLabel(input({ approval: { at: at(179.9), commitOid: 'head' } }));
+    expect(label.text).toBe('You approved just now');
+  });
+
   it('says when the viewer approved, and that commits came after', () => {
     expect(reviewRowLabel(input({ approval: { at: at(60), commitOid: 'head' } }))).toEqual({ text: 'You approved 2h ago', tone: 'approved' });
     expect(reviewRowLabel(input({ approval: { at: at(60), commitOid: 'old' } })).text).toBe('You approved 2h ago, commits since');

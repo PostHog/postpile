@@ -1,10 +1,12 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { TopicListItem, TopicPerson, TopicSection, ViewerView } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { useTools } from '../api/tools.ts';
 import { useFinishedTopics } from '../api/topics.ts';
 import { statusLabel } from '../lib/memory.ts';
-import { bucketItems, dealtItems, dealtKey, sidebarBuckets, topicRowId, unreadLook, type QueueFilter } from '../lib/queues.ts';
+import { nothingWaits } from '../lib/empty-states.ts';
+import { plural } from '../lib/plural.ts';
+import { bucketItems, dealtItems, dealtKey, rowSection, sidebarBuckets, topicRowId, unreadLook, type QueueFilter } from '../lib/queues.ts';
 import { ARCHIVE_FLIGHT_MS, flyToArchive } from '../lib/archive-flight.ts';
 import { reducedMotion } from '../lib/motion.ts';
 import { useFlip } from '../lib/use-flip.ts';
@@ -48,7 +50,7 @@ function topicSnippet(item: TopicListItem): string {
   if (item.statusLine) {
     return item.statusLine.note ? item.statusLine.note : statusLabel(item.statusLine.status);
   }
-  return `${item.openTiles} open · ${item.totalTiles} tiles`;
+  return `${item.unreadTiles} unread · ${plural(item.totalTiles, 'tile')}`;
 }
 
 /** What the unread bubble shows: its look and count, null when all is read. */
@@ -385,7 +387,7 @@ function InboxItem(props: { count: number; active: boolean; onSelect: () => void
       type="button"
       onClick={props.onSelect}
       aria-current={props.active ? 'true' : undefined}
-      title="Topic changes and standing rules the agent proposes"
+      title="Suggestions waiting for you: topic changes and standing rules the agent proposes. Not your GitHub inbox."
       className={`flex items-center gap-2 rounded-row px-2 py-[7px] text-left text-[13px] ${
         props.active ? 'bg-surface font-semibold shadow-active-row' : 'text-ink-2 hover:bg-surface/60'
       }`}
@@ -431,6 +433,14 @@ interface TopicSidebarProps {
   onQueueFilter: (filter: QueueFilter | null) => void;
   filterCounts: Record<QueueFilter, number>;
   viewer: ViewerView | undefined;
+  /** Told the section the open topic's row sits under, held place included, so the breadcrumb names the same one. */
+  onRowSection: (place: RowSection | null) => void;
+}
+
+/** The section the sidebar draws a topic's row under (`rowSection`). */
+export interface RowSection {
+  topicId: string;
+  section: TopicSection;
 }
 
 /**
@@ -530,7 +540,6 @@ function HiddenByFilter(props: { filter: QueueFilter; hidden: number; onShowAll:
 
 /** "Filtering: 2 topics, 5 tiles · Clear", above the topic list while the search bar filters. */
 function FilterHint(props: { topics: number; tiles: number; onClear: () => void }) {
-  const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
   return (
     <p className={`flex items-center gap-1.5 text-[11.5px] text-muted ${TEXT_COLUMN}`}>
       <span>
@@ -569,6 +578,11 @@ export function TopicSidebar(props: TopicSidebarProps) {
   }, [leaving]);
   // Dealt-with topics leave the owner sections, except while the search or a queue filter narrows: filters are for finding things.
   const buckets = useHeldPlace(holdKey, props.activeTopicId, sidebarBuckets(listed, !narrowed), topicRowId);
+  const activeSection = props.activeTopicId === null ? null : rowSection(buckets, props.activeTopicId);
+  const { onRowSection, activeTopicId } = props;
+  useEffect(() => {
+    onRowSection(activeTopicId !== null && activeSection !== null ? { topicId: activeTopicId, section: activeSection } : null);
+  }, [onRowSection, activeTopicId, activeSection]);
   const otherWork = bucketItems(buckets, 'other_work');
   const otherWorkDealt = dealtItems(buckets, 'other_work');
   const otherTopics = otherTopicsGroups(bucketItems(buckets, 'other_topics'));
@@ -624,6 +638,7 @@ export function TopicSidebar(props: TopicSidebarProps) {
       <InboxItem count={props.inboxCount} active={props.inboxOpen} onSelect={props.onOpenInbox} />
       {/* Right above the topics: a busy inbox is where topics go missing. Renders nothing unless busy. */}
       <BusyInboxCard />
+      {!props.error && !narrowed && nothingWaits(props.topics) && <p className={`text-xs text-faint ${TEXT_COLUMN}`}>Nothing waits on you.</p>}
       {filter &&<FilterHint topics={props.shown.length} tiles={filter.tileCount} onClear={props.onClearFilter} />}
       {props.error && <p className={`text-xs text-status-bad ${TEXT_COLUMN}`}>Could not load topics: {props.error}</p>}
       {narrowed && props.shown.length === 0 && props.topics.length > 0 && (

@@ -200,13 +200,26 @@ describe('proposeTopicChange from an outside agent', () => {
     const move = await h.engine.proposeTopicChange({ topicId: 'depot', kind: 'move', prKeys: [top.key], name: null, intoTopicId: 'other', reason: 'same work', dryRun: false }, client);
 
     expect(move).toMatchObject({ status: 'filed', movedPrKeys: [bottom.key, top.key] });
-    expect(move.preview[0]).toBe(`Move 2 PRs from "depot" into "other": ${bottom.key}, ${top.key}.`);
+    expect(move.preview[0]).toBe(`Move 2 open PRs from "depot" into "other": ${bottom.key}, ${top.key}.`);
     expect(h.store.proposals.get(move.proposalId!)).toMatchObject({ kind: 'move', name: null, intoTopicId: 'other', prKeys: [top.key], status: 'pending' });
     expect(h.store.memberships.get(top.key)?.topicId).toBe('depot');
 
     const merge = await h.engine.proposeTopicChange({ topicId: 'depot', kind: 'merge', prKeys: [], name: null, intoTopicId: 'other', reason: 'same work', dryRun: true }, client);
     expect(merge.movedPrKeys).toEqual(expect.arrayContaining([bottom.key, top.key, lone.key]));
     expect(merge.movedPrKeys).toHaveLength(3);
+  });
+
+  it('refuses a rejected move again when it names another layer of the same stack', async () => {
+    const { h } = clockedHarness();
+    const { bottom, top } = await depotWithStack(h);
+    topicWithPrs(h, 'other', [reviewRequestedPr(7)]);
+    await h.engine.sync({ maxAgentCalls: 0 });
+    const move = (prKey: string) => h.engine.proposeTopicChange({ topicId: 'depot', kind: 'move', prKeys: [prKey], name: null, intoTopicId: 'other', reason: 'same work', dryRun: false }, client);
+
+    const first = await move(top.key);
+    await h.engine.decideTopicProposal(first.proposalId!, false);
+
+    expect(await move(bottom.key)).toMatchObject({ status: 'refused', reason: expect.stringContaining('rejected this change') });
   });
 
   it('only previews on a dry run, and refuses a PR from another topic', async () => {

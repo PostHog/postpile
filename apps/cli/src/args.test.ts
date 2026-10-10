@@ -5,13 +5,17 @@ describe('parseArgs', () => {
   it('parses commands and falls back to help', () => {
     expect(parseArgs(['topics'])).toEqual({ name: 'topics' });
     expect(parseArgs(['poll'])).toEqual({ name: 'poll' });
-    expect(parseArgs(['poll', '--now'])).toEqual({ name: 'help' });
+    expect(parseArgs(['poll', '--now'])).toEqual({ name: 'help', problem: 'poll takes no arguments' });
     expect(parseArgs(['sweep'])).toEqual({ name: 'sweep' });
     expect(parseArgs(['setup-draft'])).toEqual({ name: 'setup-draft' });
     expect(parseArgs(['tools'])).toEqual({ name: 'tools' });
     expect(parseArgs(['pr', 'acme/app#1'])).toEqual({ name: 'pr', prKey: 'acme/app#1' });
-    expect(parseArgs(['topic'])).toEqual({ name: 'help' });
-    expect(parseArgs([])).toEqual({ name: 'help' });
+    expect(parseArgs(['topic'])).toEqual({ name: 'help', problem: 'topic needs one topic id, e.g. topic topic-depot' });
+    expect(parseArgs(['pr'])).toEqual({ name: 'help', problem: 'pr needs one PR key, e.g. pr acme/app#1902' });
+    expect(parseArgs(['bogus'])).toEqual({ name: 'help', problem: 'unknown command bogus' });
+    expect(parseArgs(['mcp', '--api', 'nope'])).toEqual({ name: 'help', problem: 'mcp --api needs one http(s) URL' });
+    expect(parseArgs([])).toEqual({ name: 'help', problem: null });
+    expect(parseArgs(['help'])).toEqual({ name: 'help', problem: null });
   });
 
   it('parses sync flags', () => {
@@ -32,14 +36,14 @@ describe('parseArgs', () => {
       name: 'consolidate',
       options: { onlyIfDue: true, maxAgentCalls: 2 },
     });
-    expect(parseArgs(['consolidate', '--now'])).toEqual({ name: 'help' });
+    expect(parseArgs(['consolidate', '--now'])).toEqual({ name: 'help', problem: 'bad flags for consolidate: --now' });
   });
 
   it('rejects bad sync flags', () => {
-    expect(parseArgs(['sync', '--limit', '0'])).toEqual({ name: 'help' });
-    expect(parseArgs(['sync', '--agent-jobs', 'nope'])).toEqual({ name: 'help' });
-    expect(parseArgs(['sync', '--agent-jobs', 'summaries'])).toEqual({ name: 'help' });
-    expect(parseArgs(['sync', '--what'])).toEqual({ name: 'help' });
+    expect(parseArgs(['sync', '--limit', '0'])).toEqual({ name: 'help', problem: 'bad flags for sync: --limit 0' });
+    expect(parseArgs(['sync', '--agent-jobs', 'nope'])).toMatchObject({ name: 'help', problem: expect.stringContaining('bad flags for sync') });
+    expect(parseArgs(['sync', '--agent-jobs', 'summaries'])).toMatchObject({ name: 'help', problem: expect.stringContaining('bad flags for sync') });
+    expect(parseArgs(['sync', '--what'])).toEqual({ name: 'help', problem: 'bad flags for sync: --what' });
   });
 });
 
@@ -64,7 +68,7 @@ describe('withCallCap', () => {
 
 describe('simulate-start flags', () => {
   it('needs --from and has defaults for the rest', () => {
-    expect(parseArgs(['simulate-start'])).toEqual({ name: 'help' });
+    expect(parseArgs(['simulate-start'])).toMatchObject({ name: 'help', problem: expect.any(String) });
     expect(parseArgs(['simulate-start', '--from', '/scratch/db.sqlite'])).toEqual({
       name: 'simulate-start',
       options: { from: '/scratch/db.sqlite', days: 7, roundSize: 60, out: null, arms: ['old', 'combined'], maxAgentCalls: 1000, rounds: null, dryRun: false, now: null },
@@ -77,10 +81,10 @@ describe('simulate-start flags', () => {
       name: 'simulate-start',
       options: { from: 'a.sqlite', days: 3, roundSize: 10, out: '/scratch/out', arms: ['combined'], maxAgentCalls: 0, rounds: 2, dryRun: true, now: '2026-09-29T12:00:00.000Z' },
     });
-    expect(parseArgs(['simulate-start', '--from', 'a.sqlite', '--arms', 'old,old'])).toEqual({ name: 'help' });
-    expect(parseArgs(['simulate-start', '--from', 'a.sqlite', '--arms', 'new'])).toEqual({ name: 'help' });
-    expect(parseArgs(['simulate-start', '--from', 'a.sqlite', '--days', '0'])).toEqual({ name: 'help' });
-    expect(parseArgs(['simulate-start', '--from', 'a.sqlite', '--now', 'soon'])).toEqual({ name: 'help' });
+    expect(parseArgs(['simulate-start', '--from', 'a.sqlite', '--arms', 'old,old'])).toMatchObject({ name: 'help', problem: expect.any(String) });
+    expect(parseArgs(['simulate-start', '--from', 'a.sqlite', '--arms', 'new'])).toMatchObject({ name: 'help', problem: expect.any(String) });
+    expect(parseArgs(['simulate-start', '--from', 'a.sqlite', '--days', '0'])).toMatchObject({ name: 'help', problem: expect.any(String) });
+    expect(parseArgs(['simulate-start', '--from', 'a.sqlite', '--now', 'soon'])).toMatchObject({ name: 'help', problem: expect.any(String) });
   });
 
   it('parses the hidden child command', () => {
@@ -88,6 +92,6 @@ describe('simulate-start flags', () => {
       name: 'simulate-round',
       options: { startAt: '2026-09-29T12:00:00.000Z', keysFile: 'k.json', maxAgentCalls: 5, agentJobs: ['dossiers', 'glances'] },
     });
-    expect(parseArgs(['simulate-round', '--keys', 'k.json'])).toEqual({ name: 'help' });
+    expect(parseArgs(['simulate-round', '--keys', 'k.json'])).toMatchObject({ name: 'help', problem: expect.any(String) });
   });
 });

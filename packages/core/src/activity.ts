@@ -534,12 +534,15 @@ function byTime(a: EventView, b: EventView): number {
   return a.event.at < b.event.at ? -1 : a.event.at > b.event.at ? 1 : 0;
 }
 
-/** "4 bot events", or "4 bot and other events" when review requests between others are in it. */
+/** "4 bot events", or "4 quiet events" when review requests between others are in it; empty for none. */
 export function noiseLabel(noise: EventView[]): string {
+  if (noise.length === 0) {
+    return '';
+  }
   const machineKinds: EventKind[] = ['deploy', 'merge_queue', 'bot_comment'];
   const machine = noise.every((view) => view.event.isBot || machineKinds.includes(view.event.kind));
   const events = noise.length === 1 ? 'event' : 'events';
-  return machine ? `${noise.length} bot ${events}` : `${noise.length} bot and other ${events}`;
+  return machine ? `${noise.length} bot ${events}` : `${noise.length} quiet ${events}`;
 }
 
 function countWord(count: number, word: string, plural = `${word}s`): string {

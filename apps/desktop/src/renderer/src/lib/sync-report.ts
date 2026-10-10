@@ -39,7 +39,7 @@ export function phaseTimingsLine(timings: SyncPhaseTimings | undefined): string 
 export function syncReportDetail(report: SyncReport): string {
   const lines = [
     `Started ${new Date(report.startedAt).toLocaleString()}, took ${durationLabel(report)}`,
-    `Threads ${report.threads}${report.notificationsNotModified ? ' (inbox unchanged)' : ''} · PRs fetched ${report.prsFetched} · found ${report.prsFound} · pulled in ${report.prsPulledIn} · waiting ${report.prsSkipped}`,
+    `Threads in last fetch ${report.threads}${report.notificationsNotModified ? ' (inbox unchanged)' : ''} · PRs fetched ${report.prsFetched} · found ${report.prsFound} · pulled in ${report.prsPulledIn} · waiting ${report.prsSkipped}`,
     `New events ${report.newEvents} · dossiers updated ${report.dossiersUpdated}`,
   ];
   const phases = phaseTimingsLine(report.phaseMs);

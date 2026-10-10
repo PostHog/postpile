@@ -18,6 +18,6 @@ export interface RemoveTeamButton {
 export function removeTeamButtons(teams: string[]): RemoveTeamButton[] {
   return teams.map((team) => {
     const slug = team.split('/').pop() ?? team;
-    return { team, label: `Remove ${slug}`, question: `Remove the review request for all of ${slug} and unsubscribe you?` };
+    return { team, label: `Remove ${slug}`, question: `Remove the review request for all of ${slug}, unsubscribe you and mark it read?` };
   });
 }

@@ -12,6 +12,8 @@ import {
   topicRowId,
   gridGroups,
   headingGroup,
+  headingLabel,
+  rowSection,
   tilesInTierOrder,
   unreadLook,
   visibleQueueFilters,
@@ -120,6 +122,16 @@ describe('holding the open topic row in place', () => {
     expect(bucketItems(shown, 'you_drive')).toEqual([]);
     // Once the selection moves, nothing is held and the real layout shows.
     expect(holdPlace(after, null, topicRowId)).toEqual(after);
+  });
+
+  // Bug fixed 2026-10-10 (BOARD-A-07): the breadcrumb named the new section while the sidebar held the old one.
+  it('names the section the row is drawn under, held place and dealt-with rows included', () => {
+    const before = sidebarBuckets([item('cache', { to_review: 1 }, {}, 'to_review')], true);
+    const after = sidebarBuckets([item('cache', { rest: 1 }, {}, 'you_drive')], true);
+    expect(rowSection(holdPlace(after, placeIn(before, 'cache', topicRowId), topicRowId), 'cache')).toBe('to_review');
+    expect(rowSection(after, 'cache')).toBe('you_drive');
+    expect(rowSection(sidebarBuckets([item('done', { rest: 1 }, { quiet: true }, 'you_drive')], true), 'done')).toBe('you_drive');
+    expect(rowSection(after, 'gone')).toBeNull();
   });
 });
 
@@ -300,6 +312,21 @@ describe('headingGroup', () => {
     expect(headingGroup('unread', ['unread', 'dealt_with'])).toBe('unread');
     expect(headingGroup('unread', ['open', 'dealt_with'])).toBe('unread');
     expect(headingGroup('unread', [])).toBe('unread');
+  });
+});
+
+describe('headingLabel', () => {
+  // Bug fixed 2026-10-10 (BOARD-A-10): a topic showed two "Dealt with" headings after a read in place.
+  it('says "Just read" instead of a second heading for a group already on screen', () => {
+    expect(headingLabel('unread', 'dealt_with', ['unread', 'dealt_with'])).toBe('Just read');
+    expect(headingLabel('unread', 'open', ['unread', 'open'])).toBe('Just read');
+    expect(headingLabel('open', 'dealt_with', ['open', 'dealt_with'])).toBe('Now dealt with');
+  });
+
+  it('names the group it shows otherwise', () => {
+    expect(headingLabel('unread', 'dealt_with', ['unread'])).toBe('Dealt with');
+    expect(headingLabel('unread', 'unread', ['unread', 'dealt_with'])).toBe('Unread');
+    expect(headingLabel('open', 'open', ['open'])).toBe('Open');
   });
 });
 

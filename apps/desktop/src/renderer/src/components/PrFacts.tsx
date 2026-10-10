@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import type { PrPaneView } from '@postpile/core';
 import { mergeStatus } from '../lib/pr.ts';
-import { ageLabel } from '../lib/time.ts';
+import { whenLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
 import { SectionLabel } from './SectionLabel.tsx';
 
@@ -35,7 +35,7 @@ export function PrFacts(props: { pr: PrPaneView; agentApprovers: string[] }) {
   const now = useNow();
   const { pr } = props;
   const pushedAt = pr.lastCommitAt;
-  const age = pr.mergedAt ? `merged ${ageLabel(pr.mergedAt, now)}` : `opened ${ageLabel(pr.createdAt, now)}`;
+  const age = pr.mergedAt ? `merged ${whenLabel(pr.mergedAt, now)}` : `opened ${whenLabel(pr.createdAt, now)}`;
   return (
     <div className="grid grid-cols-2 gap-x-6 gap-y-3.5 px-3">
       <Fact label="Size">
@@ -58,7 +58,7 @@ export function PrFacts(props: { pr: PrPaneView; agentApprovers: string[] }) {
           {pushedAt && !pr.mergedAt && (
             <>
               <span className="text-ghost">·</span>
-              <span className="text-hint">pushed {ageLabel(pushedAt, now)}</span>
+              <span className="text-hint">pushed {whenLabel(pushedAt, now)}</span>
             </>
           )}
         </span>

@@ -113,6 +113,15 @@ const WHO: Record<ActionOrigin, string> = {
   agent: 'an outside agent',
 };
 
+/** Where a queued mark-read came from, for "marked read after the 6s undo window, from a tile". */
+const FROM_PLACE: Partial<Record<ActionOrigin, string>> = {
+  tile: 'a tile',
+  detail: 'the detail pane',
+  debug: 'this view',
+  cleanup: 'the inbox cleanup',
+  agent: 'an outside agent',
+};
+
 /**
  * - app: the app reached GitHub
  * - local: only the app's own state changed
@@ -143,6 +152,10 @@ function markReadText(last: ActionLogEntry, decidedBy: ActionLogEntry | null): {
         // Handled quietly: the detail names the bots, or says what the user did ("you approved after it", "opened in PostPile").
         const why = last.detail.startsWith(QUIET_BOTS_PREFIX) ? 'only bot activity since your last read' : last.detail;
         return { text: `marked read by PostPile: ${why}`, tone: 'app' };
+      }
+      if (last.origin === 'queue' && decidedBy) {
+        const place = FROM_PLACE[decidedBy.origin];
+        return { text: place ? `marked read after the 6s undo window, from ${place}` : `marked read after the 6s undo window, queued by ${WHO[decidedBy.origin]}`, tone: 'app' };
       }
       return { text: `marked read by ${who}${decidedBy ? `, queued by ${WHO[decidedBy.origin]}` : ''}`, tone: 'app' };
     case 'queued':
@@ -239,7 +252,7 @@ function entryText(last: ActionLogEntry, decidedBy: ActionLogEntry | null): { te
 
 /**
  * What led to the row's read state, from the action log: "marked read by
- * the deferred queue, queued by you in a tile · 3m ago". A read thread the
+ * the 6s undo window, from a tile · 3m ago". A read thread the
  * app never touched reads as read somewhere else. Null for an unread thread
  * with nothing logged.
  */

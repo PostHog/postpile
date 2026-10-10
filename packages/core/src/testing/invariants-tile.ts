@@ -400,8 +400,13 @@ export const donePrIsNeverYourMove: Invariant = {
   },
 };
 
-function onlyOpen(pane: PaneOffers): boolean {
-  return pane.lead === 'none' && !pane.approve && !pane.ask && pane.markLabel === null && pane.removeTeams.length === 0;
+/** Approve on a done PR only as "Approve again": an open PR the viewer approved. */
+function approveOnlyAgain(pane: PaneOffers, row: PrSummary): boolean {
+  return !pane.approve || row.primaryAction === 'approved';
+}
+
+function onlyOpen(pane: PaneOffers, row: PrSummary): boolean {
+  return pane.lead === 'none' && approveOnlyAgain(pane, row) && !pane.ask && pane.markLabel === null && pane.removeTeams.length === 0;
 }
 
 export const doneTileOffersOnlyOpen: Invariant = {
@@ -412,7 +417,7 @@ export const doneTileOffersOnlyOpen: Invariant = {
       ensure(footer === 'open' && markLabel === null && !snooze && github === null, `${view.tile.id}: done tile footer ${footer}, mark ${markLabel}, snooze ${snooze}`);
       for (const row of view.prs) {
         const pane = view.offers.pane[row.key]!;
-        ensure(onlyOpen(pane) && !pane.snooze, `${row.key}: done tile pane leads with ${pane.lead}`);
+        ensure(onlyOpen(pane, row) && !pane.snooze, `${row.key}: done tile pane leads with ${pane.lead}`);
       }
     }
   },
@@ -425,9 +430,9 @@ export const donePrOffersOnlyOpen: Invariant = {
     for (const view of views) {
       for (const row of view.prs.filter((candidate) => candidate.done)) {
         const pane = view.offers.pane[row.key]!;
-        ensure(!pane.approve && !pane.ask && pane.removeTeams.length === 0, `${row.key}: done PR offers Approve, Ask or Remove team`);
+        ensure(approveOnlyAgain(pane, row) && !pane.ask && pane.removeTeams.length === 0, `${row.key}: done PR offers Approve, Ask or Remove team`);
         if (row.unseenLoudEvents === 0 && !row.unreadOnGitHub) {
-          ensure(onlyOpen(pane), `${row.key}: done PR with nothing unseen leads with ${pane.lead}`);
+          ensure(onlyOpen(pane, row), `${row.key}: done PR with nothing unseen leads with ${pane.lead}`);
         } else if (view.state.kind !== 'done') {
           ensure(pane.markLabel !== null, `${row.key}: done PR with unseen news or an unread thread offers no mark button`);
         }
@@ -453,14 +458,31 @@ export const snoozedAllDoneLeadsWithOpen: Invariant = {
   },
 };
 
-/** Snooze leads the footer exactly on a read tile that is still your move, with the GitHub link next to it. */
+/**
+ * Snooze leads the footer exactly on a read tile that is still your move, or
+ * that a mark-read leaves not done while nothing on it is unread, with the
+ * GitHub link next to it.
+ */
 export const snoozeLeadsOnlyWhileYourMove: Invariant = {
-  name: 'Snooze leads the footer exactly on an open tile that is your move',
+  name: 'Snooze leads the footer exactly on an open tile that is your move, or has nothing to mark and stays not done',
   check(_board, views) {
     for (const view of views) {
-      const expected = view.state.kind === 'open' && view.turn.kind === 'you';
+      const nothingUnread = view.prs.every((row) => row.unseenLoudEvents === 0 && !row.unreadOnGitHub);
+      const expected = view.state.kind === 'open' && (view.turn.kind === 'you' || (!view.afterRead.done && nothingUnread));
       ensure((view.offers.footer === 'snooze') === expected, `${view.tile.id}: footer ${view.offers.footer}, state ${view.state.kind}, turn ${view.turn.kind}`);
       ensure((view.offers.github !== null) === (view.offers.footer === 'snooze' && view.prs.some((row) => row.url !== '')), `${view.tile.id}: GitHub link without Snooze`);
+    }
+  },
+};
+
+/** An open tile with nothing unread on any PR never offers "Mark read": there is nothing to mark (B-A-05). */
+export const readTileNeverOffersMarkRead: Invariant = {
+  name: 'an open tile with nothing unread never offers Mark read',
+  check(_board, views) {
+    for (const view of views) {
+      if (view.state.kind === 'open' && view.prs.every((row) => row.unseenLoudEvents === 0 && !row.unreadOnGitHub)) {
+        ensure(view.offers.footer !== 'mark_read', `${view.tile.id}: Mark read with nothing unread`);
+      }
     }
   },
 };
@@ -630,6 +652,7 @@ export const TILE_INVARIANTS: readonly Invariant[] = [
   donePrOffersOnlyOpen,
   snoozedAllDoneLeadsWithOpen,
   snoozeLeadsOnlyWhileYourMove,
+  readTileNeverOffersMarkRead,
   markDoneNeverLeavesAMove,
   dotIffPrUnread,
   unreadTileHasADot,

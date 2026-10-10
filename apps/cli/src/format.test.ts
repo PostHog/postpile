@@ -13,6 +13,10 @@ describe('format over the fake engine', () => {
     const topicText = formatTopic(topic!);
     expect(topicText).toContain('[unread] set: Four PRs change how Turbo caches');
     expect(topicText).toContain('! acme/app#1902: lyra asked you');
+    // A merged or closed stack layer says so; an open one has no state word.
+    expect(topicText).toMatch(/acme\/app#1851  .*  \(merged, /);
+    expect(topicText).toMatch(/acme\/app#1930  .*  \(closed, /);
+    expect(topicText).not.toMatch(/acme\/app#1902  .*  \(open, /);
 
     const safe = await engine.getPr('acme/app#1921');
     expect(formatPr(safe!, await engine.listPrEvents('acme/app#1921'))).toContain('LOOKS_SAFE: Landing it apart from #1904');

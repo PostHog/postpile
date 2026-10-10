@@ -247,7 +247,7 @@ export function ghStatus(state: GhState, path: string | null, version = ''): Too
       return {
         ...base,
         headline: 'GitHub CLI (gh) not found',
-        detail: `PostPile reads GitHub through gh, so nothing can sync until it is installed and logged in. Tiles you already have stay as they are. ${TOOL_PATH_HINT}`,
+        detail: `PostPile reads GitHub through gh, so nothing can sync until it is installed and logged in. ${TOOL_PATH_HINT}`,
         fixes: [
           { label: 'Install it', command: TOOL_FIXES.installGh },
           { label: 'Log in', command: TOOL_FIXES.ghLogin },
@@ -276,7 +276,7 @@ export function ghStatus(state: GhState, path: string | null, version = ''): Too
 
 /** The words and fixes for a claude state. */
 export function claudeStatus(state: ClaudeState, path: string | null, version = '', retryAt: IsoTime | null = null): ToolStatus<ClaudeState> {
-  const rulesOnly = 'Tiles, whose turn and notifications still work on rules. Topics, dossiers, glances and chat need the Claude Code CLI.';
+  const rulesOnly = 'Tiles, whose turn and notifications still work on rules. Topics, dossiers and glances stop updating and chat is off until the Claude Code CLI works.';
   const base = { state, path, retryAt: null };
   switch (state) {
     case 'ok':

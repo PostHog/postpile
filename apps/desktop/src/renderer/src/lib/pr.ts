@@ -65,8 +65,22 @@ export function capitalize(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-/** What stands between the PR and a merge, in a few words. `agentApprovers` as in `approvedText`. */
-export function mergeStatus(pr: Pick<PrPaneView, 'state' | 'mergedBy' | 'isDraft' | 'reviewDecision'>, agentApprovers: string[]): string {
+/**
+ * Reviewers still asked, teams by slug ("acme/team-platform" reads
+ * "team-platform"), then people.
+ */
+function stillAsked(pr: Pick<PrPaneView, 'reviewerTeams' | 'reviewerUsers'>): string[] {
+  return [...pr.reviewerTeams.map((team) => team.split('/').pop() ?? team), ...pr.reviewerUsers];
+}
+
+/**
+ * What stands between the PR and a merge, in a few words. `agentApprovers`
+ * as in `approvedText`. GitHub says approved while a request is still
+ * pending, so the line names who is still asked ("approved · team-platform
+ * still asked", B-A-12): next to a waiting team, "approved" alone read as
+ * a contradiction.
+ */
+export function mergeStatus(pr: Pick<PrPaneView, 'state' | 'mergedBy' | 'isDraft' | 'reviewDecision' | 'reviewerTeams' | 'reviewerUsers'>, agentApprovers: string[]): string {
   if (pr.state === 'MERGED') {
     return pr.mergedBy ? `merged by ${pr.mergedBy}` : 'merged';
   }
@@ -77,7 +91,8 @@ export function mergeStatus(pr: Pick<PrPaneView, 'state' | 'mergedBy' | 'isDraft
     return 'draft';
   }
   if (pr.reviewDecision === 'APPROVED') {
-    return approvedText(agentApprovers);
+    const asked = stillAsked(pr);
+    return asked.length === 0 ? approvedText(agentApprovers) : `${approvedText(agentApprovers)} · ${asked.join(', ')} still asked`;
   }
   if (pr.reviewDecision === 'CHANGES_REQUESTED') {
     return 'changes requested';

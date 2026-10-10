@@ -172,6 +172,28 @@ describe('prNotesView', () => {
     expect(view.replaced?.id).toBe('n1');
   });
 
+  it('drops the replaced note once the note that replaced it is gone', () => {
+    const old = note({ seq: 1, id: 'n1', supersededBy: 'n2' });
+    const cleared = note({ seq: 2, id: 'n2', clearedAt: at(15), clearedBy: 'user' });
+    const lease = note({ seq: 3, id: 'l1', slot: 'lease', kind: 'in_progress', expiresAt: at(120) });
+    expect(prNotesView(KEY, 't', [old, cleared], read(at(20))).replaced).toBeNull();
+    // A lease of its own does not bring back a durable note's history.
+    expect(prNotesView(KEY, 't', [old, cleared, lease], read(at(20))).replaced).toBeNull();
+  });
+
+  it('says whether a person reviewed the covering PR', () => {
+    const covered = note({ kind: 'covered', coveredByPrKey: COVER, coverAnchor: noteAnchor(makePr({ number: 2 })) });
+    const unreviewed = makePr({ number: 2 });
+    const byBot = makePr({ number: 2, reviews: [makeReview({ author: 'coderabbitai[bot]', state: 'COMMENTED' })] });
+    const byPerson = makePr({ number: 2, reviews: [makeReview({ author: 'bob', state: 'APPROVED' })] });
+    const view = (cover: FullPr | null) => prNotesView(KEY, 't', [covered], { now: at(20), anchorOf: anchors({ [KEY]: basePr(), ...(cover ? { [COVER]: cover } : {}) }), fetchedAtOf: () => at(0) }).durable;
+    expect(view(unreviewed)?.coverReviewed).toBe(false);
+    expect(view(byBot)?.coverReviewed).toBe(false);
+    expect(view(byPerson)?.coverReviewed).toBe(true);
+    expect(view(null)?.coverReviewed).toBeNull();
+    expect(prNotesView(KEY, 't', [note()], read(at(20))).durable?.coverReviewed).toBeNull();
+  });
+
   it('shows a stale note with its reasons, and a cleared one not at all', () => {
     const stale = prNotesView(KEY, 't', [note()], { ...read(at(20)), anchorOf: anchors({ [KEY]: basePr({ headOid: 'x' }) }) });
     expect(stale.durable).toMatchObject({ status: 'stale', staleReasons: ['head changed'] });
@@ -274,9 +296,9 @@ describe('planNoteRenew and planNoteClear', () => {
     expect(planNoteRenew(null, 30, at(30))).toMatchObject({ reason: 'no note with that id' });
   });
 
-  it('clears once, answers a second clear the same way, and never brings back a replaced note', () => {
+  it('clears once, says who cleared it first on a second clear, and never brings back a replaced note', () => {
     expect(planNoteClear(note())).toEqual({ kind: 'clear' });
-    expect(planNoteClear(note({ clearedAt: at(30) }))).toEqual({ kind: 'already' });
+    expect(planNoteClear(note({ clearedAt: at(30), clearedBy: 'user' }))).toEqual({ kind: 'already', by: 'user', at: at(30) });
     expect(planNoteClear(note({ supersededBy: 'n2' }))).toMatchObject({ kind: 'refused' });
   });
 });

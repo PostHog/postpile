@@ -1,7 +1,7 @@
 import type { TileView } from '@postpile/core';
 import { stackQueueWord } from '../lib/pr.ts';
 import { stackPlaces } from '../lib/stacks.ts';
-import { kindParts, sameForWhom } from '../lib/tiles.ts';
+import { kindCountText, kindParts, sameForWhom } from '../lib/tiles.ts';
 import { BackIcon, ForwardIcon, KindIcon } from './icons.tsx';
 import { PrRow } from './PrRow.tsx';
 
@@ -48,6 +48,7 @@ export function DetailContext(props: DetailContextProps) {
   const places = stackPlaces(view.tile.stacks);
   const now = new Date();
   const kind = kindParts(view);
+  const kindCount = kindCountText(view);
   const index = Math.max(
     view.prs.findIndex((pr) => pr.key === props.prKey),
     0,
@@ -67,10 +68,10 @@ export function DetailContext(props: DetailContextProps) {
         <span className="flex shrink-0 items-center gap-2 text-[12.5px] font-semibold whitespace-nowrap text-accent">
           <KindIcon kind={view.tile.kind} size={14} className="mx-[3px] shrink-0" />
           {kind.word}
-          {kind.count !== null && (
+          {kindCount !== null && (
             <>
               <span className="text-set-sep">·</span>
-              <span className="font-mono text-[11px] font-semibold tabular-nums">{kind.count}</span>
+              <span className="font-mono text-[11px] font-semibold tabular-nums">{kindCount}</span>
             </>
           )}
         </span>

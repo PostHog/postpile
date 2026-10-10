@@ -1,5 +1,5 @@
 import type { WorkContextInputStats, WorkContextSource, WorkContextView } from '@postpile/core';
-import { ageLabel } from './time.ts';
+import { whenLabel } from './time.ts';
 
 const KIND_LABELS: Record<WorkContextSource['kind'], string> = {
   claude_md: 'CLAUDE.md',
@@ -52,6 +52,6 @@ export function sweepStatus(view: WorkContextView, now: Date): string {
   if (view.running) {
     return 'Reading your notes… this takes a minute or two.';
   }
-  const updated = view.current ? `Updated ${ageLabel(view.current.createdAt, now)} ago (v${view.current.version})` : 'Not written yet';
+  const updated = view.current ? `Updated ${whenLabel(view.current.createdAt, now)} (v${view.current.version})` : 'Not written yet';
   return view.lastError ? `${updated}. The last refresh failed, so this is the previous version.` : `${updated}.`;
 }

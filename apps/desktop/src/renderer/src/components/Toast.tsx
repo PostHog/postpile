@@ -39,7 +39,7 @@ export function Toast(props: { onShowActionLog: () => void }) {
           type="button"
           title="Snooze this tile until the author pushes again. Local only, nothing goes to GitHub."
           className="font-semibold whitespace-nowrap underline-offset-2 hover:underline"
-          onClick={() => void actions.snooze(snoozeTileId, { kind: 'new_push' })}
+          onClick={() => void actions.snooze(snoozeTileId, { kind: 'new_push' }, false)}
         >
           Snooze until next push
         </button>

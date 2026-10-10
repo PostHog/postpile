@@ -79,7 +79,7 @@ describe('notification debug helpers', () => {
   it('says what led to a read state, from the action log', () => {
     const sent = entry({ id: 2, origin: 'queue', outcome: 'github' });
     expect(actionLine({ ...row({ unread: false }), lastAction: sent, decidedBy: entry({}) }, NOW)?.text).toBe(
-      'marked read by the deferred queue, queued by you in a tile · 3m ago',
+      'marked read after the 6s undo window, from a tile · 3m ago',
     );
     expect(actionLine({ ...row({}), lastAction: entry({ outcome: 'local', detail: 'GitHub writes are off' }) }, NOW)?.text).toBe(
       'stayed local: read-only · marked read by you in a tile · 3m ago',

@@ -44,6 +44,8 @@ export function SnoozeMenu(props: {
   partlyMuted?: boolean;
   /** Core's `TileOffers.unmuteRest`: the tile is back while some of its PRs are still muted. */
   unmuteRest?: boolean;
+  /** The tile is unread on GitHub (`TileView.group` is unread): only then the snooze toast says it stays unread. */
+  unread?: boolean;
   size?: ButtonSize;
   up?: boolean;
   /** `right` where the button sits at a column's right edge (the tile footer), so the list opens inwards. */
@@ -79,12 +81,12 @@ export function SnoozeMenu(props: {
   }
   const items: MenuItem[] = OPTIONS.map((option) => ({
     label: option.label,
-    onSelect: () => void actions.snooze(props.tileId, option.condition()),
+    onSelect: () => void actions.snooze(props.tileId, option.condition(), props.unread === true),
   }));
   items.push({
     label: "Mute until I'm mentioned",
     title: actions.blockedReason('mute') ?? [MUTE_TITLE, markReadNote(actions.writes)].filter(Boolean).join(' '),
-    onSelect: () => void actions.snooze(props.tileId, { kind: 'muted' }),
+    onSelect: () => void actions.snooze(props.tileId, { kind: 'muted' }, false),
   });
   if (props.unmuteRest) {
     items.push({

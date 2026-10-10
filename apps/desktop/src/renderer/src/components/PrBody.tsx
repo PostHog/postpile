@@ -88,9 +88,9 @@ function StateLine(props: { pr: PrBodyProps['detail']['pr']; status: PrStatus; s
   const review = queue ? null : (props.stackQueue ?? reviewWord(status));
   return (
     <div className="flex items-center gap-2.5">
-      <span title={words.title} className={`flex min-w-0 items-center gap-2 text-[12.5px] font-semibold ${ICON_TEXT_TONES[status.icon]}`}>
+      <span title={words.title} className={`flex shrink-0 items-center gap-2 text-[12.5px] font-semibold ${ICON_TEXT_TONES[status.icon]}`}>
         <PrStateIcon state={status.icon} title={words.title} size={14} className="mx-[3px]" />
-        <span className="truncate">{words.text}</span>
+        <span>{words.text}</span>
       </span>
       {status.mergeQueue && <span className="shrink-0 text-[11px] text-hint">since {sinceLabel(status.mergeQueue.since, now)}</span>}
       {review && <StateWordLabel word={review} size="md" />}
@@ -186,7 +186,7 @@ export function PrBody(props: PrBodyProps) {
                   <StackMark place={place} />
                 </span>
               )}
-              <h2 className="min-w-0 text-[16px] leading-[1.3] font-[650] tracking-[-0.016em] text-balance select-text">{pr.title}</h2>
+              <h2 className="min-w-0 text-[16px] leading-[1.3] [overflow-wrap:anywhere] font-[650] tracking-[-0.016em] text-balance select-text">{pr.title}</h2>
             </div>
             <BranchLine pr={pr} place={place} />
             <QueueFailure status={props.detail.status} />

@@ -13,10 +13,7 @@ import {
   type InboxCleanupView,
   type MergedPick,
 } from '@postpile/core';
-
-function plural(count: number, one: string, many: string): string {
-  return `${count} ${count === 1 ? one : many}`;
-}
+import { plural } from './plural.ts';
 
 /**
  * The sidebar footer line: a running cleanup's progress, else the unread
@@ -78,7 +75,7 @@ export function dialogLead(mode: CleanupDialogMode, counts: CleanupCounts): Lead
     case 'vacation':
       return [`You were away ${mode.awayDays} days. Merged PRs you didn't catch up on grew to `, merged, '.'];
     case 'first_run':
-      return ['Your GitHub inbox has ', { count: counts.unread }, ' unread threads, ', merged, ' of them on merged PRs.'];
+      return ['Your GitHub inbox has ', { count: counts.unread }, ' unread GitHub threads, ', merged, ' of them on merged PRs.'];
     case 'sidebar':
       return ["Merged PRs you didn't catch up on: ", merged, '. Older notifications: ', { count: counts.olderThan14 }, '.'];
   }

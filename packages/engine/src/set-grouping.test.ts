@@ -141,7 +141,8 @@ describe('lasting sets', () => {
     expect(changes(h)).toContain('merged - (agent): into "Cache keys": both are the same cache rework now');
   });
 
-  it('lets a member that moved to another topic leave by rule', async () => {
+  // Bug fixed 2026-10-10 (builder 12): the moved PR stayed in the old set tile until the next sync.
+  it('takes a member the user moved to another topic out of the set at once', async () => {
     const prs = [reviewRequestedPr(1), reviewRequestedPr(2), reviewRequestedPr(3)];
     const { h, setId } = await depotWithSet(prs);
     h.runner.answer('set_grouping', { joins: [{ setId, prKey: prs[2]!.key, reason: 'same change' }] });
@@ -150,10 +151,23 @@ describe('lasting sets', () => {
     h.store.topics.create(makeTopic('billing'));
 
     await h.engine.giveFeedback({ kind: 'wrong_topic', tileId: `set:${setId}`, prKey: prs[2]!.key, targetTopicId: 'billing', note: '' });
-    await h.engine.sync({ agentJobs: ['sets'] });
 
     expect(h.store.sets.get(setId)?.members.map((m) => m.prKey)).toEqual([prs[0]!.key, prs[1]!.key]);
-    expect(changes(h)[0]).toBe('left acme/app#3 (rules): moved to another topic');
+    expect(changes(h)[0]).toBe('left acme/app#3 (user): moved to another topic');
+    const depot = (await h.engine.getTopic('depot'))?.tiles.flatMap((view) => view.tile.members.map((m) => m.prKey));
+    expect(depot).not.toContain(prs[2]!.key);
+    await h.engine.sync({ agentJobs: ['sets'] });
+    expect(h.store.sets.get(setId)?.members.map((m) => m.prKey)).toEqual([prs[0]!.key, prs[1]!.key]);
+  });
+
+  it('ends a set of two when the user moves one of them away, also without a target', async () => {
+    const prs = [reviewRequestedPr(1), reviewRequestedPr(2)];
+    const { h, setId } = await depotWithSet(prs);
+
+    await h.engine.giveFeedback({ kind: 'wrong_topic', tileId: `set:${setId}`, prKey: prs[1]!.key, targetTopicId: null, note: '' });
+
+    expect(h.store.sets.get(setId)?.status).not.toBe('active');
+    expect(changes(h).slice(0, 2)).toEqual(['ended - (user): fewer than two PRs left', 'left acme/app#2 (user): moved to another topic']);
   });
 
   it('records "not related" as the user taking a PR out', async () => {
