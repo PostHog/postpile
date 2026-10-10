@@ -219,7 +219,7 @@ import {
   type QuietReadView,
   withViewerReaction,
 } from '@postpile/core';
-import { AgentRefresher, approveNoteBody, AutoSyncSchedule, LivePoller, MemoryPingHold, NEW_COMMITS_SINCE_LOOKED, nextApproveOpener, PingDelivery, topicChatId, UNSORTED_TOPIC_ID, type AutoSyncOptions, type EngineService, type GitHubQuota, type LivePollOptions, type PollCycle } from '@postpile/engine';
+import { AgentRefresher, approveNoteBody, AutoSyncSchedule, LivePoller, MemoryPingHold, NEW_COMMITS_SINCE_LOOKED, nextApproveOpener, NoteCoverReader, PingDelivery, topicChatId, UNSORTED_TOPIC_ID, type AutoSyncOptions, type EngineService, type GitHubQuota, type LivePollOptions, type PollCycle } from '@postpile/engine';
 import { FakeCatchUp } from './fake-catch-up.ts';
 import { FakeInstructions } from './fake-instructions.ts';
 import { FakeLessons } from './fake-lessons.ts';
@@ -227,6 +227,7 @@ import { FakeSetup } from './fake-setup.ts';
 import { FakeTeamRoles } from './fake-team-roles.ts';
 import { FakeMcp } from './fake-mcp.ts';
 import { FakeTopicChanges } from './fake-topic-changes.ts';
+import { FakeNoteCover, FAKE_COVER_WAIT_MS } from './fake-note-cover.ts';
 import { FakePrNotes } from './fake-pr-notes.ts';
 import type { FakeExtra } from './fake-extras.ts';
 import { fakeQuota, type FakeQuotaLevel } from './fake-quota.ts';
@@ -447,7 +448,16 @@ export class FakeEngine implements EngineService {
     this.checkDelayMs = options.setupStepMs ?? 700;
     this.memory = new FakeMemory(this.data, this.now);
     this.topicChanges = new FakeTopicChanges(this.data, this.now);
-    this.prNotes = new FakePrNotes(this.data, this.now, (key) => this.fetchedAtOf(key));
+    const noteCover = new FakeNoteCover(this.data, this.now, (key) => this.fetchedAt.set(key, this.timestamp()));
+    // The engine's own reader: its hourly cap, quota check and pending answer, over the sample's stand-in for GitHub.
+    const coverReader = new NoteCoverReader({
+      now: this.now,
+      quota: this.quota,
+      pausedReason: () => this.githubPausedReason(),
+      read: (cover, notedKey) => noteCover.read(cover, notedKey),
+      waitMs: FAKE_COVER_WAIT_MS,
+    });
+    this.prNotes = new FakePrNotes(this.data, this.now, (key) => this.fetchedAtOf(key), coverReader);
     this.prNotes.seed();
     this.agentRefresher = new AgentRefresher({
       now: this.now,
@@ -566,6 +576,14 @@ export class FakeEngine implements EngineService {
   }
 
   /** Sample PRs count as fetched SAMPLE_FETCH_AGE_MS before the engine started, until a fake refresh moves them. */
+  /** Like the engine's: why nothing is read from GitHub now (setup open, gh not usable), or null. */
+  private githubPausedReason(): string | null {
+    if (this.setup.status().needed) {
+      return 'setup not finished';
+    }
+    return this.toolStatus.view().canSync ? null : 'gh is not usable (sample data)';
+  }
+
   private fetchedAtOf(prKey: PrKey): string {
     return this.fetchedAt.get(prKey) ?? new Date(this.startedAt.getTime() - SAMPLE_FETCH_AGE_MS).toISOString();
   }

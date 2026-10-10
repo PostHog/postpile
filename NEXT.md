@@ -2554,6 +2554,10 @@ POSTPILE_FAKE=1 POSTPILE_TOKEN=devtok PORT=4877 pnpm server
 POSTPILE_TOKEN=devtok pnpm cli mcp --api http://127.0.0.1:4877   # stdio MCP over that server's engine
 ```
 
+`note_pr` `covered_by` outside the sample: `acme/app#1000`-`#1999` are
+read once as pulled-in PRs, `#90000`+ are missing on GitHub, `#1777`
+answers pending once; anything else is refused.
+
 Env switches:
 
 - `POSTPILE_READ_ONLY=1`: real reads, every GitHub write refused, the
