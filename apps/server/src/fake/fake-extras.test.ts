@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { FakeEngine } from './fake-engine.ts';
 import { fakeExtras, type FakeExtra } from './fake-extras.ts';
 import { BOARD_TOPIC } from './sample-pack-board.ts';
+import { CALM_TOPIC } from './sample-pack-calm.ts';
 import { STRESS_BIG_NUMBER, STRESS_LONG_TITLE, STRESS_TOPIC, STRESS_TOPIC_NAME } from './sample-pack-stress.ts';
 
 const NOW = new Date('2026-09-29T12:00:00Z');
@@ -56,7 +57,7 @@ describe('fakeExtras', () => {
 });
 
 // The same checks as rules-invariants.test.ts, over the default sample plus each pack.
-describe.each<FakeExtra>(['board', 'stress'])('rules agree with POSTPILE_FAKE_EXTRA=%s', (extra) => {
+describe.each<FakeExtra>(['board', 'stress', 'calm'])('rules agree with POSTPILE_FAKE_EXTRA=%s', (extra) => {
   it('a done tile offers only Open', async () => {
     for (const view of await allTiles(engineWith(extra))) {
       if (view.state.kind !== 'done') {
@@ -239,5 +240,30 @@ describe('POSTPILE_FAKE_EXTRA=stress', () => {
     expect(dossier?.timeline).toHaveLength(DOSSIER_LIMITS.timeline);
     expect(dossier?.recentChanges).toHaveLength(DOSSIER_LIMITS.recentChanges);
     expect(dossier?.userCares).toHaveLength(DOSSIER_LIMITS.userCares);
+  });
+});
+
+describe('POSTPILE_FAKE_EXTRA=calm', () => {
+  it('replaces the sample with topics where nothing is left for you', async () => {
+    const engine = engineWith('calm');
+    const items = await engine.listTopics();
+    expect(items.map((item) => item.topic.id).toSorted()).toEqual(Object.values(CALM_TOPIC).toSorted());
+    expect(items.reduce((sum, item) => sum + item.unreadTiles, 0)).toBe(0);
+    expect(items.every((item) => item.quiet && item.yourMoves.length === 0)).toBe(true);
+    expect(await engine.listFinishedTopics()).toEqual([]);
+  });
+
+  it('offers Archive now on the merged topics, and holds one topic with only a snoozed tile', async () => {
+    const engine = engineWith('calm');
+    for (const id of [CALM_TOPIC.lintConfig, CALM_TOPIC.runnerCleanup, CALM_TOPIC.docsCache]) {
+      expect((await engine.getTopic(id))?.archive?.state, id).toBe('ready');
+    }
+    const snoozed = await engine.getTopic(CALM_TOPIC.flagCleanup);
+    expect(snoozed?.tiles.map((view) => view.state.kind)).toEqual(['snoozed']);
+    expect(snoozed?.dossier).toBeNull();
+  });
+
+  it('refuses to start next to another pack', () => {
+    expect(() => engineWith('calm', 'board')).toThrow(/cannot be combined/);
   });
 });

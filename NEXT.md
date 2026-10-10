@@ -2602,7 +2602,12 @@ Env switches:
   emoji, backticks, `<>` and a 96-character token, a topic name over 64
   characters, #12345 in a long repo name, five assignees, "Monorepo test
   sharding" with 25 tiles and 30 PRs by eight authors and a dossier at
-  every `DOSSIER_LIMITS` bound):
+  every `DOSSIER_LIMITS` bound). `calm`: replaces the default sample with
+  a tiny one where everything is read and dealt with (three merged topics
+  showing Archive now, one topic holding only a snoozed tile, 0 unread);
+  the server refuses to start when it is combined with another pack. The
+  thread-only inbox pile (fake-notifications.ts, "24 merged PRs · Clear")
+  still shows with it:
 
   ```
   POSTPILE_FAKE=1 POSTPILE_FAKE_EXTRA=board POSTPILE_TOKEN=devtok PORT=4877 pnpm server

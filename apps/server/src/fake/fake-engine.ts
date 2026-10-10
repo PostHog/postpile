@@ -438,6 +438,9 @@ export class FakeEngine implements EngineService {
     this.busy = options.busy ?? false;
     this.catchUpGate = options.catchUpGate ?? false;
     this.data = buildSampleData(this.now(), options.extras);
+    for (const snooze of this.data.snoozes ?? []) {
+      this.snoozes.set(snooze.prKey, snooze);
+    }
     const catchUpStepMs = options.catchUpStepMs ?? 4000;
     this.catchUp = new FakeCatchUp(this.data, this.now, { queuedMs: catchUpStepMs, writingMs: catchUpStepMs * 1.5 });
     this.toolStatus = new FakeTools(options.missingTools ?? [], this.now);

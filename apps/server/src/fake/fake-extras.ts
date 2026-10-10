@@ -2,6 +2,7 @@ import type { SampleClock } from './sample-builders.ts';
 import type { SampleData } from './sample-data.ts';
 import type { SampleMemory } from './sample-memory.ts';
 import { boardPack, boardPackMemory } from './sample-pack-board.ts';
+import { replaceWithCalmMemory, replaceWithCalmSample } from './sample-pack-calm.ts';
 import { addSamplePack, addSamplePackMemory } from './sample-pack-common.ts';
 import { stressPack, stressPackMemory } from './sample-pack-stress.ts';
 
@@ -28,10 +29,12 @@ export function fakeExtras(value: string | undefined): Set<FakeExtra> {
 export function addFakeExtras(data: SampleData, clock: SampleClock, extras: Set<FakeExtra>): void {
   if (extras.has('board')) addSamplePack(data, boardPack(clock));
   if (extras.has('stress')) addSamplePack(data, stressPack(clock));
+  if (extras.has('calm')) replaceWithCalmSample(data, clock, extras);
 }
 
 /** Adds each asked-for pack's memory (relations, dossiers) to the sample memory. */
 export function addFakeExtraMemory(memory: SampleMemory, clock: SampleClock, extras: Set<FakeExtra>): void {
   if (extras.has('board')) addSamplePackMemory(memory, boardPackMemory());
   if (extras.has('stress')) addSamplePackMemory(memory, stressPackMemory(clock));
+  if (extras.has('calm')) replaceWithCalmMemory(memory);
 }
