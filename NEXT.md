@@ -2576,6 +2576,10 @@ Env switches:
   curl -H 'x-postpile-token: devtok' -H 'content-type: application/json' \
     -d '{"step":"bot-only-read"}' http://127.0.0.1:4877/api/fake/advance
   ```
+- `POSTPILE_FAKE_LIVE=1` (with `POSTPILE_FAKE=1`): the standalone server
+  starts the fake live poll and the auto sync like Electron main, so the
+  footer reads "live · every 60s" in a browser too. No Mac notifications;
+  pings show in the debug view only.
 - `POSTPILE_MAX_AGENT_CALLS`: agent-call cap for syncs and consolidations
   without an explicit cap (launch, "Sync now", `/api/consolidate`, and the
   CLI without `--max-agent-calls`), default 150 (was 30).
