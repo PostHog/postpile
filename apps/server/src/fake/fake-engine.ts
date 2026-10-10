@@ -237,6 +237,7 @@ import { FakeCleanup } from './fake-cleanup.ts';
 import { isSampleMergedThread, sampleMergedVerdict, sampleThreads } from './fake-notifications.ts';
 import { samplePingDecisions, sampleQuietReads } from './fake-quiet.ts';
 import { derivedEvent, withComment, withReview } from './fake-pr-changes.ts';
+import type { FakeFaults } from './fake-faults.ts';
 import { FakeWrites, type FakeLocalChange, type FakeSubscription } from './fake-writes.ts';
 import { buildSampleData, type SampleData } from './sample-data.ts';
 
@@ -278,6 +279,8 @@ export interface FakeEngineOptions {
   writesLocked?: boolean;
   /** POSTPILE_FAKE_EXTRA: opt-in sample packs on top of the default sample (see fake-extras.ts). */
   extras?: Set<FakeExtra>;
+  /** POSTPILE_FAKE_FAIL_WRITES, POSTPILE_FAKE_FAIL_SEND and POSTPILE_FAKE_DELAY_MS (see fake-faults.ts). None by default. */
+  faults?: FakeFaults;
 }
 
 /** The invented busy inbox of POSTPILE_FAKE_BUSY=1: a heavy install over the cap. */
@@ -473,7 +476,7 @@ export class FakeEngine implements EngineService {
       readHere: (scope, clickedAt) => this.readSample(scope, { kind: 'pending_completion', clickedAt }),
       title: (prKeys, threadId) => this.pendingTitle(prKeys, threadId),
       startCatchUp: (picks) => this.cleanup.startFromPending(picks, this.cleanupThreads()),
-    }, options.writesLocked !== true);
+    }, options.writesLocked !== true, options.faults);
     this.cleanup = new FakeCleanup({
       now: this.now,
       writes: this.writes,
@@ -1355,6 +1358,7 @@ export class FakeEngine implements EngineService {
   }
 
   async sendPendingWrites(): Promise<PendingWritesResult> {
+    await this.writes.delay();
     this.writes.settle();
     return this.writes.sendPending();
   }
@@ -1453,6 +1457,10 @@ export class FakeEngine implements EngineService {
       this.writes.record({ action: 'approve', origin: 'tile', outcome: 'skipped', prKey, detail: 'GitHub writes are off' });
       return fail('GitHub writes are off (lock in the footer): nothing was approved');
     }
+    const failure = await this.writes.reach('approve', `POST repos/${pr.ref.repo}/pulls/${pr.ref.number}/reviews`, { action: 'approve', origin: 'tile', prKey });
+    if (failure !== null) {
+      return fail(`Approve failed: ${failure}`);
+    }
     this.writes.record({ action: 'approve', origin: 'tile', outcome: 'github', prKey, detail: 'sample data: nothing left the process' });
     const at = this.timestamp();
     const state = this.userStateOf(prKey);
@@ -1485,6 +1493,10 @@ export class FakeEngine implements EngineService {
     if (!this.writes.isEnabled()) {
       this.writes.record({ action: 'comment_review', origin: 'tile', outcome: 'skipped', prKey, detail: 'GitHub writes are off' });
       return fail('GitHub writes are off (lock in the footer): nothing was posted');
+    }
+    const failure = await this.writes.reach('comment_review', `POST repos/${pr.ref.repo}/pulls/${pr.ref.number}/reviews`, { action: 'comment_review', origin: 'tile', prKey });
+    if (failure !== null) {
+      return fail(`Comment review failed: ${failure}`);
     }
     this.writes.record({ action: 'comment_review', origin: 'tile', outcome: 'github', prKey, detail: 'sample data: nothing left the process' });
     const at = this.timestamp();
@@ -1535,6 +1547,7 @@ export class FakeEngine implements EngineService {
       this.writes.record({ action: 'remove_team_request', origin: 'detail', outcome: 'skipped', prKey, detail: `team ${slug}: GitHub writes are off` });
       return fail('GitHub writes are off (lock in the footer): nothing was removed');
     }
+    await this.writes.delay();
     this.writes.record({ action: 'remove_team_request', origin: 'detail', outcome: 'github', prKey, detail: `team ${slug}` });
     this.data.prs[index] = { ...pr, reviewerTeams: pr.reviewerTeams.filter((candidate) => candidate !== team) };
     const thread = this.threadsOnGitHub().find((candidate) => threadPrKey(candidate) === prKey);
@@ -1829,6 +1842,7 @@ export class FakeEngine implements EngineService {
 
   async draftAsk(prKey: PrKey, person: string, intent: string): Promise<{ body: string }> {
     this.refuseWithoutAgent();
+    await this.writes.delay();
     const glance = this.data.glances.find((candidate) => candidate.prKey === prKey);
     const question = intent || 'could you say a bit more about this change?';
     const context = glance ? `\n\n${glance.forYou}` : '';
@@ -1841,6 +1855,7 @@ export class FakeEngine implements EngineService {
    */
   async draftReviewNote(prKey: PrKey, kind: ReviewNoteKind, gist = ''): Promise<{ body: string }> {
     this.refuseWithoutAgent();
+    await this.writes.delay();
     if (kind === 'comment') {
       return { body: gist.trim() !== '' ? fromGist(gist) : 'The retry path has no test yet. One is worth adding before this merges.' };
     }
@@ -1851,6 +1866,7 @@ export class FakeEngine implements EngineService {
   /** A canned reply: from the user's gist when given, else a stock answer that fits where the comment is. */
   async draftReply(prKey: PrKey, commentId: string, gist: string): Promise<{ body: string }> {
     this.refuseWithoutAgent();
+    await this.writes.delay();
     const pr = this.data.prs.find((candidate) => candidate.key === prKey);
     const comment = pr ? findComment(pr, commentId) : null;
     if (!comment) {
@@ -1884,6 +1900,10 @@ export class FakeEngine implements EngineService {
     if (!this.writes.isEnabled()) {
       this.writes.record({ action: 'reply', origin: 'detail', outcome: 'skipped', prKey, detail: `${detail}: GitHub writes are off` });
       return fail('GitHub writes are off (lock in the footer): the reply was not sent');
+    }
+    const failure = await this.writes.reach('reply', `POST repos/${pr.ref.repo}/issues/${pr.ref.number}/comments`, { action: 'reply', origin: 'detail', prKey, detail });
+    if (failure !== null) {
+      return fail(`Reply failed: ${failure}`);
     }
     this.writes.record({ action: 'reply', origin: 'detail', outcome: 'github', prKey, detail: `${detail}: sample data, nothing left the process` });
     const target = replyTarget(comment);
@@ -1926,6 +1946,10 @@ export class FakeEngine implements EngineService {
       this.writes.record({ action: 'reaction', origin: 'detail', outcome: 'skipped', prKey, detail: `${detail}: GitHub writes are off` });
       return fail('GitHub writes are off (lock in the footer): the reaction was not sent');
     }
+    const failure = await this.writes.reach('react', 'POST graphql', { action: 'reaction', origin: 'detail', prKey, detail });
+    if (failure !== null) {
+      return fail(`Reaction failed: ${failure}`);
+    }
     this.writes.record({ action: 'reaction', origin: 'detail', outcome: 'github', prKey, detail: `${detail}: sample data, nothing left the process` });
     this.data.prs[index] = withViewerReaction(pr, commentId);
     return ok('fake: thumbs up kept locally, nothing sent to GitHub');
@@ -1947,6 +1971,10 @@ export class FakeEngine implements EngineService {
     if (!this.writes.isEnabled()) {
       this.writes.record({ action: 'comment', origin: 'tile', outcome: 'skipped', prKey, detail: 'GitHub writes are off' });
       return fail('GitHub writes are off (lock in the footer): the comment was not sent');
+    }
+    const failure = await this.writes.reach('comment', `POST repos/${pr.ref.repo}/issues/${pr.ref.number}/comments`, { action: 'comment', origin: 'tile', prKey });
+    if (failure !== null) {
+      return fail(`Comment failed: ${failure}`);
     }
     this.writes.record({ action: 'comment', origin: 'tile', outcome: 'github', prKey, detail: 'sample data: nothing left the process' });
     const at = this.timestamp();
@@ -2023,6 +2051,8 @@ export class FakeEngine implements EngineService {
     if (!isUnsorted && !this.data.topics.some((topic) => topic.id === topicId)) {
       throw new Error(`no topic ${topicId}`);
     }
+    // Like the engine: the turn's two messages are stored together once the answer is back.
+    await this.writes.delay();
     const chatId = topicChatId(topicId);
     const messages = this.chats.get(chatId) ?? [];
     this.chats.set(chatId, messages);
@@ -2214,6 +2244,7 @@ export class FakeEngine implements EngineService {
       return { status: 'unavailable', reason: 'failed', message: `The agent could not check it: ${agentOff}` };
     }
     await new Promise((resolve) => setTimeout(resolve, this.recheckDelayMs));
+    await this.writes.delay();
     const outcome = RECHECK_CYCLE[this.recheckCount % RECHECK_CYCLE.length] ?? 'holds';
     this.recheckCount += 1;
     if (outcome === 'fix') {

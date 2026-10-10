@@ -105,6 +105,9 @@ Environment variables. The packaged app only sees them when you start its binary
 - `POSTPILE_FAKE_QUOTA`: with `POSTPILE_FAKE=1`, `low` or `critical` simulates a GitHub quota that is low or nearly used
 - `POSTPILE_FAKE_BUSY=1`: with `POSTPILE_FAKE=1`, `GET /api/busy-inbox` reports a busy inbox (the board cap cut the hot set) with invented numbers, for building the busy inbox card
 - `POSTPILE_FAKE_LOCKED=1`: with `POSTPILE_FAKE=1`, the sample starts with GitHub writes locked (it starts with them on, like the packaged app)
+- `POSTPILE_FAKE_FAIL_WRITES`: with `POSTPILE_FAKE=1`, sample writes fail with a GitHub-shaped error (502, a 403 for `react`), logged as `failed`, nothing changes. Comma separated `approve`, `comment_review`, `comment`, `reply`, `react`, `mark_read`, or `all`; `once:<kind>` fails only the first call. A failed `mark_read` puts the PR back to unread
+- `POSTPILE_FAKE_FAIL_SEND=1`: with `POSTPILE_FAKE=1`, "Send N to GitHub" fails: the pending writes stay with the error, the tiles stay unread
+- `POSTPILE_FAKE_DELAY_MS`: with `POSTPILE_FAKE=1`, every sample write, draft, topic chat answer and memory recheck takes this many milliseconds (default 0), so busy states and late answers can be watched
 - `POSTPILE_PROFILE=dev`: the dev database and config folders; `POSTPILE_DATA_DIR` moves the data folder, `POSTPILE_DB` points at a database file
 - `POSTPILE_READ_ONLY=1`: real reads, every GitHub write refused, the write lock cannot be opened. Without it, dev runs (`pnpm desktop`, `pnpm server`, `pnpm cli`) still start with writes locked until the footer lock is opened; only the packaged app has them on by default
 - `POSTPILE_SYNC_ON_START=0`, `POSTPILE_MAX_AGENT_CALLS=0`: no sync at start, no agent calls

@@ -4,6 +4,7 @@ import type { AppConfig, McpLauncher } from '@postpile/core';
 import { createEngine, DEFAULT_AUTO_SYNC_MINUTES, defaultPaths, migrateLegacyData, profileFromEnv, type EngineService, type LockKind, type Telemetry } from '@postpile/engine';
 import { FakeEngine } from './fake/fake-engine.ts';
 import { fakeExtras } from './fake/fake-extras.ts';
+import { FakeFaults } from './fake/fake-faults.ts';
 import { fakeQuotaLevel } from './fake/fake-quota.ts';
 import { fakeToolProblems } from './fake/fake-tools.ts';
 import { FakeUpdates, type FakeUpdateMode } from './fake/fake-update.ts';
@@ -51,7 +52,8 @@ export interface EngineFromEnvOptions {
  * quota that is low or nearly used. POSTPILE_FAKE_CATCH_UP=0 starts without
  * the inbox catch-up dialog (it shows on every fake start otherwise). POSTPILE_FAKE_BUSY=1 makes the
  * inbox busy (the board cap cut it), with invented numbers. POSTPILE_FAKE_LOCKED=1 starts with GitHub
- * writes locked (the sample starts with them on, like the packaged app). Otherwise throws
+ * writes locked (the sample starts with them on, like the packaged app). POSTPILE_FAKE_FAIL_WRITES,
+ * POSTPILE_FAKE_FAIL_SEND and POSTPILE_FAKE_DELAY_MS make writes fail or slow (fake-faults.ts). Otherwise throws
  * DataDirLockedError while another process holds the database.
  */
 export function engineFromEnv(options: EngineFromEnvOptions = {}): EngineService {
@@ -65,6 +67,7 @@ export function engineFromEnv(options: EngineFromEnvOptions = {}): EngineService
       busy: process.env.POSTPILE_FAKE_BUSY === '1',
       writesLocked: process.env.POSTPILE_FAKE_LOCKED === '1',
       extras: fakeExtras(process.env.POSTPILE_FAKE_EXTRA),
+      faults: FakeFaults.fromEnv(process.env.POSTPILE_FAKE_FAIL_WRITES, process.env.POSTPILE_FAKE_FAIL_SEND, process.env.POSTPILE_FAKE_DELAY_MS),
     });
   }
   if (options.migrateLegacy ?? true) {
