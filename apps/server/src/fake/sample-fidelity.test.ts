@@ -1,4 +1,4 @@
-import { deriveEvents, type EventKind, type Viewer } from '@postpile/core';
+import { deriveEvents, isTracked, type EventKind, type Viewer } from '@postpile/core';
 import { describe, expect, it } from 'vitest';
 import { buildSampleData, type SampleData } from './sample-data.ts';
 
@@ -62,5 +62,13 @@ describe('default sample events read like the engine derives them', () => {
         expect(event.summary).toBe(`${event.actor} merged`);
       }
     }
+  });
+
+  it('leaves only the catch-up, the failed and the capped sample PR without a glance', () => {
+    const open = data.tiles
+      .flatMap((tile) => tile.members)
+      .filter((member) => isTracked(member.provenance) && data.prs.some((pr) => pr.key === member.prKey && pr.state === 'OPEN'));
+    const withoutGlance = open.filter((member) => !data.glances.some((glance) => glance.prKey === member.prKey));
+    expect(withoutGlance.map((member) => member.prKey)).toEqual(['acme/app#1945', 'acme/app#1808', 'acme/app#1988']);
   });
 });
