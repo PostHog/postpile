@@ -304,7 +304,7 @@ export function Tile(props: TileProps) {
               </>
             )}
           </div>
-          <h2 className={`text-[14.5px] leading-[1.375] tracking-[-0.012em] text-balance ${titleLook} ${titleMotion}`}>
+          <h2 className={`text-[14.5px] leading-[1.375] [overflow-wrap:anywhere] tracking-[-0.012em] text-balance ${titleLook} ${titleMotion}`}>
             <button type="button" aria-pressed={props.selected} onClick={selectTile} className="rounded-[3px] text-left">
               {tile.title}
             </button>
@@ -314,7 +314,7 @@ export function Tile(props: TileProps) {
               <PendingWritePill pending={view.pendingWrite} />
             </div>
           )}
-          {forYou && <p className={`line-clamp-3 text-[12.5px] leading-normal text-pretty ${done ? 'text-faint' : 'text-ink-2'}`}>{forYou}</p>}
+          {forYou && <p className={`line-clamp-3 [overflow-wrap:anywhere] text-[12.5px] leading-normal text-pretty ${done ? 'text-faint' : 'text-ink-2'}`}>{forYou}</p>}
         </div>
         <PrRows {...props} done={done} />
       </div>

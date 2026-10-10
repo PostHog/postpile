@@ -1,5 +1,5 @@
 import type { LivePollStatus } from '@postpile/core';
-import { clockLabel } from './time.ts';
+import { untilLabel } from './time.ts';
 
 export interface LiveLabel {
   text: string;
@@ -36,23 +36,23 @@ export function liveLabel(status: LivePollStatus | undefined, now: Date): LiveLa
 }
 
 /** The footer's quota item: null while the quota is fine (the footer stays quiet), else what waits and until when. */
-export function quotaLabel(status: LivePollStatus | undefined): LiveLabel | null {
+export function quotaLabel(status: LivePollStatus | undefined, now: Date = new Date()): LiveLabel | null {
   const quota = status?.githubQuota;
   if (!quota) {
     return null;
   }
-  const until = clockLabel(new Date(quota.resumeAt));
+  const until = untilLabel(quota.resumeAt, now);
   const resource = quota.resource === 'graphql' ? 'GraphQL' : 'REST';
   const shared = 'PostPile shares the hourly GitHub limit with your gh and other tools, and leaves at least half of it to them. Sync now still works.';
   if (quota.level === 'critical') {
     return {
-      text: `GitHub quota nearly used: background sync and live poll paused until ${until}`,
+      text: `GitHub quota nearly used: sync and poll paused until ${until}`,
       warn: true,
       title: `${resource}: ${quota.remainingPercent}% of the hourly limit left. ${shared}`,
     };
   }
   return {
-    text: `GitHub quota low: background sync paused until ${until}`,
+    text: `GitHub quota low: sync paused until ${until}`,
     warn: true,
     title: `${resource}: ${quota.remainingPercent}% of the hourly limit left; the live poll slows down. ${shared}`,
   };

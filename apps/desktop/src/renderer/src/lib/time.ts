@@ -54,6 +54,16 @@ export function sinceLabel(iso: string, now: Date): string {
   return then.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+/** When something ends, for "until 23:02 today": the clock time, with the day unless it is today. */
+export function untilLabel(iso: string, now: Date): string {
+  const then = new Date(iso);
+  if (Number.isNaN(then.getTime())) {
+    return '';
+  }
+  const clock = clockLabel(then);
+  return then.toDateString() === now.toDateString() ? `${clock} today` : `${clock} on ${then.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+}
+
 /** The newest of a list of ISO times; ISO strings compare correctly as text. */
 export function newest(times: string[]): string | null {
   let result: string | null = null;

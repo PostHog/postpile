@@ -38,7 +38,7 @@ describe('activityList', () => {
     const list = activityList([forMe, forTeam, forSam], who);
     expect(list.earlier.map((line) => line.id)).toEqual([forTeam.event.id, forMe.event.id]);
     expect(list.noise.map((item) => item.id)).toEqual([forSam.event.id]);
-    expect(list.noiseLabel).toBe('1 bot and other event');
+    expect(list.noiseLabel).toBe('1 quiet event');
   });
 
   it('collapses a burst of pushes by one person into one line', () => {
@@ -88,6 +88,10 @@ describe('activityList', () => {
     const queue = ev({ kind: 'merge_queue', actor: '', isBot: true, summary: 'queued' });
     const deploy = ev({ kind: 'deploy', actor: 'vercel', isBot: true, summary: 'vercel deploy' });
     expect(noiseLabel([queue, deploy])).toBe('2 bot events');
+  });
+
+  it('has no label when nothing is folded', () => {
+    expect(noiseLabel([])).toBe('');
   });
 });
 

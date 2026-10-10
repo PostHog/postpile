@@ -48,7 +48,7 @@ describe('retryLine and checkLine', () => {
 
   it('says when it last looked and when it looks again', () => {
     const checked = view({ checkedAt: new Date(2026, 8, 28, 15, 13).toISOString(), nextCheckAt: new Date(2026, 8, 28, 15, 17).toISOString() });
-    expect(checkLine(checked, now)).toBe('Checked 2m ago. Looks again by itself at 15:17.');
+    expect(checkLine(checked, now)).toBe('Checked 2m ago. Checks again at 15:17.');
     expect(checkLine(view({ checkedAt: now.toISOString() }), now)).toBe('Checked just now.');
   });
 });

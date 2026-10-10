@@ -136,7 +136,7 @@ export function WritesLock() {
         <div
           role="dialog"
           aria-label={writes.enabled ? 'Pending GitHub writes' : 'Allow GitHub writes'}
-          className="absolute bottom-full left-0 z-20 mb-1.5 flex w-72 flex-col gap-2.5 rounded-row bg-surface p-3 font-sans shadow-menu"
+          className="absolute bottom-full left-0 z-20 mb-1.5 flex w-72 flex-col gap-2.5 rounded-row bg-surface p-3 font-sans whitespace-normal shadow-menu"
         >
           {forced ? (
             <p className="text-[12px] leading-snug text-ink">{writes.forcedOffReason}</p>

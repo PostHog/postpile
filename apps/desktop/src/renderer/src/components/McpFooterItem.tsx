@@ -39,7 +39,7 @@ export function McpFooterItem() {
         agents: not connected
       </button>
       {open && (
-        <div role="dialog" aria-label="Connect other agents" className="absolute bottom-full left-0 z-20 mb-1.5 flex w-80 flex-col gap-2 rounded-row bg-surface p-3 font-sans shadow-menu">
+        <div role="dialog" aria-label="Connect other agents" className="absolute bottom-full left-0 z-20 mb-1.5 flex w-80 flex-col gap-2 rounded-row bg-surface p-3 font-sans whitespace-normal shadow-menu">
           <span className="text-[12.5px] font-semibold text-ink">Let other agents ask PostPile</span>
           <McpConnectOffer view={view} from="footer" onNotNow={() => void notNow()} />
         </div>

@@ -19,7 +19,7 @@ export function FixCommand(props: { command: string; label?: string | null }) {
   return (
     <div className="flex min-w-0 items-center gap-2">
       {label && <span className="shrink-0 text-[11.5px] text-muted">{label}</span>}
-      <code className="min-w-0 truncate rounded-control border border-hairline bg-subtle px-2 py-0.5 font-mono text-[11px] text-ink select-text" title={props.command}>
+      <code className="min-w-0 break-all rounded-control border border-hairline bg-subtle px-2 py-0.5 font-mono text-[11px] text-ink select-text" title={props.command}>
         {props.command}
       </code>
       <button type="button" onClick={() => void copy()} className="shrink-0 text-[11px] text-faint hover:text-ink-2 hover:underline">
