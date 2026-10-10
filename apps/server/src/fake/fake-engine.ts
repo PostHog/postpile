@@ -236,6 +236,7 @@ import { FakeMemory } from './fake-memory.ts';
 import { FakeCleanup } from './fake-cleanup.ts';
 import { isSampleMergedThread, sampleMergedVerdict, sampleThreads } from './fake-notifications.ts';
 import { samplePingDecisions, sampleQuietReads } from './fake-quiet.ts';
+import { derivedEvent, withComment, withReview } from './fake-pr-changes.ts';
 import { FakeWrites, type FakeLocalChange, type FakeSubscription } from './fake-writes.ts';
 import { buildSampleData, type SampleData } from './sample-data.ts';
 
@@ -1419,10 +1420,31 @@ export class FakeEngine implements EngineService {
   // EngineService: actions
   // -------------------------------------------------------------------------
 
-  async approve(prKey: PrKey, headOid: string): Promise<ActionResult> {
-    const pr = this.data.prs.find((candidate) => candidate.key === prKey);
+  /** Puts the viewer's review on the sample PR with its derived event (seen), like the PR refetched after a review. */
+  private addViewerReview(index: number, state: 'APPROVED' | 'COMMENTED', body: string, at: string): void {
+    const pr = this.data.prs[index]!;
+    const id = `local-review-${this.newId()}`;
+    const review = { id, author: this.data.viewer, state, body, submittedAt: at, commitOid: pr.headOid, url: `${pr.url}#pullrequestreview-${id}` };
+    const changed = withReview(pr, review);
+    this.data.prs[index] = changed;
+    const event = derivedEvent(changed, this.viewer(), this.data.userStates.find((entry) => entry.prKey === pr.key) ?? null, id, at);
+    if (event) {
+      this.data.events.push(event);
+    }
+  }
+
+  /**
+   * Like PrActions.approve, in memory: refused for a PR that is not open, then
+   * for a moved head, then while locked. The approval lands as an APPROVED
+   * review by the viewer on the head (with the note as its body), so the
+   * review state, "You approved", the activity line and the viewer's
+   * approval agree, like after the engine's refetch. Nothing leaves the process.
+   */
+  async approve(prKey: PrKey, headOid: string, body = ''): Promise<ActionResult> {
+    const index = this.data.prs.findIndex((candidate) => candidate.key === prKey && candidate.state === 'OPEN');
+    const pr = this.data.prs[index];
     if (!pr) {
-      return fail(`no PR ${prKey}`);
+      return fail(`${prKey} is not an open PR in the sample`);
     }
     if (pr.headOid !== headOid) {
       return fail(NEW_COMMITS_SINCE_LOOKED);
@@ -1432,19 +1454,21 @@ export class FakeEngine implements EngineService {
       return fail('GitHub writes are off (lock in the footer): nothing was approved');
     }
     this.writes.record({ action: 'approve', origin: 'tile', outcome: 'github', prKey, detail: 'sample data: nothing left the process' });
+    const at = this.timestamp();
     const state = this.userStateOf(prKey);
-    state.approvedAt = this.timestamp();
+    state.approvedAt = at;
     state.approvedCommitOid = pr.headOid;
     for (const event of this.eventsOf(prKey)) {
-      event.seenAt ??= this.timestamp();
+      event.seenAt ??= at;
     }
+    this.addViewerReview(index, 'APPROVED', body, at);
     return ok(`fake: approved ${prKey} locally, nothing sent to GitHub`);
   }
 
   /**
-   * Like PrActions.commentReview, in memory: the head check, then a COMMENTED
-   * review by the viewer on the head and the PR's events seen, like after an
-   * approval. Nothing leaves the process.
+   * Like PrActions.commentReview, in memory: the head check, then the PR's
+   * events seen, like after an approval, and a COMMENTED review by the viewer
+   * on the head with its event, like the refetched PR. Nothing leaves the process.
    */
   async commentReview(prKey: PrKey, headOid: string, body: string): Promise<ActionResult> {
     const index = this.data.prs.findIndex((candidate) => candidate.key === prKey && candidate.state === 'OPEN');
@@ -1464,11 +1488,10 @@ export class FakeEngine implements EngineService {
     }
     this.writes.record({ action: 'comment_review', origin: 'tile', outcome: 'github', prKey, detail: 'sample data: nothing left the process' });
     const at = this.timestamp();
-    const review = { id: `local-review-${this.newId()}`, author: this.data.viewer, state: 'COMMENTED' as const, body, submittedAt: at, commitOid: pr.headOid };
-    this.data.prs[index] = { ...pr, reviews: [...pr.reviews, review] };
     for (const event of this.eventsOf(prKey)) {
       event.seenAt ??= at;
     }
+    this.addViewerReview(index, 'COMMENTED', body, at);
     return ok(`fake: comment review kept locally on ${prKey}, nothing sent to GitHub`);
   }
 
@@ -1908,30 +1931,32 @@ export class FakeEngine implements EngineService {
     return ok('fake: thumbs up kept locally, nothing sent to GitHub');
   }
 
+  /**
+   * Like PrActions.sendComment, in memory: the comment lands on the sample PR
+   * with its derived event (seen), like the refetched PR. Nothing leaves the process.
+   */
   async sendComment(prKey: PrKey, body: string): Promise<ActionResult> {
+    const index = this.data.prs.findIndex((candidate) => candidate.key === prKey);
+    const pr = this.data.prs[index];
+    if (!pr) {
+      return fail(`${prKey} is not in the sample`);
+    }
+    if (body.trim() === '') {
+      return fail('Empty comment');
+    }
     if (!this.writes.isEnabled()) {
       this.writes.record({ action: 'comment', origin: 'tile', outcome: 'skipped', prKey, detail: 'GitHub writes are off' });
       return fail('GitHub writes are off (lock in the footer): the comment was not sent');
     }
     this.writes.record({ action: 'comment', origin: 'tile', outcome: 'github', prKey, detail: 'sample data: nothing left the process' });
     const at = this.timestamp();
-    const sourceId = `local-${this.newId()}`;
-    this.data.events.push({
-      id: `${prKey}:comment:${sourceId}`,
-      prKey,
-      kind: 'comment',
-      actor: this.data.viewer,
-      isBot: false,
-      at,
-      summary: `${this.data.viewer} commented: ${body.split('\n')[0] ?? ''}`,
-      url: null,
-      sourceId,
-      ruleLoudness: 'quiet',
-      ruleReason: 'own comment',
-      chatter: false,
-      override: null,
-      seenAt: at,
-    });
+    const id = `local-comment-${this.newId()}`;
+    const changed = withComment(pr, { id, author: this.data.viewer, body, createdAt: at, kind: 'comment', url: `${pr.url}#issuecomment-${id}`, path: null, threadId: null });
+    this.data.prs[index] = changed;
+    const event = derivedEvent(changed, this.viewer(), this.data.userStates.find((entry) => entry.prKey === prKey) ?? null, id, at);
+    if (event) {
+      this.data.events.push(event);
+    }
     return ok('fake: comment kept locally, nothing sent to GitHub');
   }
 
