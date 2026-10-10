@@ -210,6 +210,7 @@ import {
   pingDecisionsByThread,
   pingClickTarget,
   interruptionsView,
+  DEFAULT_INTERRUPTIONS,
   type InterruptionsMode,
   type InterruptionsView,
   type MacNotification,
@@ -288,6 +289,13 @@ export interface FakeEngineOptions {
   deliver?: FakeStepName[];
   /** The renderer's start sync takes no step (POSTPILE_SYNC_ON_START is not 0), so the first "Sync now" brings the first one. */
   skipFirstSyncDelivery?: boolean;
+  /**
+   * POSTPILE_FAKE_INTERRUPTIONS=unchosen: start like an older install that
+   * never picked a mode, so the interruptions prompt shows. Off by default:
+   * the sample starts like an install that finished setup (the pick made).
+   * POSTPILE_FAKE_SETUP=1 also starts unchosen; its Accept sends the pick.
+   */
+  interruptionsUnchosen?: boolean;
 }
 
 /** The invented busy inbox of POSTPILE_FAKE_BUSY=1: a heavy install over the cap. */
@@ -356,6 +364,19 @@ function fromGist(gist: string): string {
 /** Stand-in for the agent spotting a lasting point in chat. Where it applies is the user's pick. */
 const LASTING = /\b(always|never|from now on|in general|every topic|all topics)\b/i;
 
+/**
+ * The interruptions pick in memory. Like an install that finished setup, the
+ * sample starts with the default mode chosen, so the prompt for older installs
+ * stays away; `unchosen` starts without a pick, like a new or older install.
+ */
+function fakePingHold(unchosen: boolean): MemoryPingHold {
+  const hold = new MemoryPingHold();
+  if (!unchosen) {
+    hold.setMode(DEFAULT_INTERRUPTIONS);
+  }
+  return hold;
+}
+
 /** Canned numbers so the footer has something to show; the fake never calls the agent. */
 function sampleSyncStats(): AgentCallStats {
   const stats = emptyAgentCallStats();
@@ -397,11 +418,7 @@ export class FakeEngine implements EngineService {
   private lastSync: SyncReport | null = null;
   private livePoller: LivePoller | null = null;
   /** The real interruptions rules over a memory hold: the pick and the Dock badge are forgotten on restart. */
-  private readonly pingDelivery = new PingDelivery({
-    hold: new MemoryPingHold(),
-    unreadPrKeys: () => this.unreadKeysNow(),
-    onNotify: (notifications) => this.notifyMac?.(notifications) ?? false,
-  });
+  private readonly pingDelivery: PingDelivery;
   private notifyMac: ((notifications: MacNotification[]) => boolean) | null = null;
   private interruptionsListener: ((mode: InterruptionsMode) => void) | null = null;
   private autoSync: AutoSyncSchedule | null = null;
@@ -451,6 +468,11 @@ export class FakeEngine implements EngineService {
     this.busy = options.busy ?? false;
     this.catchUpGate = options.catchUpGate ?? false;
     this.data = buildSampleData(this.now(), options.extras);
+    this.pingDelivery = new PingDelivery({
+      hold: fakePingHold(options.forceSetup === true || options.interruptionsUnchosen === true),
+      unreadPrKeys: () => this.unreadKeysNow(),
+      onNotify: (notifications) => this.notifyMac?.(notifications) ?? false,
+    });
     for (const snooze of this.data.snoozes ?? []) {
       this.snoozes.set(snooze.prKey, snooze);
     }

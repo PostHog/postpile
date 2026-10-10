@@ -2634,6 +2634,11 @@ Env switches:
   ```
   POSTPILE_FAKE=1 POSTPILE_FAKE_SETUP=1 POSTPILE_TOKEN=devtok PORT=4877 pnpm server
   ```
+- `POSTPILE_FAKE_INTERRUPTIONS=unchosen` (with `POSTPILE_FAKE=1`): start
+  without an Interruptions pick, like an older install, so the prompt
+  shows. By default the sample starts with the pick made (Never), like an
+  install that finished setup. `POSTPILE_FAKE_SETUP=1` also starts without
+  one; its Accept sends the pick.
 - `POSTPILE_FAKE_MISSING` (with `POSTPILE_FAKE=1`): simulates missing
   tools, comma separated `gh`, `gh-auth`, `gh-token`, `gh-offline`,
   `claude`, `claude-auth`, `claude-limit`:

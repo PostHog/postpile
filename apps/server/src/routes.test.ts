@@ -172,8 +172,14 @@ describe('server routes over the fake engine', () => {
     expect((await post<RepoOverview>(app, '/api/repos/scope', { repo: null })).json.scope).toBeNull();
   });
 
+  it('starts with the interruptions pick made, like an install that finished setup', async () => {
+    expect(await (await appWithFake().request('/api/interruptions')).json()).toMatchObject({ mode: 'never', chosen: true });
+    const setup = appWithFake(new FakeEngine({ syncStepMs: 0, forceSetup: true }));
+    expect(await (await setup.request('/api/interruptions')).json()).toMatchObject({ mode: 'never', chosen: false });
+  });
+
   it('keeps the interruptions pick, never by default', async () => {
-    const app = appWithFake();
+    const app = appWithFake(new FakeEngine({ syncStepMs: 0, interruptionsUnchosen: true }));
     expect(await (await app.request('/api/interruptions')).json()).toEqual({ mode: 'never', chosen: false, roundupTimes: ['9:30', '13:30', '16:30'] });
     const put = (body: unknown) => app.request('/api/interruptions', { method: 'PUT', body: JSON.stringify(body), headers: { 'content-type': 'application/json' } });
     expect(await (await put({ mode: 'batches' })).json()).toMatchObject({ mode: 'batches', chosen: true });

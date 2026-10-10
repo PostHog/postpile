@@ -56,7 +56,8 @@ export interface EngineFromEnvOptions {
  * writes locked (the sample starts with them on, like the packaged app). POSTPILE_FAKE_FAIL_WRITES,
  * POSTPILE_FAKE_FAIL_SEND and POSTPILE_FAKE_DELAY_MS make writes fail or slow (fake-faults.ts).
  * POSTPILE_FAKE_DELIVER=a,b,c: each sync after the start sync brings the next scripted step
- * (fake-script.ts). Otherwise throws
+ * (fake-script.ts). POSTPILE_FAKE_INTERRUPTIONS=unchosen starts without an interruptions pick, so
+ * the prompt for older installs shows (the sample starts with the pick made). Otherwise throws
  * DataDirLockedError while another process holds the database.
  */
 export function engineFromEnv(options: EngineFromEnvOptions = {}): EngineService {
@@ -77,6 +78,7 @@ export function engineFromEnv(options: EngineFromEnvOptions = {}): EngineService
       faults: FakeFaults.fromEnv(process.env.POSTPILE_FAKE_FAIL_WRITES, process.env.POSTPILE_FAKE_FAIL_SEND, process.env.POSTPILE_FAKE_DELAY_MS),
       deliver: deliver.steps,
       skipFirstSyncDelivery: process.env.POSTPILE_SYNC_ON_START !== '0',
+      interruptionsUnchosen: process.env.POSTPILE_FAKE_INTERRUPTIONS === 'unchosen',
     });
   }
   if (options.migrateLegacy ?? true) {

@@ -114,6 +114,7 @@ Environment variables. The packaged app only sees them when you start its binary
 - `POSTPILE_FAKE_INSTALL`: with `POSTPILE_FAKE=1`, the sample self-update state: `ready` (default, "Restart to update", which only relaunches), `downloading`, `failed` or `off` (the brew command)
 - `POSTPILE_FAKE_TIDY=1`: with `POSTPILE_FAKE=1`, the first sync runs a sample topic tidy, so the "Tidying up your topics and tiles" overlay shows for a few seconds
 - `POSTPILE_FAKE_CATCH_UP=0`: with `POSTPILE_FAKE=1`, no inbox catch-up dialog on start (by default every fake start is a first run with a pile of merged PRs, so it shows)
+- `POSTPILE_FAKE_INTERRUPTIONS=unchosen`: with `POSTPILE_FAKE=1`, start without an Interruptions pick, like an older install, so the "When should PostPile tap you on the shoulder?" prompt shows. By default the sample starts with the pick made (Never), like an install that finished setup; `POSTPILE_FAKE_SETUP=1` also starts without one, and its Accept sends the pick
 - `POSTPILE_FAKE_MISSING`: with `POSTPILE_FAKE=1`, simulates missing tools for UI checks (comma separated: `gh`, `gh-auth`, `gh-token`, `gh-offline`, `claude`, `claude-auth`, `claude-limit`)
 - `POSTPILE_FAKE_QUOTA`: with `POSTPILE_FAKE=1`, `low` or `critical` simulates a GitHub quota that is low or nearly used
 - `POSTPILE_FAKE_BUSY=1`: with `POSTPILE_FAKE=1`, `GET /api/busy-inbox` reports a busy inbox (the board cap cut the hot set) with invented numbers, for building the busy inbox card
