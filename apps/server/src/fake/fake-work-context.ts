@@ -7,7 +7,7 @@ import type {
   WorkContextView,
   WorkThreadForget,
 } from '@postpile/core';
-import { DEFAULT_SWEEP_SKIP } from '@postpile/engine';
+import { DEFAULT_SWEEP_SKIP, resolveSweepSkip } from '@postpile/engine';
 import { SampleClock } from './sample-builders.ts';
 
 /** The real defaults, so fake mode shows what a real sweep skips. */
@@ -81,20 +81,26 @@ export class FakeWorkContext {
   private createdAt: string;
   private readonly forgotten = new Set<number>();
   private running = false;
-  /** Saved skip list; sample data has no config file, so it lives in memory. */
-  private skipPatterns: string[] = SAMPLE_SKIP;
-  private skipSource: 'config' | 'default' = 'default';
+  /** Saved skip list; sample data has no config file, so it lives in memory. Undefined until saved. */
+  private savedSkip: string[] | undefined = undefined;
 
+  /** `env` is read fresh on every view, like the real sweep: POSTPILE_SWEEP_SKIP wins over the saved list. */
   constructor(
     private readonly topics: Topic[],
     private readonly now: () => Date,
     private readonly refreshDelayMs: number,
+    private readonly env: NodeJS.ProcessEnv = process.env,
   ) {
     this.createdAt = new SampleClock(now()).hoursAgo(3);
   }
 
+  private skipSettings() {
+    return resolveSweepSkip(this.env.POSTPILE_SWEEP_SKIP, this.savedSkip);
+  }
+
   view(): WorkContextView {
     const names = new Map(this.topics.map((topic) => [topic.id, topic.name]));
+    const skip = this.skipSettings();
     return {
       current: {
         version: this.version,
@@ -102,7 +108,7 @@ export class FakeWorkContext {
         model: 'opus (sample)',
         summary: SUMMARY,
         lastSeenAt: this.createdAt,
-        inputStats: STATS,
+        inputStats: { ...STATS, skipPatterns: skip.patterns },
         threads: sampleThreads(this.topics).map((thread, index) => ({
           index,
           title: thread.title,
@@ -114,16 +120,16 @@ export class FakeWorkContext {
       },
       lastError: null,
       running: this.running,
-      skipPatterns: this.skipPatterns,
-      skipSource: this.skipSource,
+      skipPatterns: skip.patterns,
+      skipSource: skip.source,
       skipConfigFile: '~/.config/postpile/config.json (sample data: kept in memory)',
     };
   }
 
   setSkip(patterns: string[]): ActionResult {
-    this.skipPatterns = patterns.map((pattern) => pattern.trim()).filter((pattern) => pattern !== '');
-    this.skipSource = 'config';
-    return { ok: true, message: 'Skip list saved (sample data: in memory only).', undoToken: null };
+    this.savedSkip = patterns.map((pattern) => pattern.trim()).filter((pattern) => pattern !== '');
+    const overridden = this.skipSettings().source === 'env' ? ' POSTPILE_SWEEP_SKIP is set and still wins until it is unset.' : '';
+    return { ok: true, message: `Skip list saved (sample data: in memory only).${overridden}`, undoToken: null };
   }
 
   async sweep(): Promise<WorkContextSweepResult> {

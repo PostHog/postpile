@@ -451,13 +451,16 @@ export class FakeEngine implements EngineService {
     this.busy = options.busy ?? false;
     this.catchUpGate = options.catchUpGate ?? false;
     this.data = buildSampleData(this.now(), options.extras);
+    for (const snooze of this.data.snoozes ?? []) {
+      this.snoozes.set(snooze.prKey, snooze);
+    }
     const catchUpStepMs = options.catchUpStepMs ?? 4000;
     this.catchUp = new FakeCatchUp(this.data, this.now, { queuedMs: catchUpStepMs, writingMs: catchUpStepMs * 1.5 });
     this.toolStatus = new FakeTools(options.missingTools ?? [], this.now);
     this.quota = fakeQuota(options.quota ?? null, this.now);
     this.mcp = new FakeMcp(() => this.toolStatus.view().claude.state, this.now, options.setupStepMs ?? 700);
     this.checkDelayMs = options.setupStepMs ?? 700;
-    this.memory = new FakeMemory(this.data, this.now);
+    this.memory = new FakeMemory(this.data, this.now, options.extras);
     this.topicChanges = new FakeTopicChanges(this.data, this.now);
     const noteCover = new FakeNoteCover(this.data, this.now, (key) => this.fetchedAt.set(key, this.timestamp()));
     // The engine's own reader: its hourly cap, quota check and pending answer, over the sample's stand-in for GitHub.

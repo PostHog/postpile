@@ -1,7 +1,7 @@
 // The "Move CI to Depot" sample from the design rounds, as domain objects.
 // Used by FakeEngine so the server, CLI and desktop app run without GitHub or
 // the agent.
-import type { FullPr, Glance, PrEdits, PrEvent, PrKey, PrSet, Tile, Topic, TopicProposal, UserPrState } from '@postpile/core';
+import type { FullPr, Glance, PrEdits, PrEvent, PrKey, PrSet, Snooze, Tile, Topic, TopicProposal, UserPrState } from '@postpile/core';
 import { addFakeExtras, type FakeExtra } from './fake-extras.ts';
 import {
   found,
@@ -40,6 +40,8 @@ export interface SampleData {
   codeOwners: Map<string, string>;
   /** Changed line ranges per PR, like the sync's diff read. None in the default sample, so nothing overlaps. */
   prEdits: PrEdits[];
+  /** Snoozes the sample starts with (a pack's); the default sample has none. */
+  snoozes?: Snooze[];
 }
 
 /** acme/app's CODEOWNERS: the workflows and build scripts are the viewer's team's, the rest is someone else's. */

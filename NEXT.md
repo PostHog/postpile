@@ -2643,5 +2643,31 @@ Env switches:
   ```
 - `POSTPILE_FAKE_QUOTA` (with `POSTPILE_FAKE=1`): `low` or `critical`
   simulates a GitHub quota that is low or nearly used, for the footer.
+- `POSTPILE_FAKE_EXTRA` (with `POSTPILE_FAKE=1`): comma-separated sample
+  packs added to the default sample (`apps/server/src/fake/fake-extras.ts`),
+  for states it never shows. `board`: PRs #2001 and up for the board
+  scenarios (approved own PR alone in its topic, a You drive trio of
+  unread / dealt with / merge-ready, a teammate's draft asking you, a
+  thanks that asks nothing, a Not yours merge, a closed PR with an open
+  sibling, the retired standing topic "Release train"). `stress`: text
+  and counts at their limits for layout checks (a 220-character title with
+  emoji, backticks, `<>` and a 96-character token, a topic name over 64
+  characters, #12345 in a long repo name, five assignees, "Monorepo test
+  sharding" with 25 tiles and 30 PRs by eight authors and a dossier at
+  every `DOSSIER_LIMITS` bound). `calm`: replaces the default sample with
+  a tiny one where everything is read and dealt with (three merged topics
+  showing Archive now, one topic holding only a snoozed tile, 0 unread);
+  the server refuses to start when it is combined with another pack. The
+  thread-only inbox pile (fake-notifications.ts, "24 merged PRs · Clear")
+  still shows with it:
+
+  ```
+  POSTPILE_FAKE=1 POSTPILE_FAKE_EXTRA=board POSTPILE_TOKEN=devtok PORT=4877 pnpm server
+  ```
+- `POSTPILE_FAKE_UPDATE` (with `POSTPILE_FAKE=1`): `0` no sample update,
+  `pill` the small pill, `many` 12 newer releases, of which the one-page
+  check sees 10 ("10+ releases"); the bar otherwise. The sample work
+  context honours `POSTPILE_SWEEP_SKIP` like the real sweep (the skip
+  input turns read-only, an empty value skips nothing).
 - `POSTPILE_MODEL`, `POSTPILE_GLANCE_MODEL`,
   `POSTPILE_AGENT_CONCURRENCY` (default 8): agent knobs.

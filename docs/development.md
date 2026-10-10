@@ -110,7 +110,7 @@ Instructions for every prompt go in `~/.config/postpile/instructions.md` (honour
 Environment variables. The packaged app only sees them when you start its binary from a terminal; `open` does not pass them.
 
 - `POSTPILE_FAKE=1`: sample data, no GitHub, no agent, no database (UI work)
-- `POSTPILE_FAKE_UPDATE=0`: with `POSTPILE_FAKE=1`, no sample update in the title bar (it shows one by default)
+- `POSTPILE_FAKE_UPDATE`: with `POSTPILE_FAKE=1`, the sample update in the title bar: `0` none, `pill` the small pill (1 release), `many` more releases than one page of the release list ("10+"); the bar (3 releases) otherwise
 - `POSTPILE_FAKE_INSTALL`: with `POSTPILE_FAKE=1`, the sample self-update state: `ready` (default, "Restart to update", which only relaunches), `downloading`, `failed` or `off` (the brew command)
 - `POSTPILE_FAKE_TIDY=1`: with `POSTPILE_FAKE=1`, the first sync runs a sample topic tidy, so the "Tidying up your topics and tiles" overlay shows for a few seconds
 - `POSTPILE_FAKE_CATCH_UP=0`: with `POSTPILE_FAKE=1`, no inbox catch-up dialog on start (by default every fake start is a first run with a pile of merged PRs, so it shows)
@@ -127,6 +127,7 @@ Environment variables. The packaged app only sees them when you start its binary
   - `stacks`: stacks and a bot set in their own topics (#2101 to #2166): a 3-layer stack with an approved bottom, a layer asking you and a draft top; 3 unread layers that are not your move; a 2-layer stack whose top waits on another team (a teammate's and your own); safe and look-closer layers for the agent Approve; a stack with only its middle layer merged; a set of 5 renovate[bot] PRs next to a single one
   - `pane`: PR pane content in the topic Webhook delivery (#2201 to #2204): a rich unread teammate PR; a review bot's review with 6 inline comments, the author's replies and a bot comment cut like a stored snapshot; a comment with a code block, a list, a link, an emoji, a 300-character token and a quote, next to raw HTML that must render inert; a PR whose title and comment read like instructions to an agent (prompt-injection test data)
   - `mcp`: diffs for the overlap check, so `pr_context` and `whats_on_me` report overlapping edits (#1902 and sol's new #2301 on the same workflow lines, a nearby pair, a lockfile pair and stack mates that stay quiet, one capped diff)
+- `POSTPILE_FAKE_EXTRA`: with `POSTPILE_FAKE=1`, comma-separated sample packs on top of the default sample, for board states it never shows. `board`: topics and PRs #2001 and up (an approved own PR alone in its topic, a whole You drive trio, a teammate's draft asking you, a thanks that asks nothing, a merge the glance calls Not yours, a closed PR next to an open one, a retired standing topic, a long reviewer list, approvals right after a comment). `stress`: text and counts at their limits (a 220-character title with emoji, backticks, `<>` and a 96-character token, a topic name over 64 characters, #12345 in a long repo name, five assignees, a topic with 25 tiles and 30 PRs by eight authors, a dossier at every `DOSSIER_LIMITS` bound). `calm`: replaces the default sample with a tiny one where everything is read and dealt with (three merged topics with the Archive-now box, one topic holding only a snoozed tile, 0 unread); the server refuses to start when `calm` is combined with another pack
 - `POSTPILE_PROFILE=dev`: the dev database and config folders; `POSTPILE_DATA_DIR` moves the data folder, `POSTPILE_DB` points at a database file
 - `POSTPILE_READ_ONLY=1`: real reads, every GitHub write refused, the write lock cannot be opened. Without it, dev runs (`pnpm desktop`, `pnpm server`, `pnpm cli`) still start with writes locked until the footer lock is opened; only the packaged app has them on by default
 - `POSTPILE_SYNC_ON_START=0`, `POSTPILE_MAX_AGENT_CALLS=0`: no sync at start, no agent calls
@@ -141,7 +142,7 @@ Environment variables. The packaged app only sees them when you start its binary
 - `POSTPILE_TOPIC_DIGEST=1`: one agent call per topic for the dossier and its first glances (`topic_digest`), instead of separate dossier and glance calls. Off by default while it is compared (DESIGN.md › One call per topic)
 - `POSTPILE_CLAUDE_BIN`: the `claude` binary to run
 - `POSTPILE_CLAUDE_DIR`: the folder the work context sweep reads, default `~/.claude`
-- `POSTPILE_SWEEP_SKIP`: comma-separated `~/.claude/projects` folders the sweep never reads; wins over `sweepSkip` in `~/.config/postpile/config.json`, which wins over the default `personal,private`; empty means none
+- `POSTPILE_SWEEP_SKIP`: comma-separated `~/.claude/projects` folders the sweep never reads; wins over `sweepSkip` in `~/.config/postpile/config.json`, which wins over the default `personal,private`; empty means none. Sample data (`POSTPILE_FAKE=1`) honours it too
 - `POSTPILE_LOG_DIR`: where logs go
 
 ## Layout
