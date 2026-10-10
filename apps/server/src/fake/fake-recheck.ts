@@ -19,16 +19,16 @@ const FIX_REASONS: Partial<Record<StaleReason, string>> = {
   pr_merged: 'the PR was merged since this was written.',
 };
 
+function sentence(reason: string): string {
+  return reason.charAt(0).toUpperCase() + reason.slice(1);
+}
+
 /**
  * The fake's stand-in for the memory_recheck call: the answer follows the
  * claim's state, like the real agent reading the same sources. A fresh claim
  * holds; a stale one is fixed or dropped, by why it went stale. No agent
  * call; the "Sample data" pill already says so.
  */
-function sentence(reason: string): string {
-  return reason.charAt(0).toUpperCase() + reason.slice(1);
-}
-
 export function sampleRecheckAnswer(text: string, issue: StaleReason | null, scope: RecheckScope): MemoryRecheckResult {
   if (issue === null) {
     const why = scope === 'glance' ? 'nothing on the PR changed since this assessment.' : 'the newest reviews and comments still say the same.';
