@@ -150,7 +150,7 @@ export function sampleThreads(data: SampleData, now: Date): NotificationThread[]
     },
     {
       id: 'sample-thread-1777',
-      reason: 'review_requested',
+      reason: 'subscribed',
       unread: true,
       updatedAt: hoursBefore(now, 6),
       lastReadAt: null,

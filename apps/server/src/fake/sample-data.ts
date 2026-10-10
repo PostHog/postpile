@@ -96,7 +96,7 @@ function buildTopics(clock: SampleClock): Topic[] {
       id: TOPIC.depot,
       area: 'CI',
       name: 'Move CI to Depot',
-      summary: 'Backend and frontend run on Depot. Turbo caching and e2e are in flight. The release workflow has no PR yet.',
+      summary: 'Backend and frontend run on Depot. Turbo caching and e2e are in flight. Release builds stay on GitHub runners: #1930 was closed.',
       tailoring: 'Rowan drives, I approve. Flag cache keys, runner labels, secrets.',
       driver: 'rowan',
       userRole: 'reviewer',
@@ -112,7 +112,7 @@ function buildTopics(clock: SampleClock): Topic[] {
     }),
     sampleTopic(clock, {
       id: TOPIC.migrations,
-      area: 'Dev env',
+      area: 'Database',
       name: 'Migrations',
       summary: 'billing is waiting on one answer from you. Notifications moved and was fixed.',
       tailoring: 'Tell me when a migration touches real tables.',
@@ -139,7 +139,7 @@ function buildTopics(clock: SampleClock): Topic[] {
     }),
     sampleTopic(clock, {
       id: TOPIC.deps,
-      area: 'Dev env',
+      area: 'Dependencies',
       name: 'Dependency bumps',
       summary: 'Bot PRs that bump pinned versions.',
       tailoring: 'Never ping me for these.',
@@ -986,7 +986,7 @@ function buildGlances(clock: SampleClock): Glance[] {
     }),
     sampleGlance(clock, 1822, {
       verdict: 'LOOK_CLOSER',
-      forYou: 'Nobody from platform looked. It changes what the flaky-test report reads.',
+      forYou: 'lyra and sol approved, so platform has looked. It changes what the flaky-test report reads.',
       does: 'Shards from timing JSON.',
       risk: 'Medium.',
       othersSaid: '2 approvals.',
@@ -1181,7 +1181,7 @@ function buildTiles(): Tile[] {
       [[1904, 1907]],
       [1907],
     ),
-    sampleTile(TOPIC.depot, 'stack', `stack:${sampleKey(1851)}`, 'rowan/depot: e2e layer waits on you', [
+    sampleTile(TOPIC.depot, 'stack', `stack:${sampleKey(1851)}`, "rowan/depot: cache layer has lyra's question for you", [
       // Stack layers the sync pulled in by branch: no thread, no glance, no agent call.
       pulledIn(1851, 'stack layer below #1902'),
       pulledIn(1862, 'stack layer below #1902'),
@@ -1198,7 +1198,7 @@ function buildTiles(): Tile[] {
     sampleTile(TOPIC.ci, 'single', `pr:${sampleKey(1790)}`, 'Django test timeout raised to 45 min', [
       pinged(1790, 'subscribed'),
     ]),
-    sampleTile(TOPIC.ci, 'single', `pr:${sampleKey(1822)}`, 'Timing-based shards, no platform review', [
+    sampleTile(TOPIC.ci, 'single', `pr:${sampleKey(1822)}`, 'Timing-based shards, approved by lyra and sol', [
       pinged(1822, 'review_requested'),
     ]),
     sampleTile(TOPIC.ci, 'single', `pr:${sampleKey(1945)}`, 'Your shard retry cap waits on lyra', [pinged(1945, 'author')]),
@@ -1238,7 +1238,7 @@ function buildTiles(): Tile[] {
     sampleTile(TOPIC.quarantine, 'single', `pr:${sampleKey(1980)}`, 'sol runs quarantined tests apart', [pinged(1980, 'subscribed')]),
     sampleTile(TOPIC.quarantine, 'single', `pr:${sampleKey(1981)}`, 'Your retry report waits on sol', [found(1981, 'own_open', 'your open PR')]),
     sampleTile(TOPIC.egress, 'single', `pr:${sampleKey(1982)}`, 'nell allows the Depot cache host', [pinged(1982, 'subscribed')]),
-    sampleTile(TOPIC.replayStorage, 'single', `pr:${sampleKey(1984)}`, 'pia asks about CI disk for cold storage', [pinged(1984, 'subscribed')]),
+    sampleTile(TOPIC.replayStorage, 'single', `pr:${sampleKey(1984)}`, 'pia: does CI need more disk for cold storage?', [pinged(1984, 'subscribed')]),
     sampleTile(TOPIC.replayPlayer, 'single', `pr:${sampleKey(1985)}`, 'Replay player buffer capped', [pinged(1985, 'subscribed')]),
     sampleTile(TOPIC.usageExports, 'single', `pr:${sampleKey(1986)}`, 'Your export runner change waits on omar', [found(1986, 'own_open', 'your open PR')]),
     sampleTile(TOPIC.alertPresets, 'single', `pr:${sampleKey(1987)}`, 'Alert threshold presets', [pinged(1987, 'subscribed')]),

@@ -164,7 +164,7 @@ function depotDossierV3(clock: SampleClock): Dossier {
   const v2 = depotDossierV2(clock);
   return {
     ...v2,
-    summary: 'Backend and frontend run on Depot. Turbo caching and e2e are in flight. The release workflow has no PR yet.',
+    summary: 'Backend and frontend run on Depot. Turbo caching and e2e are in flight. Release builds stay on GitHub runners: #1930 was closed.',
     statusNote: 'Cache and e2e layers wait on reviews; the cache PR still has an open warm-up question.',
     // Written against the commit before the latest push, so "Why?" shows it as stale.
     statusSources: sources([{ ...ref(clock, 'commit', 1902, 4, 'a1b2c3'), headOid: 'a1b2c3' }, ref(clock, 'review', 1902, 1, 'review-1902-0')]),
@@ -331,7 +331,7 @@ function buildFacts(clock: SampleClock): Fact[] {
 }
 
 function buildFeedback(clock: SampleClock): Feedback[] {
-  const notMine = (id: number, number: number, hoursAgo: number): Feedback => ({
+  const notMine = (id: number, number: number, hoursAgo: number, note = ''): Feedback => ({
     id,
     kind: 'not_mine',
     topicId: 'topic-dependency-bumps',
@@ -339,10 +339,11 @@ function buildFeedback(clock: SampleClock): Feedback[] {
     prKey: sampleKey(number),
     setId: null,
     eventId: null,
-    note: 'bot bump',
+    note,
     createdAt: clock.hoursAgo(hoursAgo),
   });
-  return [notMine(1, 1640, 300), notMine(2, 1702, 200), notMine(3, 1755, 120), notMine(4, 1810, 50)];
+  // Three bare clicks and one worded note: the real bar keeps no rule built from bare clicks alone.
+  return [notMine(1, 1640, 300), notMine(2, 1702, 200), notMine(3, 1755, 120, 'Renovate bumps never need me unless they touch CI config.'), notMine(4, 1810, 50)];
 }
 
 function buildRuleProposals(clock: SampleClock): RuleProposal[] {
@@ -352,7 +353,7 @@ function buildRuleProposals(clock: SampleClock): RuleProposal[] {
       text: 'Do not surface Renovate or Dependabot bumps unless they touch CI config or cache hashing.',
       topicId: null,
       evidenceFeedbackIds: [1, 2, 3, 4],
-      reason: 'You said "not mine" on 4 bot bump PRs in the last two weeks.',
+      reason: 'You said "not mine" on 4 bot bump PRs in the last two weeks, once with "Renovate bumps never need me unless they touch CI config."',
       status: 'pending',
       createdAt: clock.hoursAgo(2),
       decidedAt: null,
