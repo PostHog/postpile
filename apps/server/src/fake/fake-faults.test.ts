@@ -97,6 +97,25 @@ describe('FakeEngine with write faults', () => {
     expect(await engine.unreadPrKeys()).toContain(ASKED_PR);
   });
 
+  it('keeps a pending mute with the error when the send fails (POSTPILE_FAKE_FAIL_SEND)', async () => {
+    const clock = new Clock();
+    const engine = engineWith(FakeFaults.fromEnv(undefined, '1', undefined), clock, true);
+    const tileId = (await engine.getPr(ASKED_PR))!.tileIds[0]!;
+    await engine.snooze(tileId, { kind: 'muted' });
+    clock.advance(7_000);
+    expect((await engine.githubWrites()).pending.map((write) => write.kind)).toContain('unsubscribe');
+    await engine.setGitHubWrites(true);
+
+    const result = await engine.sendPendingWrites();
+
+    expect(result).toMatchObject({ ok: false, done: 0 });
+    const kept = result.status.pending.filter((write) => write.kind === 'unsubscribe');
+    expect(kept.length).toBeGreaterThan(0);
+    expect(kept.every((write) => /subscription failed with 502/.test(write.error ?? ''))).toBe(true);
+    expect((await engine.actionLog(5)).some((entry) => entry.action === 'unsubscribe' && entry.outcome === 'failed')).toBe(true);
+    expect((await engine.actionLog(5)).some((entry) => entry.action === 'unsubscribe' && entry.outcome === 'github')).toBe(false);
+  });
+
   it('waits POSTPILE_FAKE_DELAY_MS before a write', async () => {
     const engine = engineWith(new FakeFaults(new Set(), new Set(), false, 30));
     const started = Date.now();

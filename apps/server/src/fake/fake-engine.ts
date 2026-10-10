@@ -492,6 +492,8 @@ export class FakeEngine implements EngineService {
   private readonly cleanup: FakeCleanup;
   /** The fake sync stopped after its fetch step until the start dialog is answered. */
   private heldSync = false;
+  /** The next fake sync continues a held one: its fetch already ran, so it brings no scripted news. */
+  private resumingHeldSync = false;
   private readonly catchUpGate: boolean;
   private readonly busy: boolean;
   // Starts above the ids of the seeded feedback.
@@ -1028,6 +1030,8 @@ export class FakeEngine implements EngineService {
   }
 
   private async runFakeSync(): Promise<SyncReport> {
+    const resumed = this.resumingHeldSync;
+    this.resumingHeldSync = false;
     const startedAt = this.timestamp();
     const phaseMs: SyncPhaseTimings = {};
     const progress: SyncProgress = { startedAt, running: [], agentCallsDone: 0, agentCallsPlanned: 0, fromGitHub: null, prsRead: null, agentCallStats: emptyAgentCallStats() };
@@ -1054,7 +1058,7 @@ export class FakeEngine implements EngineService {
       if (step.running.includes('fetch')) {
         this.syncedOnce = true;
         // Sample data never changes, like a sync right after the live poll caught up, unless POSTPILE_FAKE_DELIVER has a step left.
-        const delivered = this.script.deliverOnSync();
+        const delivered = resumed ? null : this.script.deliverOnSync();
         news = { prsFetched: delivered?.prsFetched ?? 0, newEvents: delivered?.newEvents ?? 0 };
         progress.fromGitHub = news;
       }
@@ -1296,6 +1300,7 @@ export class FakeEngine implements EngineService {
   private resumeHeldSync(): void {
     if (this.heldSync) {
       this.heldSync = false;
+      this.resumingHeldSync = true;
       void this.sync();
     }
   }

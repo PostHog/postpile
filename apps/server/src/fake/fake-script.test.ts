@@ -165,6 +165,18 @@ describe('POSTPILE_FAKE_DELIVER', () => {
     expect(await engine.sync()).toMatchObject({ prsFetched: 0 });
   });
 
+  it('resumes a sync held for the catch-up without delivering a step', async () => {
+    const engine = engineWith({ deliver: ['ask-you', 'bot-and-mention'], skipFirstSyncDelivery: true, catchUpGate: true });
+
+    expect(await engine.sync()).toMatchObject({ heldForCatchUp: true, prsFetched: 0 });
+    await engine.startAsUsual();
+    expect(await engine.sync()).toMatchObject({ prsFetched: 0, newEvents: 0 });
+    expect(engine.script.nextDelivery()).toBe('ask-you');
+
+    expect(await engine.sync()).toMatchObject({ prsFetched: 1, newEvents: 1 });
+    expect(engine.script.nextDelivery()).toBe('bot-and-mention');
+  });
+
   it('skips a step that already ran through the route', async () => {
     const engine = engineWith({ deliver: ['ask-you', 'push'] });
     engine.script.run('ask-you');

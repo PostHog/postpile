@@ -480,10 +480,34 @@ export class FakeWrites {
     return this.faults.failSend ? `GitHub ${request} failed with 502: Server Error` : this.faults.failure('mark_read', request);
   }
 
+  /** Why the footer send of a Mute or Unmute fails: POSTPILE_FAKE_FAIL_SEND; null when it goes through. */
+  private subscriptionFailure(subscription: FakeSubscription): string | null {
+    const [thread] = subscription.threads;
+    if (!this.faults.failSend || thread === undefined) {
+      return null;
+    }
+    return `GitHub PUT notifications/threads/${thread.id}/subscription failed with 502: Server Error`;
+  }
+
+  private recordSubscriptionFailure(batch: FakeBatch, error: string): void {
+    for (const thread of batch.subscription?.threads ?? []) {
+      this.record({
+        action: subscriptionKind(batch.subscription!),
+        origin: 'footer',
+        outcome: 'failed',
+        threadId: thread.id,
+        prKey: thread.prKey,
+        tileId: batch.tileId,
+        batch: batch.batchId,
+        detail: notTakenDetail(error),
+      });
+    }
+  }
+
   /**
    * "Send N to GitHub": refused while locked. A mark-read whose threads
-   * GitHub did not take (POSTPILE_FAKE_FAIL_SEND, or a mark_read fault)
-   * stays pending with the error, and its tiles stay unread, like the
+   * GitHub did not take (POSTPILE_FAKE_FAIL_SEND, or a mark_read fault), and
+   * a Mute or Unmute under POSTPILE_FAKE_FAIL_SEND, stays pending with the error, and its tiles stay unread, like the
    * engine's PendingWrites.
    */
   sendPending(): PendingWritesResult {
@@ -500,7 +524,13 @@ export class FakeWrites {
         continue;
       }
       if (write.batch.subscription !== null) {
-        this.changeSubscription(write.batch, 'footer');
+        const error = this.subscriptionFailure(write.batch.subscription);
+        if (error === null) {
+          this.changeSubscription(write.batch, 'footer');
+        } else {
+          this.recordSubscriptionFailure(write.batch, error);
+          this.pending.push({ ...write, error });
+        }
         continue;
       }
       const outcomes = this.markThreads(write.batch, 'footer', (threadId) => this.footerFailure(threadId));
