@@ -130,7 +130,7 @@ claude mcp add postpile -- postpile-mcp
 
 Homebrew links `postpile-mcp` onto your PATH. Without Homebrew, use `/Applications/PostPile.app/Contents/Resources/postpile-mcp`.
 
-The app can do this for you. While Claude Code does not have the server, the status bar at the bottom shows "agents: not connected"; click it and pick **Add to Claude Code**, which runs `claude mcp add --scope user` with the full path. The last setup step offers the same. Nothing is added without that click. "Not now" hides the status bar item for good. The same popover shows the command for other agents.
+The app can do this for you. While Claude Code does not have the server, the status bar at the bottom shows "outside agents: not connected"; click it and pick **Add to Claude Code**, which runs `claude mcp add --scope user` with the full path. The last setup step offers the same. Nothing is added without that click. "Not now" hides the status bar item for good. The same popover shows the command for other agents.
 
 - Tools: `pr_context` (a PR and its topic), `topic`, `search_prs` and `whats_on_me` read. `refresh_from_github`, `propose_topic_change` and `note_pr` ask the running app.
 - The four reads use the local database only, and answer only while the app runs. Answers are short by default; `detail: "full"` gives everything.

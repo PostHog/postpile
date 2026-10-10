@@ -61,7 +61,7 @@ export function NewSinceBox(props: { detail: PrDetail }) {
       {freshNoise.length > 0 && (
         <div className="flex flex-col">
           <button type="button" aria-expanded={showNoise} className={`${linkButton} text-muted`} onClick={() => setShowNoise(!showNoise)}>
-            {showNoise ? `Hide ${freshNoiseLabel}` : freshNoiseLabel}
+            {showNoise ? 'Hide' : 'Show'} {freshNoiseLabel}
           </button>
           {showNoise && <div className="mt-2 flex flex-col">{freshNoise.map((view, index) => eventRow(view, index === freshNoise.length - 1))}</div>}
         </div>

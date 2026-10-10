@@ -1,7 +1,7 @@
 // The label that opens the detail pane's review row: where the review
 // stands for the viewer, from GitHub's data, never from the agent's glance.
 import type { PrPaneView, ViewerApproval, ViewerReviewStand } from '@postpile/core';
-import { ageLabel } from './time.ts';
+import { whenLabel } from './time.ts';
 
 export type ReviewRowTone = 'approved' | 'changes' | 'asked' | 'plain';
 
@@ -28,7 +28,7 @@ export interface ReviewRowInput {
 export function reviewRowLabel(input: ReviewRowInput): ReviewRowLabel {
   if (input.approval) {
     const moved = input.approval.commitOid !== null && input.approval.commitOid !== input.pr.headOid;
-    return { text: `You approved ${ageLabel(input.approval.at, input.now)} ago${moved ? ', commits since' : ''}`, tone: 'approved' };
+    return { text: `You approved ${whenLabel(input.approval.at, input.now)}${moved ? ', commits since' : ''}`, tone: 'approved' };
   }
   if (input.stand === 'changes_requested') {
     return { text: 'You requested changes', tone: 'changes' };

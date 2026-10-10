@@ -37,7 +37,7 @@ describe('inbox cleanup words', () => {
       { count: 46 },
       '.',
     ]);
-    expect(dialogLead({ kind: 'first_run', load: 'busy' }, view.counts)).toEqual(['Your GitHub inbox has ', { count: 210 }, ' unread threads, ', { count: 46 }, ' of them on merged PRs.']);
+    expect(dialogLead({ kind: 'first_run', load: 'busy' }, view.counts)).toEqual(['Your GitHub inbox has ', { count: 210 }, ' unread GitHub threads, ', { count: 46 }, ' of them on merged PRs.']);
   });
 
   it('says how long it takes, what it leaves and what it saves', () => {

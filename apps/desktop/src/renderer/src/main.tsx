@@ -1,3 +1,5 @@
+// First: zod must be set up before any schema is built (see the file).
+import './lib/csp-safe-zod.ts';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';

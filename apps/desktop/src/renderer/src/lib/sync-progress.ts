@@ -63,7 +63,7 @@ export function syncProgressText(progress: SyncProgress | null | undefined, now:
   }
   const firstPhase = progress.running[0];
   if (progress.agentCallsPlanned > 0) {
-    parts.push(`agent calls ${progress.agentCallsDone}/${progress.agentCallsPlanned}`);
+    parts.push(`agent calls ${progress.agentCallsDone} of ${progress.agentCallsPlanned} so far`);
   } else if (firstPhase) {
     parts.push(PHASE_WORDS[firstPhase]);
   }

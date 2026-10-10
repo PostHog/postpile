@@ -22,8 +22,8 @@ function settled(row: PrSummary): boolean {
 /**
  * Done: Open. Snoozed with every tracked PR done, seen and read on GitHub:
  * Open (the snooze can still be taken back). Unread: Mark read. Read and
- * your move: Snooze. Else Done for now when a mark-read leaves the tile done,
- * Mark read if not.
+ * your move: Snooze. Else Done for now when a mark-read leaves the tile done;
+ * if not, Snooze on a read tile with nothing unread on any row, else Mark read.
  */
 export function expectedFooter(view: TileView): TileFooterAction {
   if (view.state.kind === 'done') {
@@ -39,7 +39,13 @@ export function expectedFooter(view: TileView): TileFooterAction {
   if (view.state.kind === 'open' && view.turn.kind === 'you') {
     return 'snooze';
   }
-  return view.afterRead.done ? 'mark_done' : 'mark_read';
+  if (view.afterRead.done) {
+    return 'mark_done';
+  }
+  if (view.state.kind === 'open' && view.prs.every((row) => row.unseenLoudEvents === 0 && !row.unreadOnGitHub)) {
+    return 'snooze';
+  }
+  return 'mark_read';
 }
 
 export function expectedMarkLabel(action: string): MarkLabel | null {
@@ -114,7 +120,8 @@ export interface ExpectedPane {
 /**
  * The detail pane for one PR: on a single-PR tile the buttons act on the
  * tile, on a stack or set on that PR. A done PR (or any PR of a done tile)
- * offers no Approve, Ask or Remove team; with its news seen and its thread
+ * offers no Ask or Remove team, and Approve only as "Approve again" on an
+ * open PR the viewer approved; with its news seen and its thread
  * read nothing to mark either. Ask needs an owner who is a person and not
  * the viewer. Approve leads on someone else's open, not yet approved,
  * non-draft PR; else the mark button; else Open on GitHub, which stays
@@ -124,7 +131,7 @@ export function expectedPane(view: TileView, row: PrSummary, pr: Pr, viewer: Vie
   const scope = view.tile.members.length <= 1 ? 'tile' : 'pr';
   const finished = view.state.kind === 'done' || row.done;
   const primary = row.primaryAction;
-  const approve = !finished && (primary === 'approve' || primary === 'approved');
+  const approve = primary === 'approved' || (!finished && primary === 'approve');
   let mark: TileFooterAction | 'none' = 'none';
   if (!settled(row)) {
     mark = scope === 'tile' ? expectedFooter(view) : prMark(view, row);

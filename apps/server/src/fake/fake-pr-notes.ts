@@ -5,6 +5,7 @@ import {
   noteAnchor,
   noteRequestKey,
   observationToken,
+  clearedNoteResult,
   planNoteClear,
   planNoteRenew,
   planNoteSet,
@@ -177,7 +178,7 @@ export class FakePrNotes {
       note.idempotencyKey = null;
       this.written += 1;
     }
-    return { status: 'cleared', note: prNoteView(note, read), replaced: null, anchored: null, reason: null };
+    return clearedNoteResult(plan, prNoteView(note, read), by, read.now);
   }
 
   async handle(request: PrNoteRequest, client: string): Promise<PrNoteResult> {

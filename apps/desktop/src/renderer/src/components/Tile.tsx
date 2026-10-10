@@ -7,7 +7,7 @@ import { updatingNow } from '../lib/staleness.ts';
 import { ageLabel } from '../lib/time.ts';
 import { stackQueueWord } from '../lib/pr.ts';
 import { stackPlaces } from '../lib/stacks.ts';
-import { kindParts, leadPr, sameForWhom, tileForYou, tileUpdatedAt } from '../lib/tiles.ts';
+import { kindCountText, kindParts, leadPr, sameForWhom, tileForYou, tileUpdatedAt } from '../lib/tiles.ts';
 import { useNow } from '../lib/use-now.ts';
 import { useSettling } from '../lib/use-settling.ts';
 import { personTitle } from '../lib/why.ts';
@@ -107,7 +107,8 @@ function PeopleStack(props: { people: TilePerson[] }) {
 
 /** "Set · 2" next to the chips: blue on the selected tile, grey otherwise. */
 function KindLabel(props: { view: TileView; selected: boolean }) {
-  const { word, count } = kindParts(props.view);
+  const { word } = kindParts(props.view);
+  const count = kindCountText(props.view);
   const kind = props.view.tile.kind;
   return (
     <span className={`flex shrink-0 items-center gap-[5px] text-[12px] ${props.selected ? 'font-medium text-accent' : 'text-muted'}`}>
@@ -304,7 +305,7 @@ export function Tile(props: TileProps) {
               </>
             )}
           </div>
-          <h2 className={`text-[14.5px] leading-[1.375] tracking-[-0.012em] text-balance ${titleLook} ${titleMotion}`}>
+          <h2 className={`text-[14.5px] leading-[1.375] [overflow-wrap:anywhere] tracking-[-0.012em] text-balance ${titleLook} ${titleMotion}`}>
             <button type="button" aria-pressed={props.selected} onClick={selectTile} className="rounded-[3px] text-left">
               {tile.title}
             </button>
@@ -314,7 +315,7 @@ export function Tile(props: TileProps) {
               <PendingWritePill pending={view.pendingWrite} />
             </div>
           )}
-          {forYou && <p className={`line-clamp-3 text-[12.5px] leading-normal text-pretty ${done ? 'text-faint' : 'text-ink-2'}`}>{forYou}</p>}
+          {forYou && <p className={`line-clamp-3 [overflow-wrap:anywhere] text-[12.5px] leading-normal text-pretty ${done ? 'text-faint' : 'text-ink-2'}`}>{forYou}</p>}
         </div>
         <PrRows {...props} done={done} />
       </div>

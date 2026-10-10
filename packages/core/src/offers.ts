@@ -18,7 +18,8 @@ import type { PrSummary, TilePendingWrite, TileView } from './views.ts';
  * - mark_done: "Done for now". The tile is read and a mark-read makes it done.
  * - snooze: the tile is read and still your move. Marking read changes
  *   nothing you can see, so Snooze is the primary button and "Review on
- *   GitHub" sits next to it.
+ *   GitHub" sits next to it. Also on a read tile that a mark-read leaves
+ *   not done while none of its PRs has anything unread (2026-10-10).
  */
 export type TileFooterAction = 'open' | 'mark_read' | 'mark_done' | 'snooze';
 
@@ -126,9 +127,14 @@ export type OfferPr = Pick<
   | 'facts'
 >;
 
+/** A PR with its news seen and its thread read on GitHub: a mark-read of it changes nothing you can see. */
+function nothingUnread(pr: Pick<OfferPr, 'unseenLoudEvents' | 'unreadOnGitHub'>): boolean {
+  return pr.unseenLoudEvents === 0 && !pr.unreadOnGitHub;
+}
+
 /** A done PR with its news seen and its thread read on GitHub: nothing is left to mark. */
 function nothingToMark(pr: Pick<OfferPr, 'done' | 'unseenLoudEvents' | 'unreadOnGitHub'>): boolean {
-  return pr.done && pr.unseenLoudEvents === 0 && !pr.unreadOnGitHub;
+  return pr.done && nothingUnread(pr);
 }
 
 /** Every tracked PR of the tile is done, its news seen and its thread read: nothing is left to mark. */
@@ -151,7 +157,15 @@ export function tileFooterAction(view: Pick<TileView, 'state' | 'turn' | 'afterR
   if (view.state.kind === 'open' && view.turn.kind === 'you') {
     return 'snooze';
   }
-  return view.afterRead.done ? 'mark_done' : 'mark_read';
+  if (view.afterRead.done) {
+    return 'mark_done';
+  }
+  // Read, not done after a mark-read, and nothing unread anywhere: "Mark read"
+  // would mark nothing (an own stack held above, B-A-05), so Snooze leads.
+  if (view.state.kind === 'open' && view.prs.every(nothingUnread)) {
+    return 'snooze';
+  }
+  return 'mark_read';
 }
 
 function markLabelOf(action: TileFooterAction | PrMarkAction): MarkLabel | null {
@@ -227,13 +241,17 @@ function githubLink(view: OfferView, leadKey: PrKey | null): GitHubLinkOffer | n
  * The detail pane's buttons for one PR. A done PR offers only Open, like a
  * done tile (2026-09-29: a handled PR by someone else with no ask still got
  * a primary Approve). A done PR whose news or unread thread keeps its tile
- * unread keeps Mark read, but no Approve, Ask or Remove team. On a snoozed single-PR tile a
- * done PR keeps Snooze, so the snooze can be taken back.
+ * unread keeps Mark read, but no Ask or Remove team. On a snoozed single-PR tile a
+ * done PR keeps Snooze, so the snooze can be taken back. An open PR the
+ * viewer approved keeps Approve (outlined "Approve again", never the lead),
+ * so the review row can say "You approved 2h ago, commits since" (2026-10-10).
  */
 export function paneOffers(view: OfferView, pr: OfferPr): PaneOffers {
   const scope = view.tile.members.length <= 1 ? 'tile' : 'pr';
   const finished = view.state.kind === 'done' || pr.done;
-  const approve = !finished && (pr.primaryAction === 'approve' || pr.primaryAction === 'approved');
+  // An open PR you approved keeps the row, done or not: its label says "commits
+  // since" and an outlined "Approve again" stays next to it (2026-10-10).
+  const approve = pr.primaryAction === 'approved' || (!finished && pr.primaryAction === 'approve');
   // A done PR has nothing to mark once its news is seen and its thread read, also on a snoozed tile.
   const doneAndSeen = nothingToMark(pr);
   let mark: TileFooterAction | PrMarkAction = 'none';

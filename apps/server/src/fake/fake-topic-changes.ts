@@ -101,6 +101,7 @@ export class FakeTopicChanges {
       members: [...new Set(this.topicPrKeys(change.topicId))],
       topicIdOf: (key) => this.tileOf(key)?.topicId ?? null,
       movesWith: (key) => this.tileOf(key)?.stacks.find((stack) => stack.prKeys.includes(key))?.prKeys ?? [key],
+      isDone: (key) => (this.data.prs.find((pr) => pr.key === key)?.state ?? 'OPEN') !== 'OPEN',
       proposals: this.data.proposals.filter((proposal) => proposal.topicId === change.topicId),
       pendingFromAgents: fromAgents.filter((proposal) => proposal.status === 'pending'),
       filedLastDay: fromAgents.filter((proposal) => proposal.createdAt >= dayAgo).length,

@@ -1,6 +1,6 @@
 import type { SetupDraft, SetupFitNote } from '@postpile/core';
 import { describe, expect, it } from 'vitest';
-import { SETUP_STEPS, acceptPlan, applyFitFix, draftText, fitAfterAnswer, fitFixes, editsFromDraft, pickMainRepo, picksAfterRefine, picksFromDraft, repoChoices, repoCountText, sourcesFor, toggleQuiet } from './setup.ts';
+import { SETUP_STEPS, acceptPlan, applyFitFix, draftText, fitAfterAnswer, fitFixes, editsFromDraft, pickMainRepo, picksAfterRefine, picksFromDraft, repoChoices, repoCountText, setupHeading, sourcesFor, toggleQuiet } from './setup.ts';
 
 function repo(name: string, prs: number) {
   return { repo: name, prs, authored: prs > 2 ? 2 : 0, reviewed: prs > 2 ? prs - 2 : prs, requested: 0 };
@@ -166,5 +166,13 @@ describe('fitAfterAnswer', () => {
   it('leaves a newer check alone', () => {
     const newer = { text: 'b', result: null };
     expect(fitAfterAnswer(newer, 'b', 'a', answer)).toBe(newer);
+  });
+});
+
+describe('setupHeading', () => {
+  it('welcomes a first run and only says "again" once setup was done', () => {
+    expect(setupHeading(false, false)).toBe('Welcome to PostPile');
+    expect(setupHeading(true, true)).toBe('Run setup again');
+    expect(setupHeading(true, false)).toBe('Run setup');
   });
 });

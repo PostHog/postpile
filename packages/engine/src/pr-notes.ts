@@ -1,5 +1,6 @@
 import {
   anchorSummary,
+  clearedNoteResult,
   coverKeyFor,
   noteAnchor,
   observationToken,
@@ -19,6 +20,7 @@ import {
   type PrNoteRequest,
   type PrNoteResult,
   type PrNotesView,
+  type PrNoteView,
 } from '@postpile/core';
 import type { Store } from '@postpile/store';
 import { newNoteId } from './ids.ts';
@@ -92,10 +94,7 @@ export class PrNotes {
     return noted.map((key) => prNotesView(key, this.tokenOf(read, key), notes, read));
   }
 
-  private view(note: PrNote | null): PrNotesView['durable'] {
-    if (!note) {
-      return null;
-    }
+  private view(note: PrNote): PrNoteView {
     const read = this.readContext(note.coveredByPrKey ? [note.prKey, note.coveredByPrKey] : [note.prKey]);
     return prNoteView(note, read);
   }
@@ -193,7 +192,7 @@ export class PrNotes {
         this.store.prNotes.clear(note.id, now, by);
         this.written += 1;
       }
-      return { status: 'cleared', note: this.view(note), replaced: null, anchored: null, reason: null };
+      return clearedNoteResult(plan, this.view(note), by, now);
     });
   }
 

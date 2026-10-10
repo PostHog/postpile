@@ -70,6 +70,8 @@ describe('agent notes on PRs', () => {
     expect(await h.engine.clearPrNote(set.note?.id ?? '')).toMatchObject({ status: 'cleared' });
     expect((await h.engine.getPr(first))?.notes.durable).toBeNull();
     expect(h.store.prNotes.get(set.note?.id ?? '')?.clearedBy).toBe('user');
+    // The agent clearing it afterwards learns the user did it first.
+    expect(await h.engine.notePr({ action: 'clear', noteId: set.note?.id ?? '' }, client)).toMatchObject({ status: 'already_cleared', cleared: { by: 'user' } });
     expect((await h.engine.livePollStatus()).changeCount).toBeGreaterThan(changesBefore);
   });
 

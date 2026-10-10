@@ -36,9 +36,9 @@ interface QueueFiltersProps {
 export function QueueFilters(props: QueueFiltersProps) {
   const options: (QueueFilter | null)[] = [null, ...visibleQueueFilters(props.viewer?.homeTeams, props.active)];
   return (
-    <div className="flex items-center gap-2 px-1.5" role="group" aria-label="Show topics with">
-      {/* The label gives way first when the sidebar is narrow; the options keep their words. */}
-      <span className="min-w-0 truncate text-[12.5px] text-muted">Topics with</span>
+    <div className="@container flex items-center gap-2 px-1.5" role="group" aria-label="Show topics with">
+      {/* The label gives way first when the sidebar is narrow: it hides whole rather than showing "T…". The group's aria-label keeps the sentence. */}
+      <span className="hidden text-[12.5px] whitespace-nowrap text-muted @[270px]:inline">Topics with</span>
       <div className="flex shrink-0 rounded-control bg-segment p-0.5">
         {options.map((filter) => {
           const on = props.active === filter;

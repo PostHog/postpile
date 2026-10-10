@@ -40,7 +40,8 @@ describe.each(PACKS)('pack %s: rules agree', (pack) => {
       }
       expect(view.offers, view.tile.id).toMatchObject({ footer: 'open', markLabel: null, github: null });
       for (const pr of view.prs) {
-        expect(paneOf(view, pr), pr.key).toMatchObject({ lead: 'none', approve: false, ask: false, markLabel: null, snooze: false, removeTeams: [] });
+        // Approve only as the outlined "Approve again" on an open PR the viewer approved (2026-10-10).
+        expect(paneOf(view, pr), pr.key).toMatchObject({ lead: 'none', approve: pr.primaryAction === 'approved', ask: false, markLabel: null, snooze: false, removeTeams: [] });
       }
     }
   });
@@ -50,10 +51,10 @@ describe.each(PACKS)('pack %s: rules agree', (pack) => {
       for (const pr of view.prs.filter((row) => row.done)) {
         const pane = paneOf(view, pr);
         if (pr.unseenLoudEvents > 0 || pr.unreadOnGitHub) {
-          expect(pane, pr.key).toMatchObject({ approve: false, ask: false, removeTeams: [] });
+          expect(pane, pr.key).toMatchObject({ approve: pr.primaryAction === 'approved', ask: false, removeTeams: [] });
           expect(pane.markLabel, pr.key).not.toBeNull();
         } else {
-          expect(pane, pr.key).toMatchObject({ lead: 'none', approve: false, ask: false, markLabel: null, removeTeams: [] });
+          expect(pane, pr.key).toMatchObject({ lead: 'none', approve: pr.primaryAction === 'approved', ask: false, markLabel: null, removeTeams: [] });
         }
       }
     }

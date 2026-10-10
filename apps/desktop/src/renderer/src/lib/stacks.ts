@@ -36,3 +36,17 @@ export function stackPlaceTitle(place: StackPlace): string {
   const where = place.builtOn ? `built on #${prNumber(place.builtOn)}` : 'bottom of the stack';
   return `Layer ${place.layer} of ${place.of} in a stack (${where})`;
 }
+
+/**
+ * What a move or re-sort acts on, for menu labels: "#1907" for a lone PR,
+ * "the 5-PR stack" when the PR sits in a stack, since a stack never splits
+ * across topics and moving one layer moves them all.
+ */
+export function moveSubject(stacks: TileStack[], prKey: string | null, fallbackKey: string | null): string {
+  const key = prKey ?? fallbackKey;
+  const stack = key === null ? undefined : stacks.find((candidate) => candidate.prKeys.length > 1 && candidate.prKeys.includes(key));
+  if (stack) {
+    return `the ${stack.prKeys.length}-PR stack`;
+  }
+  return key === null ? 'this PR' : `#${prNumber(key)}`;
+}

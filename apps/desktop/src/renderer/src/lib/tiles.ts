@@ -28,6 +28,19 @@ export function kindParts(view: TileView): { word: string; count: number | null 
   return { word: 'PR', count: null };
 }
 
+/**
+ * The number after the kind word: the PR count, or "2 of 5 open" for a stack
+ * with merged or closed layers, so the count says how many are still live.
+ */
+export function kindCountText(view: TileView): string | null {
+  const { count } = kindParts(view);
+  if (count === null) {
+    return null;
+  }
+  const open = view.prs.filter((pr) => pr.state === 'OPEN').length;
+  return view.tile.kind === 'stack' && open < count ? `${open} of ${count} open` : String(count);
+}
+
 /** The newest reason the tile is unread; the strip shows this one. */
 export function newestUnreadReason(view: TileView): UnreadReason | null {
   const reasons = view.state.unreadBecause;

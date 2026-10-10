@@ -208,6 +208,30 @@ describe('PostPile MCP server', () => {
     ]);
   });
 
+  it('finds a PR whatever the case of its owner and repo, as GitHub does', async () => {
+    const client = await connected();
+    const upper = await call(client, 'pr_context', { pr: 'ACME/APP#1932' });
+    expect(upper.isError).toBe(false);
+    expect(upper.text).toContain('acme/app#1932  ');
+    expect((await call(client, 'pr_context', { pr: 'https://github.com/Acme/App/pull/1932' })).isError).toBe(false);
+  });
+
+  it('refuses a whitespace-only search, and says JSON ignores detail: "full"', async () => {
+    const client = await connected();
+    const blank = await call(client, 'search_prs', { query: '   ' });
+    expect(blank.isError).toBe(true);
+    expect(blank.text).toContain('query needs at least one word');
+    const full = await callText(client, 'pr_context', { pr: 'acme/app#1902', format: 'json', detail: 'full' });
+    expect(full).toContain('detail: "full" applies to text answers only');
+    expect(await callText(client, 'topic', { topic: 'depot', format: 'json', detail: 'full' })).toContain('detail: "full" applies to text answers only');
+    expect(await callText(client, 'pr_context', { pr: 'acme/app#1902', format: 'json' })).not.toContain('applies to text answers only');
+  });
+
+  it('names the user in the header', async () => {
+    const client = await connected();
+    expect(await callText(client, 'whats_on_me')).toContain('PostPile\'s user is @you; "you" below means @you.');
+  });
+
   it('shows a topic briefly by id or name, in full on request, and fences topic names in errors', async () => {
     const client = await connected();
     const brief = await callText(client, 'topic', { topic: 'topic-depot' });
@@ -393,7 +417,7 @@ describe('PostPile MCP server', () => {
     expect(await callText(client, 'pr_context', { pr: 'acme/app#1822' })).toContain('pending: team-platform');
     expect(others).toContain('acme/app#1822 by remy (outside your team)');
     // A set matches when any of its PRs does, so a teammate's PR can still show beside an outsider's.
-    expect(others).toContain('acme/app#1855 by jude (outside your team)');
+    expect(others).toContain('acme/app#1855 (merged) by jude (outside your team)');
     expect(others).not.toContain('acme/app#1870');
     expect(others).not.toContain('(you)');
 

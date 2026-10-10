@@ -7,9 +7,9 @@ import { MergeIcon, TrashIcon } from './icons.tsx';
 
 /**
  * The inbox cleanup's quiet line in the sidebar footer, any day: "12 merged
- * PRs · Clear" (or "N old notifications · Clear" with no merged PR unread),
- * "Clearing 84 / 191" while a run goes. Clear opens the dialog in sidebar
- * mode. Next to merged PRs, "✨ 8 of them look safe · Clear" clears just
+ * PRs · Clean up…" (or "N old notifications · Clean up…" with no merged PR unread),
+ * "Clearing 84 / 191" while a run goes. Clean up… opens the dialog in sidebar
+ * mode. Under merged PRs, "✨ 8 of them look safe · Clear these 8" clears just
  * those right away: an explicit, narrow click, so no dialog.
  */
 export function InboxCleanupLine() {
@@ -25,7 +25,7 @@ export function InboxCleanupLine() {
   const safeBlocked = safeClearBlocked(view);
   return (
     <>
-      <p className="flex flex-wrap items-center gap-1.5 px-2.5 py-1 text-[11px] text-hint">
+      <p className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] text-hint">
         {line.kind === 'merged' && <MergeIcon size={12} className="shrink-0 text-merged" />}
         {line.kind === 'running' && <TrashIcon size={12} className="shrink-0 text-muted" />}
         <span className={`truncate ${line.kind === 'running' ? 'font-mono tabular-nums' : ''}`}>{line.text}</span>
@@ -37,30 +37,29 @@ export function InboxCleanupLine() {
             onClick={() => setOpen(true)}
             className="shrink-0 text-muted hover:text-ink hover:underline disabled:opacity-50 disabled:hover:text-muted disabled:hover:no-underline"
           >
-            Clear
+            Clean up…
           </button>
         )}
-        {safe !== null && (
-          <>
-            <span aria-hidden="true" className="px-0.5 text-ghost">
-              ·
-            </span>
-            <span className="truncate" title={SAFE_MERGED_NOTE}>
-              <span aria-hidden="true">✨ </span>
-              {safe}
-            </span>
-            <button
-              type="button"
-              disabled={safeBlocked !== null || clearingSafe}
-              title={safeBlocked ?? SAFE_MERGED_NOTE}
-              onClick={() => void actions.clearSafeMerged({ countedAt: view.countedAt })}
-              className="shrink-0 text-muted hover:text-ink hover:underline disabled:opacity-50 disabled:hover:text-muted disabled:hover:no-underline"
-            >
-              Clear
-            </button>
-          </>
-        )}
       </p>
+      {safe !== null && (
+        // On its own line: it clears without a dialog, so it must not read as part of the "Clean up…" button.
+        <p className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] text-hint">
+          <span className="truncate" title={SAFE_MERGED_NOTE}>
+            <span aria-hidden="true">✨ </span>
+            {safe}
+          </span>
+          <button
+            type="button"
+            disabled={safeBlocked !== null || clearingSafe}
+            title={safeBlocked ?? SAFE_MERGED_NOTE}
+            aria-label={`Clear these ${view.counts.mergedSafe} on GitHub`}
+            onClick={() => void actions.clearSafeMerged({ countedAt: view.countedAt })}
+            className="shrink-0 text-muted hover:text-ink hover:underline disabled:opacity-50 disabled:hover:text-muted disabled:hover:no-underline"
+          >
+            Clear these {view.counts.mergedSafe}
+          </button>
+        </p>
+      )}
       {open && <InboxCleanupDialog mode={{ kind: 'sidebar' }} view={view} onClose={() => setOpen(false)} />}
     </>
   );

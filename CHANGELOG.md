@@ -2,6 +2,34 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## Unreleased
+
+### Fixed
+
+- The breadcrumb names the same section as the sidebar while a tile stays selected. It showed the topic's new section while the sidebar still held the row in the old one.
+- A topic no longer shows two "Dealt with" headings after a read in place: the heading over the tile you just read says "Just read".
+- Your own stack waiting on a reviewer above an approved layer leads with Snooze instead of a "Mark read" that had nothing to mark.
+- An open PR you approved keeps its review row after it counts as done, with "You approved …, commits since" and an outlined "Approve again", so a push after your approval has a next step.
+- A PR moved out of a set with "Wrong topic" leaves the set right away. It showed in both topics until the next sync.
+- "To merge" names reviewers still asked on an approved PR ("approved · team-platform still asked"). "approved" next to a waiting team read as a contradiction.
+- A search with no match says archived topics are not searched.
+- An agent can no longer bring back a topic move you rejected by naming another PR of the same stack.
+- Topic move and split previews count only open PRs and list the merged and closed stack layers that go along.
+- `whats_on_me` marks merged and closed PRs inside open tiles, and `pr_context` finds PRs whatever the case of the owner and repo.
+- A topic name an agent suggests is refused above 80 characters instead of being cut without a word.
+- A note "covered by" a PR nobody has reviewed yet now says "(no review yet)" in the PR pane and in `pr_context`.
+- An agent clearing a note you already cleared is told you cleared it, and no "Replaced:" line is left under a cleared note.
+- The connect popover no longer calls the MCP server read-only: agents can leave notes and suggest topic changes.
+- The dev CLI exits non-zero when a PR or topic isn't found, and says what was wrong with a bad command.
+- The tile "…" menu no longer opens under the next tile after a tile settled.
+- Footer popovers (the writes lock, "outside agents") wrap inside their box; the quota message is shorter and names the day, and the install command in the missing-tool card wraps instead of being cut.
+- The footer counts "unread tiles", says "notified" instead of "pinged", and no longer says the mark-read queue is empty while the lock holds pending writes. The lock badge reads "N pending", and its buttons read "Unlock and discard" and "Discard, stay locked".
+- The sidebar cleanup line has "Clean up…" and "Clear these N" on separate lines instead of two buttons both named "Clear".
+- "You approved now ago" and similar labels read "just now"; the "New since you looked" fold reads "Show a deploy"; a mixed fold says "quiet events"; counts say "1 tile" and "1 open PR in Dealt with".
+- The tile menu names what a move acts on ("Move #1907" or "Move the 5-PR stack"), the remove-team confirm says it also marks the thread read, and the Snooze toast says the thread is still unread on GitHub.
+- The Instructions page shows one "Run setup" after a skip, and the Handled quietly page has a shorter intro and clearer reasons.
+- The browser console no longer logs a Content-Security-Policy violation on every load.
+
 ## 0.27.2 (2026-10-09)
 
 ### Added

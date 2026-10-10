@@ -25,9 +25,13 @@ function paneOf(view: TileView, pr: PrSummary): PaneOffers {
   return pane;
 }
 
-/** A done PR or tile offers only Open on GitHub, and never Approve, Ask, Snooze or Remove team. */
-function expectOnlyOpen(pane: PaneOffers): void {
-  expect(pane).toMatchObject({ lead: 'none', approve: false, ask: false, markLabel: null, snooze: false, removeTeams: [] });
+/**
+ * A done PR or tile offers only Open on GitHub, and never Ask, Snooze or
+ * Remove team; Approve only as the outlined "Approve again" on an open PR
+ * the viewer approved (2026-10-10).
+ */
+function expectOnlyOpen(pane: PaneOffers, pr: PrSummary): void {
+  expect(pane, pr.key).toMatchObject({ lead: 'none', approve: pr.primaryAction === 'approved', ask: false, markLabel: null, snooze: false, removeTeams: [] });
 }
 
 describe('quiet rows on the sample board', () => {
@@ -64,7 +68,7 @@ describe('rules agree on the sample boards', () => {
       }
       expect(view.offers, view.tile.id).toMatchObject({ footer: 'open', markLabel: null, github: null });
       for (const pr of view.prs) {
-        expectOnlyOpen(paneOf(view, pr));
+        expectOnlyOpen(paneOf(view, pr), pr);
       }
     }
   });
@@ -74,10 +78,10 @@ describe('rules agree on the sample boards', () => {
       for (const pr of view.prs.filter((row) => row.done)) {
         const pane = paneOf(view, pr);
         if (pr.unseenLoudEvents > 0 || pr.unreadOnGitHub) {
-          expect(pane, pr.key).toMatchObject({ approve: false, ask: false, removeTeams: [] });
+          expect(pane, pr.key).toMatchObject({ approve: pr.primaryAction === 'approved', ask: false, removeTeams: [] });
           expect(pane.markLabel, pr.key).not.toBeNull();
         } else {
-          expect(pane, pr.key).toMatchObject({ lead: 'none', approve: false, ask: false, markLabel: null, removeTeams: [] });
+          expect(pane, pr.key).toMatchObject({ lead: 'none', approve: pr.primaryAction === 'approved', ask: false, markLabel: null, removeTeams: [] });
         }
       }
     }

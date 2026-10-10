@@ -10,10 +10,14 @@ function lowerFirst(text: string): string {
 // "pim addressed your changes: re-review" (" on #12" on multi-PR tiles).
 const RE_REVIEW = /: (re-review(?: on #\d+)?)$/;
 
+// ", lyra mentioned you" at the end of a move.
+const MENTION_TAIL = /, \S+ mentioned you$/;
+
 /** The move in toast words: "re-review", "answer ada's question". */
 export function moveWords(what: string): string {
   const reReview = RE_REVIEW.exec(what);
-  return reReview ? reReview[1]! : lowerFirst(what);
+  // The mention is seen once the thread is read, so the tail would only repeat news.
+  return reReview ? reReview[1]! : lowerFirst(what).replace(MENTION_TAIL, '');
 }
 
 export interface MarkReadNoticeInput {
@@ -24,6 +28,8 @@ export interface MarkReadNoticeInput {
   writesOn: boolean;
   /** What the tile would be after the mark-read, from before it. */
   afterRead: TileAfterRead;
+  /** Set when one PR of the tile was marked (the pane): the toast names it. */
+  prKey?: string;
 }
 
 export interface MarkReadNotice {
@@ -42,5 +48,14 @@ export function markReadNotice(input: MarkReadNoticeInput): MarkReadNotice {
   if (!input.ok || !input.writesOn || input.afterRead.done || turn.kind !== 'you') {
     return { message: input.message, offerSnooze: false };
   }
-  return { message: `Marked read. Still your move: ${moveWords(turn.what)}.`, offerSnooze: true };
+  const marked = input.prKey ? `#${input.prKey.split('#')[1] ?? input.prKey} ` : '';
+  return { message: `Marked ${marked}read. Still your move: ${moveWords(turn.what)}.`, offerSnooze: true };
+}
+
+/**
+ * The toast after a snooze: the tile is quiet in PostPile but the thread
+ * stays unread on GitHub (GitHub unread is PostPile unread), so say so.
+ */
+export function snoozeMessage(message: string, ok: boolean): string {
+  return ok ? `${message.replace(/\.$/, '')}. Still unread on GitHub.` : message;
 }
