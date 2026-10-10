@@ -4,7 +4,10 @@ import type { AgentApproveOffer, LeftOutPr, MarkReadBlock, PrKey, SkippedTile, T
 
 /** Pill words for a greyed action: why the agent cannot back it. */
 const REASON_WORDS: Record<MarkReadBlock, string> = {
-  rechecking: 'Rechecking…',
+  rechecking: 'Checking…',
+  agent_off: 'No verdict',
+  agent_limit: 'No verdict',
+  glance_failed: 'No verdict',
   look_closer: 'Look closer',
   high: 'High risk',
   asks_for_you: 'Needs you',
@@ -12,14 +15,20 @@ const REASON_WORDS: Record<MarkReadBlock, string> = {
 
 /** The same reasons inside the batch toast's sentence. */
 const SKIP_WORDS: Record<MarkReadBlock, string> = {
-  rechecking: 'rechecking',
+  rechecking: 'checking',
+  agent_off: 'agent off',
+  agent_limit: 'agent limit',
+  glance_failed: 'glance failed',
   look_closer: 'look closer',
   high: 'high risk',
   asks_for_you: 'asks for you',
 };
 
 const REASON_SENTENCES: Record<MarkReadBlock, string> = {
-  rechecking: 'A PR changed since the agent looked, and it is checking again.',
+  rechecking: 'A PR changed since the agent looked, or it has not looked yet. A new glance is on its way.',
+  agent_off: 'Agent features are off or paused, so at least one PR has no current verdict.',
+  agent_limit: 'The agent hit its call limit, so at least one PR has no current verdict until the next sync.',
+  glance_failed: "The agent's glance failed on at least one PR, so it has no verdict.",
   look_closer: 'The agent says at least one PR needs a closer look.',
   high: 'The agent rates the risk of at least one PR as high.',
   asks_for_you: 'Something in the unread news asks for you.',
@@ -126,7 +135,12 @@ export function approvedMessage(count: number): string {
   return count === 1 ? 'Approved' : `Approved ${count} PRs`;
 }
 
-const LEFT_OUT_WORDS = { rechecking: 'rechecking after a push', look_closer: 'look closer', high: 'high risk', layer_below: 'a layer below needs a look' } as const;
+const LEFT_OUT_WORDS = {
+  rechecking: 'checking after a change',
+  agent_off: 'no verdict, agent off',
+  agent_limit: 'no verdict, agent limit',
+  glance_failed: 'no verdict, glance failed',
+  look_closer: 'look closer', high: 'high risk', layer_below: 'a layer below needs a look' } as const;
 
 /** Why the confirm list names a PR as left out: "look closer", or "waits on #2104" when a layer below holds it back. */
 export function leftOutReason(pr: Pick<LeftOutPr, 'reason' | 'waitsOn'>): string {

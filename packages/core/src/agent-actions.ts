@@ -7,6 +7,7 @@
 // `approve`), who approved (`standingApprovals`), the glance's stale flag, the "New moves only" asks
 // (`isNewYourMove`), the snoozed tile state and provenance.
 import { standingApprovals } from './approvals.ts';
+import type { GlanceRefreshBlock, GlanceState } from './glance-state.ts';
 import { isTracked } from './provenance.ts';
 import { prWantsGlance } from './loudness.ts';
 import { isNewYourMove } from './quiet-reads.ts';
@@ -25,11 +26,18 @@ export type AgentOfferState = 'active' | 'greyed';
 
 /**
  * Why the agent cannot back an action on a PR:
- * - rechecking: the glance is stale or missing ("✨ rechecking…")
+ * - rechecking: the glance is stale or missing and a new one is on its way
+ *   (writing, queued, or written when the user looks; "✨ Checking…")
+ * - agent_off, agent_limit, glance_failed: the glance is stale or missing
+ *   and nothing is writing it: claude is off, a call cap holds it until the
+ *   next sync, or the agent gave no usable answer ("✨ No verdict")
  * - look_closer: the verdict is not Looks safe ("✨ look closer")
  * - high: Looks safe, but the risk is high or unreadable ("✨ high")
  */
-export type AgentBlock = 'rechecking' | 'look_closer' | 'high';
+export type AgentBlock = 'rechecking' | 'agent_off' | 'agent_limit' | 'glance_failed' | 'look_closer' | 'high';
+
+/** The blocks of a PR without a current glance (`noVerdictBlock`). */
+export type NoVerdictBlock = Extract<AgentBlock, 'rechecking' | 'agent_off' | 'agent_limit' | 'glance_failed'>;
 
 /**
  * Why an approvable PR is left out of an agent Approve: its own agent block,
@@ -47,6 +55,8 @@ export interface AgentPrFacts {
   key: PrKey;
   /** A glance exists and is not stale. */
   current: boolean;
+  /** Without a current glance: whether a new one is on its way (`rechecking`) or why none comes (`noVerdictBlock`). */
+  noVerdict: NoVerdictBlock;
   /** The stored glance's verdict, stale or not; null without a glance. */
   verdict: Verdict | null;
   /** The glance's risk line as written ("medium - touches the worker loop"); null without a glance. */
@@ -217,6 +227,10 @@ export interface AgentPrFactsInput {
   events: PrEvent[];
   glance: { verdict: Verdict; risk: string } | null;
   glanceStale: boolean;
+  /** Where the glance stands (`glanceStateOf`), for why a missing or stale one has no verdict. */
+  glanceState: GlanceState;
+  /** Why looking at the PR cannot rewrite a stale glance (`glanceRefreshBlockOf`); null when it can. */
+  glanceRefreshBlock: GlanceRefreshBlock | null;
   /** GitHub's read time of the PR's thread: the "New moves only" boundary. Null when never read. */
   lastReadAt: IsoTime | null;
 }
@@ -241,12 +255,36 @@ function approvedByAnyone(pr: Pr): boolean {
   return pr.reviewDecision === 'APPROVED' || approvals.people.length > 0 || approvals.agents.length > 0;
 }
 
+/**
+ * Why a PR without a current glance has no verdict. Rechecking only while a
+ * new glance is on its way: writing, queued, or a stale one that looking at
+ * the PR rewrites. Otherwise the reason nothing writes it: claude off, a call
+ * cap (the sync's, the daily one, or catch-up off) or a failed glance.
+ */
+export function noVerdictBlock(state: GlanceState, refreshBlock: GlanceRefreshBlock | null): NoVerdictBlock {
+  if (state === 'agent_off' || refreshBlock === 'agent_off') {
+    return 'agent_off';
+  }
+  if (state === 'capped') {
+    return 'agent_limit';
+  }
+  if (state === 'failed') {
+    return 'glance_failed';
+  }
+  // A stale glance with no run on its topic waits for a look, unless a cap holds the rewrite back until the next sync.
+  if (state === 'ready' && (refreshBlock === 'daily_cap' || refreshBlock === 'catch_up_off')) {
+    return 'agent_limit';
+  }
+  return 'rechecking';
+}
+
 /** One PR's agent facts, from the same inputs as its row (`PrSummaryInput` fits). */
 export function agentPrFacts(input: AgentPrFactsInput): AgentPrFacts {
   const glance = input.glance;
   return {
     key: input.pr.key,
     current: glance !== null && !input.glanceStale,
+    noVerdict: noVerdictBlock(input.glanceState, input.glanceRefreshBlock),
     verdict: glance?.verdict ?? null,
     riskLine: glance?.risk ?? null,
     risk: glance ? riskLevelOf(glance.risk) : null,
@@ -265,7 +303,7 @@ function backedRisk(risk: RiskLevel | null): BackedRisk | null {
 /** Why the agent does not back approving this PR, or null when it is agent-safe: current glance, Looks safe, low or medium risk. */
 function approveBlock(facts: AgentPrFacts): AgentBlock | null {
   if (!facts.current) {
-    return 'rechecking';
+    return facts.noVerdict;
   }
   if (facts.verdict !== 'LOOKS_SAFE') {
     return 'look_closer';
@@ -283,7 +321,7 @@ function markReadBlock(facts: AgentPrFacts): MarkReadBlock | null {
     return null;
   }
   if (!facts.current) {
-    return 'rechecking';
+    return facts.noVerdict;
   }
   if (facts.verdict === 'LOOK_CLOSER') {
     return 'look_closer';
@@ -300,10 +338,12 @@ function firstReason<T extends string>(reasons: T[], order: T[]): T | null {
   return order.find((reason) => reasons.includes(reason)) ?? null;
 }
 
-const TILE_APPROVE_ORDER: AgentBlock[] = ['rechecking', 'look_closer', 'high'];
-const TILE_MARK_READ_ORDER: MarkReadBlock[] = ['asks_for_you', 'rechecking', 'look_closer', 'high'];
-// Rechecking first: waiting helps there, an ask for you or a verdict does not go away by itself.
-const TOPIC_MARK_READ_ORDER: MarkReadBlock[] = ['rechecking', 'asks_for_you', 'look_closer', 'high'];
+// Rechecking first: waiting helps there. Then why there is no verdict, then the verdicts.
+const NO_VERDICT_ORDER: NoVerdictBlock[] = ['rechecking', 'agent_off', 'agent_limit', 'glance_failed'];
+const TILE_APPROVE_ORDER: AgentBlock[] = [...NO_VERDICT_ORDER, 'look_closer', 'high'];
+const TILE_MARK_READ_ORDER: MarkReadBlock[] = ['asks_for_you', ...NO_VERDICT_ORDER, 'look_closer', 'high'];
+// An ask for you or a verdict does not go away by itself, so it comes after the waits.
+const TOPIC_MARK_READ_ORDER: MarkReadBlock[] = [...NO_VERDICT_ORDER, 'asks_for_you', 'look_closer', 'high'];
 
 /** What the agent offers read of the tile view: its stacks, the rows, Approve's own rule (`offers.pane`), the state and the unread PRs. */
 export type AgentOfferView = Pick<TileView, 'prs' | 'offers' | 'state' | 'unreadPrKeys'> & { tile: Pick<Tile, 'stacks'> };
@@ -427,8 +467,8 @@ export type TopicAgentTile = { tile: Pick<Tile, 'id'>; state: Pick<TileState, 'k
  * The topic's ✨ Approve: the approvable PRs of its unsnoozed tiles (each PR
  * once). It covers exactly what those tiles' Approves cover (so base up on
  * stacks too) and names the rest. Gone without an approvable PR; greyed
- * when none is covered, `rechecking` if any is rechecking, else
- * `look_closer`.
+ * when none is covered, with the first PR without a verdict in
+ * `NO_VERDICT_ORDER` (rechecking first), else `look_closer`.
  */
 export function topicApproveOffer(tiles: TopicAgentTile[]): AgentApproveOffer | null {
   const unsnoozed = tiles.filter((view) => view.state.kind !== 'snoozed');
@@ -457,7 +497,7 @@ export function topicApproveOffer(tiles: TopicAgentTile[]): AgentApproveOffer | 
   return {
     state: active ? 'active' : 'greyed',
     risk: active ? highestRisk(covered.map((pr) => pr.risk)) : null,
-    reason: active ? null : leftOut.some((pr) => pr.reason === 'rechecking') ? 'rechecking' : 'look_closer',
+    reason: active ? null : (firstReason<AgentBlock>(ownBlocks(leftOut), NO_VERDICT_ORDER) ?? 'look_closer'),
     covered,
     leftOut,
     coveredCount: covered.length,
@@ -497,6 +537,9 @@ export function topicMarkReadOffer(tiles: TopicAgentTile[]): TopicMarkReadOffer 
 
 const AGENT_REFUSALS: Record<AgentBlock, string> = {
   rechecking: 'the agent is rechecking it',
+  agent_off: 'the agent is off, so it has no current verdict',
+  agent_limit: 'the agent hit its call limit, so it has no current verdict',
+  glance_failed: 'its glance failed, so it has no verdict',
   look_closer: 'the agent now says look closer',
   high: 'the agent now rates it high risk',
 };

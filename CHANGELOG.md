@@ -48,6 +48,12 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - The interruptions question waits for a running cleanup and for gh to work, instead of opening on top of them.
 - The title bar says "waiting for your answer" while the first sync waits for the inbox question, and "GitHub unreachable" when the poll is off and GitHub cannot be reached.
 - With both gh and claude broken, the note says to fix gh first and shows the `toolPath` hint once.
+- A PR without a current verdict no longer shows "Rechecking…" on its Approve and Mark read when nothing is checking it. "Checking…" now only shows while a new glance is on its way; with the agent off or paused, a used-up agent limit or a failed glance the pill says "No verdict" and the tooltip says why.
+- Chat Send, "Draft with agent", "Rewrite with agent" and Recheck are disabled while the agent is off or paused, with the reason as the tooltip. Before, they failed only after the click. The agent pane says so above the input; you can still type.
+- A glance that waits for the agent limit says "Not looked at yet" and when the next sync reads it, in place of "Waiting (agent limit)" and "agent-call cap".
+- A failed glance no longer shows the parser's reason ("left out of the answer") in the card; it moved to the tooltip.
+- The glance card keeps its height while a new glance is written, so Approve no longer moves under the cursor when it lands.
+- Long words without spaces (cache keys, branch names) in a glance wrap instead of running out of the pane.
 
 ## 0.27.2 (2026-10-09)
 

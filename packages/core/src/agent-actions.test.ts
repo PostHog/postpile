@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { agentApproveRefusal, agentApproveSkip, agentPrFacts, riskLevelOf, topicAgentOffers } from './agent-actions.ts';
+import { agentApproveRefusal, agentApproveSkip, agentPrFacts, noVerdictBlock, riskLevelOf, topicAgentOffers } from './agent-actions.ts';
+import type { GlanceRefreshBlock, GlanceState } from './glance-state.ts';
 import { at, makeEvent, makePr, makeReview, NO_OPENED_READ_INPUT, singleTile, viewer } from './fixtures.ts';
 import { buildPrSummary, buildTileView, type PrSummaryInput } from './tile-view.ts';
 import type { Glance, Pr, PrEvent, PrKey, Tile, TileState, UserPrState, Verdict } from './types.ts';
@@ -15,6 +16,9 @@ interface RowSpec {
   risk?: string;
   stale?: boolean;
   events?: PrEvent[];
+  /** Defaults to ready with a glance, queued without one. */
+  glanceState?: GlanceState;
+  glanceRefreshBlock?: GlanceRefreshBlock;
 }
 
 /** One row's read-model input, with the agent facts built from the same input. */
@@ -31,8 +35,8 @@ function rowInput(spec: RowSpec, state: TileState): PrSummaryInput {
     glance,
     glanceStale: spec.stale ?? false,
     glanceGap: null,
-    glanceRefreshBlock: null,
-    glanceState: glance ? 'ready' : 'queued',
+    glanceRefreshBlock: spec.glanceRefreshBlock ?? null,
+    glanceState: spec.glanceState ?? (glance ? 'ready' : 'queued'),
     quietRepo: false,
     repoLabel: null,
     tileUnread: state.kind === 'unread',
@@ -92,6 +96,24 @@ describe('riskLevelOf', () => {
     expect(riskLevelOf('medium - touches the worker loop')).toBe('medium');
     expect(riskLevelOf('Low: docs only')).toBe('low');
     expect(riskLevelOf('moderate')).toBe('high');
+  });
+});
+
+describe('noVerdictBlock', () => {
+  it('says rechecking only while a new glance is on its way', () => {
+    expect(noVerdictBlock('writing', null)).toBe('rechecking');
+    expect(noVerdictBlock('queued', null)).toBe('rechecking');
+    // A stale glance that looking at the PR rewrites.
+    expect(noVerdictBlock('ready', null)).toBe('rechecking');
+  });
+
+  it('says why no glance comes: agent off, a call cap, or a failed glance', () => {
+    expect(noVerdictBlock('agent_off', 'agent_off')).toBe('agent_off');
+    expect(noVerdictBlock('ready', 'agent_off')).toBe('agent_off');
+    expect(noVerdictBlock('capped', null)).toBe('agent_limit');
+    expect(noVerdictBlock('ready', 'daily_cap')).toBe('agent_limit');
+    expect(noVerdictBlock('ready', 'catch_up_off')).toBe('agent_limit');
+    expect(noVerdictBlock('failed', null)).toBe('glance_failed');
   });
 });
 
@@ -169,6 +191,25 @@ describe('tile Approve', () => {
   it('is greyed as rechecking while the glance is stale', () => {
     const approve = tileView({ pr: reviewPr(1), verdict: 'LOOKS_SAFE', risk: 'low', stale: true }).agent.approve;
     expect(approve).toMatchObject({ state: 'greyed', reason: 'rechecking' });
+  });
+
+  // Bug hunt MEM-A-01: "Rechecking…" showed with the agent off, capped or failed, where nothing ever rechecks.
+  it('is greyed with why there is no verdict when nothing is writing a glance', () => {
+    expect(tileView({ pr: reviewPr(1), glanceState: 'agent_off' }).agent.approve).toMatchObject({ state: 'greyed', reason: 'agent_off' });
+    expect(tileView({ pr: reviewPr(1), glanceState: 'capped' }).agent.approve).toMatchObject({ state: 'greyed', reason: 'agent_limit' });
+    expect(tileView({ pr: reviewPr(1), glanceState: 'failed' }).agent.approve).toMatchObject({ state: 'greyed', reason: 'glance_failed' });
+    expect(tileView({ pr: reviewPr(1), glanceState: 'writing' }).agent.approve).toMatchObject({ state: 'greyed', reason: 'rechecking' });
+    const offStale = tileView({ pr: reviewPr(1), verdict: 'LOOKS_SAFE', risk: 'low', stale: true, glanceRefreshBlock: 'agent_off' });
+    expect(offStale.agent.approve).toMatchObject({ state: 'greyed', reason: 'agent_off' });
+  });
+
+  it('names the PR without a verdict in the topic, a recheck before a failed glance', () => {
+    const failed = tileView({ pr: reviewPr(1), glanceState: 'failed' });
+    const capped = tileView({ pr: reviewPr(2), glanceState: 'capped' });
+    const writing = tileView({ pr: reviewPr(3), glanceState: 'writing' });
+    expect(topicAgentOffers([failed, capped]).approve).toMatchObject({ state: 'greyed', reason: 'agent_limit' });
+    expect(topicAgentOffers([failed, capped, writing]).approve).toMatchObject({ state: 'greyed', reason: 'rechecking' });
+    expect(agentApproveRefusal('acme/app#1', [failed], 'agent_tile')).toBe('its glance failed, so it has no verdict');
   });
 
   it('is gone without an approvable PR (your own PR)', () => {
@@ -276,6 +317,12 @@ describe('topic Mark read', () => {
     const open = tileView({ pr: makePr({ number: 1, author: 'ada' }) }, UNREAD);
     expect(open.agent.markRead).toMatchObject({ state: 'greyed', reason: 'rechecking' });
     expect(topicAgentOffers([open]).markRead).toMatchObject({ state: 'greyed', reason: 'rechecking' });
+  });
+
+  it('says why there is no verdict instead of rechecking when the agent is off', () => {
+    const open = tileView({ pr: makePr({ number: 1, author: 'ada' }), glanceState: 'agent_off' }, UNREAD);
+    expect(open.agent.markRead).toMatchObject({ state: 'greyed', reason: 'agent_off' });
+    expect(topicAgentOffers([open]).markRead).toMatchObject({ state: 'greyed', reason: 'agent_off', skipped: [{ reason: 'agent_off' }] });
   });
 
   it('lets a merged PR in a tile skip the glance wait but not the open one next to it', () => {

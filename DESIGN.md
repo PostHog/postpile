@@ -2530,7 +2530,12 @@ need it, and never retry per call.
   to the rules like over the daily cap. Consolidation reports
   `skipped: 'agent_off'`. The work context sweep returns "skipped" without
   recording a failure. Chat, Recheck, drafts and refine fail with the
-  headline.
+  headline. The renderer does not offer them meanwhile (2026-10-10, bug
+  hunt MEM-A-11, OPS-A-13): while `ToolsView.agentOn` is false, chat Send
+  and "For all topics", "Draft with agent" / "Rewrite with agent", and
+  Recheck on a glance or memory line are disabled with the headline (and
+  when it is tried again) as their tooltip (`agentOffReason`). The agent
+  pane says so in one quiet line above the input; typing still works.
 - **PATH.** A Finder launch gets launchd's minimal PATH. Desktop main
   builds PATH without a shell (`launchToolPath`, pure part `toolSearchPath`
   in core): `toolPath` from `~/.config/postpile/config.json` first (mise or
@@ -4782,7 +4787,11 @@ and detail start equally wide (2026-09-30, was a 420-480px tile clamp). At
   line, "Written before the last change. A new assessment will be written
   on the next sync." ("Updating now: a new assessment is being written.").
   Its advice (for-you lines, RISK box, Does / Others, Look at first) folds
-  away behind "Show old assessment". The glance schema stays
+  away behind "Show old assessment". While a new one is being written
+  ("· updating") the old advice shows without the toggle, and the card
+  keeps the tallest height it had since then until the PR changes
+  (2026-10-10, bug hunt MEM-A-12): the review row under it no longer moves
+  when the new glance lands. The glance schema stays
   prose; sentences split into lines in the renderer (a dot followed by a
   space and a capital or digit ends one), so stored glances keep working.
   The action bar (primary, Ask, Mark read, Snooze (single-PR tiles only),
@@ -5795,7 +5804,8 @@ Owner decisions (2026-09-30):
 - **The ✨ rule.** ✨ marks an action that is on offer because an agent's
   verdict supports it. It sits in a pill on the button, and the pill says
   what the agent judged: the risk level (`✨ low`, `✨ medium`) or why it
-  cannot back the action (`✨ look closer`, `✨ high`, `✨ rechecking…`).
+  cannot back the action (`✨ look closer`, `✨ high`, `✨ checking…`,
+  `✨ no verdict`).
   Actions that work without the agent never carry ✨.
 - **Agent-safe PR.** A current glance (not `glanceStale`, not missing),
   verdict `LOOKS_SAFE`, risk low or medium. The risk level is the first
@@ -5815,9 +5825,16 @@ Owner decisions (2026-09-30):
   approvable PR. Active when at least one approvable PR in the tile is
   covered: it approves only those (a stack base to head), names the rest
   as left out, and the pill shows the highest risk among the covered PRs.
-  Greyed out only when nothing is covered. The reason is `rechecking…` when
-  any approvable PR's own glance is stale or missing, else `look closer` or
-  `high`. The topic's Approve covers exactly the union of what its
+  Greyed out only when nothing is covered. When an approvable PR's own
+  glance is stale or missing, the reason says whether a new one is coming
+  (2026-10-10, bug hunt MEM-A-01, `noVerdictBlock` from the PR's
+  `glanceState` and `glanceRefreshBlock`): `rechecking` ("Checking…")
+  only while it is writing, queued, or stale and rewritten when the user
+  looks; else "No verdict" with why in the tooltip: `agent_off` (claude
+  off or paused), `agent_limit` (a call cap, the daily cap or catch-up off
+  holds it until the next sync), `glance_failed`. Then `look closer` or
+  `high`. Order: checking, agent off, agent limit, glance failed, look
+  closer, high. The topic's Approve covers exactly the union of what its
   unsnoozed tiles cover.
   Owner, 2026-10-01: the tile Approve is the same magic approval as the
   topic's; the earlier all-or-nothing tile rule was a spec mistake and
@@ -5852,8 +5869,9 @@ Owner decisions (2026-09-30):
   left out is named with its reason (look closer, high risk, rechecking,
   or "waits on #N" for a stack layer above one that needs a look).
   A PR whose recheck comes back safe joins the count. Greyed out when no
-  approvable PR is agent-safe, with `rechecking…` if any is rechecking,
-  else `look closer`.
+  approvable PR is agent-safe, with the first PR without a verdict
+  (checking, then agent off, agent limit, glance failed), else `look
+  closer`.
 - **Approve is final, so it asks first.** Both Approve buttons open a
   confirm list: each PR with its verdict and risk line, plus the PRs left
   out and why. Each PR goes through the existing approve path with its
@@ -5892,7 +5910,7 @@ Owner decisions (2026-09-30):
   soft green (light green fill, green text and edge) with a green pill;
   greyed buttons keep the dashed outline with a pill in the colour of the
   reason (2026-10-01, was always honey): amber for Look closer, red for
-  high risk, honey when it asks for you, neutral while rechecking. Filled green is only the confirm dialog's "Approve N".
+  high risk, honey when it asks for you, neutral while checking or without a verdict. Filled green is only the confirm dialog's "Approve N".
 - **Tile footer (2026-10-01, design 4b/5e).** No ink button. Left: the turn
   line, then the tile's Approve (✨) right next to it; next to Approve the
   move text needs a wider footer before it shows. Right: Mark read, Snooze,
@@ -7238,8 +7256,12 @@ run or sync writes it), `agent_off`, `failed` (asked twice, no usable
 answer), `capped` (`call_cap` or `daily_cap` gap), `none` (merged, closed,
 pulled in: gets no glance). The renderer words them (`glanceStateText`):
 "Writing the glance…" with a spinner, "Glance queued", "Agent features are
-off", "Waiting: daily agent limit reached, next full sync in N min" (or
-"the last sync hit its agent-call cap"), "Glance failed" with Retry.
+off or paused", "Not looked at yet: PostPile used up today's agent calls.
+It reads this one in the next sync, in about N min." (or "ran out of agent
+calls in the last sync"; pill "Not looked at yet", 2026-10-10, was
+"Waiting (agent limit)"), "Glance failed: the agent gave no usable answer
+for this PR." with Retry. The parser's own reason ("left out of the
+answer") is only the tooltip.
 Pulled-in stack layers keep "Pulled in to complete the stack".
 
 **Retry** (`POST /api/prs/:owner/:repo/:number/glance/retry`,
