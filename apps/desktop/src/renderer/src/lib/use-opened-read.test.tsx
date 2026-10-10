@@ -176,6 +176,37 @@ describe('useOpenedRead', () => {
     expect(marks()).toBe(1);
   });
 
+  it('keeps Undo when the user picks the marked PR again inside the undo window', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+    const marks = stubFetch();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const { result, rerender } = renderHook((props: { openId: number }) => useOpenedRead(VIEW, A, props.openId), {
+      wrapper,
+      initialProps: { openId: 1 },
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(OPENED_READ_DELAY_MS);
+    });
+    expect(result.current.marked).toEqual({ label: 'Mark read', canUndo: true });
+
+    // Same PR, a new explicit open a little later: the mark and its Undo stay.
+    rerender({ openId: 2 });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(OPENED_READ_DELAY_MS * 2);
+    });
+    expect(marks()).toBe(1);
+    expect(result.current.marked).toEqual({ label: 'Mark read', canUndo: true });
+
+    act(() => {
+      result.current.undo();
+    });
+    const undoCalls = fetchSpy.mock.calls.filter(([url]) => String(url).endsWith('/api/undo'));
+    expect(undoCalls).toHaveLength(1);
+    expect(JSON.parse(String(undoCalls[0]?.[1]?.body))).toEqual({ undoToken: 'undo-1' });
+    expect(result.current.marked).toBeNull();
+  });
+
   it('runs no dwell without a PR: an app-picked tile is passed as null', async () => {
     vi.useFakeTimers();
     vi.spyOn(document, 'hasFocus').mockReturnValue(true);

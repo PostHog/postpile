@@ -254,6 +254,28 @@ describe('OpenedReadTimer', () => {
     expect(failed.timer.phase).toBe('idle');
   });
 
+  it('starts over on a reopen only when the open marked nothing', async () => {
+    const { clock, timer, calls } = started();
+    timer.visible();
+    expect(timer.reopen()).toBe(false);
+    clock.advance(OPENED_READ_DELAY_MS);
+    expect(timer.reopen()).toBe(false);
+    await answered();
+    expect(timer.phase).toBe('marked');
+    expect(timer.reopen()).toBe(false);
+    expect(timer.undo()).toBe(MARKED.undoToken);
+    expect(calls()).toBe(1);
+
+    const unwanted = started(false);
+    unwanted.timer.visible();
+    unwanted.clock.advance(OPENED_READ_DELAY_MS);
+    expect(unwanted.timer.reopen()).toBe(true);
+    unwanted.timer.setWanted(true);
+    unwanted.timer.visible();
+    unwanted.clock.advance(OPENED_READ_DELAY_MS);
+    expect(unwanted.calls()).toBe(1);
+  });
+
   it('ignores an answer that arrives after the user moved on', async () => {
     const { clock, timer, phases } = started();
     timer.visible();

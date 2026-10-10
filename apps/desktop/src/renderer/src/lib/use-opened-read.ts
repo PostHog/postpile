@@ -45,8 +45,9 @@ function actingKeys(prKey: PrKey): string[] {
  * refetches of the same PR ask nothing more, and opening the PR again later
  * asks again (the server turns that into a no-op once it is done). `openId`
  * changes with every explicit open, so picking the PR that is already in the
- * pane starts a new dwell too (React would batch the pick into no change of
- * `prKey`). Undo takes the mark back through the mark-read undo window.
+ * pane starts its dwell over when that open marked nothing (React would
+ * batch the pick into no change of `prKey`); a running dwell or a mark with
+ * its Undo stays as it is (`OpenedReadTimer.reopen`). Undo takes the mark back through the mark-read undo window.
  */
 export function useOpenedRead(view: TileView | null, prKey: PrKey | null, openId = 0): OpenedReadState {
   const actions = useActions();
@@ -62,6 +63,8 @@ export function useOpenedRead(view: TileView | null, prKey: PrKey | null, openId
   }
   const [markedLabel, setMarkedLabel] = useState<MarkLabel>('Mark read');
   const timer = useRef<OpenedReadTimer | null>(null);
+  // The open's visibility check, for a reopen that starts the dwell over.
+  const checkVisibility = useRef<() => void>(() => {});
   // The phase belongs to the PR whose open set it: on a PR change the first render still holds the old
   // open's phase (say `marked`), and the new PR must not inherit it (its dot would start empty, Codex on #143).
   const [opened, setOpened] = useState<{ prKey: PrKey | null; phase: OpenedReadPhase }>({ prKey: null, phase: 'idle' });
@@ -82,6 +85,7 @@ export function useOpenedRead(view: TileView | null, prKey: PrKey | null, openId
     // Visibility only counts for the dwell; once it is over, leaving the app changes nothing.
     // An open menu holds the dwell like a hidden window: the mark would swap the footer and close it.
     const onVisibility = () => (document.visibilityState === 'visible' && document.hasFocus() && !anyMenuOpen() ? open.visible() : open.hidden());
+    checkVisibility.current = onVisibility;
     onVisibility();
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('blur', onVisibility);
@@ -94,13 +98,21 @@ export function useOpenedRead(view: TileView | null, prKey: PrKey | null, openId
       window.removeEventListener('focus', onVisibility);
       open.leave();
       timer.current = null;
+      checkVisibility.current = () => {};
     };
-  }, [prKey, openId]);
+  }, [prKey]);
 
   // Declared after the open's effect: on a PR change the new open exists before it gets its flag.
   useEffect(() => {
     timer.current?.setWanted(wanted);
-  }, [wanted, prKey, openId]);
+  }, [wanted, prKey]);
+
+  // Picking the PR already in the pane: only an open that marked nothing starts over, a mark keeps its Undo.
+  useEffect(() => {
+    if (timer.current?.reopen()) {
+      checkVisibility.current();
+    }
+  }, [openId]);
 
   // An Approve, comment review or Remove team in the pane: a mark the refetch then makes wanted may fire.
   const acting = prKey !== null && actingKeys(prKey).some((key) => actions.isBusy(key));

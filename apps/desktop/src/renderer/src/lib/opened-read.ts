@@ -200,6 +200,23 @@ export class OpenedReadTimer {
     return token;
   }
 
+  /**
+   * The user picked the PR in the pane again: an open that ended without a
+   * mark (`idle`: the dwell ended unwanted, was hidden, or the server marked
+   * nothing) starts over, and its dwell runs once the window is visible
+   * (`visible()`). A running dwell, a mark on its way and a mark with its
+   * Undo stay as they are. Returns whether the open started over.
+   */
+  reopen(): boolean {
+    if (this.left || this.current !== 'idle') {
+      return false;
+    }
+    this.armed = false;
+    this.fired = false;
+    this.acted = false;
+    return true;
+  }
+
   /** The user moved on to another PR or tile, or closed the pane: the open ends. The mark, if any, already went out. */
   leave(): void {
     this.left = true;
