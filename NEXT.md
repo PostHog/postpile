@@ -2553,6 +2553,33 @@ Env switches:
   account.
 - `POSTPILE_FAKE_LOCKED=1`: with `POSTPILE_FAKE=1`, the sample starts with
   GitHub writes locked (it starts with them on, like the packaged app).
+- `POSTPILE_FAKE_FAIL_WRITES` (with `POSTPILE_FAKE=1`): sample writes fail
+  like GitHub would answer (502, a 403 for `react`), logged as `failed`.
+  Comma separated `approve`, `comment_review`, `comment`, `reply`, `react`,
+  `mark_read`, or `all`; `once:<kind>` fails only the first call.
+  `POSTPILE_FAKE_FAIL_SEND=1`: "Send N to GitHub" fails and the rows stay
+  pending with the error. `POSTPILE_FAKE_DELAY_MS`: every write, draft,
+  topic chat answer and recheck waits that long (default 0):
+
+  ```
+  POSTPILE_FAKE=1 POSTPILE_FAKE_FAIL_WRITES=once:approve POSTPILE_FAKE_DELAY_MS=1500 POSTPILE_TOKEN=devtok PORT=4877 pnpm server
+  ```
+- `POSTPILE_FAKE_DELIVER` (with `POSTPILE_FAKE=1`): scripted news on the
+  sample, comma separated steps (`apps/server/src/fake/fake-script.ts`,
+  `GET /api/fake/steps` lists them). Each sync after the start sync
+  delivers the next one, like a sync that fetched news; steps run once.
+  `POST /api/fake/advance {"step":"..."}` runs one at once (fake mode
+  only, token needed):
+
+  ```
+  POSTPILE_FAKE=1 POSTPILE_FAKE_DELIVER=ask-you,push POSTPILE_TOKEN=devtok PORT=4877 pnpm server
+  curl -H 'x-postpile-token: devtok' -H 'content-type: application/json' \
+    -d '{"step":"bot-only-read"}' http://127.0.0.1:4877/api/fake/advance
+  ```
+- `POSTPILE_FAKE_LIVE=1` (with `POSTPILE_FAKE=1`): the standalone server
+  starts the fake live poll and the auto sync like Electron main, so the
+  footer reads "live · every 60s" in a browser too. No Mac notifications;
+  pings show in the debug view only.
 - `POSTPILE_MAX_AGENT_CALLS`: agent-call cap for syncs and consolidations
   without an explicit cap (launch, "Sync now", `/api/consolidate`, and the
   CLI without `--max-agent-calls`), default 150 (was 30).

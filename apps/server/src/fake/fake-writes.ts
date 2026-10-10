@@ -15,8 +15,10 @@ import {
   type PendingWritesResult,
   type PrKey,
   type ReadScope,
+  type ThreadOutcome,
   type TilePendingWrite,
 } from '@postpile/core';
+import { FakeFaults, type FakeWriteKind } from './fake-faults.ts';
 
 const SAMPLE_DETAIL = 'sample data: nothing left the process';
 const QUEUED_LOCKED_DETAIL = 'GitHub writes are locked: becomes a pending write after the undo window';
@@ -24,6 +26,24 @@ const PENDING_DETAIL = 'GitHub writes are locked: waits until you unlock and sen
 const DISCARDED_DETAIL = 'discarded while locked: stays unread, like on GitHub';
 const CLEANUP_PENDING_DETAIL = 'GitHub writes are locked: the cleanup waits until you unlock and send it';
 const CLEANUP_DISCARDED_DETAIL = 'cleanup discarded while locked: GitHub keeps them unread';
+
+/** Like the engine's notTakenDetail: why a thread's mark-read did not reach GitHub. */
+function notTakenDetail(reason: string): string {
+  return `GitHub didn't take it: ${reason}; still unread`;
+}
+
+/** The request a thread's mark-read sends, for a fault's error text. */
+function markReadRequest(threadId: string): string {
+  return `PATCH notifications/threads/${threadId}`;
+}
+
+/** The part of a click's local change that belongs to one PR, to put back when its thread's write failed. */
+function localChangeOf(local: FakeLocalChange, prKey: PrKey | null): FakeLocalChange {
+  if (prKey === null) {
+    return { eventIds: [], handledPrKeys: [] };
+  }
+  return { eventIds: local.eventIds.filter((id) => id.startsWith(`${prKey}:`)), handledPrKeys: local.handledPrKeys.filter((key) => key === prKey) };
+}
 
 /** What a click changed in the sample right away (only while writes are on, or with nothing unread on GitHub). */
 export interface FakeLocalChange {
@@ -68,6 +88,8 @@ interface FakePending {
   batch: FakeBatch | null;
   /** The inbox cleanup. Null for a mark-read. */
   catchUp: FakeCatchUp | null;
+  /** Why the last "Send N to GitHub" left it pending (POSTPILE_FAKE_FAIL_SEND); null before a failed try. */
+  error: string | null;
 }
 
 const SUBSCRIPTION_DISCARDED_DETAIL = 'discarded while locked: the GitHub subscription stays as it was';
@@ -105,13 +127,20 @@ export class FakeWrites {
   private readonly pending: FakePending[] = [];
   /** The sample threads' unread flag "on GitHub", fixed at first sight and changed only by sends. */
   private readonly githubUnread = new Map<string, boolean>();
+  /** When the user last read a sample thread "on GitHub", once a scripted step or a quiet read set it (fake-script.ts). */
+  private readonly githubLastRead = new Map<string, IsoTime>();
   private nextId = 1;
 
-  /** `enabled`: how the sample starts. On, like the packaged app with no choice stored; POSTPILE_FAKE_LOCKED=1 starts it locked. */
+  /**
+   * `enabled`: how the sample starts. On, like the packaged app with no
+   * choice stored; POSTPILE_FAKE_LOCKED=1 starts it locked. `faults`: the
+   * failures POSTPILE_FAKE_FAIL_WRITES and POSTPILE_FAKE_FAIL_SEND ask for.
+   */
   constructor(
     private readonly now: () => Date,
     private readonly sample: FakeSample,
     private enabled = true,
+    private readonly faults = new FakeFaults(),
   ) {}
 
   private pendingViews(): PendingWriteView[] {
@@ -142,7 +171,7 @@ export class FakeWrites {
           prKeys: [],
           tileId: write.batch.tileId,
           threadCount: subscription.threads.length,
-          error: null,
+          error: write.error,
         };
       }
       return {
@@ -154,7 +183,7 @@ export class FakeWrites {
         prKeys: write.batch.prKeys,
         tileId: write.batch.tileId,
         threadCount: write.batch.threads.length,
-        error: null,
+        error: write.error,
       };
     });
   }
@@ -166,7 +195,7 @@ export class FakeWrites {
 
   /** The inbox cleanup while locked: one pending write, nothing changes in the sample until it is sent. */
   parkCatchUp(picks: PendingCatchUp, threadIds: string[], title: string): void {
-    this.pending.push({ id: this.nextId, createdAt: this.now().toISOString(), batch: null, catchUp: { picks, threadIds, title } });
+    this.pending.push({ id: this.nextId, createdAt: this.now().toISOString(), batch: null, catchUp: { picks, threadIds, title }, error: null });
     this.nextId += 1;
     this.record({ action: 'inbox_cleanup', origin: 'cleanup', outcome: 'pending', detail: `${title}: ${CLEANUP_PENDING_DETAIL}` });
   }
@@ -226,7 +255,29 @@ export class FakeWrites {
       this.githubUnread.set(thread.id, thread.unread);
     }
     const readHere = this.batches.some((batch) => batch.writesOn && batch.threads.some((queued) => queued.id === thread.id));
-    return { ...thread, unread: !readHere && (this.githubUnread.get(thread.id) ?? thread.unread) };
+    const lastReadAt = this.githubLastRead.get(thread.id) ?? thread.lastReadAt;
+    return { ...thread, unread: !readHere && (this.githubUnread.get(thread.id) ?? thread.unread), lastReadAt };
+  }
+
+  /**
+   * New activity on a sample thread (a scripted step): GitHub flags it
+   * unread. A thread the user had read keeps when they read it, just before
+   * the activity at the latest, so the quiet reads can tell what came after.
+   */
+  activity(thread: NotificationThread, at: IsoTime): void {
+    const current = this.onGitHub(thread);
+    if (!current.unread && current.lastReadAt === null) {
+      const justBefore = new Date(new Date(at).getTime() - 1000).toISOString();
+      this.githubLastRead.set(thread.id, current.updatedAt < justBefore ? current.updatedAt : justBefore);
+    }
+    this.githubUnread.set(thread.id, true);
+  }
+
+  /** A quiet mark-read GitHub took, like the engine's QuietReads: read there as of `readAt`, logged with origin `quiet`. */
+  quietRead(thread: NotificationThread, prKey: PrKey, detail: string, readAt: IsoTime): void {
+    this.githubUnread.set(thread.id, false);
+    this.githubLastRead.set(thread.id, readAt);
+    this.record({ action: 'mark_read', origin: 'quiet', outcome: 'github', threadId: thread.id, prKey, detail });
   }
 
   /** Logs the click the same way ReadMarker does: queued per thread, local for PRs without one that changed right away. */
@@ -270,12 +321,12 @@ export class FakeWrites {
     const createdAt = this.now().toISOString();
     if (batch.threads.length > 0) {
       this.sample.revert(batch.local);
-      this.pending.push({ id: this.nextId, createdAt, batch: { ...batch, subscription: null }, catchUp: null });
+      this.pending.push({ id: this.nextId, createdAt, batch: { ...batch, subscription: null }, catchUp: null, error: null });
       this.nextId += 1;
     }
     const subscription = batch.subscription !== null && batch.subscription.threads.length > 0 ? batch.subscription : null;
     if (subscription !== null) {
-      this.pending.push({ id: this.nextId, createdAt, batch: { ...batch, threads: [], prKeys: [], handleKeys: [], subscription }, catchUp: null });
+      this.pending.push({ id: this.nextId, createdAt, batch: { ...batch, threads: [], prKeys: [], handleKeys: [], subscription }, catchUp: null, error: null });
       this.nextId += 1;
     }
     const subscriptionRows = subscription === null ? [] : subscription.threads.map((thread) => ({ thread, action: subscriptionKind(subscription) }));
@@ -313,20 +364,38 @@ export class FakeWrites {
     }
   }
 
-  private markThreads(batch: FakeBatch, origin: 'queue' | 'quit' | 'footer'): void {
-    for (const thread of batch.threads) {
+  /**
+   * "Sends" each thread's mark-read, like the queue's markThreads: GitHub
+   * takes it (the thread turns read there), or a fault fails it (logged as
+   * failed, the thread stays unread). `fail` gives the error for a thread,
+   * null to let it through. One outcome per thread, in order.
+   */
+  private markThreads(batch: FakeBatch, origin: 'queue' | 'quit' | 'footer', fail: (threadId: string) => string | null): ThreadOutcome[] {
+    return batch.threads.map((thread): ThreadOutcome => {
+      const base = { action: 'mark_read' as const, origin, threadId: thread.id, prKey: thread.prKey, tileId: batch.tileId, batch: batch.batchId };
+      const error = fail(thread.id);
+      if (error !== null) {
+        this.record({ ...base, outcome: 'failed', detail: notTakenDetail(error) });
+        return { kind: 'failed', error };
+      }
       this.githubUnread.set(thread.id, false);
-      this.record({
-        action: 'mark_read',
-        origin,
-        outcome: 'github',
-        threadId: thread.id,
-        prKey: thread.prKey,
-        tileId: batch.tileId,
-        batch: batch.batchId,
-        detail: SAMPLE_DETAIL,
-      });
-    }
+      this.record({ ...base, outcome: 'github', detail: SAMPLE_DETAIL });
+      return { kind: 'sent' };
+    });
+  }
+
+  /**
+   * A queued batch's send, like MarkReadQueue.send: a thread GitHub did not
+   * take puts its PR back to unread here (the click already read it), so
+   * the app never holds a read state GitHub does not have.
+   */
+  private sendQueued(batch: FakeBatch, origin: 'queue' | 'quit'): void {
+    const outcomes = this.markThreads(batch, origin, (threadId) => this.faults.failure('mark_read', markReadRequest(threadId)));
+    batch.threads.forEach((thread, index) => {
+      if (outcomes[index]?.kind === 'failed') {
+        this.sample.revert(localChangeOf(batch.local, thread.prKey));
+      }
+    });
   }
 
   private send(batch: FakeBatch, origin: 'queue' | 'quit'): void {
@@ -337,7 +406,7 @@ export class FakeWrites {
       this.park(batch);
       return;
     }
-    this.markThreads(batch, origin);
+    this.sendQueued(batch, origin);
     this.changeSubscription(batch, origin);
   }
 
@@ -361,7 +430,7 @@ export class FakeWrites {
     const marks = new Map<PrKey, TilePendingWrite>();
     for (const write of this.pending) {
       for (const key of write.batch?.prKeys ?? []) {
-        marks.set(key, { since: write.createdAt, error: null });
+        marks.set(key, { since: write.createdAt, error: write.error });
       }
     }
     return marks;
@@ -369,11 +438,12 @@ export class FakeWrites {
 
   /**
    * A sent mark-read through core's `pendingWriteStep`, like the engine's
-   * `PendingWrites.apply`: every thread went out (the fake never fails), so
-   * their PRs turn read here up to the pending write's time, and PRs without
-   * an unread thread follow and are logged as local.
+   * `PendingWrites.apply`: threads GitHub took turn their PRs read here up
+   * to the pending write's time, and PRs without an unread thread follow
+   * and are logged as local. Threads that failed stay: returns the write
+   * still pending with them and the error, or null when it is done.
    */
-  private completeSent(pending: FakePending, batch: FakeBatch): void {
+  private completeSent(pending: FakePending, batch: FakeBatch, outcomes: ThreadOutcome[]): FakePending | null {
     const write: PendingWrite = {
       id: pending.id,
       kind: 'mark_read',
@@ -389,7 +459,7 @@ export class FakeWrites {
       triedAt: null,
       catchUp: null,
     };
-    const step = pendingWriteStep(write, { kind: 'sent', outcomes: write.threads.map(() => ({ kind: 'sent' as const })) });
+    const step = pendingWriteStep(write, { kind: 'sent', outcomes });
     for (const effect of step.effects) {
       if (effect.kind === 'read_here') {
         this.sample.readHere({ prKeys: effect.prKeys, handleKeys: batch.handleKeys }, pending.createdAt);
@@ -397,9 +467,25 @@ export class FakeWrites {
         this.record({ action: 'mark_read', origin: 'footer', outcome: 'local', prKey: effect.prKey, tileId: batch.tileId, batch: batch.batchId, detail: 'no unread GitHub thread' });
       }
     }
+    if (step.next.kind !== 'kept') {
+      return null;
+    }
+    const left = new Set(step.next.threads.map((thread) => thread.id));
+    return { ...pending, batch: { ...batch, threads: batch.threads.filter((thread) => left.has(thread.id)) }, error: step.next.error };
   }
 
-  /** "Send N to GitHub": refused while locked. The fake never fails a send. */
+  /** Why the footer send of one thread fails: POSTPILE_FAKE_FAIL_SEND, else a mark_read fault; null when it goes through. */
+  private footerFailure(threadId: string): string | null {
+    const request = markReadRequest(threadId);
+    return this.faults.failSend ? `GitHub ${request} failed with 502: Server Error` : this.faults.failure('mark_read', request);
+  }
+
+  /**
+   * "Send N to GitHub": refused while locked. A mark-read whose threads
+   * GitHub did not take (POSTPILE_FAKE_FAIL_SEND, or a mark_read fault)
+   * stays pending with the error, and its tiles stay unread, like the
+   * engine's PendingWrites.
+   */
   sendPending(): PendingWritesResult {
     const writes = this.pending.splice(0);
     if (!this.enabled) {
@@ -417,10 +503,38 @@ export class FakeWrites {
         this.changeSubscription(write.batch, 'footer');
         continue;
       }
-      this.markThreads(write.batch, 'footer');
-      this.completeSent(write, write.batch);
+      const outcomes = this.markThreads(write.batch, 'footer', (threadId) => this.footerFailure(threadId));
+      const kept = this.completeSent(write, write.batch, outcomes);
+      if (kept !== null) {
+        this.pending.push(kept);
+      }
+    }
+    const failed = this.pending.length;
+    const done = writes.length - failed;
+    if (failed > 0) {
+      return { ok: false, message: `Sent ${done} to GitHub, ${failed} failed and ${failed === 1 ? 'stays' : 'stay'} pending`, done, failed, status: this.status() };
     }
     return { ok: true, message: `Sent ${writes.length} to GitHub (sample data: nothing left the app)`, done: writes.length, failed: 0, status: this.status() };
+  }
+
+  /**
+   * One GitHub write of the fake (approve, comment, reply, ...) at the
+   * write boundary: waits POSTPILE_FAKE_DELAY_MS, then fails when a fault
+   * asks for it, logged as `failed` with GitHub's answer. Returns that
+   * answer, or null when the write goes through (the caller logs it).
+   */
+  async reach(kind: FakeWriteKind, request: string, log: Omit<LogInput, 'outcome'>): Promise<string | null> {
+    await this.faults.delay();
+    const error = this.faults.failure(kind, request);
+    if (error !== null) {
+      this.record({ ...log, outcome: 'failed', detail: log.detail ? `${log.detail}: ${error}` : error });
+    }
+    return error;
+  }
+
+  /** POSTPILE_FAKE_DELAY_MS for drafts, chat and rechecks, which reach no GitHub. */
+  delay(): Promise<void> {
+    return this.faults.delay();
   }
 
   /** "Discard": nothing changes in the sample, the tiles stay unread. */

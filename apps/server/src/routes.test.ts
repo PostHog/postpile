@@ -587,10 +587,10 @@ describe('server routes over the fake engine', () => {
 
   it('drafts an ask and keeps the sent comment local', async () => {
     const app = appWithFake();
-    const draft = await post<{ body: string }>(app, '/api/prs/acme/app/1915/draft-ask', { person: 'rowan', intent: 'why not the org secret?' });
+    const draft = await post<{ body: string }>(app, '/api/prs/acme/infra/1915/draft-ask', { person: 'rowan', intent: 'why not the org secret?' });
     expect(draft.json.body).toMatch(/^@rowan why not the org secret\?/);
     await post(app, '/api/github-writes', { enabled: true });
-    const sent = await post<ActionResult>(app, '/api/prs/acme/app/1915/comment', { body: draft.json.body });
+    const sent = await post<ActionResult>(app, '/api/prs/acme/infra/1915/comment', { body: draft.json.body });
     expect(sent.json.message).toContain('nothing sent to GitHub');
   });
 

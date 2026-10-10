@@ -236,6 +236,9 @@ import { FakeMemory } from './fake-memory.ts';
 import { FakeCleanup } from './fake-cleanup.ts';
 import { isSampleMergedThread, sampleMergedVerdict, sampleThreads } from './fake-notifications.ts';
 import { samplePingDecisions, sampleQuietReads } from './fake-quiet.ts';
+import { derivedEvent, withComment, withReview } from './fake-pr-changes.ts';
+import type { FakeFaults } from './fake-faults.ts';
+import { FakeScript, type FakeStepName } from './fake-script.ts';
 import { FakeWrites, type FakeLocalChange, type FakeSubscription } from './fake-writes.ts';
 import { buildSampleData, type SampleData } from './sample-data.ts';
 
@@ -277,6 +280,12 @@ export interface FakeEngineOptions {
   writesLocked?: boolean;
   /** POSTPILE_FAKE_EXTRA: opt-in sample packs on top of the default sample (see fake-extras.ts). */
   extras?: Set<FakeExtra>;
+  /** POSTPILE_FAKE_FAIL_WRITES, POSTPILE_FAKE_FAIL_SEND and POSTPILE_FAKE_DELAY_MS (see fake-faults.ts). None by default. */
+  faults?: FakeFaults;
+  /** POSTPILE_FAKE_DELIVER: scripted steps, one per sync (see fake-script.ts). None by default: a sync brings nothing. */
+  deliver?: FakeStepName[];
+  /** The renderer's start sync takes no step (POSTPILE_SYNC_ON_START is not 0), so the first "Sync now" brings the first one. */
+  skipFirstSyncDelivery?: boolean;
 }
 
 /** The invented busy inbox of POSTPILE_FAKE_BUSY=1: a heavy install over the cap. */
@@ -370,6 +379,8 @@ export class FakeEngine implements EngineService {
   private readonly instructions: FakeInstructions;
   private readonly lessons: FakeLessons;
   private readonly live: FakeLivePoll;
+  /** Scripted news: POSTPILE_FAKE_DELIVER and the /api/fake routes. */
+  readonly script: FakeScript;
   /** The last approve note opener, so the canned drafts rotate like the engine's. */
   private lastApproveOpener: string | null = null;
   private readonly workContext: FakeWorkContext;
@@ -472,7 +483,27 @@ export class FakeEngine implements EngineService {
       readHere: (scope, clickedAt) => this.readSample(scope, { kind: 'pending_completion', clickedAt }),
       title: (prKeys, threadId) => this.pendingTitle(prKeys, threadId),
       startCatchUp: (picks) => this.cleanup.startFromPending(picks, this.cleanupThreads()),
-    }, options.writesLocked !== true);
+    }, options.writesLocked !== true, options.faults);
+    this.script = new FakeScript(
+      {
+        data: this.data,
+        now: this.now,
+        viewer: () => this.viewer(),
+        userState: (key) => this.data.userStates.find((state) => state.prKey === key) ?? null,
+        notYours: (key) => this.notYours().has(key),
+        writesOn: () => this.writes.isEnabled(),
+        fetchedAt: (key) => this.fetchedAtOf(key),
+        markFetched: (key, at) => this.fetchedAt.set(key, at),
+        thread: (key) => this.prThreads().get(key) ?? null,
+        touchThread: (thread, at) => this.writes.activity(thread, at),
+        quietRead: (thread, key, detail, at) => {
+          this.writes.quietRead(thread, key, detail, at);
+          this.readSample(prReadScope(key, false), { kind: 'quiet', readAt: at });
+        },
+      },
+      options.deliver ?? [],
+      options.skipFirstSyncDelivery ?? false,
+    );
     this.cleanup = new FakeCleanup({
       now: this.now,
       writes: this.writes,
@@ -889,19 +920,22 @@ export class FakeEngine implements EngineService {
       await new Promise((resolve) => setTimeout(resolve, this.syncStepMs * 6));
       progress.agentCallsDone += 1;
     }
+    let news = { prsFetched: 0, newEvents: 0 };
     for (const step of agentOff === null ? FAKE_SYNC_STEPS : FAKE_SYNC_STEPS.slice(0, 1)) {
       progress.running = step.running;
       progress.agentCallsPlanned += step.plan;
       await new Promise((resolve) => setTimeout(resolve, this.syncStepMs));
       progress.agentCallsDone += step.done;
       if (step.running.includes('fetch')) {
-        // Sample data never changes, like a sync right after the live poll caught up.
-        progress.fromGitHub = { prsFetched: 0, newEvents: 0 };
+        // Sample data never changes, like a sync right after the live poll caught up, unless POSTPILE_FAKE_DELIVER has a step left.
+        const delivered = this.script.deliverOnSync();
+        news = { prsFetched: delivered?.prsFetched ?? 0, newEvents: delivered?.newEvents ?? 0 };
+        progress.fromGitHub = news;
       }
       // Like the engine: after the fetch the start dialog may hold the agent work until it is answered.
       if (step.running.includes('fetch') && this.catchUpGate && this.cleanup.holds(this.cleanupThreads())) {
         this.heldSync = true;
-        this.lastSync = { ...this.emptySyncReport(startedAt), heldForCatchUp: true };
+        this.lastSync = { ...this.emptySyncReport(startedAt), ...news, heldForCatchUp: true };
         return this.lastSync;
       }
     }
@@ -909,13 +943,13 @@ export class FakeEngine implements EngineService {
     this.lastSync = {
       startedAt,
       finishedAt: this.timestamp(),
-      notificationsNotModified: true,
+      notificationsNotModified: news.prsFetched === 0,
       threads: this.data.tiles.length,
-      prsFetched: 0,
+      prsFetched: news.prsFetched,
       prsSkipped: 0,
       prsPulledIn: 0,
       prsFound: 0,
-      newEvents: 0,
+      newEvents: news.newEvents,
       agentCalls: agentOff === null ? 4 : 0,
       agentCallStats: agentOff === null ? sampleSyncStats() : emptyAgentCallStats(),
       dossiersUpdated: agentOff === null ? 2 : 0,
@@ -1354,6 +1388,7 @@ export class FakeEngine implements EngineService {
   }
 
   async sendPendingWrites(): Promise<PendingWritesResult> {
+    await this.writes.delay();
     this.writes.settle();
     return this.writes.sendPending();
   }
@@ -1419,10 +1454,31 @@ export class FakeEngine implements EngineService {
   // EngineService: actions
   // -------------------------------------------------------------------------
 
-  async approve(prKey: PrKey, headOid: string): Promise<ActionResult> {
-    const pr = this.data.prs.find((candidate) => candidate.key === prKey);
+  /** Puts the viewer's review on the sample PR with its derived event (seen), like the PR refetched after a review. */
+  private addViewerReview(index: number, state: 'APPROVED' | 'COMMENTED', body: string, at: string): void {
+    const pr = this.data.prs[index]!;
+    const id = `local-review-${this.newId()}`;
+    const review = { id, author: this.data.viewer, state, body, submittedAt: at, commitOid: pr.headOid, url: `${pr.url}#pullrequestreview-${id}` };
+    const changed = withReview(pr, review);
+    this.data.prs[index] = changed;
+    const event = derivedEvent(changed, this.viewer(), this.data.userStates.find((entry) => entry.prKey === pr.key) ?? null, id, at);
+    if (event) {
+      this.data.events.push(event);
+    }
+  }
+
+  /**
+   * Like PrActions.approve, in memory: refused for a PR that is not open, then
+   * for a moved head, then while locked. The approval lands as an APPROVED
+   * review by the viewer on the head (with the note as its body), so the
+   * review state, "You approved", the activity line and the viewer's
+   * approval agree, like after the engine's refetch. Nothing leaves the process.
+   */
+  async approve(prKey: PrKey, headOid: string, body = ''): Promise<ActionResult> {
+    const index = this.data.prs.findIndex((candidate) => candidate.key === prKey && candidate.state === 'OPEN');
+    const pr = this.data.prs[index];
     if (!pr) {
-      return fail(`no PR ${prKey}`);
+      return fail(`${prKey} is not an open PR in the sample`);
     }
     if (pr.headOid !== headOid) {
       return fail(NEW_COMMITS_SINCE_LOOKED);
@@ -1431,20 +1487,26 @@ export class FakeEngine implements EngineService {
       this.writes.record({ action: 'approve', origin: 'tile', outcome: 'skipped', prKey, detail: 'GitHub writes are off' });
       return fail('GitHub writes are off (lock in the footer): nothing was approved');
     }
+    const failure = await this.writes.reach('approve', `POST repos/${pr.ref.repo}/pulls/${pr.ref.number}/reviews`, { action: 'approve', origin: 'tile', prKey });
+    if (failure !== null) {
+      return fail(`Approve failed: ${failure}`);
+    }
     this.writes.record({ action: 'approve', origin: 'tile', outcome: 'github', prKey, detail: 'sample data: nothing left the process' });
+    const at = this.timestamp();
     const state = this.userStateOf(prKey);
-    state.approvedAt = this.timestamp();
+    state.approvedAt = at;
     state.approvedCommitOid = pr.headOid;
     for (const event of this.eventsOf(prKey)) {
-      event.seenAt ??= this.timestamp();
+      event.seenAt ??= at;
     }
+    this.addViewerReview(index, 'APPROVED', body, at);
     return ok(`fake: approved ${prKey} locally, nothing sent to GitHub`);
   }
 
   /**
-   * Like PrActions.commentReview, in memory: the head check, then a COMMENTED
-   * review by the viewer on the head and the PR's events seen, like after an
-   * approval. Nothing leaves the process.
+   * Like PrActions.commentReview, in memory: the head check, then the PR's
+   * events seen, like after an approval, and a COMMENTED review by the viewer
+   * on the head with its event, like the refetched PR. Nothing leaves the process.
    */
   async commentReview(prKey: PrKey, headOid: string, body: string): Promise<ActionResult> {
     const index = this.data.prs.findIndex((candidate) => candidate.key === prKey && candidate.state === 'OPEN');
@@ -1462,13 +1524,16 @@ export class FakeEngine implements EngineService {
       this.writes.record({ action: 'comment_review', origin: 'tile', outcome: 'skipped', prKey, detail: 'GitHub writes are off' });
       return fail('GitHub writes are off (lock in the footer): nothing was posted');
     }
+    const failure = await this.writes.reach('comment_review', `POST repos/${pr.ref.repo}/pulls/${pr.ref.number}/reviews`, { action: 'comment_review', origin: 'tile', prKey });
+    if (failure !== null) {
+      return fail(`Comment review failed: ${failure}`);
+    }
     this.writes.record({ action: 'comment_review', origin: 'tile', outcome: 'github', prKey, detail: 'sample data: nothing left the process' });
     const at = this.timestamp();
-    const review = { id: `local-review-${this.newId()}`, author: this.data.viewer, state: 'COMMENTED' as const, body, submittedAt: at, commitOid: pr.headOid };
-    this.data.prs[index] = { ...pr, reviews: [...pr.reviews, review] };
     for (const event of this.eventsOf(prKey)) {
       event.seenAt ??= at;
     }
+    this.addViewerReview(index, 'COMMENTED', body, at);
     return ok(`fake: comment review kept locally on ${prKey}, nothing sent to GitHub`);
   }
 
@@ -1512,6 +1577,7 @@ export class FakeEngine implements EngineService {
       this.writes.record({ action: 'remove_team_request', origin: 'detail', outcome: 'skipped', prKey, detail: `team ${slug}: GitHub writes are off` });
       return fail('GitHub writes are off (lock in the footer): nothing was removed');
     }
+    await this.writes.delay();
     this.writes.record({ action: 'remove_team_request', origin: 'detail', outcome: 'github', prKey, detail: `team ${slug}` });
     this.data.prs[index] = { ...pr, reviewerTeams: pr.reviewerTeams.filter((candidate) => candidate !== team) };
     const thread = this.threadsOnGitHub().find((candidate) => threadPrKey(candidate) === prKey);
@@ -1806,6 +1872,7 @@ export class FakeEngine implements EngineService {
 
   async draftAsk(prKey: PrKey, person: string, intent: string): Promise<{ body: string }> {
     this.refuseWithoutAgent();
+    await this.writes.delay();
     const glance = this.data.glances.find((candidate) => candidate.prKey === prKey);
     const question = intent || 'could you say a bit more about this change?';
     const context = glance ? `\n\n${glance.forYou}` : '';
@@ -1818,6 +1885,7 @@ export class FakeEngine implements EngineService {
    */
   async draftReviewNote(prKey: PrKey, kind: ReviewNoteKind, gist = ''): Promise<{ body: string }> {
     this.refuseWithoutAgent();
+    await this.writes.delay();
     if (kind === 'comment') {
       return { body: gist.trim() !== '' ? fromGist(gist) : 'The retry path has no test yet. One is worth adding before this merges.' };
     }
@@ -1828,6 +1896,7 @@ export class FakeEngine implements EngineService {
   /** A canned reply: from the user's gist when given, else a stock answer that fits where the comment is. */
   async draftReply(prKey: PrKey, commentId: string, gist: string): Promise<{ body: string }> {
     this.refuseWithoutAgent();
+    await this.writes.delay();
     const pr = this.data.prs.find((candidate) => candidate.key === prKey);
     const comment = pr ? findComment(pr, commentId) : null;
     if (!comment) {
@@ -1861,6 +1930,10 @@ export class FakeEngine implements EngineService {
     if (!this.writes.isEnabled()) {
       this.writes.record({ action: 'reply', origin: 'detail', outcome: 'skipped', prKey, detail: `${detail}: GitHub writes are off` });
       return fail('GitHub writes are off (lock in the footer): the reply was not sent');
+    }
+    const failure = await this.writes.reach('reply', `POST repos/${pr.ref.repo}/issues/${pr.ref.number}/comments`, { action: 'reply', origin: 'detail', prKey, detail });
+    if (failure !== null) {
+      return fail(`Reply failed: ${failure}`);
     }
     this.writes.record({ action: 'reply', origin: 'detail', outcome: 'github', prKey, detail: `${detail}: sample data, nothing left the process` });
     const target = replyTarget(comment);
@@ -1903,35 +1976,45 @@ export class FakeEngine implements EngineService {
       this.writes.record({ action: 'reaction', origin: 'detail', outcome: 'skipped', prKey, detail: `${detail}: GitHub writes are off` });
       return fail('GitHub writes are off (lock in the footer): the reaction was not sent');
     }
+    const failure = await this.writes.reach('react', 'POST graphql', { action: 'reaction', origin: 'detail', prKey, detail });
+    if (failure !== null) {
+      return fail(`Reaction failed: ${failure}`);
+    }
     this.writes.record({ action: 'reaction', origin: 'detail', outcome: 'github', prKey, detail: `${detail}: sample data, nothing left the process` });
     this.data.prs[index] = withViewerReaction(pr, commentId);
     return ok('fake: thumbs up kept locally, nothing sent to GitHub');
   }
 
+  /**
+   * Like PrActions.sendComment, in memory: the comment lands on the sample PR
+   * with its derived event (seen), like the refetched PR. Nothing leaves the process.
+   */
   async sendComment(prKey: PrKey, body: string): Promise<ActionResult> {
+    const index = this.data.prs.findIndex((candidate) => candidate.key === prKey);
+    const pr = this.data.prs[index];
+    if (!pr) {
+      return fail(`${prKey} is not in the sample`);
+    }
+    if (body.trim() === '') {
+      return fail('Empty comment');
+    }
     if (!this.writes.isEnabled()) {
       this.writes.record({ action: 'comment', origin: 'tile', outcome: 'skipped', prKey, detail: 'GitHub writes are off' });
       return fail('GitHub writes are off (lock in the footer): the comment was not sent');
     }
+    const failure = await this.writes.reach('comment', `POST repos/${pr.ref.repo}/issues/${pr.ref.number}/comments`, { action: 'comment', origin: 'tile', prKey });
+    if (failure !== null) {
+      return fail(`Comment failed: ${failure}`);
+    }
     this.writes.record({ action: 'comment', origin: 'tile', outcome: 'github', prKey, detail: 'sample data: nothing left the process' });
     const at = this.timestamp();
-    const sourceId = `local-${this.newId()}`;
-    this.data.events.push({
-      id: `${prKey}:comment:${sourceId}`,
-      prKey,
-      kind: 'comment',
-      actor: this.data.viewer,
-      isBot: false,
-      at,
-      summary: `${this.data.viewer} commented: ${body.split('\n')[0] ?? ''}`,
-      url: null,
-      sourceId,
-      ruleLoudness: 'quiet',
-      ruleReason: 'own comment',
-      chatter: false,
-      override: null,
-      seenAt: at,
-    });
+    const id = `local-comment-${this.newId()}`;
+    const changed = withComment(pr, { id, author: this.data.viewer, body, createdAt: at, kind: 'comment', url: `${pr.url}#issuecomment-${id}`, path: null, threadId: null });
+    this.data.prs[index] = changed;
+    const event = derivedEvent(changed, this.viewer(), this.data.userStates.find((entry) => entry.prKey === prKey) ?? null, id, at);
+    if (event) {
+      this.data.events.push(event);
+    }
     return ok('fake: comment kept locally, nothing sent to GitHub');
   }
 
@@ -1998,6 +2081,8 @@ export class FakeEngine implements EngineService {
     if (!isUnsorted && !this.data.topics.some((topic) => topic.id === topicId)) {
       throw new Error(`no topic ${topicId}`);
     }
+    // Like the engine: the turn's two messages are stored together once the answer is back.
+    await this.writes.delay();
     const chatId = topicChatId(topicId);
     const messages = this.chats.get(chatId) ?? [];
     this.chats.set(chatId, messages);
@@ -2189,6 +2274,7 @@ export class FakeEngine implements EngineService {
       return { status: 'unavailable', reason: 'failed', message: `The agent could not check it: ${agentOff}` };
     }
     await new Promise((resolve) => setTimeout(resolve, this.recheckDelayMs));
+    await this.writes.delay();
     const outcome = RECHECK_CYCLE[this.recheckCount % RECHECK_CYCLE.length] ?? 'holds';
     this.recheckCount += 1;
     if (outcome === 'fix') {
@@ -2351,7 +2437,7 @@ export class FakeEngine implements EngineService {
     const poll = this.livePoller?.currentStatus() ?? OFF_POLL_STATUS;
     return {
       ...poll,
-      changeCount: poll.changeCount + this.cleanup.changeCount() + this.prNotes.changes(),
+      changeCount: poll.changeCount + this.cleanup.changeCount() + this.prNotes.changes() + this.script.changes(),
       syncRunning: this.syncing !== null,
       nextAutoSyncAt: this.autoSync?.nextSyncAt() ?? null,
       catchUpChanges: this.catchUp.changes(),
