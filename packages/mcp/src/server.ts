@@ -128,13 +128,13 @@ const refreshOutput = {
 const proposeOutput = {
   status: z.enum(['filed', 'dry_run']),
   proposal_id: z.string().nullable(),
-  prs_moved: z.number().int().describe('split, move and merge: PRs accepting would move to another topic, stack layers included; 0 for a rename'),
+  prs_moved: z.number().int().describe('split and move: open PRs accepting would move to another topic, stack layers included (merged and closed layers go along uncounted); merge: every PR of the topic; 0 for a rename'),
 };
 
 const noteOutput = {
   status: z
-    .enum(['set', 'unchanged', 'renewed', 'cleared', 'pending'])
-    .describe('unchanged: the same note was set already, nothing written twice; pending: nothing written yet, PostPile is still reading covered_by from GitHub, call again'),
+    .enum(['set', 'unchanged', 'renewed', 'cleared', 'already_cleared', 'pending'])
+    .describe('unchanged: the same note was set already, nothing written twice; already_cleared: someone cleared it before (the text says who), nothing changed; pending: nothing written yet, PostPile is still reading covered_by from GitHub, call again'),
   note_id: z.string().nullable(),
   expires_at: z.string().nullable().describe('in_progress: when the lease ends'),
 };
@@ -145,12 +145,12 @@ const NOTE = { readOnlyHint: false, destructiveHint: false, idempotentHint: true
 const detailSchema = z
   .enum(['brief', 'full'], { error: 'detail must be "brief" or "full", e.g. detail: "full"' })
   .default('brief')
-  .describe('brief (default) or full');
+  .describe('brief (default) or full; text answers only, format "json" has one shape either way');
 
 const formatSchema = z
   .enum(['text', 'json'], { error: 'format must be "text" or "json", e.g. format: "json"' })
   .default('text')
-  .describe('text (default) or json: the same facts as JSON in structuredContent, free text from GitHub under "untrusted" keys');
+  .describe('text (default) or json: the brief answer\'s facts as JSON in structuredContent, free text from GitHub under "untrusted" keys. JSON ignores detail; facts, activity and the dossier are in the text answer with detail: "full"');
 
 const PR_LIST_ERROR = `pr must be one PR or a list of 1 to ${MAX_PRS_PER_CALL}, e.g. pr: ["acme/app#1902", "acme/app#1911"]`;
 
@@ -316,7 +316,7 @@ export function createMcpServer(reader: PostPileReader, options: McpServerOption
       title: 'Search PostPile PRs',
       description: SEARCH_DESCRIPTION,
       inputSchema: {
-        query: z.string().min(1, { error: 'query needs at least one word, e.g. query: "depot cache"' }).describe('Words to match, e.g. "depot cache" or "rowan"'),
+        query: z.string().trim().min(1, { error: 'query needs at least one word, e.g. query: "depot cache"' }).describe('Words to match, e.g. "depot cache" or "rowan"'),
         ...listShape('any'),
         format: formatSchema,
       },

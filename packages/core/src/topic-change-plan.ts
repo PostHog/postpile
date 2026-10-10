@@ -1,5 +1,5 @@
 import { isLiveProposal, sameTopicChange } from './topic-proposals.ts';
-import { cleanTopicName, EMPTY_TOPIC_NAME } from './topics.ts';
+import { cleanTopicName, EMPTY_TOPIC_NAME, STORED_TOPIC_NAME_MAX } from './topics.ts';
 import type { IsoTime, PrKey, TopicProposal, TopicStatus } from './types.ts';
 
 // propose_topic_change (DESIGN.md "propose_topic_change"): the checks and
@@ -14,7 +14,8 @@ export const OUTSIDE_PROPOSALS_PENDING = 10;
 export const OUTSIDE_PROPOSALS_PER_DAY = 20;
 /** The reason an agent gives, and a proposed topic name, at most this long. */
 export const OUTSIDE_REASON_MAX = 300;
-export const TOPIC_NAME_MAX = 100;
+/** The stored limit, so a name is refused rather than silently cut. */
+export const TOPIC_NAME_MAX = STORED_TOPIC_NAME_MAX;
 
 export type TopicChangeKind = 'split' | 'move' | 'rename' | 'merge';
 
@@ -40,7 +41,11 @@ export interface TopicChangeResult {
   /** What accepting would do, one line each. Carries topic names, which come from GitHub text: fence it. */
   preview: string[];
   reason: string | null;
-  /** split, move and merge: every PR accepting would move, stack layers included. Empty for a rename. */
+  /**
+   * split and move: every open PR accepting would move, stack layers
+   * included; merged and closed layers go along uncounted. merge: every PR
+   * of the topic. Empty for a rename.
+   */
   movedPrKeys: PrKey[];
 }
 
@@ -61,6 +66,8 @@ export interface TopicChangeSnapshot {
   topicIdOf: (key: PrKey) => string | null;
   /** The PRs that change topic together with this one (its stack), itself included (`Board.movesWith`). */
   movesWith: (key: PrKey) => PrKey[];
+  /** Merged or closed: such a stack layer goes along with a move but is not counted as moved. */
+  isDone: (key: PrKey) => boolean;
   /** Every proposal filed about this topic, any status and source. */
   proposals: TopicProposal[];
   /** Pending outside proposals across all topics, expired ones included (filtered here). */
@@ -93,7 +100,7 @@ function checkFields(change: TopicChangeRequest): string | null {
     return `reason is required, at most ${OUTSIDE_REASON_MAX} characters.`;
   }
   const name = change.name?.trim() ?? '';
-  if ((change.kind === 'split' || change.kind === 'rename') && (name === '' || name.length > TOPIC_NAME_MAX)) {
+  if ((change.kind === 'split' || change.kind === 'rename') && (name === '' || Array.from(name).length > TOPIC_NAME_MAX)) {
     return `${change.kind} needs name, at most ${TOPIC_NAME_MAX} characters.`;
   }
   if ((change.kind === 'split' || change.kind === 'rename') && cleanTopicName(name) === '') {
@@ -111,9 +118,20 @@ function checkFields(change: TopicChangeRequest): string | null {
   return null;
 }
 
-/** Pending already, or rejected before: an agent must not file the same change twice. */
+/** Every PR that moves with these: the PRs and their whole stacks. */
+function withStacks(prKeys: PrKey[], snapshot: TopicChangeSnapshot): PrKey[] {
+  return [...new Set(prKeys.flatMap((key) => snapshot.movesWith(key)))];
+}
+
+/**
+ * Pending already, or rejected before: an agent must not file the same
+ * change twice. A move or split is compared by the PRs that would move,
+ * stacks included, so naming another layer of a rejected stack is the
+ * same change.
+ */
 function checkRepeat(change: TopicChangeRequest, snapshot: TopicChangeSnapshot): string | null {
-  const same = snapshot.proposals.filter((proposal) => sameTopicChange(proposal, { ...change, name: change.name === null ? null : cleanTopicName(change.name) }));
+  const asked = { ...change, name: change.name === null ? null : cleanTopicName(change.name), prKeys: withStacks(change.prKeys, snapshot) };
+  const same = snapshot.proposals.filter((proposal) => sameTopicChange({ ...proposal, prKeys: withStacks(proposal.prKeys, snapshot) }, asked));
   const pending = same.find((proposal) => isLiveProposal(proposal, snapshot.now));
   if (pending) {
     return `The same change is pending already (filed ${pending.createdAt.slice(0, 10)}); the user has not decided yet.`;
@@ -141,8 +159,9 @@ function checkCaps(topicId: string, snapshot: TopicChangeSnapshot): string | nul
 
 /** The PRs a split or move takes out of its topic: the asked ones with their stacks, and the ones that stay. */
 interface MovedPrs {
+  /** The open PRs that move; the count the preview gives. */
   moved: PrKey[];
-  /** "X brings Y along (same stack)." lines for the preview. */
+  /** "X brings Y along (same stack)." lines, then one line naming the merged and closed layers that go along. */
   along: string[];
   staying: PrKey[];
 }
@@ -153,21 +172,26 @@ function movedPrs(change: TopicChangeRequest, snapshot: TopicChangeSnapshot, top
   if (outside.length > 0) {
     return `${list(outside)} ${outside.length === 1 ? 'is' : 'are'} not in "${topic.name}"; a ${change.kind} only moves PRs out of their own topic.`;
   }
-  const moved: PrKey[] = [];
+  const all: PrKey[] = [];
   const along: string[] = [];
   for (const key of change.prKeys) {
     const layers = snapshot.movesWith(key);
-    const extra = layers.filter((layer) => layer !== key && !change.prKeys.includes(layer) && !moved.includes(layer));
+    const extra = layers.filter((layer) => layer !== key && !change.prKeys.includes(layer) && !all.includes(layer) && !snapshot.isDone(layer));
     if (extra.length > 0) {
       along.push(`${key} brings ${list(extra)} along (same stack).`);
     }
     for (const layer of layers) {
-      if (!moved.includes(layer)) {
-        moved.push(layer);
+      if (!all.includes(layer)) {
+        all.push(layer);
       }
     }
   }
-  const staying = snapshot.members.filter((key) => !moved.includes(key));
+  const done = all.filter((key) => snapshot.isDone(key));
+  if (done.length > 0) {
+    along.push(`Merged and closed layers of the same stack go along too: ${list(done)}.`);
+  }
+  const moved = all.filter((key) => !snapshot.isDone(key));
+  const staying = snapshot.members.filter((key) => !all.includes(key));
   return { moved, along, staying };
 }
 
@@ -188,17 +212,37 @@ function splitPlan(change: TopicChangeRequest, snapshot: TopicChangeSnapshot, to
     ok: true,
     movedPrKeys: prs.moved,
     preview: [
-      `Split ${plural(prs.moved.length, 'PR')} out of "${topic.name}" into a new topic "${name}": ${prs.moved.join(', ')}.`,
+      `Split ${plural(prs.moved.length, 'open PR')} out of "${topic.name}" into a new topic "${name}"${movedList(prs.moved)}`,
       ...prs.along,
       stayLine(prs.staying, topic),
     ],
   };
 }
 
-function movePlan(change: TopicChangeRequest, snapshot: TopicChangeSnapshot, topic: TopicSnapshot): TopicChangePlan {
+/** The topic a move or merge goes into, or why it can't take one. */
+function intoTopicOf(change: TopicChangeRequest, snapshot: TopicChangeSnapshot, topic: TopicSnapshot): TopicSnapshot | string {
   const into = snapshot.intoTopic;
-  if (!into || into.status !== 'active' || into.id === topic.id) {
-    return refused(`into_topic must be another active topic; ${change.intoTopicId} is not.`);
+  if (change.intoTopicId === topic.id) {
+    return `into_topic must be a different topic than topic; both are ${topic.id}.`;
+  }
+  if (!into) {
+    return `PostPile has no topic ${change.intoTopicId}.`;
+  }
+  if (into.status !== 'active') {
+    return `${into.id} is ${into.status}; into_topic must be an active topic.`;
+  }
+  return into;
+}
+
+/** ": a, b, c." ending the preview's first line, or just "." when no open PR moves. */
+function movedList(moved: PrKey[]): string {
+  return moved.length === 0 ? '.' : `: ${moved.join(', ')}.`;
+}
+
+function movePlan(change: TopicChangeRequest, snapshot: TopicChangeSnapshot, topic: TopicSnapshot): TopicChangePlan {
+  const into = intoTopicOf(change, snapshot, topic);
+  if (typeof into === 'string') {
+    return refused(into);
   }
   const prs = movedPrs(change, snapshot, topic);
   if (typeof prs === 'string') {
@@ -211,7 +255,7 @@ function movePlan(change: TopicChangeRequest, snapshot: TopicChangeSnapshot, top
     ok: true,
     movedPrKeys: prs.moved,
     preview: [
-      `Move ${plural(prs.moved.length, 'PR')} from "${topic.name}" into "${into.name}": ${prs.moved.join(', ')}.`,
+      `Move ${plural(prs.moved.length, 'open PR')} from "${topic.name}" into "${into.name}"${movedList(prs.moved)}`,
       ...prs.along,
       stayLine(prs.staying, topic),
     ],
@@ -242,9 +286,9 @@ export function planTopicChange(change: TopicChangeRequest, snapshot: TopicChang
     }
     plan = { ok: true, movedPrKeys: [], preview: [`Rename "${topic.name}" to "${name}".`] };
   } else if (change.kind === 'merge') {
-    const into = snapshot.intoTopic;
-    if (!into || into.status !== 'active' || into.id === topic.id) {
-      return refused(`into_topic must be another active topic; ${change.intoTopicId} is not.`);
+    const into = intoTopicOf(change, snapshot, topic);
+    if (typeof into === 'string') {
+      return refused(into);
     }
     plan = { ok: true, movedPrKeys: snapshot.members, preview: [`Merge "${topic.name}" (${plural(snapshot.members.length, 'PR')}) into "${into.name}"; "${topic.name}" is archived.`] };
   } else if (change.kind === 'move') {

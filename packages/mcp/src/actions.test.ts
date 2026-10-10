@@ -115,9 +115,11 @@ describe('propose_topic_change', () => {
     const result = await call(client, 'propose_topic_change', { ...split, dry_run: true });
     expect(result.isError).toBe(false);
     expect(result.text).toContain('Dry run: nothing was filed.');
-    expect(result.text).toMatch(/<postpile-data id="[0-9a-f]{8}">\nSplit 5 PRs out of "Move CI to Depot" into a new topic "Depot stack"/);
-    expect(result.text).toContain('acme/app#1902 brings acme/app#1851, acme/app#1862, acme/app#1911 and acme/app#1930 along (same stack).');
-    expect(result.structured).toEqual({ status: 'dry_run', proposal_id: null, prs_moved: 5 });
+    expect(result.text).toMatch(/<postpile-data id="[0-9a-f]{8}">\nSplit 2 open PRs out of "Move CI to Depot" into a new topic "Depot stack": acme\/app#1902, acme\/app#1911\./);
+    expect(result.text).toContain('acme/app#1902 brings acme/app#1911 along (same stack).');
+    // Merged and closed layers move too, named once and not counted.
+    expect(result.text).toContain('Merged and closed layers of the same stack go along too: acme/app#1851, acme/app#1862 and acme/app#1930.');
+    expect(result.structured).toEqual({ status: 'dry_run', proposal_id: null, prs_moved: 2 });
     expect((await engine.listProposals()).topics.map((proposal) => proposal.source)).toEqual(['consolidation', 'consolidation', 'agent']);
   });
 
@@ -126,7 +128,7 @@ describe('propose_topic_change', () => {
     const client = await connected(engine);
     const filed = await call(client, 'propose_topic_change', split);
     expect(filed.text).toContain('Filed as a suggestion for the user');
-    expect(filed.structured).toMatchObject({ status: 'filed', prs_moved: 5 });
+    expect(filed.structured).toMatchObject({ status: 'filed', prs_moved: 2 });
     const proposal = (await engine.listProposals()).topics.find((candidate) => candidate.id === filed.structured?.proposal_id);
     expect(proposal).toMatchObject({ kind: 'split', source: 'agent', client: 'claude-code', topicId: 'topic-depot', prKeys: ['acme/app#1902'] });
 
@@ -212,7 +214,7 @@ describe('propose_topic_change', () => {
 
     const dry = await call(client, 'propose_topic_change', { ...move, dry_run: true });
     expect(dry.structured).toEqual({ status: 'dry_run', proposal_id: null, prs_moved: 1 });
-    expect(fencedPart(dry.text)).toContain('Move 1 PR from "Dev env" into "CI & tests": acme/app#1960.');
+    expect(fencedPart(dry.text)).toContain('Move 1 open PR from "Dev env" into "CI & tests": acme/app#1960.');
     expect(fencedPart(dry.text)).toContain('2 PRs stay in "Dev env".');
     expect(outsideFence(dry.text)).not.toMatch(/Dev env|CI & tests|acme\/app/);
 
@@ -300,6 +302,46 @@ describe('note_pr', () => {
     const after = fencedPart((await call(client, 'pr_context', { pr: 'acme/app#1904' })).text);
     expect(after).not.toContain('In progress');
     expect(after).toContain('Agent note: covered by acme/app#1907');
+  });
+
+  it('says who cleared a note when it is cleared again, and that the user cleared it in the app', async () => {
+    const engine = new FakeEngine();
+    const client = await connected(engine);
+    const token = await tokenOf(client, 'acme/app#1870');
+    const set = async (by: string) => call(client, 'note_pr', { pr: 'acme/app#1870', kind: 'no_action', note: `nothing (${by})`, by, token });
+    const first = String((await set('ph3 session')).structured?.note_id);
+    await call(client, 'note_pr', { action: 'clear', note_id: first });
+    const again = await call(client, 'note_pr', { action: 'clear', note_id: first });
+    expect(again.structured).toMatchObject({ status: 'already_cleared' });
+    expect(again.text).toMatch(new RegExp(`^Note ${first} was cleared already \\(by claude-code, (just now|\\d+ s ago)\\); nothing changed\\.`));
+
+    const second = String((await set('ph4 session')).structured?.note_id);
+    await engine.clearPrNote(second);
+    const byUser = await call(client, 'note_pr', { action: 'clear', note_id: second });
+    expect(byUser.structured).toMatchObject({ status: 'already_cleared' });
+    expect(byUser.text).toMatch(/the user cleared it in the app (just now|\d+ s ago)\. Don't set it again unless they ask\./);
+  });
+
+  it('shows the replaced note only under the note that replaced it', async () => {
+    const client = await connected();
+    const token = await tokenOf(client, 'acme/app#1870');
+    await call(client, 'note_pr', { pr: 'acme/app#1870', kind: 'no_action', note: 'first look', by: 'ph3 session', token });
+    const second = await call(client, 'note_pr', { pr: 'acme/app#1870', kind: 'no_action', note: 'second look', by: 'ph4 session', token });
+    expect(fencedPart((await call(client, 'pr_context', { pr: 'acme/app#1870' })).text)).toContain('Replaced: no action needed by ph3 session');
+    await call(client, 'note_pr', { action: 'clear', note_id: String(second.structured?.note_id) });
+    const after = fencedPart((await call(client, 'pr_context', { pr: 'acme/app#1870' })).text);
+    expect(after).not.toContain('Agent note');
+    expect(after).not.toContain('Replaced:');
+  });
+
+  it('accepts a covering PR nobody reviewed, and says it has no review yet', async () => {
+    const client = await connected();
+    const token = await tokenOf(client, 'acme/app#1904');
+    await call(client, 'note_pr', { pr: 'acme/app#1904', kind: 'covered', covered_by: 'acme/app#1907', note: 'Reviewed with #1907', by: 'ph3 session', token });
+    expect(fencedPart((await call(client, 'pr_context', { pr: 'acme/app#1904' })).text)).toContain('Agent note: covered by acme/app#1907 (no review yet) (by ph3 session');
+    await call(client, 'note_pr', { pr: 'acme/app#1904', kind: 'covered', covered_by: 'acme/app#1822', note: 'Reviewed with #1822', by: 'ph3 session', token });
+    const reviewed = fencedPart((await call(client, 'pr_context', { pr: 'acme/app#1904' })).text);
+    expect(reviewed).toContain('Agent note: covered by acme/app#1822 (by ph3 session');
   });
 
   it('gives the token and the notes in pr_context JSON, agent text under untrusted', async () => {

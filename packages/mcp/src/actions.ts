@@ -342,6 +342,18 @@ function noteStructured(result: PrNoteResult): Record<string, unknown> {
   return { status: result.status, note_id: result.note?.id ?? null, expires_at: result.note?.expiresAt ?? null };
 }
 
+/**
+ * A clear of a note cleared before. When the user cleared it in the app,
+ * the agent must hear that, so it does not set the note again on its own.
+ */
+function alreadyClearedText(noteId: string, cleared: { by: string; at: string } | null, now: Date): string {
+  if (cleared?.by === 'user') {
+    return `Note ${noteId} was cleared already: the user cleared it in the app ${ago(cleared.at, now)}. Don't set it again unless they ask.`;
+  }
+  const by = cleared ? ` (by ${cleared.by}, ${ago(cleared.at, now)})` : '';
+  return `Note ${noteId} was cleared already${by}; nothing changed.`;
+}
+
 /** The outcome in PostPile's words (outside the fence) and the note itself (inside: its text and `by` are untrusted). */
 function noteAnswer(result: PrNoteResult, now: Date): ToolAnswer {
   const note = result.note;
@@ -351,10 +363,12 @@ function noteAnswer(result: PrNoteResult, now: Date): ToolAnswer {
     head.push(`Anchored to ${result.anchored}. It goes stale by itself when that changes, also through a comment you post later: write notes last.`);
   } else if (result.status === 'renewed') {
     head.push(`Lease renewed, id ${note?.id}.`);
+  } else if (result.status === 'already_cleared') {
+    head.push(alreadyClearedText(note?.id ?? '', result.cleared ?? null, now));
   } else {
     head.push(`Note ${note?.id} cleared. The note it replaced, if any, stays gone.`);
   }
-  if (note?.expiresAt && result.status !== 'cleared') {
+  if (note?.expiresAt && result.status !== 'cleared' && result.status !== 'already_cleared') {
     head.push(`The lease ends in ${untilText(note.expiresAt, now)} (${minute(note.expiresAt)}); renew it with note_pr(action: "renew", note_id: "${note.id}") while you work.`);
   }
   const data = note ? [`${note.kind}${note.coveredBy ? ` by ${note.coveredBy}` : ''}, by ${note.by}: ${note.note}`] : [];
