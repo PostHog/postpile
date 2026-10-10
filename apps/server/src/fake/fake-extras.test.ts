@@ -1,7 +1,6 @@
-// The opt-in sample packs (POSTPILE_FAKE_EXTRA): the rules agree on their
-// tiles like on the default sample (rules-invariants.test.ts), and each PR
-// lands where its bug-hunt scenario needs it.
-import { DOSSIER_LIMITS, type PaneOffers, type PrSummary, type TileView, type TopicListItem } from '@postpile/core';
+// The opt-in sample packs: where each pack puts its PRs and the shapes it is
+// there to show. The rules checks over every pack live in pack-invariants.test.ts.
+import { DOSSIER_LIMITS, type TileView, type TopicListItem } from '@postpile/core';
 import { describe, expect, it } from 'vitest';
 import { FakeEngine } from './fake-engine.ts';
 import { fakeExtras, type FakeExtra } from './fake-extras.ts';
@@ -41,95 +40,10 @@ async function topicItem(engine: FakeEngine, topicId: string): Promise<TopicList
   return item;
 }
 
-function paneOf(view: TileView, pr: PrSummary): PaneOffers {
-  const pane = view.offers.pane[pr.key];
-  if (!pane) {
-    throw new Error(`no pane offers for ${pr.key} on ${view.tile.id}`);
-  }
-  return pane;
-}
-
 describe('fakeExtras', () => {
   it('reads known pack names, ignoring case, spaces and unknown words', () => {
     expect(fakeExtras(' Board, nope,stress ')).toEqual(new Set(['board', 'stress']));
     expect(fakeExtras(undefined)).toEqual(new Set());
-  });
-});
-
-// The same checks as rules-invariants.test.ts, over the default sample plus each pack.
-describe.each<FakeExtra>(['board', 'stress', 'calm'])('rules agree with POSTPILE_FAKE_EXTRA=%s', (extra) => {
-  it('a done tile offers only Open', async () => {
-    for (const view of await allTiles(engineWith(extra))) {
-      if (view.state.kind !== 'done') {
-        continue;
-      }
-      expect(view.offers, view.tile.id).toMatchObject({ footer: 'open', markLabel: null, github: null });
-      for (const pr of view.prs) {
-        expect(paneOf(view, pr), pr.key).toMatchObject({ lead: 'none', approve: false, ask: false, markLabel: null, snooze: false, removeTeams: [] });
-      }
-    }
-  });
-
-  it('a done PR offers only Open, or Mark read while its news is unseen or its thread unread', async () => {
-    for (const view of await allTiles(engineWith(extra))) {
-      for (const pr of view.prs.filter((row) => row.done)) {
-        const pane = paneOf(view, pr);
-        if (pr.unseenLoudEvents > 0 || pr.unreadOnGitHub) {
-          expect(pane, pr.key).toMatchObject({ approve: false, ask: false, removeTeams: [] });
-          expect(pane.markLabel, pr.key).not.toBeNull();
-        } else {
-          expect(pane, pr.key).toMatchObject({ lead: 'none', approve: false, ask: false, markLabel: null, removeTeams: [] });
-        }
-      }
-    }
-  });
-
-  it('the lead PR is the PR of the tile turn, and the tile turn is one of its PRs', async () => {
-    for (const view of await allTiles(engineWith(extra))) {
-      if (view.turn.kind === 'none' || view.turn.prKey === null) {
-        continue;
-      }
-      const row = view.prs.find((pr) => pr.key === view.turn.prKey);
-      if (row) {
-        expect(view.offers.leadPrKey, view.tile.id).toBe(view.turn.prKey);
-      }
-      expect(row?.turn.kind, view.tile.id).toBe(view.turn.kind);
-    }
-  });
-
-  it('tier To review and whose move Review agree', async () => {
-    for (const view of await allTiles(engineWith(extra))) {
-      for (const pr of view.prs.filter((row) => row.state === 'OPEN')) {
-        const review = pr.turn.kind === 'you' && pr.turn.move === 'review';
-        if (review) {
-          expect(pr.tier, pr.key).toBe('to_review');
-        }
-        if (pr.tier === 'to_review' && !review) {
-          const routed = pr.facts.reviewRequest === 'team' || pr.facts.reviewRequest === 'team_taken';
-          const teamReply = pr.turn.kind === 'you' && pr.turn.move === 'reply';
-          expect(routed || teamReply, `${pr.key}: tier to_review, move ${pr.turn.kind}`).toBe(true);
-        }
-      }
-    }
-  });
-
-  it('groups every tile once and counts the Unread group, per topic and in total', async () => {
-    const engine = engineWith(extra);
-    for (const item of await engine.listTopics()) {
-      const tiles = (await engine.getTopic(item.topic.id))?.tiles ?? [];
-      for (const view of tiles) {
-        const expected = view.unreadPrKeys.length > 0 ? 'unread' : view.state.kind === 'done' ? 'dealt_with' : 'open';
-        expect(view.group, view.tile.id).toBe(expected);
-      }
-      expect(item.unreadTiles, item.topic.id).toBe(tiles.filter((view) => view.group === 'unread').length);
-    }
-  });
-
-  it('gives every pack PR one topic and every tile member a PR', async () => {
-    const engine = engineWith(extra);
-    for (const view of await allTiles(engine)) {
-      expect(view.prs.length, view.tile.id).toBe(view.tile.members.length);
-    }
   });
 });
 
