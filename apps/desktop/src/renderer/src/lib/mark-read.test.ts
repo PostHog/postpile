@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TileAfterRead, WhoseTurn } from '@postpile/core';
-import { markReadNotice, moveWords } from './mark-read.ts';
+import { markReadNotice, moveWords, snoozeMessage } from './mark-read.ts';
 
 const NONE: WhoseTurn = { kind: 'none', who: null, what: '', prKey: null };
 const REREVIEW: WhoseTurn = { kind: 'you', move: 're_review', who: null, what: 'pim addressed your changes: re-review', prKey: 'acme/app#1960' };
@@ -19,7 +19,25 @@ describe('moveWords', () => {
   });
 });
 
+describe('snoozeMessage', () => {
+  it('says the thread is still unread on GitHub', () => {
+    expect(snoozeMessage('Snoozed', true)).toBe('Snoozed. Still unread on GitHub.');
+    expect(snoozeMessage('Snoozed.', true)).toBe('Snoozed. Still unread on GitHub.');
+  });
+
+  it('keeps a failure as it is', () => {
+    expect(snoozeMessage('Could not snooze', false)).toBe('Could not snooze');
+  });
+});
+
 describe('markReadNotice', () => {
+  it('names the PR marked from the pane and drops the mention that was just seen', () => {
+    const mention: WhoseTurn = { kind: 'you', move: 'review', who: null, what: 'Review, lyra mentioned you', prKey: 'acme/app#1907' };
+    expect(markReadNotice({ message: 'x', ok: true, writesOn: true, afterRead: { done: false, turn: mention }, prKey: 'acme/app#1907' }).message).toBe(
+      'Marked #1907 read. Still your move: review.',
+    );
+  });
+
   const base = { message: 'marked 2 events read', ok: true, writesOn: true };
 
   it('says it is still your move and offers Snooze', () => {

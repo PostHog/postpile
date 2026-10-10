@@ -32,7 +32,7 @@ function TileCount(props: { count: number }) {
 }
 
 /**
- * "· 1 PR open" after the Tiles count: open PRs that sit only in Dealt with
+ * "· 1 open PR in Dealt with" after the Tiles count: open PRs that sit only in Dealt with
  * tiles (core's `TopicDetail.openInDealtWith`). They are why the Archive box
  * does not show. Nothing at 0.
  */
@@ -46,7 +46,7 @@ function OpenInDealtWithHint(props: { openIn: TopicDetail['openInDealtWith'] }) 
     <>
       <span className="text-ghost">·</span>
       <span title={title}>
-        {props.openIn.length} {props.openIn.length === 1 ? 'PR' : 'PRs'} open
+        {props.openIn.length} open {props.openIn.length === 1 ? 'PR' : 'PRs'} in Dealt with
       </span>
     </>
   );

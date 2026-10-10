@@ -1,4 +1,5 @@
 import type { WhatsNew, WhatsNewAnchor, WhatsNewAnchorKind } from '@postpile/core';
+import { plural } from './plural.ts';
 
 /** The strip has room for about this many characters next to the avatar, NEW pill and age. */
 export const STRIP_TEXT_MAX = 48;
@@ -25,10 +26,6 @@ const REPLY_NOUN: Record<WhatsNewAnchorKind, string | null> = {
   close: null,
   read: null,
 };
-
-function plural(count: number, word: string): string {
-  return `${count} ${word}${count === 1 ? '' : 's'}`;
-}
 
 /** "since your changes request", "since you marked it read". */
 export function anchorSince(anchor: WhatsNewAnchor): string {

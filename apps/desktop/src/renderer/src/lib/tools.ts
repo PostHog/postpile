@@ -68,10 +68,10 @@ export function toolsFooter(view: ToolsView | undefined): ToolsFooter | null {
   if (notice.gh) {
     parts.push({ text: 'sync off', title: notice.gh.headline });
   } else if (view.gh.state === 'offline') {
-    parts.push({ text: 'GitHub unreachable', title: `${view.gh.headline}. ${view.gh.detail}` });
+    parts.push({ text: 'GitHub unreachable', title: `${view.gh.headline}. Check your network; PostPile tries again by itself. ${view.gh.detail}`.trim() });
   }
   if (notice.claude) {
-    parts.push({ text: notice.claude.state === 'limited' ? 'agent paused' : 'rules only', title: notice.claude.headline });
+    parts.push({ text: notice.claude.state === 'limited' ? 'agent paused' : 'rules only', title: `${notice.claude.headline}. Tiles and notifications still work on rules; topics, dossiers and glances wait.` });
   }
   if (parts.length === 0) {
     return null;

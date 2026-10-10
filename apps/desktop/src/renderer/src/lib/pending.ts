@@ -19,3 +19,15 @@ export function pendingHeadline(pending: PendingWriteView[]): string {
 export function pendingBadgeTitle(pending: PendingWriteView[]): string {
   return `${pendingHeadline(pending)}: made while GitHub writes were locked. They reach GitHub only once you send them from here; until then the tiles stay unread.`;
 }
+
+/**
+ * The footer's right-hand queue item: mark-reads in the 6s undo window, then
+ * writes waiting in the lock, else nothing (an "empty" item read as "nothing
+ * is waiting" while the lock still held writes).
+ */
+export function queueText(undoWindow: number, pendingInLock: number): string | null {
+  if (undoWindow > 0) {
+    return `${undoWindow} mark-read in the undo window`;
+  }
+  return pendingInLock > 0 ? `${pendingInLock} pending, send from the lock` : null;
+}

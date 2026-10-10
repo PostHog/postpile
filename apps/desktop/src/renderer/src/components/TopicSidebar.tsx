@@ -4,6 +4,7 @@ import { useActions } from '../api/actions.tsx';
 import { useTools } from '../api/tools.ts';
 import { useFinishedTopics } from '../api/topics.ts';
 import { statusLabel } from '../lib/memory.ts';
+import { plural } from '../lib/plural.ts';
 import { bucketItems, dealtItems, dealtKey, rowSection, sidebarBuckets, topicRowId, unreadLook, type QueueFilter } from '../lib/queues.ts';
 import { ARCHIVE_FLIGHT_MS, flyToArchive } from '../lib/archive-flight.ts';
 import { reducedMotion } from '../lib/motion.ts';
@@ -48,7 +49,7 @@ function topicSnippet(item: TopicListItem): string {
   if (item.statusLine) {
     return item.statusLine.note ? item.statusLine.note : statusLabel(item.statusLine.status);
   }
-  return `${item.openTiles} open · ${item.totalTiles} tiles`;
+  return `${item.unreadTiles} unread · ${plural(item.totalTiles, 'tile')}`;
 }
 
 /** What the unread bubble shows: its look and count, null when all is read. */
@@ -538,7 +539,6 @@ function HiddenByFilter(props: { filter: QueueFilter; hidden: number; onShowAll:
 
 /** "Filtering: 2 topics, 5 tiles · Clear", above the topic list while the search bar filters. */
 function FilterHint(props: { topics: number; tiles: number; onClear: () => void }) {
-  const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
   return (
     <p className={`flex items-center gap-1.5 text-[11.5px] text-muted ${TEXT_COLUMN}`}>
       <span>

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PrSet, PrSummary, TileView, WhatsNew } from '@postpile/core';
 import { at, NO_OPENED_READ, NO_PR_FACTS, withOffers } from '@postpile/core/fixtures';
-import { countPrs, isFyiNews, kindParts, leadPr, sameForWhom, stripMoreCount, stripNews, tileForYou } from './tiles.ts';
+import { countPrs, isFyiNews, kindCountText, kindParts, leadPr, sameForWhom, stripMoreCount, stripNews, tileForYou } from './tiles.ts';
 
 function summary(number: number, overrides: Partial<PrSummary> = {}): PrSummary {
   return {
@@ -99,6 +99,15 @@ describe('tile helpers', () => {
   it('labels kinds', () => {
     const view = setView([summary(1), summary(2, { provenance: pulled }), summary(3, { provenance: pulled })]);
     expect(kindParts(view)).toEqual({ word: 'Set', count: 3 });
+  });
+
+  it('counts a stack by its live layers once some are merged or closed', () => {
+    const base = setView([summary(1), summary(2, { state: 'MERGED' }), summary(3)]);
+    const stack = { ...base, tile: { ...base.tile, kind: 'stack' as const } };
+    expect(kindCountText(stack)).toBe('2 of 3 open');
+    expect(kindCountText({ ...stack, prs: stack.prs.filter((pr) => pr.state === 'OPEN') })).toBe('2');
+    expect(kindCountText(base)).toBe('3');
+    expect(kindCountText({ ...base, tile: { ...base.tile, kind: 'single' as const } })).toBeNull();
   });
 
   it('uses the set take for set tiles and the lead for_you otherwise', () => {

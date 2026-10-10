@@ -7,6 +7,7 @@ import { useTools } from '../api/tools.ts';
 import { callStatsWords } from '../lib/agent-stats.ts';
 import { progressLabel } from '../lib/cleanup.ts';
 import { liveLabel, quotaLabel } from '../lib/live.ts';
+import { queueText } from '../lib/pending.ts';
 import { mcpFooterShows } from '../lib/mcp.ts';
 import { syncReportDetail } from '../lib/sync-report.ts';
 import { useNow } from '../lib/use-now.ts';
@@ -14,6 +15,10 @@ import { countPrs } from '../lib/tiles.ts';
 import { toolsFooter } from '../lib/tools.ts';
 import { McpFooterItem } from './McpFooterItem.tsx';
 import { WritesLock } from './WritesLock.tsx';
+
+/** What the three provenance counts mean; "notified" is GitHub telling you, never a Mac notification. */
+const PROVENANCE_TITLE =
+  'This topic\'s PRs by how they reached you. notified: GitHub sent you a notification (not a Mac ping). found: PostPile found it from your activity. pulled in: added to complete a stack or set.';
 
 /** Numbers in the footer are ink and semibold; the words around them stay muted. */
 function Num(props: { children: ReactNode }) {
@@ -50,13 +55,13 @@ export function StatusFooter(props: { topics: TopicListItem[]; detail: TopicDeta
   const left = withDividers([
     <span key="unread" className="flex items-center gap-1.5">
       <span className={`size-1.5 rounded-full ${unread > 0 ? 'bg-unread ring-2 ring-unread/16' : 'bg-dot-quiet'}`} />
-      <span>
-        <Num>{unread}</Num> unread
+      <span title="Unread tiles in PostPile. GitHub may count more unread threads: merged PRs and other notifications never become tiles.">
+        <Num>{unread}</Num> unread tiles
       </span>
     </span>,
     counts && (
-      <span key="counts">
-        <Num>{counts.pinged}</Num> pinged
+      <span key="counts" title={PROVENANCE_TITLE}>
+        <Num>{counts.pinged}</Num> notified
         {counts.found > 0 && (
           <>
             {' · '}
@@ -102,8 +107,9 @@ export function StatusFooter(props: { topics: TopicListItem[]; detail: TopicDeta
     // The item hides itself too; asked here as well so no divider is left dangling.
     mcpShows && <McpFooterItem key="mcp" />,
   ]);
+  const queue = queueText(actions.pendingMarkReads, actions.writes?.pending.length ?? 0);
   const right = withDividers([
-    <span key="queue">{actions.pendingMarkReads > 0 ? `${actions.pendingMarkReads} mark-read in the undo window` : 'mark-read queue empty'}</span>,
+    queue && <span key="queue">{queue}</span>,
     window.postpile?.version && (
       <span key="version" title="PostPile › About PostPile">
         v{window.postpile.version}

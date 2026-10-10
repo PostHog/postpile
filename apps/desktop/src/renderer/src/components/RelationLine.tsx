@@ -19,7 +19,7 @@ function lineText(placement: TopicPlacement): string {
 
 /**
  * "[repo] · Owned by X · you're here because Y" with the relation badge,
- * "Why?" and the correction: "Wrong" offers the other two relations. A
+ * "Why?" and the correction: "Not right?" offers the other two relations. A
  * correction holds until something new happens in the topic.
  */
 export function RelationLine(props: {
@@ -81,7 +81,7 @@ export function RelationLine(props: {
             onClick={() => setChoosing(!choosing)}
             className="text-[11px] text-hint hover:text-status-bad hover:underline"
           >
-            Wrong
+            Not right?
           </button>
         </span>
       </div>

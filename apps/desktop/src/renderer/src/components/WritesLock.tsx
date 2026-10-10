@@ -128,7 +128,7 @@ export function WritesLock() {
         {!writes.enabled && 'read-only'}
         {count > 0 && (
           <span title={pendingBadgeTitle(pending)} className="ml-0.5 rounded-full bg-segment px-1.5 text-[10px] leading-[15px] font-semibold text-ink-2">
-            {count}
+            {count} pending
           </span>
         )}
       </button>
@@ -141,7 +141,7 @@ export function WritesLock() {
           {forced ? (
             <p className="text-[12px] leading-snug text-ink">{writes.forcedOffReason}</p>
           ) : (
-            !writes.enabled && <p className="text-[12px] leading-snug text-ink">Mark-read and approvals will reach GitHub.</p>
+            !writes.enabled && <p className="text-[12px] leading-snug text-ink">Mark-read, approvals, comments and reactions will reach GitHub.</p>
           )}
           {writes.enabled && <p className="text-[12px] leading-snug text-ink">These did not reach GitHub yet.</p>}
           {count > 0 && <PendingList pending={pending} />}
@@ -171,7 +171,7 @@ export function WritesLock() {
                   Cancel
                 </Button>
                 <Button onClick={() => void unlockThen('discard')} title="Unlock, and drop the pending writes. The tiles stay unread, like on GitHub.">
-                  Discard
+                  Unlock and discard
                 </Button>
                 <Button variant="primary" onClick={() => void unlockThen('send')}>
                   Send {count} to GitHub
@@ -197,7 +197,7 @@ export function WritesLock() {
               className="self-end text-[11px] text-muted underline decoration-hairline-strong underline-offset-2 hover:text-ink"
               title="Drop the pending writes without unlocking. The tiles stay unread, like on GitHub."
             >
-              Discard pending, stay locked
+              Discard, stay locked
             </button>
           )}
         </div>

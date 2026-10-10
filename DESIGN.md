@@ -3028,7 +3028,7 @@ not taken; instead the user asked for a PR button: "an unassign team button
   "Remove <team slug>" (e.g. "Remove team-devex"); several teams pending =
   one button per team, or a small menu; pick the boring option.
 - Confirm once (small popover, one sentence): "Remove the review request
-  for all of <team> and unsubscribe you?" No undo: re-adding the team would
+  for all of <team>, unsubscribe you and mark it read?" (the sentence names the mark-read, since step 3 below does it) No undo: re-adding the team would
   notify every teammate again.
 - On confirm, in order: (1) GitHub `DELETE
   /repos/{owner}/{repo}/pulls/{n}/requested_reviewers` with `{reviewers: [],

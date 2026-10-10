@@ -62,7 +62,7 @@ describe('toolsFooter', () => {
   it('names what is off, with the headlines as the tooltip', () => {
     expect(toolsFooter(view({ gh: missingGh, claude: missingClaude }))).toEqual({
       text: 'sync off · rules only',
-      title: 'GitHub CLI (gh) not found\nAgent features are off: claude not found',
+      title: 'GitHub CLI (gh) not found\nAgent features are off: claude not found. Tiles and notifications still work on rules; topics, dossiers and glances wait.',
     });
     expect(toolsFooter(view({ claude: { state: 'limited', headline: 'Agent features are paused: Claude usage limit reached' } }))?.text).toBe('agent paused');
     expect(toolsFooter(view({ gh: { state: 'offline', headline: 'GitHub cannot be reached', detail: 'No network.' } }))?.text).toBe('GitHub unreachable');

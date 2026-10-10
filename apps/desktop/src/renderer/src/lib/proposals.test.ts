@@ -48,8 +48,8 @@ describe('proposalText', () => {
 describe('suggestedBy', () => {
   it('names known outside agents and falls back for unknown ones', () => {
     expect(suggestedBy(proposal({ source: 'agent', client: 'claude-code' }))).toBe('Claude Code');
-    expect(suggestedBy(proposal({ source: 'agent', client: 'some-tool' }))).toBe('an outside agent');
-    expect(suggestedBy(proposal({ source: 'agent', client: 'constructor' }))).toBe('an outside agent');
+    expect(suggestedBy(proposal({ source: 'agent', client: 'some-tool' }))).toBe('some-tool');
+    expect(suggestedBy(proposal({ source: 'agent', client: 'constructor' }))).toBe('constructor');
     expect(suggestedBy(proposal({ source: 'agent', client: null }))).toBe('an outside agent');
     expect(suggestedBy(proposal({}))).toBeNull();
   });

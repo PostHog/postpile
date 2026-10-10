@@ -7,7 +7,7 @@ import { updatingNow } from '../lib/staleness.ts';
 import { ageLabel } from '../lib/time.ts';
 import { stackQueueWord } from '../lib/pr.ts';
 import { stackPlaces } from '../lib/stacks.ts';
-import { kindParts, leadPr, sameForWhom, tileForYou, tileUpdatedAt } from '../lib/tiles.ts';
+import { kindCountText, kindParts, leadPr, sameForWhom, tileForYou, tileUpdatedAt } from '../lib/tiles.ts';
 import { useNow } from '../lib/use-now.ts';
 import { useSettling } from '../lib/use-settling.ts';
 import { personTitle } from '../lib/why.ts';
@@ -107,7 +107,8 @@ function PeopleStack(props: { people: TilePerson[] }) {
 
 /** "Set · 2" next to the chips: blue on the selected tile, grey otherwise. */
 function KindLabel(props: { view: TileView; selected: boolean }) {
-  const { word, count } = kindParts(props.view);
+  const { word } = kindParts(props.view);
+  const count = kindCountText(props.view);
   const kind = props.view.tile.kind;
   return (
     <span className={`flex shrink-0 items-center gap-[5px] text-[12px] ${props.selected ? 'font-medium text-accent' : 'text-muted'}`}>

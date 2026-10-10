@@ -44,7 +44,7 @@ describe('syncReportDetail', () => {
       }),
     );
     expect(detail).toContain('took 12.3s');
-    expect(detail).toContain('Threads 180 · PRs fetched 160 · found 4 · pulled in 13 · waiting 0');
+    expect(detail).toContain('Threads in last fetch 180 · PRs fetched 160 · found 4 · pulled in 13 · waiting 0');
     expect(detail).toContain('Agent calls 2:\ntopic_assignment: 2 calls\ndossier_update: 0 calls, 29 skipped by the cap');
     expect(detail).toContain('Skipped by the call cap: 29');
     expect(detail).toContain('Errors (2):\n- sync: gh auth token failed\n- found PRs: timeout');
