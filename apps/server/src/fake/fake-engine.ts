@@ -40,6 +40,7 @@ import type {
   LivePollStatus,
   McpConnectionView,
   SyncPhase,
+  SyncPhaseTimings,
   SyncProgress,
   RecordedSyncProgress,
   MemoryCorrection,
@@ -270,7 +271,7 @@ export interface FakeEngineOptions {
   syncStepMs?: number;
   /** How long a work context Refresh "thinks". Tests pass 0. */
   sweepDelayMs?: number;
-  /** POSTPILE_FAKE_SETUP=1: no instructions yet, and the setup flow shows until accepted or skipped. */
+  /** POSTPILE_FAKE_SETUP=1: no instructions yet, the setup flow shows until accepted or skipped, and nothing is synced until the first sync. */
   forceSetup?: boolean;
   /** Base delay of the canned setup checks, sweep lines and refine. Tests pass 0. */
   setupStepMs?: number;
@@ -348,6 +349,9 @@ const FAKE_LINE_MESSAGES: Record<MemoryCorrectionKind, string> = {
 /** Sample glances that read as older than the PR (its last push came after), for the stale verdict box. */
 const STALE_SAMPLE_GLANCES = new Set<PrKey>(['acme/app#1904']);
 
+/** What a GitHub request fails with under POSTPILE_FAKE_MISSING=gh-offline, like fetch without a network. */
+const FAKE_OFFLINE_ERROR = 'fetch failed (sample data: GitHub cannot be reached)';
+
 /** How long before start the sample PRs count as fetched. */
 const SAMPLE_FETCH_AGE_MS = 4 * 60_000;
 
@@ -395,6 +399,36 @@ function sampleSyncStats(): AgentCallStats {
   stats.byKind.event_classification = count(1, 6000, 0.01);
   stats.total = 4;
   return stats;
+}
+
+/** How long the sample's last full sync before start took. */
+const SAMPLE_SYNC_MS = 4000;
+
+/**
+ * The full sync the sample's PRs were fetched by, SAMPLE_FETCH_AGE_MS before
+ * start: like the report a real app keeps in its database across restarts,
+ * so the MCP header and the "fetched … ago" lines agree.
+ */
+function sampleLastSync(startedAt: Date): SyncReport {
+  const finishedAt = startedAt.getTime() - SAMPLE_FETCH_AGE_MS;
+  return {
+    startedAt: new Date(finishedAt - SAMPLE_SYNC_MS).toISOString(),
+    finishedAt: new Date(finishedAt).toISOString(),
+    notificationsNotModified: false,
+    threads: 0,
+    prsFetched: 0,
+    prsSkipped: 0,
+    prsPulledIn: 0,
+    prsFound: 0,
+    newEvents: 0,
+    agentCalls: 4,
+    agentCallStats: sampleSyncStats(),
+    dossiersUpdated: 2,
+    facts: { added: 0, updated: 0, invalidated: 0, confirmed: 0, stale: 0 },
+    errors: [],
+    phaseMs: { fetch: 800, dossiers: 2400, events: 1600, glances: 1600 },
+    agentOff: null,
+  };
 }
 
 /**
@@ -464,6 +498,10 @@ export class FakeEngine implements EngineService {
   private nextId = 100;
   /** When each sample PR was last "fetched": a few minutes before start, moved by a fake agent refresh. */
   private readonly fetchedAt = new Map<PrKey, string>();
+  /** POSTPILE_FAKE_SETUP=1: a first run, with nothing synced until its first sync. */
+  private readonly firstRun: boolean;
+  /** Set once a fake sync fetched: a first run shows the sample board from then on. */
+  private syncedOnce = false;
 
 
   constructor(options: FakeEngineOptions = {}) {
@@ -472,6 +510,7 @@ export class FakeEngine implements EngineService {
     this.recheckDelayMs = options.recheckDelayMs ?? 1500;
     this.syncStepMs = options.syncStepMs ?? 800;
     this.tidyPending = options.tidyOnFirstSync ?? false;
+    this.firstRun = options.forceSetup ?? false;
     this.busy = options.busy ?? false;
     this.catchUpGate = options.catchUpGate ?? false;
     this.data = buildSampleData(this.now(), options.extras);
@@ -486,6 +525,8 @@ export class FakeEngine implements EngineService {
     const catchUpStepMs = options.catchUpStepMs ?? 4000;
     this.catchUp = new FakeCatchUp(this.data, this.now, { queuedMs: catchUpStepMs, writingMs: catchUpStepMs * 1.5 });
     this.toolStatus = new FakeTools(options.missingTools ?? [], this.now);
+    // A first run has no report yet; otherwise the one the sample PRs were fetched by, as a restart finds it.
+    this.lastSync = this.firstRun || this.toolStatus.neverSynced() ? null : sampleLastSync(this.startedAt);
     this.quota = fakeQuota(options.quota ?? null, this.now);
     this.mcp = new FakeMcp(() => this.toolStatus.view().claude.state, this.now, options.setupStepMs ?? 700);
     this.checkDelayMs = options.setupStepMs ?? 700;
@@ -588,6 +629,7 @@ export class FakeEngine implements EngineService {
       now: this.now,
       forced: options.forceSetup ?? false,
       stepMs: options.setupStepMs ?? 700,
+      agentOff: () => this.toolStatus.agentOff(),
     });
   }
 
@@ -829,8 +871,20 @@ export class FakeEngine implements EngineService {
     return this.tilesOfTopic(topicId).flatMap((tile) => tile.members.map((member) => member.prKey));
   }
 
+  /**
+   * Like an empty database: a first run (POSTPILE_FAKE_SETUP=1 until its
+   * first sync, or gh missing or logged out, which never syncs) has no board,
+   * proposals or counts yet.
+   */
+  private beforeFirstSync(): boolean {
+    return this.toolStatus.neverSynced() || (this.firstRun && !this.syncedOnce);
+  }
+
   /** Active topics the sidebar lists: with a PR in the chosen repo, like the engine. Their tiles are never narrowed. */
   private listedTopics(scope?: ListScope): Topic[] {
+    if (this.beforeFirstSync()) {
+      return [];
+    }
     const settings = scopedSettings(this.repoSettings, scope);
     return this.data.topics.filter((topic) => {
       const keys = this.topicPrKeys(topic.id);
@@ -958,8 +1012,24 @@ export class FakeEngine implements EngineService {
     return this.syncing;
   }
 
+  /**
+   * One step of the fake sync: shows its phases as running for `ms`, then
+   * adds the time it took to each of them, like the engine's PhaseClock, so
+   * the reported phases fit inside the run (they overlap, as in a real run).
+   */
+  private async fakeSyncStep(progress: SyncProgress, running: SyncPhase[], ms: number, phaseMs: SyncPhaseTimings): Promise<void> {
+    progress.running = running;
+    const before = this.now().getTime();
+    await new Promise((resolve) => setTimeout(resolve, ms));
+    const took = this.now().getTime() - before;
+    for (const phase of running) {
+      phaseMs[phase] = (phaseMs[phase] ?? 0) + took;
+    }
+  }
+
   private async runFakeSync(): Promise<SyncReport> {
     const startedAt = this.timestamp();
+    const phaseMs: SyncPhaseTimings = {};
     const progress: SyncProgress = { startedAt, running: [], agentCallsDone: 0, agentCallsPlanned: 0, fromGitHub: null, prsRead: null, agentCallStats: emptyAgentCallStats() };
     this.progress = progress;
     // Without claude only the fetch runs, like the engine skipping its agent jobs.
@@ -967,18 +1037,22 @@ export class FakeEngine implements EngineService {
     if (agentOff === null && this.tidyPending) {
       // The tidy is one long agent call; long enough here to look at the overlay.
       this.tidyPending = false;
-      progress.running = ['tidy', 'topics'];
       progress.agentCallsPlanned += 1;
-      await new Promise((resolve) => setTimeout(resolve, this.syncStepMs * 6));
+      await this.fakeSyncStep(progress, ['tidy', 'topics'], this.syncStepMs * 6, phaseMs);
       progress.agentCallsDone += 1;
     }
     let news = { prsFetched: 0, newEvents: 0 };
     for (const step of agentOff === null ? FAKE_SYNC_STEPS : FAKE_SYNC_STEPS.slice(0, 1)) {
-      progress.running = step.running;
       progress.agentCallsPlanned += step.plan;
-      await new Promise((resolve) => setTimeout(resolve, this.syncStepMs));
+      await this.fakeSyncStep(progress, step.running, this.syncStepMs, phaseMs);
       progress.agentCallsDone += step.done;
+      if (step.running.includes('fetch') && this.toolStatus.offline()) {
+        // Like the engine: the notifications request throws, the run stops and its report keeps the error.
+        this.lastSync = { ...this.emptySyncReport(startedAt), errors: [`sync: ${FAKE_OFFLINE_ERROR}`], phaseMs };
+        return this.lastSync;
+      }
       if (step.running.includes('fetch')) {
+        this.syncedOnce = true;
         // Sample data never changes, like a sync right after the live poll caught up, unless POSTPILE_FAKE_DELIVER has a step left.
         const delivered = this.script.deliverOnSync();
         news = { prsFetched: delivered?.prsFetched ?? 0, newEvents: delivered?.newEvents ?? 0 };
@@ -1011,7 +1085,7 @@ export class FakeEngine implements EngineService {
       dossiersUpdated: agentOff === null ? 2 : 0,
       facts: { added: 0, updated: 0, invalidated: 0, confirmed: 0, stale: 0 },
       errors: [],
-      phaseMs: agentOff === null ? { fetch: 2100, topics: 0, dossiers: 38000, facts: 0, sets: 0, glances: 47000, events: 6000 } : { fetch: 2100 },
+      phaseMs,
       agentOff,
     };
     return this.lastSync;
@@ -1052,6 +1126,9 @@ export class FakeEngine implements EngineService {
   }
 
   private unreadKeysNow(): PrKey[] {
+    if (this.beforeFirstSync()) {
+      return [];
+    }
     this.writes.settle();
     const unread = this.data.tiles.filter((tile) => this.tileState(tile).kind === 'unread');
     return [...new Set(unread.flatMap((tile) => tile.members.map((member) => member.prKey)))];
@@ -1100,8 +1177,8 @@ export class FakeEngine implements EngineService {
 
   /** Same sections and order as the engine; ties keep the sample's order. */
   async listTopics(scope?: ListScope): Promise<TopicListItem[]> {
-    // A first run without gh: nothing synced yet, so the empty state shows.
-    if (this.toolStatus.neverSynced()) {
+    // A first run: nothing synced yet, so the empty state shows.
+    if (this.beforeFirstSync()) {
       return [];
     }
     this.writes.settle();
@@ -1272,6 +1349,9 @@ export class FakeEngine implements EngineService {
 
   /** The Archive's sample topics that still take new PRs, newest first, like the engine. Samples keep no join times. */
   async listFinishedTopics(): Promise<FinishedTopic[]> {
+    if (this.beforeFirstSync()) {
+      return [];
+    }
     const now = this.now();
     const memberTopicIds = [...this.data.membership.values()];
     return this.data.topics
@@ -1317,7 +1397,7 @@ export class FakeEngine implements EngineService {
   async getTopic(topicId: string): Promise<TopicDetail | null> {
     this.writes.settle();
     const topic = this.data.topics.find((candidate) => candidate.id === topicId);
-    if (!topic) {
+    if (!topic || this.beforeFirstSync()) {
       return null;
     }
     const tiles = this.topicTileViews(topicId);
@@ -2224,6 +2304,9 @@ export class FakeEngine implements EngineService {
   }
 
   async listProposals(): Promise<PendingProposals> {
+    if (this.beforeFirstSync()) {
+      return { topics: [], rules: [] };
+    }
     return { topics: this.topicChanges.pending(), rules: this.memory.pendingRuleProposals() };
   }
 
@@ -2483,6 +2566,10 @@ export class FakeEngine implements EngineService {
     const ghOff = this.toolStatus.ghOff();
     if (ghOff !== null) {
       return { kind: 'blocked', reason: ghOff };
+    }
+    if (this.toolStatus.offline()) {
+      // Like the engine's request failing: the poller backs off and says so.
+      throw new Error(FAKE_OFFLINE_ERROR);
     }
     const cycle = this.live.poll();
     if (cycle.kind === 'done') {

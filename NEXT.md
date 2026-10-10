@@ -2590,8 +2590,10 @@ Env switches:
   ```
 - `POSTPILE_FAKE_LIVE=1` (with `POSTPILE_FAKE=1`): the standalone server
   starts the fake live poll and the auto sync like Electron main, so the
-  footer reads "live · every 60s" in a browser too. No Mac notifications;
-  pings show in the debug view only.
+  footer reads "live · every 60s" in a browser too. They also start on
+  their own with `POSTPILE_FAKE_QUOTA` or `gh-offline`, which the real app
+  shows through its poll; `POSTPILE_FAKE_LIVE=0` keeps them off. No Mac
+  notifications; pings show in the debug view only.
 - `POSTPILE_FAKE_EXTRA`: with `POSTPILE_FAKE=1`, comma-separated sample
   packs on top of the default sample, which stays as it is
   (`apps/server/src/fake/fake-extras.ts`). `stacks`: topics Search
@@ -2641,7 +2643,10 @@ Env switches:
   one; its Accept sends the pick.
 - `POSTPILE_FAKE_MISSING` (with `POSTPILE_FAKE=1`): simulates missing
   tools, comma separated `gh`, `gh-auth`, `gh-token`, `gh-offline`,
-  `claude`, `claude-auth`, `claude-limit`:
+  `claude`, `claude-auth`, `claude-limit`. `gh` and `gh-auth` read as a
+  first run (no topics, proposals or counts), like `POSTPILE_FAKE_SETUP=1`
+  until its first sync. `gh-offline` fails every sync and poll with a
+  fetch error. Without claude the setup draft fails into the blank draft:
 
   ```
   POSTPILE_FAKE=1 POSTPILE_FAKE_MISSING=gh,claude POSTPILE_TOKEN=devtok PORT=4877 pnpm server

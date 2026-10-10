@@ -89,6 +89,11 @@ export class FakeTools {
     return this.gh === 'missing' || this.gh === 'logged_out';
   }
 
+  /** gh works but GitHub cannot be reached: syncs and polls run and fail. */
+  offline(): boolean {
+    return this.gh === 'offline';
+  }
+
   /** The claude headline while the agent is off; null otherwise. */
   agentOff(): string | null {
     return claudeBlocksAgent(this.claude) ? claudeStatus(this.claude, null).headline : null;

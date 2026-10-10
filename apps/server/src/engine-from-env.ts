@@ -136,6 +136,21 @@ export function autoSyncMinutesFromEnv(value: string | undefined, syncOnStart = 
   return syncOnStart ? DEFAULT_AUTO_SYNC_MINUTES : 0;
 }
 
+/**
+ * Whether the standalone fake server starts the sample live poll and auto
+ * sync like the desktop app: POSTPILE_FAKE_LIVE=1, or a health switch whose
+ * state the real app shows through its poll (POSTPILE_FAKE_QUOTA, or
+ * gh-offline in POSTPILE_FAKE_MISSING), so the title bar and footer agree.
+ * POSTPILE_FAKE_LIVE=0 keeps them off.
+ */
+export function fakeLiveFromEnv(env: NodeJS.ProcessEnv): boolean {
+  if (env.POSTPILE_FAKE_LIVE === '0') {
+    return false;
+  }
+  const healthSwitch = fakeQuotaLevel(env.POSTPILE_FAKE_QUOTA) !== null || fakeToolProblems(env.POSTPILE_FAKE_MISSING).includes('gh-offline');
+  return env.POSTPILE_FAKE_LIVE === '1' || healthSwitch;
+}
+
 /** How often the desktop app polls GitHub notifications, GitHub's usual X-Poll-Interval. */
 export const DEFAULT_POLL_SECONDS = 60;
 
