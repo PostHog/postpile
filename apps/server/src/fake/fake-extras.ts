@@ -1,3 +1,4 @@
+import { addMcpPack } from './fake-mcp-pack.ts';
 import type { SampleClock } from './sample-builders.ts';
 import type { SampleData } from './sample-data.ts';
 import { appendSamplePack } from './sample-pack-append.ts';
@@ -31,5 +32,8 @@ export function addFakeExtras(data: SampleData, clock: SampleClock, extras: Set<
   }
   if (extras.has('pane')) {
     appendSamplePack(data, buildPanePack(clock));
+  }
+  if (extras.has('mcp')) {
+    addMcpPack(data, clock);
   }
 }

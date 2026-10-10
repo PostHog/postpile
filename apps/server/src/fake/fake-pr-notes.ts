@@ -10,6 +10,7 @@ import {
   planNoteSet,
   prNotesView,
   prNoteView,
+  pendingNote,
   refusedNote,
   type NoteReadContext,
   type PrKey,
@@ -18,7 +19,15 @@ import {
   type PrNoteResult,
   type PrNotesView,
 } from '@postpile/core';
+import type { CoverRead } from '@postpile/engine';
+import { fakeGitHubKnows } from './fake-note-cover.ts';
 import type { SampleData } from './sample-data.ts';
+
+/** Reads a covering PR the sample does not have (NoteCoverReader over FakeNoteCover); null: nothing can be read. */
+export type FakeCoverReader = { read: (cover: PrKey, notedKey: PrKey) => Promise<CoverRead> } | null;
+
+/** What one set came to: the answer, or the covering PR it needs first. */
+type SetStep = { kind: 'done'; result: PrNoteResult } | { kind: 'needs_cover'; coverKey: PrKey };
 
 /**
  * Agent notes on sample data, in memory, through core's planners like the
@@ -34,6 +43,7 @@ export class FakePrNotes {
     private readonly data: SampleData,
     private readonly now: () => Date,
     private readonly fetchedAtOf: (key: PrKey) => string,
+    private readonly covers: FakeCoverReader = null,
   ) {}
 
   changes(): number {
@@ -72,7 +82,7 @@ export class FakePrNotes {
     return this.notes.filter((note) => isCurrentNote(note) && !isNoteExpired(note, now) && open.has(note.prKey) && (client === undefined || note.client === client)).length;
   }
 
-  private set(request: Extract<PrNoteRequest, { action: 'set' }>, client: string): PrNoteResult {
+  private setStep(request: Extract<PrNoteRequest, { action: 'set' }>, client: string): SetStep {
     const read = this.readContext();
     const key = noteRequestKey(request, client);
     const plan = planNoteSet(request, {
@@ -85,14 +95,13 @@ export class FakePrNotes {
       newId: () => `n-sample-${this.nextSeq}`,
     });
     if (plan.kind === 'refused') {
-      return refusedNote(plan.reason);
+      return { kind: 'done', result: refusedNote(plan.reason) };
     }
-    // Sample data has no GitHub to read a covering PR from.
     if (plan.kind === 'needs_cover') {
-      return refusedNote(`the sample data has no PR ${plan.coverKey}, and the sample-data engine reads nothing from GitHub`);
+      return plan;
     }
     if (plan.kind === 'unchanged') {
-      return { status: 'unchanged', note: prNoteView(plan.note, read), replaced: null, anchored: anchorSummary(plan.note.anchor), reason: null };
+      return { kind: 'done', result: { status: 'unchanged', note: prNoteView(plan.note, read), replaced: null, anchored: anchorSummary(plan.note.anchor), reason: null } };
     }
     if (plan.releaseKeyOf) {
       plan.releaseKeyOf.idempotencyKey = null;
@@ -105,8 +114,43 @@ export class FakePrNotes {
     this.nextSeq += 1;
     this.notes.push(note);
     this.written += 1;
-    return { status: 'set', note: prNoteView(note, read), replaced: plan.replaces ? prNoteView(plan.replaces, read) : null, anchored: anchorSummary(note.anchor), reason: null };
+    return { kind: 'done', result: { status: 'set', note: prNoteView(note, read), replaced: plan.replaces ? prNoteView(plan.replaces, read) : null, anchored: anchorSummary(note.anchor), reason: null } };
   }
+
+  /** What a covering PR read that stored nothing means for the note: the engine's words. */
+  private coverOutcome(read: Exclude<CoverRead, { kind: 'stored' }>, cover: PrKey): PrNoteResult {
+    if (read.kind === 'pending') {
+      return pendingNote(`PostPile is still reading ${cover} from GitHub; call note_pr again with the same arguments in a minute`);
+    }
+    if (read.kind === 'not_found') {
+      return refusedNote(`GitHub has no PR ${cover} that PostPile can read; check covered_by`);
+    }
+    return refusedNote(read.reason);
+  }
+
+  /**
+   * A set. A covering PR outside the sample is "read" first when the
+   * sample's stand-in for GitHub knows its number (fake-note-cover.ts),
+   * then the set is planned again, like the engine. Any other PR outside
+   * the sample is refused.
+   */
+  private async set(request: Extract<PrNoteRequest, { action: 'set' }>, client: string): Promise<PrNoteResult> {
+    const first = this.setStep(request, client);
+    if (first.kind === 'done') {
+      return first.result;
+    }
+    if (this.covers === null || !fakeGitHubKnows(first.coverKey)) {
+      return refusedNote(`the sample data has no PR ${first.coverKey}, and the sample-data engine reads nothing from GitHub`);
+    }
+    const read = await this.covers.read(first.coverKey, request.prKey);
+    if (read.kind !== 'stored') {
+      return this.coverOutcome(read, first.coverKey);
+    }
+    const second = this.setStep(request, client);
+    return second.kind === 'done' ? second.result : refusedNote(`PostPile could not store ${second.coverKey}`);
+  }
+
+
 
   private renew(noteId: string, minutes: number | null): PrNoteResult {
     const read = this.readContext();
@@ -136,7 +180,7 @@ export class FakePrNotes {
     return { status: 'cleared', note: prNoteView(note, read), replaced: null, anchored: null, reason: null };
   }
 
-  handle(request: PrNoteRequest, client: string): PrNoteResult {
+  async handle(request: PrNoteRequest, client: string): Promise<PrNoteResult> {
     if (request.action === 'set') {
       return this.set(request, client);
     }
@@ -152,7 +196,7 @@ export class FakePrNotes {
    */
   seed(): void {
     const prKey = 'acme/app#1955';
-    this.set({ action: 'set', prKey, kind: 'no_action', note: 'Only bumps the pinned browser version; the lockfile matches.', by: 'review session', token: this.viewFor(prKey).token, coveredByPrKey: null, coverToken: null, leaseMinutes: null }, 'claude-code');
+    this.setStep({ action: 'set', prKey, kind: 'no_action', note: 'Only bumps the pinned browser version; the lockfile matches.', by: 'review session', token: this.viewFor(prKey).token, coveredByPrKey: null, coverToken: null, leaseMinutes: null }, 'claude-code');
     this.written = 0;
   }
 }

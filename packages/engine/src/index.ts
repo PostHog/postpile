@@ -42,6 +42,7 @@ export {
 } from './telemetry/telemetry.ts';
 export { telemetryEnabled } from './telemetry/telemetry-env.ts';
 export { AgentRefresher, type AgentRefreshDeps, type RefreshRun, type StoredPrInfo } from './agent-requests/agent-refresh.ts';
+export { NoteCoverReader, type CoverRead, type NoteCoverDeps } from './note-cover.ts';
 export { AgentRequestInbox, type AgentRequestInboxOptions } from './agent-requests/inbox.ts';
 export { answerAgentRequest } from './agent-requests/answer.ts';
 export { startFresh } from './simulation/fresh-start.ts';

@@ -2546,6 +2546,18 @@ POSTPILE_FAKE=1 pnpm desktop
 POSTPILE_FAKE=1 pnpm server
 ```
 
+MCP clients and the UI on one fake sample (the plain `POSTPILE_FAKE=1 pnpm
+cli mcp` keeps its own copy, so nothing it files shows in a UI):
+
+```
+POSTPILE_FAKE=1 POSTPILE_TOKEN=devtok PORT=4877 pnpm server
+POSTPILE_TOKEN=devtok pnpm cli mcp --api http://127.0.0.1:4877   # stdio MCP over that server's engine
+```
+
+`note_pr` `covered_by` outside the sample: `acme/app#1000`-`#1999` are
+read once as pulled-in PRs, `#90000`+ are missing on GitHub, `#1777`
+answers pending once; anything else is refused.
+
 Env switches:
 
 - `POSTPILE_READ_ONLY=1`: real reads, every GitHub write refused, the
@@ -2590,6 +2602,9 @@ Env switches:
   folded bot review, a bot body cut like a stored snapshot, markdown and a
   long token in a comment, raw HTML that must stay inert, and
   instruction-like text as prompt-injection test data.
+  `mcp`: diffs for the overlap check (#1902 and sol's
+  #2301 on the same lines, a nearby pair, a quiet lockfile pair and stack
+  mates, one capped diff), for MCP checks of overlapping edits.
 - `POSTPILE_MAX_AGENT_CALLS`: agent-call cap for syncs and consolidations
   without an explicit cap (launch, "Sync now", `/api/consolidate`, and the
   CLI without `--max-agent-calls`), default 150 (was 30).

@@ -58,6 +58,19 @@ Logs go to `~/Library/Logs/PostPile/main.log` (dev runs: `~/Library/Logs/PostPil
 
 Crash dumps stay on the Mac, nothing is uploaded: when a process of the app crashes, Crashpad writes a minidump (`.dmp`) to Electron's default crash dump folder, `~/Library/Application Support/PostPile/Crashpad` (dev runs: `PostPile-dev/Crashpad`, or `Crashpad/` in `POSTPILE_DATA_DIR`), in `pending/` or `completed/`. `process.crash()` in the main process makes one for a check. A run that ended without a clean quit also leaves `running.json` in the same folder; the next start logs "the last run ended without a clean quit" and sends `app_crashed_last_run`.
 
+### MCP on the fake server
+
+`POSTPILE_FAKE=1 pnpm cli mcp` builds its own copy of the sample, so what an MCP client files never reaches a UI. To share one sample between the UI and MCP clients, start the fake server with a fixed token and point the MCP server at it:
+
+```
+POSTPILE_FAKE=1 POSTPILE_TOKEN=devtok PORT=4877 pnpm server
+POSTPILE_TOKEN=devtok pnpm cli mcp --api http://127.0.0.1:4877
+```
+
+The second command serves MCP on stdin/stdout and sends every engine read and ask to the server's `POST /api/fake/engine/:method` (token-protected, only the 14 methods MCP uses, only on a server started with `POSTPILE_FAKE=1`). Topic suggestions show in the Inbox, notes in the PR pane, and a Reject or Clear in the UI reaches the next MCP answer. A real server has no such route; the real MCP server reads the database and asks the app through files as before.
+
+`note_pr` with `covered_by` a PR outside the sample works like a real GitHub read: `acme/app#1000` to `#1999` are "read" once and kept as a pulled-in PR (no tile, no topic), `#90000` and up are PRs GitHub does not have, and `acme/app#1777` answers `pending` the first time (a retry finds it). Any other PR outside the sample is refused. The reads go through the engine's cover reader, so its hourly cap and `POSTPILE_FAKE_QUOTA=critical` apply.
+
 ### Simulate a fresh start
 
 `pnpm cli simulate-start` replays a new user's first syncs on a copy of a database, once per agent pipeline, to compare them from the same start:
@@ -113,6 +126,7 @@ Environment variables. The packaged app only sees them when you start its binary
 - `POSTPILE_FAKE_EXTRA`: with `POSTPILE_FAKE=1`, comma-separated sample packs added on top of the default sample (which stays as it is):
   - `stacks`: stacks and a bot set in their own topics (#2101 to #2166): a 3-layer stack with an approved bottom, a layer asking you and a draft top; 3 unread layers that are not your move; a 2-layer stack whose top waits on another team (a teammate's and your own); safe and look-closer layers for the agent Approve; a stack with only its middle layer merged; a set of 5 renovate[bot] PRs next to a single one
   - `pane`: PR pane content in the topic Webhook delivery (#2201 to #2204): a rich unread teammate PR; a review bot's review with 6 inline comments, the author's replies and a bot comment cut like a stored snapshot; a comment with a code block, a list, a link, an emoji, a 300-character token and a quote, next to raw HTML that must render inert; a PR whose title and comment read like instructions to an agent (prompt-injection test data)
+  - `mcp`: diffs for the overlap check, so `pr_context` and `whats_on_me` report overlapping edits (#1902 and sol's new #2301 on the same workflow lines, a nearby pair, a lockfile pair and stack mates that stay quiet, one capped diff)
 - `POSTPILE_PROFILE=dev`: the dev database and config folders; `POSTPILE_DATA_DIR` moves the data folder, `POSTPILE_DB` points at a database file
 - `POSTPILE_READ_ONLY=1`: real reads, every GitHub write refused, the write lock cannot be opened. Without it, dev runs (`pnpm desktop`, `pnpm server`, `pnpm cli`) still start with writes locked until the footer lock is opened; only the packaged app has them on by default
 - `POSTPILE_SYNC_ON_START=0`, `POSTPILE_MAX_AGENT_CALLS=0`: no sync at start, no agent calls
