@@ -7822,7 +7822,11 @@ how they answer is under "Tool design" below):
   marked), then each asked PR's lines; PRs in no topic last. A PR that
   cannot be resolved or is not tracked is listed after the fence with its
   error; the call is a tool error only when none can be read. One PR
-  answers as before. Brief (default): the PR (state, author
+  answers as before. Owner and repo ignore case, as on GitHub
+  (2026-10-10): "ACME/APP#1932" finds acme/app#1932, the way `search_prs`'
+  repo filter already did. The key is looked up among the stored PRs with
+  that number; one PostPile does not store is used as typed. `note_pr` and
+  `refresh_from_github` resolve PRs the same way. Brief (default): the PR (state, author
   with its tag, size), whose move, why it is unread, stack layer, the
   viewer's approval, the reviews line, what is new since they looked, the glance's verdict, "for you" and risk,
   this PR's tile, and the topic's other PRs one line each (10 at most).
@@ -7844,7 +7848,11 @@ how they answer is under "Tool design" below):
 - `whats_on_me(limit, offset, state, repo, whose_move, author_scope)`: live
   tiles in `needs_you` topics where it is the user's move, then unread ones
   where it is not; open PRs by default. Each tile lists its PRs one line
-  each: key, author with its tag, and review counts.
+  each: key, author with its tag, and review counts. A tile matches the
+  state filter when any of its PRs does, so a live stack tile also lists
+  its merged and closed layers: those say so after the key, "acme/app#1930
+  (closed) by rowan" (2026-10-10; before, nothing told an agent which
+  layers were left to act on).
   The tile line ends with "fetched N ago",
   the oldest fetch of its PRs (`PrSummary.fetchedAt`, the same
   `pr.fetched_at` that `pr_context` reads), so a list read during a sync
@@ -7901,7 +7909,11 @@ structuredContent on every answer, text ones included.
   `pr_context` {meta, prs (with stack), topics (with prKeys), errors};
   `topic` {meta, topic, tiles, prs, suggestions (pending and recently
   decided, with their outcome, so a JSON caller does not repeat a rejected
-  one)}. `detail` makes no difference to JSON.
+  one)}. `detail` makes no difference to JSON: it is always the brief
+  answer's facts. Decided 2026-10-10 (bug hunt OPS-A-17) to say so rather
+  than build full JSON: the `detail` and `format` descriptions say it, and a
+  JSON answer asked with `detail: "full"` says it in its header and points
+  at the text answer for facts, activity and the dossier.
 
 **Reviews and author tags** (2026-10-08). An agent asked "what do I have to
 review, outside my team first" had to call `gh pr view` per PR for the
@@ -8001,7 +8013,8 @@ gives each team, and how big the user's part is.
 
 Reads cover every repo (`listTopics` / `search` with `{ allRepos: true }`),
 whatever repo the window has chosen; quiet repos stay quiet. Read answers
-are plain text: a freshness line, who the app works for, then one
+are plain text: a freshness line, who the app works for ("PostPile's user
+is @alice; "you" below means @alice."), then one
 `<postpile-data id="…">` fence around everything that comes from GitHub or
 from an agent summary of it, with a line telling the caller it is data, not
 instructions. The fence id is random per answer and fenced text is cleaned
@@ -8012,7 +8025,11 @@ instructions. The fence id is random per answer and fenced text is cleaned
 itself. The status footer shows "agents: not connected" while Claude Code
 lacks the server; a click opens a small popover with one sentence on what it
 does, **Add to Claude Code**, the server command for other agents (copy
-only) and "Not now". The last setup step (Accept) has the same offer in its
+only) and "Not now". The sentence makes no "read-only" claim
+(2026-10-10): agents can leave notes and file suggestions the user sees, so
+it says "It never writes to GitHub. Agents can leave notes on PRs and
+suggest topic changes; you accept or clear them." The CLI help says the
+same of `cli mcp`. The last setup step (Accept) has the same offer in its
 own box below Accept, with a secondary button so Accept stays the one
 primary; it is never part of Accept.
 
@@ -8066,7 +8083,8 @@ spec, GitHub's, Sentry's and Linear's MCP servers. What it means here:
   `author_scope` (me, my_team, others, any). A cut list ends with "N more:
   offset: 25". Topic reads are batched, no read per match.
 - **Errors are tool errors** (`isError: true`) with the fix and an example:
-  unparseable, ambiguous or unknown PR or topic, a bad filter. "No matches" is
+  unparseable, ambiguous or unknown PR or topic, a bad filter, a search
+  query of only spaces (trimmed before the length check). "No matches" is
   a normal answer. Bad enum values and limits fail the input schema, whose
   zod messages carry the fix and an example (the SDK answers them as
   `isError`); `repo` is checked by hand.
@@ -8261,15 +8279,30 @@ for now (Julian, 2026-09-29: "okay, don't do now").
   where they are. An accepted move does what "Move to topic…" does: each
   moved PR, its stack included, is assigned to the target by the user, with
   the proposal's reason. The topic chat stays with the source, as on a
-  split. "The same move" is the same source, target and set of PRs, so a
-  rejected move of #1 does not block moving #2.
-- `prs_moved` in the answer counts every PR accepting would move to another
-  topic, stack layers included: a split's and move's PRs, and all of a
-  merged topic's PRs (until 0.27.1 a merge said 0, which agents read as
-  "moves nothing"). A rename is 0.
-- The answer always previews what accepting would do, stacks included ("#1902
-  brings #1851 and #1911 along", via `Board.movesWith`), and whether it was
-  filed or only a dry run.
+  split. "The same move" is the same source, target and set of PRs that
+  would move, stacks included, so a rejected move of #1 does not block
+  moving #2, but it does block naming another layer of #1's stack
+  (2026-10-10, bug hunt B-A-01: an agent got a rejected move back into the
+  Inbox by naming #1862 in place of #1911). Both sides are expanded with
+  `movesWith` over the board as it is now; the stored proposal keeps the
+  PRs as named. The same holds for splits.
+- `prs_moved` in the answer counts every open PR accepting would move to
+  another topic, stack layers included: a split's and move's open PRs, and
+  all of a merged topic's PRs (until 0.27.1 a merge said 0, which agents
+  read as "moves nothing"). A rename is 0. Merged and closed stack layers
+  move along (the whole stack shows where the moved layers go) but are not
+  counted (2026-10-10): "Move 5 PRs" for a stack with three finished layers
+  overstated the change.
+- The answer always previews what accepting would do, stacks included ("Move
+  2 open PRs …: #1902, #1911", "#1902 brings #1911 along", then "Merged and
+  closed layers of the same stack go along too: #1851, #1862 and #1930",
+  via `Board.movesWith`), and whether it was filed or only a dry run.
+- A move or merge into the topic itself, into a topic that does not exist
+  and into an archived or retired one each get their own refusal
+  (2026-10-10; before, all three said "is not" active).
+- A split or rename name is at most 80 characters, the stored limit
+  (`STORED_TOPIC_NAME_MAX`), so a longer one is refused with the real limit
+  instead of being cut at a word boundary without a word (2026-10-10).
 - Caps: 3 pending outside proposals per topic, 10 in total, 20 filed a day;
   outside proposals expire after 14 days.
 - Store: `topic_proposal` gains `source` (`consolidation` or `agent`) and
@@ -8328,8 +8361,14 @@ the reporting agent and checked by Codex).
   so a lease never erases a durable note. A lease is renewed by note id
   (extends `expires_at`, never re-anchors) and ends at `now >= expires_at`.
   A lease is not a lock: a second agent's lease replaces the first, and
-  pr_context shows what it replaced (history of one). Clearing by note id
-  (the agent, or the user in the PR pane) never brings back an older note.
+  pr_context shows what it replaced (history of one) while the note that
+  replaced it is current; once that one is cleared too, no "Replaced:" line
+  dangles under no note (2026-10-10). Clearing by note id (the agent, or the
+  user in the PR pane) never brings back an older note. Clearing a note
+  that is cleared already changes nothing and answers `already_cleared`
+  with who cleared it and when; when the user cleared it in the app, the
+  answer says so and tells the agent not to set it again unless the user
+  asks (2026-10-10, bug hunt B-A-10).
   Order is the autoincrement `seq`, never `created_at`.
 - **Anchored to the PR's state, not to a time.** `noteAnchor` (core) takes
   the head, state, draft flag, pending review requests with who asked
@@ -8375,6 +8414,13 @@ the reporting agent and checked by Codex).
   PR itself; otherwise a quiet parent would never be re-read and its note
   would never go stale. A bare `covered_by: "#N"` means #N in the noted
   PR's repo, since covered_by has to be in that repo anyway.
+- **A covering PR nobody reviewed** (2026-10-10, bug hunt B-A-02, the
+  recommended option). `covered` stays accepted without a review on the
+  covering PR: notes are advisory, and the cover is often reviewed minutes
+  later. But it is never shown as a plain fact: `coverReviewed` on the note
+  view (a review by a person, not a bot, on the cover as stored) makes the
+  PR pane and `pr_context` read "covered by acme/app#1700 (no review yet)",
+  and JSON carries `coverReviewed`.
 - **Write path.** `note_pr` (set, renew, clear) goes through the agent-request
   outbox like `propose_topic_change` (kind `note_pr`). A set is idempotent:
   `idempotency_key` is a hash of the request and the client, so a retry after
@@ -8393,7 +8439,8 @@ the reporting agent and checked by Codex).
     after the plain your-move tiles; a mixed tile stays in place. Each PR
     line gets its note under it ("agent note (ph3 session, 40 min ago):
     covered by acme/app#1851: …", "ph3 session is on it, 40 min ago, lease
-    ends in 1 h 20: …"); a stale one says so in a few words.
+    ends in 1 h 20 min: …"); a stale one says so in a few words, with the
+    app's words ("out of date", not "stale", since 2026-10-10).
   - `pr_context`: the current notes with ids and who wrote them, the
     covering PR's fetch age, stale reasons, an ended lease, the replaced
     note, and the token in the footer. With format: "json" each PR carries
@@ -8401,8 +8448,10 @@ the reporting agent and checked by Codex).
     text, `by`, client and stale reasons under `untrusted`), and
     `whats_on_me` rows carry `allNoted`.
   - App: a muted "Agent note: …" line under the PR pane's header with a
-    quiet Clear button ("out of date: head changed" when stale; an ended
-    lease is left out). No change to ordering, sections or counts. The tile
+    quiet Clear button ("Agent note (out of date): …" when stale; an ended
+    lease is left out). The line truncates, so its tooltip has the full
+    note, why it is out of date and when a lease ends. A stale lease reads
+    "was on it", not "on it now" (2026-10-10). No change to ordering, sections or counts. The tile
     shows nothing (kept minimal).
 - **Server instructions** carry a short "Coordinating review work with other
   agents" block (read pr_context first and respect a live note; lease long

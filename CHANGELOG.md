@@ -13,6 +13,14 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - A PR moved out of a set with "Wrong topic" leaves the set right away. It showed in both topics until the next sync.
 - "To merge" names reviewers still asked on an approved PR ("approved · team-platform still asked"). "approved" next to a waiting team read as a contradiction.
 - A search with no match says archived topics are not searched.
+- An agent can no longer bring back a topic move you rejected by naming another PR of the same stack.
+- Topic move and split previews count only open PRs and list the merged and closed stack layers that go along.
+- `whats_on_me` marks merged and closed PRs inside open tiles, and `pr_context` finds PRs whatever the case of the owner and repo.
+- A topic name an agent suggests is refused above 80 characters instead of being cut without a word.
+- A note "covered by" a PR nobody has reviewed yet now says "(no review yet)" in the PR pane and in `pr_context`.
+- An agent clearing a note you already cleared is told you cleared it, and no "Replaced:" line is left under a cleared note.
+- The connect popover no longer calls the MCP server read-only: agents can leave notes and suggest topic changes.
+- The dev CLI exits non-zero when a PR or topic isn't found, and says what was wrong with a bad command.
 
 ## 0.27.2 (2026-10-09)
 

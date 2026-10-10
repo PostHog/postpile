@@ -6,6 +6,23 @@ now".
 
 ## Done
 
+- MCP and CLI contract (2026-10-10, bug hunt batch P5; DESIGN.md "MCP
+  server", "propose_topic_change", "Agent notes on PRs"): a rejected move
+  is compared by the stack that would move, so naming another layer is
+  refused; previews count open PRs only and name the merged and closed
+  layers that go along; separate refusals for a move into itself, an
+  unknown and an archived topic; names capped at the stored 80 characters.
+  `whats_on_me` marks merged and closed PRs in live tiles; PR refs ignore
+  owner/repo case; a whitespace query is a tool error; JSON says it ignores
+  `detail: "full"`. note_pr: a second clear answers `already_cleared` with
+  who cleared it (the user, in the app, gets its own sentence); no dangling
+  "Replaced:" line; a cover without a person's review reads "(no review
+  yet)" in the pane and in `pr_context`; "2 h 59 min"; "out of date" in
+  both places; a stale lease "was on it". CLI: exit 1 for not found and
+  for `tools` while sync is off, exit 2 with the problem above the usage
+  for a bad command line, merged or closed PRs marked in `topic`. The
+  connect popover and CLI help drop the "read-only" claim.
+
 - Agents propose moves (2026-10-09, for 0.27.2; DESIGN.md
   "propose_topic_change"): `propose_topic_change` gets kind `move` (PRs
   into an existing topic, `into_topic`), with the split's checks (PRs in
@@ -1722,6 +1739,15 @@ the app meanwhile.
   code-manager folder migration (`legacy-data.ts`) once the move has run.
 
 ## Decided
+
+- **`note_pr` covered without a review stays accepted, but says so**
+  (2026-10-10, bug hunt Q8, recommended option applied; DESIGN.md "Agent
+  notes on PRs" › A covering PR nobody reviewed): no refusal; the PR pane
+  and `pr_context` read "covered by #N (no review yet)" while no person
+  has reviewed the cover.
+- **MCP JSON answers have one shape** (2026-10-10, bug hunt OPS-A-17;
+  DESIGN.md "JSON answers"): `detail` stays a text-only switch; the
+  descriptions and a header line say so instead of building full JSON.
 
 - **"Approve again" stays on a done PR you approved** (2026-10-10, owner,
   bug hunt Q6 / PANE-A-06; DESIGN.md "The PR pane" › review row): core
