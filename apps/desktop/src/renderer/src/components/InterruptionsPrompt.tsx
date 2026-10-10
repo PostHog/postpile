@@ -3,7 +3,9 @@ import type { InterruptionsMode } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { useInboxCleanup } from '../api/cleanup.ts';
 import { useInterruptions } from '../api/interruptions.ts';
-import { interruptionsPromptHint, showsInterruptionsPrompt } from '../lib/interruptions.ts';
+import { useSetupStatus } from '../api/setup.ts';
+import { useTools } from '../api/tools.ts';
+import { interruptionsLead, interruptionsLeadText, interruptionsPromptHint, interruptionsPromptWaits, showsInterruptionsPrompt, type InterruptionsLead } from '../lib/interruptions.ts';
 import { Button } from './Button.tsx';
 import { InterruptionsChoice } from './InterruptionsChoice.tsx';
 
@@ -14,7 +16,7 @@ import { InterruptionsChoice } from './InterruptionsChoice.tsx';
  * It closes only once the save landed: on a failure (the action shows the
  * error toast) it stays open, so the user can try again.
  */
-function InterruptionsPromptDialog(props: { mode: InterruptionsMode; roundupTimes: string[]; onClose: () => void }) {
+function InterruptionsPromptDialog(props: { mode: InterruptionsMode; roundupTimes: string[]; lead: InterruptionsLead; onClose: () => void }) {
   const actions = useActions();
   const { roundupTimes, onClose } = props;
   // The mode when the dialog opened: the setInterruptions early cache update changes the prop while a save runs.
@@ -59,8 +61,7 @@ function InterruptionsPromptDialog(props: { mode: InterruptionsMode; roundupTime
             When should PostPile tap you on the shoulder?
           </h2>
           <p className="text-[12.5px] leading-[1.55] text-ink-2">
-            New in this version: PostPile stays quiet unless you pick otherwise. Until now it sent a Mac notification as soon as something
-            crucial needed you; that is “As soon as it matters” below.
+            {interruptionsLeadText(props.lead)}
           </p>
         </div>
         <InterruptionsChoice mode={pick} roundupTimes={roundupTimes} onPick={setPick} />
@@ -83,18 +84,20 @@ function InterruptionsPromptDialog(props: { mode: InterruptionsMode; roundupTime
  * The one-time question for installs that never picked a mode (DESIGN.md
  * "Interruptions"): before 0.18 they got pings by default, now Never. Mounted
  * once in App. Never on top of setup (`blocked`, from App) or the inbox
- * cleanup start dialog, which goes first. Once a save landed it hides for
+ * cleanup start dialog, which goes first, nor while a cleanup runs or gh is
+ * unusable. Once a save landed it hides for
  * good: the view says `chosen` from then on, and `closed` keeps it hidden
  * for the session anyway.
  */
 export function InterruptionsPrompt(props: { blocked: boolean }) {
   const view = useInterruptions().data;
   const cleanup = useInboxCleanup().data;
+  const tools = useTools().data;
+  const setup = useSetupStatus().data;
   const [closed, setClosed] = useState(false);
-  // Wait until the cleanup view says no start dialog is due.
-  const cleanupDue = cleanup === undefined || cleanup.start !== null;
-  if (view === undefined || closed || !showsInterruptionsPrompt(view, props.blocked || cleanupDue)) {
+  const waits = props.blocked || setup === undefined || interruptionsPromptWaits(cleanup, tools);
+  if (view === undefined || closed || !showsInterruptionsPrompt(view, waits)) {
     return null;
   }
-  return <InterruptionsPromptDialog mode={view.mode} roundupTimes={view.roundupTimes} onClose={() => setClosed(true)} />;
+  return <InterruptionsPromptDialog mode={view.mode} roundupTimes={view.roundupTimes} lead={interruptionsLead(setup)} onClose={() => setClosed(true)} />;
 }

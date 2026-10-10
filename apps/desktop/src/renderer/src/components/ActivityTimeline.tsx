@@ -245,7 +245,7 @@ function TalkActions(props: { prKey: string; target: LineReply }) {
           </Button>
         )}
         {target.viewerReacted ? (
-          <span role="status" title="You gave it a thumbs up on GitHub" className="flex h-6 items-center gap-1 rounded-full bg-accent-soft px-2 text-[11px] font-semibold text-accent">
+          <span role="status" title="You gave it a thumbs up on GitHub. PostPile cannot take it back: remove it on github.com" className="flex h-6 items-center gap-1 rounded-full bg-accent-soft px-2 text-[11px] font-semibold text-accent">
             <ThumbsUpIcon />
             You: thumbs up
           </span>
@@ -254,7 +254,7 @@ function TalkActions(props: { prKey: string; target: LineReply }) {
             variant="quiet"
             className={target.canReply ? '' : '-ml-2.5'}
             disabled={reactBlocked !== null || actions.isBusy(`react:${props.prKey}:${target.commentId}`)}
-            title={reactBlocked ?? `Adds a 👍 reaction on GitHub: tells ${target.author} you saw it, nothing to add`}
+            title={reactBlocked ?? `Adds a 👍 reaction on GitHub: tells ${target.author} you saw it, nothing to add. PostPile cannot take it back`}
             onClick={() => void actions.react(props.prKey, target.commentId)}
           >
             <ThumbsUpIcon />

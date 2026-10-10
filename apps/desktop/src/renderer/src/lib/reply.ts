@@ -19,7 +19,10 @@ export function replyCopy(target: LineReply): ReplyCopy {
   if (target.inThread && target.path) {
     return { title: 'Reply in thread', hint: `on ${fileName(target.path)}`, submit: 'Post reply in thread' };
   }
-  // A deleted GitHub account comes through as ''.
-  const who = target.author === '' ? 'deleted user' : target.author;
-  return { title: `Reply to ${who}`, hint: 'new PR comment, quotes their line', submit: `Post reply to ${who}` };
+  // A deleted GitHub account comes through as '' and gets no mention (core's quotedReplyBody).
+  if (target.author === '') {
+    return { title: 'Reply to deleted user', hint: 'new PR comment, quotes their line', submit: 'Post reply to deleted user' };
+  }
+  // The posted comment starts with the quote and @author: say both before the user types.
+  return { title: `Reply to ${target.author}`, hint: `new PR comment, quotes their line and mentions @${target.author}`, submit: `Post reply to ${target.author}` };
 }

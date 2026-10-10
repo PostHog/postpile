@@ -37,7 +37,7 @@ import { pinnedEntry, sameView, type NavEntry } from './lib/history.ts';
 import type { SetupStepKey } from './lib/setup.ts';
 import { applyQueueFilter, filterCounts, type QueueFilter } from './lib/queues.ts';
 import { filterTopics, searchFilter, visibleTopic } from './lib/search.ts';
-import { filterKey, keptFor, listedTopics, nextKept, resolveSelection, revealedFor, withSelectedTile, type KeptView } from './lib/selection.ts';
+import { dwellPrKey, filterKey, keptFor, listedTopics, nextKept, resolveSelection, revealedFor, withSelectedTile, type KeptView } from './lib/selection.ts';
 import { clampPaneWidth, DETAIL_MIN_WIDTH, paneColumns, resolvedColumnWidths, type ResizablePane } from './lib/pane-widths.ts';
 import { tileOpenedProps } from './lib/tile-telemetry.ts';
 import { prNumber } from './lib/tiles.ts';
@@ -116,13 +116,19 @@ export function App() {
   const finishedIds = new Set((finished.data ?? []).map((entry) => entry.id));
   // Navigation is a back / forward history; the current entry is what the user picked.
   const nav = useNavHistory(new Set([...items.map((item) => item.topic.id), ...finishedIds]));
+  // The PR the user picked with their last navigation (a tile or PR click, a ping click, a jump from a
+  // list), else null. Only that one arms the open-read dwell; a tile the app picked never does (2026-10-10).
+  const [userPick, setUserPick] = useState<string | null>(null);
   // Back and forward pick another entry like any pick: the agent pane closes first, as in go().
+  // They are not a fresh pick of a PR, so they arm no dwell.
   const back = () => {
     setAgentRequest(null);
+    setUserPick(null);
     nav.back();
   };
   const forward = () => {
     setAgentRequest(null);
+    setUserPick(null);
     nav.forward();
   };
   useNavShortcuts(back, forward);
@@ -181,6 +187,8 @@ export function App() {
   const go = (next: NavEntry) => {
     // Any pick hands the right pane back to the PR.
     setAgentRequest(null);
+    // A navigation is not a pick of a PR; openByUser sets it again right after.
+    setUserPick(null);
     if (!sameView(shown, next)) {
       nav.navigate(next);
     } else if (selected.auto && next.pane === 'topic' && next.tileId !== null) {
@@ -190,6 +198,11 @@ export function App() {
   };
   // Grows with every explicit open (a tile click, a ping click), so opening the tile already open counts as a visit again.
   const [visits, setVisits] = useState(0);
+  // The user opened this tile and PR themselves: go there, and let the dwell count it.
+  const openByUser = (next: NavEntry) => {
+    go(next);
+    setUserPick(next.prKey);
+  };
   // Write the fallbacks into the current entry, so a reorder or refetch does
   // not move the selection (and remount the detail pane, losing a chat draft)
   // or mark a topic seen the user never left. Not while a search or queue
@@ -211,7 +224,7 @@ export function App() {
     if (view) {
       sendTelemetry('tile_opened', tileOpenedProps(view));
     }
-    go({ pane: 'topic', topicId: activeTopicId, tileId, prKey });
+    openByUser({ pane: 'topic', topicId: activeTopicId, tileId, prKey });
     setVisits((count) => count + 1);
   };
   const inboxCount = (proposals.data?.topics.length ?? 0) + (proposals.data?.rules.length ?? 0);
@@ -260,7 +273,7 @@ export function App() {
       return;
     }
     const entry: NavEntry = { pane: 'topic', topicId: target.topicId, tileId: target.tileId, prKey: target.prKey };
-    go(entry);
+    openByUser(entry);
     setRevealed({ filterKey: currentFilterKey, entry, topicId: target.topicId, tileId: target.tileId, prKey: target.prKey });
     setVisits((count) => count + 1);
   };
@@ -279,9 +292,9 @@ export function App() {
     main = <InstructionsPane onOpenTopic={(topicId) => go({ pane: 'topic', topicId, tileId: null, prKey: null })} onRunSetup={openSetup} />;
   } else if (pane === 'notifications') {
     // A jump goes through go(), so back returns to this list.
-    main = <NotificationsPane onOpenTile={(pick) => go({ pane: 'topic', topicId: pick.topicId, tileId: pick.tileId, prKey: pick.prKey })} />;
+    main = <NotificationsPane onOpenTile={(pick) => openByUser({ pane: 'topic', topicId: pick.topicId, tileId: pick.tileId, prKey: pick.prKey })} />;
   } else if (pane === 'quiet') {
-    main = <HandledQuietlyPane onOpenTile={(pick) => go({ pane: 'topic', topicId: pick.topicId, tileId: pick.tileId, prKey: pick.prKey })} />;
+    main = <HandledQuietlyPane onOpenTile={(pick) => openByUser({ pane: 'topic', topicId: pick.topicId, tileId: pick.tileId, prKey: pick.prKey })} />;
   } else if (topics.error) {
     main = <EmptyMain text={`The local API did not answer: ${topics.error.message}`} />;
   } else if (!topics.isPending && items.length === 0 && finishedId === null && toolsNotice(tools.data).gh) {
@@ -348,7 +361,7 @@ export function App() {
   const wideList = pane === 'notifications' || pane === 'quiet';
   // A PR open in the detail pane counts like a visit on github.com when nothing is asked of the user (DESIGN "You already dealt with it").
   const detailShown = !showSetup && !wideList && !agentShown;
-  const openedRead = useOpenedRead(detailShown ? selected.view : null, detailShown ? selected.prKey : null);
+  const openedRead = useOpenedRead(detailShown ? selected.view : null, detailShown ? dwellPrKey(selected, userPick) : null);
   // The user's pick clears its Mac pings from Notification Center; a tile the app picked does not.
   useTileVisit(detailShown && !selected.auto ? selected.view : null, visits);
 

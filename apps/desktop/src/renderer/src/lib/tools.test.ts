@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ToolsView } from '@postpile/core';
-import { checkLine, retryLine, toolsFooter, toolsNotice, toolsRefetchMs } from './tools.ts';
+import { TOOL_PATH_HINT } from '@postpile/core';
+import { checkLine, claudeDetailUnderGh, retryLine, toolsFooter, toolsNotice, toolsRefetchMs } from './tools.ts';
 
 function view(overrides: { gh?: Partial<ToolsView['gh']>; claude?: Partial<ToolsView['claude']>; checkedAt?: string | null; nextCheckAt?: string | null } = {}): ToolsView {
   return {
@@ -66,5 +67,17 @@ describe('toolsFooter', () => {
     });
     expect(toolsFooter(view({ claude: { state: 'limited', headline: 'Agent features are paused: Claude usage limit reached' } }))?.text).toBe('agent paused');
     expect(toolsFooter(view({ gh: { state: 'offline', headline: 'GitHub cannot be reached', detail: 'No network.' } }))?.text).toBe('GitHub unreachable');
+  });
+});
+
+describe('claudeDetailUnderGh', () => {
+  it('drops the toolPath hint from the claude text when the gh text already has it', () => {
+    const v = view({ gh: { ...missingGh, detail: `gh is missing. ${TOOL_PATH_HINT}` }, claude: { ...missingClaude, detail: `Rules only. ${TOOL_PATH_HINT}` } });
+    expect(claudeDetailUnderGh(v.gh, v.claude)).toBe('Rules only.');
+  });
+
+  it('keeps the claude text when gh is logged out and has no hint', () => {
+    const v = view({ gh: { state: 'logged_out', detail: 'Log in.' }, claude: { ...missingClaude, detail: `Rules only. ${TOOL_PATH_HINT}` } });
+    expect(claudeDetailUnderGh(v.gh, v.claude)).toBe(`Rules only. ${TOOL_PATH_HINT}`);
   });
 });

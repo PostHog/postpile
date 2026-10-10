@@ -2,6 +2,30 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## Unreleased
+
+### Changed
+
+- Opening a topic or searching no longer marks anything read on GitHub. Only a tile or PR you click yourself is marked after it stays open for 1.5 s; the tile PostPile picks for you stays unread until you click it or press Mark read.
+- An agent-drafted review note says "✨ Agent draft, edit before sending" until you edit it.
+- Cmd+Enter (or Ctrl+Enter) sends a comment review, a reply or an Ask. Approve with a note still needs a click.
+
+### Fixed
+
+- Unlocking GitHub writes, or "Discard" in the lock popover, no longer marks the PR open in the pane read right away. Neither does a merge that lands while the PR is open.
+- The Snooze and "…" menus no longer close under the cursor when the open PR gets marked read: the 1.5 s wait holds while a menu is open.
+- "✓ Marked read" in the PR pane goes away once the PR has new activity, so Mark read is back.
+- A half-typed reply, note or comment review stays when you switch to another PR, layer or topic and come back. It was lost without a word.
+- With GitHub writes locked, Approve in the PR pane is greyed like the other review buttons, and "Reply ↓" only scrolls to the comment instead of opening a reply that can't be sent.
+- The "Approved" toast waits for GitHub's answer. A refused write says what happened in plain words ("GitHub didn't take the approval (server error 502)"), with GitHub's message on hover and "Try again" for an approve.
+- The composer gives focus back to the button that opened it on Escape or Cancel, keeps focus while the agent drafts, and puts the caret after a kept draft.
+- A reply to a PR comment says it mentions the author, as the posted comment does.
+- The first-run "Before the first sync" dialog no longer clears on Enter, and its button now says what it does ("Mark 28 read on GitHub").
+- New installs that skipped setup get a neutral interruptions question instead of "New in this version … Until now".
+- The interruptions question waits for a running cleanup and for gh to work, instead of opening on top of them.
+- The title bar says "waiting for your answer" while the first sync waits for the inbox question, and "GitHub unreachable" when the poll is off and GitHub cannot be reached.
+- With both gh and claude broken, the note says to fix gh first and shows the `toolPath` hint once.
+
 ## 0.27.2 (2026-10-09)
 
 ### Added

@@ -19,6 +19,26 @@ function plural(count: number, one: string, many: string): string {
 }
 
 /**
+ * Whether Enter runs the dialog's main button. On the first run Enter never
+ * clears: it is the first screen after setup and the first GitHub write the
+ * app mentions, so only a click on the named button writes (2026-10-10).
+ */
+export function enterRunsMain(mode: CleanupDialogMode, mainIsClear: boolean): boolean {
+  return !(mode.kind === 'first_run' && mainIsClear);
+}
+
+/**
+ * The Clear button's words. On the first run it names its effect ("Mark 28
+ * read on GitHub"); under the writes lock it queues instead.
+ */
+export function clearButtonText(mode: CleanupDialogMode, clears: number, locked: boolean): string {
+  if (mode.kind === 'first_run') {
+    return locked ? `Queue marking ${clears} read` : `Mark ${clears} read on GitHub`;
+  }
+  return locked ? 'Add pending write' : `Clear ${clears}`;
+}
+
+/**
  * The sidebar footer line: a running cleanup's progress, else the unread
  * merged PRs, else old notifications. Null when there is nothing to clear.
  * Next to merged PRs, `safeMergedText` may add a second item.

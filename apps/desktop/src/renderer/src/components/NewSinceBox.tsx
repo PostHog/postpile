@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { ActivityLine, PrDetail } from '@postpile/core';
+import { useActions } from '../api/actions.tsx';
 import { whenLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
 import { newSinceAnchor } from '../lib/whats-new.ts';
@@ -15,21 +16,24 @@ const LINES_SHOWN = 3;
  * touch ("since your changes request yesterday"), and the quiet bot and CI
  * events of that stretch folded into one line. Only while something loud is new.
  * A digest you read: a person's comment that can take a reply gets "Reply ↓",
- * which scrolls to it in the activity list and opens the reply there.
+ * which scrolls to it in the activity list and opens the reply there
+ * (only scrolls while replies are blocked).
  */
 export function NewSinceBox(props: { detail: PrDetail }) {
   const now = useNow();
   const compose = useCompose();
+  const replyBlocked = useActions().blockedReason('reply');
   function replyLink(line: ActivityLine) {
     const target = line.reply;
     if (!target?.canReply) {
       return null;
     }
+    // While replies are blocked (the lock) it only scrolls there: no composer to type into that cannot post.
     return (
       <button
         type="button"
-        title="Scrolls to the comment in Activity and opens the reply there"
-        onClick={() => compose.jumpToReply(target.commentId)}
+        title={replyBlocked ? `Scrolls to the comment in Activity. ${replyBlocked}` : 'Scrolls to the comment in Activity and opens the reply there'}
+        onClick={() => (replyBlocked ? compose.jumpToComment(target.commentId) : compose.jumpToReply(target.commentId))}
         className="mt-0.5 block text-[11.5px] font-medium text-accent hover:underline"
       >
         Reply ↓

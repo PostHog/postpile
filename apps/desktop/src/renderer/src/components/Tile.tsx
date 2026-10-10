@@ -213,11 +213,13 @@ export function Tile(props: TileProps) {
     }
   }
 
-  // A selected tile keeps the PR that is open.
+  // A selected tile keeps the PR that is open. A click on it still counts as the user's pick: the app may have picked it.
   function selectTile() {
-    if (!props.selected) {
-      selectLead();
+    if (props.selected && props.selectedPrKey !== null) {
+      props.onSelect(props.selectedPrKey);
+      return;
     }
+    selectLead();
   }
 
   // Mouse: anywhere on the tile. Keyboard: the title button (one focusable element, Enter / Space).

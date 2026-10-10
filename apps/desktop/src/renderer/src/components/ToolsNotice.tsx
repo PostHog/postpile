@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { ToolFix, ToolsView } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { useTools } from '../api/tools.ts';
-import { checkLine, retryLine, toolsNotice } from '../lib/tools.ts';
+import { checkLine, claudeDetailUnderGh, FIX_GH_FIRST, retryLine, toolsNotice } from '../lib/tools.ts';
 import { useNow } from '../lib/use-now.ts';
 import { Button } from './Button.tsx';
 import { FixCommand } from './FixCommand.tsx';
@@ -49,6 +49,7 @@ function GhNote(props: { view: ToolsView; place: 'empty' | 'banner' }) {
   return (
     <section className={`flex flex-col gap-3 rounded-tile bg-surface shadow-tile ${frame}`}>
       <div className="flex flex-col gap-1">
+        {claude && <p className="text-xs font-medium text-ink">{FIX_GH_FIRST}</p>}
         <div className="flex items-center gap-2">
           <SetupChip tone="bad" word="Fix this" />
           <h2 className="text-[14px] font-semibold text-ink">{gh.headline}</h2>
@@ -59,7 +60,7 @@ function GhNote(props: { view: ToolsView; place: 'empty' | 'banner' }) {
       {claude && (
         <div className="flex flex-col gap-1.5 border-t border-hairline-soft pt-3">
           <p className="text-xs font-medium text-ink">{claude.headline}</p>
-          <p className="text-xs text-ink-2">{claude.detail}</p>
+          <p className="text-xs text-ink-2">{claudeDetailUnderGh(gh, claude)}</p>
           {claude.fixes.length > 0 && <FixSteps fixes={claude.fixes} />}
         </div>
       )}

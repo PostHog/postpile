@@ -1009,7 +1009,11 @@ the reasons and does not flip back:
 5. *Mark read settles it.* Mark read on the tile marks the event seen (the tile
    becomes done) and the thread read on GitHub, through the normal mark-read
    queue, undo window and writes lock. PostPile never marks these read by
-   itself.
+   itself: no quiet read, and no open-read without the user's pick. A PR the
+   user picks and keeps open through the dwell is marked like any other open
+   ("You already dealt with it" part 3, owner 2026-10-10, Q2): the user looked
+   at it. A merge that lands while the PR sits open in the pane does not mark
+   it; the user's next action does (BOARD-A-03, wave B PANE-32).
 6. *Topics wait for it.* A topic retires only when every tile is done (see
    Topic status), so an unseen merge keeps its topic in the sidebar. History:
    0.3.1 (2026-09-29) retired on "nothing unread or snoozed", which after a
@@ -2445,6 +2449,10 @@ Routes: `GET /api/setup`, `GET /api/setup/checks`, `POST/GET
 
 ## Missing tools (gh, claude)
 
+When gh and claude are both broken the gh note leads with "Fix gh first:
+nothing syncs without it. Then claude for the agent.", and the `toolPath`
+hint shows once, in the gh text (2026-10-10).
+
 PostPile needs two programs it does not ship: `gh` for every GitHub read
 and write (the token comes from `gh auth token`) and `claude` for every
 agent call. Either can be missing, logged out or failing. The rule: detect
@@ -2949,7 +2957,16 @@ for a refetch of all queries before the screen changed. Now:
   enough, the button only shows its pending state until the refetch.
 - The button stays busy until the refetch lands, so it never offers the old
   action again in between. A failed action puts the old cache back and shows
-  the error toast. The toast and Undo come as soon as the server answers.
+  the error toast. The toast and Undo come as soon as the server answers,
+  never before: an approve's "Approved" toast waits for GitHub's answer
+  while the button already reads "Approving…" (2026-10-10; it showed at
+  once and flipped to the error a moment later).
+- A pane write GitHub refused (approve, comment review, comment, reply,
+  thumbs up) says so in plain words: "GitHub didn't take the approval
+  (server error 502). Nothing was approved." GitHub's raw line is the
+  toast's hover title; a plain approve's toast offers "Try again". A
+  message that is not GitHub's error line (the head moved, the PR closed)
+  stays as the engine wrote it (2026-10-10, `lib/write-failure.ts`).
 - Locked, a mark-read changes nothing early (it only becomes a pending
   write), and a blocked approve changes nothing at all.
 - The server answers approve right after the write and the local mark-read;
@@ -3098,12 +3115,27 @@ happened when it did. Chosen from a clickable mockup:
   Clicking through faster than the dwell still marks nothing. Once per
   open. The dwell still needs the window visible and focused (hidden during
   it, it starts over); after it, hiding or leaving the window changes
-  nothing.
+  nothing. Only the user's own pick starts a dwell (2026-10-10, see "You
+  already dealt with it" part 3).
+- When no mark is wanted as the dwell ends (writes locked, an ask, a stale
+  snapshot), the open does not wait for one to become wanted by itself
+  (2026-10-10). Unlocking writes, "Discard" in the lock popover (which also
+  unlocks) or a sync that turns the PR done (a merge landing while it is
+  open) never mark it: the user did nothing new, and after a Discard their
+  last word was "keep it unread" (BOARD-A-01, BOARD-A-03). Only the user's
+  own write on the PR in the pane (Approve, a comment review, Remove team)
+  lets the open mark as soon as it is wanted, as before. Otherwise Mark read
+  or a fresh pick does it.
+- While any menu is open (Snooze, "…"), the dwell waits like in a hidden
+  window and starts over once it closes (2026-10-10, BOARD-A-06): the mark's
+  settle swaps the tile footer and would close the menu under the cursor.
 - The button then reads "✓ Marked read" (or "✓ Done for now", matching the
   label) in soft green, with an Undo link next to it while the undo window
   is open. It replaces the "Keep unread" X, and "Marks read when you leave"
   is gone. The note stays after the PR turned done, when core offers no
-  mark button any more.
+  mark button any more. Once the undo window is over and the PR is unread
+  again (new activity while it stays open, `TileView.unreadPrKeys`), the note
+  goes and Mark read and a full dot come back (2026-10-10, B-A-03).
 - Undo uses the mark-read queue like every clicked mark-read. The opened
   mark used to be a quiet, immediate GitHub write; GitHub has no
   mark-unread, so an Undo needs the write deferred. It is now its own batch
@@ -3302,8 +3334,11 @@ thread, reading the diff.
 - Title, branch line, then "New since you looked": a digest you read. A
   person's comment that can take a reply gets "Reply ↓", which scrolls the
   pane to that comment in the activity list, tints it for a moment and
-  opens the reply there with the thread around it. Rejected: a composer
-  inside the digest (no context, bloats the box, two homes for Reply).
+  opens the reply there with the thread around it. While replies are
+  blocked (the lock) it only scrolls and tints, with the lock reason in its
+  tooltip: no composer to type into that cannot post (2026-10-10).
+  Rejected: a composer inside the digest (no context, bloats the box, two
+  homes for Reply).
 - The glance (`GlanceCard`), on its own. Its title line carries only its
   own controls: Recheck and "Tell the agent" (opens the topic's agent pane
   with "About #1907: " typed in).
@@ -3314,7 +3349,9 @@ thread, reading the diff.
   you", "... from team-devex", "Your PR", "Your review"), then Approve with
   its "+ note" half, Comment review, and "Ask <owner>" on the right. Same
   order on every PR; Approve fills green when it is core's lead, else
-  outlined. Shown when core offers Approve or Ask. Rejected 2026-10-05:
+  outlined. Shown when core offers Approve or Ask. While the write is
+  blocked every button of the row is disabled with the reason as its
+  tooltip, Approve too (2026-10-10). Rejected 2026-10-05:
   welding the buttons into the glance's footer (the glance is agent output
   and may be missing or change its look), and a row in the PR header above
   the glance (longer pointer path from the tile, buttons before the
@@ -3334,7 +3371,9 @@ thread, reading the diff.
   earlier. A person's comment or review gets Reply (a button when it asks
   you, else a quiet link; "Reply in thread" on a code comment) and "Thumbs
   up" (a 👍 reaction on GitHub, said in its tooltip; "You: thumbs up" in a
-  pressed pill once given; "React" alone did not say what it posts). An
+  pressed pill once given; "React" alone did not say what it posts). The
+  app cannot take a thumbs up back: the button's and the pill's tooltips
+  say so, and point to github.com for removing it (2026-10-10). An
   approval without text only takes the thumbs up. Nothing for the viewer's own words, bots or pushes.
   Core puts it on the line (`ActivityLine.reply`, filled by `activityList`
   with the PR and the viewer); a comment on several lines (its event and an
@@ -3437,10 +3476,16 @@ thread, reading the diff.
 - "Back to top" floats at the pane's bottom while the review row has
   scrolled out above.
 
-**One composer** (`Composer`, state per PR in `PrBody`): no frame of its own (a label, the app's plain text field, the buttons, like Teach future assessments; an accent frame with a halo read as too bordery, 2026-10-05); opens in place
+**One composer** (`Composer`, drafts per PR and target in `PaneDrafts`): no frame of its own (a label, the app's plain text field, the buttons, like Teach future assessments; an accent frame with a halo read as too bordery, 2026-10-05); opens in place
 under what it answers (the review row or the comment), one at a time;
-drafts stay per target until sent or cancelled. A header says where it
-goes ("Reply to alice · new PR comment, quotes their line", "Reply in
+drafts stay per target until sent or cancelled. They also survive a
+switch to another PR, layer or topic and back while the app runs (not a
+restart), and so does which composer was open: it comes back open with
+its text, without taking focus or scrolling the pane (2026-10-10). Every
+draft is keyed by PR and target, so text typed on one PR can never be
+read or posted on another. A header says where it
+goes ("Reply to alice · new PR comment, quotes their line and mentions
+@alice": the posted comment starts with the quote and the mention), "Reply in
 thread · on ci.yml", "Approve with a note · on a1b2c3d, cannot be undone",
 "Comment review · on a1b2c3d, does not approve", "Ask alice · new PR
 comment"); one text box with the agent's pill where the text starts (the
@@ -3448,10 +3493,19 @@ first thing to click; the text starts under it): "✨ Draft with agent" on
 an empty box (from the PR and its topic), "✨ Rewrite with agent" once
 there is text (from the user's words; replaces the old person field, gist
 field and Draft step); Cancel; and a button that names the target ("Post reply to alice",
-"Approve with note" in green, every other post in ink). Escape closes it and keeps the draft.
+"Approve with note" in green, every other post in ink). Escape closes it and keeps the draft;
+Escape and Cancel give focus back to the button that opens it. Opening
+puts the caret after a kept draft; the pill comes first in the tab order.
+Meta/Ctrl+Enter presses the send button of Comment review, Ask and
+Reply, with the same checks (said in the button's tooltip); never Approve
+with a note, which stays a deliberate click (2026-10-10). Approve with a
+note closes on click; when it fails, the composer comes back with the note.
 The two review notes (Approve with a note, Comment review) start drafting
 as they open (2026-10-06, `draftsOnOpen`): the box shows "Drafting…" and
 the agent's text lands in it, editable, before anything can be sent.
+While the text is the agent's untouched draft, a line under the box says
+"✨ Agent draft, edit before sending" (2026-10-10: testers nearly posted
+words they did not write).
 Hand-written notes were rare (2 of 21 approvals in two weeks carried a
 PostPile note), so the click that opens the composer is the ask. It only
 fires into an empty box, once per opening: a kept draft (the user's text
@@ -4932,7 +4986,9 @@ avatars and filters", QueuesB2).
   first of Open; never a snoozed tile, never one in Dealt with. With
   neither it selects nothing, and the right pane says "No tile selected"
   ("Pick a tile to see it."). A tile the app picked is not the user's pick:
-  it is not written into history. When an app-picked tile changes group
+  it is not written into history, and it never marks read on open, also
+  while a search shows its first match (2026-10-10, "You already dealt with
+  it" part 3); a click on it makes it the user's pick. When an app-picked tile changes group
   while it is shown (read or done through a sync, the move-on mark), it
   stays in the pane and counts as the user's pick from then on, so the
   grid keeps it too: pane and grid never disagree, and it drops out once
@@ -5471,6 +5527,14 @@ too, also with the merged row off).
 | first run, busy (50–300) | same | merged all, older off | Clear |
 | first run, full (> 300) | same, Clear tagged Recommended | merged all + older 30 | Clear |
 | from the sidebar, any day | "Clean up your inbox" | merged all + older 14 | Clear (Cancel instead of Start as usual) |
+
+On the first run Enter never clears (2026-10-10): the dialog is the first
+screen after setup and the first GitHub write the app mentions, so the
+preselect stays but only a click on the button writes. The main button
+names its effect ("Mark 28 read on GitHub"; "Queue marking 28 read" while
+writes are locked) and carries no ⏎ hint; Start as usual still takes Enter
+when it is the main button. The other start cases keep Enter on their main
+button.
 
 A row with nothing in it starts unticked. The saving line ("Clearing first
 means the agent reads N PRs instead of M") shows for vacation, busy and
@@ -6290,9 +6354,19 @@ nobody ("Bot talk leaves agent work" › Bot talk answers nobody).
      when the dwell ends, with an Undo, see "Actions act on what you look
      at" › Marked when the dwell ends. Hidden before that, the wait starts over when the
      window is visible again with the same PR open (Codex review on PR #10:
-     the open used to be dropped). The first tile
-     the app shows by itself counts too: it is on screen. One request per
-     open; re-renders and refetches of the same PR send nothing.
+     the open used to be dropped). Only the user's own pick counts
+     (2026-10-10, owner decision Q1, replaces "the first tile the app shows by
+     itself counts too: it is on screen"): a click on a tile or one of its PR
+     rows (also on the tile the app picked), a Mac ping click, a jump from
+     Notifications or Handled quietly. A tile the app picks by itself (a
+     topic opening, search's first match, the next tile after one left, an
+     app pick that turned user-like after a group change) never marks; nor
+     do back and forward, which show an earlier pick but are not a new one.
+     Why: 11 testers of the 2026-10 bug hunt read the auto mark as "looking
+     at a topic marked things read"; it matches `useTileVisit`, which never
+     counted app picks for Mac pings. Renderer `dwellPrKey`
+     (`lib/selection.ts`). One request per open; re-renders and refetches of
+     the same PR send nothing.
    - The renderer asks only when the opened PR's `afterRead.done`, the
      tile is not snoozed and the lock is open (`openedRead` on the
      `GithubWrite` list, blocked while locked; only a lock closed inside the
@@ -6623,10 +6697,16 @@ notification; the poll, the tiles and the list work the same in every mode.
   by default, so an update would turn them off without a word. When no mode
   was ever stored (`InterruptionsView.chosen` false), the app asks once in a
   dialog (`InterruptionsPrompt`): "When should PostPile tap you on the
-  shoulder?", the same three cards with Never preselected, a lead that names
-  "As soon as it matters" as the old behavior, and Save. It waits until the
-  setup status and the inbox cleanup view have loaded and never shows on top
-  of setup or the inbox cleanup start dialog. Saving or closing (Esc, a
+  shoulder?", the same three cards with Never preselected, a lead and
+  Save. The lead for an upgrader names "As soon as it matters" as the old
+  behavior ("New in this version … Until now it sent a Mac notification");
+  a new install that skipped setup (setup flag `skipped`, no instructions)
+  never had pings and gets "PostPile stays quiet unless you pick otherwise.
+  Pick when it may tap you on the shoulder." (2026-10-10). It waits until
+  the setup status, the tools status and the inbox cleanup view have
+  loaded and never shows on top of setup or the inbox cleanup start dialog,
+  nor while a cleanup runs (its result toast comes first) nor while gh
+  cannot be used (a ping question is pointless before anything syncs). Saving or closing (Esc, a
   click outside) counts as a choice: closing stores the current mode
   (Never) and says so next to Save, so the dialog never comes back. It
   closes only once the save landed; while it runs Save reads "Saving…",
@@ -7221,7 +7301,10 @@ renderer sees it through `LivePollStatus.syncRunning` (the title bar shows
 `syncing · … · agent calls 34/82` like for "Sync now", `useActions().syncing` covers
 both) and `nextAutoSyncAt` ("next full sync in N min"). The last sync shown
 is the newer of this window's and the stored report. Between syncs the title bar
-reads the live poll, not the report (2026-10-05): "up to date" while the
+reads the live poll, not the report (2026-10-05; a first sync held for the
+inbox catch-up reads "waiting for your answer", amber, because no sync has
+finished yet; with the poll off and gh offline it reads "GitHub
+unreachable", amber, since nothing else notices): "up to date" while the
 poll runs normally and GitHub answered it within three cycles
 (`pollIsFresh` on `LivePollStatus.lastAnsweredAt`; blocked and failed
 cycles stamp only `lastPollAt`, and a retry keeps that stamp), "updates

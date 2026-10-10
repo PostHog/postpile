@@ -285,6 +285,14 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   `lib/undo-window.ts`); Undo goes through `useActions().undo` and the open
   does not arm again. Never a "Marks read when you leave" promise
   (2026-10-01, DESIGN.md "Marked when the dwell ends").
+  Since 2026-10-10: `App.tsx` passes only the user's own pick
+  (`dwellPrKey` in `lib/selection.ts`, from `userPick`, which every `go()`
+  clears and `openByUser` sets), never an app-picked tile. A mark that turns
+  wanted after the dwell fires only after `OpenedReadTimer.userActed()`
+  (the hook calls it while the pane's Approve, comment review or Remove
+  team is busy). Any open `Menu` holds the dwell (`lib/open-menus.ts`):
+  build popover menus on `Menu` so they get this. The note goes once the
+  undo window is over and the PR is unread again (`openedNoteShows`).
 - The selected tile and its topic row hold their place (`useHeldPlace`)
   until the selection moves; list moves then slide with `useFlip`
   (`lib/use-flip.ts`): mark the moving elements `data-flip-key` (never one
@@ -323,8 +331,16 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   "The PR pane", 2026-10-05): its own row with a GitHub review-state label
   (`reviewRowLabel` over core's `PrDetail.viewerReview`), never inside the
   glance, same order on every PR.
-- The pane's writes share one inline `Composer` (state per PR in `PrBody`
-  through `ComposeProvider`, one open at a time, drafts kept per target):
+- The pane's writes share one inline `Composer` (`useComposeState(prKey)`
+  in `PrBody` through `ComposeProvider`, one open at a time). Drafts, agent
+  drafts and the open composer live in `lib/pane-drafts.ts` (`PaneDrafts`,
+  one app-wide store like `AgentPane`'s unsent text) keyed by PR and
+  target, so they survive the per-PR remount and can never be read for
+  another PR; a composer that comes back with its PR (`reopened`) takes
+  no focus and does not scroll. Escape and Cancel focus the
+  `aria-expanded` button next to it; Meta/Ctrl+Enter sends everything but
+  Approve with a note. Write failures are worded by `lib/write-failure.ts`
+  (plain words, raw line as the toast's `detail`). The composer has
   a header that says where it goes, one box with the agent's pill where the
   text starts ("✨ Draft with agent" / "✨ Rewrite with agent"), Cancel and a
   button that names the target. Only the review notes draft by themselves

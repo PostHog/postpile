@@ -28,7 +28,21 @@ export function Toast(props: { onShowActionLog: () => void }) {
       className={`fixed bottom-10 left-1/2 z-30 flex max-w-[560px] -translate-x-1/2 items-center gap-3 rounded-row px-3.5 py-2 text-xs shadow-menu ${TONES[notice.tone]}`}
     >
       {notice.tone === 'blocked' && <LockIcon />}
-      <span className="select-text">{notice.message}</span>
+      <span className="select-text" title={notice.detail ?? undefined}>
+        {notice.message}
+      </span>
+      {notice.retry && (
+        <button
+          type="button"
+          className="font-semibold whitespace-nowrap underline-offset-2 hover:underline"
+          onClick={() => {
+            notice.retry?.();
+            actions.dismissNotice();
+          }}
+        >
+          Try again
+        </button>
+      )}
       {undoToken && (
         <button type="button" className="font-semibold underline-offset-2 hover:underline" onClick={() => void actions.undo(undoToken)}>
           Undo
