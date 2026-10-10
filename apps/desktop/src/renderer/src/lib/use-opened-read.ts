@@ -1,7 +1,8 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import type { MarkLabel, PrKey, TileView } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
-import { opensMarkRead, OpenedReadTimer, type OpenedReadPhase } from './opened-read.ts';
+import { anyMenuOpen, onMenusChange } from './open-menus.ts';
+import { openedNoteShows, opensMarkRead, OpenedReadTimer, type OpenedReadPhase } from './opened-read.ts';
 
 /** The open marked the PR: which label the button had ("Mark read" or "Done for now"), and whether Undo is still offered. */
 export interface OpenedMark {
@@ -27,10 +28,17 @@ export function useOpenedReadState(): OpenedReadState {
   return useContext(OpenedReadContext);
 }
 
+/** The busy keys of the pane's writes that count as the user acting on `prKey` (`OpenedReadTimer.userActed`). */
+function actingKeys(prKey: PrKey): string[] {
+  return [`approve:${prKey}`, `commentReview:${prKey}`, `removeTeam:${prKey}`];
+}
+
 /**
  * Marks the PR in the detail pane read on GitHub (and handled in PostPile)
  * when it stayed open for OPENED_READ_DELAY_MS while the window was visible
  * and `opensMarkRead` says so ("Marked when the dwell ends", 2026-10-01).
+ * `prKey` is the user's own pick only: the caller passes null for a tile the
+ * app picked (2026-10-10). The dwell waits while a menu is open.
  * The mark goes out when the dwell ends, while the PR is still on screen; the
  * tile and its topic row keep their place until the selection moves
  * (`useHeldPlace`). Once per open (`OpenedReadTimer`): re-renders and
@@ -70,12 +78,15 @@ export function useOpenedRead(view: TileView | null, prKey: PrKey | null): Opene
     timer.current = open;
     setOpened({ prKey, phase: 'idle' });
     // Visibility only counts for the dwell; once it is over, leaving the app changes nothing.
-    const onVisibility = () => (document.visibilityState === 'visible' && document.hasFocus() ? open.visible() : open.hidden());
+    // An open menu holds the dwell like a hidden window: the mark would swap the footer and close it.
+    const onVisibility = () => (document.visibilityState === 'visible' && document.hasFocus() && !anyMenuOpen() ? open.visible() : open.hidden());
     onVisibility();
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('blur', onVisibility);
     window.addEventListener('focus', onVisibility);
+    const stopMenus = onMenusChange(onVisibility);
     return () => {
+      stopMenus();
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('blur', onVisibility);
       window.removeEventListener('focus', onVisibility);
@@ -89,11 +100,21 @@ export function useOpenedRead(view: TileView | null, prKey: PrKey | null): Opene
     timer.current?.setWanted(wanted);
   }, [wanted, prKey]);
 
-  const marked = phase === 'marked' || phase === 'settled';
+  // An Approve, comment review or Remove team in the pane: a mark the refetch then makes wanted may fire.
+  const acting = prKey !== null && actingKeys(prKey).some((key) => actions.isBusy(key));
+  useEffect(() => {
+    if (acting) {
+      timer.current?.userActed();
+    }
+  }, [acting, prKey]);
+
+  const mark = phase === 'marked' || phase === 'settled' ? { label: markedLabel, canUndo: phase === 'marked' } : null;
+  // After the undo window, new activity on the open PR drops the note: Mark read and a full dot come back.
+  const unreadAgain = prKey !== null && (view?.unreadPrKeys.includes(prKey) ?? false);
   return {
     prKey,
     filling: wanted && (phase === 'filling' || phase === 'sending'),
-    marked: marked ? { label: markedLabel, canUndo: phase === 'marked' } : null,
+    marked: openedNoteShows(mark, unreadAgain) ? mark : null,
     undo: () => {
       const token = timer.current?.undo() ?? null;
       if (token !== null) {

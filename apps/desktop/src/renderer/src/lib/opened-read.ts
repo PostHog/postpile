@@ -51,8 +51,12 @@ export type OpenedReadPhase = 'idle' | 'filling' | 'sending' | 'marked' | 'settl
  * One open of a PR in the detail pane (2026-10-01, "Marked when the dwell
  * ends"). The PR has to stay OPENED_READ_DELAY_MS on screen while the
  * document is visible; when that dwell ends, the mark (`onOpened`) fires
- * right away, if `setWanted(true)` (`opensMarkRead`) holds then, or as soon
- * as it does while the PR stays open. Clicking through PRs faster than the
+ * right away, if `setWanted(true)` (`opensMarkRead`) holds then. When it
+ * does not, the open waits for the user: a mark that becomes wanted later
+ * fires only after the user acted on the PR in the pane (`userActed()`, an
+ * Approve that leaves it done). Unlocking writes, a Discard or a merge
+ * arriving while the PR stays open never mark it by themselves (2026-10-10,
+ * BOARD-A-01/A-03). Clicking through PRs faster than the
  * delay marks nothing; hidden before the delay, the wait starts over once
  * visible again (Codex review on PR #10). Hiding the window after that
  * changes nothing. Once per open: Undo (`undo()`) hands back the server's
@@ -66,6 +70,7 @@ export class OpenedReadTimer {
   private fired = false;
   private left = false;
   private wanted = false;
+  private acted = false;
   private undoToken: string | null = null;
   private current: OpenedReadPhase = 'idle';
 
@@ -143,9 +148,21 @@ export class OpenedReadTimer {
     );
   }
 
-  /** Whether a mark-read of the PR is wanted right now (`opensMarkRead`), kept up to date while it is open. */
+  /**
+   * Whether a mark-read of the PR is wanted right now (`opensMarkRead`),
+   * kept up to date while it is open. Turning true after the dwell ended
+   * marks only once the user acted on the PR (`userActed`).
+   */
   setWanted(wanted: boolean): void {
     this.wanted = wanted;
+    if (this.acted) {
+      this.fireIfArmed();
+    }
+  }
+
+  /** The user acted on this PR in the pane (Approve, a comment review, Remove team): a mark wanted from now on may fire. */
+  userActed(): void {
+    this.acted = true;
     this.fireIfArmed();
   }
 
@@ -209,4 +226,18 @@ export function dotCountdown(opened: { prKey: PrKey | null; filling: boolean; ma
     return 'draining';
   }
   return opened.marked === null ? null : 'drained';
+}
+
+/**
+ * Whether "✓ Marked read" still stands in place of the mark button: always
+ * while Undo is offered, after that only while the PR has not turned unread
+ * again (`unreadAgain`: its row has the unread dot, core
+ * `TileView.unreadPrKeys`). New activity on the open PR brings Mark read
+ * back (B-A-03).
+ */
+export function openedNoteShows(mark: { canUndo: boolean } | null, unreadAgain: boolean): boolean {
+  if (mark === null) {
+    return false;
+  }
+  return mark.canUndo || !unreadAgain;
 }

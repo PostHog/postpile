@@ -1723,6 +1723,23 @@ the app meanwhile.
 
 ## Decided
 
+- **Only your own pick marks a PR read on open** (2026-10-10, owner
+  decision Q1 after the blind bug hunt, 11 testers; DESIGN.md "You already
+  dealt with it" part 3, "Marked when the dwell ends"): the dwell runs only
+  for a tile or PR the user clicked (also the app-picked one), a ping click
+  or a jump from a list. A topic opening, search's first match or the next
+  tile after one left never marks; nor do back and forward. Replaces "the
+  first tile the app shows by itself counts too".
+
+- **Merged PRs keep their rules; no mark without a new user action**
+  (2026-10-10, owner decision Q2; DESIGN.md "Merged without your review"
+  rule 5, "Marked when the dwell ends"): the dwell may still mark a
+  merged-without-your-review PR the user picked, and an @you question
+  after the merge stays not-an-ask. A mark that turns wanted only after the
+  dwell (a merge landing, unlocking, Discard) never fires by itself; only
+  the user's own Approve, comment review or Remove team in the pane lets
+  it fire as soon as wanted.
+
 - **Agent notes on PRs are advisory and anchored to the PR's state**
   (2026-10-08, design agreed with the reporting agent, checked by Codex;
   DESIGN.md "Agent notes on PRs"): notes never change turn, unread, done,

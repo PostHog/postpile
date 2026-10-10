@@ -2,6 +2,18 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## Unreleased
+
+### Changed
+
+- Opening a topic or searching no longer marks anything read on GitHub. Only a tile or PR you click yourself is marked after it stays open for 1.5 s; the tile PostPile picks for you stays unread until you click it or press Mark read.
+
+### Fixed
+
+- Unlocking GitHub writes, or "Discard" in the lock popover, no longer marks the PR open in the pane read right away. Neither does a merge that lands while the PR is open.
+- The Snooze and "…" menus no longer close under the cursor when the open PR gets marked read: the 1.5 s wait holds while a menu is open.
+- "✓ Marked read" in the PR pane goes away once the PR has new activity, so Mark read is back.
+
 ## 0.27.2 (2026-10-09)
 
 ### Added

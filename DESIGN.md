@@ -1009,7 +1009,11 @@ the reasons and does not flip back:
 5. *Mark read settles it.* Mark read on the tile marks the event seen (the tile
    becomes done) and the thread read on GitHub, through the normal mark-read
    queue, undo window and writes lock. PostPile never marks these read by
-   itself.
+   itself: no quiet read, and no open-read without the user's pick. A PR the
+   user picks and keeps open through the dwell is marked like any other open
+   ("You already dealt with it" part 3, owner 2026-10-10, Q2): the user looked
+   at it. A merge that lands while the PR sits open in the pane does not mark
+   it; the user's next action does (BOARD-A-03, wave B PANE-32).
 6. *Topics wait for it.* A topic retires only when every tile is done (see
    Topic status), so an unseen merge keeps its topic in the sidebar. History:
    0.3.1 (2026-09-29) retired on "nothing unread or snoozed", which after a
@@ -3098,12 +3102,27 @@ happened when it did. Chosen from a clickable mockup:
   Clicking through faster than the dwell still marks nothing. Once per
   open. The dwell still needs the window visible and focused (hidden during
   it, it starts over); after it, hiding or leaving the window changes
-  nothing.
+  nothing. Only the user's own pick starts a dwell (2026-10-10, see "You
+  already dealt with it" part 3).
+- When no mark is wanted as the dwell ends (writes locked, an ask, a stale
+  snapshot), the open does not wait for one to become wanted by itself
+  (2026-10-10). Unlocking writes, "Discard" in the lock popover (which also
+  unlocks) or a sync that turns the PR done (a merge landing while it is
+  open) never mark it: the user did nothing new, and after a Discard their
+  last word was "keep it unread" (BOARD-A-01, BOARD-A-03). Only the user's
+  own write on the PR in the pane (Approve, a comment review, Remove team)
+  lets the open mark as soon as it is wanted, as before. Otherwise Mark read
+  or a fresh pick does it.
+- While any menu is open (Snooze, "…"), the dwell waits like in a hidden
+  window and starts over once it closes (2026-10-10, BOARD-A-06): the mark's
+  settle swaps the tile footer and would close the menu under the cursor.
 - The button then reads "✓ Marked read" (or "✓ Done for now", matching the
   label) in soft green, with an Undo link next to it while the undo window
   is open. It replaces the "Keep unread" X, and "Marks read when you leave"
   is gone. The note stays after the PR turned done, when core offers no
-  mark button any more.
+  mark button any more. Once the undo window is over and the PR is unread
+  again (new activity while it stays open, `TileView.unreadPrKeys`), the note
+  goes and Mark read and a full dot come back (2026-10-10, B-A-03).
 - Undo uses the mark-read queue like every clicked mark-read. The opened
   mark used to be a quiet, immediate GitHub write; GitHub has no
   mark-unread, so an Undo needs the write deferred. It is now its own batch
@@ -4932,7 +4951,9 @@ avatars and filters", QueuesB2).
   first of Open; never a snoozed tile, never one in Dealt with. With
   neither it selects nothing, and the right pane says "No tile selected"
   ("Pick a tile to see it."). A tile the app picked is not the user's pick:
-  it is not written into history. When an app-picked tile changes group
+  it is not written into history, and it never marks read on open, also
+  while a search shows its first match (2026-10-10, "You already dealt with
+  it" part 3); a click on it makes it the user's pick. When an app-picked tile changes group
   while it is shown (read or done through a sync, the move-on mark), it
   stays in the pane and counts as the user's pick from then on, so the
   grid keeps it too: pane and grid never disagree, and it drops out once
@@ -6290,9 +6311,19 @@ nobody ("Bot talk leaves agent work" › Bot talk answers nobody).
      when the dwell ends, with an Undo, see "Actions act on what you look
      at" › Marked when the dwell ends. Hidden before that, the wait starts over when the
      window is visible again with the same PR open (Codex review on PR #10:
-     the open used to be dropped). The first tile
-     the app shows by itself counts too: it is on screen. One request per
-     open; re-renders and refetches of the same PR send nothing.
+     the open used to be dropped). Only the user's own pick counts
+     (2026-10-10, owner decision Q1, replaces "the first tile the app shows by
+     itself counts too: it is on screen"): a click on a tile or one of its PR
+     rows (also on the tile the app picked), a Mac ping click, a jump from
+     Notifications or Handled quietly. A tile the app picks by itself (a
+     topic opening, search's first match, the next tile after one left, an
+     app pick that turned user-like after a group change) never marks; nor
+     do back and forward, which show an earlier pick but are not a new one.
+     Why: 11 testers of the 2026-10 bug hunt read the auto mark as "looking
+     at a topic marked things read"; it matches `useTileVisit`, which never
+     counted app picks for Mac pings. Renderer `dwellPrKey`
+     (`lib/selection.ts`). One request per open; re-renders and refetches of
+     the same PR send nothing.
    - The renderer asks only when the opened PR's `afterRead.done`, the
      tile is not snoozed and the lock is open (`openedRead` on the
      `GithubWrite` list, blocked while locked; only a lock closed inside the
