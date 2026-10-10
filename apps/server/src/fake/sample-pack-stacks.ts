@@ -322,7 +322,7 @@ function buildEvents(clock: SampleClock): PrEvent[] {
     ]),
     ...sampleEvents(clock, 2152, [
       { kind: 'review_approved', actor: 'sol', text: 'approved', hoursAgo: 8, rule: 'quiet', sourceId: 'review-2152-0', seen: true },
-      { kind: 'merged', actor: 'nell', text: 'merged it into nell/flags-1', hoursAgo: 6, rule: 'quiet', seen: true },
+      { kind: 'merged', actor: 'nell', text: 'merged', hoursAgo: 6, rule: 'quiet', seen: true },
     ]),
     ...sampleEvents(clock, 2153, [
       { kind: 'review_requested', actor: 'nell', text: 'requested a review from you', hoursAgo: 5, rule: 'loud' },
@@ -335,7 +335,7 @@ function buildEvents(clock: SampleClock): PrEvent[] {
     ]),
     ...sampleEvents(clock, 2164, [
       { kind: 'commits_pushed', actor: RENOVATE, text: 'opened the PR', hoursAgo: 17, rule: 'quiet', isBot: true, seen: true },
-      { kind: 'merged', actor: RENOVATE, text: 'merged it', hoursAgo: 4, rule: 'quiet', isBot: true, seen: true },
+      { kind: 'merged', actor: RENOVATE, text: 'merged', hoursAgo: 4, rule: 'quiet', isBot: true, seen: true },
     ]),
     ...renovateOpened(clock, 2165, 3),
     ...renovateOpened(clock, 2166, 2),

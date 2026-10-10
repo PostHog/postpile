@@ -30,7 +30,7 @@ interface Box {
 
 const SELECTED_TILE = 'article.border-accent';
 const DETAILS = 'aside[aria-label="Details"]';
-const TILE_ROWS = 'article:has-text("rowan/depot: e2e layer")';
+const TILE_ROWS = 'article:has-text("rowan/depot: cache layer")';
 
 // Each shot is one feature, cropped tight. Run one with: pnpm screenshots <name>
 const SHOTS: Shot[] = [

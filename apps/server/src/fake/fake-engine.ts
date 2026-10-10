@@ -1908,17 +1908,19 @@ export class FakeEngine implements EngineService {
   }
 
   /**
-   * Canned review notes, one per kind; with a gist, the user's words with a
-   * canned finish. An approve note starts with the engine's rotating opener.
+   * Canned review notes, one per kind, naming the PR they are on; with a
+   * gist, the user's words with a canned finish. An approve note starts with
+   * the engine's rotating opener.
    */
   async draftReviewNote(prKey: PrKey, kind: ReviewNoteKind, gist = ''): Promise<{ body: string }> {
     this.refuseWithoutAgent();
     await this.writes.delay();
+    const title = this.data.prs.find((candidate) => candidate.key === prKey)?.title ?? 'This change';
     if (kind === 'comment') {
-      return { body: gist.trim() !== '' ? fromGist(gist) : 'The retry path has no test yet. One is worth adding before this merges.' };
+      return { body: gist.trim() !== '' ? fromGist(gist) : `"${title}" has no test yet. One is worth adding before this merges.` };
     }
     this.lastApproveOpener = nextApproveOpener(this.lastApproveOpener);
-    return { body: approveNoteBody(this.lastApproveOpener, gist.trim() !== '' ? fromGist(gist) : 'A test for the retry limit can follow after merge.') };
+    return { body: approveNoteBody(this.lastApproveOpener, gist.trim() !== '' ? fromGist(gist) : `A test for "${title}" can follow after merge.`) };
   }
 
   /** A canned reply: from the user's gist when given, else a stock answer that fits where the comment is. */
@@ -1971,24 +1973,13 @@ export class FakeEngine implements EngineService {
         ? { ...base, body, kind: 'review_comment', url: comment.url, path: comment.path, threadId: target.threadId }
         : { ...base, body: quotedReplyBody(comment, body), kind: 'comment', url: pr.url, path: null, threadId: null };
     const threads = pr.threads.map((thread) => (thread.id === reply.threadId ? { ...thread, comments: [...thread.comments, reply] } : thread));
-    this.data.prs[index] = { ...pr, comments: [...pr.comments, reply], threads };
-    // The real engine refetches the PR after a reply, and the activity then shows it; here it is one own event.
-    this.data.events.push({
-      id: `${prKey}:comment:${reply.id}`,
-      prKey,
-      kind: 'comment',
-      actor: this.data.viewer,
-      isBot: false,
-      at: reply.createdAt,
-      summary: `${this.data.viewer} replied to ${comment.author}: ${body.split('\n')[0] ?? ''}`,
-      url: reply.url,
-      sourceId: reply.id,
-      ruleLoudness: 'quiet',
-      ruleReason: 'own comment',
-      chatter: false,
-      override: null,
-      seenAt: reply.createdAt,
-    });
+    const updated: FullPr = { ...pr, comments: [...pr.comments, reply], threads };
+    this.data.prs[index] = updated;
+    // The real engine refetches the PR after a reply and the sync derives its event; here core derives it the same way.
+    const event = derivedEvent(updated, this.viewer(), this.data.userStates.find((entry) => entry.prKey === prKey) ?? null, reply.id, reply.createdAt);
+    if (event) {
+      this.data.events.push(event);
+    }
     return ok('fake: reply kept locally, nothing sent to GitHub');
   }
 
@@ -2306,9 +2297,9 @@ export class FakeEngine implements EngineService {
     const outcome = RECHECK_CYCLE[this.recheckCount % RECHECK_CYCLE.length] ?? 'holds';
     this.recheckCount += 1;
     if (outcome === 'fix') {
-      return { status: 'answered', outcome, text: `${request.text.replace(/\.$/, '')} (sample correction).`, why: 'Sample answer: a newer comment on the PR says otherwise.' };
+      return { status: 'answered', outcome, text: `${request.text.replace(/\.$/, '')} (sample correction).`, why: 'A newer comment on the PR says otherwise.' };
     }
-    const why = outcome === 'holds' ? 'Sample answer: the newest review and comments still say the same.' : 'Sample answer: the PR this came from was closed and nobody picked it up.';
+    const why = outcome === 'holds' ? 'The newest review and comments still say the same.' : 'The PR this came from was closed and nobody picked it up.';
     return { status: 'answered', outcome, text: request.text, why };
   }
 

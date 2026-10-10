@@ -67,20 +67,20 @@ function buildEvents(clock: SampleClock) {
   return [
     ...sampleEvents(clock, 2501, [
       { kind: 'review_approved', actor: 'lyra', text: 'approved', hoursAgo: 32, rule: 'loud', seen: true },
-      { kind: 'merged', actor: SAMPLE_VIEWER, text: 'merged it', hoursAgo: 30, rule: 'quiet', seen: true },
+      { kind: 'merged', actor: SAMPLE_VIEWER, text: 'merged', hoursAgo: 30, rule: 'quiet', seen: true },
     ]),
     ...sampleEvents(clock, 2502, [
       { kind: 'review_requested', actor: 'rowan', text: 'requested a review from you', hoursAgo: 70, rule: 'loud', seen: true },
       { kind: 'review_approved', actor: SAMPLE_VIEWER, text: 'approved', hoursAgo: 28, rule: 'quiet', seen: true },
-      { kind: 'merged', actor: 'rowan', text: 'merged it', hoursAgo: 26, rule: 'quiet', seen: true },
+      { kind: 'merged', actor: 'rowan', text: 'merged', hoursAgo: 26, rule: 'quiet', seen: true },
     ]),
     ...sampleEvents(clock, 2503, [
       { kind: 'review_requested', actor: 'rowan', text: 'requested a review from you', hoursAgo: 60, rule: 'loud', seen: true },
       { kind: 'review_approved', actor: SAMPLE_VIEWER, text: 'approved', hoursAgo: 27, rule: 'quiet', seen: true },
-      { kind: 'merged', actor: 'rowan', text: 'merged it', hoursAgo: 25, rule: 'quiet', seen: true },
+      { kind: 'merged', actor: 'rowan', text: 'merged', hoursAgo: 25, rule: 'quiet', seen: true },
     ]),
     ...sampleEvents(clock, 2504, [
-      { kind: 'merged', actor: 'tove', text: 'merged it', hoursAgo: 20, rule: 'quiet', seen: true },
+      { kind: 'merged', actor: 'tove', text: 'merged', hoursAgo: 20, rule: 'quiet', seen: true },
     ]),
     ...sampleEvents(clock, 2505, [
       { kind: 'comment', actor: 'sol', text: 'commented: "every flag here has been on for a month"', hoursAgo: 11, rule: 'quiet', seen: true },

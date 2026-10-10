@@ -108,7 +108,7 @@ function longNameTopic(clock: SampleClock) {
       number: STRESS_BIG_NUMBER, title: 'Drop the Jenkinsfile from the ingestion workers', author: 'ines', state: 'OPEN',
       size: [0, 140, 3], openedHoursAgo: 9, reviewerTeams: ['acme/team-platform'],
     }),
-    sampleEvents(clock, STRESS_BIG_NUMBER, [{ kind: 'review_requested', actor: 'ines', text: 'requested @team-platform', hoursAgo: 9, rule: 'loud' }]),
+    sampleEvents(clock, STRESS_BIG_NUMBER, [{ kind: 'review_requested', actor: 'ines', text: 'requested a review from acme/team-platform', hoursAgo: 9, rule: 'loud' }]),
     sampleGlance(clock, STRESS_BIG_NUMBER, {
       verdict: 'LOOKS_SAFE', forYou: 'Your team is asked; it removes a Jenkinsfile.', does: 'Deletes the Jenkinsfile the ingestion workers no longer use.',
       risk: 'Low.', othersSaid: 'No comments yet.',
@@ -120,7 +120,7 @@ function longNameTopic(clock: SampleClock) {
       { kind: 'review_requested', actor: 'rowan', text: 'requested a review from you', hoursAgo: 7, rule: 'loud' },
       { kind: 'comment', actor: 'rowan', text: `commented: "the key is ${UNBROKEN_TOKEN}"`, hoursAgo: 1, rule: 'quiet' },
     ]),
-    ...sampleEvents(clock, 2402, [{ kind: 'review_requested', actor: 'rowan', text: 'requested @team-platform', hoursAgo: 5, rule: 'loud' }]),
+    ...sampleEvents(clock, 2402, [{ kind: 'review_requested', actor: 'rowan', text: 'requested a review from acme/team-platform', hoursAgo: 5, rule: 'loud' }]),
     ...moved.events,
   ];
   const glances = [
@@ -160,10 +160,10 @@ function crowdedPr(clock: SampleClock, index: number) {
     { kind: 'comment', actor: author, text: `commented: "the ${suite} suite splits into ${index % 6 + 2} shards"`, hoursAgo: 30 + index, rule: 'quiet', seen: true },
   ];
   if (asksTeam && !merged) {
-    inputs.push({ kind: 'review_requested', actor: author, text: 'requested @team-platform', hoursAgo: 20 + index, rule: 'loud', seen: true });
+    inputs.push({ kind: 'review_requested', actor: author, text: 'requested a review from acme/team-platform', hoursAgo: 20 + index, rule: 'loud', seen: true });
   }
   if (merged) {
-    inputs.push({ kind: 'merged', actor: author, text: 'merged it', hoursAgo: 10 + index, rule: 'quiet', seen: true });
+    inputs.push({ kind: 'merged', actor: author, text: 'merged', hoursAgo: 10 + index, rule: 'quiet', seen: true });
   }
   if (index % 5 === 0 && !merged) {
     inputs.push({ kind: 'comment', actor: AUTHORS[(index + 1) % AUTHORS.length]!, text: 'commented: "shard 3 is still the slowest"', hoursAgo: 1 + index / 10, rule: 'quiet' });

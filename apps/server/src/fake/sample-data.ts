@@ -96,7 +96,7 @@ function buildTopics(clock: SampleClock): Topic[] {
       id: TOPIC.depot,
       area: 'CI',
       name: 'Move CI to Depot',
-      summary: 'Backend and frontend run on Depot. Turbo caching and e2e are in flight. The release workflow has no PR yet.',
+      summary: 'Backend and frontend run on Depot. Turbo caching and e2e are in flight. Release builds stay on GitHub runners: #1930 was closed.',
       tailoring: 'Rowan drives, I approve. Flag cache keys, runner labels, secrets.',
       driver: 'rowan',
       userRole: 'reviewer',
@@ -112,7 +112,7 @@ function buildTopics(clock: SampleClock): Topic[] {
     }),
     sampleTopic(clock, {
       id: TOPIC.migrations,
-      area: 'Dev env',
+      area: 'Database',
       name: 'Migrations',
       summary: 'billing is waiting on one answer from you. Notifications moved and was fixed.',
       tailoring: 'Tell me when a migration touches real tables.',
@@ -139,7 +139,7 @@ function buildTopics(clock: SampleClock): Topic[] {
     }),
     sampleTopic(clock, {
       id: TOPIC.deps,
-      area: 'Dev env',
+      area: 'Dependencies',
       name: 'Dependency bumps',
       summary: 'Bot PRs that bump pinned versions.',
       tailoring: 'Never ping me for these.',
@@ -329,8 +329,8 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
         ['package.json', 2, 2],
       ],
       reviews: [
-        ['lyra', 'APPROVED', 'Cache config looks right. The warm-up job is the only open point.'],
-        ['nell', 'COMMENTED', 'The first run after merge took 38 min on my fork.'],
+        ['lyra', 'APPROVED', 'Cache config looks right. The warm-up job is the only open point.', undefined, 0.45],
+        ['nell', 'COMMENTED', 'The first run after merge took 38 min on my fork.', undefined, 2],
       ],
       reviewerUsers: [SAMPLE_VIEWER], reviewerTeams: ['acme/team-platform'],
       comments: [{ id: 'issuecomment-2', author: 'lyra', body: '@you does the warm-up job need a feature flag, or is one cold hour fine?\n\nMy worry is the first run after a lockfile change: the cache is empty, the warm-up job competes with the real jobs for runners, and the cold hour can stretch to two on a busy morning. A flag would let us turn it off per repo without a deploy. If a cold hour is fine, I would rather drop the warm-up job than keep dead config around. See https://example.com/acme/app/actions/runs/1234567890/attempts/2/very/long/path/that/should/wrap/instead/of/widening/the/pane for the run where it stalled.', hoursAgo: 0.3 }],
@@ -370,7 +370,7 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
     }),
     samplePr(clock, {
       number: 1855, title: 'Skip Turbo remote cache for Storybook', author: 'jude', state: 'MERGED',
-      size: [3, 1, 1], openedHoursAgo: 30, mergedHoursAgo: 14, reviews: [['lyra', 'APPROVED']],
+      size: [3, 1, 1], openedHoursAgo: 30, mergedHoursAgo: 14, reviews: [['lyra', 'APPROVED', '', undefined, 15]],
       comments: [{ id: 'issuecomment-3', author: 'jude', body: 'Are the snapshots stale because of the cache or because of the Vite upgrade?', hoursAgo: 16 }],
     }),
     samplePr(clock, {
@@ -379,7 +379,7 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
       baseRef: 'rowan/depot-3', headRef: 'rowan/depot-4', reviewerUsers: ['nell'],
       // Says "depends on" the layer it sits on by branch: still a stack, no merge-order line.
       body: 'Depends on #1902 for the cache backend.',
-      reviews: [[SAMPLE_VIEWER, 'APPROVED', 'Labels match #1880.', 'sha1911-a']],
+      reviews: [[SAMPLE_VIEWER, 'APPROVED', 'Labels match #1880.', 'sha1911-a', 4]],
       commits: [
         { oid: 'sha1911-a', headline: 'Move Playwright jobs to Depot', hoursAgo: 5 },
         { oid: 'sha1911-b', headline: 'Bump Playwright shard count to 6', hoursAgo: 0.25 },
@@ -396,38 +396,38 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
       number: 1862, title: 'Backend jobs on Depot', author: 'rowan', state: 'MERGED',
       size: [60, 60, 6], openedHoursAgo: 96, mergedHoursAgo: 72,
       baseRef: 'rowan/depot-1', headRef: 'rowan/depot-2',
-      reviews: [[SAMPLE_VIEWER, 'APPROVED'], ['lyra', 'APPROVED']],
+      reviews: [[SAMPLE_VIEWER, 'APPROVED', '', undefined, 75], ['lyra', 'APPROVED', '', undefined, 74]],
     }),
     samplePr(clock, {
       number: 1851, title: 'Add Depot project config', author: 'rowan', state: 'MERGED',
       size: [12, 0, 1], openedHoursAgo: 170, mergedHoursAgo: 144,
-      baseRef: 'master', headRef: 'rowan/depot-1', reviews: [[SAMPLE_VIEWER, 'APPROVED']],
+      baseRef: 'master', headRef: 'rowan/depot-1', reviews: [[SAMPLE_VIEWER, 'APPROVED', '', undefined, 146]],
       comments: [{ id: 'issuecomment-1', author: 'nell', body: 'Can we keep GitHub runners for release builds until Depot has an SLA?', hoursAgo: 150 }],
     }),
     samplePr(clock, {
       number: 1915, title: 'DEPOT_TOKEN as repo secret', author: 'rowan', state: 'MERGED',
-      size: [9, 3, 3], openedHoursAgo: 30, mergedHoursAgo: 24, reviews: [['lyra', 'APPROVED']],
-      comments: [{ id: 'issuecomment-4', author: 'rowan', body: 'Keeping DEPOT_TOKEN a repo secret for now. The org secret move comes with the release workflow.', hoursAgo: 25 }],
+      size: [9, 3, 3], openedHoursAgo: 30, mergedHoursAgo: 24, reviews: [['lyra', 'APPROVED', '', undefined, 26]],
+      comments: [{ id: 'issuecomment-4', author: 'rowan', body: '@acme/team-platform keeping DEPOT_TOKEN a repo secret for now.\n\nThe org secret move comes with the release workflow.', hoursAgo: 25 }],
     }),
     samplePr(clock, {
       number: 1899, title: 'Rename workflow files to ci-*.yml', author: 'rowan', state: 'OPEN',
-      size: [0, 0, 9], openedHoursAgo: 48, queued: true,
+      size: [27, 27, 9], openedHoursAgo: 48, queued: true,
       // A merge order, not a stack: pr_context shows "Depends on acme/app#1915 (merge after)".
       body: 'Depends on #1915: the renamed workflows read DEPOT_TOKEN.',
-      reviews: [[SAMPLE_VIEWER, 'APPROVED'], ['lyra', 'APPROVED'], ['nell', 'APPROVED']],
+      reviews: [[SAMPLE_VIEWER, 'APPROVED', '', undefined, 24], ['lyra', 'APPROVED', '', undefined, 20], ['nell', 'APPROVED', '', undefined, 10]],
     }),
     samplePr(clock, {
       number: 1840, title: 'Remove the nightly cache warmer job', author: 'nell', state: 'MERGED',
-      size: [0, 64, 2], openedHoursAgo: 150, mergedHoursAgo: 120, reviews: [[SAMPLE_VIEWER, 'APPROVED']],
+      size: [0, 64, 2], openedHoursAgo: 150, mergedHoursAgo: 120, reviews: [[SAMPLE_VIEWER, 'APPROVED', '', undefined, 122]],
     }),
     samplePr(clock, {
       number: 1790, title: 'Raise Django test timeout to 45 min', author: 'nell', state: 'MERGED',
-      size: [1, 1, 1], openedHoursAgo: 60, mergedHoursAgo: 48, reviews: [['rowan', 'APPROVED']],
+      size: [1, 1, 1], openedHoursAgo: 60, mergedHoursAgo: 48, reviews: [['rowan', 'APPROVED', '', undefined, 50]],
     }),
     samplePr(clock, {
       number: 1822, title: 'Split backend tests by timing data', author: 'remy', state: 'OPEN',
       size: [240, 80, 11], openedHoursAgo: 72,
-      reviews: [['lyra', 'APPROVED'], ['sol', 'APPROVED']], reviewerTeams: ['acme/team-platform'],
+      reviews: [['lyra', 'APPROVED', '', undefined, 30], ['sol', 'APPROVED', '', undefined, 26]], reviewerTeams: ['acme/team-platform'],
     }),
     samplePr(clock, {
       number: 1801, title: 'Move billing models to modules/', author: SAMPLE_VIEWER, state: 'OPEN',
@@ -439,7 +439,8 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
         ['modules/billing/apps.py', 22, 0],
         ['app/migrations/0412_move_billing_models.py', 48, 0],
       ],
-      reviews: [['ada', 'CHANGES_REQUESTED'], ['lyra', 'APPROVED']],
+      reviews: [['ada', 'CHANGES_REQUESTED', '', undefined, 26], ['lyra', 'APPROVED', '', undefined, 30]],
+      comments: [{ id: 'issuecomment-1801-1', author: 'ada', body: '@you is this reversible if the deploy goes wrong halfway?', hoursAgo: 24 }],
       threads: [
         {
           id: 'thread-1801-1',
@@ -475,7 +476,8 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
     }),
     samplePr(clock, {
       number: 1940, title: 'Release desktop 2.3', author: 'mae', state: 'OPEN',
-      size: [30, 10, 4], openedHoursAgo: 30, reviews: [['koa', 'APPROVED']],
+      size: [30, 10, 4], openedHoursAgo: 30, reviews: [['koa', 'APPROVED', '', undefined, 20]],
+      comments: [{ id: 'issuecomment-1940-1', author: 'mae', body: '2.3 goes out Thursday.', hoursAgo: 6 }],
     }),
     // Added for the sidebar's sections: your own PRs, a team mention (Team
     // mentioned), a bot bump (Other topics, FYI) and a merged PR with news on
@@ -483,12 +485,12 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
     samplePr(clock, {
       number: 1945, title: 'Cap CI shard retries at 2', author: SAMPLE_VIEWER, state: 'OPEN', draft: true,
       size: [14, 6, 2], openedHoursAgo: 8, reviewerUsers: ['lyra'],
-      reviews: [['remy', 'COMMENTED', 'Would 3 hide fewer real flakes?']],
+      reviews: [['remy', 'COMMENTED', 'Would 3 hide fewer real flakes?', undefined, 1]],
     }),
     samplePr(clock, {
       number: 1808, title: 'Drop the old billing re-exports', author: SAMPLE_VIEWER, state: 'OPEN',
       // Approved by an agent only: the pill reads "approved by agent", whose turn stays "Merge".
-      size: [3, 40, 2], openedHoursAgo: 20, reviews: [['reviewbot[bot]', 'APPROVED']],
+      size: [3, 40, 2], openedHoursAgo: 20, reviews: [['reviewbot[bot]', 'APPROVED', '', undefined, 18]],
     }),
     samplePr(clock, {
       number: 1934, title: 'Ingestion runner pool as a Terraform module', author: 'ines', state: 'OPEN',
@@ -526,7 +528,7 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
         ['lyra', 'COMMENTED', '', undefined, 27],
         ['lyra', 'COMMENTED', '', undefined, 26],
         ['nell', 'COMMENTED', '', undefined, 4],
-        ['jude', 'APPROVED'],
+        ['jude', 'APPROVED', '', undefined, 5],
         ['lyra', 'COMMENTED', '', undefined, 24],
       ],
       comments: [
@@ -607,6 +609,7 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
     samplePr(clock, {
       number: 1980, title: 'Run quarantined tests in their own job', author: 'sol', state: 'OPEN',
       size: [64, 12, 3], openedHoursAgo: 10,
+      comments: [{ id: 'issuecomment-1980-1', author: 'sol', body: 'The quarantine job is green on master.', hoursAgo: 8 }],
     }),
     samplePr(clock, {
       number: 1981, title: 'Report retries of quarantined tests', author: SAMPLE_VIEWER, state: 'OPEN',
@@ -615,14 +618,17 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
     samplePr(clock, {
       number: 1982, title: 'Allow the Depot cache host', author: 'nell', state: 'OPEN',
       size: [3, 0, 1], openedHoursAgo: 9,
+      comments: [{ id: 'issuecomment-1982-1', author: 'nell', body: 'Needed for the cache warm-up.', hoursAgo: 9 }],
     }),
     samplePr(clock, {
       number: 1984, title: 'Move recordings older than 30 days to cold storage', author: 'pia', state: 'OPEN',
       size: [210, 40, 9], openedHoursAgo: 28,
+      comments: [{ id: 'issuecomment-1984-1', author: 'pia', body: 'Does CI need more disk for the cold-storage tests?', hoursAgo: 0.5 }],
     }),
     samplePr(clock, {
       number: 1985, title: 'Cap the replay player buffer', author: 'gus', state: 'OPEN',
       size: [40, 18, 2], openedHoursAgo: 50,
+      comments: [{ id: 'issuecomment-1985-1', author: 'gus', body: 'Buffer capped at 50 MB.', hoursAgo: 30 }],
     }),
     samplePr(clock, {
       number: 1986, title: 'Run usage exports on the shared runners', author: SAMPLE_VIEWER, state: 'OPEN',
@@ -631,10 +637,12 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
     samplePr(clock, {
       number: 1987, title: 'Add alert threshold presets', author: 'gus', state: 'OPEN',
       size: [90, 5, 4], openedHoursAgo: 40,
+      comments: [{ id: 'issuecomment-1987-1', author: 'gus', body: 'Presets ship behind a flag.', hoursAgo: 20 }],
     }),
     samplePr(clock, {
       number: 1988, title: 'Rebuild the docs search index nightly', author: 'tove', state: 'OPEN',
       size: [22, 3, 2], openedHoursAgo: 3,
+      comments: [{ id: 'issuecomment-1988-1', author: 'tove', body: 'The index build takes 4 minutes.', hoursAgo: 2 }],
     }),
     samplePr(clock, {
       number: 1989, title: 'Show the uptime badge on the status page', author: 'bram', state: 'MERGED',
@@ -660,6 +668,10 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
           path: 'frontend/vite.config.ts',
           comments: [{ author: SAMPLE_VIEWER, body: 'Can these chunk names be stable?', hoursAgo: 30 }],
         },
+      ],
+      comments: [
+        { id: 'issuecomment-1960-reviewbot', author: 'reviewbot[bot]', body: 'No issues found in 9 files.', hoursAgo: 2.1 },
+        { id: 'issuecomment-1960-sizebot', author: 'sizebot[bot]', body: 'toolbar.js -18 kB', hoursAgo: 2 },
       ],
       commits: [
         { oid: 'sha1960-a', headline: 'Split the toolbar bundle', hoursAgo: 48 },
@@ -705,85 +717,90 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
   ];
 }
 
+// Summaries read like core's `deriveEvents` writes them ("lyra asked you: …",
+// "remy requested a review from acme/team-platform", "lyra merged"), and an
+// event about a comment, review or commit points at it with `sourceId`, so
+// Reply and Thumbs up show as they would in the app (sample-fidelity.test.ts).
 function buildEvents(clock: SampleClock): PrEvent[] {
   return [
     ...sampleEvents(clock, 1902, [
       { kind: 'review_requested', actor: 'rowan', text: 'requested a review from you', hoursAgo: 5, rule: 'loud', seen: true },
       { kind: 'deploy', actor: 'deploy-bot', text: 'deployed a preview', hoursAgo: 1, rule: 'quiet', isBot: true },
-      { kind: 'mention', actor: 'lyra', text: 'mentioned you: does the warm-up job need a feature flag, or is one cold hour fine?', sourceId: 'issuecomment-2', hoursAgo: 0.3, rule: 'loud' },
+      { kind: 'question_to_user', actor: 'lyra', text: 'asked you: @you does the warm-up job need a feature flag, or is one cold hour fine?', sourceId: 'issuecomment-2', hoursAgo: 0.3, rule: 'loud' },
     ]),
     ...sampleEvents(clock, 1904, [
       { kind: 'review_requested', actor: 'lyra', text: 'requested a review from you', hoursAgo: 8, rule: 'loud', seen: true },
     ]),
     ...sampleEvents(clock, 1907, [
       { kind: 'review_requested', actor: 'lyra', text: 'requested a review from you', hoursAgo: 7, rule: 'loud', seen: true },
-      { kind: 'mention', actor: 'lyra', text: 'mentioned you: "ok to drop the salt?"', hoursAgo: 0.8, rule: 'loud' },
+      { kind: 'question_to_user', actor: 'lyra', text: 'asked you: @you ok to drop the salt now that keys come from the lockfile?', sourceId: 'issuecomment-5', hoursAgo: 0.8, rule: 'loud' },
     ]),
     ...sampleEvents(clock, 1921, [
-      { kind: 'commits_pushed', actor: 'renovate[bot]', text: 'opened the PR', hoursAgo: 3, rule: 'quiet', isBot: true },
+      { kind: 'commits_pushed', actor: 'renovate[bot]', text: 'pushed: Bump turbo to 2.5', hoursAgo: 3, rule: 'quiet', isBot: true },
     ]),
     ...sampleEvents(clock, 1855, [
-      { kind: 'merged', actor: 'jude', text: 'merged it', hoursAgo: 14, rule: 'quiet', seen: true },
+      { kind: 'merged', actor: 'jude', text: 'merged', hoursAgo: 14, rule: 'quiet', seen: true },
     ]),
     ...sampleEvents(clock, 1911, [
       { kind: 'review_requested', actor: 'rowan', text: 'requested a review from you', hoursAgo: 6, rule: 'loud', seen: true },
-      { kind: 'review_approved', actor: SAMPLE_VIEWER, text: 'approved', hoursAgo: 4, rule: 'quiet', seen: true },
-      { kind: 'commits_after_approval', actor: 'rowan', text: 'pushed "Bump Playwright shard count to 6" after your approval', hoursAgo: 0.25, rule: 'quiet' },
+      { kind: 'review_approved', actor: SAMPLE_VIEWER, text: 'approved: Labels match #1880.', hoursAgo: 4, rule: 'quiet', sourceId: 'review-1911-0', seen: true },
+      { kind: 'commits_after_approval', actor: 'rowan', text: 'pushed: Bump Playwright shard count to 6', hoursAgo: 0.25, rule: 'quiet', sourceId: 'sha1911-b' },
       {
         kind: 'commits_after_approval',
         actor: 'rowan',
-        text: 'pushed "Pin the Depot runner image" after your approval',
+        text: 'pushed: Pin the Depot runner image',
         hoursAgo: 0.15,
         rule: 'quiet',
+        sourceId: 'sha1911',
         raisedBecause: 'Changes the CI runner image you approved, not a plain follow-up.',
       },
     ]),
     ...sampleEvents(clock, 1862, [
-      { kind: 'merged', actor: 'rowan', text: 'merged it', hoursAgo: 72, rule: 'quiet', seen: true },
+      { kind: 'merged', actor: 'rowan', text: 'merged', hoursAgo: 72, rule: 'quiet', seen: true },
     ]),
     ...sampleEvents(clock, 1851, [
-      { kind: 'merged', actor: 'rowan', text: 'merged it', hoursAgo: 144, rule: 'quiet', seen: true },
+      { kind: 'merged', actor: 'rowan', text: 'merged', hoursAgo: 144, rule: 'quiet', seen: true },
     ]),
     ...sampleEvents(clock, 1915, [
-      { kind: 'team_mention', actor: 'rowan', text: 'mentioned @team-platform', hoursAgo: 24, rule: 'loud' },
+      { kind: 'team_mention', actor: 'rowan', text: 'mentioned your team: @acme/team-platform keeping DEPOT_TOKEN a repo secret for now.', hoursAgo: 25, rule: 'loud', sourceId: 'issuecomment-4' },
     ]),
     ...sampleEvents(clock, 1899, [
-      { kind: 'review_approved', actor: SAMPLE_VIEWER, text: 'approved', hoursAgo: 24, rule: 'quiet', seen: true },
+      { kind: 'review_approved', actor: SAMPLE_VIEWER, text: 'approved', hoursAgo: 24, rule: 'quiet', sourceId: 'review-1899-0', seen: true },
       {
-        kind: 'force_pushed', actor: 'renovate[bot]', text: 'rebased', hoursAgo: 3, rule: 'quiet', isBot: true,
+        kind: 'force_pushed', actor: 'renovate[bot]', text: 'force-pushed', hoursAgo: 3, rule: 'quiet', isBot: true,
         mutedBecause: 'Bot rebase, no content change.',
       },
-      { kind: 'merge_queue', actor: 'mergify[bot]', text: 'queued for merge', hoursAgo: 1, rule: 'quiet', isBot: true },
+      { kind: 'merge_queue', actor: 'mergify[bot]', text: 'added it to the merge queue', hoursAgo: 1, rule: 'quiet', sourceId: 'queue-1899', isBot: true },
     ]),
     ...sampleEvents(clock, 1840, [
       { kind: 'review_requested', actor: 'nell', text: 'requested a review from you', hoursAgo: 150, rule: 'loud', seen: true },
-      { kind: 'merged', actor: 'nell', text: 'merged it', hoursAgo: 120, rule: 'quiet', seen: true },
+      { kind: 'merged', actor: 'nell', text: 'merged', hoursAgo: 120, rule: 'quiet', seen: true },
     ]),
     ...sampleEvents(clock, 1790, [
-      { kind: 'merged_without_review', actor: 'nell', text: 'merged it without your review', hoursAgo: 48, rule: 'quiet' },
+      { kind: 'merged_without_review', actor: 'nell', text: 'merged', hoursAgo: 48, rule: 'quiet' },
     ]),
     ...sampleEvents(clock, 1822, [
-      { kind: 'review_requested', actor: 'remy', text: 'requested @team-platform', hoursAgo: 72, rule: 'loud' },
+      { kind: 'review_requested', actor: 'remy', text: 'requested a review from acme/team-platform', hoursAgo: 72, rule: 'loud' },
     ]),
     ...sampleEvents(clock, 1801, [
-      { kind: 'question_to_user', actor: 'ada', text: 'asked "is this reversible?"', hoursAgo: 24, rule: 'loud' },
+      { kind: 'question_to_user', actor: 'ada', text: 'asked you: @you is this reversible if the deploy goes wrong halfway?', hoursAgo: 24, rule: 'loud', sourceId: 'issuecomment-1801-1' },
     ]),
     ...sampleEvents(clock, 1932, [
-      { kind: 'review_requested', actor: 'ines', text: 'requested @team-platform', hoursAgo: 2, rule: 'loud' },
+      { kind: 'review_requested', actor: 'ines', text: 'requested a review from acme/team-platform', hoursAgo: 2, rule: 'loud' },
     ]),
     ...sampleEvents(clock, 1940, [
-      { kind: 'comment', actor: 'mae', text: 'commented: "2.3 goes out Thursday"', hoursAgo: 6, rule: 'quiet' },
+      { kind: 'comment', actor: 'mae', text: 'commented: 2.3 goes out Thursday.', hoursAgo: 6, rule: 'quiet', sourceId: 'issuecomment-1940-1' },
     ]),
     ...sampleEvents(clock, 1945, [
-      { kind: 'review_commented', actor: 'remy', text: 'commented: "Would 3 hide fewer real flakes?"', hoursAgo: 1, rule: 'quiet', seen: true },
+      { kind: 'review_commented', actor: 'remy', text: 'reviewed: Would 3 hide fewer real flakes?', hoursAgo: 1, rule: 'quiet', sourceId: 'review-1945-0', seen: true },
     ]),
     // Trunk's status edits: the one that took your PR out of the queue is loud (DESIGN.md "Merge queue").
     ...sampleEvents(clock, 1950, [
-      { kind: 'review_approved', actor: 'lyra', text: 'approved', hoursAgo: 26, rule: 'loud', seen: true },
+      { kind: 'review_approved', actor: 'lyra', text: 'approved', hoursAgo: 26, rule: 'loud', sourceId: 'review-1950-0', seen: true },
       {
         kind: 'comment_edited',
         actor: 'trunk-io[bot]',
-        text: 'updated its comment: 🚫 This pull request was removed from the merge queue because it was waiting to become mergeable for too long',
+        text: 'updated its comment: 🚫 This pull request was removed from the merge queue because it was waiting to become mergeable fo…',
         hoursAgo: 0.6,
         rule: 'loud',
         sourceId: 'issuecomment-1950-trunk',
@@ -791,18 +808,18 @@ function buildEvents(clock: SampleClock): PrEvent[] {
       },
     ]),
     ...sampleEvents(clock, 1974, [
-      { kind: 'merged', actor: 'trunk-io[bot]', text: 'merged it', hoursAgo: 5, rule: 'quiet', seen: true, isBot: true },
+      { kind: 'merged', actor: 'trunk-io[bot]', text: 'merged', hoursAgo: 5, rule: 'quiet', seen: true, isBot: true },
     ]),
     ...sampleEvents(clock, 1978, [
       { kind: 'review_requested', actor: 'rowan', text: 'requested a review from you', hoursAgo: 5, rule: 'loud', seen: true },
-      { kind: 'review_approved', actor: SAMPLE_VIEWER, text: 'approved', hoursAgo: 2, rule: 'quiet', seen: true },
+      { kind: 'review_approved', actor: SAMPLE_VIEWER, text: 'approved', hoursAgo: 2, rule: 'quiet', sourceId: 'review-1978-0', seen: true },
     ]),
     ...sampleEvents(clock, 1975, [
-      { kind: 'review_approved', actor: 'rowan', text: 'approved', hoursAgo: 3, rule: 'loud', seen: true },
+      { kind: 'review_approved', actor: 'rowan', text: 'approved', hoursAgo: 3, rule: 'loud', sourceId: 'review-1975-0', seen: true },
       {
         kind: 'comment_edited',
         actor: 'trunk-io[bot]',
-        text: 'updated its comment: 🧪 Running tests on this pull request (testing on PR #1976)',
+        text: 'updated its comment: 🧪 Running tests on this pull request (testing on PR [#1976](https://github.com/acme/app/pull/1976)…',
         hoursAgo: 0.4,
         rule: 'quiet',
         sourceId: 'issuecomment-1975-trunk',
@@ -810,28 +827,28 @@ function buildEvents(clock: SampleClock): PrEvent[] {
       },
     ]),
     ...sampleEvents(clock, 1934, [
-      { kind: 'team_mention', actor: 'ines', text: 'mentioned @team-platform: "do the runner labels clash?"', hoursAgo: 1.5, rule: 'loud' },
+      { kind: 'team_mention', actor: 'ines', text: 'mentioned your team: @acme/team-platform do the runner labels clash with yours?', hoursAgo: 1.5, rule: 'loud', sourceId: 'issuecomment-5' },
     ]),
     ...sampleEvents(clock, 1966, [
       { kind: 'review_requested', actor: 'pr-assigner[bot]', text: 'requested a review from acme/client-approvers', hoursAgo: 5.5, rule: 'loud', isBot: true },
     ]),
     ...sampleEvents(clock, 1967, [
-      { kind: 'team_mention', actor: 'koa', text: 'mentioned @client-approvers: "the defaults change in the next release"', hoursAgo: 4, rule: 'quiet' },
+      { kind: 'team_mention', actor: 'koa', text: 'mentioned your team: @acme/client-approvers heads-up: the defaults change in the next release', hoursAgo: 4, rule: 'quiet', sourceId: 'issuecomment-7' },
     ]),
     ...sampleEvents(clock, 1925, [
-      { kind: 'commits_pushed', actor: 'renovate[bot]', text: 'opened the PR', hoursAgo: 12, rule: 'quiet', isBot: true },
+      { kind: 'commits_pushed', actor: 'renovate[bot]', text: 'pushed: Bump ruff to 0.7', hoursAgo: 12, rule: 'quiet', isBot: true },
     ]),
     ...sampleEvents(clock, 1857, [
       { kind: 'review_commented', actor: GREPTILE, text: 'reviewed: Greptile summary: upgrades Vite to 7 and moves the test setup. 4 comments.', hoursAgo: 30, rule: 'quiet', isBot: true, sourceId: 'review-1857-0', seen: true },
       { kind: 'bot_comment', actor: GREPTILE, text: 'commented: Greptile summary: upgrades Vite to 7 and moves the test setup. 4 comments.', hoursAgo: 30, rule: 'quiet', isBot: true, sourceId: 'review-1857-0', seen: true },
-      { kind: 'bot_comment', actor: GREPTILE, text: 'commented: `build.target` drops es2019', hoursAgo: 30, rule: 'quiet', isBot: true, sourceId: 'thread-1857-1-0', seen: true },
-      { kind: 'bot_comment', actor: GREPTILE, text: 'commented: `vi.useFakeTimers()` is never reset between tests.', hoursAgo: 30, rule: 'quiet', isBot: true, sourceId: 'thread-1857-2-0', seen: true },
-      { kind: 'bot_comment', actor: GREPTILE, text: 'commented: The dev server port is hardcoded', hoursAgo: 30, rule: 'quiet', isBot: true, sourceId: 'thread-1857-3-0', seen: true },
-      { kind: 'bot_comment', actor: GREPTILE, text: 'commented: `vite-plugin-legacy` is no longer imported anywhere.', hoursAgo: 30, rule: 'quiet', isBot: true, sourceId: 'thread-1857-5-0', seen: true },
+      { kind: 'bot_comment', actor: GREPTILE, text: 'commented: **logic:** `build.target` drops es2019, so older Safari versions fail to load the bundle.', hoursAgo: 30, rule: 'quiet', isBot: true, sourceId: 'thread-1857-1-0', seen: true },
+      { kind: 'bot_comment', actor: GREPTILE, text: 'commented: **logic:** `vi.useFakeTimers()` is never reset between tests.', hoursAgo: 30, rule: 'quiet', isBot: true, sourceId: 'thread-1857-2-0', seen: true },
+      { kind: 'bot_comment', actor: GREPTILE, text: 'commented: **style:** The dev server port is hardcoded; the e2e config reads it from the environment.', hoursAgo: 30, rule: 'quiet', isBot: true, sourceId: 'thread-1857-3-0', seen: true },
+      { kind: 'bot_comment', actor: GREPTILE, text: 'commented: **style:** `vite-plugin-legacy` is no longer imported anywhere.', hoursAgo: 30, rule: 'quiet', isBot: true, sourceId: 'thread-1857-5-0', seen: true },
       { kind: 'comment', actor: 'lyra', text: 'commented: @codex review', hoursAgo: 29, rule: 'quiet', sourceId: 'issuecomment-1857-codex', seen: true, chatter: true },
       { kind: 'comment', actor: 'lyra', text: `replied to ${GREPTILE} on vite.config.ts: Fixed, the target is back to es2019 for now.`, hoursAgo: 28, rule: 'quiet', sourceId: 'thread-1857-1-1', chatter: true, seen: true },
       { kind: 'review_commented', actor: 'lyra', text: 'reviewed', hoursAgo: 28, rule: 'quiet', sourceId: 'review-1857-1', chatter: true, seen: true },
-      { kind: 'bot_comment', actor: GREPTILE, text: 'commented: Thanks, that resolves it.', hoursAgo: 27.9, rule: 'quiet', isBot: true, sourceId: 'thread-1857-1-2', seen: true },
+      { kind: 'bot_comment', actor: GREPTILE, text: 'replied to lyra on vite.config.ts: Thanks, that resolves it.', hoursAgo: 27.9, rule: 'quiet', isBot: true, sourceId: 'thread-1857-1-2', seen: true },
       { kind: 'comment', actor: 'lyra', text: `replied to ${GREPTILE} on vite.config.ts: Also added a browserslist check to CI.`, hoursAgo: 27, rule: 'quiet', sourceId: 'thread-1857-1-3', chatter: true, seen: true },
       { kind: 'review_commented', actor: 'lyra', text: 'reviewed', hoursAgo: 27, rule: 'quiet', sourceId: 'review-1857-2', chatter: true, seen: true },
       { kind: 'comment', actor: 'lyra', text: `replied to ${GREPTILE} on src/test/setup.ts: Moved the reset into afterEach.`, hoursAgo: 26, rule: 'quiet', sourceId: 'thread-1857-2-1', chatter: true, seen: true },
@@ -841,50 +858,50 @@ function buildEvents(clock: SampleClock): PrEvent[] {
       { kind: 'review_commented', actor: 'lyra', text: 'reviewed', hoursAgo: 24, rule: 'quiet', sourceId: 'review-1857-6', chatter: true, seen: true },
       { kind: 'question_to_user', actor: 'nell', text: 'asked you: @you is the hardcoded port fine for the devbox?', hoursAgo: 4, rule: 'loud', sourceId: 'thread-1857-3-1' },
       { kind: 'review_commented', actor: 'nell', text: 'reviewed', hoursAgo: 4, rule: 'quiet', sourceId: 'review-1857-4', chatter: true },
-      { kind: 'merged', actor: 'lyra', text: 'merged it', hoursAgo: 3, rule: 'quiet', seen: true },
-      { kind: 'mention', actor: 'jude', text: 'mentioned you: "are the stale snapshots gone?"', hoursAgo: 2, rule: 'loud' },
+      { kind: 'merged', actor: 'lyra', text: 'merged', hoursAgo: 3, rule: 'quiet', seen: true },
+      { kind: 'question_to_user', actor: 'jude', text: 'asked you: @you are the stale snapshots gone after this?', hoursAgo: 2, rule: 'loud', sourceId: 'issuecomment-6' },
     ]),
     ...sampleEvents(clock, 1870, [
-      { kind: 'review_requested', actor: 'sol', text: 'requested @team-platform', hoursAgo: 72, rule: 'loud' },
+      { kind: 'review_requested', actor: 'sol', text: 'requested a review from acme/team-platform', hoursAgo: 72, rule: 'loud' },
     ]),
     ...sampleEvents(clock, 1960, [
-      { kind: 'review_changes_requested', actor: SAMPLE_VIEWER, text: 'requested changes', hoursAgo: 30, rule: 'quiet', seen: true },
-      { kind: 'commits_pushed', actor: 'pim', text: 'pushed: Hash chunk names from the entry path', hoursAgo: 3, rule: 'loud' },
-      { kind: 'commits_pushed', actor: 'pim', text: 'pushed: Keep the vendor chunk name fixed', hoursAgo: 2.6, rule: 'loud' },
-      { kind: 'commits_pushed', actor: 'pim', text: 'pushed: Stable chunk names for the toolbar', hoursAgo: 2.2, rule: 'loud' },
-      { kind: 'bot_comment', actor: 'reviewbot[bot]', text: 'commented: "No issues found in 9 files"', hoursAgo: 2.1, rule: 'quiet', isBot: true },
-      { kind: 'bot_comment', actor: 'sizebot[bot]', text: 'commented: "toolbar.js -18 kB"', hoursAgo: 2, rule: 'quiet', isBot: true },
+      { kind: 'review_changes_requested', actor: SAMPLE_VIEWER, text: 'requested changes: The chunk names change on every build, which busts the CDN cache.', hoursAgo: 30, rule: 'quiet', sourceId: 'review-1960-0', seen: true },
+      { kind: 'commits_pushed', actor: 'pim', text: 'pushed: Hash chunk names from the entry path', hoursAgo: 3, rule: 'loud', sourceId: 'sha1960-b' },
+      { kind: 'commits_pushed', actor: 'pim', text: 'pushed: Keep the vendor chunk name fixed', hoursAgo: 2.6, rule: 'loud', sourceId: 'sha1960-c' },
+      { kind: 'commits_pushed', actor: 'pim', text: 'pushed: Stable chunk names for the toolbar', hoursAgo: 2.2, rule: 'loud', sourceId: 'sha1960' },
+      { kind: 'bot_comment', actor: 'reviewbot[bot]', text: 'commented: No issues found in 9 files.', hoursAgo: 2.1, rule: 'quiet', isBot: true, sourceId: 'issuecomment-1960-reviewbot' },
+      { kind: 'bot_comment', actor: 'sizebot[bot]', text: 'commented: toolbar.js -18 kB', hoursAgo: 2, rule: 'quiet', isBot: true, sourceId: 'issuecomment-1960-sizebot' },
     ]),
     ...sampleEvents(clock, 1963, [
-      { kind: 'review_changes_requested', actor: SAMPLE_VIEWER, text: 'requested changes', hoursAgo: 20, rule: 'quiet', seen: true },
+      { kind: 'review_changes_requested', actor: SAMPLE_VIEWER, text: 'requested changes: Inlining drops the long cache on the icon sprite.', hoursAgo: 20, rule: 'quiet', sourceId: 'review-1963-0', seen: true },
     ]),
     ...sampleEvents(clock, 1972, [
-      { kind: 'review_requested', actor: 'rowan', text: 'requested @team-platform', hoursAgo: 3, rule: 'loud' },
+      { kind: 'review_requested', actor: 'rowan', text: 'requested a review from acme/team-platform', hoursAgo: 3, rule: 'loud' },
     ]),
     ...sampleEvents(clock, 1980, [
-      { kind: 'comment', actor: 'sol', text: 'commented: "quarantine job is green on master"', hoursAgo: 8, rule: 'quiet', seen: true },
+      { kind: 'comment', actor: 'sol', text: 'commented: The quarantine job is green on master.', hoursAgo: 8, rule: 'quiet', sourceId: 'issuecomment-1980-1', seen: true },
     ]),
     ...sampleEvents(clock, 1982, [
-      { kind: 'comment', actor: 'nell', text: 'commented: "needed for the cache warm-up"', hoursAgo: 9, rule: 'quiet', seen: true },
+      { kind: 'comment', actor: 'nell', text: 'commented: Needed for the cache warm-up.', hoursAgo: 9, rule: 'quiet', sourceId: 'issuecomment-1982-1', seen: true },
     ]),
     // Unread with an open PR and loud news: urgent, so the row stays visible while Other work is folded.
     ...sampleEvents(clock, 1984, [
-      { kind: 'comment', actor: 'pia', text: 'commented: "does CI need more disk for the cold-storage tests?"', hoursAgo: 0.5, rule: 'loud' },
+      { kind: 'comment', actor: 'pia', text: 'commented: Does CI need more disk for the cold-storage tests?', hoursAgo: 0.5, rule: 'loud', sourceId: 'issuecomment-1984-1' },
     ]),
     ...sampleEvents(clock, 1985, [
-      { kind: 'comment', actor: 'gus', text: 'commented: "buffer capped at 50 MB"', hoursAgo: 30, rule: 'quiet', seen: true },
+      { kind: 'comment', actor: 'gus', text: 'commented: Buffer capped at 50 MB.', hoursAgo: 30, rule: 'quiet', sourceId: 'issuecomment-1985-1', seen: true },
     ]),
     ...sampleEvents(clock, 1987, [
-      { kind: 'comment', actor: 'gus', text: 'commented: "presets ship behind a flag"', hoursAgo: 20, rule: 'quiet', seen: true },
+      { kind: 'comment', actor: 'gus', text: 'commented: Presets ship behind a flag.', hoursAgo: 20, rule: 'quiet', sourceId: 'issuecomment-1987-1', seen: true },
     ]),
     ...sampleEvents(clock, 1988, [
-      { kind: 'comment', actor: 'tove', text: 'commented: "index build takes 4 minutes"', hoursAgo: 2, rule: 'quiet' },
+      { kind: 'comment', actor: 'tove', text: 'commented: The index build takes 4 minutes.', hoursAgo: 2, rule: 'quiet', sourceId: 'issuecomment-1988-1' },
     ]),
     // Read up to the merge: the merge is the only unseen news.
     ...sampleEvents(clock, 1989, [
-      { kind: 'comment', actor: 'nell', text: 'commented: "Badge colours match the design tokens now."', hoursAgo: 3, rule: 'quiet', sourceId: 'issuecomment-1989-1', seen: true },
-      { kind: 'review_approved', actor: 'nell', text: 'approved', hoursAgo: 2, rule: 'quiet', seen: true },
-      { kind: 'merged', actor: 'bram', text: 'merged it', hoursAgo: 1, rule: 'quiet' },
+      { kind: 'comment', actor: 'nell', text: 'commented: Badge colours match the design tokens now.', hoursAgo: 3, rule: 'quiet', sourceId: 'issuecomment-1989-1', seen: true },
+      { kind: 'review_approved', actor: 'nell', text: 'approved', hoursAgo: 2, rule: 'quiet', sourceId: 'review-1989-0', seen: true },
+      { kind: 'merged', actor: 'bram', text: 'merged', hoursAgo: 1, rule: 'quiet' },
     ]),
     ...sampleEvents(clock, 1955, [
       // Loud, but the PR is only found (no notification): the tile stays calm, whose turn says your move.
@@ -969,7 +986,7 @@ function buildGlances(clock: SampleClock): Glance[] {
     }),
     sampleGlance(clock, 1822, {
       verdict: 'LOOK_CLOSER',
-      forYou: 'Nobody from platform looked. It changes what the flaky-test report reads.',
+      forYou: 'lyra and sol approved, so platform has looked. It changes what the flaky-test report reads.',
       does: 'Shards from timing JSON.',
       risk: 'Medium.',
       othersSaid: '2 approvals.',
@@ -1014,6 +1031,141 @@ function buildGlances(clock: SampleClock): Glance[] {
       risk: 'Low. A version bump, nothing platform owns.',
       othersSaid: 'koa approved.',
     }),
+    // Most open PRs have a glance, as on a healthy install. #1945 (catch-up at start), #1808
+    // (failed, Retry) and #1988 (skipped by the agent-call cap) have none, so those states show.
+    sampleGlance(clock, 1934, {
+      verdict: 'LOOK_CLOSER',
+      forYou: 'ines asks platform whether the new runner labels clash with yours.',
+      does: 'Adds a Terraform module for a self-hosted ingestion runner pool.',
+      risk: 'Medium. A label that matches a platform runner would pull platform jobs onto the pool.',
+      othersSaid: 'No reviews yet; ines asked platform directly.',
+    }),
+    sampleGlance(clock, 1925, {
+      verdict: 'LOOKS_SAFE',
+      forYou: 'A pinned linter bump. Nothing in it touches CI or runners.',
+      does: 'Bumps ruff from 0.6 to 0.7 in the Python SDK.',
+      risk: 'Low. New lint rules could fail CI, nothing changes at runtime.',
+      othersSaid: 'No human comments.',
+    }),
+    sampleGlance(clock, 1966, {
+      verdict: 'LOOK_CLOSER',
+      forYou: 'client-approvers is asked to sign off; the retry cap changes how long a failed upload holds on.',
+      does: 'Retries uploads with jittered backoff, capped at 30s.',
+      risk: 'Medium. A 30s cap can outlast a client timeout.',
+      othersSaid: 'No reviews yet.',
+    }),
+    sampleGlance(clock, 1967, {
+      verdict: 'LOOKS_SAFE',
+      forYou: 'koa keeps client-approvers posted. Docs only.',
+      does: 'Documents the new retry settings and their defaults.',
+      risk: 'Low. Docs only.',
+      othersSaid: 'No reviews yet.',
+    }),
+    sampleGlance(clock, 1960, {
+      verdict: 'LOOK_CLOSER',
+      forYou: 'pim pushed stable chunk names, which is what you asked for.',
+      does: 'Splits the toolbar into its own bundle; chunk names come from the entry path.',
+      risk: 'Low. Names stay the same across builds, so the CDN cache holds.',
+      othersSaid: 'You asked for changes; reviewbot found no issues.',
+    }),
+    sampleGlance(clock, 1963, {
+      verdict: 'LOOK_CLOSER',
+      forYou: 'Still as you left it: tove has not answered your sprite question.',
+      does: 'Inlines SVG icons under 4 kB into the bundle.',
+      risk: 'Low. Inlined icons lose the long cache of the sprite.',
+      othersSaid: 'You asked for changes.',
+    }),
+    sampleGlance(clock, 1932, {
+      verdict: 'LOOK_CLOSER',
+      forYou: 'Only the ingestion workflow file belongs to platform; the rest is the RFC.',
+      does: 'Proposes a self-hosted runner pool for ingestion CI and changes one workflow.',
+      risk: 'Medium. One more runner pool to run and patch.',
+      othersSaid: 'No reviews yet.',
+    }),
+    sampleGlance(clock, 1950, {
+      verdict: 'LOOKS_SAFE',
+      forYou: 'Your PR fell out of the merge queue because its checks never finished.',
+      does: 'Caches the pnpm store in the devbox CI image.',
+      risk: 'Low. A stale cache only slows the first install.',
+      othersSaid: 'lyra approved.',
+    }),
+    sampleGlance(clock, 1975, {
+      verdict: 'LOOKS_SAFE',
+      forYou: 'Your PR is testing in the merge queue.',
+      does: 'Pins every Depot runner image by digest instead of :latest.',
+      risk: 'Low. An image update becomes a PR, not a surprise.',
+      othersSaid: 'rowan approved.',
+    }),
+    sampleGlance(clock, 1977, {
+      verdict: 'LOOKS_SAFE',
+      forYou: 'Your PR is submitted to the merge queue and waits for its checks.',
+      does: 'Pins the macOS runner image by digest.',
+      risk: 'Low. Same image, pinned.',
+      othersSaid: 'rowan approved.',
+    }),
+    sampleGlance(clock, 1978, {
+      verdict: 'LOOKS_SAFE',
+      forYou: 'You approved; it waits in the merge queue.',
+      does: 'Drops the floating :latest tag from the runner config.',
+      risk: 'Low. The images are pinned by digest.',
+      othersSaid: 'You approved.',
+    }),
+    sampleGlance(clock, 1955, {
+      verdict: 'LOOKS_SAFE',
+      forYou: 'nell asks you to review the Playwright browser pin.',
+      does: 'Pins the Playwright browser version so e2e runs stop drifting.',
+      risk: 'Low. A browser update becomes a PR.',
+      othersSaid: 'No reviews yet.',
+    }),
+    sampleGlance(clock, 1980, {
+      verdict: 'LOOKS_SAFE',
+      forYou: 'The quarantine job sol drives; your retry report builds on it.',
+      does: 'Runs quarantined tests in their own job that never blocks a merge.',
+      risk: 'Medium. A real failure in a quarantined test waits until someone looks.',
+      othersSaid: 'sol says the job is green on master.',
+    }),
+    sampleGlance(clock, 1981, {
+      verdict: 'LOOKS_SAFE',
+      forYou: 'Your PR; sol has the review.',
+      does: 'Reports how often quarantined tests retry.',
+      risk: 'Low. A report, nothing blocks on it.',
+      othersSaid: 'No reviews yet.',
+    }),
+    sampleGlance(clock, 1982, {
+      verdict: 'LOOKS_SAFE',
+      forYou: 'Adds the Depot cache host to the egress allowlist your team keeps.',
+      does: 'Allows outbound traffic from the runners to the Depot cache host.',
+      risk: 'Low. One more host the runners may reach.',
+      othersSaid: 'nell says the cache warm-up needs it.',
+    }),
+    sampleGlance(clock, 1984, {
+      verdict: 'LOOK_CLOSER',
+      forYou: 'pia asks whether CI needs more disk for the cold-storage tests; that is a CI question.',
+      does: 'Moves recordings older than 30 days to cold storage.',
+      risk: 'Medium. Recordings move between stores.',
+      othersSaid: 'pia asked about CI disk.',
+    }),
+    sampleGlance(clock, 1985, {
+      verdict: 'LOOKS_SAFE',
+      forYou: 'Replay player work. Nothing in it touches CI.',
+      does: 'Caps the replay player buffer at 50 MB.',
+      risk: 'Low. Long recordings load in parts.',
+      othersSaid: 'gus says the buffer is capped at 50 MB.',
+    }),
+    sampleGlance(clock, 1986, {
+      verdict: 'LOOKS_SAFE',
+      forYou: 'Your PR; omar has the review.',
+      does: 'Runs usage exports on the shared runners.',
+      risk: 'Low. Exports wait in the shared queue on busy mornings.',
+      othersSaid: 'No reviews yet.',
+    }),
+    sampleGlance(clock, 1987, {
+      verdict: 'LOOKS_SAFE',
+      forYou: 'Alerting work. Nothing in it touches CI.',
+      does: 'Adds presets for common alert thresholds.',
+      risk: 'Low. Ships behind a flag.',
+      othersSaid: 'gus says presets ship behind a flag.',
+    }),
   ];
 }
 
@@ -1029,7 +1181,7 @@ function buildTiles(): Tile[] {
       [[1904, 1907]],
       [1907],
     ),
-    sampleTile(TOPIC.depot, 'stack', `stack:${sampleKey(1851)}`, 'rowan/depot: e2e layer waits on you', [
+    sampleTile(TOPIC.depot, 'stack', `stack:${sampleKey(1851)}`, "rowan/depot: cache layer has lyra's question for you", [
       // Stack layers the sync pulled in by branch: no thread, no glance, no agent call.
       pulledIn(1851, 'stack layer below #1902'),
       pulledIn(1862, 'stack layer below #1902'),
@@ -1046,7 +1198,7 @@ function buildTiles(): Tile[] {
     sampleTile(TOPIC.ci, 'single', `pr:${sampleKey(1790)}`, 'Django test timeout raised to 45 min', [
       pinged(1790, 'subscribed'),
     ]),
-    sampleTile(TOPIC.ci, 'single', `pr:${sampleKey(1822)}`, 'Timing-based shards, no platform review', [
+    sampleTile(TOPIC.ci, 'single', `pr:${sampleKey(1822)}`, 'Timing-based shards, approved by lyra and sol', [
       pinged(1822, 'review_requested'),
     ]),
     sampleTile(TOPIC.ci, 'single', `pr:${sampleKey(1945)}`, 'Your shard retry cap waits on lyra', [pinged(1945, 'author')]),
@@ -1086,7 +1238,7 @@ function buildTiles(): Tile[] {
     sampleTile(TOPIC.quarantine, 'single', `pr:${sampleKey(1980)}`, 'sol runs quarantined tests apart', [pinged(1980, 'subscribed')]),
     sampleTile(TOPIC.quarantine, 'single', `pr:${sampleKey(1981)}`, 'Your retry report waits on sol', [found(1981, 'own_open', 'your open PR')]),
     sampleTile(TOPIC.egress, 'single', `pr:${sampleKey(1982)}`, 'nell allows the Depot cache host', [pinged(1982, 'subscribed')]),
-    sampleTile(TOPIC.replayStorage, 'single', `pr:${sampleKey(1984)}`, 'pia asks about CI disk for cold storage', [pinged(1984, 'subscribed')]),
+    sampleTile(TOPIC.replayStorage, 'single', `pr:${sampleKey(1984)}`, 'pia: does CI need more disk for cold storage?', [pinged(1984, 'subscribed')]),
     sampleTile(TOPIC.replayPlayer, 'single', `pr:${sampleKey(1985)}`, 'Replay player buffer capped', [pinged(1985, 'subscribed')]),
     sampleTile(TOPIC.usageExports, 'single', `pr:${sampleKey(1986)}`, 'Your export runner change waits on omar', [found(1986, 'own_open', 'your open PR')]),
     sampleTile(TOPIC.alertPresets, 'single', `pr:${sampleKey(1987)}`, 'Alert threshold presets', [pinged(1987, 'subscribed')]),

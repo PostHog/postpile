@@ -12,7 +12,7 @@ describe('format over the fake engine', () => {
     expect(topic).not.toBeNull();
     const topicText = formatTopic(topic!);
     expect(topicText).toContain('[unread] set: Four PRs change how Turbo caches');
-    expect(topicText).toContain('! acme/app#1902: lyra mentioned you');
+    expect(topicText).toContain('! acme/app#1902: lyra asked you');
 
     const safe = await engine.getPr('acme/app#1921');
     expect(formatPr(safe!, await engine.listPrEvents('acme/app#1921'))).toContain('LOOKS_SAFE: Landing it apart from #1904');
@@ -20,7 +20,7 @@ describe('format over the fake engine', () => {
     const pr = await engine.getPr('acme/app#1902');
     const prText = formatPr(pr!, await engine.listPrEvents('acme/app#1902'));
     // Every event, the folded bot ones too: the pane's activity groups and folds them.
-    expect(prText).toMatch(/\[loud\]  lyra mentioned you: does the warm-up job need a feature flag/);
+    expect(prText).toMatch(/\[loud\]  lyra asked you: @you does the warm-up job need a feature flag/);
     expect(prText).toMatch(/\[quiet\]  deploy-bot deployed a preview/);
   });
 
