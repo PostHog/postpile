@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import type { InstructionsProposal, LastingPointProposal } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { useTopicChat } from '../api/chat.ts';
+import { useAgentOffReason } from '../api/tools.ts';
 import { proposalKey } from '../lib/instructions.ts';
 import { Button } from './Button.tsx';
 import { LockIcon } from './icons.tsx';
@@ -56,6 +57,11 @@ function keepFor<T>(kept: Map<string, T>, topicId: string, value: T | null): voi
  * `waitingPoints`, `waitingInstructions`): leaving a point alone still means
  * just this once, but leaving the pane does not throw anything away. A new
  * turn replaces the point and the diff only once it is in.
+ *
+ * While the agent is off or paused (claude missing, logged out or at its
+ * limit), Send and "For all topics" are disabled with the headline as their
+ * tooltip, and one quiet line above the input says so. Typing still works:
+ * the text waits for the agent like any unsent text.
  */
 export function AgentPane(props: AgentPaneProps) {
   const actions = useActions();
@@ -76,6 +82,7 @@ export function AgentPane(props: AgentPaneProps) {
   const messageCount = chat.data?.length ?? 0;
   // A turn sent before the pane was closed and opened again is still running in the provider: no second send meanwhile.
   const running = actions.isBusy(`chat:${props.topicId}`);
+  const agentOff = useAgentOffReason();
   // Gone as soon as the stored chat has the turn, even before send() clears it: no doubled bubble.
   const waiting = pending !== null && pending.count === messageCount ? pending.text : null;
 
@@ -106,7 +113,7 @@ export function AgentPane(props: AgentPaneProps) {
 
   async function send() {
     const text = draft.trim();
-    if (text === '' || pending !== null || running) {
+    if (text === '' || pending !== null || running || agentOff !== null) {
       return;
     }
     setPending({ text, count: messageCount });
@@ -188,8 +195,8 @@ export function AgentPane(props: AgentPaneProps) {
             <button
               type="button"
               className={linkButton}
-              disabled={actions.isBusy('instructions:propose')}
-              title="Proposes it as a change to your general instructions, shown as a diff first"
+              disabled={actions.isBusy('instructions:propose') || agentOff !== null}
+              title={agentOff ?? 'Proposes it as a change to your general instructions, shown as a diff first'}
               onClick={() => void keepForAllTopics()}
             >
               For all topics
@@ -198,8 +205,9 @@ export function AgentPane(props: AgentPaneProps) {
         )}
         {instructions && <InstructionsProposalCard key={proposalKey(instructions)} proposal={instructions} onDone={() => setInstructions(null)} />}
       </div>
+      {agentOff && <p className="shrink-0 border-t border-hairline px-[34px] pt-2.5 text-[11.5px] text-hint">{agentOff} You can still type; Send waits for the agent.</p>}
       <form
-        className="flex shrink-0 items-end gap-1.5 border-t border-hairline py-3 pr-[22px] pl-[22px]"
+        className={`flex shrink-0 items-end gap-1.5 py-3 pr-[22px] pl-[22px] ${agentOff ? '' : 'border-t border-hairline'}`}
         onSubmit={(event) => {
           event.preventDefault();
           void send();
@@ -221,7 +229,7 @@ export function AgentPane(props: AgentPaneProps) {
           aria-label="Message to the agent"
           autoFocus
         />
-        <Button type="submit" variant="primary" size="md" disabled={pending !== null || running || draft.trim() === ''}>
+        <Button type="submit" variant="primary" size="md" title={agentOff ?? undefined} disabled={pending !== null || running || agentOff !== null || draft.trim() === ''}>
           Send
         </Button>
       </form>

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ToolsView } from '@postpile/core';
 import { TOOL_PATH_HINT } from '@postpile/core';
-import { checkLine, claudeDetailUnderGh, retryLine, toolsFooter, toolsNotice, toolsRefetchMs } from './tools.ts';
+import { agentOffReason, checkLine, claudeDetailUnderGh, retryLine, toolsFooter, toolsNotice, toolsRefetchMs } from './tools.ts';
 
 function view(overrides: { gh?: Partial<ToolsView['gh']>; claude?: Partial<ToolsView['claude']>; checkedAt?: string | null; nextCheckAt?: string | null } = {}): ToolsView {
   return {
@@ -79,5 +79,21 @@ describe('claudeDetailUnderGh', () => {
   it('keeps the claude text when gh is logged out and has no hint', () => {
     const v = view({ gh: { state: 'logged_out', detail: 'Log in.' }, claude: { ...missingClaude, detail: `Rules only. ${TOOL_PATH_HINT}` } });
     expect(claudeDetailUnderGh(v.gh, v.claude)).toBe(`Rules only. ${TOOL_PATH_HINT}`);
+  });
+});
+
+// Bug hunt MEM-A-11 / OPS-A-13: agent-only controls are disabled with this as their tooltip.
+describe('agentOffReason', () => {
+  const now = new Date('2026-10-10T22:00:00');
+  it('is null while the agent is on or before the status loaded', () => {
+    expect(agentOffReason(view(), now)).toBeNull();
+    expect(agentOffReason(undefined, now)).toBeNull();
+  });
+
+  it('gives the headline and when the agent is tried again', () => {
+    const paused = { ...view({ claude: { state: 'limited', headline: 'Agent features are paused: Claude usage limit reached', retryAt: '2026-10-10T22:25:00' } }), agentOn: false };
+    expect(agentOffReason(paused, now)).toBe('Agent features are paused: Claude usage limit reached. Trying again at 22:25, in 25 min.');
+    const missing = { ...view({ claude: { state: 'missing', headline: 'Agent features are off: claude not found' } }), agentOn: false };
+    expect(agentOffReason(missing, now)).toBe('Agent features are off: claude not found.');
   });
 });

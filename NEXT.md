@@ -1793,6 +1793,14 @@ the app meanwhile.
   (upgrader, new install that skipped setup), and it waits for a running
   cleanup and a usable gh.
 
+- **Agent-only controls are disabled while the agent is off or paused**
+  (2026-10-10, owner, applying the bug hunt's recommendation for Q5
+  (MEM-A-11, OPS-A-13); DESIGN.md "Missing tools" › Without claude): chat
+  Send and "For all topics", Draft / Rewrite with agent and Recheck show
+  disabled with the claude headline as the tooltip; memory stays readable
+  and the input stays typeable. Greying the ✨ pills of current verdicts
+  while the agent is off was offered as optional and not done.
+
 - **Agent notes on PRs are advisory and anchored to the PR's state**
   (2026-10-08, design agreed with the reporting agent, checked by Codex;
   DESIGN.md "Agent notes on PRs"): notes never change turn, unread, done,

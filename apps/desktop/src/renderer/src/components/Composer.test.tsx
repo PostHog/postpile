@@ -85,7 +85,7 @@ function stubWrites(enabled: boolean, options: { agentOn?: boolean; draftCalls?:
       return json(status);
     }
     if (path.endsWith('/api/tools') && options.agentOn !== undefined) {
-      return json({ agentOn: options.agentOn, canSync: true, gh: { state: 'ok' }, claude: { state: options.agentOn ? 'ok' : 'missing' }, checkedAt: null, nextCheckAt: null });
+      return json({ agentOn: options.agentOn, canSync: true, gh: { state: 'ok' }, claude: { state: options.agentOn ? 'ok' : 'missing', headline: 'Agent features are off: claude not found', retryAt: null }, checkedAt: null, nextCheckAt: null });
     }
     if (path.endsWith('/draft-review-note') && options.draftCalls) {
       options.draftCalls.push(path);
@@ -217,6 +217,8 @@ describe('Composer drafting on open', () => {
 
     await waitFor(() => expect(screen.getByText('Approve with note').closest('button')?.title).toBe('Approves on GitHub with this note.'));
     expect(draftCalls).toEqual([]);
+    // Bug hunt MEM-A-11: the agent button is off too, with the headline as why.
+    expect(screen.getByText('Draft with agent').closest('button')).toMatchObject({ disabled: true, title: 'Agent features are off: claude not found.' });
   });
 });
 

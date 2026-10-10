@@ -26,6 +26,11 @@ The renderer shows what the local API returned and nothing else.
 When something is not wired yet (no endpoint, no data), render it `disabled`
 with a `title` that says why. Hiding it makes the gap invisible to the next agent.
 
+The same goes for a control that only the agent can serve (chat Send, Draft
+with agent, Recheck): while the agent is off or paused, disable it with
+`useAgentOffReason()` (`api/tools.ts`) as both the `disabled` test and the
+`title`, instead of letting the click fail in a toast.
+
 ## Data: typed query hooks, types from core
 
 - One file per resource in `api/`: `topics.ts` (`useTopics`, `useTopic`,

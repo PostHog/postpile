@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import type { FactRef, MemoryCorrection, MemoryTarget, StaleReason } from '@postpile/core';
+import { useAgentOffReason } from '../api/tools.ts';
 import { staleLabel } from '../lib/memory.ts';
 import { staleBadge } from '../lib/staleness.ts';
 import { MemoryButton } from './MemoryButton.tsx';
@@ -41,6 +42,7 @@ interface MemoryLineProps {
 export function MemoryLine(props: MemoryLineProps) {
   const [whyOpen, setWhyOpen] = useState(false);
   const [recheckOpen, setRecheckOpen] = useState(false);
+  const agentOff = useAgentOffReason();
   const fixedTo = props.fixedTo ?? null;
   const settled = props.corrected || fixedTo !== null;
   const greyed = props.stale !== null || settled;
@@ -81,7 +83,8 @@ export function MemoryLine(props: MemoryLineProps) {
           {!settled && props.canRecheck && (
             <button
               type="button"
-              title="Ask the agent to check this against GitHub. You decide what happens after."
+              disabled={agentOff !== null}
+              title={agentOff ?? 'Ask the agent to check this against GitHub. You decide what happens after.'}
               onClick={() => setRecheckOpen(true)}
               className="shrink-0 text-[11px] text-hint hover:text-accent hover:underline"
             >
