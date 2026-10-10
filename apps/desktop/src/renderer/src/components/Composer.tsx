@@ -1,7 +1,7 @@
 import type { ReviewNoteSource } from '@postpile/core';
 import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent } from 'react';
 import { useActions } from '../api/actions.tsx';
-import { useTools } from '../api/tools.ts';
+import { useAgentOffReason, useTools } from '../api/tools.ts';
 import type { GithubWrite } from '../lib/guard.ts';
 import { composeKey, paneDrafts, type ComposeTarget, type PaneDrafts } from '../lib/pane-drafts.ts';
 import { reviewNoteSource } from '../lib/review-note.ts';
@@ -241,6 +241,7 @@ export function Composer(props: ComposerProps) {
   // empty. The ref also keeps StrictMode's second effect run from calling twice.
   const autoDrafted = useRef(false);
   const agentOff = tools.data?.agentOn === false;
+  const agentOffTitle = useAgentOffReason();
   useEffect(() => {
     if (!props.draftsOnOpen || autoDrafted.current || props.drafting || blocked !== null || agentOff || compose.draftOf(key) !== '') {
       return;
@@ -265,8 +266,8 @@ export function Composer(props: ComposerProps) {
       <div className="relative flex">
         <button
           type="button"
-          disabled={props.drafting}
-          title={text.trim() === '' ? 'The agent writes it from the PR and its topic' : 'The agent rewrites it from your words'}
+          disabled={props.drafting || agentOff}
+          title={agentOffTitle ?? (text.trim() === '' ? 'The agent writes it from the PR and its topic' : 'The agent rewrites it from your words')}
           onClick={() => void draft()}
           className="absolute top-2 left-2 flex h-6 items-center gap-1 rounded-full bg-segment px-2.5 text-[11px] font-semibold text-ink-2 inset-ring inset-ring-hairline hover:bg-chip disabled:opacity-60"
         >

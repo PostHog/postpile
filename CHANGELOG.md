@@ -4,6 +4,11 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ## Unreleased
 
+### Added
+
+- "Your instructions" lists the standing rules you accepted for every topic, each with Remove. What you told the agent in a topic shows one line each, also with Remove. Both offer Undo.
+- Inbox Decline offers Undo for a few seconds. A declined suggestion is never made again, so a misclick used to lose it for good.
+
 ### Changed
 
 - Opening a topic or searching no longer marks anything read on GitHub. Only a tile or PR you click yourself is marked after it stays open for 1.5 s; the tile PostPile picks for you stays unread until you click it or press Mark read.
@@ -48,6 +53,27 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - The interruptions question waits for a running cleanup and for gh to work, instead of opening on top of them.
 - The title bar says "waiting for your answer" while the first sync waits for the inbox question, and "GitHub unreachable" when the poll is off and GitHub cannot be reached.
 - With both gh and claude broken, the note says to fix gh first and shows the `toolPath` hint once.
+- A PR without a current verdict no longer shows "Rechecking…" on its Approve and Mark read when nothing is checking it. "Checking…" now only shows while a new glance is on its way; with the agent off or paused, a used-up agent limit or a failed glance the pill says "No verdict" and the tooltip says why.
+- Chat Send, "Draft with agent", "Rewrite with agent" and Recheck are disabled while the agent is off or paused, with the reason as the tooltip. Before, they failed only after the click. The agent pane says so above the input; you can still type.
+- A glance that waits for the agent limit says "Not looked at yet" and when the next sync reads it, in place of "Waiting (agent limit)" and "agent-call cap".
+- A failed glance no longer shows the parser's reason ("left out of the answer") in the card; it moved to the tooltip.
+- The glance card keeps its height while a new glance is written, so Approve no longer moves under the cursor when it lands.
+- Long words without spaces (cache keys, branch names) in a glance wrap instead of running out of the pane.
+- A topic's Status and Goal lines now show "out of date" when the PR moved since they were written. Before, only their "Why?" said so.
+- "Keep it" on a recheck that found a line still right now marks it "checked by you". Before, the line kept saying "Out of date".
+- Facts the app shows as out of date now have Recheck, whatever they are about.
+- People in the dossier have "Why?", like every other line.
+- The Recheck dialog names what it checks, such as "Recheck topic status" or "Recheck #1902's assessment". When a recheck finds the agent's assessment of a PR no longer holds, "Mark out of date" has the agent write it again on your next look.
+- A line you marked wrong, forgot or fixed offers Restore until the next update, and a forgotten "What you're working on" thread until the next refresh. Before, only the toast's Undo for a few seconds could take it back.
+- A topic without a dossier says "No dossier yet". An empty facts list on a PR now reads "No lasting facts about this PR yet." instead of "Nothing learned".
+- A care the agent noticed reads "noticed, not kept as a rule", or "from your chat", instead of "observed, unconfirmed".
+- Merging a topic keeps what you told the agent there: it moves to the target topic as "From Frontend build: …". It used to stop applying without a word.
+- A change proposed in "Your instructions" › "Change something" stays on screen when you leave the page and come back.
+- Version history names the line you saved when you edited a proposal before accepting, not the line the agent proposed.
+- Split and move suggestions list the PRs they move, and how many stack layers come along.
+- A lasting point in the topic's agent chat has three buttons, including "Just this once", and a short line confirms your pick.
+- A lesson kept in a topic says where it came from ("From your review on #4521: …") instead of reading as your own words, and Teach shows your note above the line the agent wrote from it.
+- An agent answer that arrives while you look at another topic shows a toast with Open.
 
 ## 0.27.2 (2026-10-09)
 

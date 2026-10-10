@@ -1,10 +1,12 @@
 import type { ReactNode } from 'react';
 import type { PendingProposals, RuleProposal, TopicListItem, TopicProposal } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
-import { proposalMeta, proposalText } from '../lib/proposals.ts';
+import { useTopic } from '../api/topics.ts';
+import { mergeCarriedLines, proposalMeta, proposalPrs, proposalText } from '../lib/proposals.ts';
 import { ageLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
 import { Button } from './Button.tsx';
+import { ProposalPrList } from './ProposalPrList.tsx';
 
 function Card(props: { title: string; meta: string; reason: string; onDecide: (accept: boolean) => void; busy: boolean; children?: ReactNode }) {
   return (
@@ -27,10 +29,17 @@ function Card(props: { title: string; meta: string; reason: string; onDecide: (a
   );
 }
 
-function TopicProposalCard(props: { proposal: TopicProposal; topicName: (topicId: string) => string }) {
+function TopicProposalCard(props: { proposal: TopicProposal; topics: TopicListItem[]; topicName: (topicId: string) => string }) {
   const actions = useActions();
   const now = useNow();
   const { proposal } = props;
+  const movesPrs = proposal.kind === 'split' || proposal.kind === 'move';
+  const source = useTopic(movesPrs ? proposal.topicId : null);
+  const prs = source.data ? proposalPrs(proposal, source.data.tiles) : null;
+  const carried = mergeCarriedLines(
+    proposal,
+    props.topics.map((item) => item.topic),
+  );
   return (
     <Card
       title={`${proposalText(proposal, props.topicName)}?`}
@@ -38,7 +47,14 @@ function TopicProposalCard(props: { proposal: TopicProposal; topicName: (topicId
       reason={proposal.reason}
       busy={actions.isBusy(`proposal:${proposal.id}`)}
       onDecide={(accept) => void actions.decideProposal(proposal.id, accept)}
-    />
+    >
+      {prs && <ProposalPrList named={prs.named} stackLayers={prs.stackLayers} />}
+      {carried.length > 0 && (
+        <p className="text-[11.5px] text-muted">
+          What you told the agent there moves along: {carried.map((line) => `“${line}”`).join(' ')}
+        </p>
+      )}
+    </Card>
   );
 }
 
@@ -79,7 +95,7 @@ export function InboxPane(props: { proposals: PendingProposals | undefined; topi
       )}
       <div className="flex max-w-[680px] flex-col gap-3">
         {topics.map((proposal) => (
-          <TopicProposalCard key={proposal.id} proposal={proposal} topicName={topicName} />
+          <TopicProposalCard key={proposal.id} proposal={proposal} topics={props.topics} topicName={topicName} />
         ))}
         {rules.map((proposal) => (
           <RuleProposalCard key={proposal.id} proposal={proposal} topicName={topicName} />

@@ -264,6 +264,26 @@ export function dossierLineIssue(dossier: Dossier, path: string, world: VerifyWo
   return null;
 }
 
+/** Dossier lines the read model checks on top of verifyDossier: they follow their own refs. */
+const HEADER_PATHS = ['status', 'goal'];
+
+/**
+ * The status and goal lines' issues (`dossierLineIssue`), for the read
+ * model's stale flags. Kept out of verifyDossier on purpose: withoutStaleClaims
+ * must never drop the status line before a dossier is stored; a push only
+ * means the line may be behind until the next update.
+ */
+export function headerLineIssues(dossier: Dossier, world: VerifyWorld): DossierIssue[] {
+  const issues: DossierIssue[] = [];
+  for (const path of HEADER_PATHS) {
+    const reason = dossierLineIssue(dossier, path, world);
+    if (reason !== null) {
+      issues.push({ path, reason });
+    }
+  }
+  return issues;
+}
+
 /**
  * The dossier without the claims verifyDossier flags. Used before a dossier
  * is stored, so a claim the model keeps cannot force an update on every

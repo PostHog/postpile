@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
-import type { DossierCare, DossierView } from '@postpile/core';
-import { blockRefs, claimStaleReason, fixedText } from '../lib/memory.ts';
+import { dossierPersonText, type DossierView } from '@postpile/core';
+import { blockRefs, careText, claimStaleReason, fixedText } from '../lib/memory.ts';
 import { lineTarget } from '../lib/sources.ts';
 import { prNumber } from '../lib/tiles.ts';
 import { ageLabel } from '../lib/time.ts';
@@ -16,10 +16,6 @@ function Section(props: { title: string; children: ReactNode }) {
   );
 }
 
-function careText(care: DossierCare): string {
-  return care.source === 'observed' ? `${care.text} (observed, unconfirmed)` : `${care.text} (${care.source})`;
-}
-
 /** The full dossier behind the "Dossier" disclosure: questions, PRs, cares, people, version history. */
 export function DossierPanel(props: { dossier: DossierView; topicId: string; updating: boolean }) {
   const now = useNow();
@@ -27,6 +23,7 @@ export function DossierPanel(props: { dossier: DossierView; topicId: string; upd
   const { dossier } = view;
   const wrong = (text: string) => ({ kind: 'wrong' as const, factId: null, topicId, text });
   const corrected = (text: string) => view.correctedClaims.includes(text);
+  const kept = (text: string) => view.confirmedClaims.includes(text);
   const why = (path: string) => lineTarget(topicId, view, path);
   const questionRefs = blockRefs(dossier.openQuestions);
   return (
@@ -41,6 +38,7 @@ export function DossierPanel(props: { dossier: DossierView; topicId: string; upd
             updating={props.updating}
             corrected={corrected(question.text)}
             fixedTo={fixedText(view, question.text)}
+            kept={kept(question.text)}
             refs={questionRefs[index]}
             canRecheck
             why={why(`openQuestions[${index}]`)}
@@ -61,6 +59,7 @@ export function DossierPanel(props: { dossier: DossierView; topicId: string; upd
             updating={props.updating}
             corrected={corrected(`${entry.prKey}: ${entry.role}`)}
             fixedTo={fixedText(view, `${entry.prKey}: ${entry.role}`)}
+            kept={kept(`${entry.prKey}: ${entry.role}`)}
             why={why(`timeline[${index}]`)}
           >
             <span className="font-mono text-[11px] text-muted">#{prNumber(entry.prKey)}</span> {entry.role}
@@ -79,6 +78,7 @@ export function DossierPanel(props: { dossier: DossierView; topicId: string; upd
             updating={props.updating}
             corrected={corrected(care.text)}
             fixedTo={fixedText(view, care.text)}
+            kept={kept(care.text)}
             canRecheck
             canForget
             why={why(`userCares[${index}]`)}
@@ -90,10 +90,20 @@ export function DossierPanel(props: { dossier: DossierView; topicId: string; upd
 
       <Section title="People">
         {dossier.people.length === 0 && <p className="text-xs text-hint">Nobody noted yet.</p>}
-        {dossier.people.map((person) => {
-          const text = `@${person.login} ${person.role}: ${person.note}`;
+        {dossier.people.map((person, index) => {
+          const text = dossierPersonText(person);
           return (
-            <MemoryLine key={person.login} correction={wrong(text)} stale={null} updating={props.updating} corrected={corrected(text)} fixedTo={fixedText(view, text)} canRecheck>
+            <MemoryLine
+              key={person.login}
+              correction={wrong(text)}
+              stale={claimStaleReason(`people[${index}]`, view.staleClaims)}
+              updating={props.updating}
+              corrected={corrected(text)}
+              fixedTo={fixedText(view, text)}
+              kept={kept(text)}
+              canRecheck
+              why={why(`people[${index}]`)}
+            >
               <span className="font-medium text-ink">@{person.login}</span> <span className="text-muted">{person.role}</span>
               {person.note && ` · ${person.note}`}
             </MemoryLine>

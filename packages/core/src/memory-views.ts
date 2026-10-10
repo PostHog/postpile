@@ -62,6 +62,11 @@ export interface DossierView {
   correctedClaims: string[];
   /** Lines the user replaced with a recheck's fix since this version; shown fixed until the next update. */
   fixedClaims: FixedClaim[];
+  /**
+   * Lines the user kept through Recheck ("Keep it") since this version. Matched
+   * by text; such a line counts as checked, so it loses its stale flag.
+   */
+  confirmedClaims: string[];
 }
 
 export interface FixedClaim {

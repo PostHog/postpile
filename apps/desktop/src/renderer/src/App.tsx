@@ -483,7 +483,13 @@ export function App() {
             {!showSetup && !wideList && <PaneDivider label="Resize the tile column" left={`calc(${columns.sidebar} + ${columns.tiles})`} {...dividerProps('tiles')} />}
           </div>
           <StatusFooter topics={items} detail={topic.data} live={live.data} />
-          <Toast onShowActionLog={() => go({ ...shown, pane: 'notifications' })} />
+          <Toast
+            onShowActionLog={() => go({ ...shown, pane: 'notifications' })}
+            onOpenAgent={(topicId) => {
+              go({ pane: 'topic', topicId, tileId: null, prKey: null });
+              openAgent(topicId, '');
+            }}
+          />
           <InboxStartDialog />
           {/* Installs that never picked an interruptions mode get asked once, never on top of setup. */}
           <InterruptionsPrompt blocked={showSetup || !setupLoaded} />

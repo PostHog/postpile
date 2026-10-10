@@ -141,6 +141,29 @@ describe('RunnerAgentService.updateDossier line sources', () => {
     expect(result.dossier.timeline[1]?.refs).toEqual([]);
   });
 
+  it('gives people sources: the ids cited, or the old ones for a person kept as they were', async () => {
+    const { runner, service } = setup();
+    const answer = dossierAnswer();
+    const prRef = { kind: 'pr' as const, prKey: 'acme/app#1', sourceId: null, url: null, at: '2026-09-01T00:00:00Z', headOid: null };
+    const input = sourcesInput();
+    const previous = input.previous ? { ...input.previous, dossier: { ...input.previous.dossier, people: [{ login: 'alice', role: 'driver' as const, note: 'drives it', refs: [prRef] }] } } : null;
+    runner.answer('dossier_update', {
+      ...answer,
+      dossier: {
+        ...answer.dossier,
+        people: [
+          { login: '@alice', role: 'driver', note: 'drives it' },
+          { login: 'bob', role: 'reviewer', note: 'reviews the cache PR', refs: ['e2'] },
+        ],
+      },
+    });
+
+    const { dossier } = await service.updateDossier({ ...input, previous });
+
+    expect(dossier.people[0]?.refs).toEqual([prRef]);
+    expect(dossier.people[1]?.refs?.map((ref) => ref.sourceId)).toEqual(['r1']);
+  });
+
   it('lists chat turns and user sources in the prompt, and records the turns in the input hash', async () => {
     const { runner, service } = setup();
     runner.answer('dossier_update', dossierAnswer());
@@ -247,7 +270,7 @@ describe('RunnerAgentService.updateDossier tolerance', () => {
 
     expect(result.dossier.openQuestions[0]).toMatchObject({ text: 'Release builds?', askedBy: null });
     expect(result.dossier.status).toBe('active');
-    expect(result.dossier.people).toEqual([{ login: 'alice', role: 'contributor', note: '' }]);
+    expect(result.dossier.people).toEqual([{ login: 'alice', role: 'contributor', note: '', refs: [], userRefs: [] }]);
     expect(result.dossier.timeline[0]).toMatchObject({ prKey: 'acme/app#1', role: '' });
     expect(result.dossier.userCares[0]).toMatchObject({ text: 'CI cost', source: 'observed' });
     expect(result.flags).toEqual([{ kind: 'needs_user', text: 'Decide', prKey: null }]);
@@ -264,7 +287,7 @@ describe('RunnerAgentService.updateDossier', () => {
 
     expect(result.inputHash).toBe(dossierInputHash(input));
     expect(result.model).toBe('claude-sonnet-5-5');
-    expect(result.dossier.people).toEqual([{ login: 'alice', role: 'driver', note: 'drives it' }]);
+    expect(result.dossier.people).toEqual([{ login: 'alice', role: 'driver', note: 'drives it', refs: [], userRefs: [] }]);
     expect(result.dossier.timeline.map((e) => e.prKey)).toEqual(['acme/app#1', 'acme/app#2']);
     expect(result.dossier.openQuestions[0]).toEqual({
       text: 'Release builds?',

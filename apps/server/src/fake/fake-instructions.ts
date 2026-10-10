@@ -1,13 +1,14 @@
-import type {
-  ChatMessage,
-  InstructionsChatReply,
-  InstructionsDecision,
-  InstructionsProposal,
-  InstructionsProposalReply,
-  InstructionsSaveResult,
-  InstructionsVersion,
-  InstructionsView,
-  LessonView,
+import {
+  editedInstructionsSummary,
+  type ChatMessage,
+  type InstructionsChatReply,
+  type InstructionsDecision,
+  type InstructionsProposal,
+  type InstructionsProposalReply,
+  type InstructionsSaveResult,
+  type InstructionsVersion,
+  type InstructionsView,
+  type LessonView,
 } from '@postpile/core';
 import { SampleClock } from './sample-builders.ts';
 import { cleanPoint, nearDuplicate, withPointPlaced } from './fake-placement.ts';
@@ -145,7 +146,8 @@ export class FakeInstructions {
     return version.sourceChatMessageId === null ? null : (this.findMessage(version.sourceChatMessageId)?.text ?? null);
   }
 
-  view(): InstructionsView {
+  /** The engine's view without the accepted rules, which FakeMemory holds. */
+  view(): Omit<InstructionsView, 'rules'> {
     const latest = this.latest();
     return {
       text: latest?.text ?? '',
@@ -233,7 +235,7 @@ export class FakeInstructions {
       const rebased = this.proposeAgain(source);
       return { ok: false, message: 'Your instructions changed since this was proposed. Here is the change again on top of them.', undoToken: null, savedVersion: null, rebased };
     }
-    const summary = text === proposal.text.trim() ? proposal.summary : `${proposal.summary} (edited)`;
+    const summary = text === proposal.text.trim() ? proposal.summary : editedInstructionsSummary(proposal.baseText, text);
     const version = this.write(`${text}\n`, summary, source);
     const refresh = this.deps.dossiersToRefresh();
     const message = `Saved as version ${version}. Will refresh ${refresh} topic ${refresh === 1 ? 'dossier' : 'dossiers'} on next sync.`;

@@ -32,6 +32,7 @@ describe('memory text', () => {
       history: [],
       correctedClaims: [],
       fixedClaims: [],
+      confirmedClaims: [],
     };
 
     const text = formatDossier(view).join('\n');

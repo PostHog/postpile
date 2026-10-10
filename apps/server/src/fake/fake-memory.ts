@@ -10,6 +10,7 @@ import type {
   Feedback,
   FixedClaim,
   FullPr,
+  MemoryRestore,
   MemoryRecheckRequest,
   MemorySources,
   MemoryTarget,
@@ -24,6 +25,7 @@ import type {
   TopicStatusLine,
 } from '@postpile/core';
 import {
+  appendTailoring,
   isBigClaim,
   describeFactRef,
   describeLineSources,
@@ -32,6 +34,7 @@ import {
   emptyAgentCallStats,
   factCheck,
   findDossierLine,
+  headerLineIssues,
   lineCheck,
   parseFixedClaimNote,
   topicChangesSince,
@@ -112,6 +115,24 @@ export class FakeMemory {
       .filter((entry) => entry.topicId === topicId && entry.createdAt > since && entry.kind === 'memory_fixed')
       .map((entry) => parseFixedClaimNote(entry.note))
       .filter((claim) => claim !== null);
+  }
+
+  private confirmedClaims(topicId: string, since: string, feedback: Feedback[]): string[] {
+    return feedback.filter((entry) => entry.topicId === topicId && entry.createdAt > since && entry.kind === 'memory_confirmed').map((entry) => entry.note);
+  }
+
+  /** Like MemoryActions.restoreLine: the line's wrong, forget and fix rows since the latest version. */
+  pendingCorrections(input: MemoryRestore, feedback: Feedback[]): Feedback[] {
+    const since = this.latest(input.topicId)?.createdAt ?? '';
+    return feedback.filter((entry) => {
+      if (entry.topicId !== input.topicId || entry.createdAt <= since) {
+        return false;
+      }
+      if (entry.kind === 'memory_fixed') {
+        return parseFixedClaimNote(entry.note)?.text === input.text;
+      }
+      return (entry.kind === 'memory_wrong' || entry.kind === 'memory_forget') && entry.note === input.text;
+    });
   }
 
   /** Same rules as the engine: dossier relation (or the sample's), a user correction wins; the fake has no new events. */
@@ -242,7 +263,9 @@ export class FakeMemory {
       ? this.memory.facts.filter((fact) => fact.topicId === topicId && (fact.recordedAt > seen.updatedAt || (fact.expiredAt ?? '') > seen.updatedAt))
       : [];
     const versionsNewestFirst = [...(this.memory.dossiers.get(topicId) ?? [])].reverse();
-    const staleClaims = this.staleClaims(topicId);
+    const prs = new Map(this.data.prs.map((pr) => [pr.key, pr]));
+    const world = { prs, memberKeys: this.membersOf(topicId), now: this.now().toISOString() };
+    const staleClaims = [...this.staleClaims(topicId), ...headerLineIssues(latest.dossier, world)];
     return {
       version: latest.version,
       createdAt: latest.createdAt,
@@ -254,6 +277,7 @@ export class FakeMemory {
       history: dossierVersionNotes(versionsNewestFirst),
       correctedClaims: this.correctedClaims(topicId, latest.createdAt, feedback),
       fixedClaims: this.fixedClaims(topicId, latest.createdAt, feedback),
+      confirmedClaims: this.confirmedClaims(topicId, latest.createdAt, feedback),
     };
   }
 
@@ -278,6 +302,40 @@ export class FakeMemory {
     return this.memory.ruleProposals.filter((proposal) => proposal.status === 'pending');
   }
 
+  /** Accepted rules for every topic, oldest first, for "Your instructions" › Accepted rules. */
+  acceptedGlobalRules(): RuleProposal[] {
+    return this.memory.ruleProposals
+      .filter((proposal) => proposal.status === 'accepted' && proposal.topicId === null)
+      .toSorted((a, b) => (a.decidedAt ?? '').localeCompare(b.decidedAt ?? ''));
+  }
+
+  /** Undo of a Decline: the rule waits again. */
+  reopenRule(proposalId: string): void {
+    const proposal = this.memory.ruleProposals.find((candidate) => candidate.id === proposalId);
+    if (proposal?.status === 'rejected') {
+      proposal.status = 'pending';
+      proposal.decidedAt = null;
+    }
+  }
+
+  /** "Remove" on an accepted global rule, like the engine: it reads as rejected. Returns how to undo it, or null when there is no such rule. */
+  removeRule(proposalId: string): { text: string; undo: () => void } | null {
+    const proposal = this.memory.ruleProposals.find((candidate) => candidate.id === proposalId);
+    if (!proposal || proposal.status !== 'accepted' || proposal.topicId !== null) {
+      return null;
+    }
+    const decidedAt = proposal.decidedAt;
+    proposal.status = 'rejected';
+    proposal.decidedAt = this.now().toISOString();
+    return {
+      text: proposal.text,
+      undo: () => {
+        proposal.status = 'accepted';
+        proposal.decidedAt = decidedAt;
+      },
+    };
+  }
+
   /** An accepted topic rule is appended to the topic's tailoring, like the real engine does. */
   decideRuleProposal(proposalId: string, accept: boolean, topics: Topic[]): ActionResult {
     const proposal = this.memory.ruleProposals.find((candidate) => candidate.id === proposalId);
@@ -292,10 +350,10 @@ export class FakeMemory {
     proposal.decidedAt = at;
     const topic = topics.find((candidate) => candidate.id === proposal.topicId);
     if (accept && topic) {
-      topic.tailoring = topic.tailoring ? `${topic.tailoring}\n${proposal.text}` : proposal.text;
+      topic.tailoring = appendTailoring(topic.tailoring, proposal.text);
       topic.updatedAt = at;
     }
-    return { ok: true, message: accept ? 'Accepted' : 'Rejected', undoToken: null };
+    return { ok: true, message: accept ? 'Accepted' : 'Declined. The agent will not propose this rule again.', undoToken: null };
   }
 
   markTopicSeen(topicId: string): void {

@@ -827,6 +827,10 @@ export type FeedbackKind =
   | 'unmute'
   | 'tailoring_kept'
   | 'tailoring_once'
+  /** The user removed a line from the topic's tailoring. The note holds the line. */
+  | 'tailoring_removed'
+  /** The user removed an accepted standing rule. The note holds the rule. */
+  | 'rule_removed'
   /** A fact or dossier line the user marked wrong. The note holds the line. */
   | 'memory_wrong'
   /** A "what you care about" line the user asked to forget. The note holds the line. */
@@ -836,7 +840,9 @@ export type FeedbackKind =
   /** The user accepted a recheck's corrected line. The note is fixedClaimNote(). */
   | 'memory_fixed'
   /** A thread of the "what you're working on" digest the user asked to forget. The note holds its title, then its detail. */
-  | 'work_context_forget';
+  | 'work_context_forget'
+  /** A recheck found the PR's glance no longer holds and the user marked it out of date. The note holds the recheck's reason. */
+  | 'glance_outdated';
 
 /** A user correction. The newest few per topic go back into prompts. */
 export interface Feedback {

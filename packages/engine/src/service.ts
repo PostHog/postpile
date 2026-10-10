@@ -42,6 +42,7 @@ import type {
   RecordedSyncProgress,
   MemoryCorrection,
   MemoryRecheckRequest,
+  MemoryRestore,
   MemoryRecheckResult,
   MemorySources,
   MemoryTarget,
@@ -448,9 +449,14 @@ export interface EngineService {
   topicChat(topicId: string, message: string): Promise<ChatReply>;
   /** keep=true stores the text as topic tailoring; false logs it as "just this once". */
   decideTailoring(topicId: string, text: string, keep: boolean): Promise<ActionResult>;
+  /** "Remove" on one line of the topic's tailoring; logged, with an undo token. */
+  removeTailoringLine(topicId: string, line: string): Promise<ActionResult>;
+  /** A decline carries an undo token: Undo puts the proposal back in the Inbox. */
   decideTopicProposal(proposalId: string, accept: boolean): Promise<ActionResult>;
-  /** Accepting a global rule adds it to every prompt; a topic rule is appended to that topic's tailoring. */
+  /** Accepting a global rule adds it to every prompt; a topic rule is appended to that topic's tailoring. A decline can be undone. */
   decideRuleProposal(proposalId: string, accept: boolean): Promise<ActionResult>;
+  /** "Remove" on an accepted rule for every topic (Your instructions › Accepted rules); logged, with an undo token. */
+  removeStandingRule(ruleId: string): Promise<ActionResult>;
   /** Moves the topic's seen cursor to now, so "changes since seen" starts over. */
   markTopicSeen(topicId: string): Promise<ActionResult>;
   /** "Archive now" on a topic with nothing left; refused while anything is open or unread. */
@@ -474,6 +480,8 @@ export interface EngineService {
    * sources, the dossier and recent activity. Writes nothing. Capped per day.
    */
   recheckMemory(request: MemoryRecheckRequest): Promise<MemoryRecheckResult>;
+  /** "Restore" on a struck-through dossier line: takes back its corrections until the next dossier update. Local only. */
+  restoreMemoryLine(input: MemoryRestore): Promise<ActionResult>;
   /** "Why?" on a fact or dossier line: its sources and whether it still checks out. Null for an unknown target. */
   getMemorySources(target: MemoryTarget): Promise<MemorySources | null>;
 
@@ -523,6 +531,8 @@ export interface EngineService {
   sweepWorkContext(): Promise<WorkContextSweepResult>;
   /** Forget on a digest thread: logged as feedback, dropped by the next sweep. Undo token for UNDO_WINDOW_MS. */
   forgetWorkThread(input: WorkThreadForget): Promise<ActionResult>;
+  /** "Restore" on a forgotten thread, until the next sweep drops it. */
+  restoreWorkThread(input: WorkThreadForget): Promise<ActionResult>;
   /** Saves the sweep's skip list to the user's config.json; read again on every sweep. */
   setSweepSkip(patterns: string[]): Promise<ActionResult>;
   /** The daily sweep on a timer (desktop app): at start, then every 30 minutes if due. A second call is ignored. */

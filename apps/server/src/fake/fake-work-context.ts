@@ -160,6 +160,15 @@ export class FakeWorkContext {
     return { ok: true, message, version: this.version, stats: STATS };
   }
 
+  /** Like WorkContextMemory.restore: a forgotten thread of the current version stays after all. */
+  restore(input: WorkThreadForget): ActionResult {
+    const thread = this.threads()[input.index];
+    if (input.version !== this.version || !thread || !this.forgotten.delete(input.index)) {
+      return { ok: false, message: 'Nothing to restore: that thread is not forgotten.', undoToken: null };
+    }
+    return { ok: true, message: `Restored "${thread.title}". The next sweep keeps it.`, undoToken: null };
+  }
+
   forget(input: WorkThreadForget): { result: ActionResult; undo: () => void } | null {
     const thread = this.threads()[input.index];
     if (input.version !== this.version || !thread) {

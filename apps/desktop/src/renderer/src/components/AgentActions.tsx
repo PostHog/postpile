@@ -15,6 +15,9 @@ const OFF_LOOKS: Record<MarkReadBlock, string> = {
   high: 'bg-status-bad-soft text-status-bad',
   asks_for_you: 'bg-honey-soft text-honey-ink',
   rechecking: OFF_NEUTRAL,
+  agent_off: OFF_NEUTRAL,
+  agent_limit: OFF_NEUTRAL,
+  glance_failed: OFF_NEUTRAL,
 };
 
 /**

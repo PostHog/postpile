@@ -4,7 +4,7 @@ import { findDossierLine } from './dossier-lines.ts';
 import { at, makeComment, makeCommit, makeEvent, makeFact, makeFactRef, makePr, makeReview, makeThread } from './fixtures.ts';
 import type { Dossier, UserRef } from './memory.ts';
 import { describeFactRef, describeLineSources, describeUserRef, factCheck, lineCheck } from './memory-sources.ts';
-import { dossierLineIssue, type VerifyWorld } from './verify.ts';
+import { dossierLineIssue, headerLineIssues, verifyDossier, withoutStaleClaims, type VerifyWorld } from './verify.ts';
 
 const pr = makePr({
   number: 1,
@@ -45,6 +45,8 @@ describe('findDossierLine', () => {
     expect(findDossierLine(d, 'userCares[0]')?.text).toBe('Cache keys');
     expect(findDossierLine(d, 'openQuestions[5]')).toBeNull();
     expect(findDossierLine(d, 'people[0]')).toBeNull();
+    const withPerson = dossier({ people: [{ login: 'lyra', role: 'reviewer', note: 'owns the image', refs: [makeFactRef({ prKey: pr.key })] }] });
+    expect(findDossierLine(withPerson, 'people[0]')).toMatchObject({ text: '@lyra reviewer: owns the image', sources: { refs: [makeFactRef({ prKey: pr.key })], userRefs: [] } });
   });
 });
 
@@ -65,6 +67,23 @@ describe('dossierLineIssue', () => {
     expect(dossierLineIssue(deleted, 'userCares[0]', world())).toBe('source_deleted');
     const missing = dossier({ goalSources: { refs: [makeFactRef({ prKey: 'acme/app#77' })], userRefs: [] } });
     expect(dossierLineIssue(missing, 'goal', world())).toBe('pr_missing');
+  });
+});
+
+describe('headerLineIssues', () => {
+  it('flags the status and goal lines from their own refs, which verifyDossier and withoutStaleClaims leave alone', () => {
+    const d = dossier({ goalSources: { refs: [makeFactRef({ prKey: 'acme/app#77' })], userRefs: [] } });
+    expect(headerLineIssues(d, world())).toEqual([
+      { path: 'status', reason: 'head_moved' },
+      { path: 'goal', reason: 'pr_missing' },
+    ]);
+    expect(verifyDossier(d, world()).map((issue) => issue.path)).not.toContain('status');
+    expect(withoutStaleClaims(d, world()).statusNote).toBe('no blockers');
+  });
+
+  it('finds nothing on a status written at the current head', () => {
+    const current = dossier({ statusSources: { refs: [makeFactRef({ prKey: pr.key, headOid: 'h2' })], userRefs: [] } });
+    expect(headerLineIssues(current, world())).toEqual([]);
   });
 });
 

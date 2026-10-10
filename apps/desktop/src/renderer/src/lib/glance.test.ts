@@ -16,18 +16,21 @@ describe('glanceStateText', () => {
     expect(text({ state: 'none' }).pill).toBe('No glance');
   });
 
-  it('offers Retry on a failed glance, with the reason', () => {
-    const failed = text({ state: 'failed', gap: { reason: 'failed', detail: 'timeout', at: AT } });
-    expect(failed).toMatchObject({ pill: 'Glance failed', retry: true, problem: true });
-    expect(failed.card).toContain('(timeout)');
+  // Bug hunt B-A-22: the parser's reason ("left out of the answer") meant nothing in the card.
+  it('offers Retry on a failed glance, the parser reason only for the tooltip', () => {
+    const failed = text({ state: 'failed', gap: { reason: 'failed', detail: 'left out of the answer', at: AT } });
+    expect(failed).toMatchObject({ pill: 'Glance failed', retry: true, problem: true, detail: 'left out of the answer' });
+    expect(failed.card).toBe('Glance failed: the agent gave no usable answer for this PR.');
   });
 
-  it('names the limit and when the next full sync comes', () => {
+  // Bug hunt UI-A-14: plain words instead of "agent-call cap".
+  it('says it was not looked at yet, why, and when the next sync comes', () => {
     const daily = text({ state: 'capped', gap: { reason: 'daily_cap', detail: '', at: AT }, nextAutoSyncAt: '2026-09-29T10:41:30.000Z' });
-    expect(daily.card).toBe('Waiting: daily agent limit reached, next full sync in 42 min.');
+    expect(daily.pill).toBe('Not looked at yet');
+    expect(daily.card).toBe("Not looked at yet: PostPile used up today's agent calls. It reads this one in the next sync, in about 42 min.");
     const syncCap = text({ state: 'capped', gap: { reason: 'call_cap', detail: '', at: AT }, nextAutoSyncAt: null });
-    expect(syncCap.card).toBe('Waiting: the last sync hit its agent-call cap, the next sync writes it.');
-    expect(text({ state: 'capped', nextAutoSyncAt: '2026-09-29T10:00:20.000Z' }).card).toContain('next full sync in a minute');
+    expect(syncCap.card).toBe('Not looked at yet: PostPile ran out of agent calls in the last sync. It reads this one in the next sync.');
+    expect(text({ state: 'capped', nextAutoSyncAt: '2026-09-29T10:00:20.000Z' }).card).toContain('in about a minute');
   });
 });
 

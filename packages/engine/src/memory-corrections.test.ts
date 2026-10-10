@@ -1,4 +1,4 @@
-import { makeFact, makeFactRef, viewer } from '@postpile/core/fixtures';
+import { at, makeFact, makeFactRef, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness, NOW, type Harness } from './testing/fakes.ts';
 import { reviewRequestedPr } from './testing/prs.ts';
@@ -49,6 +49,41 @@ describe('correctMemory', () => {
     expect(dossier?.history.map((note) => note.version)).toEqual([2, 1]);
   });
 
+  it('restores a struck-through dossier line until the next update', async () => {
+    const { h, setNow } = movableHarness();
+    topicWithPrs(h, 'depot', [reviewRequestedPr(1)]);
+    await h.engine.sync({ agentJobs: ['dossiers'] });
+    setNow(LATER);
+    await h.engine.correctMemory({ kind: 'forget', factId: null, topicId: 'depot', text: 'CI cost' });
+    await h.engine.correctMemory({ kind: 'fix', factId: null, topicId: 'depot', text: 'Goal: ship', fixedText: 'Goal: ship on Depot' });
+    // Long after the undo window: Restore still works, because the line still shows struck through.
+    setNow('2026-09-04T00:00:00.000Z');
+
+    expect(await h.engine.restoreMemoryLine({ topicId: 'depot', text: 'CI cost' })).toMatchObject({ ok: true });
+    expect(await h.engine.restoreMemoryLine({ topicId: 'depot', text: 'Goal: ship' })).toMatchObject({ ok: true });
+    const dossier = (await h.engine.getTopic('depot'))?.dossier;
+    expect(dossier?.correctedClaims).toEqual([]);
+    expect(dossier?.fixedClaims).toEqual([]);
+    expect(await h.engine.restoreMemoryLine({ topicId: 'depot', text: 'CI cost' })).toMatchObject({ ok: false });
+  });
+
+  it('marks a glance out of date with feedback on its PR, so it reads stale until rewritten; undoable', async () => {
+    const h = makeHarness();
+    const pr = reviewRequestedPr(1);
+    topicWithPrs(h, 'depot', [pr]);
+    await h.engine.sync({ maxAgentCalls: 50 });
+    expect((await h.engine.getPr(pr.key))?.glanceStale).toBe(false);
+
+    const result = await h.engine.correctMemory({ kind: 'wrong', factId: null, topicId: null, text: 'lyra approved since', prKey: pr.key, fromRecheck: true });
+
+    expect(result.ok).toBe(true);
+    expect(h.store.feedback.recentForTopic('depot', 5)[0]).toMatchObject({ kind: 'glance_outdated', prKey: pr.key, note: 'lyra approved since' });
+    expect((await h.engine.getPr(pr.key))?.glanceStale).toBe(true);
+    await h.engine.undo(result.undoToken);
+    expect(h.store.feedback.recentForTopic('depot', 5)).toEqual([]);
+    expect((await h.engine.getPr(pr.key))?.glanceStale).toBe(false);
+  });
+
   it('refuses unknown facts and topics', async () => {
     const h = makeHarness();
     expect((await h.engine.correctMemory({ kind: 'wrong', factId: 'nope', topicId: null, text: '' })).ok).toBe(false);
@@ -76,6 +111,33 @@ describe('accepting a recheck', () => {
     expect((await h.engine.undo(result.undoToken)).ok).toBe(true);
     expect(h.store.facts.get('f1')).toEqual(fact);
     expect(h.store.feedback.recentForTopic('depot', 5)).toEqual([]);
+  });
+
+  it('keeps a fact whose head moved fresh on the next read, and undo pins it back', async () => {
+    const h = makeHarness();
+    const pr = reviewRequestedPr(1);
+    topicWithPrs(h, 'depot', [pr]);
+    h.store.prs.upsert(pr, at(0));
+    const fact = makeFact({
+      id: 'f1',
+      topicId: 'depot',
+      subject: { kind: 'pr', key: pr.key },
+      predicate: 'status',
+      object: null,
+      text: 'waiting on CI',
+      refs: [makeFactRef({ prKey: pr.key, headOid: 'older-head' })],
+    });
+    h.store.facts.add(fact);
+    const factStale = async () => (await h.engine.listFacts({ topicId: 'depot' }))[0]?.stale;
+    expect(await factStale()).toBe('head_moved');
+
+    const result = await h.engine.correctMemory({ kind: 'confirm', factId: 'f1', topicId: null, text: fact.text });
+    expect(h.store.facts.get('f1')?.refs[0]?.headOid).toBe(pr.headOid);
+    expect(await factStale()).toBeNull();
+
+    await h.engine.undo(result.undoToken);
+    expect(h.store.facts.get('f1')).toEqual(fact);
+    expect(await factStale()).toBe('head_moved');
   });
 
   it('replaces a fact with the fix, same refs, and undo brings the old one back', async () => {

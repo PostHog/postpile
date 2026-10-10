@@ -1,14 +1,15 @@
 import { INSTRUCTIONS_MAX_CHARS } from '@postpile/agent';
-import type {
-  ChatMessage,
-  InstructionsChatReply,
-  InstructionsDecision,
-  InstructionsProposalReply,
-  InstructionsProposal,
-  InstructionsSaveResult,
-  InstructionsVersion,
-  InstructionsView,
-  Lesson,
+import {
+  editedInstructionsSummary,
+  type ChatMessage,
+  type InstructionsChatReply,
+  type InstructionsDecision,
+  type InstructionsProposalReply,
+  type InstructionsProposal,
+  type InstructionsSaveResult,
+  type InstructionsVersion,
+  type InstructionsView,
+  type Lesson,
 } from '@postpile/core';
 import type { Store } from '@postpile/store';
 import type { InstructionsHistory } from '../instructions/history.ts';
@@ -58,6 +59,7 @@ export class InstructionsActions {
       path: this.history.file,
       versions,
       dossiersToRefresh: this.proposer.dossiersToRefresh(),
+      rules: this.store.ruleProposals.listAcceptedGlobal(),
     };
   }
 
@@ -155,7 +157,8 @@ export class InstructionsActions {
     if (`${text}\n` === current.text) {
       return saveFailed('Nothing to change: your instructions already say this.');
     }
-    const summary = text === proposal.text.trim() ? proposal.summary : `${proposal.summary} (edited)`;
+    // An edited accept names the user's own lines, not the ones the agent proposed.
+    const summary = text === proposal.text.trim() ? proposal.summary : editedInstructionsSummary(proposal.baseText, text);
     const saved = this.write(`${text}\n`, summary, source);
     const refresh = this.proposer.dossiersToRefresh();
     const message = `Saved as version ${saved.version}. Will refresh ${plural(refresh, 'topic dossier', 'topic dossiers')} on next sync.`;

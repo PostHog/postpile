@@ -199,6 +199,22 @@ describe('FakeEngine memory', () => {
 
     const topics = await engine.listTopics();
     expect(topics.map((item) => item.topic.id)).not.toContain('topic-frontend-build');
+    // Like the engine: the merged topic's tailoring joins the target's, saying where it came from.
+    expect((await engine.getTopic('topic-depot'))?.topic.tailoring).toContain('From Frontend build: Only cache changes.');
+  });
+
+  it('takes a Decline back on Undo, and removes a tailoring line with Undo', async () => {
+    const engine = new FakeEngine();
+    const declined = await engine.decideTopicProposal('proposal-merge-frontend', false);
+    expect(declined.undoToken).not.toBeNull();
+    expect((await engine.listProposals()).topics.map((p) => p.id)).not.toContain('proposal-merge-frontend');
+    await engine.undo(declined.undoToken);
+    expect((await engine.listProposals()).topics.map((p) => p.id)).toContain('proposal-merge-frontend');
+
+    const removed = await engine.removeTailoringLine('topic-frontend-build', 'Only cache changes.');
+    expect((await engine.getTopic('topic-frontend-build'))?.topic.tailoring).toBe('');
+    await engine.undo(removed.undoToken);
+    expect((await engine.getTopic('topic-frontend-build'))?.topic.tailoring).toBe('Only cache changes.');
   });
 
   it('refreshes sample PRs for an outside agent under the real rules', async () => {

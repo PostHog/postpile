@@ -207,9 +207,11 @@ export interface DossierPerson {
   login: string;
   role: DossierPersonRole;
   note: string;
+  refs?: FactRef[];
+  userRefs?: UserRef[];
 }
 
-// The userRefs, refs on timeline entries and cares, and goalSources /
+// The userRefs, refs on timeline entries, cares and people, and goalSources /
 // statusSources are optional: versions stored before lines carried sources
 // have none, and the UI shows "no source recorded" for them.
 

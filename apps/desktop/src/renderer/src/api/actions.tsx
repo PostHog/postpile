@@ -25,6 +25,7 @@ import type {
   McpConnectFrom,
   MemoryCorrection,
   MemoryRecheckRequest,
+  MemoryRestore,
   MemoryRecheckResult,
   OpenedReadResult,
   PendingWritesResult,
@@ -60,7 +61,7 @@ import { capNote } from '../lib/agent-stats.ts';
 import { writeBlockedReason, type GithubWrite } from '../lib/guard.ts';
 import { isTransientWriteFailure, writeFailureText, type PaneWrite } from '../lib/write-failure.ts';
 import { approvedMessage, batchMarkReadMessage } from '../lib/agent-actions.ts';
-import { markReadNotice, snoozeMessage } from '../lib/mark-read.ts';
+import { isMarkReadUndoToken, markReadNotice, snoozeMessage } from '../lib/mark-read.ts';
 import { approvedDetail, markedReadPr, markedReadTile, mutedTile, snoozedTile, withApprovedPrs, withTile, withTiles } from '../lib/optimistic.ts';
 import { newerReport } from '../lib/sync-report.ts';
 import { teamRoleNotice } from '../lib/team-roles.ts';
@@ -76,8 +77,6 @@ import { queryKeys } from './keys.ts';
 import { sendTelemetry } from './telemetry.ts';
 
 const NOTICE_MS = 6000;
-// Matches the engine's memory correction undo tokens.
-const MEMORY_UNDO_PREFIX = 'memory:';
 const PROBLEM_NOTICE_MS = 12000;
 /** Busy keys of the inbox cleanup's actions, one each (see withBusy). */
 export const CLEANUP_BUSY = {
@@ -103,6 +102,8 @@ export interface Notice {
   detail?: string | null;
   /** "Try again" on a failed write that can simply run again (a plain approve). */
   retry?: (() => void) | null;
+  /** The toast offers "Open": the agent pane of this topic, where an answer landed while another topic was on screen. */
+  openAgentTopicId?: string;
 }
 
 /** Reshapes the notice of a successful or failed action, e.g. the mark-read that leaves a tile your move. */
@@ -206,11 +207,21 @@ export interface Actions {
   undo(undoToken: string): Promise<void>;
   feedback(input: FeedbackInput): Promise<void>;
   unmute(eventId: string): Promise<void>;
-  decideTailoring(topicId: string, text: string, keep: boolean): Promise<void>;
+  /** True when it was stored (or logged, for just this once). */
+  decideTailoring(topicId: string, text: string, keep: boolean): Promise<boolean>;
+  /** "Remove" on one line the topic keeps in mind. Local; the toast offers Undo. */
+  removeTailoringLine(topicId: string, line: string): Promise<void>;
+  /** A Decline's toast offers Undo: it blocks the same suggestion for good. */
   decideProposal(proposalId: string, accept: boolean): Promise<void>;
   decideRuleProposal(proposalId: string, accept: boolean): Promise<void>;
+  /** "Remove" on an accepted rule for every topic. Local; the toast offers Undo. */
+  removeStandingRule(ruleId: string): Promise<void>;
+  /** A quiet toast when the agent answered on a topic whose pane is not on screen, with "Open". */
+  showAgentAnswered(topicId: string, topicName: string): void;
   /** "Forget", or accepting a recheck outcome. Local memory, not a GitHub write. The toast offers Undo. */
   correctMemory(input: MemoryCorrection): Promise<boolean>;
+  /** "Restore" on a struck-through dossier line: takes the correction back until the next update. Local only. */
+  restoreMemoryLine(input: MemoryRestore): Promise<boolean>;
   /** "Recheck": one agent call, nothing written. Null when the request itself failed. */
   recheckMemory(request: MemoryRecheckRequest): Promise<MemoryRecheckResult | null>;
   /** The repo menu's choice: one repo, or null for all. Local, quiet (no toast). */
@@ -309,6 +320,8 @@ export interface Actions {
   refreshWorkContext(): Promise<void>;
   /** "Forget" on a digest thread. Local only; the toast offers Undo. */
   forgetWorkThread(input: WorkThreadForget): Promise<boolean>;
+  /** "Restore" on a forgotten digest thread, until the next sweep. Local only. */
+  restoreWorkThread(input: WorkThreadForget): Promise<boolean>;
   /** Saves the sweep's skip list to the user's config.json. */
   saveSweepSkip(patterns: string[]): Promise<boolean>;
   /** Setup step 2: starts the sweep job (reads GitHub, one agent call); useSetupSweep polls it. */
@@ -990,8 +1003,8 @@ export function ActionsProvider(props: { children: ReactNode }) {
     topicMoves,
     // A background sync after this window's last "Sync now" is the newer one.
     lastSync: newerReport(lastSync, storedLastSync),
-    // Memory corrections carry undo tokens too, but only mark-reads wait to reach GitHub.
-    pendingMarkReads: pendingUndos.filter((entry) => !entry.token.startsWith(MEMORY_UNDO_PREFIX)).length,
+    // Local choices carry undo tokens too, but only mark-reads wait to reach GitHub.
+    pendingMarkReads: pendingUndos.filter((entry) => isMarkReadUndoToken(entry.token)).length,
     isBusy: (key) => busy.includes(key),
     blockedReason: (write) => writeBlockedReason(write, writes),
 
@@ -1071,9 +1084,13 @@ export function ActionsProvider(props: { children: ReactNode }) {
     unmute: async (eventId) => {
       await run(`unmute:${eventId}`, null, () => request('POST', `/api/events/${encodeURIComponent(eventId)}/unmute`));
     },
-    decideTailoring: async (topicId, text, keep) => {
+    decideTailoring: (topicId, text, keep) => {
       const path = `/api/topics/${encodeURIComponent(topicId)}/tailoring`;
-      await run(`tailoring:${topicId}`, null, () => request('POST', path, { text, keep }));
+      return run(`tailoring:${topicId}`, null, () => request('POST', path, { text, keep }));
+    },
+    removeTailoringLine: async (topicId, line) => {
+      const path = `/api/topics/${encodeURIComponent(topicId)}/tailoring/remove`;
+      await run(`tailoring:${topicId}:${line}`, null, () => request('POST', path, { line }));
     },
     decideProposal: async (proposalId, accept) => {
       const path = `/api/proposals/${encodeURIComponent(proposalId)}`;
@@ -1083,7 +1100,15 @@ export function ActionsProvider(props: { children: ReactNode }) {
       const path = `/api/rule-proposals/${encodeURIComponent(proposalId)}`;
       await run(`rule:${proposalId}`, null, () => request('POST', path, { accept }));
     },
+    removeStandingRule: async (ruleId) => {
+      const path = `/api/rule-proposals/${encodeURIComponent(ruleId)}/remove`;
+      await run(`rule:${ruleId}`, null, () => request('POST', path));
+    },
+    showAgentAnswered: (topicId, topicName) => {
+      setNotice({ id: Date.now(), tone: 'ok', message: `The agent answered on ${topicName || 'another topic'}.`, undoToken: null, snoozeTileId: null, openAgentTopicId: topicId });
+    },
     correctMemory: (input) => run(`correct:${input.factId ?? input.text}`, null, () => request('POST', '/api/memory/corrections', input)),
+    restoreMemoryLine: (input) => run(`restore:${input.topicId}:${input.text}`, null, () => request('POST', '/api/memory/restore', input)),
     recheckMemory,
     setRepoScope,
     setRepoQuiet,
@@ -1122,6 +1147,8 @@ export function ActionsProvider(props: { children: ReactNode }) {
     refreshWorkContext,
     forgetWorkThread: (input) =>
       run(`forget:${input.version}:${input.index}`, null, () => request('POST', '/api/work-context/forget', input)),
+    restoreWorkThread: (input) =>
+      run(`restore:${input.version}:${input.index}`, null, () => request('POST', '/api/work-context/restore', input)),
     saveSweepSkip: (patterns) => run('workContext:skip', null, () => request('PUT', '/api/work-context/skip-list', { patterns })),
     startSetupSweep,
     refineSetup,

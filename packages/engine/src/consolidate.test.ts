@@ -137,6 +137,44 @@ describe('Engine.consolidate', () => {
     expect(h.agent.dossierInputs[0]?.context.standingRules).toEqual(['Preview deploys are never mine.']);
   });
 
+  it('lists accepted global rules under the instructions; Remove takes one out of every prompt, and Undo puts it back', async () => {
+    const h = makeHarness();
+    topicWithPrs(h, 'depot', [reviewRequestedPr(1)]);
+    const rule = { text: 'Preview deploys are never mine.', topicId: null, evidenceFeedbackIds: [1, 2, 3], reason: 'said three times' };
+    h.agent.answerConsolidation(() => ({ ruleIdeas: [rule] }));
+    await h.engine.consolidate();
+    const [proposal] = (await h.engine.listProposals()).rules;
+    await h.engine.decideRuleProposal(proposal!.id, true);
+    expect((await h.engine.getInstructions()).rules.map((r) => r.text)).toEqual(['Preview deploys are never mine.']);
+
+    const removed = await h.engine.removeStandingRule(proposal!.id);
+
+    expect(removed.ok).toBe(true);
+    expect((await h.engine.getInstructions()).rules).toEqual([]);
+    expect(h.store.feedback.recent(1)[0]).toMatchObject({ kind: 'rule_removed', note: 'Preview deploys are never mine.' });
+    await h.engine.sync({ agentJobs: ['dossiers'] });
+    expect(h.agent.dossierInputs.at(-1)?.context.standingRules).toEqual([]);
+
+    expect((await h.engine.undo(removed.undoToken)).ok).toBe(true);
+    expect((await h.engine.getInstructions()).rules.map((r) => r.text)).toEqual(['Preview deploys are never mine.']);
+    expect(h.store.feedback.recent(5).map((f) => f.kind)).not.toContain('rule_removed');
+    expect((await h.engine.removeStandingRule('nope')).ok).toBe(false);
+  });
+
+  it('can take a declined rule back for a few seconds', async () => {
+    const h = makeHarness();
+    topicWithPrs(h, 'depot', [reviewRequestedPr(1)]);
+    h.agent.answerConsolidation(() => ({ ruleIdeas: [{ text: 'Ignore cache warmers.', topicId: null, evidenceFeedbackIds: [], reason: 'repeated' }] }));
+    await h.engine.consolidate();
+    const [proposal] = (await h.engine.listProposals()).rules;
+
+    const declined = await h.engine.decideRuleProposal(proposal!.id, false);
+    expect((await h.engine.listProposals()).rules).toEqual([]);
+    expect((await h.engine.undo(declined.undoToken)).ok).toBe(true);
+
+    expect((await h.engine.listProposals()).rules.map((r) => r.id)).toEqual([proposal!.id]);
+  });
+
   it('appends an accepted topic rule to the topic tailoring', async () => {
     const h = makeHarness();
     topicWithPrs(h, 'depot', [reviewRequestedPr(1)]);

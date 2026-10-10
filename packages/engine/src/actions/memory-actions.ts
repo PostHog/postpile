@@ -1,13 +1,17 @@
 import { randomBytes } from 'node:crypto';
 import {
+  appendTailoring,
   fixedClaimNote,
   isLiveProposal,
+  parseFixedClaimNote,
   UNDO_WINDOW_MS,
   type ActionResult,
   type Fact,
+  type Feedback,
   type FeedbackKind,
   type MemoryCorrection,
   type MemoryCorrectionKind,
+  type MemoryRestore,
   type PendingProposals,
   type PrKey,
   type RelationOverride,
@@ -17,6 +21,7 @@ import { UNSORTED_TOPIC_ID } from '../board.ts';
 import { newFactId } from '../ids.ts';
 import { relationOverrideKey } from '../memory/placement.ts';
 import { failed, ok } from './results.ts';
+import { UndoWindow } from './undo-window.ts';
 
 /** Undo tokens of memory corrections; mark-read tokens have no prefix. */
 const MEMORY_UNDO_PREFIX = 'memory:';
@@ -56,12 +61,28 @@ interface MemoryUndo {
   override: { key: string; previous: string | null } | null;
 }
 
+/** Feedback kinds that strike a dossier line through until the next update; Restore takes them back. */
+const RESTORABLE_KINDS: FeedbackKind[] = ['memory_wrong', 'memory_forget', 'memory_fixed'];
+
+/** Enough recent topic feedback to find every pending correction of a line. */
+const FEEDBACK_SCANNED_FOR_RESTORE = 50;
+
+/** The dossier line a correction is about: a fix's note holds the old line first. */
+function correctedLine(entry: Feedback): string {
+  return entry.kind === 'memory_fixed' ? (parseFixedClaimNote(entry.note)?.text ?? entry.note) : entry.note;
+}
+
 /** User decisions on engine memory: standing rules, "I have seen this topic" and corrections. */
 export class MemoryActions {
+  /** Declined and removed standing rules, for the toast's Undo. */
+  readonly ruleUndos: UndoWindow;
+
   constructor(
     private readonly store: Store,
     private readonly now: () => Date,
-  ) {}
+  ) {
+    this.ruleUndos = new UndoWindow('rule:', now);
+  }
 
   listProposals(): PendingProposals {
     const now = this.now().toISOString();
@@ -81,12 +102,15 @@ export class MemoryActions {
     const topic = proposal.topicId === null ? null : this.store.topics.get(proposal.topicId);
     this.store.transaction(() => {
       if (accept && topic) {
-        const tailoring = topic.tailoring.trim() ? `${topic.tailoring.trim()}\n${proposal.text}` : proposal.text;
-        this.store.topics.setTailoring(topic.id, tailoring, at);
+        this.store.topics.setTailoring(topic.id, appendTailoring(topic.tailoring, proposal.text), at);
       }
       this.store.ruleProposals.decide(proposalId, accept ? 'accepted' : 'rejected', at);
     });
-    return ok(accept ? 'Accepted' : 'Rejected');
+    if (accept) {
+      return ok('Accepted');
+    }
+    const token = this.ruleUndos.add(() => this.store.ruleProposals.reopen(proposalId));
+    return ok('Declined. The agent will not propose this rule again.', token);
   }
 
   /** Moves the seen cursor to the newest logged event and the current dossier version. */
@@ -109,6 +133,31 @@ export class MemoryActions {
   /** Feedback row for a correction on a fact or a dossier line. */
   private logFeedback(kind: FeedbackKind, topicId: string | null, prKey: PrKey | null, note: string, at: string): number {
     return this.store.feedback.add({ kind, topicId, tileId: null, prKey, setId: null, eventId: null, note, createdAt: at }).id;
+  }
+
+  /**
+   * "Remove" on an accepted rule for every topic (Your instructions ›
+   * Accepted rules): it leaves every prompt, reads as rejected so it is not
+   * proposed again, and the removal is logged as the user's words. A topic
+   * rule lives in the tailoring and is removed there.
+   */
+  removeStandingRule(ruleId: string): ActionResult {
+    const rule = this.store.ruleProposals.get(ruleId);
+    if (!rule || rule.status !== 'accepted' || rule.topicId !== null) {
+      return failed('That rule is no longer in use.');
+    }
+    const at = this.now().toISOString();
+    const feedbackId = this.store.transaction(() => {
+      this.store.ruleProposals.remove(ruleId, at);
+      return this.logFeedback('rule_removed', null, null, rule.text, at);
+    });
+    const token = this.ruleUndos.add(() => {
+      this.store.transaction(() => {
+        this.store.ruleProposals.restoreAccepted(ruleId, rule.decidedAt);
+        this.store.feedback.delete(feedbackId);
+      });
+    });
+    return ok('Removed. The agent stops applying it from the next call on.', token);
   }
 
   /** Remembers how to take a correction back, for UNDO_WINDOW_MS. */
@@ -159,6 +208,12 @@ export class MemoryActions {
     return ok(relation ? 'Moved. It stays there until something new happens in the topic.' : LINE_MESSAGES[input.kind], token);
   }
 
+  /** The current head of every PR the fact's refs point at, as far as the store knows. */
+  private currentHeads(fact: Fact): Map<PrKey, string> {
+    const prs = this.store.prs.getMany(fact.refs.map((ref) => ref.prKey));
+    return new Map([...prs].map(([key, pr]) => [key, pr.headOid]));
+  }
+
   /** A fact: closed (wrong, forget), confirmed, or replaced by the corrected text with the same refs (fix). */
   private correctFact(input: MemoryCorrection & { factId: string }, at: string): ActionResult {
     const fact = this.store.facts.get(input.factId);
@@ -174,6 +229,8 @@ export class MemoryActions {
     let replacement: Fact | null = null;
     this.store.transaction(() => {
       if (input.kind === 'confirm') {
+        // Kept at the PR's current head: pinned to the old one, the read-time check would call it stale again.
+        this.store.facts.reanchorRefs(fact.id, this.currentHeads(fact));
         this.store.facts.markVerified([fact.id], at);
         feedbackId = this.logFeedback('memory_confirmed', fact.topicId, prKey, fact.text, at);
         return;
@@ -200,6 +257,22 @@ export class MemoryActions {
   }
 
   /**
+   * "This no longer holds" on a PR's glance: feedback on the PR, in its
+   * topic. The glance's input hash covers that feedback, so the glance turns
+   * stale and the next look or catch-up writes it again, with the reason in
+   * the prompt. Undoable like any correction.
+   */
+  private outdateGlance(prKey: PrKey, reason: string, at: string): ActionResult {
+    if (!this.store.prs.get(prKey)) {
+      return failed(`${prKey} is not in the store`);
+    }
+    const topicId = this.store.memberships.get(prKey)?.topicId ?? null;
+    const feedbackId = this.logFeedback('glance_outdated', topicId, prKey, reason, at);
+    const token = this.undoable({ feedbackId, reopenFactId: null, closeFactId: null, restoreCheck: null, override: null });
+    return ok('Marked out of date. The agent writes it again on your next look.', token);
+  }
+
+  /**
    * Wrong / Forget, or accepting a recheck (confirm, fix). A fact changes now,
    * so it leaves (or rejoins) every list and prompt right away. A dossier line
    * stays until the topic's next dossier update, which gets the logged
@@ -207,10 +280,35 @@ export class MemoryActions {
    */
   correctMemory(input: MemoryCorrection): ActionResult {
     const at = this.now().toISOString();
+    if (input.prKey) {
+      return this.outdateGlance(input.prKey, input.text, at);
+    }
     if (input.factId === null) {
       return this.correctLine(input, at);
     }
     return this.correctFact({ ...input, factId: input.factId }, at);
+  }
+
+  /**
+   * "Restore" on a struck-through dossier line, for as long as it shows:
+   * deletes the line's corrections logged since the latest dossier version,
+   * so the next update keeps the line. Once that update has read them, there
+   * is nothing left to take back.
+   */
+  restoreLine(input: MemoryRestore): ActionResult {
+    const since = this.store.dossiers.latest(input.topicId)?.createdAt ?? '';
+    const pending = this.store.feedback
+      .recentForTopic(input.topicId, FEEDBACK_SCANNED_FOR_RESTORE)
+      .filter((entry) => entry.createdAt > since && RESTORABLE_KINDS.includes(entry.kind) && correctedLine(entry) === input.text);
+    if (pending.length === 0) {
+      return failed('Nothing to restore: the topic memory was already rewritten.');
+    }
+    this.store.transaction(() => {
+      for (const entry of pending) {
+        this.store.feedback.delete(entry.id);
+      }
+    });
+    return ok('Restored. The next sync keeps that line.');
   }
 
   isMemoryUndo(token: string | null): boolean {

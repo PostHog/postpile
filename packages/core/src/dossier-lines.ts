@@ -1,15 +1,15 @@
-import type { Dossier, LineSources } from './memory.ts';
+import type { Dossier, DossierPerson, LineSources } from './memory.ts';
 
 /** One dossier line the user can ask "Why?" about. */
 export interface DossierLine {
-  /** "goal", "status", or "openQuestions[2]", "timeline[5]", "userCares[0]", "recentChanges[1]". */
+  /** "goal", "status", or "openQuestions[2]", "timeline[5]", "userCares[0]", "recentChanges[1]", "people[0]". */
   path: string;
   text: string;
   /** Empty for lines from versions stored before lines carried sources. */
   sources: LineSources;
 }
 
-const LIST_PATH = /^(openQuestions|timeline|userCares|recentChanges)\[(\d+)\]$/;
+const LIST_PATH = /^(openQuestions|timeline|userCares|recentChanges|people)\[(\d+)\]$/;
 
 function sources(line: Partial<LineSources> | undefined): LineSources {
   return { refs: line?.refs ?? [], userRefs: line?.userRefs ?? [] };
@@ -26,6 +26,11 @@ const RELATION_WORDS = { team: 'Your team', routed: 'Routed to you', fyi: 'FYI' 
 export function relationText(relation: NonNullable<Dossier['relation']>): string {
   const owner = relation.ownerTeam ? `owned by ${relation.ownerTeam}, ` : '';
   return `${RELATION_WORDS[relation.kind]}: ${owner}${relation.whyYou}`;
+}
+
+/** "@lyra reviewer: owns the runner image", as the People list reads. */
+export function dossierPersonText(person: DossierPerson): string {
+  return `@${person.login} ${person.role}: ${person.note}`;
 }
 
 /** The line at `path`, or null when the path does not point at one. */
@@ -51,6 +56,10 @@ export function findDossierLine(dossier: Dossier, path: string): DossierLine | n
   if (match[1] === 'timeline') {
     const entry = dossier.timeline[index];
     return entry ? { path, text: `${entry.prKey}: ${entry.role}`, sources: sources(entry) } : null;
+  }
+  if (match[1] === 'people') {
+    const person = dossier.people[index];
+    return person ? { path, text: dossierPersonText(person), sources: sources(person) } : null;
   }
   if (match[1] === 'userCares') {
     const care = dossier.userCares[index];

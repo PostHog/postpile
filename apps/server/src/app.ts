@@ -56,6 +56,7 @@ const memoryCorrectionBody = z.object({
   relation: z.enum(['team', 'routed', 'fyi']).optional(),
   fixedText: z.string().optional(),
   fromRecheck: z.boolean().optional(),
+  prKey: z.string().min(1).optional(),
 });
 
 /** Same target shape as the "Why?" query, as JSON. */
@@ -378,6 +379,11 @@ export function createApp(
     const body = z.object({ text: z.string(), keep: z.boolean() }).parse(await c.req.json());
     return c.json(await engine.decideTailoring(c.req.param('id'), body.text, body.keep));
   });
+  // "Remove" on one line the topic keeps in mind; local, logged, with an undo token.
+  app.post('/api/topics/:id/tailoring/remove', async (c) => {
+    const body = z.object({ line: z.string().min(1) }).parse(await c.req.json());
+    return c.json(await engine.removeTailoringLine(c.req.param('id'), body.line));
+  });
   app.post('/api/topics/:id/seen', async (c) => c.json(await engine.markTopicSeen(c.req.param('id'))));
   // "Ask the agent" on the topic header: the chat about the whole topic (also Unsorted).
   app.get('/api/topics/:id/chat', async (c) => c.json(await engine.getTopicChat(c.req.param('id'))));
@@ -403,7 +409,13 @@ export function createApp(
     const body = z.object({ accept: z.boolean() }).parse(await c.req.json());
     return c.json(await engine.decideRuleProposal(c.req.param('id'), body.accept));
   });
+  // "Remove" on an accepted rule for every topic (Your instructions › Accepted rules).
+  app.post('/api/rule-proposals/:id/remove', async (c) => c.json(await engine.removeStandingRule(c.req.param('id'))));
   app.post('/api/memory/corrections', async (c) => c.json(await engine.correctMemory(memoryCorrectionBody.parse(await c.req.json()))));
+  app.post('/api/memory/restore', async (c) => {
+    const body = z.object({ topicId: z.string().min(1), text: z.string().min(1) }).parse(await c.req.json());
+    return c.json(await engine.restoreMemoryLine(body));
+  });
   // Runs one agent call (seconds); the answer is only shown, correctMemory applies it.
   app.post('/api/memory/recheck', async (c) => c.json(await engine.recheckMemory(memoryRecheckBody.parse(await c.req.json()))));
   app.get('/api/memory/sources', async (c) => {
@@ -445,6 +457,10 @@ export function createApp(
   app.post('/api/work-context/forget', async (c) => {
     const body = z.object({ version: z.number().int().positive(), index: z.number().int().min(0) }).parse(await c.req.json());
     return c.json(await engine.forgetWorkThread(body));
+  });
+  app.post('/api/work-context/restore', async (c) => {
+    const body = z.object({ version: z.number().int().positive(), index: z.number().int().min(0) }).parse(await c.req.json());
+    return c.json(await engine.restoreWorkThread(body));
   });
   // The sweep's skip list, saved to the user's config.json.
   app.put('/api/work-context/skip-list', async (c) => {

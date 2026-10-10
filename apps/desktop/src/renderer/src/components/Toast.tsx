@@ -10,10 +10,11 @@ const TONES: Record<NoticeTone, string> = {
 /**
  * The latest action result above the footer, with Undo while a mark-read can
  * still be taken back, "Snooze until next push" after a mark-read that
- * left the tile your move, and "Show" after an inbox cleanup ran (the
- * notifications view lists what each thread's last action was).
+ * left the tile your move, "Show" after an inbox cleanup ran (the
+ * notifications view lists what each thread's last action was), and "Open"
+ * when the agent answered on a topic that is not on screen.
  */
-export function Toast(props: { onShowActionLog: () => void }) {
+export function Toast(props: { onShowActionLog: () => void; onOpenAgent?: (topicId: string) => void }) {
   const actions = useActions();
   const notice = actions.notice;
   if (!notice) {
@@ -21,6 +22,8 @@ export function Toast(props: { onShowActionLog: () => void }) {
   }
   const undoToken = notice.undoToken;
   const snoozeTileId = notice.snoozeTileId;
+  const agentTopicId = notice.openAgentTopicId ?? null;
+  const openAgent = props.onOpenAgent;
   return (
     <div
       role="status"
@@ -68,6 +71,18 @@ export function Toast(props: { onShowActionLog: () => void }) {
           }}
         >
           Show
+        </button>
+      )}
+      {agentTopicId && openAgent && (
+        <button
+          type="button"
+          className="font-semibold underline-offset-2 hover:underline"
+          onClick={() => {
+            openAgent(agentTopicId);
+            actions.dismissNotice();
+          }}
+        >
+          Open
         </button>
       )}
       <button type="button" aria-label="Dismiss" className="opacity-60 hover:opacity-100" onClick={actions.dismissNotice}>

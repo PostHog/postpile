@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentApproveOffer, AgentApprovePr } from '@postpile/core';
-import { approvePillWord, batchMarkReadMessage, leftOutReason, tileApproveLabel, topicApproveLabel } from './agent-actions.ts';
+import { approvePillWord, approveTitle, batchMarkReadMessage, leftOutReason, tileApproveLabel, topicApproveLabel } from './agent-actions.ts';
 
 function offer(overrides: Partial<AgentApproveOffer>): AgentApproveOffer {
   return { state: 'active', risk: 'medium', reason: null, covered: [], leftOut: [], coveredCount: 3, totalCount: 5, prCount: 5, naming: 'some', ...overrides };
@@ -11,7 +11,17 @@ const BASE: AgentApprovePr = { prKey: 'acme/app#2107', title: 'Base', headOid: '
 describe('approve wording', () => {
   it('says the risk when active and the reason when greyed', () => {
     expect(approvePillWord(offer({}))).toBe('Medium risk');
-    expect(approvePillWord(offer({ state: 'greyed', risk: null, reason: 'rechecking' }))).toBe('Rechecking…');
+    expect(approvePillWord(offer({ state: 'greyed', risk: null, reason: 'rechecking' }))).toBe('Checking…');
+  });
+
+  // Bug hunt MEM-A-01: with the agent off, capped or failed nothing is checking, so the pill says there is no verdict and the tooltip why.
+  it('says No verdict, with the reason in the tooltip, when nothing writes a glance', () => {
+    const off = offer({ state: 'greyed', risk: null, reason: 'agent_off' });
+    expect(approvePillWord(off)).toBe('No verdict');
+    expect(approveTitle(off)).toMatch(/^Greyed out: Agent features are off/);
+    expect(approveTitle(offer({ state: 'greyed', risk: null, reason: 'agent_limit' }))).toContain('call limit');
+    expect(approveTitle(offer({ state: 'greyed', risk: null, reason: 'glance_failed' }))).toContain('glance failed');
+    expect(leftOutReason({ reason: 'agent_limit', waitsOn: null })).toBe('no verdict, agent limit');
   });
 
   it('never counts PRs on a greyed button', () => {
@@ -48,5 +58,6 @@ describe('batchMarkReadMessage', () => {
     const skipped = [{ tileId: 'a', reason: 'asks_for_you' as const }];
     expect(batchMarkReadMessage(3, skipped, 'x', true)).toBe('Marked 3 read · 1 skipped (asks for you)');
     expect(batchMarkReadMessage(3, [], 'x', true)).toBe('Marked 3 read');
+    expect(batchMarkReadMessage(1, [{ tileId: 'b', reason: 'agent_off' }], 'x', true)).toBe('Marked 1 read · 1 skipped (agent off)');
   });
 });

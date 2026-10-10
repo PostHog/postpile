@@ -55,6 +55,18 @@ export function retryLine(retryAt: string | null, now: Date): string {
   return `Trying again at ${clockLabel(at)}, in ${minutes} min.`;
 }
 
+/**
+ * Why agent-only controls (chat Send, Draft with agent, Recheck) are
+ * disabled: the claude headline while the agent is off or paused, with when
+ * it is tried again. Null while the agent is on or before the status loaded.
+ */
+export function agentOffReason(view: ToolsView | undefined, now: Date): string | null {
+  if (!view || view.agentOn) {
+    return null;
+  }
+  return [`${view.claude.headline}.`, retryLine(view.claude.retryAt, now)].filter((part) => part !== '').join(' ');
+}
+
 /** "Checked 2m ago. Checks again at 15:42." */
 export function checkLine(view: ToolsView, now: Date): string {
   const parts: string[] = [];

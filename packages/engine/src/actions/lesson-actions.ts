@@ -1,5 +1,5 @@
 import type { AgentService } from '@postpile/agent';
-import { lessonGlance, type ActionResult, type Lesson, type LessonView, type PrKey, type TeachLessonResult } from '@postpile/core';
+import { lessonGlance, lessonTailoringLine, type ActionResult, type Lesson, type LessonView, type PrKey, type TeachLessonResult } from '@postpile/core';
 import type { Store } from '@postpile/store';
 import { errorText } from '../errors.ts';
 import { checkOpenLesson } from '../lessons/lesson-check.ts';
@@ -150,7 +150,10 @@ export class LessonActions {
     if (check.lesson.topicId === null) {
       return failed('Its PR is not in a topic yet. Use it across topics, or wait for the next sync to sort it.');
     }
-    const kept = this.chats.decideTailoring(check.lesson.topicId, check.lesson.text, true);
+    // Kept with where it came from, so the topic header does not read it as the user's own words to the agent.
+    const prNumber = this.store.prs.get(check.lesson.prKey)?.ref.number ?? 0;
+    const line = lessonTailoringLine(check.lesson.source, prNumber, check.lesson.text);
+    const kept = this.chats.decideTailoring(check.lesson.topicId, line, true);
     if (!kept.ok) {
       return kept;
     }

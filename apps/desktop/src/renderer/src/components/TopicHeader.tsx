@@ -1,22 +1,24 @@
 import { useState } from 'react';
-import type { DossierStatus, DossierView, TopicDetail, TopicListItem, TopicProposal, TopicSection, UserRole } from '@postpile/core';
+import type { DossierStatus, DossierView, TileView, TopicDetail, TopicListItem, TopicProposal, TopicSection, UserRole } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
-import { fixedText, statusLabel } from '../lib/memory.ts';
+import { awaitsDossier, claimStaleReason, fixedText, statusLabel } from '../lib/memory.ts';
 import { lineTarget } from '../lib/sources.ts';
 import { updatingNow } from '../lib/staleness.ts';
-import { proposalText, suggestedBy } from '../lib/proposals.ts';
+import { proposalPrs, proposalText, suggestedBy } from '../lib/proposals.ts';
 import { prMixTitle } from '../lib/pr-mix.ts';
 import { sectionLook } from '../lib/sections.ts';
 import { Avatar } from './Avatar.tsx';
 import { Button } from './Button.tsx';
 import { DossierPanel } from './DossierPanel.tsx';
 import { DriverMenu } from './DriverMenu.tsx';
-import { ChevronIcon, PrStateIcon, QuoteIcon } from './icons.tsx';
+import { ChevronIcon, PrStateIcon } from './icons.tsx';
 import { MemoryLine } from './MemoryLine.tsx';
+import { ProposalPrList } from './ProposalPrList.tsx';
 import { RelationLine } from './RelationLine.tsx';
 import { SinceLastLooked } from './SinceLastLooked.tsx';
 import { TopicLessons } from './TopicLessons.tsx';
 import { TopicRepo } from './TopicRepo.tsx';
+import { TopicTailoring } from './TopicTailoring.tsx';
 import { YourMoveChip } from './YourMoveChip.tsx';
 
 /** Your role in the topic as a noun (2026-09-29): "You review" read like an order next to "lyra drives". */
@@ -40,19 +42,23 @@ const pill = 'flex h-5 items-center gap-[5px] rounded-full bg-pill-quiet text-[1
 /** White people chips under the timeline. */
 const personChip = 'flex h-[22px] items-center gap-1.5 rounded-full bg-surface pr-[9px] pl-[3px] text-[11.5px] text-ink inset-ring inset-ring-edge-hairline';
 
-function ProposalRow(props: { proposal: TopicProposal; topics: TopicListItem[] }) {
+function ProposalRow(props: { proposal: TopicProposal; topics: TopicListItem[]; tiles: TileView[] }) {
   const actions = useActions();
   const { proposal } = props;
   const topicName = (topicId: string) => props.topics.find((item) => item.topic.id === topicId)?.topic.name ?? topicId;
   const by = suggestedBy(proposal);
   const lead = by ? `${by.charAt(0).toUpperCase()}${by.slice(1)} suggests` : 'Agent proposes';
+  const prs = proposalPrs(proposal, props.tiles);
   return (
     <div className="mt-2.5 flex max-w-[680px] items-center gap-3 rounded-row border border-accent-line bg-accent-soft px-3 py-2 text-xs">
-      <span className="min-w-0 flex-1">
-        <span className="font-semibold">
-          {lead}: {proposalText(proposal, topicName)}.
-        </span>{' '}
-        <span className="text-ink-2">{proposal.reason}</span>
+      <span className="flex min-w-0 flex-1 flex-col gap-1">
+        <span>
+          <span className="font-semibold">
+            {lead}: {proposalText(proposal, topicName)}.
+          </span>{' '}
+          <span className="text-ink-2">{proposal.reason}</span>
+        </span>
+        {prs && <ProposalPrList named={prs.named} stackLayers={prs.stackLayers} />}
       </span>
       <Button onClick={() => void actions.decideProposal(proposal.id, true)}>Accept</Button>
       <Button onClick={() => void actions.decideProposal(proposal.id, false)}>Reject</Button>
@@ -67,6 +73,8 @@ function DossierSummary(props: { dossier: DossierView; topicId: string; updating
   const { dossier } = view;
   const statusText = dossier.statusNote ? `${statusLabel(dossier.status)}: ${dossier.statusNote}` : statusLabel(dossier.status);
   const tone = STATUS_TONES[dossier.status];
+  const statusKept = view.confirmedClaims.includes(statusText);
+  const statusStale = statusKept ? null : claimStaleReason('status', view.staleClaims);
   return (
     <>
       {/* Labels in a 48px column, so the values start on the same line as the timeline text. */}
@@ -74,10 +82,11 @@ function DossierSummary(props: { dossier: DossierView; topicId: string; updating
         <span className="pt-px text-[11.5px] font-medium text-hint">Status</span>
         <MemoryLine
           correction={{ kind: 'wrong', factId: null, topicId, text: statusText }}
-          stale={null}
+          stale={statusStale}
           updating={props.updating}
           corrected={view.correctedClaims.includes(statusText)}
           fixedTo={fixedText(view, statusText)}
+          kept={statusKept}
           canRecheck
           why={lineTarget(topicId, view, 'status')}
           textClass="text-[13px] leading-normal"
@@ -86,16 +95,18 @@ function DossierSummary(props: { dossier: DossierView; topicId: string; updating
             <span aria-hidden="true" className={`size-[5px] rounded-full ring-2 ${tone.dot}`} />
             {statusLabel(dossier.status)}
           </span>
-          <span className="text-ink">{dossier.statusNote}</span>
+          {/* Greyed with the rest of the line while it is out of date. */}
+          <span className={statusStale ? '' : 'text-ink'}>{dossier.statusNote}</span>
         </MemoryLine>
         {dossier.goal && <span className="pt-px text-[11.5px] font-medium text-hint">Goal</span>}
         {dossier.goal && (
           <MemoryLine
             correction={{ kind: 'wrong', factId: null, topicId, text: dossier.goal }}
-            stale={null}
+            stale={claimStaleReason('goal', view.staleClaims)}
             updating={props.updating}
             corrected={view.correctedClaims.includes(dossier.goal)}
             fixedTo={fixedText(view, dossier.goal)}
+            kept={view.confirmedClaims.includes(dossier.goal)}
             canRecheck
             why={lineTarget(topicId, view, 'goal')}
             textClass="text-[13px] leading-normal"
@@ -245,18 +256,13 @@ export function TopicHeader(props: {
       )}
       {topic.summary && <p className="mt-4 max-w-[600px] text-[13.5px] leading-[1.6] tracking-[-0.003em] text-pretty text-ink-2">{topic.summary}</p>}
       {dossier && <DossierSummary dossier={dossier} topicId={topic.id} updating={updating} />}
-      {topic.tailoring && (
-        <div className="mt-2.5 flex items-start gap-2 text-xs leading-normal text-muted">
-          <span className="text-faint">
-            <QuoteIcon />
-          </span>
-          <span>You told the agent: {topic.tailoring}</span>
-        </div>
-      )}
+      {/* Without this line "not written yet" and "nothing to say" look the same. */}
+      {awaitsDossier(topic.id, dossier) && <p className="mt-3.5 text-xs text-hint">No dossier yet: the agent writes one with the next update of this topic.</p>}
+      <TopicTailoring topicId={topic.id} tailoring={topic.tailoring} />
       {/* Lessons from the user's pushback sit right under what they told the agent: "Remember in this topic" adds to that line. */}
       <TopicLessons topicId={topic.id} />
       {pendingProposals.map((proposal) => (
-        <ProposalRow key={proposal.id} proposal={proposal} topics={props.topics} />
+        <ProposalRow key={proposal.id} proposal={proposal} topics={props.topics} tiles={props.detail.tiles} />
       ))}
     </div>
   );

@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import type { ToolsView } from '@postpile/core';
-import { toolsRefetchMs } from '../lib/tools.ts';
+import { agentOffReason, toolsRefetchMs } from '../lib/tools.ts';
 import { request } from './client.ts';
 import { queryKeys } from './keys.ts';
 
@@ -16,4 +16,15 @@ export function useTools() {
     queryFn: () => request<ToolsView>('GET', '/api/tools'),
     refetchInterval: (query) => toolsRefetchMs(query.state.data),
   });
+}
+
+/**
+ * Why agent-only controls are disabled right now (`agentOffReason`), null
+ * while the agent is on. For their `disabled` and `title`. No timer of its
+ * own: the "in 25 min" moves on with the tools refetch (every 30s while the
+ * agent is off), which is close enough for a tooltip.
+ */
+export function useAgentOffReason(): string | null {
+  const tools = useTools();
+  return agentOffReason(tools.data, new Date());
 }

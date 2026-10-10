@@ -18,6 +18,13 @@ describe('checkLabel', () => {
   });
 });
 
+describe('checkLabel on a line the user kept', () => {
+  it('says the user checked it instead of out of date', () => {
+    expect(checkLabel({ state: 'stale', reason: 'head_moved', note: null }, false, true)).toEqual({ text: 'Checked by you after a recheck (PR moved since)', tone: 'ok' });
+    expect(checkLabel({ state: 'unsourced', reason: null, note: null }, false, true).text).toBe('No source recorded');
+  });
+});
+
 describe('targets', () => {
   it('builds keys and query strings', () => {
     const line = { kind: 'dossier_line' as const, topicId: 'topic-depot', version: 3, path: 'openQuestions[0]' };

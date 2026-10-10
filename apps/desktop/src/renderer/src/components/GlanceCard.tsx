@@ -1,7 +1,8 @@
-import { useState, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { PrDetail, PrSummary, TileView, Verdict } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { useNextAutoSyncAt } from '../api/live.ts';
+import { useAgentOffReason } from '../api/tools.ts';
 import { assessment, type AssessmentLine, type AssessmentMark } from '../lib/assessment.ts';
 import { glanceClaim, glanceStateText } from '../lib/glance.ts';
 import { staleGlanceNote, staleWord, updatingNow } from '../lib/staleness.ts';
@@ -43,7 +44,8 @@ function Mark(props: { mark: AssessmentMark | '→' | '“'; tone: string }) {
 
 function MarkedLine(props: { line: AssessmentLine; tone: string }) {
   return (
-    <span className={`${MARK_GRID} text-[12.5px] leading-[1.45] text-pretty text-ink select-text`}>
+    // Long unbroken tokens (cache keys, branch names) wrap instead of running out of the pane.
+    <span className={`${MARK_GRID} text-[12.5px] leading-[1.45] text-pretty break-words text-ink select-text [overflow-wrap:anywhere]`}>
       <Mark mark={props.line.mark} tone={props.tone} />
       <span className="pt-px">{props.line.text}</span>
     </span>
@@ -69,7 +71,7 @@ function joinTags(...tags: string[]): string {
 }
 
 /** The glance's own controls on its title line, in the box's colour: they act on the glance, not on the PR. */
-const toolButton = 'text-[11px] font-medium opacity-80 hover:underline hover:opacity-100';
+const toolButton = 'text-[11px] font-medium opacity-80 enabled:hover:underline enabled:hover:opacity-100 disabled:opacity-50';
 
 function Box(props: { title: string; tag: string; look: { box: string; mark: string }; lines: AssessmentLine[]; tools?: ReactNode }) {
   return (
@@ -87,7 +89,7 @@ function PlainLine(props: { mark: '→' | '“'; label: string; text: string }) 
     return null;
   }
   return (
-    <span className={`${MARK_GRID} text-[12.5px] leading-[1.45] text-pretty text-ink-2 select-text`}>
+    <span className={`${MARK_GRID} text-[12.5px] leading-[1.45] text-pretty break-words text-ink-2 select-text [overflow-wrap:anywhere]`}>
       <Mark mark={props.mark} tone="bg-segment text-ink-2" />
       <span className="pt-px">
         <span className="font-[650] text-ink">{props.label}</span> {props.text}
@@ -99,7 +101,9 @@ function PlainLine(props: { mark: '→' | '“'; label: string; text: string }) 
 /**
  * The verdict box of a glance written before the last change: grey and
  * dashed, the verdict word with "out of date" (or "updating"), one line
- * saying so, and the old advice folded behind "Show old assessment".
+ * saying so, and the old advice folded behind "Show old assessment". While
+ * a new one is being written the old advice shows, without the toggle, so
+ * the card is about as tall as the glance on its way.
  */
 function StaleVerdictBox(props: {
   title: string;
@@ -114,10 +118,12 @@ function StaleVerdictBox(props: {
     <div className={`flex flex-col gap-2 rounded-box px-3 pt-[11px] pb-3 ${STALE_BOX.box}`}>
       <BoxTitle title={props.title} tag={`· ${staleWord(props.updating)}`} tools={props.tools} />
       <span className="text-[12.5px] leading-[1.45] text-ink-2">{staleGlanceNote(props.updating, props.waitsForSync)}</span>
-      {props.showOld && props.lines.map((line) => <MarkedLine key={`${line.mark}${line.text}`} line={line} tone={STALE_BOX.mark} />)}
-      <button type="button" aria-expanded={props.showOld} onClick={props.onToggle} className="self-start text-[11.5px] text-accent hover:underline">
-        {props.showOld ? 'Hide old assessment' : 'Show old assessment'}
-      </button>
+      {(props.showOld || props.updating) && props.lines.map((line) => <MarkedLine key={`${line.mark}${line.text}`} line={line} tone={STALE_BOX.mark} />)}
+      {!props.updating && (
+        <button type="button" aria-expanded={props.showOld} onClick={props.onToggle} className="self-start text-[11.5px] text-accent hover:underline">
+          {props.showOld ? 'Hide old assessment' : 'Show old assessment'}
+        </button>
+      )}
     </div>
   );
 }
@@ -136,7 +142,7 @@ function MissingGlance(props: { detail: PrDetail }) {
   const busy = actions.isBusy(`retryGlance:${pr.key}`);
   return (
     <div className="flex flex-wrap items-center gap-2 px-3">
-      <p className={`flex items-center gap-1.5 text-xs ${text.problem ? 'text-status-bad' : 'text-muted'}`}>
+      <p title={text.detail ? `The agent's reason: ${text.detail}` : undefined} className={`flex items-center gap-1.5 text-xs ${text.problem ? 'text-status-bad' : 'text-muted'}`}>
         {text.spinner && <SpinnerIcon />}
         {text.card}
       </p>
@@ -147,6 +153,29 @@ function MissingGlance(props: { detail: PrDetail }) {
       )}
     </div>
   );
+}
+
+/**
+ * Holds the card at the tallest height it had since a rewrite started, so
+ * the review row under it does not move while the new glance comes in (bug
+ * hunt MEM-A-12: stale, updating and fresh each had their own height). The
+ * detail pane remounts the body per PR, so the hold ends with the PR.
+ */
+function useHeldHeight(holding: boolean) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [held, setHeld] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!holding || !element) {
+      return;
+    }
+    const measure = () => setHeld((last) => Math.max(last ?? 0, element.offsetHeight));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [holding]);
+  return { ref, minHeight: held ?? undefined };
 }
 
 /**
@@ -161,7 +190,8 @@ function MissingGlance(props: { detail: PrDetail }) {
  * get no glance; the card says so. The verdict box's title line carries the
  * glance's own controls: Recheck (the whole glance, `RecheckDialog`) and
  * "Tell the agent", which opens the topic's agent pane with this PR named.
- * The card holds no PR actions: it is advice, and it can be missing.
+ * Recheck is disabled with the claude headline while the agent is off or
+ * paused. The card holds no PR actions: it is advice, and it can be missing.
  */
 export function GlanceCard(props: GlanceCardProps) {
   const actions = useActions();
@@ -176,14 +206,17 @@ export function GlanceCard(props: GlanceCardProps) {
   const canUnrelate = props.view.tile.kind === 'set';
   const view = glance ? assessment(glance, summary?.forWhom ?? null) : null;
   const prKey = props.detail.pr.key;
-  // A stale glance folds its advice away; "Show old assessment" brings it back.
-  const folded = glanceStale && !showOld;
   const updating = updatingNow({ syncing: actions.syncing, writing: props.detail.glanceState === 'writing' });
+  // A stale glance folds its advice away; "Show old assessment" brings it back, and so does a rewrite under way.
+  const folded = glanceStale && !showOld && !updating;
+  const held = useHeldHeight(updating);
+  const agentOff = useAgentOffReason();
   const tools = (
     <>
       <button
         type="button"
-        title="Recheck this assessment: the agent reads the whole glance against the PR, its activity and the topic dossier"
+        disabled={agentOff !== null}
+        title={agentOff ?? 'Recheck this assessment: the agent reads the whole glance against the PR, its activity and the topic dossier'}
         onClick={() => setRecheckOpen(true)}
         className={toolButton}
       >
@@ -201,7 +234,7 @@ export function GlanceCard(props: GlanceCardProps) {
     </>
   );
   return (
-    <div className="flex flex-col gap-4">
+    <div ref={held.ref} style={{ minHeight: held.minHeight }} className="flex flex-col gap-4">
       {view && (
         <div className="flex flex-col gap-2.5">
           {glanceStale ? (

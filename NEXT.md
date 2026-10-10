@@ -22,7 +22,15 @@ now".
   for `tools` while sync is off, exit 2 with the problem above the usage
   for a bad command line, merged or closed PRs marked in `topic`. The
   connect popover and CLI help drop the "read-only" claim.
-
+- Memory lines the user can trust and correct (2026-10-10, bug hunt
+  MEM-A-03/10/13/16/17/18/23/29; DESIGN.md "Verify-before-use", "Memory by
+  author"): the dossier status and goal lines show "out of date" in the
+  read model (`headerLineIssues`), "Keep it" on a recheck marks a line
+  "checked by you", stale facts get Recheck, people carry sources and
+  "Why?", the Recheck dialog names its scope, a glance that no longer
+  holds can be marked out of date, struck-through lines and forgotten work
+  threads offer Restore until the next update, and a topic without a
+  dossier says so.
 - Agents propose moves (2026-10-09, for 0.27.2; DESIGN.md
   "propose_topic_change"): `propose_topic_change` gets kind `move` (PRs
   into an existing topic, `into_topic`), with the split's checks (PRs in
@@ -1792,6 +1800,39 @@ the app meanwhile.
   effect ("Mark 28 read on GitHub"). Interruptions prompt: two leads
   (upgrader, new install that skipped setup), and it waits for a running
   cleanup and a usable gh.
+
+- **Memory corrections can be restored until the next update** (2026-10-10,
+  owner, bug hunt Q4 / MEM-A-10; DESIGN.md "Memory by author" › Restore): a
+  struck-through dossier line and a forgotten work thread offer Restore
+  until the next dossier update or sweep reads the correction. The 6 s
+  toast Undo stays for everything else, mark-read included.
+- **Recheck on stale facts, scoped dialog titles, glances can be marked out
+  of date** (2026-10-10, owner applied the bug hunt's recommendations,
+  MEM-A-16/18): any stale fact gets Recheck on top of the big claims; the
+  Recheck dialog names what it checks; "This no longer holds" on a glance
+  offers "Mark out of date", which only makes the glance stale (feedback
+  on the PR), so the 2026-09-29 "no manual glance refresh" decision holds.
+
+- **Agent-only controls are disabled while the agent is off or paused**
+  (2026-10-10, owner, applying the bug hunt's recommendation for Q5
+  (MEM-A-11, OPS-A-13); DESIGN.md "Missing tools" › Without claude): chat
+  Send and "For all topics", Draft / Rewrite with agent and Recheck show
+  disabled with the claude headline as the tooltip; memory stays readable
+  and the input stays typeable. Greying the ✨ pills of current verdicts
+  while the agent is off was offered as optional and not done.
+
+- **Memory the user can see and take back** (2026-10-10, owner: apply the
+  bug hunt's recommended options; DESIGN.md "Consolidation", "Topic chat",
+  "Instructions changes via chat", "Lessons from your reviews"):
+  accepted rules for every topic are listed under Your instructions ›
+  Accepted rules with Remove; a topic's tailoring shows one line each with
+  Remove; both log the removal and offer Undo. A topic merge carries the
+  merged topic's tailoring along ("From Frontend build: …"). Inbox Decline
+  gets a 6s Undo. Split and move cards name their PRs. A lasting point
+  gets three buttons (Keep for this topic / Just this once / Keep for all
+  topics) and a confirming line. A lesson kept in a topic says where it
+  came from ("From your review on #N: …"). An agent answer for a topic
+  not on screen shows a toast with Open; asking stays uncancellable.
 
 - **Agent notes on PRs are advisory and anchored to the PR's state**
   (2026-10-08, design agreed with the reporting agent, checked by Codex;

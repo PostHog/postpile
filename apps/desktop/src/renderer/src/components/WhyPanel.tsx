@@ -14,13 +14,14 @@ const TONES: Record<CheckTone, string> = {
 /**
  * "Why do you think this?": the sources behind one fact or dossier line and
  * whether it still checks out. `updating`: a sync or catch-up runs for the
- * line's topic, so a stale check says "Updating now".
+ * line's topic, so a stale check says "Updating now". `kept`: the user kept
+ * the line through Recheck, so a stale check says they checked it.
  */
-export function WhyPanel(props: { target: MemoryTarget; updating: boolean; onClose: () => void }) {
+export function WhyPanel(props: { target: MemoryTarget; updating: boolean; kept?: boolean; onClose: () => void }) {
   const now = useNow();
   const sources = useMemorySources(props.target, true);
   const data = sources.data;
-  const check = data ? checkLabel(data.check, props.updating) : null;
+  const check = data ? checkLabel(data.check, props.updating, props.kept) : null;
   return (
     <div className="mt-1.5 flex flex-col gap-2 rounded-row border border-hairline bg-subtle px-3 py-2.5">
       <div className="flex items-center gap-2">

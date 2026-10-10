@@ -379,6 +379,23 @@ describe('chat and tailoring', () => {
     expect(h.store.feedback.recentForTopic('depot', 1)[0]?.kind).toBe('tailoring_kept');
   });
 
+  it('removes one tailoring line, logs it, and puts it back on Undo', async () => {
+    const h = await synced();
+    h.store.topics.create(topic('depot'));
+    h.store.topics.setTailoring('depot', 'Only cache changes.\nIgnore preview deploys.', at(1));
+
+    const removed = await h.engine.removeTailoringLine('depot', 'Only cache changes.');
+
+    expect(removed.ok).toBe(true);
+    expect(h.store.topics.get('depot')?.tailoring).toBe('Ignore preview deploys.');
+    expect(h.store.feedback.recentForTopic('depot', 1)[0]).toMatchObject({ kind: 'tailoring_removed', note: 'Only cache changes.' });
+    expect((await h.engine.removeTailoringLine('depot', 'Only cache changes.')).ok).toBe(false);
+
+    expect((await h.engine.undo(removed.undoToken)).ok).toBe(true);
+    expect(h.store.topics.get('depot')?.tailoring).toBe('Only cache changes.\nIgnore preview deploys.');
+    expect(h.store.feedback.recentForTopic('depot', 5).map((f) => f.kind)).not.toContain('tailoring_removed');
+  });
+
   it('stores nothing when the agent call fails, so no unanswered message stays in the history', async () => {
     const h = await synced();
     h.store.topics.create(topic('depot'));

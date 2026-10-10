@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { useInstructions } from '../api/instructions.ts';
 import { useSetupStatus } from '../api/setup.ts';
 import { useTeamRoles } from '../api/team-roles.ts';
+import { AcceptedRules } from './AcceptedRules.tsx';
 import { Button } from './Button.tsx';
 import { InstructionsChat } from './InstructionsChat.tsx';
 import { InstructionsFileLine } from './InstructionsFileLine.tsx';
@@ -96,6 +97,11 @@ export function InstructionsPane(props: { onOpenTopic: (topicId: string) => void
       {data && (
         <Section title="Current text" meta={data.version === null ? undefined : `v${data.version}`}>
           <InstructionsText text={data.text} />
+        </Section>
+      )}
+      {data && (
+        <Section title="Accepted rules" meta={data.rules.length > 0 ? String(data.rules.length) : undefined}>
+          <AcceptedRules rules={data.rules} />
         </Section>
       )}
       {data && (

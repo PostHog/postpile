@@ -1632,7 +1632,7 @@ cuts after parsing, so one long answer cannot grow later prompts.
 | `openQuestions[]` | `{text, askedBy, refs}` | 8, text 200 |
 | `timeline[]` | `{prKey, role}` oldest first: what each PR does for the initiative | 40, role 120 |
 | `earlier` | history of PRs rolled off the timeline | 600 |
-| `userCares[]` | `{text, source: instructions/tailoring/feedback/observed}`; an entry naming a source the prompt did not carry is dropped, `observed` renders as "observed, unconfirmed" | 6, text 160 |
+| `userCares[]` | `{text, source: instructions/tailoring/feedback/observed}`; an entry naming a source the prompt did not carry is dropped, `observed` renders as "noticed, not kept as a rule", or "from your chat" when a chat turn backs it (2026-10-10: "unconfirmed" read like "you never said it") | 6, text 160 |
 | `recentChanges[]` | `{at, text, refs}` newest first, rolling; `at` is the update time for new entries, carried entries (same text or cited C id) keep theirs | 12, text 160 |
 
 PR state, author and reviewers are **not** stored in the dossier. The
@@ -1769,6 +1769,15 @@ read time in `getTopic` / `getPr` (does not write, only sets
 | referenced comment, review or commit gone from the snapshot | stale `source_deleted` |
 | dossier question whose ref sits in a resolved review thread | stale claim `thread_resolved` |
 | dossier timeline entry for a PR that is no longer a member | stale claim `left_topic`, and the PR is in the next delta's `leftPrKeys` |
+| dossier status or goal line whose refs fail (`headerLineIssues`: head moved for the status, PR missing, source deleted) | stale claim in the read model only (2026-10-10) |
+
+The status and goal lines are checked in the read model
+(`MemoryReads.dossierView`), not in `verifyDossier`: `withoutStaleClaims`
+drops what `verifyDossier` flags before a version is stored, and a push
+must never drop the status line. A line the user kept through Recheck
+since the latest version (`DossierView.confirmedClaims`, matched by text)
+counts as checked: no stale badge, its "Why?" says "Checked by you after a
+recheck".
 
 Stale facts are left out of every prompt's context, shown greyed in the
 UI, and handed to the topic's next dossier update as the recheck list,
@@ -1978,6 +1987,8 @@ topics already retired. The bar, deterministic where it can be
   click with a typed note. A bare click only moved a PR; `unmute` notes are
   GitHub text, not the user's (`ruleHasWordedEvidence`). The prompt says
   the same and never to invent topic-boundary rules from clicks.
+  `tailoring_removed` and `rule_removed` are worded kinds too: the note is
+  the line the user took out.
 - **No merge for size or state.** The prompt asks a merge to say how the
   PRs serve the same goal and what the user gains; "both are small",
   "both are finished", "winding down" are no reasons. Finished topics are
@@ -2001,6 +2012,33 @@ topics already retired. The bar, deterministic where it can be
   consolidation as decided, never block the same idea later, and the MCP
   `topic` read says "withdrawn ... not a rejection". `status` is TEXT, so
   the new value needed no migration.
+- **A Decline can be taken back** (2026-10-10, bug hunt B-A-15). Decline
+  blocks the same idea for good, and the Inbox cards are identical
+  Accept / Decline pairs, so a slip of the mouse cost a good suggestion.
+  Declining a topic or rule proposal returns an undo token (prefix
+  `proposal:` or `rule:`, `UndoWindow`, `UNDO_WINDOW_MS`, in memory like
+  memory corrections); the toast says "Declined. The agent will not suggest
+  this again." with Undo, which puts the proposal back to pending
+  (`reopen`, only from `rejected`).
+- **The card says what Accept moves** (2026-10-10, MEM-A-07). A split or
+  move card (Inbox and the topic header row) lists each named PR as "#N
+  title" from the source topic's tiles, plus "+ N stack layers that come
+  along" for the other layers of their stacks (Accept moves whole stacks).
+  A merge card quotes what the user told the agent in the merged topic,
+  which moves along (see "Topic chat").
+
+**Accepted rules and tailoring can be listed and removed** (2026-10-10,
+MEM-A-06). Accepted rules for every topic go into every prompt, so they are
+listed under "Your instructions" › Accepted rules (`InstructionsView.rules`,
+`listAcceptedGlobal`), each with Remove: `removeStandingRule` sets the row
+back to `rejected` (so consolidation does not propose it again and it
+leaves `standingRules`), logs `rule_removed` with the rule as the note, and
+returns an undo token that restores `accepted` with the old `decided_at`.
+A topic's tailoring is one entry per line (core `tailoring.ts`); the topic
+header shows it under "You told the agent:" one line each, with Remove:
+`removeTailoringLine` drops the first equal line, logs `tailoring_removed`,
+and its undo puts the line back. Accepted topic rules live in the tailoring
+and are removed there.
 
 ### Cost accounting
 
@@ -2058,7 +2096,7 @@ topics already retired. The bar, deterministic where it can be
 | `GET /api/prs/:owner/:repo/:number` | `getPr()` now carries `facts: FactView[]` |
 | `GET /api/facts?entity=person:alice&since=...` | `listFacts()` |
 | `GET /api/proposals` | `listProposals()` (topic + rule proposals) |
-| `POST /api/rule-proposals/:id` `{accept}` | `decideRuleProposal()` |
+| `POST /api/rule-proposals/:id` `{accept}` | `decideRuleProposal()` (a decline carries an undo token) |
 | `POST /api/topics/:id/seen` | `markTopicSeen()` |
 | `POST /api/consolidate` `{onlyIfDue, maxAgentCalls}` | `consolidate()`, capped like a sync when no cap is given |
 
@@ -2111,8 +2149,14 @@ events each. The zod-checked answer is `{outcome: holds | fix | drop,
 text, why}`; a fix without a new line reads as holds. Nothing is written
 until the user accepts in the dialog, through `correctMemory`:
 
-- holds -> `confirm`: a fact gets `markVerified` (not stale, verified now);
-  a dossier line logs `memory_confirmed` so the next update keeps it.
+- holds -> `confirm` ("Keep it"): a fact gets `markVerified` (not stale,
+  verified now) and its refs move to each PR's current head, like the
+  agent's own recheck confirm (`reanchorRefs`), so the next read doesn't
+  find it out of date again; Undo puts the old heads back. A fact that is
+  stale for another reason (person no longer involved, source gone) still
+  reads stale after "Keep it". A dossier line logs `memory_confirmed` so the next update
+  keeps it, and until then it shows "checked by you" instead of out of
+  date (`confirmedClaims`, 2026-10-10).
 - fix -> `fix` + `fixedText`: a fact is closed (superseded) by a copy with
   the corrected text and the same refs; a dossier line logs
   `memory_fixed` with `fixedClaimNote` (old line, "→", new line) and shows
@@ -2127,19 +2171,30 @@ until the user accepts in the dialog, through `correctMemory`:
 Every line keeps "Why?"; Recheck (and Forget) only show on:
 
 - Dossier-level claims: status, goal, open questions, people's roles, what
-  you care about (Forget stays on cares). Not the PR timeline and not the
+  you care about (Forget stays on cares). People carry `refs` / `userRefs`
+  like other lines (2026-10-10), so each has "Why?" (`people[i]`). Not the PR timeline and not the
   "since you last looked" change lines, which retell events.
 - Facts whose predicate is big (`isBigClaim` in core `big-claims.ts`,
   shipped as `FactView.recheckable`): `drives`, `owns` (person roles),
   `decided` (decisions), `blocked_by` (risks), `user_cares`. Trivial and
   never rechecked: `reviews` (reviewer assigned), `works_on`, `part_of`,
   `depends_on` (stack relations), `status` (short state notes), `note`.
+- Any fact while it is stale (2026-10-10, `canRecheckFact`): the app says
+  it may be wrong, so the user can check it whatever its predicate.
 - The PR's glance as a whole: "Recheck" on the glance's title line (the
   action bar until 2026-10-05) ("Recheck this assessment") sends the joined glance as the claim with
   `MemoryRecheckRequest.prKey`; the engine reads it against that PR, its
   newest events and its topic's dossier (`recordedIn`: "Glance: ..."). A
   glance is not memory, so the dialog has no Accept: it shows the outcome,
-  offers "Tell the agent what's wrong" and Close.
+  offers "Tell the agent what's wrong" and Close. On "This no longer
+  holds" it offers "Mark out of date" instead of Close (2026-10-10):
+  `correctMemory` with `prKey` logs `glance_outdated` feedback on the PR
+  (the recheck's reason as the note). The glance hash covers feedback on
+  its PR, so the glance turns stale and the next look or catch-up writes it
+  again. No manual refresh button (2026-09-29 holds).
+- The dialog's title names what it checks ("Recheck topic status",
+  "Recheck #1902's assessment", `recheckTitle`): one screen can hold
+  several Recheck links.
 
 Every correction returns an undo token (`memory:` prefix) valid for
 `UNDO_WINDOW_MS`: undo deletes the feedback row (the only non-append
@@ -2147,6 +2202,17 @@ write on `feedback`), reopens a closed fact, closes a fix's replacement,
 restores a confirmed fact's check state, or restores a relation override.
 The undo map is in memory, like the mark-read queue. The relation "Wrong"
 (with the real relation) stays as it was; it is a choice, not a claim.
+
+**Restore** (2026-10-10). The toast's 6 s was too short to catch a wrong
+click. A dossier line marked wrong, forgotten or fixed stays struck
+through until the next update ("forgotten, gone after the next update",
+"fixed, written in with the next update") and offers Restore all that
+time: `restoreMemoryLine` (`POST /api/memory/restore`) deletes the line's
+`memory_wrong` / `memory_forget` / `memory_fixed` rows logged since the
+latest version. A forgotten work thread offers the same until the next
+sweep (`restoreWorkThread`, `POST /api/work-context/restore`). Facts change
+at once and leave the list, so they keep the toast's Undo only. Local
+writes, no GitHub side, so the longer window carries no risk.
 
 **Lessons from your reviews** (2026-10-02, with a second opinion from
 another model). Some glances miss: the user requests changes on a PR the
@@ -2196,7 +2262,10 @@ picks where it applies. Types and rules: core `lessons.ts`; table `lesson`
   open lessons with "From your review on #4521 · Earlier assessment: Looks
   safe" and three choices. "Remember in this topic" appends the line to the
   topic's tailoring (logged as `tailoring_kept`), which every later prompt
-  for the topic reads. "Use across topics…" asks
+  for the topic reads. The line keeps where it came from ("From your
+  review on #4521: When …", or "From your note on #N:" for a taught one,
+  `lessonTailoringLine`, 2026-10-10, MEM-A-21), so "You told the agent"
+  does not claim words the user never typed. "Use across topics…" asks
   `proposeInstructionsFromLesson` for the instructions with that one line
   added: the prompt gets the chosen line and the review fenced as context,
   and the engine drops any answer that changes or removes an existing line
@@ -2209,7 +2278,9 @@ picks where it applies. Types and rules: core `lessons.ts`; table `lesson`
   verdict: "What should it check next time?" The note is the user's own
   words (not fenced); `teachLesson` stores a `taught` lesson with the
   current glance and writes its line right away (capped at 30 per rolling
-  24h), then shows it with the same three choices. A wording like
+  24h), then shows it with the same three choices. The button says so
+  ("Teach, then choose where it applies"), and the user's note shows
+  above the line the agent wrote from it ("Your note: …"). A wording like
   "Disagree", "Wrong" or "Why?" was rejected: the user reads those as
   asking for an explanation, not as changing what the agent does next time.
 - **Lifecycle**: a pending lesson whose topic retires, is archived or
@@ -2235,7 +2306,16 @@ topic: the tile chat (routes, engine, the prompt's tile mode) was removed
 once the renderer stopped using it; old tile chat rows stay in
 `chat_message` and still reach the dossier through `topic_id`. A topic
 merge (accepted proposal or the topic tidy) moves the merged topic's
-messages and its chat to the target (`moveTopicChat`). A turn's
+messages and its chat to the target (`moveTopicChat`), and its tailoring
+too (`carryTailoring`, 2026-10-10): each line joins the target's with
+where it came from ("From Frontend build: Only cache changes."), lines the
+target already has are skipped, and the carried lines are logged as
+`tailoring_kept` on the target. Before, the line stayed on the archived
+topic and silently left every prompt.
+An answer that lands while another topic is on screen (the user asked,
+then moved on) shows a quiet toast "The agent answered on <topic>." with
+Open, which opens that topic's agent pane (2026-10-10, B-A-14). A question
+on its way cannot be cancelled. A turn's
 two messages are stored together once the answer is in: a failed call
 stores nothing, so the history never holds an unanswered message.
 
@@ -2254,14 +2334,20 @@ process per topic to keep alive. Streaming is left out for the same
 reason: answers are short by design.
 
 **Instructions changes via chat.** Tile chat returns a lasting point
-without a scope; the user picks it: "Keep for this topic" stores tailoring,
-"Just this once" only logs it, "Keep for all topics" calls
+without a scope; the user picks it with one of three buttons (2026-10-10,
+MEM-A-20; two links and no "Just this once" before): "Keep for this topic"
+stores tailoring, "Just this once" only logs it (`tailoring_once`;
+Unsorted logs nothing), and a short line confirms the pick ("Kept for Move
+CI to Depot."). Leaving the point alone also means just this once, without
+the log; the next answer replaces it. "Keep for all topics" calls
 `proposeInstructionsChange`, which gets only the current text and the
 user's own message (never GitHub text; a lesson's proposal is the one
 exception, see "Lessons from your reviews"), is told the user chose all topics,
 and returns the full new text plus a summary. The UI shows it as a line
 diff: Accept, Edit inline, Reject. The general chat in "Your instructions"
-always goes to the same call. When that call finds no change, the point
+always goes to the same call; its open diff outlives leaving the page
+(kept in the renderer until Accept or Reject, like the agent pane's,
+MEM-A-05). When that call finds no change, the point
 stays on screen so it can still go to the topic. Proposals must cite a
 stored user chat message (`sourceChatMessageId`) or an open lesson
 (`sourceLessonId`); the engine refuses anything else.
@@ -2279,6 +2365,11 @@ rebased (asked again on top of the new text) for another decision. Writes
 go through a temp file + rename and follow a symlink to its target.
 An accepted change counts as new context: dossiers with a stored context
 hash refresh once on the next sync, and the accept message says how many.
+A proposal the user edited before Accept is saved with a summary of the
+saved text, not the agent's (`editedInstructionsSummary`, 2026-10-10,
+MEM-A-19): "Added: <their line> (your wording)", "Removed: …", "Changed
+to: …", or counts for bigger edits. While editing, the card header says
+"Your edited version (+1 −0 lines)".
 
 **"Why?" provenance.** Every dossier line (goal, status, open question,
 timeline entry, care, recent change) carries `refs` (GitHub) and
@@ -2294,7 +2385,14 @@ the shared `PROMPT_VERSION` stays, so glances and sets are not regenerated.
 `?topic=&version=&path=`) describes each source from stored snapshots
 (who, what, when, quote, link) and a verify state: ok, stale (reason),
 closed, user_only, unsourced. The status line counts as stale when the
-head moved since its refs; questions use `verifyDossier`.
+head moved since its refs; questions use `verifyDossier`. The line itself
+shows the same badge (`headerLineIssues`, see Verify-before-use), not only
+its "Why?".
+
+A topic without a dossier says so under its summary ("No dossier yet: the
+agent writes one with the next update of this topic."), never Unsorted. The
+PR pane's facts list reads "No lasting facts about this PR yet." when
+empty: the glance above it is not a fact.
 
 Routes: `GET/POST /api/instructions`, `GET/POST /api/instructions/chat`,
 `POST /api/instructions/proposals`, `GET /api/memory/sources`.
@@ -2530,7 +2628,12 @@ need it, and never retry per call.
   to the rules like over the daily cap. Consolidation reports
   `skipped: 'agent_off'`. The work context sweep returns "skipped" without
   recording a failure. Chat, Recheck, drafts and refine fail with the
-  headline.
+  headline. The renderer does not offer them meanwhile (2026-10-10, bug
+  hunt MEM-A-11, OPS-A-13): while `ToolsView.agentOn` is false, chat Send
+  and "For all topics", "Draft with agent" / "Rewrite with agent", and
+  Recheck on a glance or memory line are disabled with the headline (and
+  when it is tried again) as their tooltip (`agentOffReason`). The agent
+  pane says so in one quiet line above the input; typing still works.
 - **PATH.** A Finder launch gets launchd's minimal PATH. Desktop main
   builds PATH without a shell (`launchToolPath`, pure part `toolSearchPath`
   in core): `toolPath` from `~/.config/postpile/config.json` first (mise or
@@ -4782,7 +4885,11 @@ and detail start equally wide (2026-09-30, was a 420-480px tile clamp). At
   line, "Written before the last change. A new assessment will be written
   on the next sync." ("Updating now: a new assessment is being written.").
   Its advice (for-you lines, RISK box, Does / Others, Look at first) folds
-  away behind "Show old assessment". The glance schema stays
+  away behind "Show old assessment". While a new one is being written
+  ("· updating") the old advice shows without the toggle, and the card
+  keeps the tallest height it had since then until the PR changes
+  (2026-10-10, bug hunt MEM-A-12): the review row under it no longer moves
+  when the new glance lands. The glance schema stays
   prose; sentences split into lines in the renderer (a dot followed by a
   space and a capital or digit ends one), so stored glances keep working.
   The action bar (primary, Ask, Mark read, Snooze (single-PR tiles only),
@@ -5795,7 +5902,8 @@ Owner decisions (2026-09-30):
 - **The ✨ rule.** ✨ marks an action that is on offer because an agent's
   verdict supports it. It sits in a pill on the button, and the pill says
   what the agent judged: the risk level (`✨ low`, `✨ medium`) or why it
-  cannot back the action (`✨ look closer`, `✨ high`, `✨ rechecking…`).
+  cannot back the action (`✨ look closer`, `✨ high`, `✨ checking…`,
+  `✨ no verdict`).
   Actions that work without the agent never carry ✨.
 - **Agent-safe PR.** A current glance (not `glanceStale`, not missing),
   verdict `LOOKS_SAFE`, risk low or medium. The risk level is the first
@@ -5815,9 +5923,16 @@ Owner decisions (2026-09-30):
   approvable PR. Active when at least one approvable PR in the tile is
   covered: it approves only those (a stack base to head), names the rest
   as left out, and the pill shows the highest risk among the covered PRs.
-  Greyed out only when nothing is covered. The reason is `rechecking…` when
-  any approvable PR's own glance is stale or missing, else `look closer` or
-  `high`. The topic's Approve covers exactly the union of what its
+  Greyed out only when nothing is covered. When an approvable PR's own
+  glance is stale or missing, the reason says whether a new one is coming
+  (2026-10-10, bug hunt MEM-A-01, `noVerdictBlock` from the PR's
+  `glanceState` and `glanceRefreshBlock`): `rechecking` ("Checking…")
+  only while it is writing, queued, or stale and rewritten when the user
+  looks; else "No verdict" with why in the tooltip: `agent_off` (claude
+  off or paused), `agent_limit` (a call cap, the daily cap or catch-up off
+  holds it until the next sync), `glance_failed`. Then `look closer` or
+  `high`. Order: checking, agent off, agent limit, glance failed, look
+  closer, high. The topic's Approve covers exactly the union of what its
   unsnoozed tiles cover.
   Owner, 2026-10-01: the tile Approve is the same magic approval as the
   topic's; the earlier all-or-nothing tile rule was a spec mistake and
@@ -5852,8 +5967,9 @@ Owner decisions (2026-09-30):
   left out is named with its reason (look closer, high risk, rechecking,
   or "waits on #N" for a stack layer above one that needs a look).
   A PR whose recheck comes back safe joins the count. Greyed out when no
-  approvable PR is agent-safe, with `rechecking…` if any is rechecking,
-  else `look closer`.
+  approvable PR is agent-safe, with the first PR without a verdict
+  (checking, then agent off, agent limit, glance failed), else `look
+  closer`.
 - **Approve is final, so it asks first.** Both Approve buttons open a
   confirm list: each PR with its verdict and risk line, plus the PRs left
   out and why. Each PR goes through the existing approve path with its
@@ -5892,7 +6008,7 @@ Owner decisions (2026-09-30):
   soft green (light green fill, green text and edge) with a green pill;
   greyed buttons keep the dashed outline with a pill in the colour of the
   reason (2026-10-01, was always honey): amber for Look closer, red for
-  high risk, honey when it asks for you, neutral while rechecking. Filled green is only the confirm dialog's "Approve N".
+  high risk, honey when it asks for you, neutral while checking or without a verdict. Filled green is only the confirm dialog's "Approve N".
 - **Tile footer (2026-10-01, design 4b/5e).** No ink button. Left: the turn
   line, then the tile's Approve (✨) right next to it; next to Approve the
   move text needs a wider footer before it shows. Right: Mark read, Snooze,
@@ -7238,8 +7354,12 @@ run or sync writes it), `agent_off`, `failed` (asked twice, no usable
 answer), `capped` (`call_cap` or `daily_cap` gap), `none` (merged, closed,
 pulled in: gets no glance). The renderer words them (`glanceStateText`):
 "Writing the glance…" with a spinner, "Glance queued", "Agent features are
-off", "Waiting: daily agent limit reached, next full sync in N min" (or
-"the last sync hit its agent-call cap"), "Glance failed" with Retry.
+off or paused", "Not looked at yet: PostPile used up today's agent calls.
+It reads this one in the next sync, in about N min." (or "ran out of agent
+calls in the last sync"; pill "Not looked at yet", 2026-10-10, was
+"Waiting (agent limit)"), "Glance failed: the agent gave no usable answer
+for this PR." with Retry. The parser's own reason ("left out of the
+answer") is only the tooltip.
 Pulled-in stack layers keep "Pulled in to complete the stack".
 
 **Retry** (`POST /api/prs/:owner/:repo/:number/glance/retry`,
@@ -9046,7 +9166,9 @@ preflight and does not know the token, so CORS stays open.
 | `POST /api/team-roles` `{team, role}` | `setTeamRole()` (local, sticks; 400 for a team the viewer is not on) |
 | `GET /api/debug/notifications?limit=` | `debugNotifications()` (default 200, max 1000) |
 | `POST /api/topics/:id/tailoring` `{text, keep}` | `decideTailoring()` |
-| `POST /api/proposals/:id` `{accept}` | `decideTopicProposal()` |
+| `POST /api/topics/:id/tailoring/remove` `{line}` | `removeTailoringLine()` (local, logged, undo token) |
+| `POST /api/proposals/:id` `{accept}` | `decideTopicProposal()` (a decline carries an undo token) |
+| `POST /api/rule-proposals/:id/remove` | `removeStandingRule()` (an accepted rule for every topic; local, logged, undo token) |
 | `GET /api/prs/:owner/:repo/:number` | `getPr()` (`pr` is the slim `PrPaneView`, see "The PR pane") |
 | `POST /api/prs/:owner/:repo/:number/approve` `{headOid, body?, noteSource?}` | `approve()` (body: "Approve with comment"; noteSource: telemetry only) |
 | `POST /api/prs/:owner/:repo/:number/comment-review` `{headOid, body, noteSource?}` | `commentReview()` (event COMMENT; final; refused while locked) |

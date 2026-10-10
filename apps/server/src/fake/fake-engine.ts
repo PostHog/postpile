@@ -46,6 +46,8 @@ import type {
   MemoryCorrection,
   MemoryCorrectionKind,
   MemoryRecheckRequest,
+  MemoryRestore,
+  Glance,
   MemoryRecheckResult,
   MemorySources,
   MemoryTarget,
@@ -101,7 +103,10 @@ import type {
   BusyInboxView,
 } from '@postpile/core';
 import {
+  appendTailoring,
   busyInboxView,
+  lessonTailoringLine,
+  removeTailoringLine,
   hotFactsOf,
   hotTier,
   findComment,
@@ -479,6 +484,8 @@ export class FakeEngine implements EngineService {
   /** Sample decisions plus the fake poll's own, oldest sample first. */
   private readonly pingDecisions: PingDecision[];
   private readonly memoryUndos = new Map<string, { until: number; undo: () => void }>();
+  /** Glances a recheck found no longer hold: stale until a new glance replaces that one, like the engine's feedback hash. */
+  private readonly outdatedGlances = new Set<Glance>();
   /** What a mute or unmute replaced, by its undo token (like TileActions). */
   private readonly snoozeUndos = new Map<string, { remove: PrKey[]; restore: Snooze[] }>();
   private readonly recheckDelayMs: number;
@@ -656,6 +663,10 @@ export class FakeEngine implements EngineService {
 
   /** One sample glance reads as written before the PR's last push, so the stale verdict box can be seen, until refresh on look rewrites it. */
   private isGlanceStale(prKey: PrKey): boolean {
+    const glance = this.data.glances.find((candidate) => candidate.prKey === prKey);
+    if (glance && this.outdatedGlances.has(glance)) {
+      return true;
+    }
     return STALE_SAMPLE_GLANCES.has(prKey) && !this.catchUp.wrote(prKey) && this.data.glances.some((glance) => glance.prKey === prKey);
   }
 
@@ -2261,13 +2272,38 @@ export class FakeEngine implements EngineService {
     if (!keep) {
       return ok('Used just this once');
     }
-    topic.tailoring = topic.tailoring ? `${topic.tailoring}\n${text}` : text;
+    topic.tailoring = appendTailoring(topic.tailoring, text);
     topic.updatedAt = this.timestamp();
     return ok('Kept for this topic');
   }
 
+  /** Like the engine's: one line out of the topic's tailoring, logged, with Undo. */
+  async removeTailoringLine(topicId: string, line: string): Promise<ActionResult> {
+    const topic = this.data.topics.find((candidate) => candidate.id === topicId);
+    if (!topic) {
+      return fail(`no topic ${topicId}`);
+    }
+    const tailoring = removeTailoringLine(topic.tailoring, line);
+    if (tailoring === null) {
+      return fail('That line is no longer kept for this topic.');
+    }
+    const before = topic.tailoring;
+    topic.tailoring = tailoring;
+    topic.updatedAt = this.timestamp();
+    this.recordFeedback({ kind: 'tailoring_removed', topicId, tileId: null, prKey: null, setId: null, eventId: null, note: line.trim() });
+    const token = this.memoryUndo(() => {
+      topic.tailoring = before;
+      topic.updatedAt = this.timestamp();
+    });
+    return ok('Removed. The agent stops applying it in this topic.', token);
+  }
+
   async decideTopicProposal(proposalId: string, accept: boolean): Promise<ActionResult> {
-    return this.topicChanges.decide(proposalId, accept);
+    const result = this.topicChanges.decide(proposalId, accept);
+    if (!result.ok || accept) {
+      return result;
+    }
+    return ok(result.message, this.memoryUndo(() => this.topicChanges.reopen(proposalId)));
   }
 
   async proposeTopicChange(change: TopicChangeRequest, options: { client: string }): Promise<TopicChangeResult> {
@@ -2305,7 +2341,20 @@ export class FakeEngine implements EngineService {
   }
 
   async decideRuleProposal(proposalId: string, accept: boolean): Promise<ActionResult> {
-    return this.memory.decideRuleProposal(proposalId, accept, this.data.topics);
+    const result = this.memory.decideRuleProposal(proposalId, accept, this.data.topics);
+    if (!result.ok || accept) {
+      return result;
+    }
+    return ok(result.message, this.memoryUndo(() => this.memory.reopenRule(proposalId)));
+  }
+
+  async removeStandingRule(ruleId: string): Promise<ActionResult> {
+    const removed = this.memory.removeRule(ruleId);
+    if (!removed) {
+      return fail('That rule is no longer in use.');
+    }
+    this.recordFeedback({ kind: 'rule_removed', topicId: null, tileId: null, prKey: null, setId: null, eventId: null, note: removed.text });
+    return ok('Removed. The agent stops applying it from the next call on.', this.memoryUndo(removed.undo));
   }
 
   async archiveTopic(topicId: string): Promise<ActionResult> {
@@ -2362,12 +2411,42 @@ export class FakeEngine implements EngineService {
     this.feedback.splice(this.feedback.indexOf(entry), 1);
   }
 
+  /** Like MemoryActions.outdateGlance: feedback on the PR, and the glance reads stale until rewritten. */
+  private outdateGlance(prKey: PrKey, reason: string): ActionResult {
+    const glance = this.data.glances.find((candidate) => candidate.prKey === prKey);
+    if (!glance) {
+      return fail(`no glance for ${prKey}`);
+    }
+    this.outdatedGlances.add(glance);
+    const entry = this.logCorrection('glance_outdated', this.data.membership.get(prKey) ?? null, prKey, reason);
+    const token = this.memoryUndo(() => {
+      this.outdatedGlances.delete(glance);
+      this.dropFeedback(entry);
+    });
+    return ok('Marked out of date. The agent writes it again on your next look.', token);
+  }
+
+  /** Like MemoryActions.restoreLine: the line's corrections since the latest dossier version go. */
+  async restoreMemoryLine(input: MemoryRestore): Promise<ActionResult> {
+    const pending = this.memory.pendingCorrections(input, this.feedback);
+    if (pending.length === 0) {
+      return fail('Nothing to restore: the topic memory was already rewritten.');
+    }
+    for (const entry of pending) {
+      this.dropFeedback(entry);
+    }
+    return ok('Restored. The next sync keeps that line.');
+  }
+
   /** Same contract as the real engine: a fact changes now, a dossier line waits for the next update. Undoable. */
   async correctMemory(input: MemoryCorrection): Promise<ActionResult> {
     const kind = FAKE_FEEDBACK_KINDS[input.kind];
     const fixed = input.fixedText?.trim() ?? '';
     if (input.kind === 'fix' && fixed === '') {
       return fail('a fix needs the corrected line');
+    }
+    if (input.prKey) {
+      return this.outdateGlance(input.prKey, input.text);
     }
     if (input.factId === null) {
       if (!this.data.topics.some((topic) => topic.id === input.topicId)) {
@@ -2441,7 +2520,7 @@ export class FakeEngine implements EngineService {
   }
 
   async getInstructions(): Promise<InstructionsView> {
-    return this.instructions.view();
+    return { ...this.instructions.view(), rules: this.memory.acceptedGlobalRules() };
   }
 
   async getInstructionsChat(): Promise<ChatMessage[]> {
@@ -2500,7 +2579,7 @@ export class FakeEngine implements EngineService {
     if (lesson.topicId === null) {
       return fail('Its PR is not in a topic yet. Use it across topics, or wait for the next sync to sort it.');
     }
-    const kept = await this.decideTailoring(lesson.topicId, lesson.text, true);
+    const kept = await this.decideTailoring(lesson.topicId, lessonTailoringLine(lesson.source, lesson.prNumber, lesson.text), true);
     if (!kept.ok) {
       return kept;
     }
@@ -2534,6 +2613,10 @@ export class FakeEngine implements EngineService {
       return fail('That thread is gone; the digest changed meanwhile.');
     }
     return { ...forgotten.result, undoToken: this.memoryUndo(forgotten.undo) };
+  }
+
+  async restoreWorkThread(input: WorkThreadForget): Promise<ActionResult> {
+    return this.workContext.restore(input);
   }
 
   async setSweepSkip(patterns: string[]): Promise<ActionResult> {

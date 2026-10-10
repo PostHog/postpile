@@ -46,6 +46,20 @@ describe('topic tidy after an upgrade', () => {
     expect(h.store.meta.get(TOPIC_GRAIN_KEY)).toBe(String(TOPIC_GRAIN_VERSION));
   });
 
+  it('carries the folded topic\'s tailoring into the one it joins, saying where it came from', async () => {
+    const { h } = tidyHarness();
+    h.store.topics.setTailoring('review-app-packaging', 'Only signing changes.', at(1));
+    h.store.topics.setTailoring('review-app-polling', 'Watch the poll interval.', at(1));
+    h.runner.answer('topic_tidy', {
+      merges: [{ fromTopicIds: ['review-app-packaging'], intoTopicId: 'review-app-polling', name: null, reason: 'one app, two steps' }],
+    });
+    const packaging = h.store.topics.get('review-app-packaging')!.name;
+
+    await h.engine.sync({ agentJobs: ['topics'] });
+
+    expect(h.store.topics.get('review-app-polling')?.tailoring).toBe(`Watch the poll interval.\nFrom ${packaging}: Only signing changes.`);
+  });
+
   it('runs once: the next sync makes no tidy call', async () => {
     const { h } = tidyHarness();
     h.runner.answer('topic_tidy', {});

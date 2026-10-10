@@ -1,4 +1,14 @@
-import type { DossierChange, DossierIssue, DossierStatus, DossierView, FactRef, StaleReason } from '@postpile/core';
+import type {
+  DossierCare,
+  DossierChange,
+  DossierIssue,
+  DossierStatus,
+  DossierView,
+  FactRef,
+  FactView,
+  MemoryRecheckRequest,
+  StaleReason,
+} from '@postpile/core';
 import { prNumber } from './tiles.ts';
 
 const STATUS_LABELS: Record<DossierStatus, string> = {
@@ -119,4 +129,54 @@ export function leadingPerson(text: string, logins: string[]): { login: string; 
 /** The corrected text of a line the user fixed through Recheck, newest fix first; null when not fixed. */
 export function fixedText(view: DossierView, text: string): string | null {
   return view.fixedClaims.find((claim) => claim.text === text)?.fixed ?? null;
+}
+
+/**
+ * A care's source after its text. An observed care is not kept as a rule;
+ * "unconfirmed" read like "you never said it", even for a care taken from
+ * the user's own chat.
+ */
+export function careText(care: DossierCare): string {
+  if (care.source !== 'observed') {
+    return `${care.text} (${care.source})`;
+  }
+  const fromChat = (care.userRefs ?? []).some((ref) => ref.kind === 'chat');
+  return `${care.text} (${fromChat ? 'from your chat' : 'noticed, not kept as a rule'})`;
+}
+
+/** Big claims get Recheck, and so does any fact while it is stale: the app says it may be wrong, so the user can check it. */
+export function canRecheckFact(view: FactView): boolean {
+  return view.recheckable || view.stale !== null;
+}
+
+const RECHECK_LINE_NAMES: Record<string, string> = {
+  status: 'topic status',
+  goal: 'topic goal',
+  openQuestions: 'open question',
+  timeline: 'PR timeline entry',
+  userCares: 'what you care about',
+  people: 'person',
+  recentChanges: 'recent change',
+  relation: 'why this reaches you',
+};
+
+/** The Recheck dialog's title, naming what is checked: a screen can hold several Recheck links. */
+export function recheckTitle(request: MemoryRecheckRequest): string {
+  if (request.prKey) {
+    return `Recheck #${prNumber(request.prKey)}'s assessment`;
+  }
+  if (request.factId !== null) {
+    return 'Recheck fact';
+  }
+  const path = request.target?.kind === 'dossier_line' ? request.target.path : '';
+  const name = RECHECK_LINE_NAMES[path.replace(/\[\d+\]$/, '')];
+  return name ? `Recheck ${name}` : 'Recheck topic memory';
+}
+
+/** The engine's Unsorted pseudo-topic (`UNSORTED_TOPIC_ID`): not a topic yet, so it never gets a dossier. */
+const UNSORTED_TOPIC_ID = 'unsorted';
+
+/** "No dossier yet" under the topic summary: a real topic before its first dossier update. */
+export function awaitsDossier(topicId: string, dossier: DossierView | null): boolean {
+  return dossier === null && topicId !== UNSORTED_TOPIC_ID;
 }

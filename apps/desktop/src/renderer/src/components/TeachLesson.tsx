@@ -8,15 +8,19 @@ import { LessonCard } from './LessonCard.tsx';
 /**
  * "Teach future assessments" under the glance: the user says what it
  * should check next time, the agent makes a lesson line of it, and the
- * line waits for the same three choices as one from a review. A reply
- * without a lesson (nothing reusable, agent off, a failed call) shows as
- * text. Keyed by PR in GlanceCard, so a new PR starts closed.
+ * line waits for the same three choices as one from a review. The agent
+ * rewrites the note into a "When …, …" line, so the user's own words show
+ * above it ("Your note: …"). A reply without a lesson (nothing reusable,
+ * agent off, a failed call) shows as text. Keyed by PR in GlanceCard, so a
+ * new PR starts closed.
  */
 export function TeachLesson(props: { prKey: PrKey }) {
   const actions = useActions();
   const [composing, setComposing] = useState(false);
   const [note, setNote] = useState('');
   const [result, setResult] = useState<TeachLessonResult | null>(null);
+  /** The note as the user typed it, shown above the line the agent wrote from it. */
+  const [taughtNote, setTaughtNote] = useState('');
   const busy = actions.isBusy(`teach:${props.prKey}`);
   const lesson = result?.lesson ?? null;
   // The same lesson also waits in its topic (maybe one it moved to after a sync); once decided anywhere, it is gone here too.
@@ -29,6 +33,7 @@ export function TeachLesson(props: { prKey: PrKey }) {
     const answer = await actions.teachLesson(props.prKey, note);
     if (answer) {
       setResult(answer);
+      setTaughtNote(note.trim());
       setNote('');
       setComposing(false);
     }
@@ -56,7 +61,7 @@ export function TeachLesson(props: { prKey: PrKey }) {
         />
         <div className="flex gap-1.5">
           <Button type="submit" variant="primary" disabled={busy || note.trim() === ''}>
-            {busy ? 'Teaching…' : 'Teach'}
+            {busy ? 'Teaching…' : 'Teach, then choose where it applies'}
           </Button>
           <Button disabled={busy} onClick={() => setComposing(false)}>
             Cancel
@@ -70,6 +75,11 @@ export function TeachLesson(props: { prKey: PrKey }) {
     <div className="flex flex-col gap-2">
       {shown && stillOpen ? (
         <>
+          {taughtNote && (
+            <p className="px-3 text-[11.5px] text-hint">
+              Your note: <span className="text-ink-2 select-text">{taughtNote}</span>
+            </p>
+          )}
           {result?.reply && <p className="px-3 text-[11.5px] text-ink-2">{result.reply}</p>}
           <LessonCard lesson={shown} onDecided={() => setResult(null)} />
         </>
