@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { CleanupOption, InboxCleanupView } from '@postpile/core';
-import { cleanupLine, dialogLead, mergedNote, safeMergedText, savingCounts, timingText } from './cleanup.ts';
+import type { CleanupDialogMode, CleanupOption, InboxCleanupView } from '@postpile/core';
+import { cleanupLine, clearButtonText, dialogLead, enterRunsMain, mergedNote, safeMergedText, savingCounts, timingText } from './cleanup.ts';
 
 const option: CleanupOption = { merged: 'all', older: null, clears: 46, bulkCalls: 1, threadCalls: 150, glancesSaved: 9 };
 
@@ -48,5 +48,23 @@ describe('inbox cleanup words', () => {
     expect(mergedNote('quiet7', view.counts)).toBe('Leaves the ones still getting comments');
     expect(savingCounts(view, option)).toEqual({ after: 31, before: 40 });
     expect(savingCounts(view, { ...option, glancesSaved: 0 })).toBeNull();
+  });
+});
+
+describe('first-run catch-up writes', () => {
+  const firstRun: CleanupDialogMode = { kind: 'first_run', load: 'busy' };
+  const vacation: CleanupDialogMode = { kind: 'vacation', since: '2026-09-01T09:00:00.000Z', awayDays: 30 };
+
+  it('never lets Enter clear on the first run, whichever button is main', () => {
+    expect(enterRunsMain(firstRun, true)).toBe(false);
+    expect(enterRunsMain(firstRun, false)).toBe(true);
+    expect(enterRunsMain(vacation, true)).toBe(true);
+  });
+
+  it('names the effect on the first run, queues under the lock', () => {
+    expect(clearButtonText(firstRun, 28, false)).toBe('Mark 28 read on GitHub');
+    expect(clearButtonText(firstRun, 28, true)).toBe('Queue marking 28 read');
+    expect(clearButtonText(vacation, 28, false)).toBe('Clear 28');
+    expect(clearButtonText({ kind: 'sidebar' }, 28, true)).toBe('Add pending write');
   });
 });

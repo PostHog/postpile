@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import type { InterruptionsView } from '@postpile/core';
+import type { InboxCleanupView, InterruptionsView, SetupStatus, ToolsView } from '@postpile/core';
 import {
   asksNotificationPermission,
   interruptionsAcceptLine,
   interruptionsCard,
+  interruptionsLead,
+  interruptionsLeadText,
   interruptionsMenuHint,
   interruptionsPromptHint,
+  interruptionsPromptWaits,
   interruptionsRowValue,
   interruptionsTitle,
   INTERRUPTIONS_ORDER,
@@ -82,6 +85,40 @@ describe('showsInterruptionsPrompt', () => {
   it('waits for the view and for setup or the start dialog to be out of the way', () => {
     expect(showsInterruptionsPrompt(undefined, false)).toBe(false);
     expect(showsInterruptionsPrompt(neverChosen, true)).toBe(false);
+  });
+});
+
+describe('interruptionsPromptWaits', () => {
+  const idle = { start: null, running: null } as InboxCleanupView;
+  const working = { canSync: true } as ToolsView;
+
+  it('goes ahead when nothing else is on screen', () => {
+    expect(interruptionsPromptWaits(idle, working)).toBe(false);
+  });
+
+  it('waits for the views, the start dialog, a running cleanup and a usable gh', () => {
+    expect(interruptionsPromptWaits(undefined, working)).toBe(true);
+    expect(interruptionsPromptWaits(idle, undefined)).toBe(true);
+    expect(interruptionsPromptWaits({ ...idle, start: { kind: 'weekend', since: '2026-10-03T09:00:00.000Z' } }, working)).toBe(true);
+    expect(interruptionsPromptWaits({ ...idle, running: { done: 1, total: 5, merged: true } }, working)).toBe(true);
+    expect(interruptionsPromptWaits(idle, { ...working, canSync: false })).toBe(true);
+  });
+});
+
+describe('interruptionsLead', () => {
+  const status: SetupStatus = { needed: false, flag: null, flaggedAt: null, hasInstructions: false };
+
+  it('gives a new install that skipped setup the neutral lead', () => {
+    const lead = interruptionsLead({ ...status, flag: 'skipped' });
+    expect(lead).toBe('fresh');
+    expect(interruptionsLeadText(lead)).not.toContain('Until now');
+  });
+
+  it('keeps the upgrade lead for everyone else, and while the status loads', () => {
+    expect(interruptionsLead({ ...status, flag: 'skipped', hasInstructions: true })).toBe('upgrade');
+    expect(interruptionsLead({ ...status, hasInstructions: true })).toBe('upgrade');
+    expect(interruptionsLead(undefined)).toBe('upgrade');
+    expect(interruptionsLeadText('upgrade')).toContain('Until now');
   });
 });
 

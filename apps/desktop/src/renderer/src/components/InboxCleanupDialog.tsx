@@ -13,8 +13,10 @@ import {
 import { CLEANUP_BUSY, useActions } from '../api/actions.tsx';
 import {
   CLEANUP_PENDING_NOTE,
+  clearButtonText,
   dialogLead,
   dialogTitle,
+  enterRunsMain,
   MERGED_PICK_LABELS,
   mergedCount,
   mergedNote,
@@ -147,6 +149,7 @@ export function InboxCleanupDialog(props: { mode: CleanupDialogMode; view: Inbox
   // On start every way out answers the dialog; from the sidebar it just closes.
   const dismiss = sidebar ? onClose : () => void startAsUsual();
   const main = mainIsClear ? () => void clear() : dismiss;
+  const enterRunsMainButton = enterRunsMain(mode, mainIsClear);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -154,7 +157,7 @@ export function InboxCleanupDialog(props: { mode: CleanupDialogMode; view: Inbox
         dismiss();
       }
       // A focused button or checkbox takes Enter itself.
-      if (event.key === 'Enter' && !(event.target instanceof HTMLButtonElement || event.target instanceof HTMLInputElement)) {
+      if (event.key === 'Enter' && enterRunsMainButton && !(event.target instanceof HTMLButtonElement || event.target instanceof HTMLInputElement)) {
         main();
       }
     };
@@ -171,9 +174,9 @@ export function InboxCleanupDialog(props: { mode: CleanupDialogMode; view: Inbox
       onClick={() => void clear()}
     >
       <TrashIcon />
-      {locked ? 'Add pending write' : `Clear ${clears}`}
+      {clearButtonText(mode, clears, locked)}
       {setup.recommended && <span className="rounded-full bg-safe-soft px-1.5 text-[10px] leading-[17px] font-semibold text-safe">Recommended</span>}
-      {mainIsClear && !sidebar && <span className="font-mono text-[10px] opacity-60">⏎</span>}
+      {mainIsClear && !sidebar && enterRunsMainButton && <span className="font-mono text-[10px] opacity-60">⏎</span>}
     </Button>
   );
   const startButton = (

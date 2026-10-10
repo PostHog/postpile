@@ -1,4 +1,4 @@
-import type { InterruptionsMode, InterruptionsView } from '@postpile/core';
+import type { InboxCleanupView, InterruptionsMode, InterruptionsView, SetupStatus, ToolsView } from '@postpile/core';
 
 /**
  * The mode shown before GET /api/interruptions answers: core's
@@ -113,6 +113,40 @@ export function showsInterruptionsPrompt(view: InterruptionsView | undefined, bl
     return false;
   }
   return !view.chosen;
+}
+
+/**
+ * Whether the prompt waits its turn: until the cleanup view and the tools
+ * status loaded, while the cleanup start dialog is due or a cleanup runs
+ * (its result toast comes first), and while gh cannot be used (a ping
+ * question is pointless before anything syncs).
+ */
+export function interruptionsPromptWaits(cleanup: InboxCleanupView | undefined, tools: ToolsView | undefined): boolean {
+  if (cleanup === undefined || tools === undefined) {
+    return true;
+  }
+  return cleanup.start !== null || cleanup.running !== null || !tools.canSync;
+}
+
+/**
+ * The prompt's lead. A new install that skipped setup (flag skipped, no
+ * instructions) never had pings, so "until now" would be false for it.
+ * Everyone else with no stored pick is an upgrader.
+ */
+export type InterruptionsLead = 'fresh' | 'upgrade';
+
+export function interruptionsLead(setup: SetupStatus | undefined): InterruptionsLead {
+  return setup !== undefined && setup.flag === 'skipped' && !setup.hasInstructions ? 'fresh' : 'upgrade';
+}
+
+const LEAD_TEXT: Record<InterruptionsLead, string> = {
+  fresh: 'PostPile stays quiet unless you pick otherwise. Pick when it may tap you on the shoulder.',
+  upgrade:
+    'New in this version: PostPile stays quiet unless you pick otherwise. Until now it sent a Mac notification as soon as something crucial needed you; that is “As soon as it matters” below.',
+};
+
+export function interruptionsLeadText(lead: InterruptionsLead): string {
+  return LEAD_TEXT[lead];
 }
 
 /**

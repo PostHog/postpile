@@ -97,6 +97,13 @@ function SyncStatus() {
     );
   }
   const report = actions.lastSync;
+  if (report?.heldForCatchUp) {
+    return (
+      <StatusText dot="amber" detail={`The first sync fetched ${report.prsFetched} PRs and waits for the inbox question before the agent work.`}>
+        waiting for your answer
+      </StatusText>
+    );
+  }
   if (!report) {
     return (
       <StatusText dot="quiet" detail="not synced yet">
@@ -108,11 +115,13 @@ function SyncStatus() {
   const errors = report.errors.length;
   const pollOn = live !== undefined && live.state !== 'off';
   const fresh = pollIsFresh(live, now);
+  // With the poll off nothing else notices that GitHub cannot be reached; with it on, its backoff says "updates paused".
+  const unreachable = !pollOn && tools?.gh.state === 'offline';
   const paused = live !== undefined && (live.state === 'blocked' || live.state === 'backoff');
   // Before its first answer the poll is starting, not behind: no amber.
   const behind = pollOn && live.lastAnsweredAt !== null && !fresh;
   let dot: DotTone = 'open';
-  if (paused || behind) {
+  if (paused || behind || unreachable) {
     dot = 'amber';
   }
   if (capped) {
@@ -126,7 +135,9 @@ function SyncStatus() {
   const word = lastAnsweredAt ? 'checked' : 'synced';
   const age = ageLabel(lastAnsweredAt ?? report.finishedAt, now);
   let headline: ReactNode;
-  if (fresh) {
+  if (unreachable) {
+    headline = 'GitHub unreachable';
+  } else if (fresh) {
     headline = 'up to date';
   } else if (paused) {
     // The footer and the tooltip say why: backing off, catching up, consolidating.
