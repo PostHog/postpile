@@ -135,12 +135,15 @@ export function pollSecondsFromEnv(value: string | undefined): number {
   return value !== undefined && value.trim() !== '' && Number.isInteger(parsed) && parsed >= 0 ? parsed : DEFAULT_POLL_SECONDS;
 }
 
-/** POSTPILE_FAKE_UPDATE: 0 for no sample update, pill for the small pill, anything else for the bar. */
+/** POSTPILE_FAKE_UPDATE: 0 for no sample update, pill for the small pill, many for 12 releases, anything else for the bar. */
 function fakeUpdateMode(value: string | undefined): FakeUpdateMode {
   if (value === '0') {
     return 'none';
   }
-  return value === 'pill' ? 'pill' : 'bar';
+  if (value === 'pill' || value === 'many') {
+    return value;
+  }
+  return 'bar';
 }
 
 /**

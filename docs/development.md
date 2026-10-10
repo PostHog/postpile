@@ -97,7 +97,7 @@ Instructions for every prompt go in `~/.config/postpile/instructions.md` (honour
 Environment variables. The packaged app only sees them when you start its binary from a terminal; `open` does not pass them.
 
 - `POSTPILE_FAKE=1`: sample data, no GitHub, no agent, no database (UI work)
-- `POSTPILE_FAKE_UPDATE=0`: with `POSTPILE_FAKE=1`, no sample update in the title bar (it shows one by default)
+- `POSTPILE_FAKE_UPDATE`: with `POSTPILE_FAKE=1`, the sample update in the title bar: `0` none, `pill` the small pill (1 release), `many` more releases than one page of the release list ("10+"); the bar (3 releases) otherwise
 - `POSTPILE_FAKE_INSTALL`: with `POSTPILE_FAKE=1`, the sample self-update state: `ready` (default, "Restart to update", which only relaunches), `downloading`, `failed` or `off` (the brew command)
 - `POSTPILE_FAKE_TIDY=1`: with `POSTPILE_FAKE=1`, the first sync runs a sample topic tidy, so the "Tidying up your topics and tiles" overlay shows for a few seconds
 - `POSTPILE_FAKE_CATCH_UP=0`: with `POSTPILE_FAKE=1`, no inbox catch-up dialog on start (by default every fake start is a first run with a pile of merged PRs, so it shows)
@@ -120,7 +120,7 @@ Environment variables. The packaged app only sees them when you start its binary
 - `POSTPILE_TOPIC_DIGEST=1`: one agent call per topic for the dossier and its first glances (`topic_digest`), instead of separate dossier and glance calls. Off by default while it is compared (DESIGN.md › One call per topic)
 - `POSTPILE_CLAUDE_BIN`: the `claude` binary to run
 - `POSTPILE_CLAUDE_DIR`: the folder the work context sweep reads, default `~/.claude`
-- `POSTPILE_SWEEP_SKIP`: comma-separated `~/.claude/projects` folders the sweep never reads; wins over `sweepSkip` in `~/.config/postpile/config.json`, which wins over the default `personal,private`; empty means none
+- `POSTPILE_SWEEP_SKIP`: comma-separated `~/.claude/projects` folders the sweep never reads; wins over `sweepSkip` in `~/.config/postpile/config.json`, which wins over the default `personal,private`; empty means none. Sample data (`POSTPILE_FAKE=1`) honours it too
 - `POSTPILE_LOG_DIR`: where logs go
 
 ## Layout

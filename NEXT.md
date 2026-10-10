@@ -2612,5 +2612,10 @@ Env switches:
   ```
   POSTPILE_FAKE=1 POSTPILE_FAKE_EXTRA=board POSTPILE_TOKEN=devtok PORT=4877 pnpm server
   ```
+- `POSTPILE_FAKE_UPDATE` (with `POSTPILE_FAKE=1`): `0` no sample update,
+  `pill` the small pill, `many` 12 newer releases, of which the one-page
+  check sees 10 ("10+ releases"); the bar otherwise. The sample work
+  context honours `POSTPILE_SWEEP_SKIP` like the real sweep (the skip
+  input turns read-only, an empty value skips nothing).
 - `POSTPILE_MODEL`, `POSTPILE_GLANCE_MODEL`,
   `POSTPILE_AGENT_CONCURRENCY` (default 8): agent knobs.
