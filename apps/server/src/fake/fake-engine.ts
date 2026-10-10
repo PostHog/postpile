@@ -444,7 +444,7 @@ export class FakeEngine implements EngineService {
     this.quota = fakeQuota(options.quota ?? null, this.now);
     this.mcp = new FakeMcp(() => this.toolStatus.view().claude.state, this.now, options.setupStepMs ?? 700);
     this.checkDelayMs = options.setupStepMs ?? 700;
-    this.memory = new FakeMemory(this.data, this.now);
+    this.memory = new FakeMemory(this.data, this.now, options.extras);
     this.topicChanges = new FakeTopicChanges(this.data, this.now);
     this.prNotes = new FakePrNotes(this.data, this.now, (key) => this.fetchedAtOf(key));
     this.prNotes.seed();

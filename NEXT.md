@@ -2591,5 +2591,16 @@ Env switches:
   ```
 - `POSTPILE_FAKE_QUOTA` (with `POSTPILE_FAKE=1`): `low` or `critical`
   simulates a GitHub quota that is low or nearly used, for the footer.
+- `POSTPILE_FAKE_EXTRA` (with `POSTPILE_FAKE=1`): comma-separated sample
+  packs added to the default sample (`apps/server/src/fake/fake-extras.ts`),
+  for states it never shows. `board`: PRs #2001 and up for the board
+  scenarios (approved own PR alone in its topic, a You drive trio of
+  unread / dealt with / merge-ready, a teammate's draft asking you, a
+  thanks that asks nothing, a Not yours merge, a closed PR with an open
+  sibling, the retired standing topic "Release train"):
+
+  ```
+  POSTPILE_FAKE=1 POSTPILE_FAKE_EXTRA=board POSTPILE_TOKEN=devtok PORT=4877 pnpm server
+  ```
 - `POSTPILE_MODEL`, `POSTPILE_GLANCE_MODEL`,
   `POSTPILE_AGENT_CONCURRENCY` (default 8): agent knobs.

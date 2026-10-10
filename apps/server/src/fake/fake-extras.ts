@@ -1,5 +1,8 @@
 import type { SampleClock } from './sample-builders.ts';
 import type { SampleData } from './sample-data.ts';
+import type { SampleMemory } from './sample-memory.ts';
+import { boardPack, boardPackMemory } from './sample-pack-board.ts';
+import { addSamplePack, addSamplePackMemory } from './sample-pack-common.ts';
 
 /**
  * Opt-in sample packs (POSTPILE_FAKE_EXTRA, comma separated): extra topics,
@@ -22,8 +25,10 @@ export function fakeExtras(value: string | undefined): Set<FakeExtra> {
 
 /** Adds each asked-for pack to the sample, after the default topics and PRs. */
 export function addFakeExtras(data: SampleData, clock: SampleClock, extras: Set<FakeExtra>): void {
-  // Each pack adds its topics, PRs, events, glances, tiles and membership here.
-  void data;
-  void clock;
-  void extras;
+  if (extras.has('board')) addSamplePack(data, boardPack(clock));
+}
+
+/** Adds each asked-for pack's memory (relations, dossiers) to the sample memory. */
+export function addFakeExtraMemory(memory: SampleMemory, extras: Set<FakeExtra>): void {
+  if (extras.has('board')) addSamplePackMemory(memory, boardPackMemory());
 }
