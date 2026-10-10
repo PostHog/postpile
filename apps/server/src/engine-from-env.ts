@@ -5,6 +5,7 @@ import { createEngine, DEFAULT_AUTO_SYNC_MINUTES, defaultPaths, migrateLegacyDat
 import { FakeEngine } from './fake/fake-engine.ts';
 import { fakeExtras } from './fake/fake-extras.ts';
 import { FakeFaults } from './fake/fake-faults.ts';
+import { fakeDeliverFromEnv } from './fake/fake-script.ts';
 import { fakeQuotaLevel } from './fake/fake-quota.ts';
 import { fakeToolProblems } from './fake/fake-tools.ts';
 import { FakeUpdates, type FakeUpdateMode } from './fake/fake-update.ts';
@@ -53,11 +54,17 @@ export interface EngineFromEnvOptions {
  * the inbox catch-up dialog (it shows on every fake start otherwise). POSTPILE_FAKE_BUSY=1 makes the
  * inbox busy (the board cap cut it), with invented numbers. POSTPILE_FAKE_LOCKED=1 starts with GitHub
  * writes locked (the sample starts with them on, like the packaged app). POSTPILE_FAKE_FAIL_WRITES,
- * POSTPILE_FAKE_FAIL_SEND and POSTPILE_FAKE_DELAY_MS make writes fail or slow (fake-faults.ts). Otherwise throws
+ * POSTPILE_FAKE_FAIL_SEND and POSTPILE_FAKE_DELAY_MS make writes fail or slow (fake-faults.ts).
+ * POSTPILE_FAKE_DELIVER=a,b,c: each sync after the start sync brings the next scripted step
+ * (fake-script.ts). Otherwise throws
  * DataDirLockedError while another process holds the database.
  */
 export function engineFromEnv(options: EngineFromEnvOptions = {}): EngineService {
   if (isFake()) {
+    const deliver = fakeDeliverFromEnv(process.env.POSTPILE_FAKE_DELIVER);
+    if (deliver.unknown.length > 0) {
+      console.warn(`POSTPILE_FAKE_DELIVER: unknown steps ignored: ${deliver.unknown.join(', ')}`);
+    }
     return new FakeEngine({
       forceSetup: process.env.POSTPILE_FAKE_SETUP === '1',
       missingTools: fakeToolProblems(process.env.POSTPILE_FAKE_MISSING),
@@ -68,6 +75,8 @@ export function engineFromEnv(options: EngineFromEnvOptions = {}): EngineService
       writesLocked: process.env.POSTPILE_FAKE_LOCKED === '1',
       extras: fakeExtras(process.env.POSTPILE_FAKE_EXTRA),
       faults: FakeFaults.fromEnv(process.env.POSTPILE_FAKE_FAIL_WRITES, process.env.POSTPILE_FAKE_FAIL_SEND, process.env.POSTPILE_FAKE_DELAY_MS),
+      deliver: deliver.steps,
+      skipFirstSyncDelivery: process.env.POSTPILE_SYNC_ON_START !== '0',
     });
   }
   if (options.migrateLegacy ?? true) {

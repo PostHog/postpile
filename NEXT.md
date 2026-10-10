@@ -2564,6 +2564,18 @@ Env switches:
   ```
   POSTPILE_FAKE=1 POSTPILE_FAKE_FAIL_WRITES=once:approve POSTPILE_FAKE_DELAY_MS=1500 POSTPILE_TOKEN=devtok PORT=4877 pnpm server
   ```
+- `POSTPILE_FAKE_DELIVER` (with `POSTPILE_FAKE=1`): scripted news on the
+  sample, comma separated steps (`apps/server/src/fake/fake-script.ts`,
+  `GET /api/fake/steps` lists them). Each sync after the start sync
+  delivers the next one, like a sync that fetched news; steps run once.
+  `POST /api/fake/advance {"step":"..."}` runs one at once (fake mode
+  only, token needed):
+
+  ```
+  POSTPILE_FAKE=1 POSTPILE_FAKE_DELIVER=ask-you,push POSTPILE_TOKEN=devtok PORT=4877 pnpm server
+  curl -H 'x-postpile-token: devtok' -H 'content-type: application/json' \
+    -d '{"step":"bot-only-read"}' http://127.0.0.1:4877/api/fake/advance
+  ```
 - `POSTPILE_MAX_AGENT_CALLS`: agent-call cap for syncs and consolidations
   without an explicit cap (launch, "Sync now", `/api/consolidate`, and the
   CLI without `--max-agent-calls`), default 150 (was 30).

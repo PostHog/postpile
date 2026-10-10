@@ -127,6 +127,8 @@ export class FakeWrites {
   private readonly pending: FakePending[] = [];
   /** The sample threads' unread flag "on GitHub", fixed at first sight and changed only by sends. */
   private readonly githubUnread = new Map<string, boolean>();
+  /** When the user last read a sample thread "on GitHub", once a scripted step or a quiet read set it (fake-script.ts). */
+  private readonly githubLastRead = new Map<string, IsoTime>();
   private nextId = 1;
 
   /**
@@ -253,7 +255,29 @@ export class FakeWrites {
       this.githubUnread.set(thread.id, thread.unread);
     }
     const readHere = this.batches.some((batch) => batch.writesOn && batch.threads.some((queued) => queued.id === thread.id));
-    return { ...thread, unread: !readHere && (this.githubUnread.get(thread.id) ?? thread.unread) };
+    const lastReadAt = this.githubLastRead.get(thread.id) ?? thread.lastReadAt;
+    return { ...thread, unread: !readHere && (this.githubUnread.get(thread.id) ?? thread.unread), lastReadAt };
+  }
+
+  /**
+   * New activity on a sample thread (a scripted step): GitHub flags it
+   * unread. A thread the user had read keeps when they read it, just before
+   * the activity at the latest, so the quiet reads can tell what came after.
+   */
+  activity(thread: NotificationThread, at: IsoTime): void {
+    const current = this.onGitHub(thread);
+    if (!current.unread && current.lastReadAt === null) {
+      const justBefore = new Date(new Date(at).getTime() - 1000).toISOString();
+      this.githubLastRead.set(thread.id, current.updatedAt < justBefore ? current.updatedAt : justBefore);
+    }
+    this.githubUnread.set(thread.id, true);
+  }
+
+  /** A quiet mark-read GitHub took, like the engine's QuietReads: read there as of `readAt`, logged with origin `quiet`. */
+  quietRead(thread: NotificationThread, prKey: PrKey, detail: string, readAt: IsoTime): void {
+    this.githubUnread.set(thread.id, false);
+    this.githubLastRead.set(thread.id, readAt);
+    this.record({ action: 'mark_read', origin: 'quiet', outcome: 'github', threadId: thread.id, prKey, detail });
   }
 
   /** Logs the click the same way ReadMarker does: queued per thread, local for PRs without one that changed right away. */

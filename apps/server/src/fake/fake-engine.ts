@@ -238,6 +238,7 @@ import { isSampleMergedThread, sampleMergedVerdict, sampleThreads } from './fake
 import { samplePingDecisions, sampleQuietReads } from './fake-quiet.ts';
 import { derivedEvent, withComment, withReview } from './fake-pr-changes.ts';
 import type { FakeFaults } from './fake-faults.ts';
+import { FakeScript, type FakeStepName } from './fake-script.ts';
 import { FakeWrites, type FakeLocalChange, type FakeSubscription } from './fake-writes.ts';
 import { buildSampleData, type SampleData } from './sample-data.ts';
 
@@ -281,6 +282,10 @@ export interface FakeEngineOptions {
   extras?: Set<FakeExtra>;
   /** POSTPILE_FAKE_FAIL_WRITES, POSTPILE_FAKE_FAIL_SEND and POSTPILE_FAKE_DELAY_MS (see fake-faults.ts). None by default. */
   faults?: FakeFaults;
+  /** POSTPILE_FAKE_DELIVER: scripted steps, one per sync (see fake-script.ts). None by default: a sync brings nothing. */
+  deliver?: FakeStepName[];
+  /** The renderer's start sync takes no step (POSTPILE_SYNC_ON_START is not 0), so the first "Sync now" brings the first one. */
+  skipFirstSyncDelivery?: boolean;
 }
 
 /** The invented busy inbox of POSTPILE_FAKE_BUSY=1: a heavy install over the cap. */
@@ -374,6 +379,8 @@ export class FakeEngine implements EngineService {
   private readonly instructions: FakeInstructions;
   private readonly lessons: FakeLessons;
   private readonly live: FakeLivePoll;
+  /** Scripted news: POSTPILE_FAKE_DELIVER and the /api/fake routes. */
+  readonly script: FakeScript;
   /** The last approve note opener, so the canned drafts rotate like the engine's. */
   private lastApproveOpener: string | null = null;
   private readonly workContext: FakeWorkContext;
@@ -477,6 +484,26 @@ export class FakeEngine implements EngineService {
       title: (prKeys, threadId) => this.pendingTitle(prKeys, threadId),
       startCatchUp: (picks) => this.cleanup.startFromPending(picks, this.cleanupThreads()),
     }, options.writesLocked !== true, options.faults);
+    this.script = new FakeScript(
+      {
+        data: this.data,
+        now: this.now,
+        viewer: () => this.viewer(),
+        userState: (key) => this.data.userStates.find((state) => state.prKey === key) ?? null,
+        notYours: (key) => this.notYours().has(key),
+        writesOn: () => this.writes.isEnabled(),
+        fetchedAt: (key) => this.fetchedAtOf(key),
+        markFetched: (key, at) => this.fetchedAt.set(key, at),
+        thread: (key) => this.prThreads().get(key) ?? null,
+        touchThread: (thread, at) => this.writes.activity(thread, at),
+        quietRead: (thread, key, detail, at) => {
+          this.writes.quietRead(thread, key, detail, at);
+          this.readSample(prReadScope(key, false), { kind: 'quiet', readAt: at });
+        },
+      },
+      options.deliver ?? [],
+      options.skipFirstSyncDelivery ?? false,
+    );
     this.cleanup = new FakeCleanup({
       now: this.now,
       writes: this.writes,
@@ -893,19 +920,22 @@ export class FakeEngine implements EngineService {
       await new Promise((resolve) => setTimeout(resolve, this.syncStepMs * 6));
       progress.agentCallsDone += 1;
     }
+    let news = { prsFetched: 0, newEvents: 0 };
     for (const step of agentOff === null ? FAKE_SYNC_STEPS : FAKE_SYNC_STEPS.slice(0, 1)) {
       progress.running = step.running;
       progress.agentCallsPlanned += step.plan;
       await new Promise((resolve) => setTimeout(resolve, this.syncStepMs));
       progress.agentCallsDone += step.done;
       if (step.running.includes('fetch')) {
-        // Sample data never changes, like a sync right after the live poll caught up.
-        progress.fromGitHub = { prsFetched: 0, newEvents: 0 };
+        // Sample data never changes, like a sync right after the live poll caught up, unless POSTPILE_FAKE_DELIVER has a step left.
+        const delivered = this.script.deliverOnSync();
+        news = { prsFetched: delivered?.prsFetched ?? 0, newEvents: delivered?.newEvents ?? 0 };
+        progress.fromGitHub = news;
       }
       // Like the engine: after the fetch the start dialog may hold the agent work until it is answered.
       if (step.running.includes('fetch') && this.catchUpGate && this.cleanup.holds(this.cleanupThreads())) {
         this.heldSync = true;
-        this.lastSync = { ...this.emptySyncReport(startedAt), heldForCatchUp: true };
+        this.lastSync = { ...this.emptySyncReport(startedAt), ...news, heldForCatchUp: true };
         return this.lastSync;
       }
     }
@@ -913,13 +943,13 @@ export class FakeEngine implements EngineService {
     this.lastSync = {
       startedAt,
       finishedAt: this.timestamp(),
-      notificationsNotModified: true,
+      notificationsNotModified: news.prsFetched === 0,
       threads: this.data.tiles.length,
-      prsFetched: 0,
+      prsFetched: news.prsFetched,
       prsSkipped: 0,
       prsPulledIn: 0,
       prsFound: 0,
-      newEvents: 0,
+      newEvents: news.newEvents,
       agentCalls: agentOff === null ? 4 : 0,
       agentCallStats: agentOff === null ? sampleSyncStats() : emptyAgentCallStats(),
       dossiersUpdated: agentOff === null ? 2 : 0,
@@ -2407,7 +2437,7 @@ export class FakeEngine implements EngineService {
     const poll = this.livePoller?.currentStatus() ?? OFF_POLL_STATUS;
     return {
       ...poll,
-      changeCount: poll.changeCount + this.cleanup.changeCount() + this.prNotes.changes(),
+      changeCount: poll.changeCount + this.cleanup.changeCount() + this.prNotes.changes() + this.script.changes(),
       syncRunning: this.syncing !== null,
       nextAutoSyncAt: this.autoSync?.nextSyncAt() ?? null,
       catchUpChanges: this.catchUp.changes(),
