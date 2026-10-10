@@ -1638,11 +1638,10 @@ export class FakeEngine implements EngineService {
     const state = this.userStateOf(prKey);
     state.approvedAt = at;
     state.approvedCommitOid = pr.headOid;
-    for (const event of this.eventsOf(prKey)) {
-      event.seenAt ??= at;
-    }
+    // Like the engine: approving answers the ping, so the PR is marked read through the queue first.
+    const marked = this.markPrsRead([prKey], [prKey], 'tile', null, [], null, { kind: 'approved' });
     this.addViewerReview(index, 'APPROVED', body, at);
-    return ok(`fake: approved ${prKey} locally, nothing sent to GitHub`);
+    return { ...ok(`fake: approved ${prKey} locally, nothing sent to GitHub`), settleToken: marked.token };
   }
 
   /**
@@ -1672,11 +1671,9 @@ export class FakeEngine implements EngineService {
     }
     this.writes.record({ action: 'comment_review', origin: 'tile', outcome: 'github', prKey, detail: 'sample data: nothing left the process' });
     const at = this.timestamp();
-    for (const event of this.eventsOf(prKey)) {
-      event.seenAt ??= at;
-    }
+    const marked = this.markPrsRead([prKey], [prKey], 'tile', null, [], null, { kind: 'approved' });
     this.addViewerReview(index, 'COMMENTED', body, at);
-    return ok(`fake: comment review kept locally on ${prKey}, nothing sent to GitHub`);
+    return { ...ok(`fake: comment review kept locally on ${prKey}, nothing sent to GitHub`), settleToken: marked.token };
   }
 
   /** Like the engine's approveMany: each PR through the fake approve, reported per PR, no undo. */
@@ -1778,6 +1775,7 @@ export class FakeEngine implements EngineService {
     tileId: string | null,
     extraThreads: NotificationThread[] = [],
     subscription: FakeSubscription | null = null,
+    cause: ReadCause = { kind: 'button' },
   ): FakeReadBatch {
     // Read the GitHub flags before the events change: the fake derives a thread's first flag from them.
     const githubThreads = this.threadsOnGitHub();
@@ -1787,7 +1785,7 @@ export class FakeEngine implements EngineService {
     const writesOn = this.writes.isEnabled();
     // Like ReadMarker: locked with something unread on GitHub, nothing changes until the write goes out.
     const changeHere = writesOn || threads.length === 0;
-    const local = changeHere ? this.readSample({ prKeys, handleKeys }, { kind: 'button' }) : { eventIds: [], handledPrKeys: [] };
+    const local = changeHere ? this.readSample({ prKeys, handleKeys }, cause) : { eventIds: [], handledPrKeys: [] };
     const batch: MarkReadBatch = {
       token: `undo-${this.newId()}`,
       batchId: `fake-batch-${this.newId()}`,

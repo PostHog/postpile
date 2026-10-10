@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { FakeEngine } from './fake-engine.ts';
 
 const LYRA_PR = 'acme/app#1904';
+// Open in the sample with an unread notification thread.
+const UNREAD_PR = 'acme/app#1907';
 
 function engineAt(iso = '2026-09-27T10:00:00Z'): FakeEngine {
   const now = new Date(iso);
@@ -65,5 +67,42 @@ describe('FakeEngine writes land on the sample PR like GitHub would show them', 
     const comment = (await engine.listPrEvents(LYRA_PR)).find((view) => view.event.kind === 'comment' && view.event.actor === 'you');
     expect(comment).toMatchObject({ event: { summary: expect.stringContaining('lockfile hash') }, unseen: false });
     expect((await engine.sendComment(LYRA_PR, '  ')).message).toBe('Empty comment');
+  });
+});
+
+describe('FakeEngine approvals mark the PR read like the engine does', () => {
+  async function threadUnread(engine: FakeEngine, prKey: string): Promise<boolean> {
+    const rows = await engine.debugNotifications(200);
+    return rows.some((row) => row.prKey === prKey && row.thread.unread);
+  }
+
+  async function settled(engine: FakeEngine, advance: () => void): Promise<void> {
+    advance();
+    await engine.debugNotifications(1);
+  }
+
+  it('reads the thread after approve, with a settle token and no NEW from the own approval', async () => {
+    let now = new Date('2026-09-27T10:00:00Z');
+    const engine = new FakeEngine({ now: () => now, syncStepMs: 0, recheckDelayMs: 0, catchUpStepMs: 0, cleanupStepMs: 0 });
+    const head = (await engine.getPr(UNREAD_PR))!.pr.headOid;
+    expect(await threadUnread(engine, UNREAD_PR)).toBe(true);
+    const result = await engine.approve(UNREAD_PR, head, 'Looks good.');
+    expect(result.settleToken).toEqual(expect.any(String));
+    await settled(engine, () => {
+      now = new Date(now.getTime() + 7000);
+    });
+    expect(await threadUnread(engine, UNREAD_PR)).toBe(false);
+  });
+
+  it('reads the thread after a comment review', async () => {
+    let now = new Date('2026-09-27T10:00:00Z');
+    const engine = new FakeEngine({ now: () => now, syncStepMs: 0, recheckDelayMs: 0, catchUpStepMs: 0, cleanupStepMs: 0 });
+    const head = (await engine.getPr(UNREAD_PR))!.pr.headOid;
+    const result = await engine.commentReview(UNREAD_PR, head, 'One question.');
+    expect(result.settleToken).toEqual(expect.any(String));
+    await settled(engine, () => {
+      now = new Date(now.getTime() + 7000);
+    });
+    expect(await threadUnread(engine, UNREAD_PR)).toBe(false);
   });
 });
