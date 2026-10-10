@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { activityList, eventView, prPaneView, prStatus, type ActivityList, type Pr, type PrDetail, type PrSummary, type TileView } from '@postpile/core';
 import { at, makeComment, makeCommit, makeEvent, makePr, makeReview, NO_OPENED_READ, NO_PR_FACTS, viewer, withOffers } from '@postpile/core/fixtures';
@@ -188,5 +188,113 @@ describe('DetailPane', () => {
     // The folded bot rows draw from the slim items too: summary, and the reason in the hover title.
     fireEvent.click(screen.getByRole('button', { name: 'Show 1 bot event' }));
     expect(screen.getByText('Preview deployed').closest('[title]')?.getAttribute('title')).toBe('seen: bot activity');
+  });
+
+  it('keeps a reply draft per PR across PR switches and posts each text only to its own PR', async () => {
+    // Both PRs have a comment with the same id, so only the PR keeps the two drafts apart.
+    const prs = [21, 22].map((number) =>
+      makePr({ number, title: `PR ${number}`, comments: [makeComment({ id: 'c1', author: 'bob', body: `Question on ${number}?`, url: `https://github.com/acme/app/pull/${number}#issuecomment-1` })] }),
+    );
+    const posts: { path: string; body: string }[] = [];
+    vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+      const path = String(url);
+      if (path.endsWith('/api/github-writes')) {
+        return Promise.resolve(new Response(JSON.stringify({ enabled: true, forcedOffReason: null, pending: [] })));
+      }
+      if (path.endsWith('/reply') && init?.method === 'POST') {
+        posts.push({ path: path.slice(path.indexOf('/api/')), body: (JSON.parse(String(init.body)) as { body: string }).body });
+      }
+      return new Promise(() => {});
+    });
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        disconnect() {}
+      },
+    );
+    Element.prototype.scrollIntoView = () => {};
+    const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } });
+    for (const pr of prs) {
+      const comment = eventView(makeEvent({ id: `${pr.key}:comment:c1`, prKey: pr.key, actor: 'bob', sourceId: 'c1', summary: 'bob commented' }));
+      client.setQueryData(queryKeys.pr(pr.key), detailOf(pr, activityList([comment], viewer, null, pr)));
+    }
+    const view: TileView = { ...stackView, prs: prs.map(summaryOf) };
+    const wrap = (prKey: string) => (
+      <QueryClientProvider client={client}>
+        <ActionsProvider>
+          <DetailPane view={view} prKey={prKey} onSelectPr={() => {}} noSelectionText="" />
+        </ActionsProvider>
+      </QueryClientProvider>
+    );
+    const reply = () => screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Reply to bob' });
+
+    const replyButton = () => screen.getByRole<HTMLButtonElement>('button', { name: /^Reply$/ });
+
+    const { rerender } = render(wrap('acme/app#21'));
+    // Writes are blocked until the lock's state has loaded.
+    await waitFor(() => expect(replyButton().disabled).toBe(false));
+    fireEvent.click(replyButton());
+    fireEvent.change(reply(), { target: { value: 'Only for 21' } });
+
+    // Another PR: no composer follows, and its own reply starts empty.
+    rerender(wrap('acme/app#22'));
+    expect(screen.queryByRole('textbox', { name: 'Reply to bob' })).toBeNull();
+    fireEvent.click(replyButton());
+    expect(reply().value).toBe('');
+    fireEvent.change(reply(), { target: { value: 'Only for 22' } });
+    await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Post reply to bob' }).disabled).toBe(false));
+    fireEvent.click(screen.getByRole('button', { name: 'Post reply to bob' }));
+
+    // Back on the first PR: its composer is open again with its own text.
+    rerender(wrap('acme/app#21'));
+    expect(reply().value).toBe('Only for 21');
+    fireEvent.click(screen.getByRole('button', { name: 'Post reply to bob' }));
+
+    await waitFor(() => expect(posts).toHaveLength(2));
+    expect(posts).toEqual([
+      { path: '/api/prs/acme/app/22/reply', body: 'Only for 22' },
+      { path: '/api/prs/acme/app/21/reply', body: 'Only for 21' },
+    ]);
+  });
+
+  it('gates Approve and "Reply ↓" while GitHub writes are locked', async () => {
+    const stored = makePr({
+      number: 31,
+      title: 'Locked PR',
+      comments: [makeComment({ id: 'c1', author: 'bob', body: 'Can you look?', url: 'https://github.com/acme/app/pull/31#issuecomment-1' })],
+    });
+    // Unseen, so it is also in "New since you looked" with its "Reply ↓".
+    const comment = eventView(makeEvent({ id: `${stored.key}:comment:c1`, prKey: stored.key, actor: 'bob', sourceId: 'c1', summary: 'bob commented', seenAt: null, ruleLoudness: 'loud' }));
+    vi.stubGlobal('fetch', (url: string) =>
+      String(url).endsWith('/api/github-writes')
+        ? Promise.resolve(new Response(JSON.stringify({ enabled: false, forcedOffReason: null, pending: [] })))
+        : new Promise(() => {}),
+    );
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        disconnect() {}
+      },
+    );
+    Element.prototype.scrollIntoView = () => {};
+    const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } });
+    client.setQueryData(queryKeys.pr(stored.key), detailOf(stored, activityList([comment], viewer, null, stored)));
+    const view: TileView = withOffers({ ...stackView, prs: [summaryOf(stored)] });
+    render(
+      <QueryClientProvider client={client}>
+        <ActionsProvider>
+          <DetailPane view={view} prKey={stored.key} onSelectPr={() => {}} noSelectionText="" />
+        </ActionsProvider>
+      </QueryClientProvider>,
+    );
+
+    const approve = screen.getByText('Approve').closest('button')!;
+    await waitFor(() => expect(approve.title).toContain('GitHub writes are off'));
+    expect(approve.disabled).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reply ↓' }));
+    expect(screen.queryByRole('textbox', { name: 'Reply to bob' })).toBeNull();
   });
 });

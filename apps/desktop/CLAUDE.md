@@ -331,8 +331,16 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   "The PR pane", 2026-10-05): its own row with a GitHub review-state label
   (`reviewRowLabel` over core's `PrDetail.viewerReview`), never inside the
   glance, same order on every PR.
-- The pane's writes share one inline `Composer` (state per PR in `PrBody`
-  through `ComposeProvider`, one open at a time, drafts kept per target):
+- The pane's writes share one inline `Composer` (`useComposeState(prKey)`
+  in `PrBody` through `ComposeProvider`, one open at a time). Drafts, agent
+  drafts and the open composer live in `lib/pane-drafts.ts` (`PaneDrafts`,
+  one app-wide store like `AgentPane`'s unsent text) keyed by PR and
+  target, so they survive the per-PR remount and can never be read for
+  another PR; a composer that comes back with its PR (`reopened`) takes
+  no focus and does not scroll. Escape and Cancel focus the
+  `aria-expanded` button next to it; Meta/Ctrl+Enter sends everything but
+  Approve with a note. Write failures are worded by `lib/write-failure.ts`
+  (plain words, raw line as the toast's `detail`). The composer has
   a header that says where it goes, one box with the agent's pill where the
   text starts ("✨ Draft with agent" / "✨ Rewrite with agent"), Cancel and a
   button that names the target. Only the review notes draft by themselves

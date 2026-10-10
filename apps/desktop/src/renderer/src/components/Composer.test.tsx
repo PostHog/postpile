@@ -8,6 +8,10 @@ import { ActionsProvider, useActions } from '../api/actions.tsx';
 import { request } from '../api/client.ts';
 import { queryKeys } from '../api/keys.ts';
 import { Composer, ComposeProvider, useComposeState } from './Composer.tsx';
+import { PaneDrafts, type ComposeTarget } from '../lib/pane-drafts.ts';
+
+// A fresh store per test: drafts outlive the pane in the app.
+let drafts = new PaneDrafts();
 import { Toast } from './Toast.tsx';
 
 // jsdom has no layout: the composer scrolls itself into view on open.
@@ -20,19 +24,22 @@ interface PaneProps {
   draft: Draft;
   send?: Send;
   draftsOnOpen?: boolean;
+  /** Approve with a note unless set. */
+  target?: ComposeTarget;
+  closesOnClick?: boolean;
 }
 
 /** An "Approve with a note" composer behind an open button, like the review row's "+ note". */
 function Pane(props: PaneProps) {
-  const compose = useComposeState();
+  const compose = useComposeState('acme/app#1', drafts);
   return (
     <ComposeProvider value={compose}>
-      <button type="button" onClick={() => compose.openTarget({ kind: 'approve' })}>
+      <button type="button" aria-expanded={compose.open !== null} onClick={() => compose.openTarget(props.target ?? { kind: 'approve' })}>
         open
       </button>
       {compose.open !== null && (
         <Composer
-          target={{ kind: 'approve' }}
+          target={props.target ?? { kind: 'approve' }}
           title="Approve with a note"
           hint="on a1b2c3d, cannot be undone"
           submit="Approve with note"
@@ -44,6 +51,7 @@ function Pane(props: PaneProps) {
           draft={props.draft}
           draftsOnOpen={props.draftsOnOpen ?? true}
           send={props.send ?? (async () => true)}
+          closesOnClick={props.closesOnClick}
         />
       )}
     </ComposeProvider>
@@ -101,6 +109,7 @@ function box(): HTMLTextAreaElement {
 }
 
 afterEach(() => {
+  drafts = new PaneDrafts();
   cleanup();
   vi.unstubAllGlobals();
 });
@@ -208,5 +217,89 @@ describe('Composer drafting on open', () => {
 
     await waitFor(() => expect(screen.getByText('Approve with note').closest('button')?.title).toBe('Approves on GitHub with this note.'));
     expect(draftCalls).toEqual([]);
+  });
+});
+
+describe('Composer keyboard, focus and agent draft line', () => {
+  it('says the text is the agent draft until the user edits it', async () => {
+    stubWrites(true);
+    renderPane(<Pane draft={async () => 'Looks good.'} />);
+    fireEvent.click(screen.getByText('open'));
+
+    await waitFor(() => expect(screen.getByText('✨ Agent draft, edit before sending')).toBeTruthy());
+    fireEvent.change(box(), { target: { value: 'Looks good, ship it.' } });
+    expect(screen.queryByText('✨ Agent draft, edit before sending')).toBeNull();
+  });
+
+  it('sends a comment review on Meta+Enter and Ctrl+Enter, never Approve with a note', async () => {
+    stubWrites(true);
+    const send = vi.fn<Send>(async () => false);
+    renderPane(<Pane draft={async () => 'Looks good.'} send={send} />);
+    fireEvent.click(screen.getByText('open'));
+    await waitFor(() => expect(box().value).toBe('Looks good.'));
+    fireEvent.keyDown(box(), { key: 'Enter', metaKey: true });
+    expect(send).not.toHaveBeenCalled();
+    cleanup();
+
+    renderPane(<Pane draft={async () => null} send={send} draftsOnOpen={false} target={{ kind: 'comment' }} />);
+    fireEvent.click(screen.getByText('open'));
+    const field = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Approve with a note' });
+    // Nothing to send yet: the chord does nothing.
+    fireEvent.keyDown(field, { key: 'Enter', metaKey: true });
+    fireEvent.change(field, { target: { value: 'Why the retry?' } });
+    await waitFor(() => expect(screen.getByText('Approve with note').closest('button')?.disabled).toBe(false));
+    fireEvent.keyDown(field, { key: 'Enter', metaKey: true });
+    fireEvent.keyDown(field, { key: 'Enter', ctrlKey: true });
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(2));
+    expect(send).toHaveBeenCalledWith('Why the retry?', 'own');
+  });
+
+  it('gives focus back to the opener on Escape, and puts the caret after a kept draft', () => {
+    stubWrites(true);
+    renderPane(<Pane draft={async () => null} draftsOnOpen={false} target={{ kind: 'comment' }} />);
+    const opener = screen.getByText('open');
+    opener.focus();
+    fireEvent.click(opener);
+    expect(document.activeElement).toBe(box());
+    fireEvent.change(box(), { target: { value: 'Half a thought' } });
+    fireEvent.keyDown(box(), { key: 'Escape' });
+    expect(document.activeElement).toBe(opener);
+
+    fireEvent.click(opener);
+    expect(document.activeElement).toBe(box());
+    expect(box().selectionStart).toBe('Half a thought'.length);
+  });
+
+  it('keeps focus in the field while the agent drafts on open', async () => {
+    stubWrites(true);
+    renderPane(<Pane draft={async () => 'Looks good.'} />);
+    fireEvent.click(screen.getByText('open'));
+
+    await waitFor(() => expect(box().value).toBe('Looks good.'));
+    expect(document.activeElement).toBe(box());
+  });
+
+  it('brings a note that closed on click back when its send failed', async () => {
+    stubWrites(true);
+    let answer: (sent: boolean) => void = () => {};
+    const send = vi.fn<Send>(() => new Promise<boolean>((resolve) => (answer = resolve)));
+    renderPane(<Pane draft={async () => 'Looks good.'} send={send} closesOnClick />);
+    fireEvent.click(screen.getByText('open'));
+    await waitFor(() => expect(box().value).toBe('Looks good.'));
+
+    fireEvent.click(screen.getByText('Approve with note'));
+    expect(screen.queryByRole('textbox')).toBeNull();
+    answer(false);
+
+    await waitFor(() => expect(box().value).toBe('Looks good.'));
+  });
+
+  it('puts the agent pill before the box in the tab order', () => {
+    stubWrites(true);
+    renderPane(<Pane draft={async () => null} draftsOnOpen={false} />);
+    fireEvent.click(screen.getByText('open'));
+    const controls = screen.getByRole('group', { name: 'Approve with a note' }).querySelectorAll('button, textarea');
+    expect(controls[0]?.textContent).toContain('Draft with agent');
+    expect(controls[1]).toBe(box());
   });
 });

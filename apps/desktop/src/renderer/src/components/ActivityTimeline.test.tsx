@@ -7,6 +7,10 @@ import { at, makeComment, makeEvent, makePr, makeReview, makeThread, makeTimelin
 import { ActionsProvider } from '../api/actions.tsx';
 import { ActivityTimeline } from './ActivityTimeline.tsx';
 import { ComposeProvider, useCompose, useComposeState } from './Composer.tsx';
+import { PaneDrafts } from '../lib/pane-drafts.ts';
+
+// A fresh store per test: drafts outlive the pane in the app.
+let drafts = new PaneDrafts();
 
 // One more comment than the list shows before "Show all"; the oldest one is folded away.
 const COUNT = ACTIVITY_LINE_CAP + 1;
@@ -29,7 +33,7 @@ function JumpButton() {
 }
 
 function Pane() {
-  const compose = useComposeState();
+  const compose = useComposeState('acme/app#1', drafts);
   return (
     <ComposeProvider value={compose}>
       <JumpButton />
@@ -44,6 +48,7 @@ function oldestShown(): boolean {
 }
 
 afterEach(() => {
+  drafts = new PaneDrafts();
   cleanup();
   vi.unstubAllGlobals();
 });
@@ -73,7 +78,7 @@ function botThreadActivity() {
 }
 
 function BotThreadPane() {
-  const compose = useComposeState();
+  const compose = useComposeState('acme/app#1', drafts);
   const { pr: botPr, activity: botActivity } = botThreadActivity();
   return (
     <ComposeProvider value={compose}>
@@ -114,7 +119,7 @@ function botReviewActivity() {
 }
 
 function BotReviewPane() {
-  const compose = useComposeState();
+  const compose = useComposeState('acme/app#1', drafts);
   const { pr: botPr, activity: botActivity } = botReviewActivity();
   return (
     <ComposeProvider value={compose}>
@@ -149,7 +154,7 @@ function linkActivity() {
 }
 
 function LinkPane() {
-  const compose = useComposeState();
+  const compose = useComposeState('acme/app#1', drafts);
   const { pr: linkPr, activity: linkList } = linkActivity();
   return (
     <ComposeProvider value={compose}>
