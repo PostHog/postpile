@@ -3,6 +3,9 @@ import { join } from 'node:path';
 import type { AppConfig, McpLauncher } from '@postpile/core';
 import { createEngine, DEFAULT_AUTO_SYNC_MINUTES, defaultPaths, migrateLegacyData, profileFromEnv, type EngineService, type LockKind, type Telemetry } from '@postpile/engine';
 import { FakeEngine } from './fake/fake-engine.ts';
+import { fakeExtras } from './fake/fake-extras.ts';
+import { FakeFaults } from './fake/fake-faults.ts';
+import { fakeDeliverFromEnv } from './fake/fake-script.ts';
 import { fakeQuotaLevel } from './fake/fake-quota.ts';
 import { fakeToolProblems } from './fake/fake-tools.ts';
 import { FakeUpdates, type FakeUpdateMode } from './fake/fake-update.ts';
@@ -50,11 +53,19 @@ export interface EngineFromEnvOptions {
  * quota that is low or nearly used. POSTPILE_FAKE_CATCH_UP=0 starts without
  * the inbox catch-up dialog (it shows on every fake start otherwise). POSTPILE_FAKE_BUSY=1 makes the
  * inbox busy (the board cap cut it), with invented numbers. POSTPILE_FAKE_LOCKED=1 starts with GitHub
- * writes locked (the sample starts with them on, like the packaged app). Otherwise throws
+ * writes locked (the sample starts with them on, like the packaged app). POSTPILE_FAKE_FAIL_WRITES,
+ * POSTPILE_FAKE_FAIL_SEND and POSTPILE_FAKE_DELAY_MS make writes fail or slow (fake-faults.ts).
+ * POSTPILE_FAKE_DELIVER=a,b,c: each sync after the start sync brings the next scripted step
+ * (fake-script.ts). POSTPILE_FAKE_INTERRUPTIONS=unchosen starts without an interruptions pick, so
+ * the prompt for older installs shows (the sample starts with the pick made). Otherwise throws
  * DataDirLockedError while another process holds the database.
  */
 export function engineFromEnv(options: EngineFromEnvOptions = {}): EngineService {
   if (isFake()) {
+    const deliver = fakeDeliverFromEnv(process.env.POSTPILE_FAKE_DELIVER);
+    if (deliver.unknown.length > 0) {
+      console.warn(`POSTPILE_FAKE_DELIVER: unknown steps ignored: ${deliver.unknown.join(', ')}`);
+    }
     return new FakeEngine({
       forceSetup: process.env.POSTPILE_FAKE_SETUP === '1',
       missingTools: fakeToolProblems(process.env.POSTPILE_FAKE_MISSING),
@@ -63,6 +74,11 @@ export function engineFromEnv(options: EngineFromEnvOptions = {}): EngineService
       catchUpGate: process.env.POSTPILE_FAKE_CATCH_UP !== '0',
       busy: process.env.POSTPILE_FAKE_BUSY === '1',
       writesLocked: process.env.POSTPILE_FAKE_LOCKED === '1',
+      extras: fakeExtras(process.env.POSTPILE_FAKE_EXTRA),
+      faults: FakeFaults.fromEnv(process.env.POSTPILE_FAKE_FAIL_WRITES, process.env.POSTPILE_FAKE_FAIL_SEND, process.env.POSTPILE_FAKE_DELAY_MS),
+      deliver: deliver.steps,
+      skipFirstSyncDelivery: process.env.POSTPILE_SYNC_ON_START !== '0',
+      interruptionsUnchosen: process.env.POSTPILE_FAKE_INTERRUPTIONS === 'unchosen',
     });
   }
   if (options.migrateLegacy ?? true) {
@@ -120,6 +136,21 @@ export function autoSyncMinutesFromEnv(value: string | undefined, syncOnStart = 
   return syncOnStart ? DEFAULT_AUTO_SYNC_MINUTES : 0;
 }
 
+/**
+ * Whether the standalone fake server starts the sample live poll and auto
+ * sync like the desktop app: POSTPILE_FAKE_LIVE=1, or a health switch whose
+ * state the real app shows through its poll (POSTPILE_FAKE_QUOTA, or
+ * gh-offline in POSTPILE_FAKE_MISSING), so the title bar and footer agree.
+ * POSTPILE_FAKE_LIVE=0 keeps them off.
+ */
+export function fakeLiveFromEnv(env: NodeJS.ProcessEnv): boolean {
+  if (env.POSTPILE_FAKE_LIVE === '0') {
+    return false;
+  }
+  const healthSwitch = fakeQuotaLevel(env.POSTPILE_FAKE_QUOTA) !== null || fakeToolProblems(env.POSTPILE_FAKE_MISSING).includes('gh-offline');
+  return env.POSTPILE_FAKE_LIVE === '1' || healthSwitch;
+}
+
 /** How often the desktop app polls GitHub notifications, GitHub's usual X-Poll-Interval. */
 export const DEFAULT_POLL_SECONDS = 60;
 
@@ -133,12 +164,15 @@ export function pollSecondsFromEnv(value: string | undefined): number {
   return value !== undefined && value.trim() !== '' && Number.isInteger(parsed) && parsed >= 0 ? parsed : DEFAULT_POLL_SECONDS;
 }
 
-/** POSTPILE_FAKE_UPDATE: 0 for no sample update, pill for the small pill, anything else for the bar. */
+/** POSTPILE_FAKE_UPDATE: 0 for no sample update, pill for the small pill, many for 12 releases, anything else for the bar. */
 function fakeUpdateMode(value: string | undefined): FakeUpdateMode {
   if (value === '0') {
     return 'none';
   }
-  return value === 'pill' ? 'pill' : 'bar';
+  if (value === 'pill' || value === 'many') {
+    return value;
+  }
+  return 'bar';
 }
 
 /**

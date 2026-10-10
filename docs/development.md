@@ -58,6 +58,19 @@ Logs go to `~/Library/Logs/PostPile/main.log` (dev runs: `~/Library/Logs/PostPil
 
 Crash dumps stay on the Mac, nothing is uploaded: when a process of the app crashes, Crashpad writes a minidump (`.dmp`) to Electron's default crash dump folder, `~/Library/Application Support/PostPile/Crashpad` (dev runs: `PostPile-dev/Crashpad`, or `Crashpad/` in `POSTPILE_DATA_DIR`), in `pending/` or `completed/`. `process.crash()` in the main process makes one for a check. A run that ended without a clean quit also leaves `running.json` in the same folder; the next start logs "the last run ended without a clean quit" and sends `app_crashed_last_run`.
 
+### MCP on the fake server
+
+`POSTPILE_FAKE=1 pnpm cli mcp` builds its own copy of the sample, so what an MCP client files never reaches a UI. To share one sample between the UI and MCP clients, start the fake server with a fixed token and point the MCP server at it:
+
+```
+POSTPILE_FAKE=1 POSTPILE_TOKEN=devtok PORT=4877 pnpm server
+POSTPILE_TOKEN=devtok pnpm cli mcp --api http://127.0.0.1:4877
+```
+
+The second command serves MCP on stdin/stdout and sends every engine read and ask to the server's `POST /api/fake/engine/:method` (token-protected, only the 14 methods MCP uses, only on a server started with `POSTPILE_FAKE=1`). Topic suggestions show in the Inbox, notes in the PR pane, and a Reject or Clear in the UI reaches the next MCP answer. A real server has no such route; the real MCP server reads the database and asks the app through files as before.
+
+`note_pr` with `covered_by` a PR outside the sample works like a real GitHub read: `acme/app#1000` to `#1999` are "read" once and kept as a pulled-in PR (no tile, no topic), `#90000` and up are PRs GitHub does not have, and `acme/app#1777` answers `pending` the first time (a retry finds it). Any other PR outside the sample is refused. The reads go through the engine's cover reader, so its hourly cap and `POSTPILE_FAKE_QUOTA=critical` apply.
+
 ### Simulate a fresh start
 
 `pnpm cli simulate-start` replays a new user's first syncs on a copy of a database, once per agent pipeline, to compare them from the same start:
@@ -97,14 +110,27 @@ Instructions for every prompt go in `~/.config/postpile/instructions.md` (honour
 Environment variables. The packaged app only sees them when you start its binary from a terminal; `open` does not pass them.
 
 - `POSTPILE_FAKE=1`: sample data, no GitHub, no agent, no database (UI work)
-- `POSTPILE_FAKE_UPDATE=0`: with `POSTPILE_FAKE=1`, no sample update in the title bar (it shows one by default)
+- `POSTPILE_FAKE_UPDATE`: with `POSTPILE_FAKE=1`, the sample update in the title bar: `0` none, `pill` the small pill (1 release), `many` more releases than one page of the release list ("10+"); the bar (3 releases) otherwise
 - `POSTPILE_FAKE_INSTALL`: with `POSTPILE_FAKE=1`, the sample self-update state: `ready` (default, "Restart to update", which only relaunches), `downloading`, `failed` or `off` (the brew command)
 - `POSTPILE_FAKE_TIDY=1`: with `POSTPILE_FAKE=1`, the first sync runs a sample topic tidy, so the "Tidying up your topics and tiles" overlay shows for a few seconds
 - `POSTPILE_FAKE_CATCH_UP=0`: with `POSTPILE_FAKE=1`, no inbox catch-up dialog on start (by default every fake start is a first run with a pile of merged PRs, so it shows)
-- `POSTPILE_FAKE_MISSING`: with `POSTPILE_FAKE=1`, simulates missing tools for UI checks (comma separated: `gh`, `gh-auth`, `gh-token`, `gh-offline`, `claude`, `claude-auth`, `claude-limit`)
+- `POSTPILE_FAKE_INTERRUPTIONS=unchosen`: with `POSTPILE_FAKE=1`, start without an Interruptions pick, like an older install, so the "When should PostPile tap you on the shoulder?" prompt shows. By default the sample starts with the pick made (Never), like an install that finished setup; `POSTPILE_FAKE_SETUP=1` also starts without one, and its Accept sends the pick
+- `POSTPILE_FAKE_MISSING`: with `POSTPILE_FAKE=1`, simulates missing tools for UI checks (comma separated: `gh`, `gh-auth`, `gh-token`, `gh-offline`, `claude`, `claude-auth`, `claude-limit`). `gh` and `gh-auth` read as a first run: no topics, proposals or counts. `gh-offline` makes every sync and poll fail with a fetch error, like the real app without a network. `claude` and `claude-auth` make the setup draft fail into the blank draft
 - `POSTPILE_FAKE_QUOTA`: with `POSTPILE_FAKE=1`, `low` or `critical` simulates a GitHub quota that is low or nearly used
 - `POSTPILE_FAKE_BUSY=1`: with `POSTPILE_FAKE=1`, `GET /api/busy-inbox` reports a busy inbox (the board cap cut the hot set) with invented numbers, for building the busy inbox card
 - `POSTPILE_FAKE_LOCKED=1`: with `POSTPILE_FAKE=1`, the sample starts with GitHub writes locked (it starts with them on, like the packaged app)
+- `POSTPILE_FAKE_FAIL_WRITES`: with `POSTPILE_FAKE=1`, sample writes fail with a GitHub-shaped error (502, a 403 for `react`), logged as `failed`, nothing changes. Comma separated `approve`, `comment_review`, `comment`, `reply`, `react`, `mark_read`, or `all`; `once:<kind>` fails only the first call. A failed `mark_read` puts the PR back to unread
+- `POSTPILE_FAKE_FAIL_SEND=1`: with `POSTPILE_FAKE=1`, "Send N to GitHub" fails: the pending writes (mark-reads, Mute and Unmute) stay with the error, the tiles stay unread
+- `POSTPILE_FAKE_DELAY_MS`: with `POSTPILE_FAKE=1`, every sample write, draft, topic chat answer and memory recheck takes this many milliseconds (default 0), so busy states and late answers can be watched
+- `POSTPILE_FAKE_DELIVER`: with `POSTPILE_FAKE=1`, scripted news, comma separated step names in order (`ask-you`, `approve-set-member`, `merge-set-member`, `push`, `merge-open-pr`, `revive-archived`, `bot-on-archived`, `bot-only-read`, `bot-and-mention`, and two that need `POSTPILE_FAKE_EXTRA=board`: `ready-for-review` takes the draft #2010 out of draft with your review request still pending, `assign-archived` adds #2018 asking you to review it to the retired topic Release train, which comes back). Each sync after the start sync ("Sync now", or the first one with `POSTPILE_SYNC_ON_START=0`) delivers the next step and reports it as fetched news. Steps run once; the core rules work out tiles and sections again. `GET /api/fake/steps` lists them (what each does, whether it ran, the next delivery) and `POST /api/fake/advance {"step":"ask-you"}` runs one now; both exist only in fake mode and need the token
+- `POSTPILE_FAKE_LIVE=1`: with `POSTPILE_FAKE=1`, the standalone server (`pnpm server`) starts the sample live poll (a question from rowan, lyra or nell about every 45 s, interval from `POSTPILE_POLL_SECONDS`) and the auto sync (`POSTPILE_AUTO_SYNC_MINUTES`) like the desktop app does, so the footer and title bar show live, paused and auto sync states in a browser. They also start on their own with `POSTPILE_FAKE_QUOTA` or `gh-offline` in `POSTPILE_FAKE_MISSING`, since the real app shows those states through its poll (the first cycle runs after one interval, so set `POSTPILE_POLL_SECONDS` low to see it sooner); `POSTPILE_FAKE_LIVE=0` keeps them off. No Mac notifications: a ping shows in the Notifications debug view only
+- `POSTPILE_FAKE_EXTRA`: with `POSTPILE_FAKE=1`, comma-separated sample packs added on top of the default sample, which stays as it is (`calm` replaces it, see below):
+  - `stacks`: stacks and a bot set in their own topics (#2101 to #2166): a 3-layer stack with an approved bottom, a layer asking you and a draft top; 3 unread layers that are not your move; a 2-layer stack whose top waits on another team (a teammate's and your own); safe and look-closer layers for the agent Approve; a stack with only its middle layer merged; a set of 5 renovate[bot] PRs next to a single one
+  - `pane`: PR pane content in the topic Webhook delivery (#2201 to #2204): a rich unread teammate PR; a review bot's review with 6 inline comments, the author's replies and a bot comment cut like a stored snapshot; a comment with a code block, a list, a link, an emoji, a 300-character token and a quote, next to raw HTML that must render inert; a PR whose title and comment read like instructions to an agent (prompt-injection test data)
+  - `mcp`: diffs for the overlap check, so `pr_context` and `whats_on_me` report overlapping edits (#1902 and sol's new #2301 on the same workflow lines, a nearby pair, a lockfile pair and stack mates that stay quiet, one capped diff)
+  - `board`: topics and PRs #2001 and up for board states the default sample never shows (an approved own PR alone in its topic, a whole You drive trio, a teammate's draft asking you, a thanks that asks nothing, a merge the glance calls Not yours, a closed PR next to an open one, a retired standing topic, a long reviewer list, approvals right after a comment). The scripted steps `ready-for-review` and `assign-archived` work on it
+  - `stress`: text and counts at their limits (a 220-character title with emoji, backticks, `<>` and a 96-character token, a topic name over 64 characters, #12345 in a long repo name, five assignees, a topic with 25 tiles and 30 PRs by eight authors, a dossier at every `DOSSIER_LIMITS` bound)
+  - `calm`: replaces the default sample with a tiny one where everything is read and dealt with (three merged topics with the Archive-now box, one topic holding only a snoozed tile, 0 unread); the server refuses to start when `calm` is combined with another pack
 - `POSTPILE_PROFILE=dev`: the dev database and config folders; `POSTPILE_DATA_DIR` moves the data folder, `POSTPILE_DB` points at a database file
 - `POSTPILE_READ_ONLY=1`: real reads, every GitHub write refused, the write lock cannot be opened. Without it, dev runs (`pnpm desktop`, `pnpm server`, `pnpm cli`) still start with writes locked until the footer lock is opened; only the packaged app has them on by default
 - `POSTPILE_SYNC_ON_START=0`, `POSTPILE_MAX_AGENT_CALLS=0`: no sync at start, no agent calls
@@ -119,7 +145,7 @@ Environment variables. The packaged app only sees them when you start its binary
 - `POSTPILE_TOPIC_DIGEST=1`: one agent call per topic for the dossier and its first glances (`topic_digest`), instead of separate dossier and glance calls. Off by default while it is compared (DESIGN.md › One call per topic)
 - `POSTPILE_CLAUDE_BIN`: the `claude` binary to run
 - `POSTPILE_CLAUDE_DIR`: the folder the work context sweep reads, default `~/.claude`
-- `POSTPILE_SWEEP_SKIP`: comma-separated `~/.claude/projects` folders the sweep never reads; wins over `sweepSkip` in `~/.config/postpile/config.json`, which wins over the default `personal,private`; empty means none
+- `POSTPILE_SWEEP_SKIP`: comma-separated `~/.claude/projects` folders the sweep never reads; wins over `sweepSkip` in `~/.config/postpile/config.json`, which wins over the default `personal,private`; empty means none. Sample data (`POSTPILE_FAKE=1`) honours it too
 - `POSTPILE_LOG_DIR`: where logs go
 
 ## Layout

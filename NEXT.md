@@ -1325,8 +1325,8 @@ now".
 - Search matches title, number, author, repo, head branch, topic name and
   area only (no PR body, comments or labels) and does not highlight the
   matched text. Filter state and history are not kept across restarts.
-- Recheck: not run against the real agent yet; the fake answers cycle
-  holds / fix / drop after 1.5s. The daily cap (40) is a guess. A fix of a
+- Recheck: not run against the real agent yet; the fake answers by the
+  claim's state after 1.5s (fresh holds; stale is fixed or dropped). The daily cap (40) is a guess. A fix of a
   fact keeps the old refs; no new ref points at the evidence in `why`.
 - Whose turn is rules only and still rough: "you
   commented on the head" only looks at reviews, and the own-PR "Merge, it is
@@ -2546,6 +2546,18 @@ POSTPILE_FAKE=1 pnpm desktop
 POSTPILE_FAKE=1 pnpm server
 ```
 
+MCP clients and the UI on one fake sample (the plain `POSTPILE_FAKE=1 pnpm
+cli mcp` keeps its own copy, so nothing it files shows in a UI):
+
+```
+POSTPILE_FAKE=1 POSTPILE_TOKEN=devtok PORT=4877 pnpm server
+POSTPILE_TOKEN=devtok pnpm cli mcp --api http://127.0.0.1:4877   # stdio MCP over that server's engine
+```
+
+`note_pr` `covered_by` outside the sample: `acme/app#1000`-`#1999` are
+read once as pulled-in PRs, `#90000`+ are missing on GitHub, `#1777`
+answers pending once; anything else is refused.
+
 Env switches:
 
 - `POSTPILE_READ_ONLY=1`: real reads, every GitHub write refused, the
@@ -2553,6 +2565,69 @@ Env switches:
   account.
 - `POSTPILE_FAKE_LOCKED=1`: with `POSTPILE_FAKE=1`, the sample starts with
   GitHub writes locked (it starts with them on, like the packaged app).
+- `POSTPILE_FAKE_FAIL_WRITES` (with `POSTPILE_FAKE=1`): sample writes fail
+  like GitHub would answer (502, a 403 for `react`), logged as `failed`.
+  Comma separated `approve`, `comment_review`, `comment`, `reply`, `react`,
+  `mark_read`, or `all`; `once:<kind>` fails only the first call.
+  `POSTPILE_FAKE_FAIL_SEND=1`: "Send N to GitHub" fails and the rows stay
+  pending with the error. `POSTPILE_FAKE_DELAY_MS`: every write, draft,
+  topic chat answer and recheck waits that long (default 0):
+
+  ```
+  POSTPILE_FAKE=1 POSTPILE_FAKE_FAIL_WRITES=once:approve POSTPILE_FAKE_DELAY_MS=1500 POSTPILE_TOKEN=devtok PORT=4877 pnpm server
+  ```
+- `POSTPILE_FAKE_DELIVER` (with `POSTPILE_FAKE=1`): scripted news on the
+  sample, comma separated steps (`apps/server/src/fake/fake-script.ts`,
+  `GET /api/fake/steps` lists them). Each sync after the start sync
+  delivers the next one, like a sync that fetched news; steps run once.
+  `POST /api/fake/advance {"step":"..."}` runs one at once (fake mode
+  only, token needed). `ready-for-review` and `assign-archived` need
+  `POSTPILE_FAKE_EXTRA=board` and refuse without it:
+
+  ```
+  POSTPILE_FAKE=1 POSTPILE_FAKE_DELIVER=ask-you,push POSTPILE_TOKEN=devtok PORT=4877 pnpm server
+  curl -H 'x-postpile-token: devtok' -H 'content-type: application/json' \
+    -d '{"step":"bot-only-read"}' http://127.0.0.1:4877/api/fake/advance
+  ```
+- `POSTPILE_FAKE_LIVE=1` (with `POSTPILE_FAKE=1`): the standalone server
+  starts the fake live poll and the auto sync like Electron main, so the
+  footer reads "live · every 60s" in a browser too. They also start on
+  their own with `POSTPILE_FAKE_QUOTA` or `gh-offline`, which the real app
+  shows through its poll; `POSTPILE_FAKE_LIVE=0` keeps them off. No Mac
+  notifications; pings show in the debug view only.
+- `POSTPILE_FAKE_EXTRA`: with `POSTPILE_FAKE=1`, comma-separated sample
+  packs on top of the default sample, which stays as it is
+  (`apps/server/src/fake/fake-extras.ts`; `calm` replaces it). `stacks`:
+  topics Search ranking, Search indexing, Session export, Query result
+  cache, Flag cleanup and Lockfile bumps (#2101 to #2166), for stack
+  tiles, per-layer writes, "Blocked:" on a stack, the agent Approve on
+  stacks and a bot set. `pane`: topic Webhook delivery (#2201 to #2204),
+  for the PR pane: a folded bot review, a bot body cut like a stored
+  snapshot, markdown and a long token in a comment, raw HTML that must
+  stay inert, and instruction-like text as prompt-injection test data.
+  `mcp`: diffs for the overlap check (#1902 and sol's #2301 on the same
+  lines, a nearby pair, a quiet lockfile pair and stack mates, one
+  capped diff), for MCP checks of overlapping edits. `board`: PRs #2001
+  and up for the board scenarios (approved own PR alone in its topic, a
+  You drive trio of unread / dealt with / merge-ready, a teammate's
+  draft asking you, a thanks that asks nothing, a Not yours merge, a
+  closed PR with an open sibling, the retired standing topic "Release
+  train"; the steps `ready-for-review` and `assign-archived` of
+  `POSTPILE_FAKE_DELIVER` work on it). `stress`: text and counts at
+  their limits for layout checks (a 220-character title with emoji,
+  backticks, `<>` and a 96-character token, a topic name over 64
+  characters, #12345 in a long repo name, five assignees, "Monorepo test
+  sharding" with 25 tiles and 30 PRs by eight authors and a dossier at
+  every `DOSSIER_LIMITS` bound). `calm`: replaces the default sample
+  with a tiny one where everything is read and dealt with (three merged
+  topics showing Archive now, one topic holding only a snoozed tile, 0
+  unread); the server refuses to start when it is combined with another
+  pack. The thread-only inbox pile (fake-notifications.ts, "24 merged
+  PRs · Clear") still shows with it:
+
+  ```
+  POSTPILE_FAKE=1 POSTPILE_FAKE_EXTRA=board POSTPILE_TOKEN=devtok PORT=4877 pnpm server
+  ```
 - `POSTPILE_MAX_AGENT_CALLS`: agent-call cap for syncs and consolidations
   without an explicit cap (launch, "Sync now", `/api/consolidate`, and the
   CLI without `--max-agent-calls`), default 150 (was 30).
@@ -2582,14 +2657,27 @@ Env switches:
   ```
   POSTPILE_FAKE=1 POSTPILE_FAKE_SETUP=1 POSTPILE_TOKEN=devtok PORT=4877 pnpm server
   ```
+- `POSTPILE_FAKE_INTERRUPTIONS=unchosen` (with `POSTPILE_FAKE=1`): start
+  without an Interruptions pick, like an older install, so the prompt
+  shows. By default the sample starts with the pick made (Never), like an
+  install that finished setup. `POSTPILE_FAKE_SETUP=1` also starts without
+  one; its Accept sends the pick.
 - `POSTPILE_FAKE_MISSING` (with `POSTPILE_FAKE=1`): simulates missing
   tools, comma separated `gh`, `gh-auth`, `gh-token`, `gh-offline`,
-  `claude`, `claude-auth`, `claude-limit`:
+  `claude`, `claude-auth`, `claude-limit`. `gh` and `gh-auth` read as a
+  first run (no topics, proposals or counts), like `POSTPILE_FAKE_SETUP=1`
+  until its first sync. `gh-offline` fails every sync and poll with a
+  fetch error. Without claude the setup draft fails into the blank draft:
 
   ```
   POSTPILE_FAKE=1 POSTPILE_FAKE_MISSING=gh,claude POSTPILE_TOKEN=devtok PORT=4877 pnpm server
   ```
 - `POSTPILE_FAKE_QUOTA` (with `POSTPILE_FAKE=1`): `low` or `critical`
   simulates a GitHub quota that is low or nearly used, for the footer.
+- `POSTPILE_FAKE_UPDATE` (with `POSTPILE_FAKE=1`): `0` no sample update,
+  `pill` the small pill, `many` 12 newer releases, of which the one-page
+  check sees 10 ("10+ releases"); the bar otherwise. The sample work
+  context honours `POSTPILE_SWEEP_SKIP` like the real sweep (the skip
+  input turns read-only, an empty value skips nothing).
 - `POSTPILE_MODEL`, `POSTPILE_GLANCE_MODEL`,
   `POSTPILE_AGENT_CONCURRENCY` (default 8): agent knobs.

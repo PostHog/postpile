@@ -1,18 +1,23 @@
 import type {
   ActionResult,
   ConsolidationReport,
+  Dossier,
   DossierVersion,
   DossierView,
   Fact,
   FactQuery,
   FactView,
   Feedback,
+  FixedClaim,
+  FullPr,
+  MemoryRecheckRequest,
   MemorySources,
   MemoryTarget,
   PrEvent,
   PrKey,
   RuleProposal,
   RelationOverride,
+  StaleReason,
   Topic,
   TopicPlacement,
   TopicRelation,
@@ -33,7 +38,10 @@ import {
   topicPlacement,
 } from '@postpile/core';
 import type { SampleData } from './sample-data.ts';
+import { addFakeExtraMemory, type FakeExtra } from './fake-extras.ts';
+import { SampleClock } from './sample-builders.ts';
 import { buildSampleMemory, type SampleMemory } from './sample-memory.ts';
+import { correctedDossier } from './fake-dossier-rewrite.ts';
 
 const DEFAULT_FACT_LIMIT = 100;
 
@@ -62,12 +70,16 @@ function touchesPr(fact: Fact, prKey: PrKey): boolean {
 export class FakeMemory {
   private readonly memory: SampleMemory;
   private readonly overrides = new Map<string, RelationOverride>();
+  /** Topics whose dossier a fake sync rewrote: the sample's planted stale claim is gone with it. */
+  private readonly rewritten = new Set<string>();
 
   constructor(
     private readonly data: SampleData,
     private readonly now: () => Date,
+    extras: Set<FakeExtra> = new Set(),
   ) {
     this.memory = buildSampleMemory(now());
+    addFakeExtraMemory(this.memory, new SampleClock(now()), extras);
   }
 
   /** The "not mine" entries the sample's rule proposal cites. FakeEngine starts its feedback log with them. */
@@ -93,6 +105,13 @@ export class FakeMemory {
       .filter((entry) => entry.topicId === topicId && entry.createdAt > since)
       .filter((entry) => entry.kind === 'memory_wrong' || entry.kind === 'memory_forget')
       .map((entry) => entry.note);
+  }
+
+  private fixedClaims(topicId: string, since: string, feedback: Feedback[]): FixedClaim[] {
+    return feedback
+      .filter((entry) => entry.topicId === topicId && entry.createdAt > since && entry.kind === 'memory_fixed')
+      .map((entry) => parseFixedClaimNote(entry.note))
+      .filter((claim) => claim !== null);
   }
 
   /** Same rules as the engine: dossier relation (or the sample's), a user correction wins; the fake has no new events. */
@@ -124,7 +143,64 @@ export class FakeMemory {
 
   /** Sample story: the thread behind the DEPOT_TOKEN question was resolved on GitHub. */
   private staleClaims(topicId: string) {
-    return topicId === 'topic-depot' ? [{ path: 'openQuestions[2]', reason: 'thread_resolved' as const }] : [];
+    return topicId === 'topic-depot' && !this.rewritten.has(topicId) ? [{ path: 'openQuestions[2]', reason: 'thread_resolved' as const }] : [];
+  }
+
+  /** The dossier without its planted stale claims, as the engine's withoutStaleClaims leaves it before storing. */
+  private withoutPlantedClaims(topicId: string, dossier: Dossier): Dossier {
+    const stale = new Set(this.staleClaims(topicId).map((claim) => claim.path));
+    return { ...dossier, openQuestions: dossier.openQuestions.filter((_, index) => !stale.has(`openQuestions[${index}]`)) };
+  }
+
+  /**
+   * The fake sync's dossier updates: like the real delta, a topic with lines
+   * marked wrong, forgotten or fixed since its latest version gets a new
+   * version that reads them, so "… on next sync" settles. Returns how many
+   * topics got one.
+   */
+  rewriteAfterFeedback(feedback: Feedback[]): number {
+    const at = this.now().toISOString();
+    let rewritten = 0;
+    for (const [topicId, versions] of this.memory.dossiers) {
+      const latest = versions.at(-1);
+      if (!latest) {
+        continue;
+      }
+      const corrections = { dropped: this.correctedClaims(topicId, latest.createdAt, feedback), fixes: this.fixedClaims(topicId, latest.createdAt, feedback) };
+      if (corrections.dropped.length === 0 && corrections.fixes.length === 0) {
+        continue;
+      }
+      const dossier = correctedDossier(this.withoutPlantedClaims(topicId, latest.dossier), corrections);
+      versions.push({ ...latest, version: latest.version + 1, dossier, flags: [], createdAt: at });
+      this.rewritten.add(topicId);
+      rewritten += 1;
+    }
+    return rewritten;
+  }
+
+  /** Why a dossier line is out of date: the sample's planted claim, else the engine's verify rules. */
+  private lineIssue(topicId: string, version: DossierVersion, path: string, prs: Map<PrKey, FullPr>): StaleReason | null {
+    const planted = this.staleClaims(topicId).find((claim) => claim.path === path)?.reason ?? null;
+    if (planted) {
+      return planted;
+    }
+    return dossierLineIssue(version.dossier, path, { prs, memberKeys: this.membersOf(topicId), now: this.now().toISOString() });
+  }
+
+  /** Why the claim a recheck asks about is stale or out of date, or null when it is fresh. */
+  claimIssue(request: MemoryRecheckRequest): StaleReason | null {
+    if (request.factId !== null) {
+      return this.memory.facts.find((fact) => fact.id === request.factId)?.staleReason ?? null;
+    }
+    const target = request.target;
+    if (target?.kind !== 'dossier_line') {
+      return null;
+    }
+    const version = this.memory.dossiers.get(target.topicId)?.find((candidate) => candidate.version === target.version);
+    if (!version || !findDossierLine(version.dossier, target.path)) {
+      return null;
+    }
+    return this.lineIssue(target.topicId, version, target.path, new Map(this.data.prs.map((pr) => [pr.key, pr])));
   }
 
   /** Mirrors MemorySourcesReads, over the sample snapshots. */
@@ -145,9 +221,7 @@ export class FakeMemory {
     if (!version || !line) {
       return null;
     }
-    const world = { prs, memberKeys: this.membersOf(target.topicId), now: this.now().toISOString() };
-    const planted = this.staleClaims(target.topicId).find((claim) => claim.path === target.path)?.reason ?? null;
-    const issue = planted ?? dossierLineIssue(version.dossier, target.path, world);
+    const issue = this.lineIssue(target.topicId, version, target.path, prs);
     return {
       target,
       claim: line.text,
@@ -179,10 +253,7 @@ export class FakeMemory {
       eventsBehind: this.eventsAfter(topicId, latest.createdAt),
       history: dossierVersionNotes(versionsNewestFirst),
       correctedClaims: this.correctedClaims(topicId, latest.createdAt, feedback),
-      fixedClaims: feedback
-        .filter((entry) => entry.topicId === topicId && entry.createdAt > latest.createdAt && entry.kind === 'memory_fixed')
-        .map((entry) => parseFixedClaimNote(entry.note))
-        .filter((claim) => claim !== null),
+      fixedClaims: this.fixedClaims(topicId, latest.createdAt, feedback),
     };
   }
 

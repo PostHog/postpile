@@ -61,7 +61,7 @@ describe('FakeEngine', () => {
     const marked = await engine.markRead('pr:acme/infra#1915');
     now = new Date(now.getTime() + 7000);
     const undone = await engine.undo(marked.undoToken);
-    expect(undone).toEqual({ ok: false, message: 'undo window closed', undoToken: null });
+    expect(undone).toEqual({ ok: false, message: 'Nothing to undo: already sent to GitHub', undoToken: null });
   });
 
   it('undoes the newest batch when no token is given', async () => {
@@ -123,7 +123,7 @@ describe('FakeEngine tile faces', () => {
     const depot = (await engine.getTopic('topic-depot'))?.tiles ?? [];
     const stack = depot.find((view) => view.tile.id.startsWith('stack:'));
     // #1911 was approved before the pushes; approvals stand on any commit, so the move is on #1902.
-    expect(stack?.turn).toMatchObject({ kind: 'you', what: 'Review, lyra mentioned you on #1902' });
+    expect(stack?.turn).toMatchObject({ kind: 'you', what: 'Review, lyra asked you something on #1902' });
     expect(stack?.prs.map((pr) => pr.why)).toEqual(['ST', 'ST', 'RV', 'RV', 'ST']);
     expect(stack?.prs.map((pr) => pr.status.lifecycle)).toEqual(['merged', 'merged', 'open', 'open', 'closed']);
     expect(depot.find((view) => view.tile.id === 'pr:acme/app#1899')?.turn).toMatchObject({ kind: 'them', who: null, what: 'Waiting on the merge queue' });
@@ -266,15 +266,22 @@ describe('FakeEngine topic moves', () => {
 });
 
 describe('FakeEngine rechecks', () => {
-  it('cycles holds, fix and drop so every dialog state can be seen', async () => {
+  it('answers by the claim\'s state: a fresh line holds, a stale one is fixed or dropped', async () => {
     const engine = new FakeEngine({ recheckDelayMs: 0 });
-    const request = { factId: null, topicId: 'topic-depot', text: 'rowan drives it.', target: null };
-    const outcomes = [];
-    for (let i = 0; i < 4; i += 1) {
+    const outcome = async (request: Parameters<FakeEngine['recheckMemory']>[0]) => {
       const result = await engine.recheckMemory(request);
-      outcomes.push(result.status === 'answered' ? result.outcome : result.status);
-    }
-    expect(outcomes).toEqual(['holds', 'fix', 'drop', 'holds']);
+      return result.status === 'answered' ? result.outcome : result.status;
+    };
+    const version = (await engine.getTopic('topic-depot'))?.dossier?.version ?? 0;
+    const line = (path: string) => ({ factId: null, topicId: 'topic-depot', text: 'a line', target: { kind: 'dossier_line' as const, topicId: 'topic-depot', version, path } });
+    expect(await outcome(line('goal'))).toBe('holds');
+    expect(await outcome(line('goal'))).toBe('holds');
+    // The thread behind it was resolved on GitHub.
+    expect(await outcome(line('openQuestions[2]'))).toBe('drop');
+    // Written before the latest push.
+    expect(await outcome({ factId: 'fact-1902-status', topicId: null, text: 'a fact', target: { kind: 'fact', factId: 'fact-1902-status' } })).toBe('fix');
+    expect(await outcome({ factId: null, topicId: null, text: 'the glance', target: null, prKey: 'acme/app#1904' })).toBe('fix');
+    expect(await outcome({ factId: null, topicId: null, text: 'the glance', target: null, prKey: 'acme/app#1822' })).toBe('holds');
   });
 
   it('replaces a fact on an accepted fix and undoes it', async () => {
@@ -570,7 +577,7 @@ describe('FakeEngine what is new on a revisit', () => {
     expect(detail?.whatsNew?.anchor.kind).toBe('changes_request');
     expect(detail?.activity.fresh.map((line) => line.summary)).toEqual(['pim pushed 3 commits']);
     expect(detail?.activity.freshNoiseLabel).toBe('2 bot comments');
-    expect(detail?.activity.earlier.map((line) => line.summary)).toEqual(['you requested changes']);
+    expect(detail?.activity.earlier.map((line) => line.summary)).toEqual(['you requested changes: The chunk names change on every build, which busts the CDN cache.']);
     expect(detail?.activity.noise).toEqual([]);
   });
 

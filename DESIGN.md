@@ -2435,8 +2435,9 @@ imports types only; keep the two in step.
 
 **Fake mode** (`FakeSetup`): canned checks, sweep lines after short delays
 (about 6s in all), a canned draft built with the real `setupSources` and
-`mapSetupDraft`, a refine that files the message under Preferences, and an
-accept into the in-memory instructions and repo settings.
+`mapSetupDraft`, a refine that files the message under the section it is
+about (by keywords, Preferences when none fits), and an accept into the
+in-memory instructions and repo settings.
 
 Routes: `GET /api/setup`, `GET /api/setup/checks`, `POST/GET
 /api/setup/sweep`, `POST /api/setup/refine`, `POST /api/setup/fit`, `POST /api/setup/accept`,

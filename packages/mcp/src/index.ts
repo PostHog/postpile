@@ -3,4 +3,5 @@ export { prContext, searchPrs, topicOverview, whatsOnMe, type PostPileReader, ty
 export { proposeTopicChange, refreshFromGithub, type ActionContext } from './actions.ts';
 export { FileAgentRequests, InMemoryAgentRequests, type AgentAsk, type AgentAskOutcome, type AgentRequests } from './agent-requests.ts';
 export { clientName, createMcpServer, INSTRUCTIONS, routeConsoleToStderr, serveStdio, type McpServerOptions, type McpToolName, type ToolCallReport } from './server.ts';
-export { runMcpFromEnv } from './run.ts';
+export { runMcpFromEnv, runMcpOverApi } from './run.ts';
+export { RemoteEngine, type SharedEngine } from './remote-engine.ts';

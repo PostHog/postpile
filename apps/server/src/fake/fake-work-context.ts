@@ -7,7 +7,7 @@ import type {
   WorkContextView,
   WorkThreadForget,
 } from '@postpile/core';
-import { DEFAULT_SWEEP_SKIP } from '@postpile/engine';
+import { DEFAULT_SWEEP_SKIP, resolveSweepSkip } from '@postpile/engine';
 import { SampleClock } from './sample-builders.ts';
 
 /** The real defaults, so fake mode shows what a real sweep skips. */
@@ -74,27 +74,43 @@ function sampleThreads(topics: Topic[]): WorkContextThread[] {
 /**
  * "What you're working on" for FakeEngine: one sample digest linked to the
  * sample topics. Refresh takes a moment and stamps a new version; Forget
- * marks the thread like the real engine does. Nothing reads ~/.claude.
+ * marks the thread like the real engine does, and the next Refresh leaves
+ * it out, like the real sweep that hands forgotten titles to the agent.
+ * Nothing reads ~/.claude.
  */
 export class FakeWorkContext {
   private version = 3;
   private createdAt: string;
+  /** Threads of the current version the user forgot, by index. */
   private readonly forgotten = new Set<number>();
+  /** Titles forgotten in an earlier version: every later sweep leaves them out. */
+  private readonly leftOut = new Set<string>();
   private running = false;
-  /** Saved skip list; sample data has no config file, so it lives in memory. */
-  private skipPatterns: string[] = SAMPLE_SKIP;
-  private skipSource: 'config' | 'default' = 'default';
+  /** Saved skip list; sample data has no config file, so it lives in memory. Undefined until saved. */
+  private savedSkip: string[] | undefined = undefined;
 
+  /** `env` is read fresh on every view, like the real sweep: POSTPILE_SWEEP_SKIP wins over the saved list. */
   constructor(
     private readonly topics: Topic[],
     private readonly now: () => Date,
     private readonly refreshDelayMs: number,
+    private readonly env: NodeJS.ProcessEnv = process.env,
   ) {
     this.createdAt = new SampleClock(now()).hoursAgo(3);
   }
 
+  /** The current version's threads: the sample's, without the ones forgotten before the last sweep. */
+  private threads(): WorkContextThread[] {
+    return sampleThreads(this.topics).filter((thread) => !this.leftOut.has(thread.title));
+  }
+
+  private skipSettings() {
+    return resolveSweepSkip(this.env.POSTPILE_SWEEP_SKIP, this.savedSkip);
+  }
+
   view(): WorkContextView {
     const names = new Map(this.topics.map((topic) => [topic.id, topic.name]));
+    const skip = this.skipSettings();
     return {
       current: {
         version: this.version,
@@ -102,8 +118,8 @@ export class FakeWorkContext {
         model: 'opus (sample)',
         summary: SUMMARY,
         lastSeenAt: this.createdAt,
-        inputStats: STATS,
-        threads: sampleThreads(this.topics).map((thread, index) => ({
+        inputStats: { ...STATS, skipPatterns: skip.patterns },
+        threads: this.threads().map((thread, index) => ({
           index,
           title: thread.title,
           detail: thread.detail,
@@ -114,29 +130,38 @@ export class FakeWorkContext {
       },
       lastError: null,
       running: this.running,
-      skipPatterns: this.skipPatterns,
-      skipSource: this.skipSource,
+      skipPatterns: skip.patterns,
+      skipSource: skip.source,
       skipConfigFile: '~/.config/postpile/config.json (sample data: kept in memory)',
     };
   }
 
   setSkip(patterns: string[]): ActionResult {
-    this.skipPatterns = patterns.map((pattern) => pattern.trim()).filter((pattern) => pattern !== '');
-    this.skipSource = 'config';
-    return { ok: true, message: 'Skip list saved (sample data: in memory only).', undoToken: null };
+    this.savedSkip = patterns.map((pattern) => pattern.trim()).filter((pattern) => pattern !== '');
+    const overridden = this.skipSettings().source === 'env' ? ' POSTPILE_SWEEP_SKIP is set and still wins until it is unset.' : '';
+    return { ok: true, message: `Skip list saved (sample data: in memory only).${overridden}`, undoToken: null };
   }
 
   async sweep(): Promise<WorkContextSweepResult> {
     this.running = true;
     await new Promise((resolve) => setTimeout(resolve, this.refreshDelayMs));
     this.running = false;
+    const threads = this.threads();
+    for (const index of this.forgotten) {
+      const title = threads[index]?.title;
+      if (title !== undefined) {
+        this.leftOut.add(title);
+      }
+    }
+    this.forgotten.clear();
     this.version += 1;
     this.createdAt = this.now().toISOString();
-    return { ok: true, message: `Work context v${this.version} (sample data)`, version: this.version, stats: STATS };
+    const message = `Work context v${this.version}: ${this.threads().length} threads from ${STATS.sentChars} chars (sample data)`;
+    return { ok: true, message, version: this.version, stats: STATS };
   }
 
   forget(input: WorkThreadForget): { result: ActionResult; undo: () => void } | null {
-    const thread = sampleThreads(this.topics)[input.index];
+    const thread = this.threads()[input.index];
     if (input.version !== this.version || !thread) {
       return null;
     }

@@ -13,7 +13,7 @@ export function failed(message: string): ActionResult {
  * "Marked read", or, while GitHub writes are locked, that nothing changes
  * until the write reaches GitHub (it turns pending after the undo window).
  */
-export function readMessage(base: string, batch: PendingBatch): string {
+export function readMessage(base: string, batch: Pick<PendingBatch, 'writesOn' | 'threadIds'>): string {
   if (batch.writesOn || batch.threadIds.length === 0) {
     return base;
   }
@@ -21,7 +21,7 @@ export function readMessage(base: string, batch: PendingBatch): string {
 }
 
 /** Mute's toast: what reaches GitHub and when (after the undo window, or once writes are unlocked). */
-export function muteMessage(batch: PendingBatch): string {
+export function muteMessage(batch: { writesOn: boolean; subscription: object | null }): string {
   if (batch.subscription === null) {
     return "Muted until you're mentioned. No GitHub notification thread to unsubscribe from";
   }
@@ -32,7 +32,7 @@ export function muteMessage(batch: PendingBatch): string {
 }
 
 /** Unmute's toast: subscribing again on GitHub, after the undo window or once writes are unlocked. */
-export function unmuteMessage(batch: PendingBatch): string {
+export function unmuteMessage(batch: Pick<PendingBatch, 'writesOn'>): string {
   if (!batch.writesOn) {
     return 'Unmuted. Subscribing you again on GitHub is pending until you unlock GitHub writes';
   }

@@ -172,8 +172,14 @@ describe('server routes over the fake engine', () => {
     expect((await post<RepoOverview>(app, '/api/repos/scope', { repo: null })).json.scope).toBeNull();
   });
 
+  it('starts with the interruptions pick made, like an install that finished setup', async () => {
+    expect(await (await appWithFake().request('/api/interruptions')).json()).toMatchObject({ mode: 'never', chosen: true });
+    const setup = appWithFake(new FakeEngine({ syncStepMs: 0, forceSetup: true }));
+    expect(await (await setup.request('/api/interruptions')).json()).toMatchObject({ mode: 'never', chosen: false });
+  });
+
   it('keeps the interruptions pick, never by default', async () => {
-    const app = appWithFake();
+    const app = appWithFake(new FakeEngine({ syncStepMs: 0, interruptionsUnchosen: true }));
     expect(await (await app.request('/api/interruptions')).json()).toEqual({ mode: 'never', chosen: false, roundupTimes: ['9:30', '13:30', '16:30'] });
     const put = (body: unknown) => app.request('/api/interruptions', { method: 'PUT', body: JSON.stringify(body), headers: { 'content-type': 'application/json' } });
     expect(await (await put({ mode: 'batches' })).json()).toMatchObject({ mode: 'batches', chosen: true });
@@ -552,7 +558,8 @@ describe('server routes over the fake engine', () => {
     const sourceChatMessageId = reply.json.lastingPoint?.sourceChatMessageId;
     const proposed = await post<InstructionsProposalReply>(app, '/api/instructions/proposals', { sourceChatMessageId });
     const proposal = proposed.json.proposal;
-    expect(proposal?.text).toContain('- From now on flag every CI timeout change');
+    // Placed under the heading it is about, without the filler opener, like the agent would.
+    expect(proposal?.text).toContain('- Flag every CI timeout change.\n\n# What to skip');
     expect(proposal?.sourceChatMessageId).toBe(sourceChatMessageId);
 
     const saved = await post<InstructionsSaveResult>(app, '/api/instructions', { proposal, text: proposal?.text });
@@ -569,7 +576,7 @@ describe('server routes over the fake engine', () => {
   it('proposes from the general instructions chat', async () => {
     const app = appWithFake();
     const chat = await post<InstructionsChatReply>(app, '/api/instructions/chat', { message: 'Skip docs-only PRs' });
-    expect(chat.json.proposal?.summary).toBe('Added: Skip docs-only PRs');
+    expect(chat.json.proposal?.summary).toBe('Added under What to skip: Skip docs-only PRs.');
     const history = (await (await app.request('/api/instructions/chat')).json()) as unknown[];
     expect(history.length).toBeGreaterThanOrEqual(4);
   });
@@ -587,10 +594,10 @@ describe('server routes over the fake engine', () => {
 
   it('drafts an ask and keeps the sent comment local', async () => {
     const app = appWithFake();
-    const draft = await post<{ body: string }>(app, '/api/prs/acme/app/1915/draft-ask', { person: 'rowan', intent: 'why not the org secret?' });
+    const draft = await post<{ body: string }>(app, '/api/prs/acme/infra/1915/draft-ask', { person: 'rowan', intent: 'why not the org secret?' });
     expect(draft.json.body).toMatch(/^@rowan why not the org secret\?/);
     await post(app, '/api/github-writes', { enabled: true });
-    const sent = await post<ActionResult>(app, '/api/prs/acme/app/1915/comment', { body: draft.json.body });
+    const sent = await post<ActionResult>(app, '/api/prs/acme/infra/1915/comment', { body: draft.json.body });
     expect(sent.json.message).toContain('nothing sent to GitHub');
   });
 
@@ -607,8 +614,8 @@ describe('server routes over the fake engine', () => {
     const replies = [...detail.activity.fresh, ...detail.activity.earlier].filter((line) => line.actor === 'you' && line.kind === 'comment');
     // Newest first, and both may share a millisecond: compare sorted.
     expect(replies.map((line) => [line.summary, line.body]).sort()).toEqual([
-      ['you replied to lyra: One cold hour is fine.', expect.stringMatching(/^> @you does the warm-up job need a feature flag[^\n]*\n\n@lyra One cold hour is fine\.$/)],
-      ['you replied to nell: Yes, next layer.', 'Yes, next layer.'],
+      ['you commented: > @you does the warm-up job need a feature flag, or is one cold hour fine?', expect.stringMatching(/^> @you does the warm-up job need a feature flag[^\n]*\n\n@lyra One cold hour is fine\.$/)],
+      ['you replied to rowan on turbo.json: Yes, next layer.', 'Yes, next layer.'],
     ]);
     expect((await post<ActionResult>(app, '/api/prs/acme/app/1902/reply', { commentId: 'nope', body: 'x' })).json.ok).toBe(false);
     expect((await post(app, '/api/prs/acme/app/1902/reply', { commentId: 'issuecomment-2', body: '' })).status).not.toBe(200);
@@ -636,7 +643,7 @@ describe('server routes over the fake engine', () => {
     expect(note.json.body).toBe('Looks good. Watch the first cold run.');
     // The opener rotates: never the same twice in a row.
     const plainNote = await post<{ body: string }>(app, '/api/prs/acme/app/1902/draft-review-note', { kind: 'approve' });
-    expect(plainNote.json.body).toBe('LGTM. A test for the retry limit can follow after merge.');
+    expect(plainNote.json.body).toBe('LGTM. A test for "Use Depot cache backend for Turbo" can follow after merge.');
   });
 
   it('chats on a whole topic, apart from the tile chats', async () => {

@@ -15,6 +15,9 @@ import {
   type TelemetryEventName,
 } from '@postpile/core';
 import { NoopTelemetry, type EngineService, type Telemetry } from '@postpile/engine';
+import { FakeEngine } from './fake/fake-engine.ts';
+import { addFakeRoutes } from './fake/fake-routes.ts';
+import { addFakeEngineRoutes } from './fake-engine-routes.ts';
 import { UpdatesOff, type UpdateSource } from './update-check.ts';
 
 /** Every /api request must carry the server's token in this header. */
@@ -241,6 +244,9 @@ export function createApp(
 
   app.get('/api/health', (c) => c.json({ ok: true }));
   app.get('/api/config', (c) => c.json(config));
+  if (config.fake) {
+    addFakeEngineRoutes(app, engine);
+  }
   // The title bar's update reminder: the last check's answer, never a live request to GitHub.
   app.get('/api/update', (c) => c.json(updates.status()));
   // The renderer's only way to PostHog: an allow-listed event name plus props validated
@@ -564,6 +570,9 @@ export function createApp(
   });
   app.post('/api/feedback', async (c) => c.json(await engine.giveFeedback(feedbackBody.parse(await c.req.json()))));
   app.post('/api/events/:id/unmute', async (c) => c.json(await engine.unmuteEvent(c.req.param('id'))));
+  if (engine instanceof FakeEngine) {
+    addFakeRoutes(app, engine);
+  }
 
   return app;
 }

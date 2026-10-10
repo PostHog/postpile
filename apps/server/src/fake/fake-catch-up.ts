@@ -1,4 +1,4 @@
-import { isTracked, type ActionResult, type CatchUpRunState, type Glance, type GlanceGap, type PrKey } from '@postpile/core';
+import { isTracked, type ActionResult, type CatchUpRunState, type FullPr, type Glance, type GlanceGap, type PrKey } from '@postpile/core';
 import type { SampleData } from './sample-data.ts';
 
 export interface FakeCatchUpOptions {
@@ -9,6 +9,41 @@ export interface FakeCatchUpOptions {
 }
 
 type Phase = 'queued' | 'writing';
+
+type GlanceText = Pick<Glance, 'verdict' | 'forYou' | 'does' | 'risk' | 'othersSaid'>;
+
+/**
+ * What the catch-up writes for the sample PRs it catches up (#1945 queued at
+ * start, #1808 on Retry), worded like a real glance so testers read it as one.
+ */
+const CATCH_UP_TEXT: Record<number, GlanceText> = {
+  1945: {
+    verdict: 'LOOKS_SAFE',
+    forYou: 'Your draft. remy asks whether 3 retries would hide fewer real flakes.',
+    does: 'Caps CI shard retries at 2, so a flaky shard fails sooner.',
+    risk: 'Low. A real flake fails the run one retry earlier.',
+    othersSaid: 'remy asked about 3 retries. lyra has not reviewed yet.',
+  },
+  1808: {
+    verdict: 'LOOK_CLOSER',
+    forYou: 'Your PR. Only the review bot approved it, so a person still has to look.',
+    does: 'Drops the old billing re-exports that #1801 left behind.',
+    risk: 'Medium. Any import of the old path breaks at startup.',
+    othersSaid: 'reviewbot approved.',
+  },
+};
+
+/** Any other PR the fake rewrites (a stale glance looked at): plain facts from the PR. */
+function genericText(pr: FullPr | undefined): GlanceText {
+  const reviews = pr?.reviews.length ?? 0;
+  return {
+    verdict: 'LOOKS_SAFE',
+    forYou: 'Nothing in the newest activity changes what this asks of you.',
+    does: pr ? `${pr.title}.` : 'A small change.',
+    risk: 'Low.',
+    othersSaid: reviews === 0 ? 'No reviews yet.' : reviews === 1 ? 'One review so far.' : `${reviews} reviews so far.`,
+  };
+}
 
 /**
  * Stand-in for the glance catch-up on the sample data, so the UI states can
@@ -51,13 +86,10 @@ export class FakeCatchUp {
 
   private cannedGlance(prKey: PrKey): Glance {
     const pr = this.data.prs.find((candidate) => candidate.key === prKey);
+    const text = (pr ? CATCH_UP_TEXT[pr.ref.number] : undefined) ?? genericText(pr);
     return {
       prKey,
-      verdict: 'LOOKS_SAFE',
-      forYou: 'Written by the sample catch-up a few seconds after start.',
-      does: pr ? `Does what the title says: ${pr.title}.` : 'Small change.',
-      risk: 'Low.',
-      othersSaid: 'No comments yet.',
+      ...text,
       keyFiles: [],
       pullInReason: null,
       dossierVersion: null,
