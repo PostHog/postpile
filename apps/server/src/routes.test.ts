@@ -607,8 +607,8 @@ describe('server routes over the fake engine', () => {
     const replies = [...detail.activity.fresh, ...detail.activity.earlier].filter((line) => line.actor === 'you' && line.kind === 'comment');
     // Newest first, and both may share a millisecond: compare sorted.
     expect(replies.map((line) => [line.summary, line.body]).sort()).toEqual([
-      ['you replied to lyra: One cold hour is fine.', expect.stringMatching(/^> @you does the warm-up job need a feature flag[^\n]*\n\n@lyra One cold hour is fine\.$/)],
-      ['you replied to nell: Yes, next layer.', 'Yes, next layer.'],
+      ['you commented: > @you does the warm-up job need a feature flag, or is one cold hour fine?', expect.stringMatching(/^> @you does the warm-up job need a feature flag[^\n]*\n\n@lyra One cold hour is fine\.$/)],
+      ['you replied to rowan on turbo.json: Yes, next layer.', 'Yes, next layer.'],
     ]);
     expect((await post<ActionResult>(app, '/api/prs/acme/app/1902/reply', { commentId: 'nope', body: 'x' })).json.ok).toBe(false);
     expect((await post(app, '/api/prs/acme/app/1902/reply', { commentId: 'issuecomment-2', body: '' })).status).not.toBe(200);

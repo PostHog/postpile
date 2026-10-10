@@ -123,7 +123,7 @@ describe('FakeEngine tile faces', () => {
     const depot = (await engine.getTopic('topic-depot'))?.tiles ?? [];
     const stack = depot.find((view) => view.tile.id.startsWith('stack:'));
     // #1911 was approved before the pushes; approvals stand on any commit, so the move is on #1902.
-    expect(stack?.turn).toMatchObject({ kind: 'you', what: 'Review, lyra mentioned you on #1902' });
+    expect(stack?.turn).toMatchObject({ kind: 'you', what: 'Review, lyra asked you something on #1902' });
     expect(stack?.prs.map((pr) => pr.why)).toEqual(['ST', 'ST', 'RV', 'RV', 'ST']);
     expect(stack?.prs.map((pr) => pr.status.lifecycle)).toEqual(['merged', 'merged', 'open', 'open', 'closed']);
     expect(depot.find((view) => view.tile.id === 'pr:acme/app#1899')?.turn).toMatchObject({ kind: 'them', who: null, what: 'Waiting on the merge queue' });
@@ -570,7 +570,7 @@ describe('FakeEngine what is new on a revisit', () => {
     expect(detail?.whatsNew?.anchor.kind).toBe('changes_request');
     expect(detail?.activity.fresh.map((line) => line.summary)).toEqual(['pim pushed 3 commits']);
     expect(detail?.activity.freshNoiseLabel).toBe('2 bot comments');
-    expect(detail?.activity.earlier.map((line) => line.summary)).toEqual(['you requested changes']);
+    expect(detail?.activity.earlier.map((line) => line.summary)).toEqual(['you requested changes: The chunk names change on every build, which busts the CDN cache.']);
     expect(detail?.activity.noise).toEqual([]);
   });
 

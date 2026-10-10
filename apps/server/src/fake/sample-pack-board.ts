@@ -204,21 +204,21 @@ function buildEvents(clock: SampleClock): PrEvent[] {
     ]),
     ...sampleEvents(clock, 2002, [
       { kind: 'review_approved', actor: 'lyra', text: 'approved', hoursAgo: 32, rule: 'loud', seen: true },
-      { kind: 'merged', actor: SAMPLE_VIEWER, text: 'merged it', hoursAgo: 30, rule: 'quiet', seen: true },
+      { kind: 'merged', actor: SAMPLE_VIEWER, text: 'merged', hoursAgo: 30, rule: 'quiet', seen: true },
     ]),
     ...sampleEvents(clock, 2003, [
       { kind: 'review_approved', actor: 'lyra', text: 'approved', hoursAgo: 2, rule: 'loud', seen: true },
-      { kind: 'merged', actor: 'lyra', text: 'merged it', hoursAgo: 1.5, rule: 'quiet' },
+      { kind: 'merged', actor: 'lyra', text: 'merged', hoursAgo: 1.5, rule: 'quiet' },
     ]),
     // Your own push is your last touch: nothing came after it, so the draft is dealt with.
     ...sampleEvents(clock, 2004, [
       { kind: 'commits_pushed', actor: SAMPLE_VIEWER, text: 'pushed: Check docs links in CI', hoursAgo: 26, rule: 'quiet', sourceId: 'sha2004', seen: true },
     ]),
     ...sampleEvents(clock, 2005, [
-      { kind: 'merged', actor: SAMPLE_VIEWER, text: 'merged it', hoursAgo: 70, rule: 'quiet', seen: true },
+      { kind: 'merged', actor: SAMPLE_VIEWER, text: 'merged', hoursAgo: 70, rule: 'quiet', seen: true },
     ]),
     ...sampleEvents(clock, 2006, [
-      { kind: 'merged', actor: SAMPLE_VIEWER, text: 'merged it', hoursAgo: 66, rule: 'quiet', seen: true },
+      { kind: 'merged', actor: SAMPLE_VIEWER, text: 'merged', hoursAgo: 66, rule: 'quiet', seen: true },
     ]),
     // A review request naming you on a draft is quiet by the rules (DESIGN.md "Drafts").
     ...sampleEvents(clock, 2010, [
@@ -232,9 +232,9 @@ function buildEvents(clock: SampleClock): PrEvent[] {
       { kind: 'question_to_user', actor: 'lyra', text: 'asked you: "should the e2e limit be 25 or 30 minutes?"', hoursAgo: 0.7, rule: 'loud', sourceId: 'issuecomment-2013-1' },
     ]),
     ...sampleEvents(clock, 2014, [
-      { kind: 'review_requested', actor: 'nell', text: 'requested @team-platform', hoursAgo: 40, rule: 'loud', seen: true },
+      { kind: 'review_requested', actor: 'nell', text: 'requested a review from acme/team-platform', hoursAgo: 40, rule: 'loud', seen: true },
       { kind: 'review_approved', actor: 'rowan', text: 'approved', hoursAgo: 12, rule: 'quiet', seen: true },
-      { kind: 'merged_without_review', actor: 'nell', text: 'merged it without your review', hoursAgo: 10, rule: 'quiet' },
+      { kind: 'merged_without_review', actor: 'nell', text: 'merged', hoursAgo: 10, rule: 'quiet' },
     ]),
     ...sampleEvents(clock, 2015, [
       { kind: 'review_requested', actor: 'bram', text: 'requested a review from you', hoursAgo: 50, rule: 'loud', seen: true },
@@ -247,7 +247,7 @@ function buildEvents(clock: SampleClock): PrEvent[] {
     ...sampleEvents(clock, 2017, [
       { kind: 'review_requested', actor: 'rowan', text: 'requested a review from you', hoursAgo: 200, rule: 'loud', seen: true },
       { kind: 'review_approved', actor: SAMPLE_VIEWER, text: 'approved', hoursAgo: 172, rule: 'quiet', seen: true },
-      { kind: 'merged', actor: 'rowan', text: 'merged it', hoursAgo: 170, rule: 'quiet', seen: true },
+      { kind: 'merged', actor: 'rowan', text: 'merged', hoursAgo: 170, rule: 'quiet', seen: true },
     ]),
     // Unread: rowan's comment came 7 seconds before your approval, with no read in between.
     ...sampleEvents(clock, 2020, [

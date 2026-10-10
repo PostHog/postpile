@@ -1971,24 +1971,13 @@ export class FakeEngine implements EngineService {
         ? { ...base, body, kind: 'review_comment', url: comment.url, path: comment.path, threadId: target.threadId }
         : { ...base, body: quotedReplyBody(comment, body), kind: 'comment', url: pr.url, path: null, threadId: null };
     const threads = pr.threads.map((thread) => (thread.id === reply.threadId ? { ...thread, comments: [...thread.comments, reply] } : thread));
-    this.data.prs[index] = { ...pr, comments: [...pr.comments, reply], threads };
-    // The real engine refetches the PR after a reply, and the activity then shows it; here it is one own event.
-    this.data.events.push({
-      id: `${prKey}:comment:${reply.id}`,
-      prKey,
-      kind: 'comment',
-      actor: this.data.viewer,
-      isBot: false,
-      at: reply.createdAt,
-      summary: `${this.data.viewer} replied to ${comment.author}: ${body.split('\n')[0] ?? ''}`,
-      url: reply.url,
-      sourceId: reply.id,
-      ruleLoudness: 'quiet',
-      ruleReason: 'own comment',
-      chatter: false,
-      override: null,
-      seenAt: reply.createdAt,
-    });
+    const updated: FullPr = { ...pr, comments: [...pr.comments, reply], threads };
+    this.data.prs[index] = updated;
+    // The real engine refetches the PR after a reply and the sync derives its event; here core derives it the same way.
+    const event = derivedEvent(updated, this.viewer(), this.data.userStates.find((entry) => entry.prKey === prKey) ?? null, reply.id, reply.createdAt);
+    if (event) {
+      this.data.events.push(event);
+    }
     return ok('fake: reply kept locally, nothing sent to GitHub');
   }
 
