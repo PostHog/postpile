@@ -11,7 +11,7 @@ import { formatSetupDraft } from './format-setup.ts';
 import { formatTools } from './format-tools.ts';
 import { readFileSync } from 'node:fs';
 import { applyLegacyEnv, runSimulatedRound, type EngineService } from '@postpile/engine';
-import { runMcpFromEnv } from '@postpile/mcp';
+import { runMcpFromEnv, runMcpOverApi } from '@postpile/mcp';
 import type { RoundKeys, SimulateRoundOptions } from './simulate/simulate-args.ts';
 import { refuseAppDataPath, simulateStart } from './simulate/simulate-start.ts';
 import { spawnRound } from './simulate/spawn-round.ts';
@@ -96,6 +96,15 @@ async function main(): Promise<void> {
   }
   if (command.name === 'help') {
     console.log(usage);
+    return;
+  }
+  if (command.name === 'mcp' && command.api !== undefined) {
+    const token = process.env.POSTPILE_TOKEN;
+    if (!token) {
+      throw new Error('mcp --api needs the fake server\'s token in POSTPILE_TOKEN');
+    }
+    // Owns stdout for the protocol; the fake server's engine answers every tool.
+    await runMcpOverApi(readOwnVersion(), command.api, token);
     return;
   }
   if (command.name === 'mcp') {

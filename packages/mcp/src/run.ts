@@ -4,6 +4,7 @@ import { AGENT_REQUESTS_FOLDER } from '@postpile/core';
 import { LATEST_SCHEMA_VERSION, defaultPaths, lockedAppVersion, runningApp, telemetryFromEnv } from '@postpile/engine';
 import { engineFromEnv, isFake } from '@postpile/server';
 import { FileAgentRequests, InMemoryAgentRequests, type AgentRequests } from './agent-requests.ts';
+import { RemoteEngine } from './remote-engine.ts';
 import { routeConsoleToStderr, serveStdio } from './server.ts';
 import { updateCheck } from './update-check.ts';
 
@@ -73,4 +74,21 @@ export async function runMcpFromEnv(appVersion: string): Promise<void> {
     // Also flushes the telemetry.
     await engine.close();
   }
+}
+
+/**
+ * `pnpm cli mcp --api <url>`: MCP on stdin/stdout over the engine of a
+ * running fake server (POSTPILE_FAKE=1 pnpm server), so proposals and notes
+ * an MCP client files show in the UI that server serves. Sample data only:
+ * the server counts as the running app, has no database to go stale, and
+ * answers the asks in memory like runMcpFromEnv's fake branch. No telemetry.
+ */
+export async function runMcpOverApi(appVersion: string, apiUrl: string, token: string): Promise<void> {
+  routeConsoleToStderr();
+  const engine = new RemoteEngine(apiUrl, token);
+  await serveStdio(engine, {
+    version: appVersion,
+    appRunning: () => true,
+    requests: new InMemoryAgentRequests(engine),
+  });
 }

@@ -58,6 +58,17 @@ Logs go to `~/Library/Logs/PostPile/main.log` (dev runs: `~/Library/Logs/PostPil
 
 Crash dumps stay on the Mac, nothing is uploaded: when a process of the app crashes, Crashpad writes a minidump (`.dmp`) to Electron's default crash dump folder, `~/Library/Application Support/PostPile/Crashpad` (dev runs: `PostPile-dev/Crashpad`, or `Crashpad/` in `POSTPILE_DATA_DIR`), in `pending/` or `completed/`. `process.crash()` in the main process makes one for a check. A run that ended without a clean quit also leaves `running.json` in the same folder; the next start logs "the last run ended without a clean quit" and sends `app_crashed_last_run`.
 
+### MCP on the fake server
+
+`POSTPILE_FAKE=1 pnpm cli mcp` builds its own copy of the sample, so what an MCP client files never reaches a UI. To share one sample between the UI and MCP clients, start the fake server with a fixed token and point the MCP server at it:
+
+```
+POSTPILE_FAKE=1 POSTPILE_TOKEN=devtok PORT=4877 pnpm server
+POSTPILE_TOKEN=devtok pnpm cli mcp --api http://127.0.0.1:4877
+```
+
+The second command serves MCP on stdin/stdout and sends every engine read and ask to the server's `POST /api/fake/engine/:method` (token-protected, only the 14 methods MCP uses, only on a server started with `POSTPILE_FAKE=1`). Topic suggestions show in the Inbox, notes in the PR pane, and a Reject or Clear in the UI reaches the next MCP answer. A real server has no such route; the real MCP server reads the database and asks the app through files as before.
+
 ### Simulate a fresh start
 
 `pnpm cli simulate-start` replays a new user's first syncs on a copy of a database, once per agent pipeline, to compare them from the same start:

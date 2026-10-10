@@ -11,7 +11,8 @@ export type Command =
   | { name: 'topics' }
   | { name: 'topic'; topicId: string }
   | { name: 'pr'; prKey: string }
-  | { name: 'mcp' }
+  /** api: the fake server whose engine to share (--api); plain `mcp` opens its own. */
+  | { name: 'mcp'; api?: string }
   | { name: 'simulate-start'; options: SimulateStartOptions }
   | { name: 'simulate-round'; options: SimulateRoundOptions }
   | { name: 'help' };
@@ -34,6 +35,7 @@ export const usage = `usage: postpile <command>
   topic <id>           show a topic: dossier, changes since seen, tiles
   pr <owner/repo#n>    show one PR: glance, facts and events
   mcp                  read-only MCP server on stdin/stdout (always without the lock): claude mcp add postpile -- pnpm -C <repo> cli mcp
+    --api <url>          sample data only: share the engine of a running POSTPILE_FAKE=1 server (token in POSTPILE_TOKEN)
   simulate-start --from <db> [flags]  a new user's first syncs on a copy, once per agent pipeline; writes report.md
     --days <n>           only threads of the last n days (default 7)
     --round-size <n>     pinged PRs per round (default ${SYNC_MAX_PRS})
@@ -136,6 +138,10 @@ export function parseArgs(argv: string[]): Command {
   if (name === 'simulate-round') {
     const options = parseSimulateRoundFlags(argv.slice(1));
     return options ? { name, options } : { name: 'help' };
+  }
+  const [apiUrl] = rest;
+  if (name === 'mcp' && arg === '--api' && rest.length === 1 && apiUrl !== undefined && /^https?:\/\//.test(apiUrl)) {
+    return { name, api: apiUrl.replace(/\/+$/, '') };
   }
   if ((name === 'topics' || name === 'mcp' || name === 'poll' || name === 'sweep' || name === 'setup-draft' || name === 'tools') && arg === undefined) {
     return { name };

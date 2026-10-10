@@ -2546,6 +2546,14 @@ POSTPILE_FAKE=1 pnpm desktop
 POSTPILE_FAKE=1 pnpm server
 ```
 
+MCP clients and the UI on one fake sample (the plain `POSTPILE_FAKE=1 pnpm
+cli mcp` keeps its own copy, so nothing it files shows in a UI):
+
+```
+POSTPILE_FAKE=1 POSTPILE_TOKEN=devtok PORT=4877 pnpm server
+POSTPILE_TOKEN=devtok pnpm cli mcp --api http://127.0.0.1:4877   # stdio MCP over that server's engine
+```
+
 Env switches:
 
 - `POSTPILE_READ_ONLY=1`: real reads, every GitHub write refused, the
