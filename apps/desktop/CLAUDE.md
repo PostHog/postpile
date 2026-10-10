@@ -211,10 +211,11 @@ with agent, Recheck): while the agent is off or paused, disable it with
   locked or blocked.
   Mark-read and memory correction results carry an undo token; the toast
   offers Undo for the 6s window and the footer counts mark-reads in the
-  undo window (tokens starting with `memory:` are not mark-reads). So do
+  undo window. So do
   the local "take back" choices: an Inbox Decline (`proposal:`, `rule:`)
   and Remove on an accepted rule or a tailoring line (`rule:`,
-  `tailoring:`). When a
+  `tailoring:`). Those and `memory:` tokens are not mark-reads
+  (`isMarkReadUndoToken` in `lib/mark-read.ts`). When a
   window ends the provider refetches, so a locked mark-read shows up as
   pending.
 - Big memory lines get "Recheck" (and "Forget" on a care): `MemoryLine`

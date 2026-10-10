@@ -61,7 +61,7 @@ import { capNote } from '../lib/agent-stats.ts';
 import { writeBlockedReason, type GithubWrite } from '../lib/guard.ts';
 import { isTransientWriteFailure, writeFailureText, type PaneWrite } from '../lib/write-failure.ts';
 import { approvedMessage, batchMarkReadMessage } from '../lib/agent-actions.ts';
-import { markReadNotice, snoozeMessage } from '../lib/mark-read.ts';
+import { isMarkReadUndoToken, markReadNotice, snoozeMessage } from '../lib/mark-read.ts';
 import { approvedDetail, markedReadPr, markedReadTile, mutedTile, snoozedTile, withApprovedPrs, withTile, withTiles } from '../lib/optimistic.ts';
 import { newerReport } from '../lib/sync-report.ts';
 import { teamRoleNotice } from '../lib/team-roles.ts';
@@ -77,8 +77,6 @@ import { queryKeys } from './keys.ts';
 import { sendTelemetry } from './telemetry.ts';
 
 const NOTICE_MS = 6000;
-// Matches the engine's memory correction undo tokens.
-const MEMORY_UNDO_PREFIX = 'memory:';
 const PROBLEM_NOTICE_MS = 12000;
 /** Busy keys of the inbox cleanup's actions, one each (see withBusy). */
 export const CLEANUP_BUSY = {
@@ -1005,8 +1003,8 @@ export function ActionsProvider(props: { children: ReactNode }) {
     topicMoves,
     // A background sync after this window's last "Sync now" is the newer one.
     lastSync: newerReport(lastSync, storedLastSync),
-    // Memory corrections carry undo tokens too, but only mark-reads wait to reach GitHub.
-    pendingMarkReads: pendingUndos.filter((entry) => !entry.token.startsWith(MEMORY_UNDO_PREFIX)).length,
+    // Local choices carry undo tokens too, but only mark-reads wait to reach GitHub.
+    pendingMarkReads: pendingUndos.filter((entry) => isMarkReadUndoToken(entry.token)).length,
     isBusy: (key) => busy.includes(key),
     blockedReason: (write) => writeBlockedReason(write, writes),
 

@@ -3,6 +3,16 @@
 // core too (`TileView.offers`); the renderer only displays them.
 import type { TileAfterRead } from '@postpile/core';
 
+// Undo tokens of purely local choices, matching the engine's prefixes: memory
+// corrections, Inbox declines, removed rules and tailoring lines. Their undo
+// windows never end in a GitHub write.
+const LOCAL_UNDO_PREFIXES = ['memory:', 'proposal:', 'rule:', 'tailoring:'];
+
+/** True when an undo token belongs to a mark-read waiting to reach GitHub. */
+export function isMarkReadUndoToken(token: string): boolean {
+  return !LOCAL_UNDO_PREFIXES.some((prefix) => token.startsWith(prefix));
+}
+
 function lowerFirst(text: string): string {
   return text.charAt(0).toLowerCase() + text.slice(1);
 }

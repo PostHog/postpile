@@ -208,6 +208,12 @@ export class MemoryActions {
     return ok(relation ? 'Moved. It stays there until something new happens in the topic.' : LINE_MESSAGES[input.kind], token);
   }
 
+  /** The current head of every PR the fact's refs point at, as far as the store knows. */
+  private currentHeads(fact: Fact): Map<PrKey, string> {
+    const prs = this.store.prs.getMany(fact.refs.map((ref) => ref.prKey));
+    return new Map([...prs].map(([key, pr]) => [key, pr.headOid]));
+  }
+
   /** A fact: closed (wrong, forget), confirmed, or replaced by the corrected text with the same refs (fix). */
   private correctFact(input: MemoryCorrection & { factId: string }, at: string): ActionResult {
     const fact = this.store.facts.get(input.factId);
@@ -223,6 +229,8 @@ export class MemoryActions {
     let replacement: Fact | null = null;
     this.store.transaction(() => {
       if (input.kind === 'confirm') {
+        // Kept at the PR's current head: pinned to the old one, the read-time check would call it stale again.
+        this.store.facts.reanchorRefs(fact.id, this.currentHeads(fact));
         this.store.facts.markVerified([fact.id], at);
         feedbackId = this.logFeedback('memory_confirmed', fact.topicId, prKey, fact.text, at);
         return;

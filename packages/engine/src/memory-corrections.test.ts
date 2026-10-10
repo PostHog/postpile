@@ -1,4 +1,4 @@
-import { makeFact, makeFactRef, viewer } from '@postpile/core/fixtures';
+import { at, makeFact, makeFactRef, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness, NOW, type Harness } from './testing/fakes.ts';
 import { reviewRequestedPr } from './testing/prs.ts';
@@ -111,6 +111,33 @@ describe('accepting a recheck', () => {
     expect((await h.engine.undo(result.undoToken)).ok).toBe(true);
     expect(h.store.facts.get('f1')).toEqual(fact);
     expect(h.store.feedback.recentForTopic('depot', 5)).toEqual([]);
+  });
+
+  it('keeps a fact whose head moved fresh on the next read, and undo pins it back', async () => {
+    const h = makeHarness();
+    const pr = reviewRequestedPr(1);
+    topicWithPrs(h, 'depot', [pr]);
+    h.store.prs.upsert(pr, at(0));
+    const fact = makeFact({
+      id: 'f1',
+      topicId: 'depot',
+      subject: { kind: 'pr', key: pr.key },
+      predicate: 'status',
+      object: null,
+      text: 'waiting on CI',
+      refs: [makeFactRef({ prKey: pr.key, headOid: 'older-head' })],
+    });
+    h.store.facts.add(fact);
+    const factStale = async () => (await h.engine.listFacts({ topicId: 'depot' }))[0]?.stale;
+    expect(await factStale()).toBe('head_moved');
+
+    const result = await h.engine.correctMemory({ kind: 'confirm', factId: 'f1', topicId: null, text: fact.text });
+    expect(h.store.facts.get('f1')?.refs[0]?.headOid).toBe(pr.headOid);
+    expect(await factStale()).toBeNull();
+
+    await h.engine.undo(result.undoToken);
+    expect(h.store.facts.get('f1')).toEqual(fact);
+    expect(await factStale()).toBe('head_moved');
   });
 
   it('replaces a fact with the fix, same refs, and undo brings the old one back', async () => {

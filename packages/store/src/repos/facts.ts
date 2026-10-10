@@ -377,8 +377,8 @@ export class FactRepo {
     run(this.db, 'UPDATE fact SET invalid_at = NULL, invalid_reason = NULL, superseded_by = NULL, expired_at = NULL WHERE id = ?', factId);
   }
 
-  /** Puts stale_* and verified_at back as they were, to undo a confirm. */
-  restoreCheck(fact: Pick<Fact, 'id' | 'staleAt' | 'staleReason' | 'verifiedAt'>): void {
+  /** Puts stale_*, verified_at and the refs' heads back as they were, to undo a confirm. */
+  restoreCheck(fact: Pick<Fact, 'id' | 'staleAt' | 'staleReason' | 'verifiedAt' | 'refs'>): void {
     run(
       this.db,
       'UPDATE fact SET stale_at = ?, stale_reason = ?, verified_at = ? WHERE id = ?',
@@ -387,6 +387,17 @@ export class FactRepo {
       fact.verifiedAt,
       fact.id,
     );
+    for (const ref of fact.refs) {
+      run(
+        this.db,
+        'UPDATE fact_ref SET head_oid = ? WHERE fact_id = ? AND kind = ? AND pr_key = ? AND source_id = ?',
+        ref.headOid,
+        fact.id,
+        ref.kind,
+        ref.prKey,
+        ref.sourceId ?? '',
+      );
+    }
   }
 
   /** Keeps the first stale time and reason while the fact stays stale. */

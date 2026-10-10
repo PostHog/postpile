@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TileAfterRead, WhoseTurn } from '@postpile/core';
-import { markReadNotice, moveWords, snoozeMessage } from './mark-read.ts';
+import { isMarkReadUndoToken, markReadNotice, moveWords, snoozeMessage } from './mark-read.ts';
 
 const NONE: WhoseTurn = { kind: 'none', who: null, what: '', prKey: null };
 const REREVIEW: WhoseTurn = { kind: 'you', move: 're_review', who: null, what: 'pim addressed your changes: re-review', prKey: 'acme/app#1960' };
@@ -58,5 +58,17 @@ describe('markReadNotice', () => {
   it('keeps the engine message while writes are locked or on failure', () => {
     expect(markReadNotice({ ...base, writesOn: false, afterRead: stillYours }).offerSnooze).toBe(false);
     expect(markReadNotice({ ...base, ok: false, afterRead: stillYours }).offerSnooze).toBe(false);
+  });
+});
+
+describe('isMarkReadUndoToken', () => {
+  it('counts a mark-read token', () => {
+    expect(isMarkReadUndoToken('a1b2c3')).toBe(true);
+  });
+
+  it('leaves out the tokens of local choices', () => {
+    for (const token of ['memory:a1b2', 'memory:workctx:a1b2', 'proposal:a1b2', 'rule:a1b2', 'tailoring:a1b2']) {
+      expect(isMarkReadUndoToken(token)).toBe(false);
+    }
   });
 });
