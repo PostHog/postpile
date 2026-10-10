@@ -1750,6 +1750,13 @@ the app meanwhile.
   Approve with a note. A thumbs up stays one-way in the app; its tooltips
   say so (the toggle was not chosen).
 
+- **First-run catch-up never writes on Enter** (2026-10-10, DESIGN.md
+  "Inbox cleanup" › Cases): the preselect stays (merged all on a busy
+  first run), but Enter does nothing there and the main button names its
+  effect ("Mark 28 read on GitHub"). Interruptions prompt: two leads
+  (upgrader, new install that skipped setup), and it waits for a running
+  cleanup and a usable gh.
+
 - **Agent notes on PRs are advisory and anchored to the PR's state**
   (2026-10-08, design agreed with the reporting agent, checked by Codex;
   DESIGN.md "Agent notes on PRs"): notes never change turn, unread, done,

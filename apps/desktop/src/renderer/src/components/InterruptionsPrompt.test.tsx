@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import type { InboxCleanupView, InterruptionsMode, InterruptionsView } from '@postpile/core';
+import type { InboxCleanupView, InterruptionsMode, InterruptionsView, SetupStatus, ToolsView } from '@postpile/core';
 import { ActionsProvider } from '../api/actions.tsx';
 import { queryKeys } from '../api/keys.ts';
 import { InterruptionsPrompt } from './InterruptionsPrompt.tsx';
@@ -19,6 +19,16 @@ const noStartDialog: InboxCleanupView = {
   lastRun: null,
   pending: false,
   syncing: false,
+};
+
+const setupDone: SetupStatus = { needed: false, flag: 'done', flaggedAt: null, hasInstructions: true };
+const toolsOk: ToolsView = {
+  gh: { state: 'ok', path: '/usr/bin/gh', headline: 'GitHub CLI ready', detail: '', fixes: [], retryAt: null },
+  claude: { state: 'ok', path: '/usr/bin/claude', headline: 'Claude Code CLI ready', detail: '', fixes: [], retryAt: null },
+  canSync: true,
+  agentOn: true,
+  checkedAt: null,
+  nextCheckAt: null,
 };
 
 interface PutCall {
@@ -49,10 +59,12 @@ function stubFetch(): PutCall[] {
   return calls;
 }
 
-function renderPrompt() {
+function renderPrompt(overrides: { cleanup?: InboxCleanupView; tools?: ToolsView; setup?: SetupStatus } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } });
   client.setQueryData(queryKeys.interruptions, neverChosen);
-  client.setQueryData(queryKeys.inboxCleanup, noStartDialog);
+  client.setQueryData(queryKeys.inboxCleanup, overrides.cleanup ?? noStartDialog);
+  client.setQueryData(queryKeys.tools, overrides.tools ?? toolsOk);
+  client.setQueryData(queryKeys.setupStatus, overrides.setup ?? setupDone);
   render(
     <QueryClientProvider client={client}>
       <ActionsProvider>
@@ -97,5 +109,22 @@ describe('InterruptionsPrompt', () => {
     await act(async () => calls[0]?.answer(false));
     expect(screen.getByRole('dialog')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Save' })).toBeTruthy();
+  });
+
+  it('waits while a cleanup runs and while gh cannot be used', () => {
+    renderPrompt({ cleanup: { ...noStartDialog, running: { done: 3, total: 40, merged: true } } });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    cleanup();
+    renderPrompt({ tools: { ...toolsOk, canSync: false } });
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('leads with the upgrade text for an upgrader and a neutral one for a skipped new install', () => {
+    renderPrompt();
+    expect(screen.getByText(/Until now it sent a Mac notification/)).toBeTruthy();
+    cleanup();
+    renderPrompt({ setup: { needed: false, flag: 'skipped', flaggedAt: null, hasInstructions: false } });
+    expect(screen.queryByText(/Until now/)).toBeNull();
+    expect(screen.getByText(/stays quiet unless you pick otherwise/)).toBeTruthy();
   });
 });

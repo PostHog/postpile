@@ -20,6 +20,11 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - The "Approved" toast waits for GitHub's answer. A refused write says what happened in plain words ("GitHub didn't take the approval (server error 502)"), with GitHub's message on hover and "Try again" for an approve.
 - The composer gives focus back to the button that opened it on Escape or Cancel, keeps focus while the agent drafts, and puts the caret after a kept draft.
 - A reply to a PR comment says it mentions the author, as the posted comment does.
+- The first-run "Before the first sync" dialog no longer clears on Enter, and its button now says what it does ("Mark 28 read on GitHub").
+- New installs that skipped setup get a neutral interruptions question instead of "New in this version … Until now".
+- The interruptions question waits for a running cleanup and for gh to work, instead of opening on top of them.
+- The title bar says "waiting for your answer" while the first sync waits for the inbox question, and "GitHub unreachable" when the poll is off and GitHub cannot be reached.
+- With both gh and claude broken, the note says to fix gh first and shows the `toolPath` hint once.
 
 ## 0.27.2 (2026-10-09)
 

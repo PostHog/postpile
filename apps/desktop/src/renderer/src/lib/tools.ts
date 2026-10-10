@@ -1,4 +1,4 @@
-import type { ClaudeState, GhState, ToolStatus, ToolsView } from '@postpile/core';
+import { TOOL_PATH_HINT, type ClaudeState, type GhState, type ToolStatus, type ToolsView } from '@postpile/core';
 import { ageLabel, clockLabel } from './time.ts';
 
 // What the renderer shows about gh and claude (DESIGN.md "Missing tools").
@@ -20,6 +20,20 @@ export function toolsNotice(view: ToolsView | undefined): ToolsNotice {
     gh: view && GH_NOTE_STATES.includes(view.gh.state) ? view.gh : null,
     claude: view && CLAUDE_NOTE_STATES.includes(view.claude.state) ? view.claude : null,
   };
+}
+
+/** The one line above both notes when gh and claude are both broken: gh goes first. */
+export const FIX_GH_FIRST = 'Fix gh first: nothing syncs without it. Then claude for the agent.';
+
+/**
+ * The claude note under the gh note: the "toolPath" hint is already in the
+ * gh text when gh is missing too, so it shows once.
+ */
+export function claudeDetailUnderGh(gh: ToolStatus<GhState>, claude: ToolStatus<ClaudeState>): string {
+  if (!gh.detail.includes(TOOL_PATH_HINT)) {
+    return claude.detail;
+  }
+  return claude.detail.replace(TOOL_PATH_HINT, '').trim();
 }
 
 /** Often while something is wrong (each ask may run a due recheck on the server), rarely otherwise. */

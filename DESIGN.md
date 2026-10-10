@@ -2449,6 +2449,10 @@ Routes: `GET /api/setup`, `GET /api/setup/checks`, `POST/GET
 
 ## Missing tools (gh, claude)
 
+When gh and claude are both broken the gh note leads with "Fix gh first:
+nothing syncs without it. Then claude for the agent.", and the `toolPath`
+hint shows once, in the gh text (2026-10-10).
+
 PostPile needs two programs it does not ship: `gh` for every GitHub read
 and write (the token comes from `gh auth token`) and `claude` for every
 agent call. Either can be missing, logged out or failing. The rule: detect
@@ -5524,6 +5528,14 @@ too, also with the merged row off).
 | first run, full (> 300) | same, Clear tagged Recommended | merged all + older 30 | Clear |
 | from the sidebar, any day | "Clean up your inbox" | merged all + older 14 | Clear (Cancel instead of Start as usual) |
 
+On the first run Enter never clears (2026-10-10): the dialog is the first
+screen after setup and the first GitHub write the app mentions, so the
+preselect stays but only a click on the button writes. The main button
+names its effect ("Mark 28 read on GitHub"; "Queue marking 28 read" while
+writes are locked) and carries no ⏎ hint; Start as usual still takes Enter
+when it is the main button. The other start cases keep Enter on their main
+button.
+
 A row with nothing in it starts unticked. The saving line ("Clearing first
 means the agent reads N PRs instead of M") shows for vacation, busy and
 full: M = PRs the coming sync would glance (the glance writer's own check,
@@ -6685,10 +6697,16 @@ notification; the poll, the tiles and the list work the same in every mode.
   by default, so an update would turn them off without a word. When no mode
   was ever stored (`InterruptionsView.chosen` false), the app asks once in a
   dialog (`InterruptionsPrompt`): "When should PostPile tap you on the
-  shoulder?", the same three cards with Never preselected, a lead that names
-  "As soon as it matters" as the old behavior, and Save. It waits until the
-  setup status and the inbox cleanup view have loaded and never shows on top
-  of setup or the inbox cleanup start dialog. Saving or closing (Esc, a
+  shoulder?", the same three cards with Never preselected, a lead and
+  Save. The lead for an upgrader names "As soon as it matters" as the old
+  behavior ("New in this version … Until now it sent a Mac notification");
+  a new install that skipped setup (setup flag `skipped`, no instructions)
+  never had pings and gets "PostPile stays quiet unless you pick otherwise.
+  Pick when it may tap you on the shoulder." (2026-10-10). It waits until
+  the setup status, the tools status and the inbox cleanup view have
+  loaded and never shows on top of setup or the inbox cleanup start dialog,
+  nor while a cleanup runs (its result toast comes first) nor while gh
+  cannot be used (a ping question is pointless before anything syncs). Saving or closing (Esc, a
   click outside) counts as a choice: closing stores the current mode
   (Never) and says so next to Save, so the dialog never comes back. It
   closes only once the save landed; while it runs Save reads "Saving…",
@@ -7283,7 +7301,10 @@ renderer sees it through `LivePollStatus.syncRunning` (the title bar shows
 `syncing · … · agent calls 34/82` like for "Sync now", `useActions().syncing` covers
 both) and `nextAutoSyncAt` ("next full sync in N min"). The last sync shown
 is the newer of this window's and the stored report. Between syncs the title bar
-reads the live poll, not the report (2026-10-05): "up to date" while the
+reads the live poll, not the report (2026-10-05; a first sync held for the
+inbox catch-up reads "waiting for your answer", amber, because no sync has
+finished yet; with the poll off and gh offline it reads "GitHub
+unreachable", amber, since nothing else notices): "up to date" while the
 poll runs normally and GitHub answered it within three cycles
 (`pollIsFresh` on `LivePollStatus.lastAnsweredAt`; blocked and failed
 cycles stamp only `lastPollAt`, and a retry keeps that stamp), "updates
