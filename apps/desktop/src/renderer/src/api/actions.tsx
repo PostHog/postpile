@@ -58,6 +58,7 @@ import type {
 } from '@postpile/core';
 import { capNote } from '../lib/agent-stats.ts';
 import { writeBlockedReason, type GithubWrite } from '../lib/guard.ts';
+import { writeFailureText, type PaneWrite } from '../lib/write-failure.ts';
 import { approvedMessage, batchMarkReadMessage } from '../lib/agent-actions.ts';
 import { markReadNotice } from '../lib/mark-read.ts';
 import { approvedDetail, markedReadPr, markedReadTile, mutedTile, snoozedTile, withApprovedPrs, withTile, withTiles } from '../lib/optimistic.ts';
@@ -98,10 +99,14 @@ export interface Notice {
   snoozeTileId: string | null;
   /** The toast offers "Show": the notifications view, where each thread's last action is listed (the inbox cleanup's done toast). */
   showActionLog?: boolean;
+  /** The raw line behind a plain-worded failure (GitHub's answer), for the hover title. */
+  detail?: string | null;
+  /** "Try again" on a failed write that can simply run again (a plain approve). */
+  retry?: (() => void) | null;
 }
 
 /** Reshapes the notice of a successful or failed action, e.g. the mark-read that leaves a tile your move. */
-type NoticeShape = (result: ActionResult) => { message: string; snoozeTileId: string | null };
+type NoticeShape = (result: ActionResult) => { message: string; snoozeTileId: string | null; detail?: string | null };
 
 /** Changes the cache before the server answers (lib/optimistic.ts) and returns how to put the old data back. */
 type Optimistic = () => Promise<() => void>;
@@ -332,6 +337,17 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/** The notice of a pane write: GitHub's refusal in plain words, its raw line in the hover title. */
+function paneWriteShape(write: PaneWrite): NoticeShape {
+  return (result) => {
+    if (result.ok) {
+      return { message: result.message, snoozeTileId: null };
+    }
+    const text = writeFailureText(write, result.message);
+    return { message: text.message, snoozeTileId: null, detail: text.detail };
+  };
+}
+
 export function ActionsProvider(props: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const config = useAppConfig().data;
@@ -480,7 +496,14 @@ export function ActionsProvider(props: { children: ReactNode }) {
           rollback?.();
         }
         const shaped = shape ? shape(result) : { message: result.message, snoozeTileId: null };
-        show(result.ok ? 'ok' : 'error', shaped.message, result.undoToken, shaped.snoozeTileId);
+        setNotice({
+          id: Date.now(),
+          tone: result.ok ? 'ok' : 'error',
+          message: shaped.message,
+          undoToken: result.undoToken,
+          snoozeTileId: shaped.snoozeTileId,
+          detail: shaped.detail ?? null,
+        });
         // A settle token has no Undo in the toast, but its mark-read is watched the same way: refetch once it settled.
         const watched = result.undoToken ?? result.settleToken ?? null;
         if (watched) {
@@ -499,15 +522,28 @@ export function ActionsProvider(props: { children: ReactNode }) {
     });
   }
 
+  /** A failed approve: GitHub's refusal in plain words, the raw line in the hover title, and "Try again" when `retry` is set. */
+  function showApproveFailure(raw: string, retry: (() => void) | null): void {
+    const text = writeFailureText('approve', raw);
+    setNotice({ id: Date.now(), tone: 'error', message: text.message, undoToken: null, snoozeTileId: null, detail: text.detail, retry });
+  }
+
   /**
    * Every approve, the pane's and the ✨ ones. Final, so never an Undo: the
-   * cache shows the PRs approved and the toast says "Approved" before GitHub
-   * answers. A failed PR is put back (the whole call, when it all failed) and
-   * the server's message replaces the toast. The busy key holds until the
+   * cache shows the PRs approved on click, but the toast waits for GitHub's
+   * answer ("Approved" only once it went out, DESIGN.md "A click shows its
+   * result right away"). A failed PR is put back (the whole call, when it
+   * all failed) and the toast says why. The busy key holds until the
    * refetch: the topic's own offers are core's and are not worked out here.
-   * Returns true when every PR was approved.
+   * `retry` is the toast's "Try again" after a failure. Returns true when
+   * every PR was approved.
    */
-  async function runApprove(busyKey: string, prKeys: PrKey[], task: () => Promise<ActionResult & { results: PrApproveResult[] }>): Promise<boolean> {
+  async function runApprove(
+    busyKey: string,
+    prKeys: PrKey[],
+    task: () => Promise<ActionResult & { results: PrApproveResult[] }>,
+    retry: (() => void) | null = null,
+  ): Promise<boolean> {
     if (isBlocked('approve')) {
       return false;
     }
@@ -523,15 +559,16 @@ export function ActionsProvider(props: { children: ReactNode }) {
       let allApproved = false;
       try {
         rollback = await showApproved(prKeys);
-        show('ok', approvedMessage(prKeys.length));
         const result = await task();
         const failed = result.results.filter((entry) => !entry.ok).map((entry) => entry.prKey);
         allApproved = failed.length === 0;
-        if (failed.length > 0) {
+        if (allApproved) {
+          show('ok', approvedMessage(prKeys.length));
+        } else {
           rollback();
           const worked = prKeys.filter((key) => !failed.includes(key));
           rollback = worked.length > 0 ? await showApproved(worked) : null;
-          show('error', result.message);
+          showApproveFailure(result.message, retry);
         }
         if (result.settleToken) {
           const entry = { token: result.settleToken, until: Date.now() + UNDO_WINDOW_MS };
@@ -539,11 +576,25 @@ export function ActionsProvider(props: { children: ReactNode }) {
         }
       } catch (error) {
         rollback?.();
-        show('error', errorText(error));
+        showApproveFailure(errorText(error), retry);
       }
       await refreshAll();
       return allApproved;
     });
+  }
+
+  function approve(prKey: PrKey, headOid: string, body = '', noteSource?: ReviewNoteSource): Promise<boolean> {
+    // "Try again" only for a plain approve: a note's composer comes back with the text, and its button is the retry.
+    const retry = body === '' ? () => void approve(prKey, headOid) : null;
+    return runApprove(
+      `approve:${prKey}`,
+      [prKey],
+      async () => {
+        const result = await request<ActionResult>('POST', `${prPath(prKey)}/approve`, { headOid, body, noteSource });
+        return { ...result, results: [{ prKey, ok: result.ok, message: result.message }] };
+      },
+      retry,
+    );
   }
 
   async function sync(): Promise<void> {
@@ -947,13 +998,14 @@ export function ActionsProvider(props: { children: ReactNode }) {
     markThreadRead: async (threadId) => {
       await run(`markThread:${threadId}`, 'markRead', () => request('POST', `/api/notifications/${encodeURIComponent(threadId)}/mark-read`));
     },
-    approve: (prKey, headOid, body = '', noteSource) =>
-      runApprove(`approve:${prKey}`, [prKey], async () => {
-        const result = await request<ActionResult>('POST', `${prPath(prKey)}/approve`, { headOid, body, noteSource });
-        return { ...result, results: [{ prKey, ok: result.ok, message: result.message }] };
-      }),
+    approve,
     commentReview: (prKey, headOid, body, noteSource) =>
-      run(`commentReview:${prKey}`, 'commentReview', () => request('POST', `${prPath(prKey)}/comment-review`, { headOid, body, noteSource })),
+      run(
+        `commentReview:${prKey}`,
+        'commentReview',
+        () => request('POST', `${prPath(prKey)}/comment-review`, { headOid, body, noteSource }),
+        paneWriteShape('commentReview'),
+      ),
     approveAgent: async (input) => {
       const prKeys = input.prs.map((pr) => pr.prKey);
       await runApprove(input.busyKey, prKeys, () => request<BatchApproveResult>('POST', '/api/agent-actions/approve', { prs: input.prs, from: input.from }));
@@ -1047,10 +1099,11 @@ export function ActionsProvider(props: { children: ReactNode }) {
     draftAsk: (prKey, person, intent) => draft(`ask:${prKey}`, `${prPath(prKey)}/draft-ask`, { person, intent }),
     draftReviewNote: (prKey, kind, gist = '', quiet = false) => draft(`reviewNote:${prKey}`, `${prPath(prKey)}/draft-review-note`, { kind, gist }, quiet),
     draftReply: (prKey, commentId, gist) => draft(`reply:${prKey}:${commentId}`, `${prPath(prKey)}/draft-reply`, { commentId, gist }),
-    sendComment: (prKey, body) => run(`comment:${prKey}`, 'comment', () => request('POST', `${prPath(prKey)}/comment`, { body })),
+    sendComment: (prKey, body) => run(`comment:${prKey}`, 'comment', () => request('POST', `${prPath(prKey)}/comment`, { body }), paneWriteShape('comment')),
     replyToComment: (prKey, commentId, body) =>
-      run(`replySend:${prKey}:${commentId}`, 'reply', () => request('POST', `${prPath(prKey)}/reply`, { commentId, body })),
-    react: (prKey, commentId) => run(`react:${prKey}:${commentId}`, 'react', () => request('POST', `${prPath(prKey)}/react`, { commentId })),
+      run(`replySend:${prKey}:${commentId}`, 'reply', () => request('POST', `${prPath(prKey)}/reply`, { commentId, body }), paneWriteShape('reply')),
+    react: (prKey, commentId) =>
+      run(`react:${prKey}:${commentId}`, 'react', () => request('POST', `${prPath(prKey)}/react`, { commentId }), paneWriteShape('react')),
     topicChat,
     instructionsChat,
     proposeInstructions,

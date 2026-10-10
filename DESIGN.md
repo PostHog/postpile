@@ -2953,7 +2953,16 @@ for a refetch of all queries before the screen changed. Now:
   enough, the button only shows its pending state until the refetch.
 - The button stays busy until the refetch lands, so it never offers the old
   action again in between. A failed action puts the old cache back and shows
-  the error toast. The toast and Undo come as soon as the server answers.
+  the error toast. The toast and Undo come as soon as the server answers,
+  never before: an approve's "Approved" toast waits for GitHub's answer
+  while the button already reads "Approving…" (2026-10-10; it showed at
+  once and flipped to the error a moment later).
+- A pane write GitHub refused (approve, comment review, comment, reply,
+  thumbs up) says so in plain words: "GitHub didn't take the approval
+  (server error 502). Nothing was approved." GitHub's raw line is the
+  toast's hover title; a plain approve's toast offers "Try again". A
+  message that is not GitHub's error line (the head moved, the PR closed)
+  stays as the engine wrote it (2026-10-10, `lib/write-failure.ts`).
 - Locked, a mark-read changes nothing early (it only becomes a pending
   write), and a blocked approve changes nothing at all.
 - The server answers approve right after the write and the local mark-read;
@@ -3321,8 +3330,11 @@ thread, reading the diff.
 - Title, branch line, then "New since you looked": a digest you read. A
   person's comment that can take a reply gets "Reply ↓", which scrolls the
   pane to that comment in the activity list, tints it for a moment and
-  opens the reply there with the thread around it. Rejected: a composer
-  inside the digest (no context, bloats the box, two homes for Reply).
+  opens the reply there with the thread around it. While replies are
+  blocked (the lock) it only scrolls and tints, with the lock reason in its
+  tooltip: no composer to type into that cannot post (2026-10-10).
+  Rejected: a composer inside the digest (no context, bloats the box, two
+  homes for Reply).
 - The glance (`GlanceCard`), on its own. Its title line carries only its
   own controls: Recheck and "Tell the agent" (opens the topic's agent pane
   with "About #1907: " typed in).
@@ -3333,7 +3345,9 @@ thread, reading the diff.
   you", "... from team-devex", "Your PR", "Your review"), then Approve with
   its "+ note" half, Comment review, and "Ask <owner>" on the right. Same
   order on every PR; Approve fills green when it is core's lead, else
-  outlined. Shown when core offers Approve or Ask. Rejected 2026-10-05:
+  outlined. Shown when core offers Approve or Ask. While the write is
+  blocked every button of the row is disabled with the reason as its
+  tooltip, Approve too (2026-10-10). Rejected 2026-10-05:
   welding the buttons into the glance's footer (the glance is agent output
   and may be missing or change its look), and a row in the PR header above
   the glance (longer pointer path from the tile, buttons before the
@@ -3353,7 +3367,9 @@ thread, reading the diff.
   earlier. A person's comment or review gets Reply (a button when it asks
   you, else a quiet link; "Reply in thread" on a code comment) and "Thumbs
   up" (a 👍 reaction on GitHub, said in its tooltip; "You: thumbs up" in a
-  pressed pill once given; "React" alone did not say what it posts). An
+  pressed pill once given; "React" alone did not say what it posts). The
+  app cannot take a thumbs up back: the button's and the pill's tooltips
+  say so, and point to github.com for removing it (2026-10-10). An
   approval without text only takes the thumbs up. Nothing for the viewer's own words, bots or pushes.
   Core puts it on the line (`ActivityLine.reply`, filled by `activityList`
   with the PR and the viewer); a comment on several lines (its event and an
@@ -3456,10 +3472,16 @@ thread, reading the diff.
 - "Back to top" floats at the pane's bottom while the review row has
   scrolled out above.
 
-**One composer** (`Composer`, state per PR in `PrBody`): no frame of its own (a label, the app's plain text field, the buttons, like Teach future assessments; an accent frame with a halo read as too bordery, 2026-10-05); opens in place
+**One composer** (`Composer`, drafts per PR and target in `PaneDrafts`): no frame of its own (a label, the app's plain text field, the buttons, like Teach future assessments; an accent frame with a halo read as too bordery, 2026-10-05); opens in place
 under what it answers (the review row or the comment), one at a time;
-drafts stay per target until sent or cancelled. A header says where it
-goes ("Reply to alice · new PR comment, quotes their line", "Reply in
+drafts stay per target until sent or cancelled. They also survive a
+switch to another PR, layer or topic and back while the app runs (not a
+restart), and so does which composer was open: it comes back open with
+its text, without taking focus or scrolling the pane (2026-10-10). Every
+draft is keyed by PR and target, so text typed on one PR can never be
+read or posted on another. A header says where it
+goes ("Reply to alice · new PR comment, quotes their line and mentions
+@alice": the posted comment starts with the quote and the mention), "Reply in
 thread · on ci.yml", "Approve with a note · on a1b2c3d, cannot be undone",
 "Comment review · on a1b2c3d, does not approve", "Ask alice · new PR
 comment"); one text box with the agent's pill where the text starts (the
@@ -3467,10 +3489,19 @@ first thing to click; the text starts under it): "✨ Draft with agent" on
 an empty box (from the PR and its topic), "✨ Rewrite with agent" once
 there is text (from the user's words; replaces the old person field, gist
 field and Draft step); Cancel; and a button that names the target ("Post reply to alice",
-"Approve with note" in green, every other post in ink). Escape closes it and keeps the draft.
+"Approve with note" in green, every other post in ink). Escape closes it and keeps the draft;
+Escape and Cancel give focus back to the button that opens it. Opening
+puts the caret after a kept draft; the pill comes first in the tab order.
+Meta/Ctrl+Enter presses the send button of Comment review, Ask and
+Reply, with the same checks (said in the button's tooltip); never Approve
+with a note, which stays a deliberate click (2026-10-10). Approve with a
+note closes on click; when it fails, the composer comes back with the note.
 The two review notes (Approve with a note, Comment review) start drafting
 as they open (2026-10-06, `draftsOnOpen`): the box shows "Drafting…" and
 the agent's text lands in it, editable, before anything can be sent.
+While the text is the agent's untouched draft, a line under the box says
+"✨ Agent draft, edit before sending" (2026-10-10: testers nearly posted
+words they did not write).
 Hand-written notes were rare (2 of 21 approvals in two weeks carried a
 PostPile note), so the click that opens the composer is the ask. It only
 fires into an empty box, once per opening: a kept draft (the user's text

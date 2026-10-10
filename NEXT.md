@@ -1740,6 +1740,16 @@ the app meanwhile.
   the user's own Approve, comment review or Remove team in the pane lets
   it fire as soon as wanted.
 
+- **Composer drafts survive PR switches; agent drafts are marked; a send
+  chord for Comment review, Ask and Reply** (2026-10-10, owner, from the
+  bug hunt, recommended options of PANE-A-01, PANE-A-12 and PANE-A-14;
+  DESIGN.md "The PR pane" › One composer): drafts and the open composer
+  are kept per PR and target while the app runs; "✨ Agent draft, edit
+  before sending" shows under an untouched agent draft (draft on open
+  stays); Meta/Ctrl+Enter sends Comment review, Ask and Reply, never
+  Approve with a note. A thumbs up stays one-way in the app; its tooltips
+  say so (the toggle was not chosen).
+
 - **Agent notes on PRs are advisory and anchored to the PR's state**
   (2026-10-08, design agreed with the reporting agent, checked by Codex;
   DESIGN.md "Agent notes on PRs"): notes never change turn, unread, done,
