@@ -2,7 +2,7 @@ import { useRef, type ReactNode } from 'react';
 import { TopicActions } from './AgentActions.tsx';
 import { TopicArchiveBox } from './TopicArchiveBox.tsx';
 import type { TileGroup, TileView, TopicDetail, TopicListItem } from '@postpile/core';
-import { gridGroups, headingGroup } from '../lib/queues.ts';
+import { GROUP_LABELS, gridGroups, headingGroup, headingLabel } from '../lib/queues.ts';
 import { useFlip } from '../lib/use-flip.ts';
 import { useHeldPlace } from '../lib/use-held-place.ts';
 import { useSettling } from '../lib/use-settling.ts';
@@ -26,9 +26,6 @@ interface TileGridProps {
   /** Core's per-group your-move counts match what the groups show: no search filter, no tile held outside its group. */
   showYourMove: boolean;
 }
-
-/** Group names on screen. "Dealt with" is the tile state `done`; a topic with nothing left goes to the Archive. */
-const GROUP_LABELS: Record<TileGroup, string> = { unread: 'Unread', open: 'Open', dealt_with: 'Dealt with' };
 
 function TileCount(props: { count: number }) {
   return <span className="font-mono text-[10.5px] font-semibold text-hint tabular-nums">{props.count}</span>;
@@ -133,20 +130,22 @@ function GroupMarkers(props: { shown: TileGroup; topicId: string }) {
 /**
  * Unread or Open: the name and count sit right on top of the group's first
  * tile. The name follows `headingGroup`: once the held tile under "Unread"
- * is read, the word changes in place to the group it went to (+160ms).
+ * is read, the word changes in place to the group it went to (+160ms), or
+ * to "Just read" when that group has its own heading below (`headingLabel`).
  */
-function GroupSection(props: TileGridProps & { group: TileGroup; views: TileView[] }) {
+function GroupSection(props: TileGridProps & { group: TileGroup; views: TileView[]; onScreen: TileGroup[] }) {
   const shown = headingGroup(
     props.group,
     props.views.map((view) => view.group),
   );
+  const label = headingLabel(props.group, shown, props.onScreen);
   return (
     <section className="flex flex-col gap-2">
       {/* 16px in: the tile's 15px padding plus its 1px frame. */}
       <h3 data-flip-key={`group:${props.group}`} className="relative flex items-baseline gap-1.5 pl-4 text-[11.5px] leading-[normal] font-semibold text-ink-2">
         <GroupMarkers shown={shown} topicId={props.detail.topic.id} />
-        <Crossfade swapKey={shown} animate enterClass="animate-word-in" leaveClass="animate-word-out">
-          <span className={shown === 'unread' ? '' : 'text-hint'}>{GROUP_LABELS[shown]}</span>
+        <Crossfade swapKey={label} animate enterClass="animate-word-in" leaveClass="animate-word-out">
+          <span className={shown === 'unread' ? '' : 'text-hint'}>{label}</span>
         </Crossfade>
         <TileCount count={props.views.length} />
         <YourMoveCount count={props.showYourMove ? props.detail.groupYourMoves[props.group] : 0} />
@@ -281,7 +280,14 @@ export function TileGrid(props: Omit<TileGridProps, 'showYourMove'>) {
         bucket.key === 'dealt_with' ? (
           <DealtWithGroup key={bucket.key} {...props} showYourMove={showYourMove} views={bucket.items} />
         ) : (
-          <GroupSection key={`${props.detail.topic.id}:${bucket.key}`} {...props} showYourMove={showYourMove} group={bucket.key as TileGroup} views={bucket.items} />
+          <GroupSection
+            key={`${props.detail.topic.id}:${bucket.key}`}
+            {...props}
+            showYourMove={showYourMove}
+            group={bucket.key as TileGroup}
+            views={bucket.items}
+            onScreen={groups.map((other) => other.key as TileGroup)}
+          />
         ),
       )}
     </div>

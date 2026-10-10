@@ -1,10 +1,10 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { TopicListItem, TopicPerson, TopicSection, ViewerView } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { useTools } from '../api/tools.ts';
 import { useFinishedTopics } from '../api/topics.ts';
 import { statusLabel } from '../lib/memory.ts';
-import { bucketItems, dealtItems, dealtKey, sidebarBuckets, topicRowId, unreadLook, type QueueFilter } from '../lib/queues.ts';
+import { bucketItems, dealtItems, dealtKey, rowSection, sidebarBuckets, topicRowId, unreadLook, type QueueFilter } from '../lib/queues.ts';
 import { ARCHIVE_FLIGHT_MS, flyToArchive } from '../lib/archive-flight.ts';
 import { reducedMotion } from '../lib/motion.ts';
 import { useFlip } from '../lib/use-flip.ts';
@@ -431,6 +431,14 @@ interface TopicSidebarProps {
   onQueueFilter: (filter: QueueFilter | null) => void;
   filterCounts: Record<QueueFilter, number>;
   viewer: ViewerView | undefined;
+  /** Told the section the open topic's row sits under, held place included, so the breadcrumb names the same one. */
+  onRowSection: (place: RowSection | null) => void;
+}
+
+/** The section the sidebar draws a topic's row under (`rowSection`). */
+export interface RowSection {
+  topicId: string;
+  section: TopicSection;
 }
 
 /**
@@ -569,6 +577,11 @@ export function TopicSidebar(props: TopicSidebarProps) {
   }, [leaving]);
   // Dealt-with topics leave the owner sections, except while the search or a queue filter narrows: filters are for finding things.
   const buckets = useHeldPlace(holdKey, props.activeTopicId, sidebarBuckets(listed, !narrowed), topicRowId);
+  const activeSection = props.activeTopicId === null ? null : rowSection(buckets, props.activeTopicId);
+  const { onRowSection, activeTopicId } = props;
+  useEffect(() => {
+    onRowSection(activeTopicId !== null && activeSection !== null ? { topicId: activeTopicId, section: activeSection } : null);
+  }, [onRowSection, activeTopicId, activeSection]);
   const otherWork = bucketItems(buckets, 'other_work');
   const otherWorkDealt = dealtItems(buckets, 'other_work');
   const otherTopics = otherTopicsGroups(bucketItems(buckets, 'other_topics'));

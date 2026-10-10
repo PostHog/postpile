@@ -32,7 +32,7 @@ import { ToolsNotice } from './components/ToolsNotice.tsx';
 import { Toast } from './components/Toast.tsx';
 import { TidyOverlay } from './components/TidyOverlay.tsx';
 import { TopicHeader } from './components/TopicHeader.tsx';
-import { TopicSidebar } from './components/TopicSidebar.tsx';
+import { TopicSidebar, type RowSection } from './components/TopicSidebar.tsx';
 import { pinnedEntry, sameView, type NavEntry } from './lib/history.ts';
 import type { SetupStepKey } from './lib/setup.ts';
 import { applyQueueFilter, filterCounts, type QueueFilter } from './lib/queues.ts';
@@ -77,6 +77,8 @@ export function App() {
   const [queueFilter, setQueueFilter] = useState<QueueFilter | null>(null);
   // The grid's Dealt with group: the user's last click on it (open or closed), kept for the session in every topic. Starts folded.
   const [dealtWithOpen, setDealtWithOpen] = useState(false);
+  // Where the sidebar draws the open topic's row, so the breadcrumb says the same while the row is held.
+  const [rowSection, setRowSection] = useState<RowSection | null>(null);
   const changeQueueFilter = (filter: QueueFilter | null): void => {
     setQueueFilter(filter);
     sendTelemetry('queue_filter_changed', { filter: filter ?? 'none' });
@@ -300,7 +302,8 @@ export function App() {
       </MainPane>
     );
   } else if (filter && !activeItem && revealedUnlistedId === null) {
-    main = <EmptyMain text={`Nothing matches “${query.trim()}”. Esc clears the filter.`} />;
+    // The search covers live topics only; say so, or a PR in an archived topic reads as a broken search (BOARD-A-15).
+    main = <EmptyMain text={`Nothing matches “${query.trim()}” in live topics. Archived topics are not searched; Esc clears the filter.`} />;
   } else if (queueFilter && !activeItem && revealedUnlistedId === null) {
     main = <EmptyMain text="No topic has a PR that matches the filter. Pick “any PR” to show all topics." />;
   } else if (topic.error) {
@@ -312,6 +315,7 @@ export function App() {
         <TopicHeader
           detail={topic.data}
           topics={items}
+          rowSection={rowSection?.topicId === topic.data.topic.id ? rowSection.section : null}
           agentOpen={agentShown}
           onAskAgent={() => (agentShown ? setAgentRequest(null) : openAgent(topic.data!.topic.id, ''))}
         />
@@ -414,6 +418,7 @@ export function App() {
               onQueueFilter={changeQueueFilter}
               filterCounts={filterCounts(items)}
               viewer={viewer.data}
+              onRowSection={setRowSection}
             />
             )}
             {showSetup && (
