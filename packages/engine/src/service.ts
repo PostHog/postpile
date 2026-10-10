@@ -449,9 +449,14 @@ export interface EngineService {
   topicChat(topicId: string, message: string): Promise<ChatReply>;
   /** keep=true stores the text as topic tailoring; false logs it as "just this once". */
   decideTailoring(topicId: string, text: string, keep: boolean): Promise<ActionResult>;
+  /** "Remove" on one line of the topic's tailoring; logged, with an undo token. */
+  removeTailoringLine(topicId: string, line: string): Promise<ActionResult>;
+  /** A decline carries an undo token: Undo puts the proposal back in the Inbox. */
   decideTopicProposal(proposalId: string, accept: boolean): Promise<ActionResult>;
-  /** Accepting a global rule adds it to every prompt; a topic rule is appended to that topic's tailoring. */
+  /** Accepting a global rule adds it to every prompt; a topic rule is appended to that topic's tailoring. A decline can be undone. */
   decideRuleProposal(proposalId: string, accept: boolean): Promise<ActionResult>;
+  /** "Remove" on an accepted rule for every topic (Your instructions › Accepted rules); logged, with an undo token. */
+  removeStandingRule(ruleId: string): Promise<ActionResult>;
   /** Moves the topic's seen cursor to now, so "changes since seen" starts over. */
   markTopicSeen(topicId: string): Promise<ActionResult>;
   /** "Archive now" on a topic with nothing left; refused while anything is open or unread. */

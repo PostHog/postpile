@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import {
+  appendTailoring,
   fixedClaimNote,
   isLiveProposal,
   parseFixedClaimNote,
@@ -20,6 +21,7 @@ import { UNSORTED_TOPIC_ID } from '../board.ts';
 import { newFactId } from '../ids.ts';
 import { relationOverrideKey } from '../memory/placement.ts';
 import { failed, ok } from './results.ts';
+import { UndoWindow } from './undo-window.ts';
 
 /** Undo tokens of memory corrections; mark-read tokens have no prefix. */
 const MEMORY_UNDO_PREFIX = 'memory:';
@@ -72,10 +74,15 @@ function correctedLine(entry: Feedback): string {
 
 /** User decisions on engine memory: standing rules, "I have seen this topic" and corrections. */
 export class MemoryActions {
+  /** Declined and removed standing rules, for the toast's Undo. */
+  readonly ruleUndos: UndoWindow;
+
   constructor(
     private readonly store: Store,
     private readonly now: () => Date,
-  ) {}
+  ) {
+    this.ruleUndos = new UndoWindow('rule:', now);
+  }
 
   listProposals(): PendingProposals {
     const now = this.now().toISOString();
@@ -95,12 +102,15 @@ export class MemoryActions {
     const topic = proposal.topicId === null ? null : this.store.topics.get(proposal.topicId);
     this.store.transaction(() => {
       if (accept && topic) {
-        const tailoring = topic.tailoring.trim() ? `${topic.tailoring.trim()}\n${proposal.text}` : proposal.text;
-        this.store.topics.setTailoring(topic.id, tailoring, at);
+        this.store.topics.setTailoring(topic.id, appendTailoring(topic.tailoring, proposal.text), at);
       }
       this.store.ruleProposals.decide(proposalId, accept ? 'accepted' : 'rejected', at);
     });
-    return ok(accept ? 'Accepted' : 'Rejected');
+    if (accept) {
+      return ok('Accepted');
+    }
+    const token = this.ruleUndos.add(() => this.store.ruleProposals.reopen(proposalId));
+    return ok('Declined. The agent will not propose this rule again.', token);
   }
 
   /** Moves the seen cursor to the newest logged event and the current dossier version. */
@@ -123,6 +133,31 @@ export class MemoryActions {
   /** Feedback row for a correction on a fact or a dossier line. */
   private logFeedback(kind: FeedbackKind, topicId: string | null, prKey: PrKey | null, note: string, at: string): number {
     return this.store.feedback.add({ kind, topicId, tileId: null, prKey, setId: null, eventId: null, note, createdAt: at }).id;
+  }
+
+  /**
+   * "Remove" on an accepted rule for every topic (Your instructions ›
+   * Accepted rules): it leaves every prompt, reads as rejected so it is not
+   * proposed again, and the removal is logged as the user's words. A topic
+   * rule lives in the tailoring and is removed there.
+   */
+  removeStandingRule(ruleId: string): ActionResult {
+    const rule = this.store.ruleProposals.get(ruleId);
+    if (!rule || rule.status !== 'accepted' || rule.topicId !== null) {
+      return failed('That rule is no longer in use.');
+    }
+    const at = this.now().toISOString();
+    const feedbackId = this.store.transaction(() => {
+      this.store.ruleProposals.remove(ruleId, at);
+      return this.logFeedback('rule_removed', null, null, rule.text, at);
+    });
+    const token = this.ruleUndos.add(() => {
+      this.store.transaction(() => {
+        this.store.ruleProposals.restoreAccepted(ruleId, rule.decidedAt);
+        this.store.feedback.delete(feedbackId);
+      });
+    });
+    return ok('Removed. The agent stops applying it from the next call on.', token);
   }
 
   /** Remembers how to take a correction back, for UNDO_WINDOW_MS. */

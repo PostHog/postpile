@@ -379,6 +379,11 @@ export function createApp(
     const body = z.object({ text: z.string(), keep: z.boolean() }).parse(await c.req.json());
     return c.json(await engine.decideTailoring(c.req.param('id'), body.text, body.keep));
   });
+  // "Remove" on one line the topic keeps in mind; local, logged, with an undo token.
+  app.post('/api/topics/:id/tailoring/remove', async (c) => {
+    const body = z.object({ line: z.string().min(1) }).parse(await c.req.json());
+    return c.json(await engine.removeTailoringLine(c.req.param('id'), body.line));
+  });
   app.post('/api/topics/:id/seen', async (c) => c.json(await engine.markTopicSeen(c.req.param('id'))));
   // "Ask the agent" on the topic header: the chat about the whole topic (also Unsorted).
   app.get('/api/topics/:id/chat', async (c) => c.json(await engine.getTopicChat(c.req.param('id'))));
@@ -404,6 +409,8 @@ export function createApp(
     const body = z.object({ accept: z.boolean() }).parse(await c.req.json());
     return c.json(await engine.decideRuleProposal(c.req.param('id'), body.accept));
   });
+  // "Remove" on an accepted rule for every topic (Your instructions › Accepted rules).
+  app.post('/api/rule-proposals/:id/remove', async (c) => c.json(await engine.removeStandingRule(c.req.param('id'))));
   app.post('/api/memory/corrections', async (c) => c.json(await engine.correctMemory(memoryCorrectionBody.parse(await c.req.json()))));
   app.post('/api/memory/restore', async (c) => {
     const body = z.object({ topicId: z.string().min(1), text: z.string().min(1) }).parse(await c.req.json());

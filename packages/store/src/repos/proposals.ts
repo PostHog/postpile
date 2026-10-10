@@ -145,4 +145,9 @@ export class TopicProposalRepo {
       id,
     );
   }
+
+  /** Undo of a Decline: a rejected proposal waits again, as if it was never decided. */
+  reopen(id: string): void {
+    run(this.db, "UPDATE topic_proposal SET status = 'pending', decided_at = NULL WHERE id = ? AND status = 'rejected'", id);
+  }
 }

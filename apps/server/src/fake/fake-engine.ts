@@ -103,7 +103,10 @@ import type {
   BusyInboxView,
 } from '@postpile/core';
 import {
+  appendTailoring,
   busyInboxView,
+  lessonTailoringLine,
+  removeTailoringLine,
   hotFactsOf,
   hotTier,
   findComment,
@@ -2269,13 +2272,38 @@ export class FakeEngine implements EngineService {
     if (!keep) {
       return ok('Used just this once');
     }
-    topic.tailoring = topic.tailoring ? `${topic.tailoring}\n${text}` : text;
+    topic.tailoring = appendTailoring(topic.tailoring, text);
     topic.updatedAt = this.timestamp();
     return ok('Kept for this topic');
   }
 
+  /** Like the engine's: one line out of the topic's tailoring, logged, with Undo. */
+  async removeTailoringLine(topicId: string, line: string): Promise<ActionResult> {
+    const topic = this.data.topics.find((candidate) => candidate.id === topicId);
+    if (!topic) {
+      return fail(`no topic ${topicId}`);
+    }
+    const tailoring = removeTailoringLine(topic.tailoring, line);
+    if (tailoring === null) {
+      return fail('That line is no longer kept for this topic.');
+    }
+    const before = topic.tailoring;
+    topic.tailoring = tailoring;
+    topic.updatedAt = this.timestamp();
+    this.recordFeedback({ kind: 'tailoring_removed', topicId, tileId: null, prKey: null, setId: null, eventId: null, note: line.trim() });
+    const token = this.memoryUndo(() => {
+      topic.tailoring = before;
+      topic.updatedAt = this.timestamp();
+    });
+    return ok('Removed. The agent stops applying it in this topic.', token);
+  }
+
   async decideTopicProposal(proposalId: string, accept: boolean): Promise<ActionResult> {
-    return this.topicChanges.decide(proposalId, accept);
+    const result = this.topicChanges.decide(proposalId, accept);
+    if (!result.ok || accept) {
+      return result;
+    }
+    return ok(result.message, this.memoryUndo(() => this.topicChanges.reopen(proposalId)));
   }
 
   async proposeTopicChange(change: TopicChangeRequest, options: { client: string }): Promise<TopicChangeResult> {
@@ -2313,7 +2341,20 @@ export class FakeEngine implements EngineService {
   }
 
   async decideRuleProposal(proposalId: string, accept: boolean): Promise<ActionResult> {
-    return this.memory.decideRuleProposal(proposalId, accept, this.data.topics);
+    const result = this.memory.decideRuleProposal(proposalId, accept, this.data.topics);
+    if (!result.ok || accept) {
+      return result;
+    }
+    return ok(result.message, this.memoryUndo(() => this.memory.reopenRule(proposalId)));
+  }
+
+  async removeStandingRule(ruleId: string): Promise<ActionResult> {
+    const removed = this.memory.removeRule(ruleId);
+    if (!removed) {
+      return fail('That rule is no longer in use.');
+    }
+    this.recordFeedback({ kind: 'rule_removed', topicId: null, tileId: null, prKey: null, setId: null, eventId: null, note: removed.text });
+    return ok('Removed. The agent stops applying it from the next call on.', this.memoryUndo(removed.undo));
   }
 
   async archiveTopic(topicId: string): Promise<ActionResult> {
@@ -2479,7 +2520,7 @@ export class FakeEngine implements EngineService {
   }
 
   async getInstructions(): Promise<InstructionsView> {
-    return this.instructions.view();
+    return { ...this.instructions.view(), rules: this.memory.acceptedGlobalRules() };
   }
 
   async getInstructionsChat(): Promise<ChatMessage[]> {
@@ -2538,7 +2579,7 @@ export class FakeEngine implements EngineService {
     if (lesson.topicId === null) {
       return fail('Its PR is not in a topic yet. Use it across topics, or wait for the next sync to sort it.');
     }
-    const kept = await this.decideTailoring(lesson.topicId, lesson.text, true);
+    const kept = await this.decideTailoring(lesson.topicId, lessonTailoringLine(lesson.source, lesson.prNumber, lesson.text), true);
     if (!kept.ok) {
       return kept;
     }

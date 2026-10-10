@@ -90,4 +90,22 @@ export class RuleProposalRepo {
       id,
     );
   }
+
+  /** Undo of a Decline: a rejected rule waits again, as if it was never decided. */
+  reopen(id: string): void {
+    run(this.db, "UPDATE rule_proposal SET status = 'pending', decided_at = NULL WHERE id = ? AND status = 'rejected'", id);
+  }
+
+  /**
+   * "Remove" on an accepted rule: it reads as rejected from now on, so it
+   * leaves every prompt and the consolidation job does not propose it again.
+   */
+  remove(id: string, at: string): void {
+    run(this.db, "UPDATE rule_proposal SET status = 'rejected', decided_at = ? WHERE id = ? AND status = 'accepted'", at, id);
+  }
+
+  /** Undo of a Remove: the rule is accepted again, with its old decision time. */
+  restoreAccepted(id: string, decidedAt: string | null): void {
+    run(this.db, "UPDATE rule_proposal SET status = 'accepted', decided_at = ? WHERE id = ? AND status = 'rejected'", decidedAt, id);
+  }
 }

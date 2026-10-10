@@ -113,14 +113,14 @@ describe('saveInstructions', () => {
     expect((await h.engine.getInstructionsChat()).map((m) => m.role)).toEqual(['user', 'agent']);
   });
 
-  it('marks an inline edit in the summary', async () => {
+  it('names the line the user wrote in the summary of an inline edit, not the proposed one', async () => {
     const { h, file } = await setup();
     const proposal = await proposed(h);
 
     await h.engine.saveInstructions({ proposal, text: `${CHANGED} Also runner labels.` });
 
     expect(readFileSync(file, 'utf8')).toBe(`${CHANGED} Also runner labels.\n`);
-    expect((await h.engine.getInstructions()).versions[0]?.summary).toBe('Flag cache key changes (edited)');
+    expect((await h.engine.getInstructions()).versions[0]?.summary).toBe('Added: - Flag cache key changes. Also runner labels. (your wording)');
   });
 
   it('keeps a hand edit made after the proposal and proposes the change again on top of it', async () => {

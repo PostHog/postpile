@@ -25,6 +25,7 @@ import type {
   TopicStatusLine,
 } from '@postpile/core';
 import {
+  appendTailoring,
   isBigClaim,
   describeFactRef,
   describeLineSources,
@@ -301,6 +302,40 @@ export class FakeMemory {
     return this.memory.ruleProposals.filter((proposal) => proposal.status === 'pending');
   }
 
+  /** Accepted rules for every topic, oldest first, for "Your instructions" › Accepted rules. */
+  acceptedGlobalRules(): RuleProposal[] {
+    return this.memory.ruleProposals
+      .filter((proposal) => proposal.status === 'accepted' && proposal.topicId === null)
+      .toSorted((a, b) => (a.decidedAt ?? '').localeCompare(b.decidedAt ?? ''));
+  }
+
+  /** Undo of a Decline: the rule waits again. */
+  reopenRule(proposalId: string): void {
+    const proposal = this.memory.ruleProposals.find((candidate) => candidate.id === proposalId);
+    if (proposal?.status === 'rejected') {
+      proposal.status = 'pending';
+      proposal.decidedAt = null;
+    }
+  }
+
+  /** "Remove" on an accepted global rule, like the engine: it reads as rejected. Returns how to undo it, or null when there is no such rule. */
+  removeRule(proposalId: string): { text: string; undo: () => void } | null {
+    const proposal = this.memory.ruleProposals.find((candidate) => candidate.id === proposalId);
+    if (!proposal || proposal.status !== 'accepted' || proposal.topicId !== null) {
+      return null;
+    }
+    const decidedAt = proposal.decidedAt;
+    proposal.status = 'rejected';
+    proposal.decidedAt = this.now().toISOString();
+    return {
+      text: proposal.text,
+      undo: () => {
+        proposal.status = 'accepted';
+        proposal.decidedAt = decidedAt;
+      },
+    };
+  }
+
   /** An accepted topic rule is appended to the topic's tailoring, like the real engine does. */
   decideRuleProposal(proposalId: string, accept: boolean, topics: Topic[]): ActionResult {
     const proposal = this.memory.ruleProposals.find((candidate) => candidate.id === proposalId);
@@ -315,10 +350,10 @@ export class FakeMemory {
     proposal.decidedAt = at;
     const topic = topics.find((candidate) => candidate.id === proposal.topicId);
     if (accept && topic) {
-      topic.tailoring = topic.tailoring ? `${topic.tailoring}\n${proposal.text}` : proposal.text;
+      topic.tailoring = appendTailoring(topic.tailoring, proposal.text);
       topic.updatedAt = at;
     }
-    return { ok: true, message: accept ? 'Accepted' : 'Rejected', undoToken: null };
+    return { ok: true, message: accept ? 'Accepted' : 'Declined. The agent will not propose this rule again.', undoToken: null };
   }
 
   markTopicSeen(topicId: string): void {

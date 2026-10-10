@@ -4,6 +4,7 @@
 // written until the user accepts.
 
 import type { ActionResult } from './views.ts';
+import type { RuleProposal } from './memory.ts';
 import type { ChatMessage, IsoTime } from './types.ts';
 
 /**
@@ -62,6 +63,12 @@ export interface InstructionsView {
   versions: InstructionsVersionView[];
   /** Topic dossiers that refresh once on the next sync after an accepted change. */
   dossiersToRefresh: number;
+  /**
+   * Accepted standing rules for every topic, oldest first: they go into every
+   * prompt next to these instructions, so they are listed here with Remove.
+   * Accepted topic rules live in the topic's tailoring instead.
+   */
+  rules: RuleProposal[];
 }
 
 /** What the user accepts: the proposal, and its text as they left it (maybe edited inline). */

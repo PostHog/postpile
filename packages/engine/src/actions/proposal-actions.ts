@@ -3,15 +3,21 @@ import type { Store } from '@postpile/store';
 import { Board } from '../board.ts';
 import { newTopicId } from '../ids.ts';
 import { changeTopicStatus } from '../topic-status.ts';
-import { moveTopicChat } from './chat-actions.ts';
+import { carryTailoring, moveTopicChat } from './chat-actions.ts';
 import { failed, ok } from './results.ts';
+import { UndoWindow } from './undo-window.ts';
 
 /** Topic renames, merges, splits and new topics only happen here, after the user said yes. */
 export class ProposalActions {
+  /** Declined proposals, for the toast's Undo. */
+  readonly undos: UndoWindow;
+
   constructor(
     private readonly store: Store,
     private readonly now: () => Date,
-  ) {}
+  ) {
+    this.undos = new UndoWindow('proposal:', now);
+  }
 
   /**
    * new_topic and split both end up here: a new topic with the proposal's
@@ -56,6 +62,7 @@ export class ProposalActions {
         this.store.memberships.assign({ ...membership, topicId: proposal.intoTopicId, createdAt: at });
       }
       moveTopicChat(this.store, proposal.topicId, proposal.intoTopicId);
+      carryTailoring(this.store, proposal.topicId, proposal.intoTopicId, at);
       changeTopicStatus(this.store, proposal.topicId, 'archive', at);
     } else if (proposal.kind === 'area_merge' && proposal.fromArea && proposal.name) {
       this.store.topics.renameArea(proposal.fromArea, proposal.name, at);
@@ -129,6 +136,11 @@ export class ProposalActions {
         this.applyAccepted(proposal, at);
       }
     });
-    return ok(accept ? 'Accepted' : 'Rejected');
+    if (accept) {
+      return ok('Accepted');
+    }
+    // A decline blocks the same suggestion for good (checkRepeat), so a slip of the mouse gets an Undo.
+    const token = this.undos.add(() => this.store.proposals.reopen(proposalId));
+    return ok('Declined. The agent will not suggest this again.', token);
   }
 }

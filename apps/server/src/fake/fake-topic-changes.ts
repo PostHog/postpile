@@ -3,12 +3,14 @@ import {
   EMPTY_TOPIC_NAME,
   hasEmptyTopicName,
   isLiveProposal,
+  mergedTailoringLines,
   newTopic,
   nextTopicStatus,
   OUTSIDE_PROPOSAL_DAYS,
   planTopicChange,
   proposalOutcome,
   proposalOutcomeAt,
+  tailoringLines,
   type ActionResult,
   type PrKey,
   type Tile,
@@ -185,7 +187,16 @@ export class FakeTopicChanges {
     if (accept) {
       this.apply(proposal);
     }
-    return ok(accept ? 'accepted' : 'rejected');
+    return ok(accept ? 'Accepted' : 'Declined. The agent will not suggest this again.');
+  }
+
+  /** Undo of a Decline: the proposal waits again. */
+  reopen(proposalId: string): void {
+    const proposal = this.data.proposals.find((candidate) => candidate.id === proposalId);
+    if (proposal?.status === 'rejected') {
+      proposal.status = 'pending';
+      proposal.decidedAt = null;
+    }
   }
 
   private apply(proposal: TopicProposal): void {
@@ -210,8 +221,15 @@ export class FakeTopicChanges {
     }
   }
 
-  /** Moves tiles and members over and archives the source topic. */
+  /** Moves tiles and members over, carries the tailoring along like the engine, and archives the source topic. */
   private merge(fromTopicId: string, intoTopicId: string): void {
+    const from = this.data.topics.find((candidate) => candidate.id === fromTopicId);
+    const into = this.data.topics.find((candidate) => candidate.id === intoTopicId);
+    const carried = from && into ? mergedTailoringLines(into.tailoring, from.tailoring, from.name) : [];
+    if (into && carried.length > 0) {
+      into.tailoring = [...tailoringLines(into.tailoring), ...carried].join('\n');
+      into.updatedAt = this.timestamp();
+    }
     for (const tile of this.tilesOf(fromTopicId)) {
       tile.topicId = intoTopicId;
     }

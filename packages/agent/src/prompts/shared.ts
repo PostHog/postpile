@@ -87,6 +87,8 @@ const feedbackLabels: Record<FeedbackKind, string> = {
   unmute: 'unmuted an event that had been muted as noise',
   tailoring_kept: 'asked to keep this for the topic',
   tailoring_once: 'said this, for one time only',
+  tailoring_removed: 'removed this from what the topic keeps in mind, stop applying it',
+  rule_removed: 'removed this standing rule, stop applying it',
   memory_wrong: 'said this line of the topic memory is wrong',
   memory_forget: 'said they do not care about this, stop assuming it',
   memory_confirmed: 'checked this line of the topic memory and confirmed it is right, keep it',

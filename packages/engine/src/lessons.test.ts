@@ -175,7 +175,8 @@ describe('writing and deciding lessons', () => {
     expect(await h.engine.getLesson(lesson!.id)).toMatchObject({ id: lesson!.id, text: LINE });
     expect((await h.engine.keepLessonForTopic(lesson!.id)).ok).toBe(true);
     expect(await h.engine.getLesson(lesson!.id)).toBeNull();
-    expect(h.store.topics.get('t')?.tailoring).toBe(LINE);
+    // Kept with where it came from: the header must not read it as the user's own words to the agent.
+    expect(h.store.topics.get('t')?.tailoring).toBe(`From your review on #1: ${LINE}`);
     expect(h.store.lessons.get(lesson!.id)?.status).toBe('kept_topic');
     expect(await h.engine.getLessons('t')).toEqual([]);
   });

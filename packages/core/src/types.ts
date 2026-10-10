@@ -827,6 +827,10 @@ export type FeedbackKind =
   | 'unmute'
   | 'tailoring_kept'
   | 'tailoring_once'
+  /** The user removed a line from the topic's tailoring. The note holds the line. */
+  | 'tailoring_removed'
+  /** The user removed an accepted standing rule. The note holds the rule. */
+  | 'rule_removed'
   /** A fact or dossier line the user marked wrong. The note holds the line. */
   | 'memory_wrong'
   /** A "what you care about" line the user asked to forget. The note holds the line. */

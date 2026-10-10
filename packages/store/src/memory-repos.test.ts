@@ -335,6 +335,25 @@ describe('RuleProposalRepo', () => {
     expect(store.ruleProposals.listAcceptedGlobal().map((p) => p.id)).toEqual(['r1']);
     expect(store.ruleProposals.listDecided(2).map((p) => p.id)).toEqual(['r3', 'r2']);
   });
+
+  it('reopens a declined rule, and removes and restores an accepted one', () => {
+    store.ruleProposals.add({ ...base, id: 'r1', createdAt: at(1) });
+    store.ruleProposals.add({ ...base, id: 'r2', createdAt: at(2) });
+    store.ruleProposals.decide('r1', 'rejected', at(10));
+    store.ruleProposals.decide('r2', 'accepted', at(11));
+
+    store.ruleProposals.reopen('r1');
+    store.ruleProposals.reopen('r2');
+    expect(store.ruleProposals.get('r1')).toMatchObject({ status: 'pending', decidedAt: null });
+    expect(store.ruleProposals.get('r2')).toMatchObject({ status: 'accepted' });
+
+    store.ruleProposals.remove('r2', at(20));
+    expect(store.ruleProposals.get('r2')).toMatchObject({ status: 'rejected', decidedAt: at(20) });
+    expect(store.ruleProposals.listAcceptedGlobal()).toEqual([]);
+
+    store.ruleProposals.restoreAccepted('r2', at(11));
+    expect(store.ruleProposals.get('r2')).toMatchObject({ status: 'accepted', decidedAt: at(11) });
+  });
 });
 
 describe('AgentCallRepo', () => {

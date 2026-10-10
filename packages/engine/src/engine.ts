@@ -1446,6 +1446,12 @@ export class Engine implements EngineService {
     if (undoToken !== null && this.memoryActions.isMemoryUndo(undoToken)) {
       return this.memoryActions.undo(undoToken);
     }
+    // Local choices: a Decline in the Inbox, a removed rule or tailoring line.
+    for (const undos of [this.proposals.undos, this.memoryActions.ruleUndos, this.chats.undos]) {
+      if (undoToken !== null && undos.owns(undoToken)) {
+        return undos.undo(undoToken);
+      }
+    }
     return this.tiles.undo(undoToken);
   }
 
@@ -1534,6 +1540,10 @@ export class Engine implements EngineService {
     return this.chats.decideTailoring(topicId, text, keep);
   }
 
+  async removeTailoringLine(topicId: string, line: string): Promise<ActionResult> {
+    return this.chats.removeTailoringLine(topicId, line);
+  }
+
   async decideTopicProposal(proposalId: string, accept: boolean): Promise<ActionResult> {
     // Read the kind before deciding: decide() marks the proposal accepted/rejected in place.
     const proposal = this.deps.store.proposals.get(proposalId);
@@ -1563,6 +1573,10 @@ export class Engine implements EngineService {
       this.telemetry.capture('proposal_resolved', { kind: 'rule', accepted: accept });
     }
     return result;
+  }
+
+  async removeStandingRule(ruleId: string): Promise<ActionResult> {
+    return this.memoryActions.removeStandingRule(ruleId);
   }
 
   async markTopicSeen(topicId: string): Promise<ActionResult> {

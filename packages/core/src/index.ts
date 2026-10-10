@@ -102,6 +102,8 @@ export * from './lessons.ts';
 export * from './glance-basis.ts';
 export * from './glance-risk.ts';
 export * from './instructions-sections.ts';
+export * from './instructions-summary.ts';
+export * from './tailoring.ts';
 export * from './setup.ts';
 export * from './setup-draft.ts';
 export * from './setup-fit.ts';

@@ -63,6 +63,39 @@ describe('topic proposals from outside agents', () => {
     expect((await h.engine.getTopic('depot'))?.decidedProposals.map((p) => [p.id, p.status])).toEqual([['m', 'accepted']]);
   });
 
+  it('carry the merged topic\'s tailoring into the target, saying where it came from', async () => {
+    const { h } = clockedHarness();
+    topicWithPrs(h, 'depot', [reviewRequestedPr(1)]);
+    topicWithPrs(h, 'ci', [reviewRequestedPr(2)]);
+    h.store.topics.rename('ci', 'Frontend build', '2026-09-02T12:00:00.000Z');
+    h.store.topics.setTailoring('ci', 'Only cache changes.', '2026-09-02T12:00:00.000Z');
+    h.store.topics.setTailoring('depot', 'Flag runner labels.', '2026-09-02T12:00:00.000Z');
+    h.store.proposals.add(proposal({ id: 'm', kind: 'merge', topicId: 'ci', name: null, intoTopicId: 'depot' }));
+
+    expect((await h.engine.decideTopicProposal('m', true)).ok).toBe(true);
+
+    expect(h.store.topics.get('depot')?.tailoring).toBe('Flag runner labels.\nFrom Frontend build: Only cache changes.');
+    expect(h.store.feedback.recentForTopic('depot', 1)[0]).toMatchObject({ kind: 'tailoring_kept', note: 'From Frontend build: Only cache changes.' });
+  });
+
+  it('can take a decline back for a few seconds: the proposal waits in the Inbox again', async () => {
+    const { h, setNow } = clockedHarness();
+    topicWithPrs(h, 'depot', [reviewRequestedPr(1)]);
+    h.store.proposals.add(proposal({ id: 'slip' }));
+    h.store.proposals.add(proposal({ id: 'late', name: 'Depot CI' }));
+
+    const declined = await h.engine.decideTopicProposal('slip', false);
+    expect(declined).toMatchObject({ ok: true, message: 'Declined. The agent will not suggest this again.' });
+    expect((await h.engine.listProposals()).topics.map((p) => p.id)).toEqual(['late']);
+    expect((await h.engine.undo(declined.undoToken)).ok).toBe(true);
+    expect((await h.engine.listProposals()).topics.map((p) => p.id).sort()).toEqual(['late', 'slip']);
+
+    const tooLate = await h.engine.decideTopicProposal('late', false);
+    setNow('2026-09-02T12:01:00Z');
+    expect(await h.engine.undo(tooLate.undoToken)).toMatchObject({ ok: false, message: 'undo window closed' });
+    expect(h.store.proposals.get('late')?.status).toBe('rejected');
+  });
+
   it('list decisions of the last 14 days on the topic, newest first', async () => {
     const { h, setNow } = clockedHarness();
     topicWithPrs(h, 'depot', [reviewRequestedPr(1)]);

@@ -1987,6 +1987,8 @@ topics already retired. The bar, deterministic where it can be
   click with a typed note. A bare click only moved a PR; `unmute` notes are
   GitHub text, not the user's (`ruleHasWordedEvidence`). The prompt says
   the same and never to invent topic-boundary rules from clicks.
+  `tailoring_removed` and `rule_removed` are worded kinds too: the note is
+  the line the user took out.
 - **No merge for size or state.** The prompt asks a merge to say how the
   PRs serve the same goal and what the user gains; "both are small",
   "both are finished", "winding down" are no reasons. Finished topics are
@@ -2010,6 +2012,33 @@ topics already retired. The bar, deterministic where it can be
   consolidation as decided, never block the same idea later, and the MCP
   `topic` read says "withdrawn ... not a rejection". `status` is TEXT, so
   the new value needed no migration.
+- **A Decline can be taken back** (2026-10-10, bug hunt B-A-15). Decline
+  blocks the same idea for good, and the Inbox cards are identical
+  Accept / Decline pairs, so a slip of the mouse cost a good suggestion.
+  Declining a topic or rule proposal returns an undo token (prefix
+  `proposal:` or `rule:`, `UndoWindow`, `UNDO_WINDOW_MS`, in memory like
+  memory corrections); the toast says "Declined. The agent will not suggest
+  this again." with Undo, which puts the proposal back to pending
+  (`reopen`, only from `rejected`).
+- **The card says what Accept moves** (2026-10-10, MEM-A-07). A split or
+  move card (Inbox and the topic header row) lists each named PR as "#N
+  title" from the source topic's tiles, plus "+ N stack layers that come
+  along" for the other layers of their stacks (Accept moves whole stacks).
+  A merge card quotes what the user told the agent in the merged topic,
+  which moves along (see "Topic chat").
+
+**Accepted rules and tailoring can be listed and removed** (2026-10-10,
+MEM-A-06). Accepted rules for every topic go into every prompt, so they are
+listed under "Your instructions" › Accepted rules (`InstructionsView.rules`,
+`listAcceptedGlobal`), each with Remove: `removeStandingRule` sets the row
+back to `rejected` (so consolidation does not propose it again and it
+leaves `standingRules`), logs `rule_removed` with the rule as the note, and
+returns an undo token that restores `accepted` with the old `decided_at`.
+A topic's tailoring is one entry per line (core `tailoring.ts`); the topic
+header shows it under "You told the agent:" one line each, with Remove:
+`removeTailoringLine` drops the first equal line, logs `tailoring_removed`,
+and its undo puts the line back. Accepted topic rules live in the tailoring
+and are removed there.
 
 ### Cost accounting
 
@@ -2067,7 +2096,7 @@ topics already retired. The bar, deterministic where it can be
 | `GET /api/prs/:owner/:repo/:number` | `getPr()` now carries `facts: FactView[]` |
 | `GET /api/facts?entity=person:alice&since=...` | `listFacts()` |
 | `GET /api/proposals` | `listProposals()` (topic + rule proposals) |
-| `POST /api/rule-proposals/:id` `{accept}` | `decideRuleProposal()` |
+| `POST /api/rule-proposals/:id` `{accept}` | `decideRuleProposal()` (a decline carries an undo token) |
 | `POST /api/topics/:id/seen` | `markTopicSeen()` |
 | `POST /api/consolidate` `{onlyIfDue, maxAgentCalls}` | `consolidate()`, capped like a sync when no cap is given |
 
@@ -2229,7 +2258,10 @@ picks where it applies. Types and rules: core `lessons.ts`; table `lesson`
   open lessons with "From your review on #4521 · Earlier assessment: Looks
   safe" and three choices. "Remember in this topic" appends the line to the
   topic's tailoring (logged as `tailoring_kept`), which every later prompt
-  for the topic reads. "Use across topics…" asks
+  for the topic reads. The line keeps where it came from ("From your
+  review on #4521: When …", or "From your note on #N:" for a taught one,
+  `lessonTailoringLine`, 2026-10-10, MEM-A-21), so "You told the agent"
+  does not claim words the user never typed. "Use across topics…" asks
   `proposeInstructionsFromLesson` for the instructions with that one line
   added: the prompt gets the chosen line and the review fenced as context,
   and the engine drops any answer that changes or removes an existing line
@@ -2242,7 +2274,9 @@ picks where it applies. Types and rules: core `lessons.ts`; table `lesson`
   verdict: "What should it check next time?" The note is the user's own
   words (not fenced); `teachLesson` stores a `taught` lesson with the
   current glance and writes its line right away (capped at 30 per rolling
-  24h), then shows it with the same three choices. A wording like
+  24h), then shows it with the same three choices. The button says so
+  ("Teach, then choose where it applies"), and the user's note shows
+  above the line the agent wrote from it ("Your note: …"). A wording like
   "Disagree", "Wrong" or "Why?" was rejected: the user reads those as
   asking for an explanation, not as changing what the agent does next time.
 - **Lifecycle**: a pending lesson whose topic retires, is archived or
@@ -2268,7 +2302,16 @@ topic: the tile chat (routes, engine, the prompt's tile mode) was removed
 once the renderer stopped using it; old tile chat rows stay in
 `chat_message` and still reach the dossier through `topic_id`. A topic
 merge (accepted proposal or the topic tidy) moves the merged topic's
-messages and its chat to the target (`moveTopicChat`). A turn's
+messages and its chat to the target (`moveTopicChat`), and its tailoring
+too (`carryTailoring`, 2026-10-10): each line joins the target's with
+where it came from ("From Frontend build: Only cache changes."), lines the
+target already has are skipped, and the carried lines are logged as
+`tailoring_kept` on the target. Before, the line stayed on the archived
+topic and silently left every prompt.
+An answer that lands while another topic is on screen (the user asked,
+then moved on) shows a quiet toast "The agent answered on <topic>." with
+Open, which opens that topic's agent pane (2026-10-10, B-A-14). A question
+on its way cannot be cancelled. A turn's
 two messages are stored together once the answer is in: a failed call
 stores nothing, so the history never holds an unanswered message.
 
@@ -2287,14 +2330,20 @@ process per topic to keep alive. Streaming is left out for the same
 reason: answers are short by design.
 
 **Instructions changes via chat.** Tile chat returns a lasting point
-without a scope; the user picks it: "Keep for this topic" stores tailoring,
-"Just this once" only logs it, "Keep for all topics" calls
+without a scope; the user picks it with one of three buttons (2026-10-10,
+MEM-A-20; two links and no "Just this once" before): "Keep for this topic"
+stores tailoring, "Just this once" only logs it (`tailoring_once`;
+Unsorted logs nothing), and a short line confirms the pick ("Kept for Move
+CI to Depot."). Leaving the point alone also means just this once, without
+the log; the next answer replaces it. "Keep for all topics" calls
 `proposeInstructionsChange`, which gets only the current text and the
 user's own message (never GitHub text; a lesson's proposal is the one
 exception, see "Lessons from your reviews"), is told the user chose all topics,
 and returns the full new text plus a summary. The UI shows it as a line
 diff: Accept, Edit inline, Reject. The general chat in "Your instructions"
-always goes to the same call. When that call finds no change, the point
+always goes to the same call; its open diff outlives leaving the page
+(kept in the renderer until Accept or Reject, like the agent pane's,
+MEM-A-05). When that call finds no change, the point
 stays on screen so it can still go to the topic. Proposals must cite a
 stored user chat message (`sourceChatMessageId`) or an open lesson
 (`sourceLessonId`); the engine refuses anything else.
@@ -2312,6 +2361,11 @@ rebased (asked again on top of the new text) for another decision. Writes
 go through a temp file + rename and follow a symlink to its target.
 An accepted change counts as new context: dossiers with a stored context
 hash refresh once on the next sync, and the accept message says how many.
+A proposal the user edited before Accept is saved with a summary of the
+saved text, not the agent's (`editedInstructionsSummary`, 2026-10-10,
+MEM-A-19): "Added: <their line> (your wording)", "Removed: …", "Changed
+to: …", or counts for bigger edits. While editing, the card header says
+"Your edited version (+1 −0 lines)".
 
 **"Why?" provenance.** Every dossier line (goal, status, open question,
 timeline entry, care, recent change) carries `refs` (GitHub) and
@@ -9108,7 +9162,9 @@ preflight and does not know the token, so CORS stays open.
 | `POST /api/team-roles` `{team, role}` | `setTeamRole()` (local, sticks; 400 for a team the viewer is not on) |
 | `GET /api/debug/notifications?limit=` | `debugNotifications()` (default 200, max 1000) |
 | `POST /api/topics/:id/tailoring` `{text, keep}` | `decideTailoring()` |
-| `POST /api/proposals/:id` `{accept}` | `decideTopicProposal()` |
+| `POST /api/topics/:id/tailoring/remove` `{line}` | `removeTailoringLine()` (local, logged, undo token) |
+| `POST /api/proposals/:id` `{accept}` | `decideTopicProposal()` (a decline carries an undo token) |
+| `POST /api/rule-proposals/:id/remove` | `removeStandingRule()` (an accepted rule for every topic; local, logged, undo token) |
 | `GET /api/prs/:owner/:repo/:number` | `getPr()` (`pr` is the slim `PrPaneView`, see "The PR pane") |
 | `POST /api/prs/:owner/:repo/:number/approve` `{headOid, body?, noteSource?}` | `approve()` (body: "Approve with comment"; noteSource: telemetry only) |
 | `POST /api/prs/:owner/:repo/:number/comment-review` `{headOid, body, noteSource?}` | `commentReview()` (event COMMENT; final; refused while locked) |

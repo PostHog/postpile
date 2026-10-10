@@ -502,6 +502,18 @@ describe('TopicProposalRepo', () => {
     expect(store.proposals.listPending().map((p) => p.id)).toEqual(['p2']);
   });
 
+  it('reopens only a rejected proposal', () => {
+    const base = { kind: 'rename' as const, topicId: 'topic-1', name: 'One', intoTopicId: null, fromArea: null, prKeys: [], reason: 'clearer', status: 'pending' as const, decidedAt: null, createdAt: at(0), source: 'consolidation' as const, client: null };
+    store.proposals.add({ ...base, id: 'r1' });
+    store.proposals.add({ ...base, id: 'a1' });
+    store.proposals.decide('r1', 'rejected', at(1));
+    store.proposals.decide('a1', 'accepted', at(1));
+    store.proposals.reopen('r1');
+    store.proposals.reopen('a1');
+    expect(store.proposals.get('r1')).toMatchObject({ status: 'pending', decidedAt: null });
+    expect(store.proposals.get('a1')).toMatchObject({ status: 'accepted' });
+  });
+
   it('keeps who filed a proposal and lists outside ones and recent decisions', () => {
     const base = { kind: 'rename' as const, intoTopicId: null, fromArea: null, prKeys: [], reason: 'clearer', status: 'pending' as const, decidedAt: null };
     store.proposals.add({ ...base, id: 'c1', topicId: 'topic-1', name: 'One', createdAt: at(0), source: 'consolidation', client: null });

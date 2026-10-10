@@ -59,6 +59,8 @@ const FEEDBACK_VOICE: Record<FeedbackKind, 'words' | 'click' | 'event'> = {
   unmute: 'event',
   tailoring_kept: 'words',
   tailoring_once: 'words',
+  tailoring_removed: 'words',
+  rule_removed: 'words',
   memory_wrong: 'words',
   memory_forget: 'words',
   memory_confirmed: 'words',
