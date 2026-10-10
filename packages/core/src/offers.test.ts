@@ -49,8 +49,20 @@ describe('tile footer', () => {
   it('says Mark read on an unread tile, Done for now only where a mark-read makes it done', () => {
     expect(tileOffers(view('unread', REREVIEW, stillYours)).markLabel).toBe('Mark read');
     expect(tileOffers(view('open', NONE, doneAfter)).markLabel).toBe('Done for now');
-    expect(tileOffers(view('open', NONE, { done: false, turn: NONE })).markLabel).toBe('Mark read');
+    expect(tileOffers(view('open', NONE, { done: false, turn: NONE }, [row(1, { unreadOnGitHub: true })])).markLabel).toBe('Mark read');
     expect(tileOffers(view('snoozed', NONE, doneAfter)).markLabel).toBe('Done for now');
+  });
+
+  // Bug fixed 2026-10-10 (B-A-05): an own stack held above (bottom layer approved,
+  // top waits on a team) offered "Mark read" with every thread read.
+  it('leads with Snooze, not Mark read, on a read tile that stays not done with nothing unread', () => {
+    const blocked: WhoseTurn = { kind: 'them', who: 'acme/team-security', what: 'Blocked: acme/team-security to review #2', prKey: 'acme/app#2' };
+    const own = [row(1, { authorRelation: 'you', primaryAction: 'open_on_github' }), row(2, { authorRelation: 'you', primaryAction: 'open_on_github' })];
+    const offers = tileOffers(view('open', blocked, { done: false, turn: blocked }, own));
+    expect(offers).toMatchObject({ footer: 'snooze', markLabel: null, snooze: true });
+    expect(offers.github).toEqual({ label: 'Open on GitHub', url: 'https://github.com/acme/app/pull/2', filesTab: false });
+    const news = [row(1, { authorRelation: 'you', unseenLoudEvents: 1 }), own[1]!];
+    expect(tileFooterAction(view('open', blocked, { done: false, turn: blocked }, news))).toBe('mark_read');
   });
 
   it('leads with Snooze and a GitHub link on a read tile that is still your move', () => {
@@ -195,6 +207,16 @@ describe('detail pane', () => {
     const yours = row(2, { turn: REREVIEW, afterRead: stillYours, primaryAction: 'approved' });
     const set = view('open', REREVIEW, stillYours, [row(1, { primaryAction: 'approved' }), yours]);
     expect(paneOffers(set, yours).lead).toBe('open_on_github');
+  });
+
+  // 2026-10-10 (PANE-A-06): the row with "You approved …, commits since" never showed once the PR was done.
+  it('keeps an outlined Approve again on an open PR the viewer approved, done or not, never as the lead', () => {
+    const approved = row(1, { done: true, primaryAction: 'approved' });
+    expect(paneOffers(view('done', NONE, doneAfter, [approved]), approved)).toMatchObject({ lead: 'none', approve: true, ask: false, markLabel: null });
+    const set = view('open', REREVIEW, stillYours, [row(2, { turn: REREVIEW }), approved]);
+    expect(paneOffers(set, approved)).toMatchObject({ lead: 'none', approve: true, ask: false, removeTeams: [] });
+    const merged = row(1, { done: true, state: 'MERGED', primaryAction: 'open_on_github' });
+    expect(paneOffers(view('done', NONE, doneAfter, [merged]), merged).approve).toBe(false);
   });
 
   it('keeps Mark read on a done PR whose news keeps the tile unread, without Approve', () => {
