@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { createApp, TOKEN_HEADER } from '../app.ts';
 import { FakeEngine, type FakeEngineOptions } from './fake-engine.ts';
-import { fakeDeliverFromEnv, FAKE_STEPS } from './fake-script.ts';
+import { fakeDeliverFromEnv, FAKE_STEPS, type FakeStepName } from './fake-script.ts';
+import { BOARD_TOPIC } from './sample-pack-board.ts';
+
+/** The steps that need POSTPILE_FAKE_EXTRA=board. */
+const BOARD_STEPS: FakeStepName[] = ['ready-for-review', 'assign-archived'];
 
 class Clock {
   private ms = new Date('2026-09-27T10:00:00Z').getTime();
@@ -98,10 +102,50 @@ describe('FakeScript steps', () => {
     expect(await sectionOf(engine, 'topic-alert-presets')).toBe('needs_reply');
   });
 
-  it('runs every step on the default sample', () => {
+  it('runs every step on the default sample, except the ones that need the board pack', () => {
     const engine = engineWith();
-    const results = FAKE_STEPS.filter((name) => name !== 'merge-open-pr').map((name) => engine.script.run(name));
+    const results = FAKE_STEPS.filter((name) => !['merge-open-pr', ...BOARD_STEPS].includes(name)).map((name) => engine.script.run(name));
     expect(results.every((result) => result.ok)).toBe(true);
+  });
+
+  it.each(BOARD_STEPS)('%s says it needs the board pack, and changes nothing without it', async (name) => {
+    const engine = engineWith();
+    const topics = await engine.listTopics();
+    expect(engine.script.run(name)).toEqual({ ok: false, message: `${name} did not run: needs POSTPILE_FAKE_EXTRA=board`, prsFetched: 0, newEvents: 0 });
+    expect(await engine.listTopics()).toEqual(topics);
+    expect(engine.script.steps().find((step) => step.name === name)?.done).toBe(false);
+  });
+
+  it('ready-for-review: sol takes #2010 out of draft and it lands in To review as a Review move', async () => {
+    const engine = engineWith({ extras: new Set(['board']) });
+    expect(await sectionOf(engine, BOARD_TOPIC.devboxPrebuilds)).toBe('team_owns');
+
+    expect(engine.script.run('ready-for-review')).toMatchObject({ ok: true, prsFetched: 1, newEvents: 1 });
+
+    const detail = await engine.getPr('acme/app#2010');
+    expect(detail?.pr.isDraft).toBe(false);
+    expect(detail?.pr.reviewerUsers).toEqual(['you']);
+    expect(await sectionOf(engine, BOARD_TOPIC.devboxPrebuilds)).toBe('to_review');
+    const [view] = (await engine.getTopic(BOARD_TOPIC.devboxPrebuilds))?.tiles ?? [];
+    expect(view?.turn).toMatchObject({ kind: 'you', move: 'review' });
+    expect(view?.prs[0]).toMatchObject({ tier: 'to_review', unseenLoudEvents: 1 });
+    expect(engine.script.run('ready-for-review')).toMatchObject({ ok: true, message: 'ready-for-review ran already; nothing changed' });
+  });
+
+  it('assign-archived: #2018 asks you to review and brings the retired Release train back', async () => {
+    const engine = engineWith({ extras: new Set(['board']) });
+    expect((await engine.listFinishedTopics()).map((topic) => topic.id)).toContain(BOARD_TOPIC.releaseTrain);
+
+    expect(engine.script.run('assign-archived')).toMatchObject({ ok: true, prsFetched: 1, newEvents: 1 });
+
+    expect((await engine.listFinishedTopics()).map((topic) => topic.id)).not.toContain(BOARD_TOPIC.releaseTrain);
+    expect((await engine.getTopic(BOARD_TOPIC.releaseTrain))?.topic).toMatchObject({ kind: 'standing', status: 'active', retiredAt: null });
+    expect(await sectionOf(engine, BOARD_TOPIC.releaseTrain)).toBe('to_review');
+    const detail = await engine.getPr('acme/app#2018');
+    expect(detail).toMatchObject({ topicId: BOARD_TOPIC.releaseTrain });
+    expect(detail?.pr).toMatchObject({ title: 'Cut release 2026.41', author: 'rowan', state: 'OPEN', reviewerUsers: ['you'] });
+    const tiles = (await engine.getTopic(BOARD_TOPIC.releaseTrain))?.tiles ?? [];
+    expect(tiles.find((view) => view.prs.some((pr) => pr.key === 'acme/app#2018'))?.turn).toMatchObject({ kind: 'you', move: 'review' });
   });
 });
 

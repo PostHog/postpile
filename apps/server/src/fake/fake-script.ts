@@ -27,16 +27,16 @@ import {
   type Viewer,
 } from '@postpile/core';
 import { derivedEvent, withComment, withReview } from './fake-pr-changes.ts';
-import { sampleKey } from './sample-builders.ts';
+import { pinged, SAMPLE_VIEWER, SampleClock, sampleEvents, sampleKey, samplePr, sampleTile } from './sample-builders.ts';
 import type { SampleData } from './sample-data.ts';
+import { BOARD_TOPIC } from './sample-pack-board.ts';
+
+const NEEDS_BOARD = 'needs POSTPILE_FAKE_EXTRA=board';
 
 /**
- * The steps that work on the default sample. Steps for other packs go here
- * too, once the pack exists: `ready-for-review` (POSTPILE_FAKE_EXTRA=board
- * flips the draft #2010 to ready, its request still pending) and
- * `assign-archived` (adds #2018, review requested of you, to the retired
- * standing topic "Release train"). Add the name, a line in STEP_ABOUT and a
- * case in FakeScript.runStep that refuses while its PR is not in the sample.
+ * The steps, in the order GET /api/fake/steps lists them. The last two need
+ * POSTPILE_FAKE_EXTRA=board and refuse without it. A new step needs its name
+ * here, a line in STEP_ABOUT and a case in FakeScript.runStep.
  */
 export const FAKE_STEPS = [
   'ask-you',
@@ -48,6 +48,8 @@ export const FAKE_STEPS = [
   'bot-on-archived',
   'bot-only-read',
   'bot-and-mention',
+  'ready-for-review',
+  'assign-archived',
 ] as const;
 
 export type FakeStepName = (typeof FAKE_STEPS)[number];
@@ -63,6 +65,8 @@ const STEP_ABOUT: Record<FakeStepName, string> = {
   'bot-on-archived': 'renovate[bot] comments on #1840: with writes on PostPile marks it read quietly and the archived topic stays put; locked, the unread thread brings it back',
   'bot-only-read': 'vercel[bot] comments on the read #1985: with writes on PostPile marks it read quietly ("Handled quietly"); locked, it stays unread',
   'bot-and-mention': 'vercel[bot] and gus comment on #1987, gus asks you: stays unread',
+  'ready-for-review': 'sol takes the draft #2010 (Devbox prebuilds) out of draft; your review request is still pending (needs POSTPILE_FAKE_EXTRA=board)',
+  'assign-archived': 'rowan opens #2018 and asks you to review it: the retired standing topic Release train comes back (needs POSTPILE_FAKE_EXTRA=board)',
 };
 
 export function isFakeStep(word: string): word is FakeStepName {
@@ -267,6 +271,59 @@ export class FakeScript {
     return null;
   }
 
+  /** Takes the PR out of draft, like the "ready for review" button; its review requests stay. */
+  private markReady(number: number, actor: string, change: StepChange): string | null {
+    const found = this.findPr(number);
+    if (!found) {
+      return NEEDS_BOARD;
+    }
+    if (!found.pr.isDraft) {
+      return `#${number} is not a draft`;
+    }
+    const at = this.timestamp();
+    const id = this.newSourceId('ready');
+    const ready: FullPr = {
+      ...found.pr,
+      isDraft: false,
+      timeline: [...found.pr.timeline, { id, kind: 'ready_for_review', actor, at, subject: null }],
+    };
+    this.land(found.index, ready, id, change);
+    return null;
+  }
+
+  /**
+   * Adds a new PR that asks you for a review to the retired standing topic
+   * "Release train". The topic is flipped back to active here: retired is a
+   * stored state, nothing derives it from the new PR.
+   */
+  private assignToArchived(number: number, change: StepChange): string | null {
+    const topic = this.host.data.topics.find((candidate) => candidate.id === BOARD_TOPIC.releaseTrain);
+    if (!topic) {
+      return NEEDS_BOARD;
+    }
+    if (this.findPr(number)) {
+      return `#${number} is in the sample already`;
+    }
+    const clock = new SampleClock(this.host.now());
+    const pr = samplePr(clock, {
+      number, title: 'Cut release 2026.41', author: 'rowan', state: 'OPEN',
+      size: [4, 4, 2], openedHoursAgo: 0, reviewerUsers: [SAMPLE_VIEWER],
+    });
+    const [event] = sampleEvents(clock, number, [{ kind: 'review_requested', actor: 'rowan', text: 'requested a review from you', hoursAgo: 0, rule: 'loud' }]);
+    const member = pinged(number, 'review_requested');
+    this.host.data.prs.push(pr);
+    this.host.data.events.push(event!);
+    this.host.data.tiles.push(sampleTile(topic.id, 'single', `pr:${pr.key}`, 'Release 2026.41 cut', [member]));
+    this.host.data.membership.set(pr.key, topic.id);
+    topic.status = 'active';
+    topic.retiredAt = null;
+    topic.updatedAt = this.timestamp();
+    this.host.markFetched(pr.key, this.timestamp());
+    change.prKeys.push(pr.key);
+    change.eventIds.push(event!.id);
+    return null;
+  }
+
   // ---------------------------------------------------------------------------
   // What the engine runs after a poll stored news
   // ---------------------------------------------------------------------------
@@ -358,6 +415,10 @@ export class FakeScript {
         this.comment(1987, 'vercel[bot]', 'The latest updates on your project: preview deployment is ready.', change);
         this.comment(1987, 'gus', '@you do the presets need a docs page before this merges?', change);
         return null;
+      case 'ready-for-review':
+        return this.markReady(2010, 'sol', change);
+      case 'assign-archived':
+        return this.assignToArchived(2018, change);
     }
   }
 
