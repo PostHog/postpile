@@ -27,7 +27,7 @@ import {
   sampleTile,
   sampleTopic,
 } from './sample-builders.ts';
-import type { SamplePack } from './sample-pack-append.ts';
+import type { SamplePack } from './sample-pack-common.ts';
 
 const TOPIC = {
   ranking: 'topic-search-ranking',
@@ -456,7 +456,7 @@ function buildUserStates(clock: SampleClock): UserPrState[] {
   return [{ prKey: sampleKey(2121), approvedAt: clock.hoursAgo(3), approvedCommitOid: 'sha2121', handledAt: null }];
 }
 
-export function buildStacksPack(clock: SampleClock): SamplePack {
+export function stacksPack(clock: SampleClock): SamplePack {
   return {
     topics: buildTopics(clock),
     prs: buildPrs(clock),

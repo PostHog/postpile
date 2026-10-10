@@ -13,7 +13,7 @@
 //   to an agent (prompt-injection test data).
 import { trimBotBodies, type FullPr, type Glance, type PrEvent, type Tile, type Topic } from '@postpile/core';
 import { pinged, SAMPLE_VIEWER, SampleClock, sampleEvents, sampleGlance, sampleKey, samplePr, sampleTile, sampleTopic } from './sample-builders.ts';
-import type { SamplePack } from './sample-pack-append.ts';
+import type { SamplePack } from './sample-pack-common.ts';
 
 const TOPIC_ID = 'topic-webhook-delivery';
 const GREPTILE = 'greptile-apps[bot]';
@@ -262,12 +262,14 @@ function buildTiles(): Tile[] {
   ];
 }
 
-export function buildPanePack(clock: SampleClock): SamplePack {
+export function panePack(clock: SampleClock): SamplePack {
   return {
     topics: [buildTopic(clock)],
     prs: [buildRichPr(clock), buildBotReviewedPr(clock), buildMarkdownPr(clock), buildInjectionPr(clock)],
     events: buildEvents(clock),
     glances: buildGlances(clock),
     tiles: buildTiles(),
+    sets: [],
+    userStates: [],
   };
 }

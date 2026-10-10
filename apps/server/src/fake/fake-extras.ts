@@ -1,13 +1,12 @@
 import { addMcpPack } from './fake-mcp-pack.ts';
 import type { SampleClock } from './sample-builders.ts';
 import type { SampleData } from './sample-data.ts';
-import { appendSamplePack } from './sample-pack-append.ts';
-import { buildPanePack } from './sample-pack-pane.ts';
-import { buildStacksPack } from './sample-pack-stacks.ts';
 import type { SampleMemory } from './sample-memory.ts';
 import { boardPack, boardPackMemory } from './sample-pack-board.ts';
 import { replaceWithCalmMemory, replaceWithCalmSample } from './sample-pack-calm.ts';
 import { addSamplePack, addSamplePackMemory } from './sample-pack-common.ts';
+import { panePack } from './sample-pack-pane.ts';
+import { stacksPack } from './sample-pack-stacks.ts';
 import { stressPack, stressPackMemory } from './sample-pack-stress.ts';
 
 /**
@@ -36,10 +35,10 @@ export function addFakeExtras(data: SampleData, clock: SampleClock, extras: Set<
     addSamplePack(data, boardPack(clock));
   }
   if (extras.has('stacks')) {
-    appendSamplePack(data, buildStacksPack(clock));
+    addSamplePack(data, stacksPack(clock));
   }
   if (extras.has('pane')) {
-    appendSamplePack(data, buildPanePack(clock));
+    addSamplePack(data, panePack(clock));
   }
   if (extras.has('stress')) {
     addSamplePack(data, stressPack(clock));
