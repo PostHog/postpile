@@ -2,6 +2,18 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## Unreleased
+
+### Fixed
+
+- The breadcrumb names the same section as the sidebar while a tile stays selected. It showed the topic's new section while the sidebar still held the row in the old one.
+- A topic no longer shows two "Dealt with" headings after a read in place: the heading over the tile you just read says "Just read".
+- Your own stack waiting on a reviewer above an approved layer leads with Snooze instead of a "Mark read" that had nothing to mark.
+- An open PR you approved keeps its review row after it counts as done, with "You approved …, commits since" and an outlined "Approve again", so a push after your approval has a next step.
+- A PR moved out of a set with "Wrong topic" leaves the set right away. It showed in both topics until the next sync.
+- "To merge" names reviewers still asked on an approved PR ("approved · team-platform still asked"). "approved" next to a waiting team read as a contradiction.
+- A search with no match says archived topics are not searched.
+
 ## 0.27.2 (2026-10-09)
 
 ### Added

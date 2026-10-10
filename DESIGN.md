@@ -401,7 +401,10 @@ Action details:
   dissolves); regroups never put it back with the remaining members.
 - wrong topic: moved as a user assignment when a target is given, otherwise
   membership removed so the next sync re-sorts it with the feedback in the
-  prompt. The tile's ⋯ menu stays short (Not mine, Wrong topic, "Move to
+  prompt. Either way the moved PRs leave the sets of their old topic at
+  once ("left: moved to another topic", by the user; a set left with fewer
+  than two units ends), so a set member never shows in two topics until
+  the next set pass (2026-10-10, builder 12). The tile's ⋯ menu stays short (Not mine, Wrong topic, "Move to
   topic…"). Not mine is left out while the tile's verdict pill already says
   Not yours, stale or not (2026-10-05, core `TileOffers.notMine`): the agent
   agrees, nothing is left to teach, and Mark read clears the tile. The pill
@@ -965,7 +968,12 @@ real fix is a process of its own for the engine (NEXT.md "Later").
 Decided 2026-09-29 (evening), tried on the "PostPile Tile Rules" page before
 it was built. The question PostPile inherits from ghatchup: after time away,
 did something merge that the user should have looked at? The answer is
-surfaced, never loud: no unread tile, no coral, no ping, no "needs you".
+surfaced, never loud: no ping, no "needs you", and the merge itself never
+makes a tile unread. While the PR's notification thread is unread on GitHub
+the tile is unread like any other ("GitHub unread is PostPile unread",
+2026-09-30); that is the thread's state, not the merge's loudness. The rules
+below were written before that rule and say how it plays out (2026-10-10,
+owner, Q2: behaviour stays, text updated to match).
 
 **What counts.** A PR merged while a review was asked of the user or of one
 of their teams (`viewerWasAsked`) and the user never reviewed it themselves
@@ -985,21 +993,31 @@ the reasons and does not flip back:
    On 2026-09-29 Julian: "They must not be loud, but they should be surfaced"
    and "a useful rule for any engineer … not in instructions". The phrase
    match is gone; the agent may still raise a single event like any other.
+   Quiet is about pings and loudness only: while the thread is unread on
+   GitHub the tile is `unread`, with the merge as its headline, and a merge
+   by a person shows the coral NEW pill like any unread person's event
+   (`tileNewBadge`; a bot's merge does not). Mark read (rule 5) settles both.
 2. *Not done until seen.* `isPrDone`: a merged PR is done, except while its
    `merged_without_review` event is unseen. Such a tile is `open`, whose turn
    "none", in the normal tile list (not in Dealt with), and carries the
    merge on `TileState.unseenMerges`: the tile shows it in a grey strip where
    an unread tile has its warm one ("nell merged it without your review ·
-   2d", `UnseenMergeStrip`), without the NEW pill. History: 2026-09-25 "approved and even merged might mean I
+   2d", `UnseenMergeStrip`), without the NEW pill. That is the tile once its
+   thread is read on GitHub; with the thread unread it is `unread` (rule 1).
+   History: 2026-09-25 "approved and even merged might mean I
    still need to take a look"; 2026-09-28 "review required in done makes no
    sense" (done = nothing asked of the user, which stays: nothing is asked
    here, but something is unseen) and "not urgent when all stuff has merged"
    (why it never makes a topic urgent).
 3. *"Not yours" counts as seen.* When the PR's glance says NOT_YOURS, the
-   merge counts as seen and the tile is done (it shows in Dealt with with
-   the verdict). This applies to personal requests too: after a merge the only
+   merge counts as seen and the PR is done. This applies to personal requests too: after a merge the only
    question is whether it concerns the user. For open PRs the team request
    hold still ignores NOT_YOURS on personal requests (see whose turn).
+   The glance is no evidence that the user saw the thread, so it does not
+   read it: while the thread is unread on GitHub the tile stays `unread`
+   (with NEW for a person's merge, rule 1), and the Not yours pill says it
+   can go. Mark read clears it, and the tile then shows in Dealt with with
+   the verdict.
 4. *Glanced after the merge.* Glance targets include merged PRs with an
    unseen `merged_without_review` event. The glance then answers "worth a
    look after the fact?": LOOK_CLOSER is worth a look (what the user would
@@ -1008,8 +1026,10 @@ the reasons and does not flip back:
    a small cap; 2026-09-28 "cost shall not be an issue".
 5. *Mark read settles it.* Mark read on the tile marks the event seen (the tile
    becomes done) and the thread read on GitHub, through the normal mark-read
-   queue, undo window and writes lock. PostPile never marks these read by
-   itself.
+   queue, undo window and writes lock. PostPile never marks these read
+   without a user action: the open-read dwell may mark one the user picked
+   (Q2, 2026-10-10), but a merge that lands while the PR is open in the pane
+   does not mark it read by itself.
 6. *Topics wait for it.* A topic retires only when every tile is done (see
    Topic status), so an unseen merge keeps its topic in the sidebar. History:
    0.3.1 (2026-09-29) retired on "nothing unread or snoozed", which after a
@@ -3166,7 +3186,11 @@ happened when it did. Chosen from a clickable mockup:
   - +160ms: the heading's word changes in place (`headingGroup` in
     `lib/queues.ts`): "Unread" becomes "Dealt with" with a grey check, once
     no tile under it is still unread. The tile keeps its held place; moving
-    the selection regroups as before.
+    the selection regroups as before. When the topic already shows a
+    group of that name below (a Dealt with group of earlier tiles), the
+    heading says "Just read" instead (`headingLabel`; "Now dealt with" for
+    an Open heading), so no topic shows two "Dealt with" headings
+    (2026-10-10, BOARD-A-10).
   - +240ms: the footer crossfades Mark read · Snooze to Open (`Crossfade`).
   - +320ms: the topic's action row gives way and the Archive box grows into
     its place (320ms); the strip folding at the same time keeps the tile
@@ -3314,7 +3338,12 @@ thread, reading the diff.
   you", "... from team-devex", "Your PR", "Your review"), then Approve with
   its "+ note" half, Comment review, and "Ask <owner>" on the right. Same
   order on every PR; Approve fills green when it is core's lead, else
-  outlined. Shown when core offers Approve or Ask. Rejected 2026-10-05:
+  outlined. Shown when core offers Approve or Ask. Core offers Approve on
+  an open PR the viewer approved even once the PR is done (2026-10-10,
+  PANE-A-06, option a): the row then shows "You approved 4h ago, commits
+  since" and an outlined "Approve again", never the lead, so "rowan pushed
+  after your approval" has a next step. Ask, Remove team and the mark
+  button follow the done rules as before. Rejected 2026-10-05:
   welding the buttons into the glance's footer (the glance is agent output
   and may be missing or change its look), and a row in the PR header above
   the glance (longer pointer path from the tile, buttons before the
@@ -4238,6 +4267,12 @@ event seen, pinged and found PRs handled): `done` and the `turn` left.
   is still open here"). A snoozed tile whose tracked PRs are all done, their
   news seen, leads with "Open" too, like its pane, and keeps Snooze so the
   snooze can be taken back (2026-09-29: the footer said "Mark done" there).
+  A read (open) tile that a mark-read leaves not done, with nothing unread
+  on any PR (no unseen news, every thread read on GitHub), leads with
+  Snooze too, not "Mark read": there is nothing to mark (2026-10-10,
+  B-A-05: your own stack held above, bottom layer approved and top waiting
+  on a team, offered "Mark read" with every thread read). Property:
+  an open tile with nothing unread never offers Mark read.
 - Detail pane action bar (changed 2026-09-29, "Actions act on what you
   look at"): on a single-PR tile, same label rule as the footer; the mark
   button is left out while the tile is read and still your move (Snooze
@@ -4306,7 +4341,8 @@ any review ask; on top of that:
   "After a mark-read"). On a done PR "Open on GitHub" stays outlined
   (`PaneLead` `none`, 2026-10-07, owner): with an ink one there, a
   dealt-with topic showed two black buttons at once, and "Archive now" is
-  the next move. "Approve again" and "Approve draft" stay outlined next to it.
+  the next move. "Approve again" and "Approve draft" stay outlined next to it
+  ("Approve again" also on a done PR the viewer approved, 2026-10-10).
   The filled button is ink, except Approve (2026-09-30): it leads in `--safe`
   green, the same color as the "Approved" state it produces, because it is
   the one action that is both final and positive. Accent blue stays for
@@ -4491,7 +4527,9 @@ worth seeing, so the app says who approved instead of a bare "approved".
   (agent)"), the detail's "To merge" says "approved by reviewbot (agent)",
   and the Approve button's review glyph says the same in its tooltip. Same
   calm green as any approval, no warning colors. Once a person approved it
-  is the usual "approved".
+  is the usual "approved". GitHub says APPROVED while a review request is
+  still pending, so "To merge" then names who is still asked: "approved ·
+  team-platform still asked" (`mergeStatus`, 2026-10-10, B-A-12).
 - GitHub's semantics stay: `reviewDecision`, whose turn, tiers and Done do
   not change. An agent approval counts; "Merge, it is approved" and
   "Approve as well" apply after one too.
@@ -4533,8 +4571,12 @@ are in no team. So each of the viewer's teams gets a role:
 - **home**: behaves as every team did before. Members are teammates
   (`teamMembers`, the `team` tier, the team PRs filter, Your team owns,
   faces in the sea team pill).
-  A home team request on a teammate's PR is `team_for_you`; the sea "For
-  <slug>" chip and band; human mentions of it are loud.
+  A home team request on a teammate's PR is `team_for_you`: it reads "For
+  you" with the honey chip and band, like a personal request (see "For
+  whom", 2026-09-28; this line said "the sea 'For <slug>' chip" until
+  2026-10-10, but the code always followed "For whom"). A home team request
+  on anyone else's PR gets the sea "For <slug>" chip and band. Human
+  mentions of a home team are loud.
 - **routing**: only its review requests and mentions matter. Members are
   not teammates and are never fetched. Its requests are routed like a home
   team's request on an outsider's PR (To review, below "For you" tiles,
@@ -4794,7 +4836,10 @@ avatars and filters", QueuesB2).
   bubble, no faces, no count on the header. A row opens the topic like any
   other (`getTopic` reads a retired topic whole, `Board.forTopic`; the
   breadcrumb says "Archive"). Search and the queue filters cover live
-  topics only, so the drawer hides while they narrow. Hidden when empty.
+  topics only, so the drawer hides while they narrow. A search with no
+  match says so: "Nothing matches “warmer” in live topics. Archived topics
+  are not searched" (2026-10-10, BOARD-A-15: a PR only in an archived
+  topic read as a broken search). Hidden when empty.
 - **Counts** come from `TopicListItem.queues` (`topicQueues` in core): PRs
   per tier over the PRs in the topic's tiles on the hot board (each PR
   once; PRs that went cold are not counted), plus open PRs
@@ -4891,7 +4936,12 @@ avatars and filters", QueuesB2).
 - **Breadcrumb = sidebar section** (`TopicDetail.section`, 2026-10-01):
   "Topics › To review › area", with the section's label and coloured dot as
   the sidebar draws them; Archive for a retired one (core gives `archive`
-  since 2026-10-02). It used to say "Needs you" or "Quiet" from
+  since 2026-10-02). While the sidebar holds the open topic's row in its old
+  section (a tile stays selected, "held place"), the breadcrumb names that
+  held section too (`rowSection` in `lib/queues.ts`, reported up by
+  `TopicSidebar`), and both move together when the selection moves
+  (2026-10-10, BOARD-A-07: the breadcrumb said "Changes you requested"
+  while the row still sat under "Needs reply"). It used to say "Needs you" or "Quiet" from
   `TopicGroup`, which only matches a subgroup inside Other topics.
 - **Urgency** (`topicUrgency` in core): a topic needs you when an unread
   tile still has an open PR, or whose-turn says it's your move on a live
@@ -8478,7 +8528,9 @@ offers come from their own core function with that context passed in, and
 the renderer only displays them. Consequences:
 
 - A done PR in the detail pane offers only Open, like a done tile (a handled
-  PR by someone else with no ask still got a primary Approve).
+  PR by someone else with no ask still got a primary Approve). One exception
+  since 2026-10-10: an open PR the viewer approved keeps an outlined
+  "Approve again" in its review row (never the lead).
 - Whether a person is automation comes from core (the renderer's `[bot]`
   check missed the other automation accounts and decided whether Ask shows).
 
@@ -8621,7 +8673,8 @@ state and whose turn per snapshot (`stateOf`, `turnOf`). Offers are
 `tileOffers` / `paneOffers` in `core/offers.ts`, shipped as
 `TileView.offers` (footer action and label, GitHub link, lead PR, and the
 pane's buttons per PR key); the pane (`PaneHousekeeping`, `ReviewRow`, `OpenOnGitHub`) and `Tile` only lay them out. A done
-PR (or one on a done tile) gets no Approve, Ask or Remove team; a done PR
+PR (or one on a done tile) gets no Ask or Remove team, and Approve only as
+the outlined "Approve again" on an open PR the viewer approved; a done PR
 whose news keeps its tile unread keeps Mark read. The renderer's tier order
 is typed with core's `PrTierOrder`, so a drift fails to compile. The fake
 engine reads through `planRead` and sends pending writes through

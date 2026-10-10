@@ -1723,6 +1723,16 @@ the app meanwhile.
 
 ## Decided
 
+- **"Approve again" stays on a done PR you approved** (2026-10-10, owner,
+  bug hunt Q6 / PANE-A-06; DESIGN.md "The PR pane" › review row): core
+  offers Approve on an open PR the viewer approved even once it is done,
+  outlined and never the lead, so the row's "You approved 4h ago, commits
+  since" shows after someone pushes. Ask, Remove team and the mark button
+  keep the done rules. Same day: a heading renamed in place over the held
+  tile says "Just read" when its new name already heads a group below
+  (BOARD-A-10), and the "Merged without your review" rules 1–3 and "Team
+  roles" were reworded to match the code (Q2: behaviour stays).
+
 - **Agent notes on PRs are advisory and anchored to the PR's state**
   (2026-10-08, design agreed with the reporting agent, checked by Codex;
   DESIGN.md "Agent notes on PRs"): notes never change turn, unread, done,
