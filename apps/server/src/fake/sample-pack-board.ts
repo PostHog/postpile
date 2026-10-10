@@ -339,6 +339,7 @@ export function boardPack(clock: SampleClock): SamplePack {
     events: buildEvents(clock),
     glances: buildGlances(clock),
     tiles: buildTiles(),
+    sets: [],
     userStates: [
       approvedState(2020, clock.hoursAgo(2)),
       // Opened in PostPile between rowan's comment and the approval.

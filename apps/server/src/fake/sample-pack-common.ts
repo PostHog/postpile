@@ -2,7 +2,7 @@
 // handful of topics, PRs, events, glances, tiles and user states that get
 // appended to the default sample, plus the memory (relations, dossiers) the
 // topics need for their placement.
-import type { DossierRelation, DossierVersion, FullPr, Glance, PrEvent, Tile, Topic, UserPrState } from '@postpile/core';
+import type { DossierRelation, DossierVersion, FullPr, Glance, PrEvent, PrSet, Tile, Topic, UserPrState } from '@postpile/core';
 import { sampleKey } from './sample-builders.ts';
 import type { SampleData } from './sample-data.ts';
 import type { SampleMemory } from './sample-memory.ts';
@@ -13,6 +13,8 @@ export interface SamplePack {
   events: PrEvent[];
   glances: Glance[];
   tiles: Tile[];
+  /** The agent-grouped sets behind the pack's set tiles. */
+  sets: PrSet[];
   userStates: UserPrState[];
 }
 
@@ -30,6 +32,7 @@ export function addSamplePack(data: SampleData, pack: SamplePack): void {
   data.events.push(...pack.events);
   data.glances.push(...pack.glances);
   data.tiles.push(...pack.tiles);
+  data.sets.push(...pack.sets);
   data.userStates.push(...pack.userStates);
   for (const tile of pack.tiles) {
     for (const member of tile.members) {

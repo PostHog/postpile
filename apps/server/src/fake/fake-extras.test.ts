@@ -1,11 +1,12 @@
 // The opt-in sample packs (POSTPILE_FAKE_EXTRA): the rules agree on their
 // tiles like on the default sample (rules-invariants.test.ts), and each PR
 // lands where its bug-hunt scenario needs it.
-import type { PaneOffers, PrSummary, TileView, TopicListItem } from '@postpile/core';
+import { DOSSIER_LIMITS, type PaneOffers, type PrSummary, type TileView, type TopicListItem } from '@postpile/core';
 import { describe, expect, it } from 'vitest';
 import { FakeEngine } from './fake-engine.ts';
 import { fakeExtras, type FakeExtra } from './fake-extras.ts';
 import { BOARD_TOPIC } from './sample-pack-board.ts';
+import { STRESS_BIG_NUMBER, STRESS_LONG_TITLE, STRESS_TOPIC, STRESS_TOPIC_NAME } from './sample-pack-stress.ts';
 
 const NOW = new Date('2026-09-29T12:00:00Z');
 
@@ -55,7 +56,7 @@ describe('fakeExtras', () => {
 });
 
 // The same checks as rules-invariants.test.ts, over the default sample plus each pack.
-describe.each<FakeExtra>(['board'])('rules agree with POSTPILE_FAKE_EXTRA=%s', (extra) => {
+describe.each<FakeExtra>(['board', 'stress'])('rules agree with POSTPILE_FAKE_EXTRA=%s', (extra) => {
   it('a done tile offers only Open', async () => {
     for (const view of await allTiles(engineWith(extra))) {
       if (view.state.kind !== 'done') {
@@ -200,5 +201,43 @@ describe('POSTPILE_FAKE_EXTRA=board', () => {
     const engine = engineWith('board');
     expect(await tileOf(engine, 2020)).toMatchObject({ group: 'unread', turn: { kind: 'them', who: 'sol' } });
     expect(await tileOf(engine, 2021)).toMatchObject({ group: 'dealt_with', turn: { kind: 'them', who: 'sol' } });
+  });
+});
+
+describe('POSTPILE_FAKE_EXTRA=stress', () => {
+  it('has a long title with emoji, backticks, angle brackets and an unbroken token, and a long topic name', async () => {
+    const engine = engineWith('stress');
+    expect(STRESS_LONG_TITLE.length).toBeGreaterThanOrEqual(220);
+    expect(STRESS_LONG_TITLE).toMatch(/`.+`/);
+    expect(STRESS_LONG_TITLE).toMatch(/<\w+>/);
+    expect(Math.max(...STRESS_LONG_TITLE.split(' ').map((word) => word.length))).toBeGreaterThanOrEqual(90);
+    expect((await topicItem(engine, STRESS_TOPIC.longName)).topic.name).toBe(STRESS_TOPIC_NAME);
+    expect(STRESS_TOPIC_NAME.length).toBeGreaterThan(64);
+  });
+
+  it('has a PR above #9999 in a repo with a long name, and an agent PR with five assignees', async () => {
+    const engine = engineWith('stress');
+    const big = await tileOf(engine, STRESS_BIG_NUMBER);
+    expect(big.prs[0]?.key).toMatch(/^acme\/.{40,}#12345$/);
+    expect((await tileOf(engine, 2402)).prs[0]?.assignees).toHaveLength(5);
+  });
+
+  it('has a topic with 25 tiles, 30 PRs and at least seven authors', async () => {
+    const tiles = (await engineWith('stress').getTopic(STRESS_TOPIC.crowded))?.tiles ?? [];
+    const prs = tiles.flatMap((view) => view.prs);
+    expect(tiles).toHaveLength(25);
+    expect(prs).toHaveLength(30);
+    expect(new Set(prs.map((pr) => pr.author)).size).toBeGreaterThanOrEqual(7);
+  });
+
+  it('has a dossier at every bound', async () => {
+    const dossier = (await engineWith('stress').getTopic(STRESS_TOPIC.crowded))?.dossier?.dossier;
+    expect(dossier?.goal).toHaveLength(DOSSIER_LIMITS.goal);
+    expect(dossier?.summary).toHaveLength(DOSSIER_LIMITS.summary);
+    expect(dossier?.people).toHaveLength(DOSSIER_LIMITS.people);
+    expect(dossier?.openQuestions).toHaveLength(DOSSIER_LIMITS.openQuestions);
+    expect(dossier?.timeline).toHaveLength(DOSSIER_LIMITS.timeline);
+    expect(dossier?.recentChanges).toHaveLength(DOSSIER_LIMITS.recentChanges);
+    expect(dossier?.userCares).toHaveLength(DOSSIER_LIMITS.userCares);
   });
 });

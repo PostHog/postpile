@@ -34,6 +34,7 @@ import {
 } from '@postpile/core';
 import type { SampleData } from './sample-data.ts';
 import { addFakeExtraMemory, type FakeExtra } from './fake-extras.ts';
+import { SampleClock } from './sample-builders.ts';
 import { buildSampleMemory, type SampleMemory } from './sample-memory.ts';
 
 const DEFAULT_FACT_LIMIT = 100;
@@ -70,7 +71,7 @@ export class FakeMemory {
     extras: Set<FakeExtra> = new Set(),
   ) {
     this.memory = buildSampleMemory(now());
-    addFakeExtraMemory(this.memory, extras);
+    addFakeExtraMemory(this.memory, new SampleClock(now()), extras);
   }
 
   /** The "not mine" entries the sample's rule proposal cites. FakeEngine starts its feedback log with them. */

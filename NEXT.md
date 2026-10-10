@@ -2597,7 +2597,12 @@ Env switches:
   scenarios (approved own PR alone in its topic, a You drive trio of
   unread / dealt with / merge-ready, a teammate's draft asking you, a
   thanks that asks nothing, a Not yours merge, a closed PR with an open
-  sibling, the retired standing topic "Release train"):
+  sibling, the retired standing topic "Release train"). `stress`: text
+  and counts at their limits for layout checks (a 220-character title with
+  emoji, backticks, `<>` and a 96-character token, a topic name over 64
+  characters, #12345 in a long repo name, five assignees, "Monorepo test
+  sharding" with 25 tiles and 30 PRs by eight authors and a dossier at
+  every `DOSSIER_LIMITS` bound):
 
   ```
   POSTPILE_FAKE=1 POSTPILE_FAKE_EXTRA=board POSTPILE_TOKEN=devtok PORT=4877 pnpm server
