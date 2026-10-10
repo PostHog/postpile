@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { OpenedReadCheck, OpenedReadResult } from '@postpile/core';
-import { dotCountdown, OPENED_READ_DELAY_MS, OpenedReadTimer, opensMarkRead, type OpenedReadClock, type OpenedReadPhase, type OpenedTileView } from './opened-read.ts';
+import { dotCountdown, OPENED_READ_DELAY_MS, openedNoteShows, OpenedReadTimer, opensMarkRead, type OpenedReadClock, type OpenedReadPhase, type OpenedTileView } from './opened-read.ts';
 import { UNDO_WINDOW_MS } from './undo-window.ts';
 
 const ON = { enabled: true, forcedOffReason: null, pending: [] };
@@ -159,13 +159,36 @@ describe('OpenedReadTimer', () => {
     expect(phases).toEqual(['filling', 'idle']);
   });
 
-  it('waits when a mark is not wanted at the dwell end, and marks once a sync makes it wanted while the PR stays open', () => {
+  it('marks nothing when the mark turns wanted only after the dwell, by unlocking, a Discard or a merge (BOARD-A-01/A-03)', () => {
     const { clock, timer, calls } = started(false);
     timer.visible();
     clock.advance(OPENED_READ_DELAY_MS);
     expect(calls()).toBe(0);
     expect(timer.phase).toBe('idle');
 
+    timer.setWanted(true);
+    clock.advance(OPENED_READ_DELAY_MS * 3);
+    expect(calls()).toBe(0);
+    expect(timer.phase).toBe('idle');
+  });
+
+  it("marks as soon as wanted after the user's own Approve in the pane left the PR done", () => {
+    const { clock, timer, calls } = started(false);
+    timer.visible();
+    clock.advance(OPENED_READ_DELAY_MS);
+    timer.userActed();
+    expect(calls()).toBe(0);
+
+    timer.setWanted(true);
+    expect(calls()).toBe(1);
+  });
+
+  it('marks once even when the user acts again after the mark', async () => {
+    const { clock, timer, calls } = started();
+    timer.visible();
+    clock.advance(OPENED_READ_DELAY_MS);
+    await answered();
+    timer.userActed();
     timer.setWanted(true);
     expect(calls()).toBe(1);
   });
@@ -257,5 +280,24 @@ describe('dotCountdown', () => {
   it('gives a full dot back when the dwell is cancelled or the mark undone', () => {
     expect(dotCountdown({ prKey: 'acme/app#3', filling: false, marked: null }, 'acme/app#3')).toBeNull();
     expect(dotCountdown({ prKey: null, filling: false, marked: null }, 'acme/app#3')).toBeNull();
+  });
+});
+
+describe('openedNoteShows', () => {
+  it('shows nothing without a mark of this open', () => {
+    expect(openedNoteShows(null, false)).toBe(false);
+  });
+
+  it('keeps the note while Undo is offered, also when the PR shows unread meanwhile', () => {
+    expect(openedNoteShows({ canUndo: true }, false)).toBe(true);
+    expect(openedNoteShows({ canUndo: true }, true)).toBe(true);
+  });
+
+  it('keeps the settled note while the PR stays read', () => {
+    expect(openedNoteShows({ canUndo: false }, false)).toBe(true);
+  });
+
+  it('drops the settled note once the PR is unread again, so Mark read comes back (B-A-03)', () => {
+    expect(openedNoteShows({ canUndo: false }, true)).toBe(false);
   });
 });

@@ -4,7 +4,7 @@ import { at, NO_OPENED_READ, NO_PR_FACTS, withOffers } from '@postpile/core/fixt
 import type { NavEntry } from './history.ts';
 import { applyQueueFilter } from './queues.ts';
 import { visibleTopic } from './search.ts';
-import { autoTile, filterKey, keptFor, listedTopics, nextKept, resolveSelection, withSelectedTile, type KeptView } from './selection.ts';
+import { autoTile, dwellPrKey, filterKey, keptFor, listedTopics, nextKept, resolveSelection, withSelectedTile, type KeptView } from './selection.ts';
 
 /** A topic with `mine` open PRs of the viewer's. */
 function item(id: string, mine: number): TopicListItem {
@@ -228,5 +228,49 @@ describe('autoTile and the auto selection', () => {
     const read = [tile('t1', ['o/r#1'], DONE), tile('t2', ['o/r#2'], UNREAD)];
     const selected = resolveSelection(entry('t'), read, read, null, kept);
     expect([selected.view?.tile.id, selected.auto]).toEqual(['t1', false]);
+  });
+});
+
+describe("dwellPrKey: only the user's pick arms the open-read dwell", () => {
+  const tiles = [tile('t1', ['o/r#1'], UNREAD), tile('t2', ['o/r#2'], UNREAD)];
+
+  it("arms for the PR the user picked", () => {
+    const selected = resolveSelection(entry('t', 't2', 'o/r#2'), tiles, tiles, null, null);
+    expect(dwellPrKey(selected, 'o/r#2')).toBe('o/r#2');
+  });
+
+  it('never arms for the tile the app picks when a topic opens', () => {
+    const selected = resolveSelection(entry('t'), tiles, tiles, null, null);
+    expect(dwellPrKey(selected, null)).toBeNull();
+    // Even when the user had picked that PR before and navigated away since.
+    expect(dwellPrKey(selected, 'o/r#1')).toBeNull();
+  });
+
+  it("never arms for search's first match, also for a half-typed query (BOARD-A-02)", () => {
+    const matching = [tiles[1]!];
+    const selected = resolveSelection(entry('t'), matching, tiles, new Set(['o/r#2']), null);
+    expect([selected.view?.tile.id, selected.auto]).toEqual(['t2', true]);
+    expect(dwellPrKey(selected, null)).toBeNull();
+  });
+
+  it("arms once the user clicks a search result", () => {
+    const matching = [tiles[1]!];
+    const selected = resolveSelection(entry('t', 't2', 'o/r#2'), matching, tiles, new Set(['o/r#2']), null);
+    expect(dwellPrKey(selected, 'o/r#2')).toBe('o/r#2');
+  });
+
+  it('never arms for the next tile the app picks after the picked one left', () => {
+    const left = [tiles[0]!];
+    const selected = resolveSelection(entry('t', 't2', 'o/r#2'), left, left, null, null);
+    expect(selected.view?.tile.id).toBe('t1');
+    expect(dwellPrKey(selected, 'o/r#2')).toBeNull();
+  });
+
+  it('never arms for an app pick that turned user-like after a group change while shown', () => {
+    const kept = nextKept(null, filterKey(null, null), entry('t'), entry('t', 't1', 'o/r#1'), { group: 'unread' });
+    const read = [tile('t1', ['o/r#1'], DONE), tile('t2', ['o/r#2'], UNREAD)];
+    const selected = resolveSelection(entry('t'), read, read, null, kept);
+    expect(selected.auto).toBe(false);
+    expect(dwellPrKey(selected, null)).toBeNull();
   });
 });

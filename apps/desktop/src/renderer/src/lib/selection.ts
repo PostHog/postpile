@@ -164,3 +164,17 @@ export function withSelectedTile(tileIds: Set<string> | null, selectedTileId: st
   }
   return new Set([...tileIds, selectedTileId]);
 }
+
+/**
+ * The PR the open-read dwell may run for (2026-10-10): the PR in the pane
+ * when the user picked it with their last navigation (`userPick`), else
+ * null. A tile the app picked (a topic opening, search's first match, the
+ * next tile after one left) never arms it, also once it counts as the
+ * user's pick for the grid after a group change.
+ */
+export function dwellPrKey(selected: { prKey: string | null; auto: boolean }, userPick: string | null): string | null {
+  if (selected.auto || selected.prKey === null || selected.prKey !== userPick) {
+    return null;
+  }
+  return selected.prKey;
+}

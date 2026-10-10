@@ -1,4 +1,5 @@
 import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { holdMenuOpen } from '../lib/open-menus.ts';
 import { Button, type ButtonSize, type ButtonVariant } from './Button.tsx';
 
 export interface MenuItem {
@@ -34,6 +35,9 @@ export function Menu(props: MenuProps) {
   // The label of the item whose panel is showing, null for the list.
   const [panelOf, setPanelOf] = useState<string | null>(null);
   const root = useRef<HTMLDivElement>(null);
+
+  // The open-read dwell waits while a menu is open, so a mark cannot close this one under the cursor.
+  useEffect(() => (open ? holdMenuOpen() : undefined), [open]);
 
   useEffect(() => {
     if (!open) {
