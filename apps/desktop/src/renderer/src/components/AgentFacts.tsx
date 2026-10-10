@@ -1,12 +1,12 @@
 import type { FactView } from '@postpile/core';
-import { blockRefs } from '../lib/memory.ts';
+import { blockRefs, canRecheckFact } from '../lib/memory.ts';
 import { MemoryLine } from './MemoryLine.tsx';
 import { SectionLabel } from './SectionLabel.tsx';
 
 /**
  * "What the agent knows": facts about the PR or citing it, with sources.
- * Stale ones are greyed ("updating" while a sync or catch-up runs); only big
- * claims get Recheck.
+ * Stale ones are greyed ("updating" while a sync or catch-up runs); big
+ * claims and stale facts get Recheck.
  */
 export function AgentFacts(props: { facts: FactView[]; updating: boolean }) {
   const refs = blockRefs(props.facts.map((view) => view.fact));
@@ -15,7 +15,8 @@ export function AgentFacts(props: { facts: FactView[]; updating: boolean }) {
       <span className="pb-px">
         <SectionLabel>What the agent knows</SectionLabel>
       </span>
-      {props.facts.length === 0 && <span className="text-xs text-hint">Nothing learned about this PR yet.</span>}
+      {/* Facts are what lasts beyond one look; the glance above is not one, so "nothing learned" read wrong next to it. */}
+      {props.facts.length === 0 && <span className="text-xs text-hint">No lasting facts about this PR yet.</span>}
       {props.facts.map((view, index) => (
         <MemoryLine
           key={view.fact.id}
@@ -24,7 +25,7 @@ export function AgentFacts(props: { facts: FactView[]; updating: boolean }) {
           updating={props.updating}
           corrected={false}
           refs={refs[index]}
-          canRecheck={view.recheckable}
+          canRecheck={canRecheckFact(view)}
           why={{ kind: 'fact', factId: view.fact.id }}
           textClass="text-[12.5px] leading-normal"
         >

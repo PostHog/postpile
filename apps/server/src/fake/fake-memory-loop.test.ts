@@ -29,8 +29,9 @@ describe('fake dossier rewrite on sync', () => {
     expect(after.fixedClaims).toEqual([]);
     expect(after.dossier.goal).toBe('');
     expect(after.dossier.openQuestions[0]?.text).toBe('Release builds stay on GitHub runners.');
-    // The planted stale question goes with the rewrite, like withoutStaleClaims.
-    expect(after.staleClaims).toEqual([]);
+    // The planted stale question goes with the rewrite, like withoutStaleClaims. The status line keeps its
+    // sources in the fake rewrite, so it can still read out of date (the read model flags it, never drops it).
+    expect(after.staleClaims.filter((claim) => claim.path !== 'status')).toEqual([]);
   });
 
   it('leaves dossiers without new corrections alone', async () => {

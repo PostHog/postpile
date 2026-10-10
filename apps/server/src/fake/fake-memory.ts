@@ -10,6 +10,7 @@ import type {
   Feedback,
   FixedClaim,
   FullPr,
+  MemoryRestore,
   MemoryRecheckRequest,
   MemorySources,
   MemoryTarget,
@@ -32,6 +33,7 @@ import {
   emptyAgentCallStats,
   factCheck,
   findDossierLine,
+  headerLineIssues,
   lineCheck,
   parseFixedClaimNote,
   topicChangesSince,
@@ -112,6 +114,24 @@ export class FakeMemory {
       .filter((entry) => entry.topicId === topicId && entry.createdAt > since && entry.kind === 'memory_fixed')
       .map((entry) => parseFixedClaimNote(entry.note))
       .filter((claim) => claim !== null);
+  }
+
+  private confirmedClaims(topicId: string, since: string, feedback: Feedback[]): string[] {
+    return feedback.filter((entry) => entry.topicId === topicId && entry.createdAt > since && entry.kind === 'memory_confirmed').map((entry) => entry.note);
+  }
+
+  /** Like MemoryActions.restoreLine: the line's wrong, forget and fix rows since the latest version. */
+  pendingCorrections(input: MemoryRestore, feedback: Feedback[]): Feedback[] {
+    const since = this.latest(input.topicId)?.createdAt ?? '';
+    return feedback.filter((entry) => {
+      if (entry.topicId !== input.topicId || entry.createdAt <= since) {
+        return false;
+      }
+      if (entry.kind === 'memory_fixed') {
+        return parseFixedClaimNote(entry.note)?.text === input.text;
+      }
+      return (entry.kind === 'memory_wrong' || entry.kind === 'memory_forget') && entry.note === input.text;
+    });
   }
 
   /** Same rules as the engine: dossier relation (or the sample's), a user correction wins; the fake has no new events. */
@@ -242,7 +262,9 @@ export class FakeMemory {
       ? this.memory.facts.filter((fact) => fact.topicId === topicId && (fact.recordedAt > seen.updatedAt || (fact.expiredAt ?? '') > seen.updatedAt))
       : [];
     const versionsNewestFirst = [...(this.memory.dossiers.get(topicId) ?? [])].reverse();
-    const staleClaims = this.staleClaims(topicId);
+    const prs = new Map(this.data.prs.map((pr) => [pr.key, pr]));
+    const world = { prs, memberKeys: this.membersOf(topicId), now: this.now().toISOString() };
+    const staleClaims = [...this.staleClaims(topicId), ...headerLineIssues(latest.dossier, world)];
     return {
       version: latest.version,
       createdAt: latest.createdAt,
@@ -254,6 +276,7 @@ export class FakeMemory {
       history: dossierVersionNotes(versionsNewestFirst),
       correctedClaims: this.correctedClaims(topicId, latest.createdAt, feedback),
       fixedClaims: this.fixedClaims(topicId, latest.createdAt, feedback),
+      confirmedClaims: this.confirmedClaims(topicId, latest.createdAt, feedback),
     };
   }
 

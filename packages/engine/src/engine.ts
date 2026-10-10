@@ -48,6 +48,7 @@ import type {
   RecordedSyncProgress,
   MemoryCorrection,
   MemoryRecheckRequest,
+  MemoryRestore,
   MemoryRecheckResult,
   MemorySources,
   MemoryTarget,
@@ -1620,6 +1621,10 @@ export class Engine implements EngineService {
     return result;
   }
 
+  async restoreMemoryLine(input: MemoryRestore): Promise<ActionResult> {
+    return this.memoryActions.restoreLine(input);
+  }
+
   async getMemorySources(target: MemoryTarget): Promise<MemorySources | null> {
     return this.memorySources.get(target);
   }
@@ -1688,6 +1693,10 @@ export class Engine implements EngineService {
 
   async forgetWorkThread(input: WorkThreadForget): Promise<ActionResult> {
     return this.workContext.forget(input);
+  }
+
+  async restoreWorkThread(input: WorkThreadForget): Promise<ActionResult> {
+    return this.workContext.restore(input);
   }
 
   async setSweepSkip(patterns: string[]): Promise<ActionResult> {

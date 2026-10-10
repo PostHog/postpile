@@ -14,9 +14,17 @@ export interface CheckLabel {
  * catch-up run for the line's topic is going, so a stale line reads
  * "Updating now: …" instead of "Out of date: …" (`lib/staleness.ts`).
  */
-export function checkLabel(check: MemoryCheck, updating: boolean): CheckLabel {
+/**
+ * `kept`: the user kept the line through Recheck since this dossier version,
+ * so a stale check reads as checked by them, not "Out of date" (it would
+ * contradict the "Still looks right" they just accepted).
+ */
+export function checkLabel(check: MemoryCheck, updating: boolean, kept = false): CheckLabel {
   if (check.state === 'ok') {
     return { text: 'Checks out against GitHub', tone: 'ok' };
+  }
+  if (check.state === 'stale' && kept) {
+    return { text: `Checked by you after a recheck${check.reason ? ` (${staleLabel(check.reason)})` : ''}`, tone: 'ok' };
   }
   if (check.state === 'stale') {
     return { text: `${staleLead(updating)}: ${check.reason ? staleLabel(check.reason) : 'a check failed'}`, tone: 'warn' };

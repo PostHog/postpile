@@ -15,7 +15,8 @@ import type { DossierUpdateInput, GlanceBatchInput, GlanceBatchItem, PromptConte
  * the topic's next real activity anyway. So did fencing the area names
  * (2026-09-29): the same data, only moved inside <github_data>. So did
  * driverTeam and the user's driver pick (2026-10-02): picked up at each
- * topic's next dossier update.
+ * topic's next dossier update. So did refs on people (2026-10-10): until
+ * then a person's "Why?" says "no source recorded".
  */
 export const DOSSIER_PROMPT_VERSION = 'd2';
 

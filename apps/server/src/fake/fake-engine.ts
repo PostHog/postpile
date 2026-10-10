@@ -46,6 +46,8 @@ import type {
   MemoryCorrection,
   MemoryCorrectionKind,
   MemoryRecheckRequest,
+  MemoryRestore,
+  Glance,
   MemoryRecheckResult,
   MemorySources,
   MemoryTarget,
@@ -479,6 +481,8 @@ export class FakeEngine implements EngineService {
   /** Sample decisions plus the fake poll's own, oldest sample first. */
   private readonly pingDecisions: PingDecision[];
   private readonly memoryUndos = new Map<string, { until: number; undo: () => void }>();
+  /** Glances a recheck found no longer hold: stale until a new glance replaces that one, like the engine's feedback hash. */
+  private readonly outdatedGlances = new Set<Glance>();
   /** What a mute or unmute replaced, by its undo token (like TileActions). */
   private readonly snoozeUndos = new Map<string, { remove: PrKey[]; restore: Snooze[] }>();
   private readonly recheckDelayMs: number;
@@ -656,6 +660,10 @@ export class FakeEngine implements EngineService {
 
   /** One sample glance reads as written before the PR's last push, so the stale verdict box can be seen, until refresh on look rewrites it. */
   private isGlanceStale(prKey: PrKey): boolean {
+    const glance = this.data.glances.find((candidate) => candidate.prKey === prKey);
+    if (glance && this.outdatedGlances.has(glance)) {
+      return true;
+    }
     return STALE_SAMPLE_GLANCES.has(prKey) && !this.catchUp.wrote(prKey) && this.data.glances.some((glance) => glance.prKey === prKey);
   }
 
@@ -2362,12 +2370,42 @@ export class FakeEngine implements EngineService {
     this.feedback.splice(this.feedback.indexOf(entry), 1);
   }
 
+  /** Like MemoryActions.outdateGlance: feedback on the PR, and the glance reads stale until rewritten. */
+  private outdateGlance(prKey: PrKey, reason: string): ActionResult {
+    const glance = this.data.glances.find((candidate) => candidate.prKey === prKey);
+    if (!glance) {
+      return fail(`no glance for ${prKey}`);
+    }
+    this.outdatedGlances.add(glance);
+    const entry = this.logCorrection('glance_outdated', this.data.membership.get(prKey) ?? null, prKey, reason);
+    const token = this.memoryUndo(() => {
+      this.outdatedGlances.delete(glance);
+      this.dropFeedback(entry);
+    });
+    return ok('Marked out of date. The agent writes it again on your next look.', token);
+  }
+
+  /** Like MemoryActions.restoreLine: the line's corrections since the latest dossier version go. */
+  async restoreMemoryLine(input: MemoryRestore): Promise<ActionResult> {
+    const pending = this.memory.pendingCorrections(input, this.feedback);
+    if (pending.length === 0) {
+      return fail('Nothing to restore: the topic memory was already rewritten.');
+    }
+    for (const entry of pending) {
+      this.dropFeedback(entry);
+    }
+    return ok('Restored. The next sync keeps that line.');
+  }
+
   /** Same contract as the real engine: a fact changes now, a dossier line waits for the next update. Undoable. */
   async correctMemory(input: MemoryCorrection): Promise<ActionResult> {
     const kind = FAKE_FEEDBACK_KINDS[input.kind];
     const fixed = input.fixedText?.trim() ?? '';
     if (input.kind === 'fix' && fixed === '') {
       return fail('a fix needs the corrected line');
+    }
+    if (input.prKey) {
+      return this.outdateGlance(input.prKey, input.text);
     }
     if (input.factId === null) {
       if (!this.data.topics.some((topic) => topic.id === input.topicId)) {
@@ -2534,6 +2572,10 @@ export class FakeEngine implements EngineService {
       return fail('That thread is gone; the digest changed meanwhile.');
     }
     return { ...forgotten.result, undoToken: this.memoryUndo(forgotten.undo) };
+  }
+
+  async restoreWorkThread(input: WorkThreadForget): Promise<ActionResult> {
+    return this.workContext.restore(input);
   }
 
   async setSweepSkip(patterns: string[]): Promise<ActionResult> {

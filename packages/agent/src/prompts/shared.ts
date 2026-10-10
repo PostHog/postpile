@@ -92,6 +92,7 @@ const feedbackLabels: Record<FeedbackKind, string> = {
   memory_confirmed: 'checked this line of the topic memory and confirmed it is right, keep it',
   memory_fixed: 'replaced a line of the topic memory with a corrected one (old line, then the new one)',
   work_context_forget: 'asked to forget this item of the "what you are working on" digest',
+  glance_outdated: "had the agent's assessment of this PR rechecked; it no longer holds, for this reason",
 };
 
 /** "said this line of the topic memory is wrong", for prompts and source quotes. */

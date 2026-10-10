@@ -73,6 +73,35 @@ describe('getMemorySources', () => {
     expect(fact?.sources[0]).toMatchObject({ who: 'lyra', title: 'commented on #1' });
   });
 
+  it('flags the status line out of date in the topic view, and stores it untouched', async () => {
+    const h = await setup();
+    const view = (await h.engine.getTopic('depot'))?.dossier;
+    expect(view?.staleClaims).toEqual([{ path: 'status', reason: 'head_moved' }]);
+    expect(h.store.dossiers.latest('depot')?.dossier.statusNote).toBe('waiting on the warm-up');
+  });
+
+  it('lists a status line the user kept through Recheck as confirmed', async () => {
+    const h = await setup();
+    await h.engine.correctMemory({ kind: 'confirm', factId: null, topicId: 'depot', text: 'Active: waiting on the warm-up', fromRecheck: true });
+    expect((await h.engine.getTopic('depot'))?.dossier?.confirmedClaims).toEqual(['Active: waiting on the warm-up']);
+  });
+
+  it('explains a person with their sources', async () => {
+    const h = await setup();
+    const latest = h.store.dossiers.latest('depot');
+    if (!latest) {
+      throw new Error('no dossier');
+    }
+    h.store.dossiers.add({
+      ...latest,
+      version: 2,
+      dossier: { ...latest.dossier, people: [{ login: 'lyra', role: 'reviewer', note: 'asks about the warm-up', refs: [commentRef], userRefs: [] }] },
+    });
+    const person = await h.engine.getMemorySources({ kind: 'dossier_line', topicId: 'depot', version: 2, path: 'people[0]' });
+    expect(person).toMatchObject({ claim: '@lyra reviewer: asks about the warm-up', check: { state: 'ok' } });
+    expect(person?.sources[0]).toMatchObject({ who: 'lyra' });
+  });
+
   it('returns null for unknown targets', async () => {
     const h = await setup();
     expect(await h.engine.getMemorySources({ kind: 'fact', factId: 'nope' })).toBeNull();

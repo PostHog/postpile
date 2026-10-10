@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { DossierView } from '@postpile/core';
 import { at, makeDossierVersion, makeFact, makeFactRef } from '@postpile/core/fixtures';
-import { blockRefs, claimStaleReason, fixedText, leadingPerson, refLabel, sinceLastLooked } from './memory.ts';
+import { awaitsDossier, blockRefs, canRecheckFact, careText, claimStaleReason, fixedText, leadingPerson, recheckTitle, refLabel, sinceLastLooked } from './memory.ts';
 
 function view(overrides: Partial<DossierView> = {}): DossierView {
   return {
@@ -18,6 +18,7 @@ function view(overrides: Partial<DossierView> = {}): DossierView {
     history: [],
     correctedClaims: [],
     fixedClaims: [],
+    confirmedClaims: [],
     ...overrides,
   };
 }
@@ -102,5 +103,44 @@ describe('blockRefs', () => {
   it('keeps chips that look the same but lead elsewhere', () => {
     const elsewhere = { ...pr, url: 'https://github.com/acme/app/pull/1902#event-9' };
     expect(blockRefs([{ refs: [pr] }, { refs: [elsewhere] }])).toEqual([[pr], [elsewhere]]);
+  });
+});
+
+describe('careText', () => {
+  it('says where a care comes from, and never calls an observed one unconfirmed', () => {
+    expect(careText({ text: 'Cache keys', source: 'tailoring' })).toBe('Cache keys (tailoring)');
+    expect(careText({ text: 'Cache keys', source: 'observed' })).toBe('Cache keys (noticed, not kept as a rule)');
+    const fromChat = { text: 'Cache keys', source: 'observed' as const, userRefs: [{ kind: 'chat' as const, id: '41', at: at(0), quote: 'cache keys!' }] };
+    expect(careText(fromChat)).toBe('Cache keys (from your chat)');
+  });
+});
+
+describe('canRecheckFact', () => {
+  it('offers Recheck on big claims and on any stale fact', () => {
+    const fact = makeFact({ predicate: 'note' });
+    expect(canRecheckFact({ fact, stale: null, recheckable: false })).toBe(false);
+    expect(canRecheckFact({ fact, stale: 'head_moved', recheckable: false })).toBe(true);
+    expect(canRecheckFact({ fact, stale: null, recheckable: true })).toBe(true);
+  });
+});
+
+describe('recheckTitle', () => {
+  const line = (path: string) => ({ factId: null, topicId: 'depot', text: 'x', target: { kind: 'dossier_line' as const, topicId: 'depot', version: 2, path } });
+
+  it('names what the dialog checks', () => {
+    expect(recheckTitle(line('status'))).toBe('Recheck topic status');
+    expect(recheckTitle(line('goal'))).toBe('Recheck topic goal');
+    expect(recheckTitle(line('people[1]'))).toBe('Recheck person');
+    expect(recheckTitle({ factId: 'f1', topicId: null, text: 'x', target: null })).toBe('Recheck fact');
+    expect(recheckTitle({ factId: null, topicId: 'depot', text: 'x', target: null, prKey: 'acme/app#1902' })).toBe("Recheck #1902's assessment");
+    expect(recheckTitle({ factId: null, topicId: 'depot', text: 'x', target: null })).toBe('Recheck topic memory');
+  });
+});
+
+describe('awaitsDossier', () => {
+  it('says a real topic has no dossier yet, never Unsorted', () => {
+    expect(awaitsDossier('topic-depot', null)).toBe(true);
+    expect(awaitsDossier('topic-depot', view())).toBe(false);
+    expect(awaitsDossier('unsorted', null)).toBe(false);
   });
 });

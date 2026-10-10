@@ -216,10 +216,11 @@ with agent, Recheck): while the agent is off or paused, disable it with
   pending.
 - Big memory lines get "Recheck" (and "Forget" on a care): `MemoryLine`
   takes `canRecheck` (dossier status, goal, open questions, people, cares;
-  facts with `FactView.recheckable`), never change lines or activity. The
-  glance's "Recheck" (on its title line, next to "Tell the agent") opens
-  `RecheckDialog` for the whole glance (`prKey` set, no Accept, only Tell
-  the agent / Close). Recheck opens
+  facts by `canRecheckFact`: `recheckable` or stale), never change lines or
+  activity. The glance's "Recheck" (on its title line, next to "Tell the
+  agent") opens `RecheckDialog` for the whole glance (`prKey` set, no
+  Accept; "Mark out of date" on a drop, else Tell the agent / Close). The
+  dialog's title comes from `recheckTitle`. Recheck opens
   `RecheckDialog`: `recheckMemory` runs one agent call and writes nothing;
   the user then accepts the outcome through `correctMemory` (holds ->
   `confirm`, fix -> `fix` with `fixedText`, drop -> `wrong`) or picks "Tell
@@ -228,7 +229,9 @@ with agent, Recheck): while the agent is off or paused, disable it with
   they are not on the `GithubWrite` list, and carry an undo token (toast
   Undo, 6s). A fact changes right away; a dossier line shows struck through
   (`correctedClaims`) or with its fix (`fixedClaims`) until the next sync
-  rewrites the dossier. Never fire `recheckMemory` from an effect without
+  rewrites the dossier, with Restore (`restoreMemoryLine`) all that time; a
+  line kept through Recheck (`confirmedClaims`) passes `kept` and drops its
+  stale badge. Never fire `recheckMemory` from an effect without
   a guard: StrictMode would double the agent call.
 - Instructions writes (`instructionsChat`, `proposeInstructions`,
   `saveInstructions`) are local (instructions.md + SQLite), not on the
@@ -534,7 +537,7 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   (the coral dot before a PR number and on a topic, core `TileView.unreadPrKeys`), `ForWhomChip`,
   `StateWordLabel`, `StackMark`: the "1/3" layers tag, place from
   `stackPlaces` in `lib/stacks.ts` over `tile.stacks`), `icons.tsx` (`Glyph` event set, `PrStateIcon`), `TurnLine`, and for memory `MemoryLine` (text, source chips,
-  stale / marked-wrong / fixed badge, Why? / Recheck / Forget on hover),
+  stale / checked-by-you / forgotten / fixed note, Restore on a struck line, Why? / Recheck / Forget on hover),
   `MemoryButton` ("Forget"), `RecheckDialog`,
   `SourceChip`, `WhyPanel` + `MemorySourceRow` ("Why?"), `DiffView`,
   `InstructionsProposalCard` (the agent pane, the instructions view and under a

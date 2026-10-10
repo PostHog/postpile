@@ -1,6 +1,7 @@
 import {
   DOSSIER_HISTORY_SHOWN,
   dossierVersionNotes,
+  headerLineIssues,
   parseFixedClaimNote,
   topicChangesSince,
   verifyDossier,
@@ -40,6 +41,11 @@ export class MemoryReads {
     return corrections.filter((entry) => entry.kind === 'memory_wrong' || entry.kind === 'memory_forget').map((entry) => entry.note);
   }
 
+  /** Lines the user kept through Recheck after `since`: checked, so not stale until the next version. */
+  private confirmedClaims(corrections: Feedback[]): string[] {
+    return corrections.filter((entry) => entry.kind === 'memory_confirmed').map((entry) => entry.note);
+  }
+
   /** Lines the user replaced with a recheck's fix after `since`. */
   private fixedClaims(corrections: Feedback[]): FixedClaim[] {
     return corrections
@@ -65,13 +71,15 @@ export class MemoryReads {
       createdAt: latest.createdAt,
       dossier: latest.dossier,
       flags: latest.flags,
-      staleClaims: verifyDossier(latest.dossier, world),
+      // The status and goal follow their refs too (a push since): flagged here only, so the stored dossier keeps them.
+      staleClaims: [...verifyDossier(latest.dossier, world), ...headerLineIssues(latest.dossier, world)],
       changesSinceSeen: topicChangesSince(seen, latest, changedFacts, newEvents),
       eventsBehind: triggersSince(store, memberKeys, latest.throughSeq),
       // One extra version, so the oldest shown one has something to compare against.
       history: dossierVersionNotes(store.dossiers.listVersions(topicId, DOSSIER_HISTORY_SHOWN + 1)),
       correctedClaims: this.correctedClaims(corrections),
       fixedClaims: this.fixedClaims(corrections),
+      confirmedClaims: this.confirmedClaims(corrections),
     };
   }
 

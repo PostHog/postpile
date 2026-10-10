@@ -25,6 +25,7 @@ import type {
   McpConnectFrom,
   MemoryCorrection,
   MemoryRecheckRequest,
+  MemoryRestore,
   MemoryRecheckResult,
   OpenedReadResult,
   PendingWritesResult,
@@ -211,6 +212,8 @@ export interface Actions {
   decideRuleProposal(proposalId: string, accept: boolean): Promise<void>;
   /** "Forget", or accepting a recheck outcome. Local memory, not a GitHub write. The toast offers Undo. */
   correctMemory(input: MemoryCorrection): Promise<boolean>;
+  /** "Restore" on a struck-through dossier line: takes the correction back until the next update. Local only. */
+  restoreMemoryLine(input: MemoryRestore): Promise<boolean>;
   /** "Recheck": one agent call, nothing written. Null when the request itself failed. */
   recheckMemory(request: MemoryRecheckRequest): Promise<MemoryRecheckResult | null>;
   /** The repo menu's choice: one repo, or null for all. Local, quiet (no toast). */
@@ -309,6 +312,8 @@ export interface Actions {
   refreshWorkContext(): Promise<void>;
   /** "Forget" on a digest thread. Local only; the toast offers Undo. */
   forgetWorkThread(input: WorkThreadForget): Promise<boolean>;
+  /** "Restore" on a forgotten digest thread, until the next sweep. Local only. */
+  restoreWorkThread(input: WorkThreadForget): Promise<boolean>;
   /** Saves the sweep's skip list to the user's config.json. */
   saveSweepSkip(patterns: string[]): Promise<boolean>;
   /** Setup step 2: starts the sweep job (reads GitHub, one agent call); useSetupSweep polls it. */
@@ -1084,6 +1089,7 @@ export function ActionsProvider(props: { children: ReactNode }) {
       await run(`rule:${proposalId}`, null, () => request('POST', path, { accept }));
     },
     correctMemory: (input) => run(`correct:${input.factId ?? input.text}`, null, () => request('POST', '/api/memory/corrections', input)),
+    restoreMemoryLine: (input) => run(`restore:${input.topicId}:${input.text}`, null, () => request('POST', '/api/memory/restore', input)),
     recheckMemory,
     setRepoScope,
     setRepoQuiet,
@@ -1122,6 +1128,8 @@ export function ActionsProvider(props: { children: ReactNode }) {
     refreshWorkContext,
     forgetWorkThread: (input) =>
       run(`forget:${input.version}:${input.index}`, null, () => request('POST', '/api/work-context/forget', input)),
+    restoreWorkThread: (input) =>
+      run(`restore:${input.version}:${input.index}`, null, () => request('POST', '/api/work-context/restore', input)),
     saveSweepSkip: (patterns) => run('workContext:skip', null, () => request('PUT', '/api/work-context/skip-list', { patterns })),
     startSetupSweep,
     refineSetup,

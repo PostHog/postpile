@@ -172,8 +172,9 @@ export class FakeAgent extends RunnerAgentService {
     );
   }
 
-  /** Like the real hash: the PR's code, text, labels and human discussion (no bot talk), not the dossier version. */
+  /** Like the real hash: the PR's code, text, labels, human discussion (no bot talk) and feedback on it, not the dossier version. */
   override glanceItemInputHash(input: GlanceBatchInput, item: GlanceBatchItem): string {
+    const ownFeedback = input.context.recentFeedback.filter((feedback) => feedback.prKey === item.pr.key).map((feedback) => feedback.id);
     return inputHash(
       'glance_batch',
       item.pr.key,
@@ -187,6 +188,7 @@ export class FakeAgent extends RunnerAgentService {
       input.context.instructions,
       input.context.tailoring,
       input.context.standingRules,
+      ownFeedback,
       ...stackNoteParts(item),
     );
   }

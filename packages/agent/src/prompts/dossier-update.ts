@@ -172,7 +172,7 @@ export const DOSSIER_ANSWER_FIELDS = `  "dossier": {
     "goal": "...", "goalRefs": ["owner/repo#1"],
     "summary": "...", "status": "starting" | "active" | "blocked" | "winding_down" | "finished",
     "statusNote": "...", "statusRefs": ["e4"],
-    "people": [{"login": "alice", "role": "driver" | "contributor" | "reviewer" | "stakeholder", "note": "..."}],
+    "people": [{"login": "alice", "role": "driver" | "contributor" | "reviewer" | "stakeholder", "note": "...", "refs": ["e2"]}],
     "driverTeam": false,
     "openQuestions": [{"text": "...", "askedBy": "carol" | null, "refs": ["e3"]}],
     "timeline": [{"prKey": "owner/repo#1", "role": "...", "refs": ["owner/repo#1"]}],
@@ -234,8 +234,8 @@ How to write the dossier:
   what happened now, keep older ones that still matter (same text, or cite their C id).
 - refs: the short ids above: e1.. for new activity, Q1.. or C1.. to keep the sources of an entry
   of the previous dossier, F1.. for a fact, a member PR key, or I1 / T1.. / U1.. / M1.. for the
-  user's own words. Every line carries refs: goalRefs, statusRefs, each question, timeline entry,
-  care and change. Cite only what the line rests on, at most 3. A line you keep unchanged may
+  user's own words. Every line carries refs: goalRefs, statusRefs, each person, question, timeline
+  entry, care and change. Cite only what the line rests on, at most 3. A line you keep unchanged may
   leave refs empty; it keeps its old sources. Only an observed care may cite activity.
 
 ${NO_CI_RULE}

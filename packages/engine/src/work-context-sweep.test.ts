@@ -157,6 +157,16 @@ describe('Engine.sweepWorkContext', () => {
     expect((await h.engine.getWorkContext()).current?.threads[0]?.forgotten).toBe(false);
   });
 
+  it('Restore takes a Forget back after the undo window, until the next sweep', async () => {
+    answer();
+    await h.engine.sweepWorkContext();
+    await h.engine.forgetWorkThread({ version: 1, index: 0 });
+
+    expect(await h.engine.restoreWorkThread({ version: 1, index: 0 })).toMatchObject({ ok: true });
+    expect((await h.engine.getWorkContext()).current?.threads[0]?.forgotten).toBe(false);
+    expect(await h.engine.restoreWorkThread({ version: 1, index: 0 })).toMatchObject({ ok: false });
+  });
+
   it('refuses a thread that is not in the digest', async () => {
     expect(await h.engine.forgetWorkThread({ version: 3, index: 0 })).toMatchObject({ ok: false });
   });

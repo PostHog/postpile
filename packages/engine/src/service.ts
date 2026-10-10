@@ -42,6 +42,7 @@ import type {
   RecordedSyncProgress,
   MemoryCorrection,
   MemoryRecheckRequest,
+  MemoryRestore,
   MemoryRecheckResult,
   MemorySources,
   MemoryTarget,
@@ -474,6 +475,8 @@ export interface EngineService {
    * sources, the dossier and recent activity. Writes nothing. Capped per day.
    */
   recheckMemory(request: MemoryRecheckRequest): Promise<MemoryRecheckResult>;
+  /** "Restore" on a struck-through dossier line: takes back its corrections until the next dossier update. Local only. */
+  restoreMemoryLine(input: MemoryRestore): Promise<ActionResult>;
   /** "Why?" on a fact or dossier line: its sources and whether it still checks out. Null for an unknown target. */
   getMemorySources(target: MemoryTarget): Promise<MemorySources | null>;
 
@@ -523,6 +526,8 @@ export interface EngineService {
   sweepWorkContext(): Promise<WorkContextSweepResult>;
   /** Forget on a digest thread: logged as feedback, dropped by the next sweep. Undo token for UNDO_WINDOW_MS. */
   forgetWorkThread(input: WorkThreadForget): Promise<ActionResult>;
+  /** "Restore" on a forgotten thread, until the next sweep drops it. */
+  restoreWorkThread(input: WorkThreadForget): Promise<ActionResult>;
   /** Saves the sweep's skip list to the user's config.json; read again on every sweep. */
   setSweepSkip(patterns: string[]): Promise<ActionResult>;
   /** The daily sweep on a timer (desktop app): at start, then every 30 minutes if due. A second call is ignored. */

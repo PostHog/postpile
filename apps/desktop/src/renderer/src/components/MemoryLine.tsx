@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import type { FactRef, MemoryCorrection, MemoryTarget, StaleReason } from '@postpile/core';
 import { useAgentOffReason } from '../api/tools.ts';
+import { useActions } from '../api/actions.tsx';
 import { staleLabel } from '../lib/memory.ts';
 import { staleBadge } from '../lib/staleness.ts';
 import { MemoryButton } from './MemoryButton.tsx';
@@ -22,6 +23,8 @@ interface MemoryLineProps {
   corrected: boolean;
   /** The user accepted a recheck's fix; shown instead until the next sync rewrites the dossier. */
   fixedTo?: string | null;
+  /** The user kept it through Recheck since this dossier version: checked, so never shown out of date. */
+  kept?: boolean;
   refs?: FactRef[];
   /** A big claim (dossier-level, or a fact `recheckable` says is big). Everything else gets no Recheck. */
   canRecheck?: boolean;
@@ -35,18 +38,26 @@ interface MemoryLineProps {
 
 /**
  * One thing the agent remembers: the text with its sources and an "out of
- * date" ("updating" while a sync or catch-up runs), "marked wrong" or "fixed" badge after it, and Why? / Recheck / Forget on
+ * date" ("updating" while a sync or catch-up runs), "checked by you",
+ * "forgotten" or "fixed" note after it, and Why? / Recheck / Forget on
  * hover. Why? opens the sources panel under the line, Recheck the dialog.
  * Recheck and Forget only show on big claims (`canRecheck`, `canForget`).
+ * A struck-through dossier line offers Restore until the next update.
  */
 export function MemoryLine(props: MemoryLineProps) {
   const [whyOpen, setWhyOpen] = useState(false);
   const [recheckOpen, setRecheckOpen] = useState(false);
   const agentOff = useAgentOffReason();
+  const actions = useActions();
   const fixedTo = props.fixedTo ?? null;
   const settled = props.corrected || fixedTo !== null;
-  const greyed = props.stale !== null || settled;
+  const kept = props.kept ?? false;
+  // A kept line counts as checked, a corrected one says so instead.
+  const stale = kept || settled ? null : props.stale;
+  const greyed = stale !== null || settled;
   const { factId, topicId, text } = props.correction;
+  // Only a dossier line stays struck through until the next update; a fact changes at once.
+  const restorable = settled && factId === null && topicId !== null;
   return (
     <div>
       <div className={`group flex items-start gap-2 text-pretty ${props.textClass ?? 'text-[12.5px] leading-[1.45]'}`}>
@@ -60,13 +71,29 @@ export function MemoryLine(props: MemoryLineProps) {
               ))}
             </span>
           )}
-          {props.stale && (
+          {stale && (
             <span className="ml-1.5 rounded bg-amber-soft px-1.5 text-[10px] font-medium whitespace-nowrap text-amber-ink">
-              {staleBadge(staleLabel(props.stale), props.updating)}
+              {staleBadge(staleLabel(stale), props.updating)}
             </span>
           )}
-          {props.corrected && <span className="ml-1.5 text-[10.5px] whitespace-nowrap text-hint">marked wrong, fixed on next sync</span>}
-          {fixedTo !== null && <span className="ml-1.5 text-[10.5px] whitespace-nowrap text-hint">fixed, written in on next sync</span>}
+          {kept && !settled && <span className="ml-1.5 text-[10.5px] whitespace-nowrap text-hint">checked by you</span>}
+          {settled && (
+            // The note and its Restore stay together on one line.
+            <span className="ml-1.5 text-[10.5px] whitespace-nowrap text-hint">
+              {props.corrected ? 'forgotten, gone after the next update' : 'fixed, written in with the next update'}
+              {restorable && topicId !== null && (
+                <button
+                  type="button"
+                  disabled={actions.isBusy(`restore:${topicId}:${text}`)}
+                  title="Take the correction back: the next update keeps the line as it was. Local only."
+                  onClick={() => void actions.restoreMemoryLine({ topicId, text })}
+                  className="ml-1.5 text-accent hover:underline disabled:opacity-50"
+                >
+                  Restore
+                </button>
+              )}
+            </span>
+          )}
         </span>
         <span className={`flex shrink-0 gap-2 pt-px group-focus-within:opacity-100 group-hover:opacity-100 ${whyOpen ? 'opacity-100' : 'opacity-0'}`}>
           {props.why && (
@@ -94,7 +121,7 @@ export function MemoryLine(props: MemoryLineProps) {
           {!settled && props.canRecheck && props.canForget && <MemoryButton correction={{ ...props.correction, kind: 'forget' }} />}
         </span>
       </div>
-      {whyOpen && props.why && <WhyPanel target={props.why} updating={props.updating} onClose={() => setWhyOpen(false)} />}
+      {whyOpen && props.why && <WhyPanel target={props.why} updating={props.updating} kept={kept} onClose={() => setWhyOpen(false)} />}
       {recheckOpen && <RecheckDialog request={{ factId, topicId, text, target: props.why ?? null }} onClose={() => setRecheckOpen(false)} />}
     </div>
   );

@@ -836,7 +836,9 @@ export type FeedbackKind =
   /** The user accepted a recheck's corrected line. The note is fixedClaimNote(). */
   | 'memory_fixed'
   /** A thread of the "what you're working on" digest the user asked to forget. The note holds its title, then its detail. */
-  | 'work_context_forget';
+  | 'work_context_forget'
+  /** A recheck found the PR's glance no longer holds and the user marked it out of date. The note holds the recheck's reason. */
+  | 'glance_outdated';
 
 /** A user correction. The newest few per topic go back into prompts. */
 export interface Feedback {

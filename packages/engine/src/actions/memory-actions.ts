@@ -2,12 +2,15 @@ import { randomBytes } from 'node:crypto';
 import {
   fixedClaimNote,
   isLiveProposal,
+  parseFixedClaimNote,
   UNDO_WINDOW_MS,
   type ActionResult,
   type Fact,
+  type Feedback,
   type FeedbackKind,
   type MemoryCorrection,
   type MemoryCorrectionKind,
+  type MemoryRestore,
   type PendingProposals,
   type PrKey,
   type RelationOverride,
@@ -54,6 +57,17 @@ interface MemoryUndo {
   restoreCheck: Fact | null;
   /** The relation override as it was before a relation correction; previous null means none. */
   override: { key: string; previous: string | null } | null;
+}
+
+/** Feedback kinds that strike a dossier line through until the next update; Restore takes them back. */
+const RESTORABLE_KINDS: FeedbackKind[] = ['memory_wrong', 'memory_forget', 'memory_fixed'];
+
+/** Enough recent topic feedback to find every pending correction of a line. */
+const FEEDBACK_SCANNED_FOR_RESTORE = 50;
+
+/** The dossier line a correction is about: a fix's note holds the old line first. */
+function correctedLine(entry: Feedback): string {
+  return entry.kind === 'memory_fixed' ? (parseFixedClaimNote(entry.note)?.text ?? entry.note) : entry.note;
 }
 
 /** User decisions on engine memory: standing rules, "I have seen this topic" and corrections. */
@@ -200,6 +214,22 @@ export class MemoryActions {
   }
 
   /**
+   * "This no longer holds" on a PR's glance: feedback on the PR, in its
+   * topic. The glance's input hash covers that feedback, so the glance turns
+   * stale and the next look or catch-up writes it again, with the reason in
+   * the prompt. Undoable like any correction.
+   */
+  private outdateGlance(prKey: PrKey, reason: string, at: string): ActionResult {
+    if (!this.store.prs.get(prKey)) {
+      return failed(`${prKey} is not in the store`);
+    }
+    const topicId = this.store.memberships.get(prKey)?.topicId ?? null;
+    const feedbackId = this.logFeedback('glance_outdated', topicId, prKey, reason, at);
+    const token = this.undoable({ feedbackId, reopenFactId: null, closeFactId: null, restoreCheck: null, override: null });
+    return ok('Marked out of date. The agent writes it again on your next look.', token);
+  }
+
+  /**
    * Wrong / Forget, or accepting a recheck (confirm, fix). A fact changes now,
    * so it leaves (or rejoins) every list and prompt right away. A dossier line
    * stays until the topic's next dossier update, which gets the logged
@@ -207,10 +237,35 @@ export class MemoryActions {
    */
   correctMemory(input: MemoryCorrection): ActionResult {
     const at = this.now().toISOString();
+    if (input.prKey) {
+      return this.outdateGlance(input.prKey, input.text, at);
+    }
     if (input.factId === null) {
       return this.correctLine(input, at);
     }
     return this.correctFact({ ...input, factId: input.factId }, at);
+  }
+
+  /**
+   * "Restore" on a struck-through dossier line, for as long as it shows:
+   * deletes the line's corrections logged since the latest dossier version,
+   * so the next update keeps the line. Once that update has read them, there
+   * is nothing left to take back.
+   */
+  restoreLine(input: MemoryRestore): ActionResult {
+    const since = this.store.dossiers.latest(input.topicId)?.createdAt ?? '';
+    const pending = this.store.feedback
+      .recentForTopic(input.topicId, FEEDBACK_SCANNED_FOR_RESTORE)
+      .filter((entry) => entry.createdAt > since && RESTORABLE_KINDS.includes(entry.kind) && correctedLine(entry) === input.text);
+    if (pending.length === 0) {
+      return failed('Nothing to restore: the topic memory was already rewritten.');
+    }
+    this.store.transaction(() => {
+      for (const entry of pending) {
+        this.store.feedback.delete(entry.id);
+      }
+    });
+    return ok('Restored. The next sync keeps that line.');
   }
 
   isMemoryUndo(token: string | null): boolean {

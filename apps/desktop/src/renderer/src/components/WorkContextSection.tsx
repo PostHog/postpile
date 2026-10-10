@@ -16,6 +16,17 @@ function ThreadRow(props: { thread: WorkContextThreadView; version: number; onOp
       <div className="flex items-baseline gap-2">
         <span className={`text-xs font-semibold ${thread.forgotten ? 'text-faint line-through' : 'text-ink'}`}>{thread.title}</span>
         {thread.forgotten && <span className="text-[11px] text-hint">forgotten, gone after the next refresh</span>}
+        {thread.forgotten && (
+          <button
+            type="button"
+            disabled={actions.isBusy(`restore:${version}:${thread.index}`)}
+            title="Take the Forget back: the next refresh keeps this thread. Local only."
+            onClick={() => void actions.restoreWorkThread({ version, index: thread.index })}
+            className="text-[11px] text-accent hover:underline disabled:opacity-50"
+          >
+            Restore
+          </button>
+        )}
         <span className="ml-auto flex shrink-0 gap-2.5">
           <button
             type="button"

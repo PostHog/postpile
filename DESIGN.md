@@ -1632,7 +1632,7 @@ cuts after parsing, so one long answer cannot grow later prompts.
 | `openQuestions[]` | `{text, askedBy, refs}` | 8, text 200 |
 | `timeline[]` | `{prKey, role}` oldest first: what each PR does for the initiative | 40, role 120 |
 | `earlier` | history of PRs rolled off the timeline | 600 |
-| `userCares[]` | `{text, source: instructions/tailoring/feedback/observed}`; an entry naming a source the prompt did not carry is dropped, `observed` renders as "observed, unconfirmed" | 6, text 160 |
+| `userCares[]` | `{text, source: instructions/tailoring/feedback/observed}`; an entry naming a source the prompt did not carry is dropped, `observed` renders as "noticed, not kept as a rule", or "from your chat" when a chat turn backs it (2026-10-10: "unconfirmed" read like "you never said it") | 6, text 160 |
 | `recentChanges[]` | `{at, text, refs}` newest first, rolling; `at` is the update time for new entries, carried entries (same text or cited C id) keep theirs | 12, text 160 |
 
 PR state, author and reviewers are **not** stored in the dossier. The
@@ -1769,6 +1769,15 @@ read time in `getTopic` / `getPr` (does not write, only sets
 | referenced comment, review or commit gone from the snapshot | stale `source_deleted` |
 | dossier question whose ref sits in a resolved review thread | stale claim `thread_resolved` |
 | dossier timeline entry for a PR that is no longer a member | stale claim `left_topic`, and the PR is in the next delta's `leftPrKeys` |
+| dossier status or goal line whose refs fail (`headerLineIssues`: head moved for the status, PR missing, source deleted) | stale claim in the read model only (2026-10-10) |
+
+The status and goal lines are checked in the read model
+(`MemoryReads.dossierView`), not in `verifyDossier`: `withoutStaleClaims`
+drops what `verifyDossier` flags before a version is stored, and a push
+must never drop the status line. A line the user kept through Recheck
+since the latest version (`DossierView.confirmedClaims`, matched by text)
+counts as checked: no stale badge, its "Why?" says "Checked by you after a
+recheck".
 
 Stale facts are left out of every prompt's context, shown greyed in the
 UI, and handed to the topic's next dossier update as the recheck list,
@@ -2111,8 +2120,10 @@ events each. The zod-checked answer is `{outcome: holds | fix | drop,
 text, why}`; a fix without a new line reads as holds. Nothing is written
 until the user accepts in the dialog, through `correctMemory`:
 
-- holds -> `confirm`: a fact gets `markVerified` (not stale, verified now);
-  a dossier line logs `memory_confirmed` so the next update keeps it.
+- holds -> `confirm` ("Keep it"): a fact gets `markVerified` (not stale,
+  verified now); a dossier line logs `memory_confirmed` so the next update
+  keeps it, and until then it shows "checked by you" instead of out of
+  date (`confirmedClaims`, 2026-10-10).
 - fix -> `fix` + `fixedText`: a fact is closed (superseded) by a copy with
   the corrected text and the same refs; a dossier line logs
   `memory_fixed` with `fixedClaimNote` (old line, "→", new line) and shows
@@ -2127,19 +2138,30 @@ until the user accepts in the dialog, through `correctMemory`:
 Every line keeps "Why?"; Recheck (and Forget) only show on:
 
 - Dossier-level claims: status, goal, open questions, people's roles, what
-  you care about (Forget stays on cares). Not the PR timeline and not the
+  you care about (Forget stays on cares). People carry `refs` / `userRefs`
+  like other lines (2026-10-10), so each has "Why?" (`people[i]`). Not the PR timeline and not the
   "since you last looked" change lines, which retell events.
 - Facts whose predicate is big (`isBigClaim` in core `big-claims.ts`,
   shipped as `FactView.recheckable`): `drives`, `owns` (person roles),
   `decided` (decisions), `blocked_by` (risks), `user_cares`. Trivial and
   never rechecked: `reviews` (reviewer assigned), `works_on`, `part_of`,
   `depends_on` (stack relations), `status` (short state notes), `note`.
+- Any fact while it is stale (2026-10-10, `canRecheckFact`): the app says
+  it may be wrong, so the user can check it whatever its predicate.
 - The PR's glance as a whole: "Recheck" on the glance's title line (the
   action bar until 2026-10-05) ("Recheck this assessment") sends the joined glance as the claim with
   `MemoryRecheckRequest.prKey`; the engine reads it against that PR, its
   newest events and its topic's dossier (`recordedIn`: "Glance: ..."). A
   glance is not memory, so the dialog has no Accept: it shows the outcome,
-  offers "Tell the agent what's wrong" and Close.
+  offers "Tell the agent what's wrong" and Close. On "This no longer
+  holds" it offers "Mark out of date" instead of Close (2026-10-10):
+  `correctMemory` with `prKey` logs `glance_outdated` feedback on the PR
+  (the recheck's reason as the note). The glance hash covers feedback on
+  its PR, so the glance turns stale and the next look or catch-up writes it
+  again. No manual refresh button (2026-09-29 holds).
+- The dialog's title names what it checks ("Recheck topic status",
+  "Recheck #1902's assessment", `recheckTitle`): one screen can hold
+  several Recheck links.
 
 Every correction returns an undo token (`memory:` prefix) valid for
 `UNDO_WINDOW_MS`: undo deletes the feedback row (the only non-append
@@ -2147,6 +2169,17 @@ write on `feedback`), reopens a closed fact, closes a fix's replacement,
 restores a confirmed fact's check state, or restores a relation override.
 The undo map is in memory, like the mark-read queue. The relation "Wrong"
 (with the real relation) stays as it was; it is a choice, not a claim.
+
+**Restore** (2026-10-10). The toast's 6 s was too short to catch a wrong
+click. A dossier line marked wrong, forgotten or fixed stays struck
+through until the next update ("forgotten, gone after the next update",
+"fixed, written in with the next update") and offers Restore all that
+time: `restoreMemoryLine` (`POST /api/memory/restore`) deletes the line's
+`memory_wrong` / `memory_forget` / `memory_fixed` rows logged since the
+latest version. A forgotten work thread offers the same until the next
+sweep (`restoreWorkThread`, `POST /api/work-context/restore`). Facts change
+at once and leave the list, so they keep the toast's Undo only. Local
+writes, no GitHub side, so the longer window carries no risk.
 
 **Lessons from your reviews** (2026-10-02, with a second opinion from
 another model). Some glances miss: the user requests changes on a PR the
@@ -2294,7 +2327,14 @@ the shared `PROMPT_VERSION` stays, so glances and sets are not regenerated.
 `?topic=&version=&path=`) describes each source from stored snapshots
 (who, what, when, quote, link) and a verify state: ok, stale (reason),
 closed, user_only, unsourced. The status line counts as stale when the
-head moved since its refs; questions use `verifyDossier`.
+head moved since its refs; questions use `verifyDossier`. The line itself
+shows the same badge (`headerLineIssues`, see Verify-before-use), not only
+its "Why?".
+
+A topic without a dossier says so under its summary ("No dossier yet: the
+agent writes one with the next update of this topic."), never Unsorted. The
+PR pane's facts list reads "No lasting facts about this PR yet." when
+empty: the glance above it is not a fact.
 
 Routes: `GET/POST /api/instructions`, `GET/POST /api/instructions/chat`,
 `POST /api/instructions/proposals`, `GET /api/memory/sources`.

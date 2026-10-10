@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { MemoryCorrection, MemoryRecheckRequest, MemoryRecheckResult } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
+import { recheckTitle } from '../lib/memory.ts';
 import { Button } from './Button.tsx';
 import { DiffView } from './DiffView.tsx';
 import { quoteLineDraft, useTellAgent } from './TellAgent.tsx';
@@ -26,8 +27,10 @@ function Verdict(props: { title: string; tone: string; why: string }) {
 
 /**
  * "Recheck" on a memory line: the agent checks it against GitHub, then the
- * user accepts the outcome (keep, fix, drop) or tells the agent in the tile
- * chat. Nothing changes until Accept; Accept's toast offers Undo.
+ * user accepts the outcome (Keep it, Accept fix, Accept) or tells the agent
+ * in the tile chat. Nothing changes until then; the toast offers Undo. On a
+ * glance, "no longer holds" offers Mark out of date: the glance turns stale
+ * and the next look writes it again.
  */
 export function RecheckDialog(props: RecheckDialogProps) {
   const actions = useActions();
@@ -60,6 +63,8 @@ export function RecheckDialog(props: RecheckDialogProps) {
   // A glance is not a memory line: nothing to accept into memory. The outcome
   // informs; to act on it, the user tells the agent (or the next sync rewrites it).
   const assessment = Boolean(request.prKey);
+  // Status, goal and the glance can all say "Recheck" on one screen: the title names which one.
+  const title = recheckTitle(request);
   const closeButton = (
     <Button variant="primary" onClick={onClose}>
       Close
@@ -107,7 +112,7 @@ export function RecheckDialog(props: RecheckDialogProps) {
           closeButton
         ) : (
           <Button variant="primary" disabled={busy} onClick={() => void accept({ ...correction, kind: 'confirm' })} title="Keep it and stop asking about it">
-            Accept
+            Keep it
           </Button>
         )}
       </>
@@ -133,11 +138,20 @@ export function RecheckDialog(props: RecheckDialogProps) {
     );
   } else if (result?.outcome === 'drop') {
     body = <Verdict title="This no longer holds" tone="text-status-bad" why={result.why} />;
+    const reason = result.why;
     buttons = (
       <>
         {tellButton}
-        {assessment ? (
-          closeButton
+        {assessment && request.prKey ? (
+          // No manual glance refresh (2026-09-29): this only makes the glance stale, so the next look writes it again.
+          <Button
+            variant="primary"
+            disabled={actions.isBusy(`correct:${reason}`)}
+            onClick={() => void accept({ kind: 'wrong', factId: null, topicId: request.topicId, text: reason, prKey: request.prKey ?? undefined, fromRecheck: true })}
+            title="Marks this assessment out of date; the agent writes it again on your next look"
+          >
+            Mark out of date
+          </Button>
         ) : (
           <Button variant="primary" disabled={busy} onClick={() => void accept(correction)} title="Forget this line">
             Accept
@@ -149,9 +163,9 @@ export function RecheckDialog(props: RecheckDialogProps) {
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-ink/20" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <div role="dialog" aria-modal="true" aria-label="Recheck" className="flex w-[460px] max-w-[calc(100vw-32px)] flex-col gap-3.5 rounded-tile bg-surface p-5 shadow-menu">
+      <div role="dialog" aria-modal="true" aria-label={title} className="flex w-[460px] max-w-[calc(100vw-32px)] flex-col gap-3.5 rounded-tile bg-surface p-5 shadow-menu">
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-semibold tracking-[0.04em] text-muted">{assessment ? 'RECHECK THIS ASSESSMENT' : 'RECHECK'}</span>
+          <span className="text-[11px] font-semibold tracking-[0.04em] text-muted uppercase">{title}</span>
           <button type="button" aria-label="Close" onClick={onClose} className="ml-auto text-faint hover:text-ink">
             ✕
           </button>

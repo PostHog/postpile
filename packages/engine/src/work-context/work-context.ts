@@ -7,7 +7,7 @@ import {
   type WorkThreadForget,
 } from '@postpile/core';
 import type { Store } from '@postpile/store';
-import { forgetNote, forgottenTitles } from './forgotten.ts';
+import { FORGOTTEN_IN_SWEEP, forgetNote, forgottenTitles } from './forgotten.ts';
 import type { WorkContextSweeper } from './sweeper.ts';
 
 /**
@@ -109,6 +109,28 @@ export class WorkContextMemory {
     const token = `${WORK_CONTEXT_UNDO_PREFIX}${randomBytes(6).toString('hex')}`;
     this.undos.set(token, { feedbackId: feedback.id, until: nowMs + UNDO_WINDOW_MS });
     return { ok: true, message: `Forgot "${thread.title}". The next sweep leaves it out.`, undoToken: token };
+  }
+
+  /**
+   * "Restore" on a struck-through thread, until the next sweep drops it:
+   * deletes its Forget rows (matched by title, the way forgotten threads are).
+   */
+  restore(input: WorkThreadForget): ActionResult {
+    const thread = this.store.workContext.get(input.version)?.digest.threads[input.index];
+    if (!thread) {
+      return { ok: false, message: 'That thread is gone; the digest changed meanwhile.', undoToken: null };
+    }
+    const title = thread.title.trim().toLowerCase();
+    const rows = this.store.feedback
+      .listByKind('work_context_forget', FORGOTTEN_IN_SWEEP)
+      .filter((feedback) => (feedback.note.split('\n')[0] ?? '').trim().toLowerCase() === title);
+    if (rows.length === 0) {
+      return { ok: false, message: 'Nothing to restore: that thread is not forgotten.', undoToken: null };
+    }
+    for (const row of rows) {
+      this.store.feedback.delete(row.id);
+    }
+    return { ok: true, message: `Restored "${thread.title}". The next sweep keeps it.`, undoToken: null };
   }
 
   isUndo(token: string | null): boolean {

@@ -245,6 +245,7 @@ export const dossierOutput = z.object({
         login: text.min(1),
         role: z.enum(['driver', 'contributor', 'reviewer', 'stakeholder']).catch('contributor'),
         note: text.default(''),
+        refs: refIds,
       }),
     )
     .default([]),

@@ -54,6 +54,14 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - A failed glance no longer shows the parser's reason ("left out of the answer") in the card; it moved to the tooltip.
 - The glance card keeps its height while a new glance is written, so Approve no longer moves under the cursor when it lands.
 - Long words without spaces (cache keys, branch names) in a glance wrap instead of running out of the pane.
+- A topic's Status and Goal lines now show "out of date" when the PR moved since they were written. Before, only their "Why?" said so.
+- "Keep it" on a recheck that found a line still right now marks it "checked by you". Before, the line kept saying "Out of date".
+- Facts the app shows as out of date now have Recheck, whatever they are about.
+- People in the dossier have "Why?", like every other line.
+- The Recheck dialog names what it checks, such as "Recheck topic status" or "Recheck #1902's assessment". When a recheck finds the agent's assessment of a PR no longer holds, "Mark out of date" has the agent write it again on your next look.
+- A line you marked wrong, forgot or fixed offers Restore until the next update, and a forgotten "What you're working on" thread until the next refresh. Before, only the toast's Undo for a few seconds could take it back.
+- A topic without a dossier says "No dossier yet". An empty facts list on a PR now reads "No lasting facts about this PR yet." instead of "Nothing learned".
+- A care the agent noticed reads "noticed, not kept as a rule", or "from your chat", instead of "observed, unconfirmed".
 
 ## 0.27.2 (2026-10-09)
 

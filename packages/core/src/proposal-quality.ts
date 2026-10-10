@@ -64,6 +64,7 @@ const FEEDBACK_VOICE: Record<FeedbackKind, 'words' | 'click' | 'event'> = {
   memory_confirmed: 'words',
   memory_fixed: 'words',
   work_context_forget: 'words',
+  glance_outdated: 'click',
 };
 
 /** True when the row states a preference in words: a worded kind, or a click with a note the user typed. */

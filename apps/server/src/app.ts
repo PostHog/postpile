@@ -56,6 +56,7 @@ const memoryCorrectionBody = z.object({
   relation: z.enum(['team', 'routed', 'fyi']).optional(),
   fixedText: z.string().optional(),
   fromRecheck: z.boolean().optional(),
+  prKey: z.string().min(1).optional(),
 });
 
 /** Same target shape as the "Why?" query, as JSON. */
@@ -404,6 +405,10 @@ export function createApp(
     return c.json(await engine.decideRuleProposal(c.req.param('id'), body.accept));
   });
   app.post('/api/memory/corrections', async (c) => c.json(await engine.correctMemory(memoryCorrectionBody.parse(await c.req.json()))));
+  app.post('/api/memory/restore', async (c) => {
+    const body = z.object({ topicId: z.string().min(1), text: z.string().min(1) }).parse(await c.req.json());
+    return c.json(await engine.restoreMemoryLine(body));
+  });
   // Runs one agent call (seconds); the answer is only shown, correctMemory applies it.
   app.post('/api/memory/recheck', async (c) => c.json(await engine.recheckMemory(memoryRecheckBody.parse(await c.req.json()))));
   app.get('/api/memory/sources', async (c) => {
@@ -445,6 +450,10 @@ export function createApp(
   app.post('/api/work-context/forget', async (c) => {
     const body = z.object({ version: z.number().int().positive(), index: z.number().int().min(0) }).parse(await c.req.json());
     return c.json(await engine.forgetWorkThread(body));
+  });
+  app.post('/api/work-context/restore', async (c) => {
+    const body = z.object({ version: z.number().int().positive(), index: z.number().int().min(0) }).parse(await c.req.json());
+    return c.json(await engine.restoreWorkThread(body));
   });
   // The sweep's skip list, saved to the user's config.json.
   app.put('/api/work-context/skip-list', async (c) => {

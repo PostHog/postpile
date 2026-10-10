@@ -4,6 +4,7 @@ import type {
   DossierCare,
   DossierCareSource,
   DossierFlag,
+  DossierPerson,
   DossierPrEntry,
   DossierQuestion,
   DossierRelation,
@@ -142,6 +143,16 @@ function toQuestions(answer: DossierAnswer['dossier']['openQuestions'], input: D
 }
 
 /** PRs that left or never were members do not belong on the timeline. */
+/** A person kept with the same role and note keeps the sources it had when the answer cites none. */
+function toPeople(answer: DossierAnswer['dossier']['people'], input: DossierUpdateInput, refs: DossierRefs): DossierPerson[] {
+  const previous = input.previous?.dossier.people ?? [];
+  return answer.map((person) => {
+    const name = login(person.login);
+    const old = previous.find((candidate) => candidate.login === name && candidate.role === person.role && candidate.note === person.note);
+    return { login: name, role: person.role, note: person.note, ...lineSources(person.refs, refs, sourcesOf(old)) };
+  });
+}
+
 function toTimeline(answer: DossierAnswer['dossier']['timeline'], input: DossierUpdateInput, refs: DossierRefs): DossierPrEntry[] {
   const memberKeys = new Set(input.prs.map((pr) => pr.key));
   const previous = input.previous?.dossier.timeline ?? [];
@@ -185,7 +196,7 @@ function toDossier(
     status: answer.status,
     statusNote: withoutMetaLead(answer.statusNote),
     statusSources: lineSources(answer.statusRefs, refs, sameStatus ? previous.statusSources : undefined),
-    people: answer.people.map((p) => ({ login: login(p.login), role: p.role, note: p.note })),
+    people: toPeople(answer.people, input, refs),
     // The team drives only while nobody does: a named driver is the clearer answer. Only standing topics have one.
     driverTeam: kind === 'standing' && answer.driverTeam && !answer.people.some((p) => p.role === 'driver'),
     openQuestions: toQuestions(answer.openQuestions, input, refs),

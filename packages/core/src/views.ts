@@ -781,6 +781,23 @@ export interface MemoryCorrection {
   fixedText?: string;
   /** Set when the user accepts a "Recheck" outcome, so telemetry can count recheck decisions. */
   fromRecheck?: boolean;
+  /**
+   * kind wrong on a PR's glance ("Recheck this assessment" found it no longer
+   * holds). A glance is not memory: nothing is dropped, the logged feedback
+   * makes the glance stale, so the next look writes it again. `text` holds
+   * the recheck's reason.
+   */
+  prKey?: PrKey;
+}
+
+/**
+ * "Restore" on a struck-through dossier line: takes back the user's pending
+ * corrections of it (wrong, forget, fix) until the next dossier update has
+ * read them. Matched by the line's text, like the corrections themselves.
+ */
+export interface MemoryRestore {
+  topicId: string;
+  text: string;
 }
 
 /** "Recheck" on a fact or dossier line: what the agent should look at. */

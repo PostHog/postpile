@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { DossierStatus, DossierView, TopicDetail, TopicListItem, TopicProposal, TopicSection, UserRole } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
-import { fixedText, statusLabel } from '../lib/memory.ts';
+import { awaitsDossier, claimStaleReason, fixedText, statusLabel } from '../lib/memory.ts';
 import { lineTarget } from '../lib/sources.ts';
 import { updatingNow } from '../lib/staleness.ts';
 import { proposalText, suggestedBy } from '../lib/proposals.ts';
@@ -67,6 +67,8 @@ function DossierSummary(props: { dossier: DossierView; topicId: string; updating
   const { dossier } = view;
   const statusText = dossier.statusNote ? `${statusLabel(dossier.status)}: ${dossier.statusNote}` : statusLabel(dossier.status);
   const tone = STATUS_TONES[dossier.status];
+  const statusKept = view.confirmedClaims.includes(statusText);
+  const statusStale = statusKept ? null : claimStaleReason('status', view.staleClaims);
   return (
     <>
       {/* Labels in a 48px column, so the values start on the same line as the timeline text. */}
@@ -74,10 +76,11 @@ function DossierSummary(props: { dossier: DossierView; topicId: string; updating
         <span className="pt-px text-[11.5px] font-medium text-hint">Status</span>
         <MemoryLine
           correction={{ kind: 'wrong', factId: null, topicId, text: statusText }}
-          stale={null}
+          stale={statusStale}
           updating={props.updating}
           corrected={view.correctedClaims.includes(statusText)}
           fixedTo={fixedText(view, statusText)}
+          kept={statusKept}
           canRecheck
           why={lineTarget(topicId, view, 'status')}
           textClass="text-[13px] leading-normal"
@@ -86,16 +89,18 @@ function DossierSummary(props: { dossier: DossierView; topicId: string; updating
             <span aria-hidden="true" className={`size-[5px] rounded-full ring-2 ${tone.dot}`} />
             {statusLabel(dossier.status)}
           </span>
-          <span className="text-ink">{dossier.statusNote}</span>
+          {/* Greyed with the rest of the line while it is out of date. */}
+          <span className={statusStale ? '' : 'text-ink'}>{dossier.statusNote}</span>
         </MemoryLine>
         {dossier.goal && <span className="pt-px text-[11.5px] font-medium text-hint">Goal</span>}
         {dossier.goal && (
           <MemoryLine
             correction={{ kind: 'wrong', factId: null, topicId, text: dossier.goal }}
-            stale={null}
+            stale={claimStaleReason('goal', view.staleClaims)}
             updating={props.updating}
             corrected={view.correctedClaims.includes(dossier.goal)}
             fixedTo={fixedText(view, dossier.goal)}
+            kept={view.confirmedClaims.includes(dossier.goal)}
             canRecheck
             why={lineTarget(topicId, view, 'goal')}
             textClass="text-[13px] leading-normal"
@@ -245,6 +250,8 @@ export function TopicHeader(props: {
       )}
       {topic.summary && <p className="mt-4 max-w-[600px] text-[13.5px] leading-[1.6] tracking-[-0.003em] text-pretty text-ink-2">{topic.summary}</p>}
       {dossier && <DossierSummary dossier={dossier} topicId={topic.id} updating={updating} />}
+      {/* Without this line "not written yet" and "nothing to say" look the same. */}
+      {awaitsDossier(topic.id, dossier) && <p className="mt-3.5 text-xs text-hint">No dossier yet: the agent writes one with the next update of this topic.</p>}
       {topic.tailoring && (
         <div className="mt-2.5 flex items-start gap-2 text-xs leading-normal text-muted">
           <span className="text-faint">
