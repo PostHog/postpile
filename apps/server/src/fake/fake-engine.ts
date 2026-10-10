@@ -220,7 +220,7 @@ import {
   type QuietReadView,
   withViewerReaction,
 } from '@postpile/core';
-import { AgentRefresher, approveNoteBody, AutoSyncSchedule, LivePoller, MemoryPingHold, NEW_COMMITS_SINCE_LOOKED, nextApproveOpener, NoteCoverReader, PingDelivery, topicChatId, UNSORTED_TOPIC_ID, type AutoSyncOptions, type EngineService, type GitHubQuota, type LivePollOptions, type PollCycle } from '@postpile/engine';
+import { AgentRefresher, approveNoteBody, AutoSyncSchedule, LivePoller, MemoryPingHold, muteMessage, NEW_COMMITS_SINCE_LOOKED, nextApproveOpener, NoteCoverReader, PingDelivery, readMessage, topicChatId, unmuteMessage, UNSORTED_TOPIC_ID, type AutoSyncOptions, type EngineService, type GitHubQuota, type LivePollOptions, type PollCycle } from '@postpile/engine';
 import { FakeCatchUp } from './fake-catch-up.ts';
 import { FakeInstructions } from './fake-instructions.ts';
 import { FakeLessons } from './fake-lessons.ts';
@@ -251,6 +251,14 @@ interface MarkReadBatch {
   eventIds: string[];
   handledPrKeys: PrKey[];
   queuedAt: number;
+}
+
+/** What a fake mark-read queued: enough for the engine's toast helpers (readMessage, muteMessage, unmuteMessage). */
+interface FakeReadBatch {
+  token: string;
+  writesOn: boolean;
+  threadIds: string[];
+  subscription: FakeSubscription | null;
 }
 
 export interface FakeEngineOptions {
@@ -1638,7 +1646,7 @@ export class FakeEngine implements EngineService {
     }
     const marked = this.markPrsRead([prKey], [prKey], 'detail', this.tilesHolding(prKey)[0]?.id ?? null);
     const removed = ok(`Removed ${slug}'s review request, ${unsubscribed}`);
-    return marked.undoToken ? { ...removed, settleToken: marked.undoToken } : removed;
+    return { ...removed, settleToken: marked.token };
   }
 
   /**
@@ -1686,7 +1694,7 @@ export class FakeEngine implements EngineService {
     tileId: string | null,
     extraThreads: NotificationThread[] = [],
     subscription: FakeSubscription | null = null,
-  ): ActionResult {
+  ): FakeReadBatch {
     // Read the GitHub flags before the events change: the fake derives a thread's first flag from them.
     const githubThreads = this.threadsOnGitHub();
     const threads = [...githubThreads.filter((thread) => prKeys.includes(threadPrKey(thread) ?? '')), ...extraThreads]
@@ -1705,10 +1713,12 @@ export class FakeEngine implements EngineService {
     };
     this.batches.push(batch);
     this.writes.queued({ ...batch, origin, tileId, threads, prKeys, handleKeys, local, writesOn, subscription });
-    if (!changeHere) {
-      return ok('Marked read: pending until you unlock GitHub writes, stays unread here until then', batch.token);
-    }
-    return ok(`marked ${batch.eventIds.length} events read`, batch.token);
+    return { token: batch.token, writesOn, threadIds: threads.map((thread) => thread.id), subscription };
+  }
+
+  /** The engine's toast for a mark-read: "Marked read", or pending while writes are locked. */
+  private markedRead(batch: FakeReadBatch, base = 'Marked read'): ActionResult {
+    return ok(readMessage(base, batch), batch.token);
   }
 
   async markRead(tileId: string): Promise<ActionResult> {
@@ -1718,7 +1728,7 @@ export class FakeEngine implements EngineService {
     }
     const keys = tile.members.map((member) => member.prKey);
     const pinged = tile.members.filter((member) => member.provenance.kind !== 'pulled_in').map((member) => member.prKey);
-    return this.markPrsRead(keys, pinged, 'tile', tileId);
+    return this.markedRead(this.markPrsRead(keys, pinged, 'tile', tileId));
   }
 
   /** Like TileActions.markTilesRead: every tile's read in one batch, one undo token. */
@@ -1749,7 +1759,8 @@ export class FakeEngine implements EngineService {
       return fail(`Nothing marked read; skipped ${skipped.join('; ')}`);
     }
     const scope = tilesReadScope(backed);
-    const result = this.markPrsRead(scope.prKeys, scope.handleKeys, 'tile', backed.length === 1 ? (backed[0]?.id ?? null) : null);
+    const batch = this.markPrsRead(scope.prKeys, scope.handleKeys, 'tile', backed.length === 1 ? (backed[0]?.id ?? null) : null);
+    const result = this.markedRead(batch, backed.length === 1 ? 'Marked read' : `Marked ${backed.length} tiles read`);
     return skipped.length === 0 ? result : { ...result, message: `${result.message}; skipped ${skipped.join('; ')}` };
   }
 
@@ -1763,7 +1774,7 @@ export class FakeEngine implements EngineService {
     if (!member) {
       return fail(`${prKey} is not in tile ${tileId}`);
     }
-    return this.markPrsRead([prKey], member.provenance.kind === 'pulled_in' ? [] : [prKey], 'detail', tileId);
+    return this.markedRead(this.markPrsRead([prKey], member.provenance.kind === 'pulled_in' ? [] : [prKey], 'detail', tileId));
   }
 
   private tilesHolding(prKey: PrKey): Tile[] {
@@ -1777,9 +1788,9 @@ export class FakeEngine implements EngineService {
     }
     const key = threadPrKey(thread);
     if (key !== null && this.data.prs.some((pr) => pr.key === key)) {
-      return this.markPrsRead([key], [key], 'debug', this.tilesHolding(key)[0]?.id ?? null);
+      return this.markedRead(this.markPrsRead([key], [key], 'debug', this.tilesHolding(key)[0]?.id ?? null));
     }
-    return this.markPrsRead([], [], 'debug', null, [thread]);
+    return this.markedRead(this.markPrsRead([], [], 'debug', null, [thread]));
   }
 
   /**
@@ -1800,9 +1811,9 @@ export class FakeEngine implements EngineService {
       return NOT_OPENED;
     }
     const marked = this.markPrsRead([prKey], [prKey], 'detail', this.tilesHolding(prKey)[0]?.id ?? null);
-    const batch = this.batches.find((candidate) => candidate.token === marked.undoToken);
+    const batch = this.batches.find((candidate) => candidate.token === marked.token);
     const undoUntil = batch ? new Date(batch.queuedAt + UNDO_WINDOW_MS).toISOString() : null;
-    return { marked: true, undoToken: marked.undoToken, undoUntil };
+    return { marked: true, undoToken: marked.token, undoUntil };
   }
 
   /** Whether a read of the PR changes anything in the sample: unseen events, or not handled yet. */
@@ -1826,16 +1837,16 @@ export class FakeEngine implements EngineService {
     const index = undoToken ? this.batches.findIndex((batch) => batch.token === undoToken) : this.batches.length - 1;
     const batch = this.batches[index];
     if (!batch) {
-      return fail('nothing to undo');
+      return fail('Nothing to undo: already sent to GitHub');
     }
     this.batches.splice(index, 1);
     if (this.now().getTime() - batch.queuedAt > UNDO_WINDOW_MS) {
-      return fail('undo window closed');
+      return fail('Nothing to undo: already sent to GitHub');
     }
     this.writes.undone(batch.token);
     this.revertLocal(batch.eventIds, batch.handledPrKeys);
     this.putBackSnoozes(batch.token);
-    return ok('undone');
+    return ok('Undone');
   }
 
   private applySnoozeWrites(writes: SnoozeWrites): void {
@@ -1862,6 +1873,9 @@ export class FakeEngine implements EngineService {
   /** Like TileActions.mute: the mute, a mark-read of the tile and the unsubscribe in one batch, one undo token. */
   private mute(tile: Tile): ActionResult {
     const writes = snoozeWrites(tile, { kind: 'start', condition: { kind: 'muted' }, at: this.timestamp() });
+    if (writes.put.length === 0) {
+      return fail(`nothing to mute in tile ${tile.id}`);
+    }
     const keys = writes.put.map((snooze) => snooze.prKey);
     const before = keys.flatMap((key) => this.snoozes.get(key) ?? []);
     this.applySnoozeWrites(writes);
@@ -1869,11 +1883,8 @@ export class FakeEngine implements EngineService {
     const subscription = threads.length > 0 ? { subscribed: false, threads } : null;
     const scope = tileReadScope(tile);
     const marked = this.markPrsRead(scope.prKeys, scope.handleKeys, 'tile', tile.id, [], subscription);
-    if (marked.undoToken) {
-      this.snoozeUndos.set(marked.undoToken, { remove: keys, restore: before });
-    }
-    const github = this.writes.isEnabled() ? 'Unsubscribed on GitHub in a few seconds' : 'Unsubscribing on GitHub is pending until you unlock GitHub writes';
-    return ok(`Muted until you're mentioned. ${github}`, marked.undoToken);
+    this.snoozeUndos.set(marked.token, { remove: keys, restore: before });
+    return ok(muteMessage(marked), marked.token);
   }
 
   async snooze(tileId: string, condition: SnoozeCondition): Promise<ActionResult> {
@@ -1885,7 +1896,7 @@ export class FakeEngine implements EngineService {
       return this.mute(tile);
     }
     this.applySnoozeWrites(snoozeWrites(tile, { kind: 'start', condition, at: this.timestamp() }));
-    return ok(`snoozed until ${condition.kind}`);
+    return ok('Snoozed');
   }
 
   /** Like TileActions.unsnooze: a tile id that no longer exists fails; an unmute subscribes again through the fake queue. */
@@ -1905,11 +1916,8 @@ export class FakeEngine implements EngineService {
       return ok('Unmuted');
     }
     const marked = this.markPrsRead([], [], 'tile', tileId, [], { subscribed: true, threads });
-    if (marked.undoToken) {
-      this.snoozeUndos.set(marked.undoToken, { remove: [], restore: snoozes });
-    }
-    const github = this.writes.isEnabled() ? 'Subscribed again on GitHub in a few seconds' : 'Subscribing you again on GitHub is pending until you unlock GitHub writes';
-    return ok(`Unmuted. ${github}`, marked.undoToken);
+    this.snoozeUndos.set(marked.token, { remove: [], restore: snoozes });
+    return ok(unmuteMessage(marked), marked.token);
   }
 
   /** Agent actions fail with the headline while the agent is off, as the engine's do. */
@@ -2089,17 +2097,16 @@ export class FakeEngine implements EngineService {
       const dropped = stack ? stack.prKeys : [prKey];
       tile.members = tile.members.filter((member) => !dropped.includes(member.prKey));
       tile.stacks = tile.stacks.filter((candidate) => candidate !== stack);
-      return ok(`dropped ${dropped.join(', ')} from the set`);
+      return ok('Removed from the set');
     }
     if (input.kind === 'wrong_topic' && input.targetTopicId) {
       tile.topicId = input.targetTopicId;
-      return ok(`moved to ${input.targetTopicId}`);
+      return ok('Moved');
     }
     if (input.kind === 'not_mine') {
       // Like the engine: a mark-read of the PR (or the whole tile) with undo.
       const keys = input.prKey ? [input.prKey] : tile.members.map((member) => member.prKey);
-      const result = this.markPrsRead(keys, keys, 'tile', tile.id);
-      return ok(`Noted: not yours, ${result.message}`, result.undoToken);
+      return this.markedRead(this.markPrsRead(keys, keys, 'tile', tile.id), 'Noted: not yours, marked read');
     }
     return ok('feedback noted');
   }
@@ -2113,7 +2120,7 @@ export class FakeEngine implements EngineService {
     event.override = { loudness, reason: 'unmuted by the user', by: 'user' };
     const topicId = this.data.membership.get(event.prKey) ?? null;
     this.recordFeedback({ kind: 'unmute', topicId, tileId: null, prKey: event.prKey, setId: null, eventId, note: '' });
-    return ok('unmuted');
+    return ok('Unmuted');
   }
 
   async getTopicChat(topicId: string): Promise<ChatMessage[]> {
@@ -2159,11 +2166,11 @@ export class FakeEngine implements EngineService {
     }
     this.recordFeedback({ kind: keep ? 'tailoring_kept' : 'tailoring_once', topicId, tileId: null, prKey: null, setId: null, eventId: null, note: text });
     if (!keep) {
-      return ok('used just this once');
+      return ok('Used just this once');
     }
     topic.tailoring = topic.tailoring ? `${topic.tailoring}\n${text}` : text;
     topic.updatedAt = this.timestamp();
-    return ok('kept as topic tailoring');
+    return ok('Kept for this topic');
   }
 
   async decideTopicProposal(proposalId: string, accept: boolean): Promise<ActionResult> {

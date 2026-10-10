@@ -61,7 +61,7 @@ describe('FakeEngine', () => {
     const marked = await engine.markRead('pr:acme/infra#1915');
     now = new Date(now.getTime() + 7000);
     const undone = await engine.undo(marked.undoToken);
-    expect(undone).toEqual({ ok: false, message: 'undo window closed', undoToken: null });
+    expect(undone).toEqual({ ok: false, message: 'Nothing to undo: already sent to GitHub', undoToken: null });
   });
 
   it('undoes the newest batch when no token is given', async () => {
