@@ -1,5 +1,8 @@
 import type { SampleClock } from './sample-builders.ts';
 import type { SampleData } from './sample-data.ts';
+import { appendSamplePack } from './sample-pack-append.ts';
+import { buildPanePack } from './sample-pack-pane.ts';
+import { buildStacksPack } from './sample-pack-stacks.ts';
 
 /**
  * Opt-in sample packs (POSTPILE_FAKE_EXTRA, comma separated): extra topics,
@@ -23,7 +26,10 @@ export function fakeExtras(value: string | undefined): Set<FakeExtra> {
 /** Adds each asked-for pack to the sample, after the default topics and PRs. */
 export function addFakeExtras(data: SampleData, clock: SampleClock, extras: Set<FakeExtra>): void {
   // Each pack adds its topics, PRs, events, glances, tiles and membership here.
-  void data;
-  void clock;
-  void extras;
+  if (extras.has('stacks')) {
+    appendSamplePack(data, buildStacksPack(clock));
+  }
+  if (extras.has('pane')) {
+    appendSamplePack(data, buildPanePack(clock));
+  }
 }
