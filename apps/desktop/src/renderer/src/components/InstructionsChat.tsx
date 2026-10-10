@@ -6,14 +6,29 @@ import { proposalKey } from '../lib/instructions.ts';
 import { Button } from './Button.tsx';
 import { InstructionsProposalCard } from './InstructionsProposalCard.tsx';
 
+/**
+ * The diff waiting for Accept or Reject, for as long as the app runs, like
+ * the agent pane's `waitingInstructions`: nothing on the server lists an
+ * open proposal, so leaving the page must not throw it away (and leave the
+ * chat saying "Proposed: …" with nothing to decide). Cleared on Accept,
+ * Reject or a new proposal.
+ */
+let waitingProposal: InstructionsProposal | null = null;
+
 /** The general chat in "Your instructions": say what should change, get it back as a diff to accept. */
 export function InstructionsChat() {
   const actions = useActions();
   const chat = useInstructionsChat();
   const [draft, setDraft] = useState('');
-  const [proposal, setProposal] = useState<InstructionsProposal | null>(null);
+  const [proposal, setShownProposal] = useState<InstructionsProposal | null>(() => waitingProposal);
   const sending = actions.isBusy('instructions:chat');
   const recent = (chat.data ?? []).slice(-6);
+
+  /** Shows the proposal and keeps it for the next time the page opens; null drops it. */
+  function setProposal(next: InstructionsProposal | null) {
+    waitingProposal = next;
+    setShownProposal(next);
+  }
 
   async function send() {
     const reply = await actions.instructionsChat(draft);

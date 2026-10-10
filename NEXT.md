@@ -1821,6 +1821,19 @@ the app meanwhile.
   and the input stays typeable. Greying the ✨ pills of current verdicts
   while the agent is off was offered as optional and not done.
 
+- **Memory the user can see and take back** (2026-10-10, owner: apply the
+  bug hunt's recommended options; DESIGN.md "Consolidation", "Topic chat",
+  "Instructions changes via chat", "Lessons from your reviews"):
+  accepted rules for every topic are listed under Your instructions ›
+  Accepted rules with Remove; a topic's tailoring shows one line each with
+  Remove; both log the removal and offer Undo. A topic merge carries the
+  merged topic's tailoring along ("From Frontend build: …"). Inbox Decline
+  gets a 6s Undo. Split and move cards name their PRs. A lasting point
+  gets three buttons (Keep for this topic / Just this once / Keep for all
+  topics) and a confirming line. A lesson kept in a topic says where it
+  came from ("From your review on #N: …"). An agent answer for a topic
+  not on screen shows a toast with Open; asking stays uncancellable.
+
 - **Agent notes on PRs are advisory and anchored to the PR's state**
   (2026-10-08, design agreed with the reporting agent, checked by Codex;
   DESIGN.md "Agent notes on PRs"): notes never change turn, unread, done,

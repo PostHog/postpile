@@ -211,7 +211,10 @@ with agent, Recheck): while the agent is off or paused, disable it with
   locked or blocked.
   Mark-read and memory correction results carry an undo token; the toast
   offers Undo for the 6s window and the footer counts mark-reads in the
-  undo window (tokens starting with `memory:` are not mark-reads). When a
+  undo window (tokens starting with `memory:` are not mark-reads). So do
+  the local "take back" choices: an Inbox Decline (`proposal:`, `rule:`)
+  and Remove on an accepted rule or a tailoring line (`rule:`,
+  `tailoring:`). When a
   window ends the provider refetches, so a locked mark-read shows up as
   pending.
 - Big memory lines get "Recheck" (and "Forget" on a care): `MemoryLine`
@@ -237,9 +240,14 @@ with agent, Recheck): while the agent is off or paused, disable it with
   `saveInstructions`) are local (instructions.md + SQLite), not on the
   `GithubWrite` list. The user's instructions are never changed without an
   Accept on a proposal; the card shows a line diff (`lib/diff.ts`), Edit
-  and Reject. In the agent pane the user places a lasting point with one
-  line ("For this topic · For all topics"; left alone it is just this
-  once); the agent never picks the scope. A save that comes back with `rebased` (the
+  and Reject. In the agent pane the user places a lasting point with three
+  buttons (Keep for this topic / Just this once / Keep for all topics) and
+  a short line confirms the pick; left alone it is just this once; the
+  agent never picks the scope. An open instructions diff outlives its pane
+  or page in a module-level holder (`waitingInstructions` in `AgentPane`,
+  `waitingProposal` in `InstructionsChat`) until Accept or Reject. An agent
+  answer for a topic whose pane is not on screen shows a toast with Open
+  (`showAgentAnswered`, Notice `openAgentTopicId`). A save that comes back with `rebased` (the
   file changed on disk meanwhile) replaces the card's proposal, it is not
   an error to swallow.
 - Lessons (DESIGN.md "Lessons from your reviews") are local, not on the
@@ -546,11 +554,16 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   `lessonSource` / `earlierAssessmentText` from `lib/lessons.ts`, then
   Remember in this topic / Use across topics… / Dismiss; neutral grey, never
   coral, honey or accent), used by `TopicLessons` (under the topic header's
-  "You told the agent" line, renders nothing without open lessons) and
+  "You told the agent" lines, `TopicTailoring`: one line per entry, split
+  by `lib/tailoring.ts`, each with Remove; `TopicLessons` renders nothing
+  without open lessons) and
   `TeachLesson` ("Teach future assessments" under the verdict explanation in
   `GlanceCard`, only with a glance; keyed by PR; hides its lesson once it
   left the topic's open list),
-  `WorkContextSection` (instructions pane only),
+  `WorkContextSection` (instructions pane only), `AcceptedRules` (instructions
+  pane: accepted rules for every topic with Remove), `ProposalPrList` (the
+  PRs a split or move takes along, `proposalPrs` in `lib/proposals.ts`; Inbox
+  card and topic header row),
   `RelationBadge` (in `pills.tsx`).
   Something used in three places goes here; two call
   sites can stay duplicated.

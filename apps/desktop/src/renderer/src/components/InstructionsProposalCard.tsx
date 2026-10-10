@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { InstructionsProposal } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
+import { diffCounts, lineDiff } from '../lib/diff.ts';
 import { Button } from './Button.tsx';
 import { DiffView } from './DiffView.tsx';
 
@@ -39,7 +40,8 @@ export function InstructionsProposalCard(props: { proposal: InstructionsProposal
     <div className="flex flex-col gap-2 rounded-row border border-accent-line bg-accent-soft p-3 text-xs">
       <div className="flex items-baseline gap-2">
         <span className="font-semibold text-ink">Change your instructions?</span>
-        <span className="text-ink-2">{proposal.summary}</span>
+        {/* Once edited, the agent's summary no longer names what Accept saves: say it is the user's own version. */}
+        <span className="text-ink-2">{text === proposal.text ? proposal.summary : `Your edited version (${diffCounts(lineDiff(proposal.baseText, text))} lines)`}</span>
       </div>
       {editing ? (
         <textarea

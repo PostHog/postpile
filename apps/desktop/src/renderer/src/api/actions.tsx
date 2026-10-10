@@ -104,6 +104,8 @@ export interface Notice {
   detail?: string | null;
   /** "Try again" on a failed write that can simply run again (a plain approve). */
   retry?: (() => void) | null;
+  /** The toast offers "Open": the agent pane of this topic, where an answer landed while another topic was on screen. */
+  openAgentTopicId?: string;
 }
 
 /** Reshapes the notice of a successful or failed action, e.g. the mark-read that leaves a tile your move. */
@@ -207,9 +209,17 @@ export interface Actions {
   undo(undoToken: string): Promise<void>;
   feedback(input: FeedbackInput): Promise<void>;
   unmute(eventId: string): Promise<void>;
-  decideTailoring(topicId: string, text: string, keep: boolean): Promise<void>;
+  /** True when it was stored (or logged, for just this once). */
+  decideTailoring(topicId: string, text: string, keep: boolean): Promise<boolean>;
+  /** "Remove" on one line the topic keeps in mind. Local; the toast offers Undo. */
+  removeTailoringLine(topicId: string, line: string): Promise<void>;
+  /** A Decline's toast offers Undo: it blocks the same suggestion for good. */
   decideProposal(proposalId: string, accept: boolean): Promise<void>;
   decideRuleProposal(proposalId: string, accept: boolean): Promise<void>;
+  /** "Remove" on an accepted rule for every topic. Local; the toast offers Undo. */
+  removeStandingRule(ruleId: string): Promise<void>;
+  /** A quiet toast when the agent answered on a topic whose pane is not on screen, with "Open". */
+  showAgentAnswered(topicId: string, topicName: string): void;
   /** "Forget", or accepting a recheck outcome. Local memory, not a GitHub write. The toast offers Undo. */
   correctMemory(input: MemoryCorrection): Promise<boolean>;
   /** "Restore" on a struck-through dossier line: takes the correction back until the next update. Local only. */
@@ -1076,9 +1086,13 @@ export function ActionsProvider(props: { children: ReactNode }) {
     unmute: async (eventId) => {
       await run(`unmute:${eventId}`, null, () => request('POST', `/api/events/${encodeURIComponent(eventId)}/unmute`));
     },
-    decideTailoring: async (topicId, text, keep) => {
+    decideTailoring: (topicId, text, keep) => {
       const path = `/api/topics/${encodeURIComponent(topicId)}/tailoring`;
-      await run(`tailoring:${topicId}`, null, () => request('POST', path, { text, keep }));
+      return run(`tailoring:${topicId}`, null, () => request('POST', path, { text, keep }));
+    },
+    removeTailoringLine: async (topicId, line) => {
+      const path = `/api/topics/${encodeURIComponent(topicId)}/tailoring/remove`;
+      await run(`tailoring:${topicId}:${line}`, null, () => request('POST', path, { line }));
     },
     decideProposal: async (proposalId, accept) => {
       const path = `/api/proposals/${encodeURIComponent(proposalId)}`;
@@ -1087,6 +1101,13 @@ export function ActionsProvider(props: { children: ReactNode }) {
     decideRuleProposal: async (proposalId, accept) => {
       const path = `/api/rule-proposals/${encodeURIComponent(proposalId)}`;
       await run(`rule:${proposalId}`, null, () => request('POST', path, { accept }));
+    },
+    removeStandingRule: async (ruleId) => {
+      const path = `/api/rule-proposals/${encodeURIComponent(ruleId)}/remove`;
+      await run(`rule:${ruleId}`, null, () => request('POST', path));
+    },
+    showAgentAnswered: (topicId, topicName) => {
+      setNotice({ id: Date.now(), tone: 'ok', message: `The agent answered on ${topicName || 'another topic'}.`, undoToken: null, snoozeTileId: null, openAgentTopicId: topicId });
     },
     correctMemory: (input) => run(`correct:${input.factId ?? input.text}`, null, () => request('POST', '/api/memory/corrections', input)),
     restoreMemoryLine: (input) => run(`restore:${input.topicId}:${input.text}`, null, () => request('POST', '/api/memory/restore', input)),

@@ -4,6 +4,11 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ## Unreleased
 
+### Added
+
+- "Your instructions" lists the standing rules you accepted for every topic, each with Remove. What you told the agent in a topic shows one line each, also with Remove. Both offer Undo.
+- Inbox Decline offers Undo for a few seconds. A declined suggestion is never made again, so a misclick used to lose it for good.
+
 ### Changed
 
 - Opening a topic or searching no longer marks anything read on GitHub. Only a tile or PR you click yourself is marked after it stays open for 1.5 s; the tile PostPile picks for you stays unread until you click it or press Mark read.
@@ -62,6 +67,13 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - A line you marked wrong, forgot or fixed offers Restore until the next update, and a forgotten "What you're working on" thread until the next refresh. Before, only the toast's Undo for a few seconds could take it back.
 - A topic without a dossier says "No dossier yet". An empty facts list on a PR now reads "No lasting facts about this PR yet." instead of "Nothing learned".
 - A care the agent noticed reads "noticed, not kept as a rule", or "from your chat", instead of "observed, unconfirmed".
+- Merging a topic keeps what you told the agent there: it moves to the target topic as "From Frontend build: …". It used to stop applying without a word.
+- A change proposed in "Your instructions" › "Change something" stays on screen when you leave the page and come back.
+- Version history names the line you saved when you edited a proposal before accepting, not the line the agent proposed.
+- Split and move suggestions list the PRs they move, and how many stack layers come along.
+- A lasting point in the topic's agent chat has three buttons, including "Just this once", and a short line confirms your pick.
+- A lesson kept in a topic says where it came from ("From your review on #4521: …") instead of reading as your own words, and Teach shows your note above the line the agent wrote from it.
+- An agent answer that arrives while you look at another topic shows a toast with Open.
 
 ## 0.27.2 (2026-10-09)
 

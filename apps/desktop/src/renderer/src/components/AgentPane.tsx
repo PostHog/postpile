@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { InstructionsProposal, LastingPointProposal } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { useTopicChat } from '../api/chat.ts';
@@ -18,7 +18,6 @@ interface AgentPaneProps {
   onBack: () => void;
 }
 
-const linkButton = 'text-[11.5px] font-semibold text-accent hover:underline disabled:text-hint disabled:no-underline';
 const bubble = 'max-w-[85%] rounded-row px-3 py-2 text-[12.5px] leading-normal whitespace-pre-wrap select-text';
 
 /**
@@ -32,6 +31,13 @@ const waitingDrafts = new Map<string, string>();
 const waitingPoints = new Map<string, LastingPointProposal>();
 const waitingInstructions = new Map<string, InstructionsProposal>();
 
+/**
+ * The topic whose agent pane is on screen, null when none. An answer that
+ * lands for another topic (the user asked, then moved on) gets a quiet
+ * toast with "Open", so it does not arrive without a trace.
+ */
+let shownTopicId: string | null = null;
+
 /** Keeps `value` for the topic, or drops what was kept when it is null. */
 function keepFor<T>(kept: Map<string, T>, topicId: string, value: T | null): void {
   if (value) {
@@ -44,10 +50,13 @@ function keepFor<T>(kept: Map<string, T>, topicId: string, value: T | null): voi
 /**
  * "Ask the agent": the topic's agent chat, in the right pane in place of the
  * PR. Private and it looks it: a grey band with a lock instead of the blue PR
- * band, and nothing here writes to GitHub. A lasting point comes back as one
- * line, "For this topic · For all topics"; leaving it alone means just this
- * once. All topics shows the instructions diff first. The agent never picks
- * the scope.
+ * band, and nothing here writes to GitHub. A lasting point comes back with
+ * three buttons, "Keep for this topic", "Just this once" (logged as
+ * `tailoring_once`) and "Keep for all topics"; a short line confirms the
+ * pick. Leaving it alone also means just this once, without the log. All
+ * topics shows the instructions diff first. The agent never picks the
+ * scope. An answer that lands while another topic is on screen shows a
+ * toast with Open (`shownTopicId`).
  *
  * A sent message shows right away with a "Thinking…" bubble under it (an
  * answer takes a few seconds), and the list keeps the newest message in
@@ -78,6 +87,8 @@ export function AgentPane(props: AgentPaneProps) {
   const [instructions, setShownInstructions] = useState<InstructionsProposal | null>(() => waitingInstructions.get(props.topicId) ?? null);
   /** The message on its way, with how many messages the chat had when it was sent. */
   const [pending, setPending] = useState<{ text: string; count: number } | null>(null);
+  /** The line after a scope pick ("Kept for Move CI to Depot."), until the next message. */
+  const [picked, setPicked] = useState<string | null>(null);
   const list = useRef<HTMLDivElement>(null);
   const messageCount = chat.data?.length ?? 0;
   // A turn sent before the pane was closed and opened again is still running in the provider: no second send meanwhile.
@@ -86,12 +97,21 @@ export function AgentPane(props: AgentPaneProps) {
   // Gone as soon as the stored chat has the turn, even before send() clears it: no doubled bubble.
   const waiting = pending !== null && pending.count === messageCount ? pending.text : null;
 
+  useEffect(() => {
+    shownTopicId = props.topicId;
+    return () => {
+      if (shownTopicId === props.topicId) {
+        shownTopicId = null;
+      }
+    };
+  }, [props.topicId]);
+
   useLayoutEffect(() => {
     const element = list.current;
     if (element) {
       element.scrollTop = element.scrollHeight;
     }
-  }, [messageCount, waiting, point, instructions]);
+  }, [messageCount, waiting, point, instructions, picked]);
 
   /** Shows the text and keeps it for the next time the pane opens. */
   function setDraft(next: string) {
@@ -117,9 +137,13 @@ export function AgentPane(props: AgentPaneProps) {
       return;
     }
     setPending({ text, count: messageCount });
+    setPicked(null);
     setDraft('');
     const reply = await actions.topicChat(props.topicId, text);
     setPending(null);
+    if (reply && shownTopicId !== props.topicId) {
+      actions.showAgentAnswered(props.topicId, props.topicName);
+    }
     if (reply) {
       setPoint(reply.lastingPoint);
       setInstructions(null);
@@ -130,9 +154,20 @@ export function AgentPane(props: AgentPaneProps) {
   }
 
   async function keepForTopic() {
-    if (point?.topicId) {
-      await actions.decideTailoring(point.topicId, point.text, true);
+    if (point?.topicId && (await actions.decideTailoring(point.topicId, point.text, true))) {
       setPoint(null);
+      setPicked(`Kept for ${props.topicName}.`);
+    }
+  }
+
+  /** Logged as said for this once; it goes into no prompt. Unsorted has no topic to log it on, so the point just goes. */
+  async function justThisOnce() {
+    if (!point) {
+      return;
+    }
+    if (point.topicId === null || (await actions.decideTailoring(point.topicId, point.text, false))) {
+      setPoint(null);
+      setPicked('Used just this once.');
     }
   }
 
@@ -178,31 +213,34 @@ export function AgentPane(props: AgentPaneProps) {
           </p>
         )}
         {point && (
-          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 px-3 text-[11.5px] text-hint">
+          <div className="flex flex-col gap-1.5 px-3 text-[11.5px] text-hint">
             <span>
               Remember <span className="font-medium text-ink-2">"{point.text}"</span>?
             </span>
-            <button
-              type="button"
-              className={linkButton}
-              disabled={point.topicId === null}
-              title={point.topicId === null ? 'Unsorted is not a topic yet, so there is no topic to keep it on' : 'Adds it to what this topic remembers'}
-              onClick={() => void keepForTopic()}
-            >
-              For this topic
-            </button>
-            <span className="text-faint">·</span>
-            <button
-              type="button"
-              className={linkButton}
-              disabled={actions.isBusy('instructions:propose') || agentOff !== null}
-              title={agentOff ?? 'Proposes it as a change to your general instructions, shown as a diff first'}
-              onClick={() => void keepForAllTopics()}
-            >
-              For all topics
-            </button>
+            <div className="flex flex-wrap gap-1.5">
+              <Button
+                size="sm"
+                disabled={point.topicId === null || actions.isBusy(`tailoring:${point.topicId}`)}
+                title={point.topicId === null ? 'Unsorted is not a topic yet, so there is no topic to keep it on' : 'Adds it to what this topic keeps in mind'}
+                onClick={() => void keepForTopic()}
+              >
+                Keep for this topic
+              </Button>
+              <Button size="sm" disabled={point.topicId !== null && actions.isBusy(`tailoring:${point.topicId}`)} title="Used for this answer only; nothing is kept" onClick={() => void justThisOnce()}>
+                Just this once
+              </Button>
+              <Button
+                size="sm"
+                disabled={actions.isBusy('instructions:propose') || agentOff !== null}
+                title={agentOff ?? 'Proposes it as a change to your general instructions, shown as a diff first'}
+                onClick={() => void keepForAllTopics()}
+              >
+                Keep for all topics
+              </Button>
+            </div>
           </div>
         )}
+        {picked && <p className="px-3 text-[11.5px] text-hint">{picked}</p>}
         {instructions && <InstructionsProposalCard key={proposalKey(instructions)} proposal={instructions} onDone={() => setInstructions(null)} />}
       </div>
       {agentOff && <p className="shrink-0 border-t border-hairline px-[34px] pt-2.5 text-[11.5px] text-hint">{agentOff} You can still type; Send waits for the agent.</p>}
