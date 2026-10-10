@@ -2,6 +2,7 @@
 // Used by FakeEngine so the server, CLI and desktop app run without GitHub or
 // the agent.
 import type { FullPr, Glance, PrEvent, PrKey, PrSet, Tile, Topic, TopicProposal, UserPrState } from '@postpile/core';
+import { addFakeExtras, type FakeExtra } from './fake-extras.ts';
 import {
   found,
   pinged,
@@ -1196,10 +1197,10 @@ function buildMembership(tiles: Tile[]): Map<PrKey, string> {
   return membership;
 }
 
-export function buildSampleData(now: Date): SampleData {
+export function buildSampleData(now: Date, extras: Set<FakeExtra> = new Set()): SampleData {
   const clock = new SampleClock(now);
   const tiles = buildTiles();
-  return {
+  const data: SampleData = {
     viewer: SAMPLE_VIEWER,
     viewerTeams: ['acme/team-platform', 'acme/client-approvers'],
     viewerHomeTeams: ['acme/team-platform'],
@@ -1215,4 +1216,6 @@ export function buildSampleData(now: Date): SampleData {
     membership: buildMembership(tiles),
     codeOwners: new Map([['acme/app', SAMPLE_CODEOWNERS]]),
   };
+  addFakeExtras(data, clock, extras);
+  return data;
 }

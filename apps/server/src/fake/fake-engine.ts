@@ -227,6 +227,7 @@ import { FakeTeamRoles } from './fake-team-roles.ts';
 import { FakeMcp } from './fake-mcp.ts';
 import { FakeTopicChanges } from './fake-topic-changes.ts';
 import { FakePrNotes } from './fake-pr-notes.ts';
+import type { FakeExtra } from './fake-extras.ts';
 import { fakeQuota, type FakeQuotaLevel } from './fake-quota.ts';
 import { FakeTools, type FakeToolProblem } from './fake-tools.ts';
 import { FakeWorkContext } from './fake-work-context.ts';
@@ -274,6 +275,8 @@ export interface FakeEngineOptions {
   busy?: boolean;
   /** POSTPILE_FAKE_LOCKED=1: GitHub writes start locked. Off by default: the sample starts with writes on, like the packaged app. */
   writesLocked?: boolean;
+  /** POSTPILE_FAKE_EXTRA: opt-in sample packs on top of the default sample (see fake-extras.ts). */
+  extras?: Set<FakeExtra>;
 }
 
 /** The invented busy inbox of POSTPILE_FAKE_BUSY=1: a heavy install over the cap. */
@@ -434,7 +437,7 @@ export class FakeEngine implements EngineService {
     this.tidyPending = options.tidyOnFirstSync ?? false;
     this.busy = options.busy ?? false;
     this.catchUpGate = options.catchUpGate ?? false;
-    this.data = buildSampleData(this.now());
+    this.data = buildSampleData(this.now(), options.extras);
     const catchUpStepMs = options.catchUpStepMs ?? 4000;
     this.catchUp = new FakeCatchUp(this.data, this.now, { queuedMs: catchUpStepMs, writingMs: catchUpStepMs * 1.5 });
     this.toolStatus = new FakeTools(options.missingTools ?? [], this.now);

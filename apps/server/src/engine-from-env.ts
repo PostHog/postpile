@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import type { AppConfig, McpLauncher } from '@postpile/core';
 import { createEngine, DEFAULT_AUTO_SYNC_MINUTES, defaultPaths, migrateLegacyData, profileFromEnv, type EngineService, type LockKind, type Telemetry } from '@postpile/engine';
 import { FakeEngine } from './fake/fake-engine.ts';
+import { fakeExtras } from './fake/fake-extras.ts';
 import { fakeQuotaLevel } from './fake/fake-quota.ts';
 import { fakeToolProblems } from './fake/fake-tools.ts';
 import { FakeUpdates, type FakeUpdateMode } from './fake/fake-update.ts';
@@ -63,6 +64,7 @@ export function engineFromEnv(options: EngineFromEnvOptions = {}): EngineService
       catchUpGate: process.env.POSTPILE_FAKE_CATCH_UP !== '0',
       busy: process.env.POSTPILE_FAKE_BUSY === '1',
       writesLocked: process.env.POSTPILE_FAKE_LOCKED === '1',
+      extras: fakeExtras(process.env.POSTPILE_FAKE_EXTRA),
     });
   }
   if (options.migrateLegacy ?? true) {
