@@ -4,6 +4,7 @@ import { useActions } from '../api/actions.tsx';
 import { useTools } from '../api/tools.ts';
 import { useFinishedTopics } from '../api/topics.ts';
 import { statusLabel } from '../lib/memory.ts';
+import { nothingWaits } from '../lib/empty-states.ts';
 import { plural } from '../lib/plural.ts';
 import { bucketItems, dealtItems, dealtKey, rowSection, sidebarBuckets, topicRowId, unreadLook, type QueueFilter } from '../lib/queues.ts';
 import { ARCHIVE_FLIGHT_MS, flyToArchive } from '../lib/archive-flight.ts';
@@ -386,7 +387,7 @@ function InboxItem(props: { count: number; active: boolean; onSelect: () => void
       type="button"
       onClick={props.onSelect}
       aria-current={props.active ? 'true' : undefined}
-      title="Topic changes and standing rules the agent proposes"
+      title="Suggestions waiting for you: topic changes and standing rules the agent proposes. Not your GitHub inbox."
       className={`flex items-center gap-2 rounded-row px-2 py-[7px] text-left text-[13px] ${
         props.active ? 'bg-surface font-semibold shadow-active-row' : 'text-ink-2 hover:bg-surface/60'
       }`}
@@ -637,6 +638,7 @@ export function TopicSidebar(props: TopicSidebarProps) {
       <InboxItem count={props.inboxCount} active={props.inboxOpen} onSelect={props.onOpenInbox} />
       {/* Right above the topics: a busy inbox is where topics go missing. Renders nothing unless busy. */}
       <BusyInboxCard />
+      {!props.error && !narrowed && nothingWaits(props.topics) && <p className={`text-xs text-faint ${TEXT_COLUMN}`}>Nothing waits on you.</p>}
       {filter &&<FilterHint topics={props.shown.length} tiles={filter.tileCount} onClear={props.onClearFilter} />}
       {props.error && <p className={`text-xs text-status-bad ${TEXT_COLUMN}`}>Could not load topics: {props.error}</p>}
       {narrowed && props.shown.length === 0 && props.topics.length > 0 && (

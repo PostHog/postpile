@@ -2310,7 +2310,9 @@ meta `setup_state` has no flag (`GET /api/setup` answers `needed`). The
 flow takes the middle and right panes; the sidebar shows a small "Setting
 up" note. The start sync waits: Accept runs the first sync, "Skip for now"
 stores `skipped` and syncs. The Instructions pane has "Run setup again"
-(always) and a honey banner after a skip. `POSTPILE_FAKE_SETUP=1` with
+and, after a skip, a honey banner with "Run setup" in its place (one button
+at a time; the flow's heading says "Run setup" until setup was done once,
+2026-10-10). `POSTPILE_FAKE_SETUP=1` with
 `POSTPILE_FAKE=1` starts sample data with no instructions, so the flow
 shows. Once open, the renderer keeps it open until Accept's sync finishes
 or the user closes it, even though the server stops asking for it. While
@@ -2726,7 +2728,8 @@ A PR that is a stack layer is never shown apart from its stack.
   assigns a PR to a retired topic. Of a stack
   without a topic only the lowest waiting layer is asked about; the other
   waiting layers follow the answer.
-- **Moves**: "Wrong topic" on one layer moves (or re-sorts) every layer
+- **Moves** (the menu names the whole stack, "Move the 5-PR stack to topic…",
+  since 2026-10-10): "Wrong topic" on one layer moves (or re-sorts) every layer
   that is tracked or has a topic; an accepted split or new-topic proposal
   brings whole stacks along (`Board.movesWith`).
 - **Sets**: a set can hold a stack, whole. A proposal member that is a
@@ -2755,6 +2758,8 @@ A PR that is a stack layer is never shown apart from its stack.
   radius 5px, `--stack-tag` fill with a `--stack-tag-line` border and
   `--stack-tag-ink` text, mono 10.5px semibold (the bundled mono stops at
   600), 11px icon; grey on done tiles. The tile header keeps "Stack · N",
+  and says "Stack · 2 of 5 open" once some layers are merged or closed
+  (2026-10-10),
   and the detail branch line keeps `head → base · layer X of N`, now also
   for a stack inside a set. The light blue is the one accent-family use
   outside selection and focus, chosen by the user.
@@ -3028,7 +3033,7 @@ not taken; instead the user asked for a PR button: "an unassign team button
   "Remove <team slug>" (e.g. "Remove team-devex"); several teams pending =
   one button per team, or a small menu; pick the boring option.
 - Confirm once (small popover, one sentence): "Remove the review request
-  for all of <team>, unsubscribe you and mark it read?" (the sentence names the mark-read, since step 3 below does it) No undo: re-adding the team would
+  for all of <team>, unsubscribe you and mark it read?" (the sentence names the mark-read, since step 3 below does it, 2026-10-10). No undo: re-adding the team would
   notify every teammate again.
 - On confirm, in order: (1) GitHub `DELETE
   /repos/{owner}/{repo}/pulls/{n}/requested_reviewers` with `{reviewers: [],
@@ -5192,8 +5197,12 @@ make the tile done:
   count badge (`GitHubWritesStatus.pending`).
 - Unlocking opens a popover that lists them (count, first five titles):
   "Send N to GitHub" (unlock, then `POST /api/github-writes/pending/send`),
-  "Discard" (unlock, drop them), "Cancel" (stay locked), and "Discard
-  pending, stay locked". With writes on and something left (a failed send)
+  "Unlock and discard" (unlock, drop them; "Discard" until 2026-10-10),
+  "Cancel" (stay locked), and "Discard, stay locked". The badge on the lock
+  reads "N pending". The popover's first line says "Mark-read, approvals,
+  comments and reactions will reach GitHub." The footer's right-hand item
+  counts mark-reads in the undo window, then writes waiting in the lock
+  ("3 pending, send from the lock"), and is left out when both are 0. With writes on and something left (a failed send)
   a click on the lock offers Send / Discard / Lock. Under
   `POSTPILE_READ_ONLY=1` it only offers Discard.
 - Sending goes thread by thread through the same path as the queue
@@ -5609,12 +5618,14 @@ old notifications"), a bar and "84 / 191"; the sidebar line reads
 toast: "✓ Marked 191 read on GitHub" with "Show", which opens the
 notifications view (each thread's last action).
 
-**Sidebar line**, any day: "12 merged PRs · Clear" whenever a merged PR is
-unread, else "N old notifications · Clear" (older than 14 days). It opens
-the dialog in sidebar mode.
+**Sidebar line**, any day: "12 merged PRs · Clean up…" whenever a merged PR is
+unread, else "N old notifications · Clean up…" (older than 14 days). It opens
+the dialog in sidebar mode. The button is "Clean up…" (not "Clear"), so it
+matches the busy-inbox card and the dialog, and cannot be mistaken for the
+one-click item below (2026-10-10).
 
-**"✨ 8 of them look safe · Clear"** (added 2026-10-03), a second item on
-the same line. Why: of the merged PRs, the user mostly cares about the
+**"✨ 8 of them look safe · Clear these 8"** (added 2026-10-03; on its own
+line and worded with the count 2026-10-10), a second item under the first. Why: of the merged PRs, the user mostly cares about the
 ones merged without their review, and for many of those the glance after
 the merge ("Merged without your review" rule 4) already said there is
 nothing worth a look. The item counts unread merged PRs whose *current*
@@ -5848,7 +5859,9 @@ teammate's PR in it that waits on the viewer's review was out of sight.
 Owner decisions (2026-10-01), after a UX pass (design "9c"):
 
 - **One switch, worded as a sentence: "Topics with any PR | my PRs | team
-  PRs".** It says it narrows which topics show, not which PRs. "any PR" is
+  PRs".** At the narrowest sidebar (248px at the 1100px window floor) the
+  words "Topics with" hide whole instead of showing "T…"; the group's
+  aria-label keeps the sentence (2026-10-10). It says it narrows which topics show, not which PRs. "any PR" is
   the way back; a narrowing option on is drawn in the accent. Team hides
   without a home team, as before. Reply and Review are gone: the Needs reply
   and To review sections are those.

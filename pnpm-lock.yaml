@@ -274,6 +274,9 @@ importers:
       vite:
         specifier: ^7.3.6
         version: 7.3.6(@types/node@26.6.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.15)
+      zod:
+        specifier: ^4.6.5
+        version: 4.6.5
 
   apps/server:
     dependencies:

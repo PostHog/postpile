@@ -21,6 +21,14 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - An agent clearing a note you already cleared is told you cleared it, and no "Replaced:" line is left under a cleared note.
 - The connect popover no longer calls the MCP server read-only: agents can leave notes and suggest topic changes.
 - The dev CLI exits non-zero when a PR or topic isn't found, and says what was wrong with a bad command.
+- The tile "…" menu no longer opens under the next tile after a tile settled.
+- Footer popovers (the writes lock, "outside agents") wrap inside their box; the quota message is shorter and names the day, and the install command in the missing-tool card wraps instead of being cut.
+- The footer counts "unread tiles", says "notified" instead of "pinged", and no longer says the mark-read queue is empty while the lock holds pending writes. The lock badge reads "N pending", and its buttons read "Unlock and discard" and "Discard, stay locked".
+- The sidebar cleanup line has "Clean up…" and "Clear these N" on separate lines instead of two buttons both named "Clear".
+- "You approved now ago" and similar labels read "just now"; the "New since you looked" fold reads "Show a deploy"; a mixed fold says "quiet events"; counts say "1 tile" and "1 open PR in Dealt with".
+- The tile menu names what a move acts on ("Move #1907" or "Move the 5-PR stack"), the remove-team confirm says it also marks the thread read, and the Snooze toast says the thread is still unread on GitHub.
+- The Instructions page shows one "Run setup" after a skip, and the Handled quietly page has a shorter intro and clearer reasons.
+- The browser console no longer logs a Content-Security-Policy violation on every load.
 
 ## 0.27.2 (2026-10-09)
 

@@ -118,7 +118,7 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   Reply): no raw events, and no
   `PrDetail.events` either. A row needs a new field: add it to
   `activityEvent` in core.
-- Derived UI values ("1 pinged · 2 pulled", check counts, review
+- Derived UI values ("1 notified · 2 pulled in", check counts, review
   rows) are pure functions in `lib/`, unit tested. Components stay dumb.
   Rules are not display: facts (whose move, done, automation) and offers
   (which buttons, which leads, the lead PR) come from core as view fields,
@@ -174,10 +174,10 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   open-lock icon (`text-faint` on purpose, hover shows it; a click locks);
   locked, a quiet "read-only" in the footer's own `text-muted`, never
   `amber-*`, `status-bad`, coral or honey. Opening it asks in a small
-  popover ("Mark-read and approvals will reach GitHub")
+  popover ("Mark-read, approvals, comments and reactions will reach GitHub")
   that also lists the pending writes (`lib/pending.ts`) with "Send N to
-  GitHub" / "Discard" / "Cancel" and "Discard pending, stay locked"; the
-  count badge sits on the lock, also while writes are on (a failed send,
+  GitHub" / "Unlock and discard" / "Cancel" and "Discard, stay locked"; the
+  "N pending" badge sits on the lock, also while writes are on (a failed send,
   or mark-reads from the locked days the default switch left). Closing it
   is instant unless something is pending. With `POSTPILE_READ_ONLY=1` it
   cannot unlock, only discard. The server keeps the choice and the pending
@@ -459,9 +459,9 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   `StatusFooter` (+ `WritesLock`), `Toast`, `SearchField` (title bar filter),
   `ToolsNotice` (missing gh or claude, with `FixCommand`, shared with setup),
   `RepoScopeMenu` (title bar repo scope + "Let it go stale"),
-  `InboxCleanupLine` (sidebar footer: "12 merged PRs · Clear", "Clearing
-  84 / 191" while a run goes; next to merged PRs "✨ 8 of them look safe ·
-  Clear", `safeMergedText`, which calls `clearSafeMerged` right away, no
+  `InboxCleanupLine` (sidebar footer: "12 merged PRs · Clean up…", "Clearing
+  84 / 191" while a run goes; under merged PRs, on its own line, "✨ 8 of them look safe ·
+  Clear these 8", `safeMergedText`, which calls `clearSafeMerged` right away, no
   dialog, disabled while a cleanup waits in the lock) +
   `InboxStartDialog` (mounted once in App, opens while the server holds
   the start sync, `view.start`) + `InboxCleanupDialog` (both modes; picks
@@ -500,7 +500,7 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   through `setInterruptions(mode, 'prompt')`; it closes only once that
   returns true, a failed save keeps it open with Save usable again; wiring
   test in `InterruptionsPrompt.test.tsx`),
-  `McpFooterItem` ("agents: not connected" in the footer, only while
+  `McpFooterItem` ("outside agents: not connected" in the footer, only while
   `mcpFooterShows` in `lib/mcp.ts`; never while the state is unknown) +
   `McpConnectOffer` (the offer body, shared with `SetupAcceptStep`'s
   optional box; secondary button there so Accept stays the one primary).
@@ -805,3 +805,22 @@ stays on screen and listed (`KeptView`).
   the stored report (`newerReport`). The main process
   runs the live poll (`engine.startLivePoll`) and shows Mac notifications
   (`main/mac-notifier.ts`); closing the window hides it on macOS, Cmd+Q quits.
+
+## Layout and copy rules (2026-10-10)
+
+- Never use `animation-fill-mode: both` (or `forwards`) on an opacity or
+  translate animation that stays on a settled element: the finished
+  animation keeps a stacking context, which traps `z-20` menus inside the
+  element so the next tile paints over them. The `-in` settle steps in
+  `app.css` use `backwards`; `lib/app-css.test.ts` pins it.
+- Footer popovers (`absolute bottom-full`) are children of a `whitespace-nowrap`
+  strip: give them `whitespace-normal`.
+- Time in running text goes through `whenLabel` (`lib/time.ts`: "just now",
+  "5m ago", "yesterday"), never `ageLabel(...)} ago`, which says "now ago".
+  Counts with a word go through `plural` (`lib/plural.ts`).
+- Long unbroken tokens (cache keys, branch names) in titles use
+  `[overflow-wrap:anywhere]`.
+- `lib/csp-safe-zod.ts` turns zod's jitless mode on before any schema is
+  built, so zod's `new Function("")` probe does not log a CSP violation on
+  every load. `main.tsx` imports it first; keep the CSP free of
+  `unsafe-eval`.

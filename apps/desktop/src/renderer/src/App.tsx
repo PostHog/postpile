@@ -35,6 +35,7 @@ import { TopicHeader } from './components/TopicHeader.tsx';
 import { TopicSidebar, type RowSection } from './components/TopicSidebar.tsx';
 import { pinnedEntry, sameView, type NavEntry } from './lib/history.ts';
 import type { SetupStepKey } from './lib/setup.ts';
+import { noSelectionText } from './lib/empty-states.ts';
 import { applyQueueFilter, filterCounts, type QueueFilter } from './lib/queues.ts';
 import { filterTopics, searchFilter, visibleTopic } from './lib/search.ts';
 import { filterKey, keptFor, listedTopics, nextKept, resolveSelection, revealedFor, withSelectedTile, type KeptView } from './lib/selection.ts';
@@ -458,7 +459,7 @@ export function App() {
                 view={selected.view}
                 prKey={selected.prKey}
                 onSelectPr={(prKey) => selected.view && pickTile(selected.view.tile.id, prKey)}
-                noSelectionText="Pick a tile to see it."
+                noSelectionText={noSelectionText(topic.data)}
               />
             )}
             <PaneDivider label="Resize the sidebar" left={columns.sidebar} {...dividerProps('sidebar')} />
