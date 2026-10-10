@@ -2150,7 +2150,11 @@ text, why}`; a fix without a new line reads as holds. Nothing is written
 until the user accepts in the dialog, through `correctMemory`:
 
 - holds -> `confirm` ("Keep it"): a fact gets `markVerified` (not stale,
-  verified now); a dossier line logs `memory_confirmed` so the next update
+  verified now) and its refs move to each PR's current head, like the
+  agent's own recheck confirm (`reanchorRefs`), so the next read doesn't
+  find it out of date again; Undo puts the old heads back. A fact that is
+  stale for another reason (person no longer involved, source gone) still
+  reads stale after "Keep it". A dossier line logs `memory_confirmed` so the next update
   keeps it, and until then it shows "checked by you" instead of out of
   date (`confirmedClaims`, 2026-10-10).
 - fix -> `fix` + `fixedText`: a fact is closed (superseded) by a copy with
