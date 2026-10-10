@@ -336,7 +336,11 @@ with a `title` that says why. Hiding it makes the gap invisible to the next agen
   drafts and the open composer live in `lib/pane-drafts.ts` (`PaneDrafts`,
   one app-wide store like `AgentPane`'s unsent text) keyed by PR and
   target, so they survive the per-PR remount and can never be read for
-  another PR; a composer that comes back with its PR (`reopened`) takes
+  another PR. The store is the only copy of the text and the open target
+  (read with `useSyncExternalStore`, never copied into state): a send that
+  ends after the user left and came back must empty and close the composer
+  now on screen, or the posted text could go out twice (Codex on #176).
+  A composer that comes back with its PR (`reopened`) takes
   no focus and does not scroll. Escape and Cancel focus the
   `aria-expanded` button next to it; Meta/Ctrl+Enter sends everything but
   Approve with a note. Write failures are worded by `lib/write-failure.ts`

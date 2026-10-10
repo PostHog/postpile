@@ -294,6 +294,41 @@ describe('Composer keyboard, focus and agent draft line', () => {
     await waitFor(() => expect(box().value).toBe('Looks good.'));
   });
 
+  it('empties and closes the composer on screen when a send ends after the PR was left and opened again', async () => {
+    stubWrites(true);
+    let answer: (sent: boolean) => void = () => {};
+    const send = vi.fn<Send>(() => new Promise<boolean>((resolve) => (answer = resolve)));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const host = (shown: boolean, visit: number) => (
+      <QueryClientProvider client={client}>
+        <ActionsProvider>{shown && <Pane key={visit} draft={async () => null} send={send} draftsOnOpen={false} target={{ kind: 'comment' }} />}</ActionsProvider>
+      </QueryClientProvider>
+    );
+    const { rerender } = render(host(true, 1));
+    fireEvent.click(screen.getByText('open'));
+    fireEvent.change(box(), { target: { value: 'Why the retry?' } });
+    await waitFor(() => expect(screen.getByText('Approve with note').closest('button')?.disabled).toBe(false));
+    fireEvent.click(screen.getByText('Approve with note'));
+    expect(send).toHaveBeenCalledTimes(1);
+
+    // The user leaves the PR and comes back while the comment is still on its way: the kept composer is back.
+    rerender(host(false, 1));
+    rerender(host(true, 2));
+    expect(box().value).toBe('Why the retry?');
+
+    answer(true);
+
+    await waitFor(() => expect(screen.queryByRole('textbox')).toBeNull());
+    expect(drafts.text('acme/app#1', 'comment')).toBe('');
+    expect(drafts.openTarget('acme/app#1')).toBeNull();
+    // Opened again, the box is empty, so the posted text cannot go out a second time.
+    fireEvent.click(screen.getByText('open'));
+    expect(box().value).toBe('');
+    expect(screen.getByText('Approve with note').closest('button')?.disabled).toBe(true);
+    fireEvent.keyDown(box(), { key: 'Enter', metaKey: true });
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
   it('puts the agent pill before the box in the tab order', () => {
     stubWrites(true);
     renderPane(<Pane draft={async () => null} draftsOnOpen={false} />);

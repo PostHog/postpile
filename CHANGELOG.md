@@ -40,7 +40,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - "✓ Marked read" in the PR pane goes away once the PR has new activity, so Mark read is back.
 - A half-typed reply, note or comment review stays when you switch to another PR, layer or topic and come back. It was lost without a word.
 - With GitHub writes locked, Approve in the PR pane is greyed like the other review buttons, and "Reply ↓" only scrolls to the comment instead of opening a reply that can't be sent.
-- The "Approved" toast waits for GitHub's answer. A refused write says what happened in plain words ("GitHub didn't take the approval (server error 502)"), with GitHub's message on hover and "Try again" for an approve.
+- The "Approved" toast waits for GitHub's answer. A refused write says what happened in plain words ("GitHub didn't take the approval (server error 502)"), with GitHub's message on hover and "Try again" for an approve that failed on a GitHub server error or the network.
 - The composer gives focus back to the button that opened it on Escape or Cancel, keeps focus while the agent drafts, and puts the caret after a kept draft.
 - A reply to a PR comment says it mentions the author, as the posted comment does.
 - The first-run "Before the first sync" dialog no longer clears on Enter, and its button now says what it does ("Mark 28 read on GitHub").

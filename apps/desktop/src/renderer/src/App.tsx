@@ -201,10 +201,13 @@ export function App() {
   };
   // Grows with every explicit open (a tile click, a ping click), so opening the tile already open counts as a visit again.
   const [visits, setVisits] = useState(0);
+  // Grows with every pick of a PR by the user, also from the lists: each one is its own dwell, the PR already open included.
+  const [userOpens, setUserOpens] = useState(0);
   // The user opened this tile and PR themselves: go there, and let the dwell count it.
   const openByUser = (next: NavEntry) => {
     go(next);
     setUserPick(next.prKey);
+    setUserOpens((count) => count + 1);
   };
   // Write the fallbacks into the current entry, so a reorder or refetch does
   // not move the selection (and remount the detail pane, losing a chat draft)
@@ -366,7 +369,7 @@ export function App() {
   const wideList = pane === 'notifications' || pane === 'quiet';
   // A PR open in the detail pane counts like a visit on github.com when nothing is asked of the user (DESIGN "You already dealt with it").
   const detailShown = !showSetup && !wideList && !agentShown;
-  const openedRead = useOpenedRead(detailShown ? selected.view : null, detailShown ? dwellPrKey(selected, userPick) : null);
+  const openedRead = useOpenedRead(detailShown ? selected.view : null, detailShown ? dwellPrKey(selected, userPick) : null, userOpens);
   // The user's pick clears its Mac pings from Notification Center; a tile the app picked does not.
   useTileVisit(detailShown && !selected.auto ? selected.view : null, visits);
 

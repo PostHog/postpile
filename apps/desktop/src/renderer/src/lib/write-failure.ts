@@ -60,3 +60,19 @@ export function writeFailureText(write: PaneWrite, raw: string): WriteFailureTex
   const status = Number(match[1]);
   return { message: `GitHub didn't take ${WHAT[write]} (${statusWords(status)}). ${AFTER[write]}`, detail: raw };
 }
+
+// A network failure on the way to the server or to GitHub: the browser's and Node's fetch errors and the usual socket codes.
+const NETWORK_ERROR = /fetch failed|Failed to fetch|NetworkError|ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket hang up/;
+
+/**
+ * Whether the same write can simply run again: GitHub had a server error
+ * (5xx) or the network failed. Anything else (the head moved, a 4xx, the PR
+ * closed) fails the same way again, so the toast offers no "Try again".
+ */
+export function isTransientWriteFailure(raw: string): boolean {
+  const match = GITHUB_ERROR.exec(raw);
+  if (match) {
+    return Number(match[1]) >= 500;
+  }
+  return NETWORK_ERROR.test(raw);
+}

@@ -118,14 +118,15 @@ export function showsInterruptionsPrompt(view: InterruptionsView | undefined, bl
 /**
  * Whether the prompt waits its turn: until the cleanup view and the tools
  * status loaded, while the cleanup start dialog is due or a cleanup runs
- * (its result toast comes first), and while gh cannot be used (a ping
- * question is pointless before anything syncs).
+ * (its result toast comes first), and while gh cannot be used or is
+ * offline (a ping question is pointless before anything syncs). `canSync`
+ * stays true while gh is offline, so the gh state is checked on its own.
  */
 export function interruptionsPromptWaits(cleanup: InboxCleanupView | undefined, tools: ToolsView | undefined): boolean {
   if (cleanup === undefined || tools === undefined) {
     return true;
   }
-  return cleanup.start !== null || cleanup.running !== null || !tools.canSync;
+  return cleanup.start !== null || cleanup.running !== null || !tools.canSync || tools.gh.state === 'offline';
 }
 
 /**

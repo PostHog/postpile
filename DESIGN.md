@@ -2987,7 +2987,10 @@ for a refetch of all queries before the screen changed. Now:
 - A pane write GitHub refused (approve, comment review, comment, reply,
   thumbs up) says so in plain words: "GitHub didn't take the approval
   (server error 502). Nothing was approved." GitHub's raw line is the
-  toast's hover title; a plain approve's toast offers "Try again". A
+  toast's hover title; a plain approve's toast offers "Try again", only
+  for a GitHub 5xx or a network failure (a retry keeps the head commit
+  that was on screen, so "New commits since you looked" would just fail
+  again). A
   message that is not GitHub's error line (the head moved, the PR closed)
   stays as the engine wrote it (2026-10-10, `lib/write-failure.ts`).
 - Locked, a mark-read changes nothing early (it only becomes a pending

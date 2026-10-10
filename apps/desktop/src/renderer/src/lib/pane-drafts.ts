@@ -13,15 +13,33 @@ export function composeKey(target: ComposeTarget): string {
 /**
  * Drafts keyed by PR and target, plus the composer each PR had open. Every
  * read and write names the PR, so a text typed for one PR can never be read
- * back for another.
+ * back for another. It is the one source of the composer's text and open
+ * target: components read it with `useSyncExternalStore`, so a send that
+ * ends after the pane left and came back clears the composer on screen,
+ * not only the one that sent (Codex on #176).
  */
 export class PaneDrafts {
   private readonly texts = new Map<string, string>();
   private readonly agentTexts = new Map<string, string>();
   private readonly openTargets = new Map<string, ComposeTarget>();
+  private readonly listeners = new Set<() => void>();
 
   private static key(prKey: string, key: string): string {
     return `${prKey}|${key}`;
+  }
+
+  /** Calls `listener` after every write; returns the unsubscribe. An arrow, so it can be handed to `useSyncExternalStore` as is. */
+  subscribe = (listener: () => void): (() => void) => {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  };
+
+  private changed(): void {
+    for (const listener of this.listeners) {
+      listener();
+    }
   }
 
   text(prKey: string, key: string): string {
@@ -35,6 +53,7 @@ export class PaneDrafts {
     } else {
       this.texts.set(PaneDrafts.key(prKey, key), text);
     }
+    this.changed();
   }
 
   /** The agent's last draft for a target, null when the agent has not drafted it. */
@@ -48,6 +67,7 @@ export class PaneDrafts {
     } else {
       this.agentTexts.set(PaneDrafts.key(prKey, key), text);
     }
+    this.changed();
   }
 
   /** The composer that was open when the user left this PR. */
@@ -61,6 +81,7 @@ export class PaneDrafts {
     } else {
       this.openTargets.set(prKey, target);
     }
+    this.changed();
   }
 }
 

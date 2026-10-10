@@ -1,5 +1,5 @@
 import type { ReviewNoteSource } from '@postpile/core';
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent } from 'react';
 import { useActions } from '../api/actions.tsx';
 import { useTools } from '../api/tools.ts';
 import type { GithubWrite } from '../lib/guard.ts';
@@ -22,10 +22,12 @@ export interface ComposeState {
   openIfClosed(target: ComposeTarget): void;
   /** Closes the composer of `key`, and only that one: a send that finishes late never closes a composer opened since. */
   close(key: string): void;
-  /** The kept draft of a target, for a composer that opens again. */
+  /** The kept draft of a target: the composer's text, read through `subscribe`. */
   draftOf(key: string): string;
-  /** Keeps a draft without re-rendering anything: the composer holds the live text itself. */
+  /** Keeps a draft. Only a composer that reads this draft re-renders, never the pane. */
   setDraft(key: string, text: string): void;
+  /** Calls `listener` after every change of the drafts: the composer's `useSyncExternalStore`. */
+  subscribe(listener: () => void): () => void;
   /** The agent's last draft for a target, null when the agent has not drafted it: tells an agent note from the user's own. */
   agentDraftOf(key: string): string | null;
   setAgentDraft(key: string, text: string | null): void;
@@ -47,19 +49,19 @@ export function useCompose(): ComposeState {
  * The pane's compose state for one PR. `PrBody` holds it and remounts per
  * PR; the drafts and the open composer live in `PaneDrafts` under the PR's
  * key, so they are there again when the user comes back, and a draft can
- * only ever be read by the PR it was typed for. Drafts are not React
- * state: a keystroke re-renders only the composer, never the pane with its
- * markdown and activity list.
+ * only ever be read by the PR it was typed for. The store is the only copy:
+ * a send that ends after the user left and came back closes and empties the
+ * composer now on screen. Drafts are not pane state: a keystroke re-renders
+ * only the composer, never the pane with its markdown and activity list.
  */
 export function useComposeState(prKey: string, drafts: PaneDrafts = paneDrafts): ComposeState {
-  const [open, setOpen] = useState<ComposeTarget | null>(() => drafts.openTarget(prKey));
+  const open = useSyncExternalStore(drafts.subscribe, () => drafts.openTarget(prKey));
   const [reopened, setReopened] = useState(() => drafts.openTarget(prKey) !== null);
   const [jump, setJump] = useState<{ commentId: string; seq: number } | null>(null);
   return useMemo(() => {
     function openTarget(target: ComposeTarget) {
-      drafts.setOpenTarget(prKey, target);
       setReopened(false);
-      setOpen(target);
+      drafts.setOpenTarget(prKey, target);
     }
     function jumpTo(commentId: string) {
       setJump((current) => ({ commentId, seq: (current?.seq ?? 0) + 1 }));
@@ -80,17 +82,17 @@ export function useComposeState(prKey: string, drafts: PaneDrafts = paneDrafts):
         }
       },
       close: (key: string) => {
-        // Also after the pane left this PR (a send that ends late): the store forgets the open composer either way.
+        // Also after the pane left this PR (a send that ends late): the composer on screen now reads the same store.
         const kept = drafts.openTarget(prKey);
         if (kept !== null && composeKey(kept) === key) {
           drafts.setOpenTarget(prKey, null);
         }
-        setOpen((current) => (current !== null && composeKey(current) === key ? null : current));
       },
       draftOf: (key: string) => drafts.text(prKey, key),
       setDraft: (key: string, text: string) => drafts.setText(prKey, key, text),
       agentDraftOf: (key: string) => drafts.agentText(prKey, key),
       setAgentDraft: (key: string, text: string | null) => drafts.setAgentText(prKey, key, text),
+      subscribe: drafts.subscribe,
     };
   }, [open, reopened, jump, prKey, drafts]);
 }
@@ -149,7 +151,9 @@ export function Composer(props: ComposerProps) {
   const tools = useTools();
   const compose = useCompose();
   const key = composeKey(props.target);
-  const [text, setText] = useState(() => compose.draftOf(key));
+  // Read through the store, not copied into state: a send that ends after this composer remounted
+  // (the user left the PR and came back) empties the box on screen, so the text cannot go out twice.
+  const text = useSyncExternalStore(compose.subscribe, () => compose.draftOf(key));
   const box = useRef<HTMLDivElement>(null);
   const field = useRef<HTMLTextAreaElement>(null);
   // An agent draft that comes back after Cancel or Escape is dropped, not written into the kept draft.
@@ -162,14 +166,13 @@ export function Composer(props: ComposerProps) {
   }, []);
 
   function changeText(next: string) {
-    setText(next);
     compose.setDraft(key, next);
   }
 
   function takeAgentDraft(result: string | null) {
     if (result !== null && open.current) {
-      changeText(result);
       compose.setAgentDraft(key, result);
+      changeText(result);
       // The pill was disabled while it drafted, which drops focus: hand it to the field, unless the user went elsewhere.
       const focused = document.activeElement;
       if (focused === null || focused === document.body || box.current?.contains(focused)) {

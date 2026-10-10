@@ -87,4 +87,15 @@ describe('approve toast', () => {
     fireEvent.click(screen.getByText('Try again'));
     await waitFor(() => expect(answers).toHaveLength(2));
   });
+
+  it('offers no Try again when new commits came in since the user looked', async () => {
+    const answers = stubApprove();
+    renderApprove();
+    await clickApprove();
+    await waitFor(() => expect(answers).toHaveLength(1));
+    answers[0]?.({ ok: false, message: 'New commits since you looked; take another look', undoToken: null });
+
+    await screen.findByText('New commits since you looked; take another look');
+    expect(screen.queryByText('Try again')).toBeNull();
+  });
 });

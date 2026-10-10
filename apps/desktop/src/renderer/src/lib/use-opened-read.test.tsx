@@ -142,6 +142,40 @@ describe('useOpenedRead', () => {
     expect(result.current.marked).not.toBeNull();
   });
 
+  it('starts a new dwell when the user picks the PR already open again, after a locked dwell ended unwanted', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+    const marks = stubFetch();
+    const { client, Wrapper } = wrapperWith(LOCKED);
+    const { result, rerender } = renderHook((props: { openId: number }) => useOpenedRead(VIEW, A, props.openId), {
+      wrapper: Wrapper,
+      initialProps: { openId: 1 },
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(OPENED_READ_DELAY_MS);
+    });
+    await act(async () => {
+      client.setQueryData(queryKeys.githubWrites, ON);
+      await vi.advanceTimersByTimeAsync(OPENED_READ_DELAY_MS);
+    });
+    expect(marks()).toBe(0);
+
+    // Same PR, a new explicit open: the dwell runs again and marks.
+    rerender({ openId: 2 });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(OPENED_READ_DELAY_MS);
+    });
+    expect(marks()).toBe(1);
+    expect(result.current.marked).not.toBeNull();
+
+    // A re-render of the same open asks nothing more.
+    rerender({ openId: 2 });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(OPENED_READ_DELAY_MS * 2);
+    });
+    expect(marks()).toBe(1);
+  });
+
   it('runs no dwell without a PR: an app-picked tile is passed as null', async () => {
     vi.useFakeTimers();
     vi.spyOn(document, 'hasFocus').mockReturnValue(true);

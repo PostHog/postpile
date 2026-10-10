@@ -58,7 +58,7 @@ import type {
 } from '@postpile/core';
 import { capNote } from '../lib/agent-stats.ts';
 import { writeBlockedReason, type GithubWrite } from '../lib/guard.ts';
-import { writeFailureText, type PaneWrite } from '../lib/write-failure.ts';
+import { isTransientWriteFailure, writeFailureText, type PaneWrite } from '../lib/write-failure.ts';
 import { approvedMessage, batchMarkReadMessage } from '../lib/agent-actions.ts';
 import { markReadNotice, snoozeMessage } from '../lib/mark-read.ts';
 import { approvedDetail, markedReadPr, markedReadTile, mutedTile, snoozedTile, withApprovedPrs, withTile, withTiles } from '../lib/optimistic.ts';
@@ -522,10 +522,15 @@ export function ActionsProvider(props: { children: ReactNode }) {
     });
   }
 
-  /** A failed approve: GitHub's refusal in plain words, the raw line in the hover title, and "Try again" when `retry` is set. */
+  /**
+   * A failed approve: GitHub's refusal in plain words, the raw line in the hover title, and "Try again" when `retry`
+   * is set and the failure is transient. A refusal such as "New commits since you looked" would fail the same way
+   * again, since the retry keeps the head commit that was on screen.
+   */
   function showApproveFailure(raw: string, retry: (() => void) | null): void {
     const text = writeFailureText('approve', raw);
-    setNotice({ id: Date.now(), tone: 'error', message: text.message, undoToken: null, snoozeTileId: null, detail: text.detail, retry });
+    const offered = isTransientWriteFailure(raw) ? retry : null;
+    setNotice({ id: Date.now(), tone: 'error', message: text.message, undoToken: null, snoozeTileId: null, detail: text.detail, retry: offered });
   }
 
   /**

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { writeFailureText } from './write-failure.ts';
+import { isTransientWriteFailure, writeFailureText } from './write-failure.ts';
 
 describe('writeFailureText', () => {
   it('says a refused approval in plain words and keeps the raw line', () => {
@@ -27,5 +27,18 @@ describe('writeFailureText', () => {
     const raw = 'New commits since you looked: nothing was approved';
 
     expect(writeFailureText('approve', raw)).toEqual({ message: raw, detail: null });
+  });
+});
+
+describe('isTransientWriteFailure', () => {
+  it('retries a GitHub server error and a network failure', () => {
+    expect(isTransientWriteFailure('Approve failed: GitHub POST repos/acme/app/pulls/1870/reviews failed with 502: Server Error')).toBe(true);
+    expect(isTransientWriteFailure('Approve failed: fetch failed')).toBe(true);
+    expect(isTransientWriteFailure('Failed to fetch')).toBe(true);
+  });
+
+  it('does not retry a refusal that would come back the same', () => {
+    expect(isTransientWriteFailure('New commits since you looked; take another look')).toBe(false);
+    expect(isTransientWriteFailure('Approve failed: GitHub POST repos/acme/app/pulls/1870/reviews failed with 422: Unprocessable')).toBe(false);
   });
 });

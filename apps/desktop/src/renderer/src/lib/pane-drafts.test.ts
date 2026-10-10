@@ -36,6 +36,20 @@ describe('PaneDrafts', () => {
     expect(drafts.openTarget('acme/app#1')).toBeNull();
   });
 
+  it('tells subscribers about every write until they unsubscribe', () => {
+    const drafts = new PaneDrafts();
+    let calls = 0;
+    const stop = drafts.subscribe(() => (calls += 1));
+    drafts.setText('acme/app#1', 'comment', 'Why?');
+    drafts.setAgentText('acme/app#1', 'comment', 'Why?');
+    drafts.setOpenTarget('acme/app#1', null);
+    expect(calls).toBe(3);
+
+    stop();
+    drafts.setText('acme/app#1', 'comment', '');
+    expect(calls).toBe(3);
+  });
+
   it('keys a reply by its comment', () => {
     expect(composeKey({ kind: 'reply', commentId: 'c1' })).toBe('reply:c1');
     expect(composeKey({ kind: 'approve' })).toBe('approve');

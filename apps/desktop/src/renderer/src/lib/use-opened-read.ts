@@ -43,10 +43,12 @@ function actingKeys(prKey: PrKey): string[] {
  * tile and its topic row keep their place until the selection moves
  * (`useHeldPlace`). Once per open (`OpenedReadTimer`): re-renders and
  * refetches of the same PR ask nothing more, and opening the PR again later
- * asks again (the server turns that into a no-op once it is done). Undo
- * takes the mark back through the mark-read undo window.
+ * asks again (the server turns that into a no-op once it is done). `openId`
+ * changes with every explicit open, so picking the PR that is already in the
+ * pane starts a new dwell too (React would batch the pick into no change of
+ * `prKey`). Undo takes the mark back through the mark-read undo window.
  */
-export function useOpenedRead(view: TileView | null, prKey: PrKey | null): OpenedReadState {
+export function useOpenedRead(view: TileView | null, prKey: PrKey | null, openId = 0): OpenedReadState {
   const actions = useActions();
   const wanted = opensMarkRead(view, prKey, actions.writes);
   // The provider hands out new functions on every render; the timer calls the latest ones.
@@ -93,12 +95,12 @@ export function useOpenedRead(view: TileView | null, prKey: PrKey | null): Opene
       open.leave();
       timer.current = null;
     };
-  }, [prKey]);
+  }, [prKey, openId]);
 
   // Declared after the open's effect: on a PR change the new open exists before it gets its flag.
   useEffect(() => {
     timer.current?.setWanted(wanted);
-  }, [wanted, prKey]);
+  }, [wanted, prKey, openId]);
 
   // An Approve, comment review or Remove team in the pane: a mark the refetch then makes wanted may fire.
   const acting = prKey !== null && actingKeys(prKey).some((key) => actions.isBusy(key));

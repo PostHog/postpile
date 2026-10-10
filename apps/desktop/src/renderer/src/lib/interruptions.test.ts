@@ -90,7 +90,7 @@ describe('showsInterruptionsPrompt', () => {
 
 describe('interruptionsPromptWaits', () => {
   const idle = { start: null, running: null } as InboxCleanupView;
-  const working = { canSync: true } as ToolsView;
+  const working = { canSync: true, gh: { state: 'ok' } } as ToolsView;
 
   it('goes ahead when nothing else is on screen', () => {
     expect(interruptionsPromptWaits(idle, working)).toBe(false);
@@ -102,6 +102,10 @@ describe('interruptionsPromptWaits', () => {
     expect(interruptionsPromptWaits({ ...idle, start: { kind: 'weekend', since: '2026-10-03T09:00:00.000Z' } }, working)).toBe(true);
     expect(interruptionsPromptWaits({ ...idle, running: { done: 1, total: 5, merged: true } }, working)).toBe(true);
     expect(interruptionsPromptWaits(idle, { ...working, canSync: false })).toBe(true);
+  });
+
+  it('waits while gh is offline, even though syncing is not blocked then', () => {
+    expect(interruptionsPromptWaits(idle, { ...working, gh: { ...working.gh, state: 'offline' } })).toBe(true);
   });
 });
 
