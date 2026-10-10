@@ -12,8 +12,14 @@ describe('replyCopy', () => {
     });
   });
 
-  it('says deleted user for a deleted account', () => {
-    expect(replyCopy({ ...base, author: '', inThread: false, path: null }).title).toBe('Reply to deleted user');
+  it('says deleted user for a deleted account, with no mention', () => {
+    const copy = replyCopy({ ...base, author: '', inThread: false, path: null });
+    expect(copy.title).toBe('Reply to deleted user');
+    expect(copy.hint).toBe('new PR comment, quotes their line');
+  });
+
+  it('says the PR comment quotes and mentions the author', () => {
+    expect(replyCopy({ ...base, inThread: false, path: null }).hint).toBe('new PR comment, quotes their line and mentions @alice');
   });
 
   it('names the person for a PR comment', () => {

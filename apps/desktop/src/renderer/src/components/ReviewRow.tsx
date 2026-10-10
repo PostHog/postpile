@@ -77,7 +77,7 @@ export function ReviewRow(props: ReviewRowProps) {
                 variant={variant}
                 size="md"
                 className="rounded-r-none"
-                disabled={approving}
+                disabled={approving || approveBlocked !== null}
                 title={approveTitle(input, look, approveBlocked, now)}
                 onClick={() => void actions.approve(pr.key, pr.headOid)}
               >

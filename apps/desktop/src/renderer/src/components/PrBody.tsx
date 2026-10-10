@@ -149,13 +149,14 @@ function useBelowRow(scroller: RefObject<HTMLDivElement | null>, row: RefObject<
  * path from the tile) with the quiet housekeeping line under it (mark read,
  * snooze, ⋯), then description, facts and the activity, where
  * every person's comment takes Reply and React. One composer is open at a
- * time; its state lives here, so it starts fresh per PR.
+ * time; its drafts and which one was open are kept per PR (`PaneDrafts`).
  */
 export function PrBody(props: PrBodyProps) {
   const { syncing } = useActions();
   const { pr } = props.detail;
   const { offers } = props;
-  const compose = useComposeState();
+  // Drafts and the open composer are kept per PR, so they are there again when the user comes back.
+  const compose = useComposeState(pr.key);
   const scroller = useRef<HTMLDivElement>(null);
   const reviewRow = useRef<HTMLDivElement>(null);
   const belowRow = useBelowRow(scroller, reviewRow);
