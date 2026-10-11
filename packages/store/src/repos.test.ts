@@ -517,10 +517,10 @@ describe('TopicProposalRepo', () => {
   it('keeps who filed a proposal and lists outside ones and recent decisions', () => {
     const base = { kind: 'rename' as const, intoTopicId: null, fromArea: null, prKeys: [], reason: 'clearer', status: 'pending' as const, decidedAt: null };
     store.proposals.add({ ...base, id: 'c1', topicId: 'topic-1', name: 'One', createdAt: at(0), source: 'consolidation', client: null });
-    store.proposals.add({ ...base, id: 'a1', topicId: 'topic-1', name: 'Uno', createdAt: at(1), source: 'agent', client: 'claude-code' });
+    store.proposals.add({ ...base, id: 'a1', topicId: 'topic-1', name: 'Uno', createdAt: at(1), source: 'agent', client: 'claude-code', by: 'ph3 session' });
     store.proposals.add({ ...base, id: 'a2', topicId: 'topic-1', name: 'Eins', createdAt: at(2), source: 'agent', client: 'codex-mcp-client' });
-    expect(store.proposals.get('a1')).toMatchObject({ source: 'agent', client: 'claude-code' });
-    expect(store.proposals.get('c1')).toMatchObject({ source: 'consolidation', client: null });
+    expect(store.proposals.get('a1')).toMatchObject({ source: 'agent', client: 'claude-code', by: 'ph3 session' });
+    expect(store.proposals.get('c1')).toMatchObject({ source: 'consolidation', client: null, by: null });
     expect(store.proposals.listPendingFromAgents().map((p) => p.id)).toEqual(['a1', 'a2']);
     expect(store.proposals.countFromAgentsSince(at(2))).toBe(1);
 

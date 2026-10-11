@@ -1,4 +1,4 @@
-import { cleanTopicName, planTopicChange, type TopicChangeRequest, type TopicChangeResult, type TopicChangeSnapshot, type TopicProposal, type TopicSnapshot } from '@postpile/core';
+import { cleanTopicName, planTopicChange, proposalBy, type TopicChangeRequest, type TopicChangeResult, type TopicChangeSnapshot, type TopicProposal, type TopicSnapshot } from '@postpile/core';
 import type { Store } from '@postpile/store';
 import { Board } from '../board.ts';
 import { newProposalId } from '../ids.ts';
@@ -63,6 +63,7 @@ export class OutsideProposals {
       decidedAt: null,
       source: 'agent',
       client,
+      by: proposalBy(change),
     };
     this.store.proposals.add(proposal);
     return { status: 'filed', proposalId: proposal.id, preview: plan.preview, reason: null, movedPrKeys: plan.movedPrKeys };

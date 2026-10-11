@@ -103,6 +103,8 @@ const topicChangeSchema = z
     intoTopicId: topicIdSchema.nullable(),
     reason: z.string().max(OUTSIDE_REASON_MAX),
     dryRun: z.boolean(),
+    // Optional: an MCP server from before 2026-10-11 still runs until /mcp reconnects, and sends none.
+    by: z.string().max(PR_NOTE_BY_MAX * 2).nullable().optional(),
   })
   .strict();
 

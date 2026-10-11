@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { planTopicChange, type TopicChangeRequest, type TopicChangeSnapshot } from './topic-change-plan.ts';
+import { planTopicChange, proposalBy, type TopicChangeRequest, type TopicChangeSnapshot } from './topic-change-plan.ts';
 import type { PrKey, TopicProposal } from './types.ts';
 
 const NOW = '2026-09-29T12:00:00.000Z';
@@ -144,11 +144,36 @@ describe('planTopicChange', () => {
         movedPrKeys: ['acme/app#1902'],
         preview: [
           'Move 1 open PR from "Move CI to Depot" into "CI & tests": acme/app#1902.',
-          'Merged and closed layers of the same stack go along too: acme/app#1851 and acme/app#1911.',
+          'Merged and closed PRs go along too: acme/app#1851 and acme/app#1911.',
           '2 PRs stay in "Move CI to Depot".',
         ],
       });
     });
+
+    it('leads with the merged and closed PRs when no open PR moves, never "Move 0"', () => {
+      const done = new Set(['acme/app#1851', 'acme/app#1902', 'acme/app#1911']);
+      const finished = snapshot({ intoTopic: ci, isDone: (key) => done.has(key) });
+      expect(planTopicChange(move({ prKeys: ['acme/app#1902'] }), finished)).toEqual({
+        ok: true,
+        movedPrKeys: [],
+        preview: [
+          'Move 3 merged or closed PRs from "Move CI to Depot" into "CI & tests": acme/app#1851, acme/app#1902, acme/app#1911.',
+          '2 PRs stay in "Move CI to Depot".',
+        ],
+      });
+      expect(planTopicChange(change({ prKeys: ['acme/app#1902'] }), finished)).toMatchObject({
+        ok: true,
+        preview: ['Split 3 merged or closed PRs out of "Move CI to Depot" into a new topic "Turbo cache": acme/app#1851, acme/app#1902, acme/app#1911.', '2 PRs stay in "Move CI to Depot".'],
+      });
+    });
+  });
+
+  it('keeps the session name on one line, null when none, and refuses a long one', () => {
+    expect(proposalBy({ by: '  ph3\n session ' })).toBe('ph3 session');
+    expect(proposalBy({ by: ' ' })).toBeNull();
+    expect(proposalBy({})).toBeNull();
+    expect(planTopicChange(change({ by: 'x'.repeat(61) }), snapshot())).toMatchObject({ ok: false, reason: expect.stringContaining('by must be at most 60 characters') });
+    expect(planTopicChange(change({ by: 'ph3 session' }), snapshot()).ok).toBe(true);
   });
 
   it('checks the fields and that the topic is active', () => {

@@ -165,7 +165,7 @@ describe('PostPile MCP server', () => {
       search_prs: ['format', 'limit', 'offset', 'query', 'repo', 'state', 'whose_move'],
       whats_on_me: ['author_scope', 'format', 'limit', 'offset', 'repo', 'state', 'whose_move'],
       refresh_from_github: ['pr', 'topic'],
-      propose_topic_change: ['dry_run', 'into_topic', 'kind', 'name', 'prs', 'reason', 'topic'],
+      propose_topic_change: ['by', 'dry_run', 'into_topic', 'kind', 'name', 'prs', 'reason', 'topic'],
       note_pr: ['action', 'by', 'cover_token', 'covered_by', 'kind', 'lease_minutes', 'note', 'note_id', 'pr', 'token'],
     });
     const schemaOf = (name: string) => tools.find((tool) => tool.name === name)?.inputSchema.properties ?? {};

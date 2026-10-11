@@ -797,10 +797,15 @@ function proposalWords(proposal: TopicProposal, topicId: string, name: (id: stri
   return `new topic "${proposal.name ?? ''}"`;
 }
 
-/** Who filed it: an outside agent, PostPile's consolidation, or the topic tidy that applied itself after an upgrade. */
+/**
+ * Who filed it: an outside agent ("suggested by claude-code (ph3 session)"
+ * when it gave its session name), PostPile's consolidation, or the topic
+ * tidy that applied itself after an upgrade.
+ */
 function proposalSourceWords(proposal: TopicProposal): string {
   if (proposal.source === 'agent') {
-    return `suggested by ${proposal.client ?? 'an outside agent'}`;
+    const session = proposal.by ? ` (${proposal.by})` : '';
+    return `suggested by ${proposal.client ?? 'an outside agent'}${session}`;
   }
   return proposal.source === 'upgrade' ? 'applied by the topic tidy after an upgrade' : "from PostPile's consolidation";
 }

@@ -293,7 +293,17 @@ describe('agent requests through the data folder', () => {
     await vi.waitFor(() => expect(existsSync(join(folder, `${id}.result.json`))).toBe(true), { timeout: 8000, interval: 20 });
     const result = JSON.parse(readFileSync(join(folder, `${id}.result.json`), 'utf8'));
     expect(result).toMatchObject({ ok: true, kind: 'propose_topic_change', topicChange: { status: 'filed' } });
-    expect((await h.engine.listProposals()).topics).toMatchObject([{ kind: 'rename', name: 'Depot CI', source: 'agent', client: 'claude-code' }]);
+    // A payload without by (an MCP server from before it existed) files with by null.
+    expect((await h.engine.listProposals()).topics).toMatchObject([{ kind: 'rename', name: 'Depot CI', source: 'agent', client: 'claude-code', by: null }]);
+    await h.engine.close();
+  });
+
+  it('stores the session name an agent gives', async () => {
+    const h = makeHarness({ now: () => new Date('2026-09-02T12:00:00Z') });
+    await depotWithStack(h);
+    const change = { topicId: 'depot', kind: 'rename' as const, prKeys: [], name: 'Depot CI', intoTopicId: null, reason: 'clearer', dryRun: false, by: ' ph3 session ' };
+    expect(await h.engine.proposeTopicChange(change, { client: 'claude-code' })).toMatchObject({ status: 'filed' });
+    expect((await h.engine.listProposals()).topics).toMatchObject([{ client: 'claude-code', by: 'ph3 session' }]);
     await h.engine.close();
   });
 });

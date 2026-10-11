@@ -118,7 +118,7 @@ describe('propose_topic_change', () => {
     expect(result.text).toMatch(/<postpile-data id="[0-9a-f]{8}">\nSplit 2 open PRs out of "Move CI to Depot" into a new topic "Depot stack": acme\/app#1902, acme\/app#1911\./);
     expect(result.text).toContain('acme/app#1902 brings acme/app#1911 along (same stack).');
     // Merged and closed layers move too, named once and not counted.
-    expect(result.text).toContain('Merged and closed layers of the same stack go along too: acme/app#1851, acme/app#1862 and acme/app#1930.');
+    expect(result.text).toContain('Merged and closed PRs go along too: acme/app#1851, acme/app#1862 and acme/app#1930.');
     expect(result.structured).toEqual({ status: 'dry_run', proposal_id: null, prs_moved: 2 });
     expect((await engine.listProposals()).topics.map((proposal) => proposal.source)).toEqual(['consolidation', 'consolidation', 'agent']);
   });
@@ -175,12 +175,14 @@ describe('propose_topic_change', () => {
   it('points at the merge target for the outcome, and shows an accepted merge there', async () => {
     const engine = new FakeEngine();
     const client = await connected(engine);
-    const filed = await call(client, 'propose_topic_change', { topic: 'topic-migrations', kind: 'merge', into_topic: 'topic-ci-tests', reason: 'Same people, same shards.' });
+    const filed = await call(client, 'propose_topic_change', { topic: 'topic-migrations', kind: 'merge', into_topic: 'topic-ci-tests', reason: 'Same people, same shards.', by: ' ph3\n session ' });
     expect(filed.text).toContain('topic(topic: "topic-ci-tests") shows whether the user accepted or rejected it.');
+    const proposal = (await engine.listProposals()).topics.find((candidate) => candidate.id === filed.structured?.proposal_id);
+    expect(proposal).toMatchObject({ client: 'claude-code', by: 'ph3 session' });
 
     await engine.decideTopicProposal(String(filed.structured?.proposal_id), true);
     const target = await call(client, 'topic', { topic: 'topic-ci-tests' });
-    expect(fencedPart(target.text)).toMatch(/accepted on \d{4}-\d\d-\d\d: merged in from "Migrations", suggested by claude-code\. Reason: Same people, same shards\./);
+    expect(fencedPart(target.text)).toMatch(/accepted on \d{4}-\d\d-\d\d: merged in from "Migrations", suggested by claude-code \(ph3 session\)\. Reason: Same people, same shards\./);
   });
 
   it('asks for what each kind needs, with an example', async () => {

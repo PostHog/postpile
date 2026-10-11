@@ -8,6 +8,7 @@ import {
   nextTopicStatus,
   OUTSIDE_PROPOSAL_DAYS,
   planTopicChange,
+  proposalBy,
   proposalOutcome,
   proposalOutcomeAt,
   tailoringLines,
@@ -128,6 +129,7 @@ export class FakeTopicChanges {
       decidedAt: null,
       source: 'agent',
       client,
+      by: proposalBy(change),
     };
     this.data.proposals.push(proposal);
     return { status: 'filed', proposalId: proposal.id, preview: plan.preview, reason: null, movedPrKeys: plan.movedPrKeys };

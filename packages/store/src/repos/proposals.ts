@@ -16,6 +16,7 @@ interface ProposalRow {
   decided_at: string | null;
   source: string;
   client: string | null;
+  by: string | null;
 }
 
 function toProposal(row: ProposalRow): TopicProposal {
@@ -33,6 +34,7 @@ function toProposal(row: ProposalRow): TopicProposal {
     decidedAt: row.decided_at,
     source: row.source as ProposalSource,
     client: row.client,
+    by: row.by,
   };
 }
 
@@ -43,8 +45,8 @@ export class TopicProposalRepo {
     run(
       this.db,
       `INSERT INTO topic_proposal
-         (id, kind, topic_id, name, into_topic_id, from_area, pr_keys_json, reason, status, created_at, decided_at, source, client)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (id, kind, topic_id, name, into_topic_id, from_area, pr_keys_json, reason, status, created_at, decided_at, source, client, "by")
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       proposal.id,
       proposal.kind,
       proposal.topicId,
@@ -58,6 +60,7 @@ export class TopicProposalRepo {
       proposal.decidedAt,
       proposal.source,
       proposal.client,
+      proposal.by ?? null,
     );
   }
 

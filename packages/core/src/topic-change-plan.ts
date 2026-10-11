@@ -1,3 +1,4 @@
+import { cleanNoteText, PR_NOTE_BY_MAX } from './pr-notes.ts';
 import { isLiveProposal, sameTopicChange } from './topic-proposals.ts';
 import { cleanTopicName, EMPTY_TOPIC_NAME, STORED_TOPIC_NAME_MAX } from './topics.ts';
 import type { IsoTime, PrKey, TopicProposal, TopicStatus } from './types.ts';
@@ -32,6 +33,8 @@ export interface TopicChangeRequest {
   reason: string;
   /** Check and preview only, file nothing. */
   dryRun: boolean;
+  /** The agent's session name ("ph3 session"), like note_pr's by; absent or null when it gave none. */
+  by?: string | null;
 }
 
 export interface TopicChangeResult {
@@ -94,10 +97,19 @@ function list(items: string[]): string {
   return `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`;
 }
 
+/** The session name to store: whitespace folded to one line, null when none was given. */
+export function proposalBy(change: Pick<TopicChangeRequest, 'by'>): string | null {
+  const by = cleanNoteText(change.by ?? '');
+  return by === '' ? null : by;
+}
+
 function checkFields(change: TopicChangeRequest): string | null {
   const reason = change.reason.trim();
   if (reason === '' || reason.length > OUTSIDE_REASON_MAX) {
     return `reason is required, at most ${OUTSIDE_REASON_MAX} characters.`;
+  }
+  if ((proposalBy(change) ?? '').length > PR_NOTE_BY_MAX) {
+    return `by must be at most ${PR_NOTE_BY_MAX} characters: your session name, e.g. "ph3 session".`;
   }
   const name = change.name?.trim() ?? '';
   if ((change.kind === 'split' || change.kind === 'rename') && (name === '' || Array.from(name).length > TOPIC_NAME_MAX)) {
@@ -161,7 +173,9 @@ function checkCaps(topicId: string, snapshot: TopicChangeSnapshot): string | nul
 interface MovedPrs {
   /** The open PRs that move; the count the preview gives. */
   moved: PrKey[];
-  /** "X brings Y along (same stack)." lines, then one line naming the merged and closed layers that go along. */
+  /** The merged and closed PRs that go along (asked for, or layers of the same stack). */
+  done: PrKey[];
+  /** "X brings Y along (same stack)." lines. */
   along: string[];
   staying: PrKey[];
 }
@@ -187,12 +201,23 @@ function movedPrs(change: TopicChangeRequest, snapshot: TopicChangeSnapshot, top
     }
   }
   const done = all.filter((key) => snapshot.isDone(key));
-  if (done.length > 0) {
-    along.push(`Merged and closed layers of the same stack go along too: ${list(done)}.`);
-  }
   const moved = all.filter((key) => !snapshot.isDone(key));
   const staying = snapshot.members.filter((key) => !all.includes(key));
-  return { moved, along, staying };
+  return { moved, done, along, staying };
+}
+
+/**
+ * The preview's lines about what moves, `lead` saying how many and where:
+ * "Move 2 open PRs from ...: a, b." plus the stack lines and the merged and
+ * closed PRs that go along. With no open PR moving, those lead instead
+ * ("Move 3 merged or closed PRs ..."), so the preview never reads "Move 0".
+ */
+function movedLines(prs: MovedPrs, lead: (count: string) => string): string[] {
+  if (prs.moved.length === 0) {
+    return [`${lead(plural(prs.done.length, 'merged or closed PR'))}: ${prs.done.join(', ')}.`, ...prs.along];
+  }
+  const doneLine = prs.done.length > 0 ? [`Merged and closed PRs go along too: ${list(prs.done)}.`] : [];
+  return [`${lead(plural(prs.moved.length, 'open PR'))}: ${prs.moved.join(', ')}.`, ...prs.along, ...doneLine];
 }
 
 function stayLine(staying: PrKey[], topic: TopicSnapshot): string {
@@ -211,11 +236,7 @@ function splitPlan(change: TopicChangeRequest, snapshot: TopicChangeSnapshot, to
   return {
     ok: true,
     movedPrKeys: prs.moved,
-    preview: [
-      `Split ${plural(prs.moved.length, 'open PR')} out of "${topic.name}" into a new topic "${name}"${movedList(prs.moved)}`,
-      ...prs.along,
-      stayLine(prs.staying, topic),
-    ],
+    preview: [...movedLines(prs, (count) => `Split ${count} out of "${topic.name}" into a new topic "${name}"`), stayLine(prs.staying, topic)],
   };
 }
 
@@ -234,11 +255,6 @@ function intoTopicOf(change: TopicChangeRequest, snapshot: TopicChangeSnapshot, 
   return into;
 }
 
-/** ": a, b, c." ending the preview's first line, or just "." when no open PR moves. */
-function movedList(moved: PrKey[]): string {
-  return moved.length === 0 ? '.' : `: ${moved.join(', ')}.`;
-}
-
 function movePlan(change: TopicChangeRequest, snapshot: TopicChangeSnapshot, topic: TopicSnapshot): TopicChangePlan {
   const into = intoTopicOf(change, snapshot, topic);
   if (typeof into === 'string') {
@@ -254,11 +270,7 @@ function movePlan(change: TopicChangeRequest, snapshot: TopicChangeSnapshot, top
   return {
     ok: true,
     movedPrKeys: prs.moved,
-    preview: [
-      `Move ${plural(prs.moved.length, 'open PR')} from "${topic.name}" into "${into.name}"${movedList(prs.moved)}`,
-      ...prs.along,
-      stayLine(prs.staying, topic),
-    ],
+    preview: [...movedLines(prs, (count) => `Move ${count} from "${topic.name}" into "${into.name}"`), stayLine(prs.staying, topic)],
   };
 }
 

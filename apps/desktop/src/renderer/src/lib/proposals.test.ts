@@ -56,6 +56,7 @@ describe('suggestedBy', () => {
 
   it('puts the suggester in the card meta line only for outside proposals', () => {
     expect(proposalMeta(proposal({ source: 'agent', client: 'claude-code' }), '2h')).toBe('topic · suggested by Claude Code · 2h');
+    expect(proposalMeta(proposal({ source: 'agent', client: 'claude-code', by: 'ph3 session' }), '2h')).toBe('topic · suggested by Claude Code · ph3 session · 2h');
     expect(proposalMeta(proposal({}), '2h')).toBe('topic · 2h');
   });
 });
