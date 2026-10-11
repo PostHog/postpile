@@ -126,16 +126,24 @@ describe('updateUrgency', () => {
     const now = since + 5 * hour;
     const until = laterUntil(view, now);
     expect(until).toBe(since + 24 * hour);
-    expect(updateUrgency(view, now, until)).toBe('none');
-    expect(updateUrgency(view, until, until)).toBe('bar');
+    expect(updateUrgency(view, now, { until, from: 'pill' })).toBe('none');
+    expect(updateUrgency(view, until, { until, from: 'pill' })).toBe('bar');
   });
 
   it('Later on the bar drops to the pill for 24h, then the bar returns', () => {
     const now = since + 40 * hour;
     const until = laterUntil(view, now);
     expect(until).toBe(now + 24 * hour);
-    expect(updateUrgency(view, now + hour, until)).toBe('pill');
-    expect(updateUrgency(view, until, until)).toBe('bar');
+    expect(updateUrgency(view, now + hour, { until, from: 'bar' })).toBe('pill');
+    expect(updateUrgency(view, until, { until, from: 'bar' })).toBe('bar');
+  });
+
+  it('Later on the pill once the bar is due hides it for 24h, then the bar returns', () => {
+    const now = since + 40 * hour;
+    const until = laterUntil(view, now);
+    expect(until).toBe(now + 24 * hour);
+    expect(updateUrgency(view, now + hour, { until, from: 'pill' })).toBe('none');
+    expect(updateUrgency(view, until, { until, from: 'pill' })).toBe('bar');
   });
 });
 

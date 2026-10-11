@@ -8,6 +8,7 @@ import { capNote } from '../lib/agent-stats.ts';
 import { pollIsFresh } from '../lib/live.ts';
 import { syncProgressDetail, syncProgressText } from '../lib/sync-progress.ts';
 import { syncReportDetail } from '../lib/sync-report.ts';
+import { syncOffStatus } from '../lib/tools.ts';
 import { ageLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
 import logoUrl from '../assets/logo-64.png';
@@ -90,9 +91,10 @@ function SyncStatus() {
     return <SyncProgressStatus progress={progress} />;
   }
   if (tools && !tools.canSync) {
+    const off = syncOffStatus(tools);
     return (
-      <StatusText dot="amber" detail={`${tools.gh.headline}. The note in the middle column has the fix.`}>
-        sync off <Sep /> gh needs a fix
+      <StatusText dot="amber" detail={off.title}>
+        sync off <Sep /> {off.text}
       </StatusText>
     );
   }

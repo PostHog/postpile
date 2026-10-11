@@ -52,7 +52,7 @@ export function UpdateBar() {
           title="Back to the small pill for 24 hours"
           onClick={() => {
             sendTelemetry('update_bar_later_clicked', {});
-            later();
+            later('bar');
           }}
         >
           Later
