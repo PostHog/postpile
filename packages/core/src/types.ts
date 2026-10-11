@@ -551,6 +551,8 @@ export interface TopicProposal {
   source: ProposalSource;
   /** agent: the MCP client's name from its initialize handshake ("claude-code"); null for consolidation. */
   client: string | null;
+  /** agent: the session name it passed ("ph3 session"), self-reported; absent or null when it gave none, and for the app's own. */
+  by?: string | null;
 }
 
 export type PrSetStatus = 'active' | 'dissolved';

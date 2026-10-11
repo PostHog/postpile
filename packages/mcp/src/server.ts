@@ -104,8 +104,9 @@ const PROPOSE_DESCRIPTION = `File a topic change for the user to decide in PostP
 Checks: the topic is active, split and move PRs belong to it and at least one PR stays, the same change is not pending and was not rejected before. At most 3 pending suggestions per topic, 10 in total, 20 a day; unanswered ones expire after 14 days. topic lists earlier outcomes.
 Use when: you know from the code or the user that PRs belong to different work, or a topic's name no longer fits.
 Not for: small taste differences, or changes the user did not ask about and would not care for.
-Example: propose_topic_change(topic: "depot", kind: "split", prs: ["acme/app#1902"], name: "Turbo cache", reason: "Cache work is separate from the runner move")
-Example: propose_topic_change(topic: "depot", kind: "move", prs: ["acme/app#1911"], into_topic: "frontend build", reason: "It only changes the frontend build")`;
+Pass your session name in by: the user sees it with the suggestion, and topic lists it with the outcome.
+Example: propose_topic_change(topic: "depot", kind: "split", prs: ["acme/app#1902"], name: "Turbo cache", reason: "Cache work is separate from the runner move", by: "ph3 session")
+Example: propose_topic_change(topic: "depot", kind: "move", prs: ["acme/app#1911"], into_topic: "frontend build", reason: "It only changes the frontend build", by: "ph3 session")`;
 
 const NOTE_DESCRIPTION = `Leave a short note on a PR for the user and other agents: facts GitHub does not show. kind "covered": another PR's review covers this one (covered_by, same repo); "no_action": you looked and nothing is needed; "in_progress": you are on it right now (a lease, default ${PR_NOTE_LEASE_DEFAULT_MINUTES} min, ${PR_NOTE_LEASE_MIN_MINUTES} to ${PR_NOTE_LEASE_MAX_MINUTES}).
 Advisory only: a note never hides a move, marks nothing read or done and changes no counts. whats_on_me shows it on the PR's line; the user sees it in the PR pane and can clear it.
@@ -370,6 +371,7 @@ export function createMcpServer(reader: PostPileReader, options: McpServerOption
           .max(OUTSIDE_REASON_MAX, { error: `reason must be at most ${OUTSIDE_REASON_MAX} characters` })
           .describe(`Why, for the user, at most ${OUTSIDE_REASON_MAX} characters`),
         dry_run: z.boolean().default(false).describe('true: only preview, file nothing'),
+        by: z.string().max(PR_NOTE_BY_MAX, { error: `by must be at most ${PR_NOTE_BY_MAX} characters` }).optional().describe('Your session name, e.g. "ph3 session"; the user sees it with the suggestion'),
       },
       outputSchema: proposeOutput,
       annotations: PROPOSE,

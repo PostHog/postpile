@@ -172,10 +172,19 @@ export function pickUpdate(current: string, releases: ReleaseInfo[]): AvailableU
 const HOUR_MS = 60 * 60 * 1000;
 /** How long the small pill is enough; after this the bar shows. */
 export const BAR_AFTER_MS = 24 * HOUR_MS;
-/** What "Later" on the bar buys. */
+/** What "Later" buys once the pill alone is not enough. */
 export const BAR_LATER_MS = 24 * HOUR_MS;
 
 export type UpdateUrgency = 'none' | 'pill' | 'bar';
+
+/**
+ * A "Later": quiet until `until` (epoch ms). `from` is where it was clicked:
+ * Later on the pill hides the pill, Later on the bar drops back to the pill.
+ */
+export interface UpdateSnooze {
+  until: number;
+  from: 'pill' | 'bar';
+}
 
 function behindSinceMs(update: AvailableUpdate): number | null {
   if (!update.behindSince) {
@@ -193,27 +202,28 @@ export function hoursBehind(view: UpdateView, now: number): number | null {
 
 /**
  * How loud the update reminder is. Under 24h behind it is the small pill; from
- * 24h on it is the bar. `snoozedUntil` (epoch ms, from "Later") quiets it:
- * under 24h the pill hides, and from 24h on the bar drops back to the pill.
- * It never goes fully quiet once the user is 24h behind. Without a known
+ * 24h on it is the bar. A running snooze ("Later") quiets it: under 24h the
+ * pill hides; from 24h on, Later on the bar drops back to the pill and Later
+ * on the pill hides it. When the snooze ends the bar is back. Without a known
  * time behind, the reminder stays a pill.
  */
-export function updateUrgency(view: UpdateView, now: number, snoozedUntil: number | null): UpdateUrgency {
+export function updateUrgency(view: UpdateView, now: number, snooze: UpdateSnooze | null): UpdateUrgency {
   if (!view.latest) {
     return 'none';
   }
-  const snoozed = snoozedUntil !== null && snoozedUntil > now;
+  const snoozed = snooze !== null && snooze.until > now;
   const since = behindSinceMs(view.latest);
   const barDue = since !== null && now - since >= BAR_AFTER_MS;
-  if (barDue) {
-    return snoozed ? 'pill' : 'bar';
+  if (!snoozed) {
+    return barDue ? 'bar' : 'pill';
   }
-  return snoozed ? 'none' : 'pill';
+  return barDue && snooze.from === 'bar' ? 'pill' : 'none';
 }
 
 /**
- * Where "Later" snoozes to (epoch ms). On the bar: 24h from now. On the pill:
- * until the bar is due, so the pill hides only until the bar takes over.
+ * Where "Later" snoozes to (epoch ms). On the pill under 24h: until the bar
+ * is due, so the pill hides only until the bar takes over. Otherwise (the
+ * bar, or the pill once the bar is due): 24h from now.
  */
 export function laterUntil(view: UpdateView, now: number): number {
   const since = view.latest ? behindSinceMs(view.latest) : null;

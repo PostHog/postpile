@@ -2673,7 +2673,9 @@ need it, and never retry per call.
   ("Fix this" chip, headline, what it means, numbered fix steps with Copy,
   "Check again", when it last looked and looks again). Topics exist: the
   same note as a banner above them. Sync is disabled with the headline as
-  its title, the title bar says "sync off · gh needs a fix", the start
+  its title, the title bar says "sync off · gh needs a fix" ("sync off · gh
+  and claude need a fix" when claude is missing or logged out too, since
+  2026-10-11; a claude usage limit is left to the footer), the start
   sync is skipped quietly.
 - claude off: one line above the topics, "Rules only" chip and
   "Agent features are off: claude not found. Tiles, whose turn and
@@ -8539,8 +8541,11 @@ for now (Julian, 2026-09-29: "okay, don't do now").
   overstated the change.
 - The answer always previews what accepting would do, stacks included ("Move
   2 open PRs …: #1902, #1911", "#1902 brings #1911 along", then "Merged and
-  closed layers of the same stack go along too: #1851, #1862 and #1930",
-  via `Board.movesWith`), and whether it was filed or only a dry run.
+  closed PRs go along too: #1851, #1862 and #1930", via `Board.movesWith`),
+  and whether it was filed or only a dry run. When no open PR moves, the
+  finished ones lead: "Move 3 merged or closed PRs from … into …: #1851,
+  #1862, #1930" (same for a split). They do move along, and "Move 0 open
+  PRs" read as "moves nothing" (2026-10-11). Such a move is not refused.
 - A move or merge into the topic itself, into a topic that does not exist
   and into an archived or retired one each get their own refusal
   (2026-10-10; before, all three said "is not" active).
@@ -8552,13 +8557,19 @@ for now (Julian, 2026-09-29: "okay, don't do now").
 - Store: `topic_proposal` gains `source` (`consolidation` or `agent`) and
   `client` (the MCP client name), in a new migration. `decide` checks the
   proposal again on accept (PRs may have moved since) and refuses with a
-  reason when it no longer fits.
+  reason when it no longer fits. Migration 040 adds `by` (2026-10-11): the
+  optional session name the agent passes, like note_pr's `by` (whitespace
+  folded, at most 60 characters, null when none). Self-reported: a label,
+  never an identity. Before, two sessions of the same client filing
+  suggestions looked the same.
 - Inbox card: the meta line names who suggested it, "topic · suggested by
   Claude Code · 2h ago" (client names map to a display name; unknown ones show
-  as "an outside agent"); the reason shows as today. Accept and Reject as for
-  any proposal.
+  as "an outside agent"), with the session name when the agent gave one:
+  "suggested by Claude Code · ph3 session · 2h ago". The reason shows as
+  today. Accept and Reject as for any proposal.
 - Feedback to the agent: `topic` (brief and full) lists pending suggestions
-  and decisions from the last 14 days with dates, so an agent sees the outcome
+  and decisions from the last 14 days with dates and who filed them
+  ("suggested by claude-code (ph3 session)"), so an agent sees the outcome
   and does not repeat itself. There is no push back to the agent.
 - Telemetry: `proposal_resolved` gets `source`.
 - Built (2026-09-29): `planTopicChange` in core (checks and preview, shared
@@ -8612,7 +8623,17 @@ the reporting agent and checked by Codex).
   that is cleared already changes nothing and answers `already_cleared`
   with who cleared it and when; when the user cleared it in the app, the
   answer says so and tells the agent not to set it again unless the user
-  asks (2026-10-10, bug hunt B-A-10).
+  asks (2026-10-10, bug hunt B-A-10). pr_context also says it without
+  a clear call: "The user cleared claude-code's no_action note (by ph3
+  session) 2 h ago: don't set it again unless they ask", from the PR's
+  newest note the user cleared (`listForPrs` brings it along, and each
+  slot's newest note whatever became of it). Any newer note in that slot,
+  even one cleared since, makes it history and the line goes. Before, only
+  the agent that called clear learned it, so another agent could set again
+  what the user just took away (2026-10-11). Only the PR pane's Clear
+  stores `cleared_by` "user": an agent's clear stores its client name, and
+  a client that names itself "user" is stored as "user (agent)"
+  (`agentClearedBy`), so it can never pass for the user.
   Order is the autoincrement `seq`, never `created_at`.
 - **Anchored to the PR's state, not to a time.** `noteAnchor` (core) takes
   the head, state, draft flag, pending review requests with who asked
@@ -9419,8 +9440,11 @@ The reminder has two sizes, picked by core (`updateUrgency` in
   the brew command, release notes and "Later".
 - **Later**: on the bar it drops back to the pill for 24h, then the bar
   returns. In the pill's popover (under 24h) it hides the pill until the bar
-  takes over. Stored as one timestamp in localStorage; losing it only shows the
-  reminder again.
+  takes over. In the pill's popover once the bar is due (the pill the bar's
+  Later left), it hides the pill for 24h, then the bar returns (2026-10-11:
+  before, it snoozed again and the pill stayed, so the click did nothing
+  visible). Stored in localStorage as the time and where Later was clicked;
+  losing it only shows the reminder again.
 
 Why: the owner releases about twice a day, and "Later" used to hide a version
 for good, so the reminder went quiet while the user kept falling behind.

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ToolsView } from '@postpile/core';
 import { TOOL_PATH_HINT } from '@postpile/core';
-import { agentOffReason, checkLine, claudeDetailUnderGh, retryLine, toolsFooter, toolsNotice, toolsRefetchMs } from './tools.ts';
+import { agentOffReason, checkLine, claudeDetailUnderGh, retryLine, syncOffStatus, toolsFooter, toolsNotice, toolsRefetchMs } from './tools.ts';
 
 function view(overrides: { gh?: Partial<ToolsView['gh']>; claude?: Partial<ToolsView['claude']>; checkedAt?: string | null; nextCheckAt?: string | null } = {}): ToolsView {
   return {
@@ -95,5 +95,18 @@ describe('agentOffReason', () => {
     expect(agentOffReason(paused, now)).toBe('Agent features are paused: Claude usage limit reached. Trying again at 22:25, in 25 min.');
     const missing = { ...view({ claude: { state: 'missing', headline: 'Agent features are off: claude not found' } }), agentOn: false };
     expect(agentOffReason(missing, now)).toBe('Agent features are off: claude not found.');
+  });
+});
+
+describe('syncOffStatus', () => {
+  it('names gh alone, or gh and claude when claude is broken too', () => {
+    expect(syncOffStatus(view({ gh: missingGh })).text).toBe('gh needs a fix');
+    expect(syncOffStatus(view({ gh: missingGh, claude: missingClaude })).text).toBe('gh and claude need a fix');
+    expect(syncOffStatus(view({ gh: missingGh, claude: { state: 'logged_out' } })).text).toBe('gh and claude need a fix');
+    expect(syncOffStatus(view({ gh: missingGh, claude: missingClaude })).title).toContain('Agent features are off: claude not found');
+  });
+
+  it('leaves a usage limit to the footer: it ends by itself', () => {
+    expect(syncOffStatus(view({ gh: missingGh, claude: { state: 'limited' } })).text).toBe('gh needs a fix');
   });
 });

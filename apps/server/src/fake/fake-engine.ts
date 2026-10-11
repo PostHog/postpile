@@ -104,6 +104,7 @@ import type {
 } from '@postpile/core';
 import {
   appendTailoring,
+  CLEARED_BY_USER,
   busyInboxView,
   lessonTailoringLine,
   removeTailoringLine,
@@ -2315,7 +2316,7 @@ export class FakeEngine implements EngineService {
   }
 
   async clearPrNote(noteId: string): Promise<PrNoteResult> {
-    return this.prNotes.clear(noteId, 'user');
+    return this.prNotes.clear(noteId, CLEARED_BY_USER);
   }
 
   async listPrNotes(prKeys: PrKey[]): Promise<PrNotesView[]> {

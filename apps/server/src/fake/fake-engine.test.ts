@@ -236,7 +236,7 @@ describe('FakeEngine memory', () => {
     const dry = await engine.proposeTopicChange(change, { client: 'claude-code' });
     expect(dry.status).toBe('dry_run');
     expect(dry.preview.join('\n')).toContain('acme/app#1902 brings acme/app#1911 along (same stack).');
-    expect(dry.preview.join('\n')).toContain('Merged and closed layers of the same stack go along too: acme/app#1851, acme/app#1862 and acme/app#1930.');
+    expect(dry.preview.join('\n')).toContain('Merged and closed PRs go along too: acme/app#1851, acme/app#1862 and acme/app#1930.');
 
     const filed = await engine.proposeTopicChange({ ...change, dryRun: false }, { client: 'claude-code' });
     expect(filed.status).toBe('filed');

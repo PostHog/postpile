@@ -2,7 +2,7 @@
 // PRs"). Note text, `by` and the client name are untrusted: every line here
 // goes inside the <postpile-data> fence. Only the observation token, a hash
 // PostPile made, is printed outside it.
-import type { PrNotesView, PrNoteView } from '@postpile/core';
+import type { PrNotesView, PrNoteView, UserClearedNote } from '@postpile/core';
 import { ago } from './text.ts';
 
 /** "1 h 20 min", "2 h", "45 min", "under a minute": how long until `iso`. */
@@ -77,7 +77,16 @@ function leaseLine(note: PrNoteView, now: Date): string {
   return `${head}${until} (${who(note, now)}): ${note.note}`;
 }
 
-/** pr_context's note lines: the current note of each slot with its id, why it is stale, and the one it replaced. Empty when there are none. */
+/** "The user cleared claude-code's no_action note (by ph3 session) 2 h ago: don't set it again unless they ask." */
+function userClearedLine(cleared: UserClearedNote, now: Date): string {
+  return `The user cleared ${cleared.client}'s ${cleared.kind} note (by ${cleared.by}) ${ago(cleared.clearedAt, now)}: don't set it again unless they ask.`;
+}
+
+/**
+ * pr_context's note lines: the current note of each slot with its id, why
+ * it is stale, the one it replaced, and the newest one the user cleared.
+ * Empty when there are none.
+ */
 export function contextNoteLines(view: PrNotesView, now: Date): string[] {
   const lines: string[] = [];
   if (view.durable) {
@@ -89,6 +98,9 @@ export function contextNoteLines(view: PrNotesView, now: Date): string[] {
   if (view.replaced) {
     const kind = view.replaced.kind === 'in_progress' ? 'in_progress' : durableWords(view.replaced);
     lines.push(`Replaced: ${kind} by ${view.replaced.by} (${ago(view.replaced.createdAt, now)})`);
+  }
+  if (view.userCleared) {
+    lines.push(userClearedLine(view.userCleared, now));
   }
   return lines;
 }
@@ -102,9 +114,22 @@ function noteJson(note: PrNoteView | null): object | null {
   return { id, kind, coveredBy, coverFetchedAt, coverReviewed, createdAt, expiresAt, status, untrusted: { note: note.note, by: note.by, client: note.client, staleReasons } };
 }
 
+function userClearedJson(cleared: UserClearedNote | null): object | null {
+  if (!cleared) {
+    return null;
+  }
+  return { kind: cleared.kind, clearedAt: cleared.clearedAt, untrusted: { client: cleared.client, by: cleared.by } };
+}
+
 /** pr_context's JSON: the observation token and the notes, free text under "untrusted". */
 export function notesJson(view: PrNotesView): object {
-  return { observationToken: view.token, durable: noteJson(view.durable), lease: noteJson(view.lease), replaced: noteJson(view.replaced) };
+  return {
+    observationToken: view.token,
+    durable: noteJson(view.durable),
+    lease: noteJson(view.lease),
+    replaced: noteJson(view.replaced),
+    userCleared: userClearedJson(view.userCleared),
+  };
 }
 
 /** Outside the fence: the token note_pr needs. */

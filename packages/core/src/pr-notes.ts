@@ -294,6 +294,32 @@ export interface PrNotesView {
    * "Replaced:" line never dangles under no note.
    */
   replaced: PrNoteView | null;
+  /**
+   * The newest note the user cleared in the PR pane, so an agent does not
+   * set again what the user just took away. Null when there is none, or a
+   * newer note sits in its slot.
+   */
+  userCleared: UserClearedNote | null;
+}
+
+/** The PR pane's Clear: `cleared_by` of a note the user cleared. */
+export const CLEARED_BY_USER = 'user';
+
+/**
+ * The `cleared_by` an agent's clear is stored under: its MCP client name,
+ * which the client picks itself. A client calling itself "user" is stored
+ * as "user (agent)", so only the PR pane's Clear ever reads as the user's.
+ */
+export function agentClearedBy(client: string): string {
+  return client === CLEARED_BY_USER ? `${client} (agent)` : client;
+}
+
+/** A note the user cleared: whose it was and when it went. `client` and `by` are agent-written. */
+export interface UserClearedNote {
+  kind: PrNoteKind;
+  client: string;
+  by: string;
+  clearedAt: IsoTime;
 }
 
 /** What a note's staleness is checked against: the PRs as stored now. */
@@ -364,9 +390,27 @@ export function prNoteView(note: PrNote, read: NoteReadContext): PrNoteView {
 }
 
 /**
- * One PR's notes from its stored rows (current ones and replaced ones, any
- * order): the current note of each slot, and the newest replaced note while
- * the note that replaced it is still current.
+ * The newest note the user cleared, unless a newer note took its slot since
+ * (even one cleared or replaced by now). `own` is sorted by seq and holds
+ * each slot's newest note (`listForPrs`).
+ */
+function userClearedNote(own: PrNote[]): UserClearedNote | null {
+  const cleared = own.filter((note) => note.clearedBy === CLEARED_BY_USER && note.clearedAt !== null).at(-1);
+  if (!cleared || cleared.clearedAt === null) {
+    return null;
+  }
+  const newestInSlot = own.filter((note) => note.slot === cleared.slot).at(-1);
+  if (newestInSlot && newestInSlot.seq > cleared.seq) {
+    return null;
+  }
+  return { kind: cleared.kind, client: cleared.client, by: cleared.by, clearedAt: cleared.clearedAt };
+}
+
+/**
+ * One PR's notes from its stored rows (current, replaced and user-cleared
+ * ones, any order): the current note of each slot, the newest replaced note
+ * while the note that replaced it is still current, and the newest note the
+ * user cleared.
  */
 export function prNotesView(prKey: PrKey, token: string, notes: PrNote[], read: NoteReadContext): PrNotesView {
   const own = notes.filter((note) => note.prKey === prKey).toSorted((a, b) => a.seq - b.seq);
@@ -382,6 +426,7 @@ export function prNotesView(prKey: PrKey, token: string, notes: PrNote[], read: 
     durable: durable ? prNoteView(durable, read) : null,
     lease: lease ? prNoteView(lease, read) : null,
     replaced: replaced ? prNoteView(replaced, read) : null,
+    userCleared: userClearedNote(own),
   };
 }
 

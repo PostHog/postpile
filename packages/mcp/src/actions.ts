@@ -162,6 +162,8 @@ export interface ProposeArgs {
   into_topic?: string;
   reason: string;
   dry_run: boolean;
+  /** Your session name, shown with the suggestion. */
+  by?: string;
 }
 
 const PROPOSE_EXAMPLES: Record<TopicChangeKind, string> = {
@@ -231,6 +233,7 @@ export async function proposeTopicChange(ctx: ActionContext, args: ProposeArgs):
     intoTopicId,
     reason: args.reason.trim(),
     dryRun: args.dry_run,
+    by: args.by?.trim() || null,
   };
   // An accepted merge archives the topic it merges; the target is where the outcome shows.
   const outcomeTopic = payload.intoTopicId ?? payload.topicId;

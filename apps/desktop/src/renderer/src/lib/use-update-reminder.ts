@@ -1,4 +1,4 @@
-import { hoursBehind, laterUntil, updateAction, updateUrgency, type InstallState, type UpdateAction, type UpdateUrgency, type UpdateView } from '@postpile/core';
+import { hoursBehind, laterUntil, updateAction, updateUrgency, type InstallState, type UpdateAction, type UpdateSnooze, type UpdateUrgency, type UpdateView } from '@postpile/core';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { queryKeys } from '../api/keys.ts';
@@ -7,11 +7,14 @@ import { useNow } from './use-now.ts';
 
 /** localStorage key for "Later": the time (epoch ms) the reminder is quiet until. */
 export const SNOOZE_KEY = 'postpile.update.snoozedUntil';
+/** localStorage key for where "Later" was clicked: "pill" or "bar". A snooze stored before it counts as the bar's. */
+export const SNOOZE_FROM_KEY = 'postpile.update.snoozedFrom';
 
-function readSnooze(): number | null {
+function readSnooze(): UpdateSnooze | null {
   try {
-    const stored = Number(window.localStorage.getItem(SNOOZE_KEY));
-    return Number.isFinite(stored) && stored > 0 ? stored : null;
+    const until = Number(window.localStorage.getItem(SNOOZE_KEY));
+    const from = window.localStorage.getItem(SNOOZE_FROM_KEY) === 'pill' ? 'pill' : 'bar';
+    return Number.isFinite(until) && until > 0 ? { until, from } : null;
   } catch {
     return null;
   }
@@ -19,7 +22,7 @@ function readSnooze(): number | null {
 
 // The pill (title bar) and the bar (under it) share one snooze, so "Later" in
 // either one reaches the other.
-let snoozedUntil: number | null | undefined;
+let snoozed: UpdateSnooze | null | undefined;
 const listeners = new Set<() => void>();
 
 function subscribe(listener: () => void): () => void {
@@ -27,15 +30,16 @@ function subscribe(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
-function getSnooze(): number | null {
-  snoozedUntil ??= readSnooze();
-  return snoozedUntil;
+function getSnooze(): UpdateSnooze | null {
+  snoozed ??= readSnooze();
+  return snoozed;
 }
 
-function snoozeUntil(time: number): void {
-  snoozedUntil = time;
+function snoozeUntil(snooze: UpdateSnooze): void {
+  snoozed = snooze;
   try {
-    window.localStorage.setItem(SNOOZE_KEY, String(time));
+    window.localStorage.setItem(SNOOZE_KEY, String(snooze.until));
+    window.localStorage.setItem(SNOOZE_FROM_KEY, snooze.from);
   } catch {
     // Storage can be blocked; the reminder then comes back after a reload.
   }
@@ -86,8 +90,8 @@ export interface UpdateReminder {
    * else the newest release. Null when there is nothing to update.
    */
   version: string | null;
-  /** "Later": quiet until the time core picks. */
-  later: () => void;
+  /** "Later" on the pill or the bar: quiet until the time core picks (see updateUrgency for what each one hides). */
+  later: (from: UpdateSnooze['from']) => void;
   /** "Restart to update": main installs the staged update. */
   restart: () => void;
 }
@@ -96,19 +100,19 @@ export interface UpdateReminder {
 export function useUpdateReminder(): UpdateReminder {
   const view = useUpdate().data;
   const install = useInstallState();
-  const snoozed = useSyncExternalStore(subscribe, getSnooze);
+  const snooze = useSyncExternalStore(subscribe, getSnooze);
   const now = useNow().getTime();
   const action = updateAction(install);
   const latestVersion = view?.latest?.version ?? null;
   return {
     view,
-    urgency: view ? updateUrgency(view, now, snoozed) : 'none',
+    urgency: view ? updateUrgency(view, now, snooze) : 'none',
     hoursBehind: view ? hoursBehind(view, now) : null,
     action,
     version: action === 'restart' ? (install?.version ?? latestVersion) : latestVersion,
-    later: () => {
+    later: (from) => {
       if (view) {
-        snoozeUntil(laterUntil(view, Date.now()));
+        snoozeUntil({ until: laterUntil(view, Date.now()), from });
       }
     },
     restart: () => window.postpile?.restartToUpdate?.(),

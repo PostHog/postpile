@@ -52,10 +52,18 @@ export function suggestedBy(proposal: TopicProposal): string | null {
   return client === '' ? 'an outside agent' : client;
 }
 
-/** The Inbox card's meta line: "topic · suggested by Claude Code · 2h ago", or "topic · 2h ago" for the app's own. */
+/**
+ * The suggestion card's meta line: "topic · suggested by Claude Code · ph3
+ * session · 2h ago" (the session name when the agent gave one), or
+ * "topic · 2h ago" for the app's own.
+ */
 export function proposalMeta(proposal: TopicProposal, age: string): string {
   const by = suggestedBy(proposal);
-  return by ? `topic · suggested by ${by} · ${age}` : `topic · ${age}`;
+  if (!by) {
+    return `topic · ${age}`;
+  }
+  const session = proposal.by?.trim() ?? '';
+  return session === '' ? `topic · suggested by ${by} · ${age}` : `topic · suggested by ${by} · ${session} · ${age}`;
 }
 
 /** The PRs a split or move takes along: the ones it names, and the stack layers Accept brings with them. */

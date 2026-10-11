@@ -36,6 +36,24 @@ export function claudeDetailUnderGh(gh: ToolStatus<GhState>, claude: ToolStatus<
   return claude.detail.replace(TOOL_PATH_HINT, '').trim();
 }
 
+export interface SyncOffStatus {
+  text: string;
+  title: string;
+}
+
+/**
+ * The title bar's words while sync is off: "gh needs a fix", or "gh and
+ * claude need a fix" when claude is missing or logged out too. A usage
+ * limit is not named: it ends by itself, and the footer says "agent paused".
+ */
+export function syncOffStatus(view: ToolsView): SyncOffStatus {
+  const claudeBroken = view.claude.state === 'missing' || view.claude.state === 'logged_out';
+  if (!claudeBroken) {
+    return { text: 'gh needs a fix', title: `${view.gh.headline}. The note in the middle column has the fix.` };
+  }
+  return { text: 'gh and claude need a fix', title: `${view.gh.headline}. ${view.claude.headline}. The notes in the middle column have the fixes, gh first.` };
+}
+
 /** Often while something is wrong (each ask may run a due recheck on the server), rarely otherwise. */
 export function toolsRefetchMs(view: ToolsView | undefined): number {
   const notice = toolsNotice(view);

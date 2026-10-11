@@ -41,7 +41,8 @@ function UpdatePopover(props: { update: AvailableUpdate; version: string; curren
  * popover has the release notes link and the next step (UpdateNextStep):
  * restart, wait for the download, or the brew command.
  * Under 24h behind this is the whole reminder and "Later" hides it until the
- * bar takes over; the bar's own "Later" drops back to this pill for 24h.
+ * bar takes over; the bar's own "Later" drops back to this pill for 24h, and
+ * "Later" on that pill hides it for those 24h.
  * Self-contained so it can move when the title bar changes.
  */
 export function UpdatePill() {
@@ -63,7 +64,7 @@ export function UpdatePill() {
   }
   function snooze() {
     sendTelemetry('update_later_clicked', {});
-    later();
+    later('pill');
     setOpen(false);
   }
   return (
