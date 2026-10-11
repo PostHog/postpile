@@ -24,6 +24,11 @@ async function allTiles(engine: FakeEngine): Promise<TileView[]> {
   return views;
 }
 
+/** GitHub takes a review: an open PR by someone else, approved by the viewer or not. */
+function reviewable(pr: PrSummary): boolean {
+  return pr.primaryAction === 'approve' || pr.primaryAction === 'approved';
+}
+
 function paneOf(view: TileView, pr: PrSummary): PaneOffers {
   const pane = view.offers.pane[pr.key];
   if (!pane) {
@@ -40,21 +45,21 @@ describe.each(PACKS)('pack %s: rules agree', (pack) => {
       }
       expect(view.offers, view.tile.id).toMatchObject({ footer: 'open', markLabel: null, github: null });
       for (const pr of view.prs) {
-        // Approve only as the outlined "Approve again" on an open PR the viewer approved (2026-10-10).
-        expect(paneOf(view, pr), pr.key).toMatchObject({ lead: 'none', approve: pr.primaryAction === 'approved', ask: false, markLabel: null, snooze: false, removeTeams: [] });
+        // The outlined review row only where GitHub takes a review: an open PR by someone else (2026-10-11).
+        expect(paneOf(view, pr), pr.key).toMatchObject({ lead: 'none', approve: reviewable(pr), ask: false, markLabel: null, snooze: false, removeTeams: [] });
       }
     }
   });
 
-  it('a done PR offers only Open, or Mark read while its news is unseen or its thread unread', async () => {
+  it('a done PR leads with nothing, or Mark read while its news is unseen or its thread unread', async () => {
     for (const view of await allTiles(engineWith(pack))) {
       for (const pr of view.prs.filter((row) => row.done)) {
         const pane = paneOf(view, pr);
         if (pr.unseenLoudEvents > 0 || pr.unreadOnGitHub) {
-          expect(pane, pr.key).toMatchObject({ approve: pr.primaryAction === 'approved', ask: false, removeTeams: [] });
+          expect(pane, pr.key).toMatchObject({ approve: reviewable(pr), ask: false, removeTeams: [] });
           expect(pane.markLabel, pr.key).not.toBeNull();
         } else {
-          expect(pane, pr.key).toMatchObject({ lead: 'none', approve: pr.primaryAction === 'approved', ask: false, markLabel: null, removeTeams: [] });
+          expect(pane, pr.key).toMatchObject({ lead: 'none', approve: reviewable(pr), ask: false, markLabel: null, removeTeams: [] });
         }
       }
     }

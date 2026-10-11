@@ -16,20 +16,22 @@ import {
 import { plural } from './plural.ts';
 
 /**
- * Whether Enter runs the dialog's main button. On the first run Enter never
- * clears: it is the first screen after setup and the first GitHub write the
- * app mentions, so only a click on the named button writes (2026-10-10).
+ * Whether Enter runs the dialog's main button. On a start dialog (first run,
+ * back after a weekend or 5+ days away) Enter never clears: the dialog shows
+ * before anything else, and a stray Enter would mark a whole pile read on
+ * GitHub, so only a click on the named button writes (first run 2026-10-10,
+ * coming back 2026-10-11). From the sidebar the user opened it to clear.
  */
 export function enterRunsMain(mode: CleanupDialogMode, mainIsClear: boolean): boolean {
-  return !(mode.kind === 'first_run' && mainIsClear);
+  return !(mode.kind !== 'sidebar' && mainIsClear);
 }
 
 /**
- * The Clear button's words. On the first run it names its effect ("Mark 28
+ * The Clear button's words. On a start dialog it names its effect ("Mark 28
  * read on GitHub"); under the writes lock it queues instead.
  */
 export function clearButtonText(mode: CleanupDialogMode, clears: number, locked: boolean): string {
-  if (mode.kind === 'first_run') {
+  if (mode.kind !== 'sidebar') {
     return locked ? `Queue marking ${clears} read` : `Mark ${clears} read on GitHub`;
   }
   return locked ? 'Add pending write' : `Clear ${clears}`;

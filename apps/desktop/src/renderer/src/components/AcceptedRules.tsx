@@ -5,7 +5,7 @@ import { useActions } from '../api/actions.tsx';
  * "Accepted rules" under Your instructions: the standing rules the user
  * accepted for every topic. They go into every prompt next to the
  * instructions, so they are listed here, each with Remove (logged, Undo in
- * the toast). Rules for one topic sit in that topic's "You told the agent"
+ * the toast). Rules for one topic sit in that topic's "Kept for this topic"
  * lines instead.
  */
 export function AcceptedRules(props: { rules: RuleProposal[] }) {

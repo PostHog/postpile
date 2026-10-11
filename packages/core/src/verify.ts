@@ -120,6 +120,42 @@ function sourceExists(ref: FactRef, pr: Pr): boolean {
   return true;
 }
 
+/** Why a fact can no longer be trusted (checks 3 to 5 of `verifyFact`), or null. */
+function staleCheck(fact: Fact, prs: Map<PrKey, Pr>): StaleReason | null {
+  const headMoved =
+    PREDICATE_RULES[fact.predicate].followsHead &&
+    fact.refs.some((ref) => ref.headOid !== null && prs.get(ref.prKey)?.headOid !== ref.headOid);
+  if (headMoved) {
+    return 'head_moved';
+  }
+  if (personLeft(fact, prs)) {
+    return 'person_not_involved';
+  }
+  const sourceGone = fact.refs.some((ref) => {
+    const pr = prs.get(ref.prKey);
+    return pr !== undefined && !sourceExists(ref, pr);
+  });
+  return sourceGone ? 'source_deleted' : null;
+}
+
+/**
+ * Someone confirmed the fact (the user's "Keep it" or the agent's recheck,
+ * `verifiedAt`) and nothing new happened on its PRs since: every PR it
+ * touches is in the store and was last updated before the confirm. The
+ * confirm saw those PRs as they are, so a stale check on them is waived
+ * until something new happens (2026-10-11, owner).
+ */
+function confirmedSinceLastChange(fact: Fact, prs: Map<PrKey, Pr>): boolean {
+  const verifiedAt = fact.verifiedAt;
+  if (verifiedAt === null) {
+    return false;
+  }
+  return referencedPrKeys(fact).every((key) => {
+    const pr = prs.get(key);
+    return pr !== undefined && pr.updatedAt <= verifiedAt;
+  });
+}
+
 /**
  * Cheap checks before a fact is shown or fed back into a prompt. In order:
  * 1. a referenced PR is not in the store -> stale pr_missing
@@ -129,6 +165,8 @@ function sourceExists(ref: FactRef, pr: Pr): boolean {
  * 4. reviews/works_on and the person is no longer reviewer / author / committer -> stale person_not_involved
  * 5. a referenced comment, review or commit is gone from the snapshot -> stale source_deleted
  * 6. otherwise ok
+ * A stale outcome of 2 to 5 is waived while the fact was confirmed after
+ * its PRs' last update (`confirmedSinceLastChange`); 1 and an invalidate never are.
  */
 export function verifyFact(fact: Fact, world: VerifyWorld): VerifyOutcome {
   const { prs } = world;
@@ -142,31 +180,11 @@ export function verifyFact(fact: Fact, world: VerifyWorld): VerifyOutcome {
       return { kind: 'invalidate', reason: end.reason, at: end.at };
     }
   }
-  const outlived = statusOutlivedPr(fact, prs);
-  if (outlived !== null) {
-    return { kind: 'stale', reason: outlived.reason };
+  const reason = statusOutlivedPr(fact, prs)?.reason ?? staleCheck(fact, prs);
+  if (reason === null || confirmedSinceLastChange(fact, prs)) {
+    return { kind: 'ok' };
   }
-
-  const headMoved =
-    PREDICATE_RULES[fact.predicate].followsHead &&
-    fact.refs.some((ref) => ref.headOid !== null && prs.get(ref.prKey)?.headOid !== ref.headOid);
-  if (headMoved) {
-    return { kind: 'stale', reason: 'head_moved' };
-  }
-
-  if (personLeft(fact, prs)) {
-    return { kind: 'stale', reason: 'person_not_involved' };
-  }
-
-  const sourceGone = fact.refs.some((ref) => {
-    const pr = prs.get(ref.prKey);
-    return pr !== undefined && !sourceExists(ref, pr);
-  });
-  if (sourceGone) {
-    return { kind: 'stale', reason: 'source_deleted' };
-  }
-
-  return { kind: 'ok' };
+  return { kind: 'stale', reason };
 }
 
 /** Why a question's ref no longer holds, or null. */

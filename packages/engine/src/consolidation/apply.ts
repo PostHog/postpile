@@ -166,7 +166,7 @@ export class ConsolidationApplier {
       if (drop.expiredAt !== null) {
         continue;
       }
-      this.store.facts.addRefs(keepId, drop.refs, at);
+      this.store.facts.addRefs(keepId, drop.refs);
       this.facts.close(drop.id, reason, at, keepId);
       this.counts.factsMerged += 1;
     }

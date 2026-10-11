@@ -28,7 +28,7 @@ export type MarkLabel = 'Mark read' | 'Done for now';
 /**
  * The detail pane's one ink button, placed first:
  * - approve: Approve is due (someone else's open PR, not a draft, not
- *   approved yet, not done).
+ *   approved yet, not done). On a done PR the review row stays, outlined.
  * - mark_read / mark_done: the mark button.
  * - snooze: single-PR tile only, read and still your move, as on the tile.
  * - open_on_github: on a stack or set the selected PR is not done but has
@@ -59,7 +59,11 @@ export interface PaneOffers {
    */
   scope: 'tile' | 'pr';
   lead: PaneLead;
-  /** Show Approve; its label and look ("Approve again", "Approve draft") stay display. */
+  /**
+   * Show the review row's Approve, + note and Comment review: on every open
+   * PR someone else wrote, done or not, since GitHub takes a review there.
+   * Its label and look ("Approve again", "Approve draft") stay display.
+   */
   approve: boolean;
   /** Show "Ask <author>": not on your own PR, not to automation, not on a done PR. */
   ask: boolean;
@@ -238,20 +242,23 @@ function githubLink(view: OfferView, leadKey: PrKey | null): GitHubLinkOffer | n
 }
 
 /**
- * The detail pane's buttons for one PR. A done PR offers only Open, like a
+ * The detail pane's buttons for one PR. A done PR leads with nothing, like a
  * done tile (2026-09-29: a handled PR by someone else with no ask still got
  * a primary Approve). A done PR whose news or unread thread keeps its tile
  * unread keeps Mark read, but no Ask or Remove team. On a snoozed single-PR tile a
- * done PR keeps Snooze, so the snooze can be taken back. An open PR the
- * viewer approved keeps Approve (outlined "Approve again", never the lead),
- * so the review row can say "You approved 2h ago, commits since" (2026-10-10).
+ * done PR keeps Snooze, so the snooze can be taken back. The review row
+ * (Approve, + note, Comment review) stays on every open PR by someone else,
+ * done or not, outlined unless Approve is due (2026-10-11: approving a PR
+ * the read timer already marked done is still useful). An open PR the
+ * viewer approved keeps it too, so the row can say "You approved 2h ago,
+ * commits since" (2026-10-10).
  */
 export function paneOffers(view: OfferView, pr: OfferPr): PaneOffers {
   const scope = view.tile.members.length <= 1 ? 'tile' : 'pr';
   const finished = view.state.kind === 'done' || pr.done;
-  // An open PR you approved keeps the row, done or not: its label says "commits
-  // since" and an outlined "Approve again" stays next to it (2026-10-10).
-  const approve = pr.primaryAction === 'approved' || (!finished && pr.primaryAction === 'approve');
+  // Any open PR by someone else keeps the review row, done or not (2026-10-11);
+  // one you approved says "commits since" next to "Approve again" (2026-10-10).
+  const approve = pr.primaryAction === 'approved' || pr.primaryAction === 'approve';
   // A done PR has nothing to mark once its news is seen and its thread read, also on a snoozed tile.
   const doneAndSeen = nothingToMark(pr);
   let mark: TileFooterAction | PrMarkAction = 'none';
@@ -259,7 +266,7 @@ export function paneOffers(view: OfferView, pr: OfferPr): PaneOffers {
     mark = scope === 'tile' ? tileFooterAction(view) : prMarkAction(view.state, pr);
   }
   let lead: PaneLead;
-  if (approve && pr.primaryAction === 'approve' && !pr.isDraft) {
+  if (!finished && pr.primaryAction === 'approve' && !pr.isDraft) {
     lead = 'approve';
   } else if (mark === 'open' || mark === 'none') {
     lead = finished ? 'none' : 'open_on_github';

@@ -68,14 +68,16 @@ export class FactWriter {
   }
 
   /**
-   * The agent says these facts still hold. A stale one whose check keeps
-   * failing would go stale again on the next verify pass and be offered for
-   * recheck again, so it is closed instead; one that now passes is verified.
+   * The agent says these facts still hold. Each is checked first, stale or
+   * not: `verifiedAt` waives later stale checks, so it is only set on a
+   * fact that passes now. One whose check keeps failing would go stale
+   * again on the next verify pass and be offered for recheck again, so it
+   * is closed instead.
    */
   confirm(factIds: string[], counts: FactChangeCounts): void {
     const at = this.now().toISOString();
     for (const fact of this.store.facts.getMany(factIds).values()) {
-      const outcome = fact.staleAt === null ? ({ kind: 'ok' } as const) : this.recheck(fact, at);
+      const outcome = this.recheck(fact, at);
       if (outcome.kind === 'ok') {
         this.store.facts.markVerified([fact.id], at);
         counts.confirmed += 1;
@@ -101,7 +103,7 @@ export class FactWriter {
       this.close(action.factId, action.reason, action.at);
       counts.invalidated += 1;
     } else {
-      this.store.facts.addRefs(action.factId, action.refs, this.now().toISOString());
+      this.store.facts.addRefs(action.factId, action.refs);
       this.confirm([action.factId], counts);
     }
   }

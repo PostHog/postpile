@@ -1748,6 +1748,41 @@ the app meanwhile.
 
 ## Decided
 
+- **A done open PR by someone else keeps its review row** (2026-10-11,
+  owner, #1988 case; DESIGN.md "The PR pane" › review row): Approve,
+  + note and Comment review stay outlined wherever GitHub takes a review
+  (open, not your own), also after the read timer marked the PR done.
+  Lock rules still apply. Replaces "a done PR offers only Open" for the
+  review row; Ask, Remove team and the mark button keep the done rules.
+- **✨ Approve is greyed while writes are locked** (2026-10-11, owner;
+  DESIGN.md "Agent-assisted actions"): disabled with the lock reason as
+  tooltip, like the pane's Approve.
+- **Enter never clears on any start dialog** (2026-10-11, owner; DESIGN.md
+  "Inbox cleanup"): coming back after a weekend or 5+ days too, not only the
+  first run. The Clear button says "Mark 28 read on GitHub"; the preselect
+  stays.
+- **A chat answer for a topic not on screen gets a quiet toast**
+  (2026-10-11, owner): "The agent answered on <topic> · Open", Open selects
+  the topic and its chat. No Cancel for a question on its way.
+- **"You told the agent:" is now "Kept for this topic"** (2026-10-11,
+  owner): the lines include kept lessons, rules and merged lines the user
+  never typed.
+- **"Keep it" clears any stale reason until something new happens**
+  (2026-10-11, owner; DESIGN.md "Recheck instead of Wrong"): not only a
+  moved head; a new update on the fact's PRs brings the checks back. Undo
+  restores the stale state.
+- **Back and Forward never mark a PR read** (2026-10-11, owner): unchanged.
+- **Unlocking writes does not restart the open dwell** (2026-10-11, owner):
+  unchanged.
+- **Thumbs up stays one-way** (2026-10-11, owner): no toggle that removes
+  the reaction.
+- **A failed write stays toast-only** (2026-10-11, owner): no persistent
+  "last try failed" line under the review row.
+- **✨ verdicts stay active while the agent is off** (2026-10-11, owner).
+- **One "Agent off" pill** (2026-10-11, owner): no split into off vs paused.
+- **Removed rules stay `rejected`** (2026-10-11, owner): no `removed`
+  status or migration.
+
 - **`note_pr` covered without a review stays accepted, but says so**
   (2026-10-10, bug hunt Q8, recommended option applied; DESIGN.md "Agent
   notes on PRs" › A covering PR nobody reviewed): no refusal; the PR pane

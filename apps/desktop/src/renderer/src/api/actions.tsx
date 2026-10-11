@@ -1105,7 +1105,7 @@ export function ActionsProvider(props: { children: ReactNode }) {
       await run(`rule:${ruleId}`, null, () => request('POST', path));
     },
     showAgentAnswered: (topicId, topicName) => {
-      setNotice({ id: Date.now(), tone: 'ok', message: `The agent answered on ${topicName || 'another topic'}.`, undoToken: null, snoozeTileId: null, openAgentTopicId: topicId });
+      setNotice({ id: Date.now(), tone: 'ok', message: `The agent answered on ${topicName || 'another topic'}`, undoToken: null, snoozeTileId: null, openAgentTopicId: topicId });
     },
     correctMemory: (input) => run(`correct:${input.factId ?? input.text}`, null, () => request('POST', '/api/memory/corrections', input)),
     restoreMemoryLine: (input) => run(`restore:${input.topicId}:${input.text}`, null, () => request('POST', '/api/memory/restore', input)),

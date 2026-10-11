@@ -140,6 +140,29 @@ describe('accepting a recheck', () => {
     expect(await factStale()).toBe('head_moved');
   });
 
+  // 2026-10-11 (owner): "Keep it" clears any stale reason until something new happens, not only a moved head.
+  it('keeps a fact stale for another reason fresh until the PR changes, and undo makes it stale again', async () => {
+    const h = makeHarness();
+    const pr = reviewRequestedPr(1);
+    topicWithPrs(h, 'depot', [pr]);
+    h.store.prs.upsert(pr, at(0));
+    const fact = makeFact({ id: 'f1', topicId: 'depot', subject: { kind: 'person', key: 'bob' }, predicate: 'reviews', text: 'bob reviews #1', refs: [makeFactRef({ prKey: pr.key })] });
+    h.store.facts.add(fact);
+    const factStale = async () => (await h.engine.listFacts({ topicId: 'depot' }))[0]?.stale;
+    expect(await factStale()).toBe('person_not_involved');
+
+    const result = await h.engine.correctMemory({ kind: 'confirm', factId: 'f1', topicId: null, text: fact.text });
+    expect(await factStale()).toBeNull();
+
+    await h.engine.undo(result.undoToken);
+    expect(h.store.facts.get('f1')).toEqual(fact);
+    expect(await factStale()).toBe('person_not_involved');
+
+    await h.engine.correctMemory({ kind: 'confirm', factId: 'f1', topicId: null, text: fact.text });
+    h.store.prs.upsert({ ...pr, updatedAt: LATER }, at(0));
+    expect(await factStale()).toBe('person_not_involved');
+  });
+
   it('replaces a fact with the fix, same refs, and undo brings the old one back', async () => {
     const h = makeHarness();
     const { pr, fact } = withFact(h);

@@ -93,6 +93,24 @@ describe('verifyFact', () => {
     expect(verifyFact(cites('review', 'gone'), world([withSources]))).toEqual({ kind: 'stale', reason: 'source_deleted' });
     expect(verifyFact(cites('commit', 'gone'), world([withSources]))).toEqual({ kind: 'stale', reason: 'source_deleted' });
   });
+
+  // 2026-10-11 (owner): "Keep it" re-anchored heads, but a fact stale for another reason still read stale.
+  it('waives a stale check while the fact was confirmed after its PRs last changed', () => {
+    const quiet = { ...pr1, updatedAt: at(20) };
+    const reviews = makeFact({ subject: { kind: 'person', key: 'bob' }, predicate: 'reviews', text: 'bob reviews #1' });
+    expect(verifyFact({ ...reviews, verifiedAt: at(30) }, world([quiet]))).toEqual({ kind: 'ok' });
+    const gone = makeFact({ predicate: 'note', object: null, refs: [makeFactRef({ kind: 'comment', sourceId: 'gone' })] });
+    expect(verifyFact({ ...gone, verifiedAt: at(30) }, world([quiet]))).toEqual({ kind: 'ok' });
+  });
+
+  it('checks again once something new happens on the PR, and never waives a missing PR or a merge', () => {
+    const reviews = makeFact({ subject: { kind: 'person', key: 'bob' }, predicate: 'reviews', text: 'bob reviews #1', verifiedAt: at(30) });
+    expect(verifyFact(reviews, world([{ ...pr1, updatedAt: at(40) }]))).toEqual({ kind: 'stale', reason: 'person_not_involved' });
+    const missing = makeFact({ refs: [makeFactRef({ prKey: 'acme/app#99' })], verifiedAt: at(30) });
+    expect(verifyFact(missing, world([{ ...pr1, updatedAt: at(20) }]))).toEqual({ kind: 'stale', reason: 'pr_missing' });
+    const merged = { ...pr1, state: 'MERGED' as const, mergedAt: at(10), updatedAt: at(20) };
+    expect(verifyFact(makeFact({ verifiedAt: at(30) }), world([merged]))).toEqual({ kind: 'invalidate', reason: 'pr_merged', at: at(10) });
+  });
 });
 
 describe('verifyDossier', () => {

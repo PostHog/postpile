@@ -14,6 +14,11 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - Opening a topic or searching no longer marks anything read on GitHub. Only a tile or PR you click yourself is marked after it stays open for 1.5 s; the tile PostPile picks for you stays unread until you click it or press Mark read.
 - An agent-drafted review note says "✨ Agent draft, edit before sending" until you edit it.
 - Cmd+Enter (or Ctrl+Enter) sends a comment review, a reply or an Ask. Approve with a note still needs a click.
+- A colleague's open PR keeps Approve, + note and Comment review after it counts as done, for example once opening it marked it read. The row stays outlined there.
+- The ✨ Approve on a tile or topic is greyed while GitHub writes are locked, with the reason on hover, like Approve in the PR pane.
+- Enter no longer clears on the "Welcome back" dialog either: only a click on "Mark 28 read on GitHub" marks anything read.
+- The topic header's "You told the agent:" is now "Kept for this topic", since it also lists kept lessons, rules and lines from merged topics.
+- "Keep it" on a fact clears every out-of-date reason (a reviewer gone, a deleted comment), not only a new push, until something new happens on its PRs.
 
 ### Fixed
 

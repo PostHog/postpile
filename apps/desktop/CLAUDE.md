@@ -154,9 +154,10 @@ with agent, Recheck): while the agent is off or paused, disable it with
   `lib/guard.ts`, which reads the footer lock (`useGitHubWrites`, `GET
   /api/github-writes`, changes at runtime). With the lock closed
   (read-only; on by default in the packaged app, locked by default in dev
-  runs) approve and comment are blocked with a clear
-  toast (so is "Remove <team>", `removeTeam`: final, never a pending
-  write); mark read and "not mine" still run but change nothing in the app:
+  runs) approve and comment are blocked: their buttons (the pane's Approve
+  and the ✨ Approve, `agentApproveLook`) are disabled with the lock reason
+  as tooltip, anything else gets a clear toast (so does "Remove <team>",
+  `removeTeam`: final, never a pending write); mark read and "not mine" still run but change nothing in the app:
   after the undo window they become pending writes (buttons carry
   `markReadNote`, the tile shows `PendingWritePill` from `pills.tsx`, its
   Mark read button is disabled). Never show a locked mark-read as done. Everything is blocked
@@ -555,7 +556,7 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   `lessonSource` / `earlierAssessmentText` from `lib/lessons.ts`, then
   Remember in this topic / Use across topics… / Dismiss; neutral grey, never
   coral, honey or accent), used by `TopicLessons` (under the topic header's
-  "You told the agent" lines, `TopicTailoring`: one line per entry, split
+  "Kept for this topic" lines, `TopicTailoring`, header `TAILORING_HEADER`: one line per entry, split
   by `lib/tailoring.ts`, each with Remove; `TopicLessons` renders nothing
   without open lessons) and
   `TeachLesson` ("Teach future assessments" under the verdict explanation in
