@@ -1,4 +1,5 @@
 import {
+  agentClearedBy,
   anchorSummary,
   clearedNoteResult,
   coverKeyFor,
@@ -179,7 +180,7 @@ export class PrNotes {
     });
   }
 
-  /** `by`: the agent's client name, or "user" for the PR pane's Clear. */
+  /** `by`: `agentClearedBy(client)` for an agent, or CLEARED_BY_USER for the PR pane's Clear. */
   clear(noteId: string, by: string): PrNoteResult {
     const now = this.now().toISOString();
     return this.store.transaction(() => {
@@ -204,6 +205,6 @@ export class PrNotes {
     if (request.action === 'renew') {
       return this.renew(request.noteId, request.leaseMinutes);
     }
-    return this.clear(request.noteId, client);
+    return this.clear(request.noteId, agentClearedBy(client));
   }
 }

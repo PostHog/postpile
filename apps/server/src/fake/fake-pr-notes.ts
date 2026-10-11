@@ -1,4 +1,5 @@
 import {
+  agentClearedBy,
   anchorSummary,
   isCurrentNote,
   isNoteExpired,
@@ -188,7 +189,7 @@ export class FakePrNotes {
     if (request.action === 'renew') {
       return this.renew(request.noteId, request.leaseMinutes);
     }
-    return this.clear(request.noteId, client);
+    return this.clear(request.noteId, agentClearedBy(client));
   }
 
   /**

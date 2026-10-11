@@ -94,8 +94,10 @@ export class PrNoteRepo {
 
   /**
    * One query for many PRs: each PR's current notes plus its newest
-   * replaced one (pr_context's "replaced ...") and its newest one the user
-   * cleared (pr_context's "the user cleared ..."), oldest first.
+   * replaced one (pr_context's "replaced ..."), its newest one the user
+   * cleared (pr_context's "the user cleared ...") and the newest note of
+   * each slot whatever became of it (so a later note, even cleared, makes
+   * that clear history), oldest first.
    */
   listForPrs(prKeys: PrKey[]): PrNote[] {
     if (prKeys.length === 0) {
@@ -108,12 +110,14 @@ export class PrNoteRepo {
        WHERE pr_key IN (${marks})
          AND ((${CURRENT})
            OR seq IN (SELECT MAX(seq) FROM pr_note WHERE pr_key IN (${marks}) AND superseded_by IS NOT NULL GROUP BY pr_key)
-           OR seq IN (SELECT MAX(seq) FROM pr_note WHERE pr_key IN (${marks}) AND cleared_by = ? GROUP BY pr_key))
+           OR seq IN (SELECT MAX(seq) FROM pr_note WHERE pr_key IN (${marks}) AND cleared_by = ? GROUP BY pr_key)
+           OR seq IN (SELECT MAX(seq) FROM pr_note WHERE pr_key IN (${marks}) GROUP BY pr_key, slot))
        ORDER BY seq`,
       ...prKeys,
       ...prKeys,
       ...prKeys,
       CLEARED_BY_USER,
+      ...prKeys,
     ).map(toNote);
   }
 

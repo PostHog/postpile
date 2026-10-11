@@ -305,6 +305,15 @@ export interface PrNotesView {
 /** The PR pane's Clear: `cleared_by` of a note the user cleared. */
 export const CLEARED_BY_USER = 'user';
 
+/**
+ * The `cleared_by` an agent's clear is stored under: its MCP client name,
+ * which the client picks itself. A client calling itself "user" is stored
+ * as "user (agent)", so only the PR pane's Clear ever reads as the user's.
+ */
+export function agentClearedBy(client: string): string {
+  return client === CLEARED_BY_USER ? `${client} (agent)` : client;
+}
+
 /** A note the user cleared: whose it was and when it went. `client` and `by` are agent-written. */
 export interface UserClearedNote {
   kind: PrNoteKind;
@@ -380,14 +389,18 @@ export function prNoteView(note: PrNote, read: NoteReadContext): PrNoteView {
   };
 }
 
-/** The newest note the user cleared, unless a newer note took its slot since. */
-function userClearedNote(own: PrNote[], current: (slot: PrNoteSlot) => PrNote | null): UserClearedNote | null {
+/**
+ * The newest note the user cleared, unless a newer note took its slot since
+ * (even one cleared or replaced by now). `own` is sorted by seq and holds
+ * each slot's newest note (`listForPrs`).
+ */
+function userClearedNote(own: PrNote[]): UserClearedNote | null {
   const cleared = own.filter((note) => note.clearedBy === CLEARED_BY_USER && note.clearedAt !== null).at(-1);
   if (!cleared || cleared.clearedAt === null) {
     return null;
   }
-  const since = current(cleared.slot);
-  if (since && since.seq > cleared.seq) {
+  const newestInSlot = own.filter((note) => note.slot === cleared.slot).at(-1);
+  if (newestInSlot && newestInSlot.seq > cleared.seq) {
     return null;
   }
   return { kind: cleared.kind, client: cleared.client, by: cleared.by, clearedAt: cleared.clearedAt };
@@ -413,7 +426,7 @@ export function prNotesView(prKey: PrKey, token: string, notes: PrNote[], read: 
     durable: durable ? prNoteView(durable, read) : null,
     lease: lease ? prNoteView(lease, read) : null,
     replaced: replaced ? prNoteView(replaced, read) : null,
-    userCleared: userClearedNote(own, current),
+    userCleared: userClearedNote(own),
   };
 }
 

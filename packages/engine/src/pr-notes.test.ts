@@ -75,6 +75,28 @@ describe('agent notes on PRs', () => {
     expect((await h.engine.livePollStatus()).changeCount).toBeGreaterThan(changesBefore);
   });
 
+  it('drops the user-clear warning once a later note held the slot, and never takes an agent for the user', async () => {
+    const { h, first } = await depot();
+    const withToken = async (by: string) => {
+      const token = (await h.engine.getPr(first))?.notes.token ?? '';
+      return h.engine.notePr({ action: 'set', prKey: first, kind: 'no_action', note: `nothing to do (${by})`, by, token, coveredByPrKey: null, coverToken: null, leaseMinutes: null }, client);
+    };
+    const userCleared = await withToken('ph3 session');
+    await h.engine.clearPrNote(userCleared.note?.id ?? '');
+    expect((await h.engine.getPr(first))?.notes.userCleared).toMatchObject({ by: 'ph3 session' });
+
+    // Another agent sets a note and clears it itself: the user's clear is history now.
+    const later = await withToken('ph4 session');
+    await h.engine.notePr({ action: 'clear', noteId: later.note?.id ?? '' }, client);
+    expect((await h.engine.getPr(first))?.notes.userCleared).toBeNull();
+
+    // A client that calls itself "user" is stored as an agent.
+    const third = await withToken('ph5 session');
+    expect(await h.engine.notePr({ action: 'clear', noteId: third.note?.id ?? '' }, { client: 'user' })).toMatchObject({ status: 'cleared', cleared: { by: 'user (agent)' } });
+    expect(h.store.prNotes.get(third.note?.id ?? '')?.clearedBy).toBe('user (agent)');
+    expect((await h.engine.getPr(first))?.notes.userCleared).toBeNull();
+  });
+
   describe('covered by a PR PostPile does not track', () => {
     /**
      * The parent of a stack that never notified the user: on GitHub, not in

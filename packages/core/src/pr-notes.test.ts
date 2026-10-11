@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { at, makeComment, makePr, makeReview, makeThread, makeTimelineItem } from './fixtures.ts';
 import {
+  agentClearedBy,
+  CLEARED_BY_USER,
   anchorChanges,
   hasLiveNote,
   isNoteExpired,
@@ -207,11 +209,20 @@ describe('prNotesView', () => {
     expect(view.userCleared).toEqual({ kind: byUser.kind, client: byUser.client, by: byUser.by, clearedAt: at(15) });
     // An agent's own clear is not the user's word.
     expect(prNotesView(KEY, 't', [note({ clearedAt: at(15), clearedBy: 'claude-code' })], read(at(20))).userCleared).toBeNull();
-    // A newer note in the same slot: the clear is history.
+    // A newer note in the same slot: the clear is history, also once an agent cleared that note too.
     expect(prNotesView(KEY, 't', [byUser, note({ seq: 2, id: 'n2' })], read(at(20))).userCleared).toBeNull();
+    expect(prNotesView(KEY, 't', [byUser, note({ seq: 2, id: 'n2', clearedAt: at(18), clearedBy: 'claude-code' })], read(at(20))).userCleared).toBeNull();
     // A lease set since leaves the durable note's clear standing.
     const lease = note({ seq: 2, id: 'l1', slot: 'lease', kind: 'in_progress', expiresAt: at(120) });
     expect(prNotesView(KEY, 't', [byUser, lease], read(at(20))).userCleared?.clearedAt).toBe(at(15));
+  });
+});
+
+describe('agentClearedBy', () => {
+  it('keeps the client name, but never lets an agent read as the user', () => {
+    expect(agentClearedBy('claude-code')).toBe('claude-code');
+    expect(agentClearedBy('user')).toBe('user (agent)');
+    expect(agentClearedBy('user')).not.toBe(CLEARED_BY_USER);
   });
 });
 

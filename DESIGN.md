@@ -8626,10 +8626,14 @@ the reporting agent and checked by Codex).
   asks (2026-10-10, bug hunt B-A-10). pr_context also says it without
   a clear call: "The user cleared claude-code's no_action note (by ph3
   session) 2 h ago: don't set it again unless they ask", from the PR's
-  newest note the user cleared (`listForPrs` brings it along). A newer note
-  in that slot makes it history and the line goes. Before, only the agent
-  that called clear learned it, so another agent could set again what the
-  user just took away (2026-10-11).
+  newest note the user cleared (`listForPrs` brings it along, and each
+  slot's newest note whatever became of it). Any newer note in that slot,
+  even one cleared since, makes it history and the line goes. Before, only
+  the agent that called clear learned it, so another agent could set again
+  what the user just took away (2026-10-11). Only the PR pane's Clear
+  stores `cleared_by` "user": an agent's clear stores its client name, and
+  a client that names itself "user" is stored as "user (agent)"
+  (`agentClearedBy`), so it can never pass for the user.
   Order is the autoincrement `seq`, never `created_at`.
 - **Anchored to the PR's state, not to a time.** `noteAnchor` (core) takes
   the head, state, draft flag, pending review requests with who asked
