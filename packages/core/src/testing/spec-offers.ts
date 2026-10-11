@@ -120,8 +120,8 @@ export interface ExpectedPane {
 /**
  * The detail pane for one PR: on a single-PR tile the buttons act on the
  * tile, on a stack or set on that PR. A done PR (or any PR of a done tile)
- * offers no Ask or Remove team, and Approve only as "Approve again" on an
- * open PR the viewer approved; with its news seen and its thread
+ * offers no Ask or Remove team; its review row stays outlined on an open PR
+ * by someone else (2026-10-11); with its news seen and its thread
  * read nothing to mark either. Ask needs an owner who is a person and not
  * the viewer. Approve leads on someone else's open, not yet approved,
  * non-draft PR; else the mark button; else Open on GitHub, which stays
@@ -131,13 +131,13 @@ export function expectedPane(view: TileView, row: PrSummary, pr: Pr, viewer: Vie
   const scope = view.tile.members.length <= 1 ? 'tile' : 'pr';
   const finished = view.state.kind === 'done' || row.done;
   const primary = row.primaryAction;
-  const approve = primary === 'approved' || (!finished && primary === 'approve');
+  const approve = primary === 'approved' || primary === 'approve';
   let mark: TileFooterAction | 'none' = 'none';
   if (!settled(row)) {
     mark = scope === 'tile' ? expectedFooter(view) : prMark(view, row);
   }
   let lead: PaneLead;
-  if (approve && primary === 'approve' && !row.isDraft) {
+  if (!finished && primary === 'approve' && !row.isDraft) {
     lead = 'approve';
   } else if (mark === 'open' || mark === 'none') {
     lead = finished ? 'none' : 'open_on_github';

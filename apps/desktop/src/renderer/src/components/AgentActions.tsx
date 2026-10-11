@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { AgentApproveOffer, AgentActionFrom, MarkReadBlock, TopicDetail, TopicMarkReadOffer } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
-import { approvePillWord, approveTitle, leftOutReason, markReadPillWord, topicApproveLabel, topicMarkReadLabel, topicMarkReadTitle } from '../lib/agent-actions.ts';
+import { agentApproveLook, approvePillWord, leftOutReason, markReadPillWord, topicApproveLabel, topicMarkReadLabel, topicMarkReadTitle } from '../lib/agent-actions.ts';
 import { markReadNote } from '../lib/guard.ts';
 import { Button } from './Button.tsx';
 import { VerdictPill } from './pills.tsx';
@@ -100,8 +100,9 @@ function ConfirmApprove(props: { offer: AgentApproveOffer; onCancel: () => void;
 
 /**
  * The ✨ Approve of a tile or the topic. Absent offer, no button. Greyed is
- * disabled with the reason in the pill. A click asks first; nothing is sent
- * before "Approve N". Locked GitHub writes skip the list and show why.
+ * disabled with the reason in the pill. While GitHub writes are locked it is
+ * greyed too, with the lock reason as its tooltip (`agentApproveLook`). A
+ * click asks first; nothing is sent before "Approve N".
  */
 export function AgentApproveButton(props: { offer: AgentApproveOffer | null; label: string; busyKey: string; from: AgentActionFrom }) {
   const actions = useActions();
@@ -111,7 +112,7 @@ export function AgentApproveButton(props: { offer: AgentApproveOffer | null; lab
     return null;
   }
   const active = offer.state === 'active';
-  const blocked = actions.blockedReason('approve');
+  const look = agentApproveLook(offer, actions.blockedReason('approve'));
 
   function confirm() {
     setAsking(false);
@@ -124,11 +125,11 @@ export function AgentApproveButton(props: { offer: AgentApproveOffer | null; lab
   return (
     <>
       <Button
-        variant={active ? 'safe-soft' : 'secondary'}
-        className={active ? '' : GREYED}
-        title={blocked ?? approveTitle(offer)}
-        disabled={!active || actions.isBusy(props.busyKey)}
-        onClick={() => (blocked ? confirm() : setAsking(true))}
+        variant={look.greyed ? 'secondary' : 'safe-soft'}
+        className={look.greyed ? GREYED : ''}
+        title={look.title}
+        disabled={!look.usable || actions.isBusy(props.busyKey)}
+        onClick={() => setAsking(true)}
       >
         {props.label}
         <AgentPill word={approvePillWord(offer)} off={!active} reason={offer.reason} />

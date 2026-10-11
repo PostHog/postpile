@@ -51,20 +51,29 @@ describe('inbox cleanup words', () => {
   });
 });
 
-describe('first-run catch-up writes', () => {
+describe('start dialog catch-up writes', () => {
   const firstRun: CleanupDialogMode = { kind: 'first_run', load: 'busy' };
   const vacation: CleanupDialogMode = { kind: 'vacation', since: '2026-09-01T09:00:00.000Z', awayDays: 30 };
+  const weekend: CleanupDialogMode = { kind: 'weekend', since: '2026-09-26T17:00:00.000Z' };
 
   it('never lets Enter clear on the first run, whichever button is main', () => {
     expect(enterRunsMain(firstRun, true)).toBe(false);
     expect(enterRunsMain(firstRun, false)).toBe(true);
-    expect(enterRunsMain(vacation, true)).toBe(true);
   });
 
-  it('names the effect on the first run, queues under the lock', () => {
+  // 2026-10-11: Enter on the 5+ days away dialog marked the whole preselected pile read on GitHub.
+  it('never lets Enter clear when coming back either, only from the sidebar', () => {
+    expect(enterRunsMain(vacation, true)).toBe(false);
+    expect(enterRunsMain(weekend, false)).toBe(true);
+    expect(enterRunsMain({ kind: 'sidebar' }, true)).toBe(true);
+  });
+
+  it('names the effect on every start dialog, queues under the lock', () => {
     expect(clearButtonText(firstRun, 28, false)).toBe('Mark 28 read on GitHub');
     expect(clearButtonText(firstRun, 28, true)).toBe('Queue marking 28 read');
-    expect(clearButtonText(vacation, 28, false)).toBe('Clear 28');
+    expect(clearButtonText(vacation, 28, false)).toBe('Mark 28 read on GitHub');
+    expect(clearButtonText(weekend, 28, true)).toBe('Queue marking 28 read');
+    expect(clearButtonText({ kind: 'sidebar' }, 28, false)).toBe('Clear 28');
     expect(clearButtonText({ kind: 'sidebar' }, 28, true)).toBe('Add pending write');
   });
 });

@@ -82,7 +82,8 @@ function paneOf(view: TileView, key: PrKey): PaneOffers {
   return pane;
 }
 
-const ONLY_OPEN = { lead: 'none', approve: false, ask: false, markLabel: null, removeTeams: [] };
+/** A done PR by someone else: no lead, no Ask, nothing to mark, and the outlined review row (2026-10-11). */
+const ONLY_OPEN = { lead: 'none', approve: true, ask: false, markLabel: null, removeTeams: [] };
 
 /** ada's open PR the viewer marked done earlier, with nothing asked of them. */
 const handledPr = makePr({ number: 1, author: 'ada' });
@@ -90,7 +91,7 @@ const handled = makeUserState({ prKey: handledPr.key, handledAt: at(50) });
 /** ada's PR that asks the viewer for a review. */
 const reviewPr = makePr({ number: 2, author: 'ada', reviewerUsers: [viewer.login] });
 
-describe('a done tile or done PR offers only Open', () => {
+describe('a done tile or done PR leads with nothing but Open', () => {
   // Bug fixed 2026-09-29: a handled PR by someone else with no ask still got a primary Approve.
   it('on a done single-PR tile', () => {
     const view = tileView({ prs: [handledPr], userStates: [handled] });
@@ -112,13 +113,13 @@ describe('a done tile or done PR offers only Open', () => {
     const view = tileView({ prs: [handledPr], events: [news], userStates: [handled], unreadKeys: [handledPr.key] });
     expect(view.state.kind).toBe('unread');
     expect(view.prs[0]?.done).toBe(true);
-    expect(paneOf(view, handledPr.key)).toMatchObject({ lead: 'mark_read', markLabel: 'Mark read', approve: false, ask: false, removeTeams: [] });
+    expect(paneOf(view, handledPr.key)).toMatchObject({ lead: 'mark_read', markLabel: 'Mark read', approve: true, ask: false, removeTeams: [] });
   });
 
   it('and Mark read while the done PR only has its thread unread on GitHub', () => {
     const view = tileView({ prs: [handledPr], userStates: [handled], unreadKeys: [handledPr.key] });
     expect(view.state).toMatchObject({ kind: 'unread', loud: false });
-    expect(paneOf(view, handledPr.key)).toMatchObject({ lead: 'mark_read', markLabel: 'Mark read', approve: false, ask: false, removeTeams: [] });
+    expect(paneOf(view, handledPr.key)).toMatchObject({ lead: 'mark_read', markLabel: 'Mark read', approve: true, ask: false, removeTeams: [] });
   });
 
   it('on a snoozed tile whose PR is done: footer and pane lead with Open, and Snooze takes the snooze back', () => {

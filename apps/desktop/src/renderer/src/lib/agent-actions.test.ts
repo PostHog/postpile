@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentApproveOffer, AgentApprovePr } from '@postpile/core';
-import { approvePillWord, approveTitle, batchMarkReadMessage, leftOutReason, tileApproveLabel, topicApproveLabel } from './agent-actions.ts';
+import { agentApproveLook, approvePillWord, approveTitle, batchMarkReadMessage, leftOutReason, tileApproveLabel, topicApproveLabel } from './agent-actions.ts';
 
 function offer(overrides: Partial<AgentApproveOffer>): AgentApproveOffer {
   return { state: 'active', risk: 'medium', reason: null, covered: [], leftOut: [], coveredCount: 3, totalCount: 5, prCount: 5, naming: 'some', ...overrides };
@@ -50,6 +50,19 @@ describe('approve wording', () => {
   it('says what a left-out layer waits on', () => {
     expect(leftOutReason({ reason: 'layer_below', waitsOn: 'acme/app#2104' })).toBe('waits on #2104');
     expect(leftOutReason({ reason: 'look_closer', waitsOn: null })).toBe('look closer');
+  });
+});
+
+describe('agentApproveLook', () => {
+  it('takes a click only while active and GitHub writes are on', () => {
+    expect(agentApproveLook(offer({}), null)).toEqual({ usable: true, greyed: false, title: 'Agent verdict: Looks safe.' });
+    expect(agentApproveLook(offer({ state: 'greyed', reason: 'rechecking' }), null)).toMatchObject({ usable: false, greyed: true });
+  });
+
+  // 2026-10-11: locked writes left the ✨ Approve active, and a click could only fail; the pane's Approve was greyed since #176.
+  it('greys while writes are locked, with the lock reason as its tooltip', () => {
+    const lock = 'Approving writes to GitHub, and GitHub writes are off. Open the lock in the footer.';
+    expect(agentApproveLook(offer({}), lock)).toEqual({ usable: false, greyed: true, title: lock });
   });
 });
 

@@ -114,6 +114,27 @@ export function approveTitle(offer: AgentApproveOffer): string {
   return 'Agent verdict: Looks safe.';
 }
 
+/** Whether the ✨ Approve takes a click, whether it shows greyed, and its tooltip. */
+export interface AgentApproveLook {
+  usable: boolean;
+  greyed: boolean;
+  title: string;
+}
+
+/**
+ * The ✨ Approve of a tile or topic. Greyed and disabled when the agent cannot
+ * back it, and also while GitHub writes are locked, with the lock reason as its
+ * tooltip, like the pane's Approve (2026-10-11): an approval has no pending
+ * queue, so a click could only fail.
+ */
+export function agentApproveLook(offer: AgentApproveOffer, blocked: string | null): AgentApproveLook {
+  if (blocked !== null) {
+    return { usable: false, greyed: true, title: blocked };
+  }
+  const active = offer.state === 'active';
+  return { usable: active, greyed: !active, title: approveTitle(offer) };
+}
+
 export function topicMarkReadTitle(offer: TopicMarkReadOffer): string {
   if (offer.state === 'greyed' && offer.reason) {
     return `Greyed out: ${REASON_SENTENCES[offer.reason]}`;

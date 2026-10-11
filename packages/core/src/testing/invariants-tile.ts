@@ -400,13 +400,14 @@ export const donePrIsNeverYourMove: Invariant = {
   },
 };
 
-/** Approve on a done PR only as "Approve again": an open PR the viewer approved. */
-function approveOnlyAgain(pane: PaneOffers, row: PrSummary): boolean {
-  return !pane.approve || row.primaryAction === 'approved';
+/** The review row on a done PR only where GitHub takes a review: an open PR by someone else (2026-10-11). */
+function reviewRowOnlyWhereGitHubTakesIt(pane: PaneOffers, row: PrSummary): boolean {
+  const reviewable = row.primaryAction === 'approve' || row.primaryAction === 'approved';
+  return pane.approve === reviewable;
 }
 
 function onlyOpen(pane: PaneOffers, row: PrSummary): boolean {
-  return pane.lead === 'none' && approveOnlyAgain(pane, row) && !pane.ask && pane.markLabel === null && pane.removeTeams.length === 0;
+  return pane.lead === 'none' && reviewRowOnlyWhereGitHubTakesIt(pane, row) && !pane.ask && pane.markLabel === null && pane.removeTeams.length === 0;
 }
 
 export const doneTileOffersOnlyOpen: Invariant = {
@@ -423,14 +424,18 @@ export const doneTileOffersOnlyOpen: Invariant = {
   },
 };
 
-/** A done PR offers only Open; with unseen news or its thread unread on GitHub it keeps Mark read, never Approve, Ask or Remove team. */
+/**
+ * A done PR leads with nothing; with unseen news or its thread unread on
+ * GitHub it keeps Mark read, never Ask or Remove team. The outlined review
+ * row stays on an open PR by someone else (2026-10-11).
+ */
 export const donePrOffersOnlyOpen: Invariant = {
-  name: 'a done PR offers only Open, or Mark read while its news is unseen or its thread unread',
+  name: 'a done PR leads with nothing, or Mark read while its news is unseen or its thread unread',
   check(_board, views) {
     for (const view of views) {
       for (const row of view.prs.filter((candidate) => candidate.done)) {
         const pane = view.offers.pane[row.key]!;
-        ensure(approveOnlyAgain(pane, row) && !pane.ask && pane.removeTeams.length === 0, `${row.key}: done PR offers Approve, Ask or Remove team`);
+        ensure(reviewRowOnlyWhereGitHubTakesIt(pane, row) && pane.lead !== 'approve' && !pane.ask && pane.removeTeams.length === 0, `${row.key}: done PR leads with Approve, offers Ask or Remove team, or its review row is wrong`);
         if (row.unseenLoudEvents === 0 && !row.unreadOnGitHub) {
           ensure(onlyOpen(pane, row), `${row.key}: done PR with nothing unseen leads with ${pane.lead}`);
         } else if (view.state.kind !== 'done') {

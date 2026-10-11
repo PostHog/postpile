@@ -184,20 +184,31 @@ describe('detail pane', () => {
   });
 
   // Bug fixed 2026-09-29: a handled PR by someone else with no ask was done but still got a primary Approve, plus Ask.
-  it('offers only Open on a done PR, also on a set whose other PR is still open', () => {
+  // 2026-10-11: the review row stays, outlined, since GitHub still takes a review there.
+  it('leads with nothing on a done PR and keeps its outlined review row, also on a set whose other PR is still open', () => {
     const done = row(2, { done: true, ownTeamRequests: ['acme/team-platform'] });
     const set = view('open', REREVIEW, stillYours, [row(1, { turn: REREVIEW }), done]);
     expect(paneOffers(set, done)).toEqual({
       scope: 'pr',
       lead: 'none',
-      approve: false,
+      approve: true,
       ask: false,
       markLabel: null,
       snooze: false,
       removeTeams: [],
       pendingWrite: null,
     });
-    expect(paneOffers(view('done', NONE, doneAfter), row(1, { done: true }))).toMatchObject({ lead: 'none', approve: false, ask: false, snooze: false, markLabel: null });
+    expect(paneOffers(view('done', NONE, doneAfter), row(1, { done: true }))).toMatchObject({ lead: 'none', approve: true, ask: false, snooze: false, markLabel: null });
+  });
+
+  // 2026-10-11 (#1988 case): the read timer marked a colleague's PR done and Approve, + note and Comment review vanished.
+  it('keeps the review row on a done open PR by someone else, never on a done PR GitHub takes no review on', () => {
+    const doneDraft = row(1, { done: true, isDraft: true });
+    expect(paneOffers(view('done', NONE, doneAfter, [doneDraft]), doneDraft)).toMatchObject({ lead: 'none', approve: true });
+    const merged = row(1, { done: true, state: 'MERGED', primaryAction: 'open_on_github' });
+    expect(paneOffers(view('done', NONE, doneAfter, [merged]), merged).approve).toBe(false);
+    const own = row(1, { done: true, authorRelation: 'you', primaryAction: 'open_on_github' });
+    expect(paneOffers(view('done', NONE, doneAfter, [own]), own).approve).toBe(false);
   });
 
   // 2026-10-07: on a dealt-with topic the ink Open on GitHub competed with "Archive now" for the next move.
@@ -219,9 +230,9 @@ describe('detail pane', () => {
     expect(paneOffers(view('done', NONE, doneAfter, [merged]), merged).approve).toBe(false);
   });
 
-  it('keeps Mark read on a done PR whose news keeps the tile unread, without Approve', () => {
+  it('keeps Mark read on a done PR whose news keeps the tile unread, with the review row outlined', () => {
     const done = row(1, { done: true, unseenLoudEvents: 1 });
-    expect(paneOffers(view('unread', NONE, doneAfter, [done]), done)).toMatchObject({ lead: 'mark_read', approve: false, ask: false });
+    expect(paneOffers(view('unread', NONE, doneAfter, [done]), done)).toMatchObject({ lead: 'mark_read', approve: true, ask: false });
   });
 
   it('asks no automation account and never the viewer', () => {
