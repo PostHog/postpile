@@ -41,7 +41,7 @@ with agent, Recheck): while the agent is off or paused, disable it with
   `team-roles.ts` (`useTeamRoles`, home or routing only per team for "Your
   teams"; flips go through `actions.setTeamRole`, rows are `TeamRolesList`,
   shared with the setup sweep step),
-  `proposals.ts` (`useProposals`, the Inbox), `search.ts` (`useSearch`,
+  `proposals.ts` (`useProposals`, the Suggestions pane), `search.ts` (`useSearch`,
   debounced title bar filter), `instructions.ts`
   (`useInstructions`, `useInstructionsChat`), `lessons.ts`
   (`useLessons(topicId)`, a topic's open lessons; key `lessons(topicId)`,
@@ -213,7 +213,7 @@ with agent, Recheck): while the agent is off or paused, disable it with
   Mark-read and memory correction results carry an undo token; the toast
   offers Undo for the 6s window and the footer counts mark-reads in the
   undo window. So do
-  the local "take back" choices: an Inbox Decline (`proposal:`, `rule:`)
+  the local "take back" choices: a Suggestions Decline (`proposal:`, `rule:`)
   and Remove on an accepted rule or a tailoring line (`rule:`,
   `tailoring:`). Those and `memory:` tokens are not mark-reads
   (`isMarkReadUndoToken` in `lib/mark-read.ts`). When a
@@ -265,7 +265,7 @@ with agent, Recheck): while the agent is off or paused, disable it with
   message or a lesson as its source, never both.
 - Topic proposals come from consolidation or, through the MCP server, from
   an outside agent (`source: 'agent'`, `client`). Say who suggested an
-  outside one wherever it shows: the Inbox card's meta line
+  outside one wherever it shows: the Suggestions card's meta line
   (`proposalMeta`: "topic · suggested by Claude Code · 2h ago", plus the
   agent's session name before the age when it gave one) and the
   topic header row ("Claude Code suggests: …"), both from `suggestedBy` in
@@ -289,7 +289,7 @@ with agent, Recheck): while the agent is off or paused, disable it with
   editing its text. Every memory line takes a `why` target
   (`lib/sources.ts`: `lineTarget`, `changePath`) and shows "Why?".
 - `markTopicSeen` is quiet (no toast). `App.tsx` calls it when the user
-  leaves a topic (another topic or the Inbox), not on a timer.
+  leaves a topic (another topic or Suggestions), not on a timer.
 - `markOpenedRead` has no toast and is on the `GithubWrite` list as
   `openedRead`, blocked while locked. `useOpenedRead` in `App.tsx` calls it
   once per open, when the PR has stayed 1.5s in the detail pane with the
@@ -509,7 +509,7 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   under `motion-safe:`). The footer shows the run's progress, and the
   done toast's "Show" opens the notifications view (`Toast` prop
   `onShowActionLog`),
-  `BusyInboxCard` (sidebar, after Inbox and right above the topics, only
+  `BusyInboxCard` (sidebar, after Suggestions and right above the topics, only
   while `BusyInboxView.busy`: the aching robot `BusyInboxArt` on the
   `busy-*` keyframes, only under `motion-safe:`; calm `amber-*` tokens,
   never coral or honey, the sweat drop `--drop` the one blue; words and
@@ -565,7 +565,7 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   left the topic's open list),
   `WorkContextSection` (instructions pane only), `AcceptedRules` (instructions
   pane: accepted rules for every topic with Remove), `ProposalPrList` (the
-  PRs a split or move takes along, `proposalPrs` in `lib/proposals.ts`; Inbox
+  PRs a split or move takes along, `proposalPrs` in `lib/proposals.ts`; Suggestions
   card and topic header row),
   `RelationBadge` (in `pills.tsx`).
   Something used in three places goes here; two call
@@ -738,9 +738,22 @@ a `<button>`. A click on the already selected tile keeps the open PR.
 Tiles stay in one column (DESIGN.md "Three-pane balance"). The selected
 tile keeps the place it had when it was selected, in its group (`useHeldPlace` over
 `holdPlace`, `lib/hold-place.ts`), and the open topic's sidebar row too,
-until the selection moves; its look still changes right away.
+until the selection moves; its look still changes right away. In the
+sidebar, a selection made with the pointer over it keeps the rows it left
+until the pointer leaves (`useSidebarHold`, pure part
+`lib/sidebar-hold.ts`); fold helpers in `lib/sidebar.ts` take those kept
+ids, not only the open topic's.
 
-`App.tsx` holds the picked topic, which middle pane shows (topic, Inbox,
+The topic's ✨ buttons under a search filter read
+`shownTopicOffers(detail.agent, shownTiles)` (`lib/agent-actions.ts`),
+never `detail.agent` directly: they count and act on what is on screen.
+
+The agent's proposals list is "Suggestions" in every UI word (sidebar
+row, pane title, cards; 2026-10-11, was "Inbox"). The code keeps its
+inbox names (`InboxPane`, pane `'inbox'`). In copy, "inbox" only ever
+means the user's GitHub inbox.
+
+`App.tsx` holds the picked topic, which middle pane shows (topic, Suggestions,
 "Your instructions", the notifications debug list and "Handled quietly",
 which both also take the detail pane's column), and the picked
 tile + PR. Everything else is

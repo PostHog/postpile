@@ -71,7 +71,8 @@ now".
   "Merge, it is approved" gives way to the stack layer that holds it
   ("Blocked: team-security to review #12"): on a PR's row for layers
   below, on the tile for the whole stack (core `stack-readiness.ts`, spec
-  `expectedStackHold`). `PrDetail.botFindings` (core `bot-findings.ts`):
+  `expectedStackHold`). Since 2026-10-11 someone else's "sol to merge"
+  does too, while someone else holds the layer. `PrDetail.botFindings` (core `bot-findings.ts`):
   `pr_context` shows one line of what a bot's change request found.
 - MCP review ownership and effort (2026-10-08; DESIGN.md "MCP server" ›
   Review ownership and effort): CODEOWNERS per repo of open PRs, read once
@@ -1747,6 +1748,42 @@ the app meanwhile.
   code-manager folder migration (`legacy-data.ts`) once the move has run.
 
 ## Decided
+
+- **Owner answers, board and copy** (2026-10-11, bug hunt wave 2, group B):
+  - Sidebar "Inbox" is now **Suggestions** (OPS-A-15): the row, pane title,
+    cards, MCP descriptions and docs. Code names keep "inbox"; "inbox" in
+    copy only means GitHub's.
+  - Under a search filter the topic's Approve and "Mark N read" count and
+    act on the shown tiles only: "Approve 2 PRs" (B-A-25 item 2; DESIGN.md
+    "Topic Approve").
+  - The topic's bulk buttons start with a verb and set the pill off with a
+    dot: "Mark all read · ✨ Needs you", "Approve all · ✨ Checking…"
+    greyed, "Approve 3 PRs · ✨ Low risk" (UI-A-17 item 8).
+  - "Blocked:" on every stack (B-A-12): someone else's stack reads
+    "Blocked: acme/team-security to review #2122" instead of "sol to merge
+    on #2121" while someone else holds a layer. Changes the 2026-10-08
+    "Stacks land together" decision (DESIGN.md, same section).
+  - "Owned by" softens to "omar drives · usually team-platform" when the
+    driver, not the owner team, placed the topic (BOARD-A-13; DESIGN.md
+    "Ownership sections").
+  - The header names the PR that holds a topic in its ask section when its
+    tile is folded under Dealt with: "In Changes you requested: #1963 waits
+    on tove" (BOARD-A-14).
+  - A sidebar row left by a click stays in place until the pointer leaves
+    the sidebar (B-A-16; DESIGN.md "Actions act on what you look at").
+  - The your-move chip orders moves by the ask tier of their PR first, like
+    the sections (B-A-17).
+  - No coral NEW on a merge without your review the glance calls Not
+    yours: the tile stays Unread, quietly (B-A-08; DESIGN.md "Merged
+    without your review" rules 1 and 3).
+  - Stack layer card: "This PR is only here because it's part of the
+    stack. PostPile writes no summary for a stack layer GitHub hasn't
+    pinged you about." (UI-A-14; covers every pulled-in layer, open ones
+    too, so not only "merged or closed").
+- **"Stack · 2 of 5 open" stays** (2026-10-11, owner, UI-A-15): kept as
+  shipped in #177.
+- **The Handled quietly row stays bare** (2026-10-11, owner, B-A-19): no
+  weekly count.
 
 - **A done open PR by someone else keeps its review row** (2026-10-11,
   owner, #1988 case; DESIGN.md "The PR pane" › review row): Approve,

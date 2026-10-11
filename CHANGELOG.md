@@ -7,12 +7,22 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 ### Added
 
 - "Your instructions" lists the standing rules you accepted for every topic, each with Remove. What you told the agent in a topic shows one line each, also with Remove. Both offer Undo.
-- Inbox Decline offers Undo for a few seconds. A declined suggestion is never made again, so a misclick used to lose it for good.
+- Decline under Suggestions offers Undo for a few seconds. A declined suggestion is never made again, so a misclick used to lose it for good.
 - `propose_topic_change` takes an optional `by` (the agent's session name). The suggestion card reads "suggested by Claude Code · ph3 session · 2h ago", and `topic` lists it with the outcome.
 - `pr_context` says when you cleared an agent's note in the PR pane, so another agent does not set it again.
 
 ### Changed
 
+- The sidebar's "Inbox" is now "Suggestions": it lists the topic changes and rules the agent suggests. "Inbox" only means your GitHub inbox now.
+- Someone else's stack reads "Blocked: acme/team-security to review #2122" while a layer above waits, like your own stack, instead of "sol to merge".
+- With a search filter on, the topic's Approve and Mark read count and act on the tiles you see only ("Approve 2 PRs").
+- The topic's bulk buttons start with a verb: "Mark all read · ✨ Needs you", "Approve all · ✨ Checking…".
+- The topic header says "omar drives · usually team-platform" when the driver, not the owner team, decides where the topic sits.
+- The topic header names the PR that keeps a topic in its section when that PR is folded under Dealt with: "In Changes you requested: #1963 waits on tove".
+- Clicking a topic in the sidebar no longer pulls the row you left out from under the pointer. Rows move once the pointer leaves the sidebar.
+- The your-move chip leads with the move that put the topic in its section ("Review" under To review, not a team mention's "Reply").
+- A merge without your review that the agent calls Not yours stays unread without the coral NEW.
+- A stack layer PostPile only pulled in says so in plain words instead of "Stack layers get no glance".
 - Opening a topic or searching no longer marks anything read on GitHub. Only a tile or PR you click yourself is marked after it stays open for 1.5 s; the tile PostPile picks for you stays unread until you click it or press Mark read.
 - An agent-drafted review note says "✨ Agent draft, edit before sending" until you edit it.
 - Cmd+Enter (or Ctrl+Enter) sends a comment review, a reply or an Ask. Approve with a note still needs a click.
