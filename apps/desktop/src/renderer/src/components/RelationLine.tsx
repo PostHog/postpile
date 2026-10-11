@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import type { TopicPlacement, TopicRelation, TopicRepoLine } from '@postpile/core';
+import type { TopicDriverView, TopicPlacement, TopicRelation, TopicRepoLine } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
+import { ownerLine, ownerLineText, type OwnerLine } from '../lib/owner-line.ts';
 import { relationLabel } from '../lib/sidebar.ts';
 import { RelationBadge } from './pills.tsx';
 import { TopicRepo } from './TopicRepo.tsx';
@@ -12,18 +13,20 @@ const OTHER_RELATIONS: Record<TopicRelation, TopicRelation[]> = {
   fyi: ['team', 'routed'],
 };
 
-function lineText(placement: TopicPlacement): string {
-  const owner = placement.ownerTeam ? `Owned by ${placement.ownerTeam}` : 'Owner not known';
-  return placement.whyYou ? `${owner} · you're here because ${placement.whyYou}` : owner;
+function lineText(placement: TopicPlacement, owner: OwnerLine): string {
+  const ownerText = ownerLineText(owner);
+  return placement.whyYou ? `${ownerText} · you're here because ${placement.whyYou}` : ownerText;
 }
 
 /**
- * "[repo] · Owned by X · you're here because Y" with the relation badge,
+ * "[repo] · Owned by X · you're here because Y" ("omar drives · usually X"
+ * when the driver placed the topic, `ownerLine`) with the relation badge,
  * "Why?" and the correction: "Not right?" offers the other two relations. A
  * correction holds until something new happens in the topic.
  */
 export function RelationLine(props: {
   placement: TopicPlacement;
+  driver: Pick<TopicDriverView, 'kind' | 'login' | 'driverDecides'> | null;
   repo: TopicRepoLine | null;
   topicId: string;
   dossierVersion: number | null;
@@ -33,7 +36,8 @@ export function RelationLine(props: {
   const [whyOpen, setWhyOpen] = useState(false);
   const [choosing, setChoosing] = useState(false);
   const { placement } = props;
-  const text = lineText(placement);
+  const owner = ownerLine(placement.ownerTeam, props.driver);
+  const text = lineText(placement, owner);
 
   async function correct(relation: TopicRelation) {
     setChoosing(false);
@@ -52,13 +56,8 @@ export function RelationLine(props: {
                 <span className="px-[5px] text-ghost">·</span>
               </>
             )}
-            {placement.ownerTeam ? (
-              <>
-                Owned by <span className="text-ink-2">{placement.ownerTeam}</span>
-              </>
-            ) : (
-              'Owner not known'
-            )}
+            {owner.before}
+            {owner.team && <span className="text-ink-2">{owner.team}</span>}
           </span>
           {placement.whyYou && (
             <>

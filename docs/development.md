@@ -67,7 +67,7 @@ POSTPILE_FAKE=1 POSTPILE_TOKEN=devtok PORT=4877 pnpm server
 POSTPILE_TOKEN=devtok pnpm cli mcp --api http://127.0.0.1:4877
 ```
 
-The second command serves MCP on stdin/stdout and sends every engine read and ask to the server's `POST /api/fake/engine/:method` (token-protected, only the 14 methods MCP uses, only on a server started with `POSTPILE_FAKE=1`). Topic suggestions show in the Inbox, notes in the PR pane, and a Reject or Clear in the UI reaches the next MCP answer. A real server has no such route; the real MCP server reads the database and asks the app through files as before.
+The second command serves MCP on stdin/stdout and sends every engine read and ask to the server's `POST /api/fake/engine/:method` (token-protected, only the 14 methods MCP uses, only on a server started with `POSTPILE_FAKE=1`). Topic suggestions show under Suggestions, notes in the PR pane, and a Reject or Clear in the UI reaches the next MCP answer. A real server has no such route; the real MCP server reads the database and asks the app through files as before.
 
 `note_pr` with `covered_by` a PR outside the sample works like a real GitHub read: `acme/app#1000` to `#1999` are "read" once and kept as a pulled-in PR (no tile, no topic), `#90000` and up are PRs GitHub does not have, and `acme/app#1777` answers `pending` the first time (a retry finds it). Any other PR outside the sample is refused. The reads go through the engine's cover reader, so its hourly cap and `POSTPILE_FAKE_QUOTA=critical` apply.
 

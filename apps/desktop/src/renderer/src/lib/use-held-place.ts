@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { holdPlace, placeIn, type Bucket, type HeldPlace } from './hold-place.ts';
+import { holdPlace, holdPlaces, nextHeldEntries, placeIn, type Bucket, type HeldEntry, type HeldPlace, type HoldRequest } from './hold-place.ts';
 
 interface Held {
   key: string;
@@ -24,4 +24,23 @@ export function useHeldPlace<T>(holdKey: string | null, itemId: string | null, b
     setHeld(current);
   }
   return holdPlace(buckets, current?.place ?? null, idOf);
+}
+
+function sameEntries(a: HeldEntry[], b: HeldEntry[]): boolean {
+  return a.length === b.length && a.every((entry, index) => entry === b[index]);
+}
+
+/**
+ * `useHeldPlace` for several items at once (`nextHeldEntries`): each
+ * request keeps the place its item had when its key started, until the
+ * request goes. Only UI state.
+ */
+export function useHeldPlaces<T>(requests: HoldRequest[], buckets: Bucket<T>[], idOf: (item: T) => string): Bucket<T>[] {
+  const [held, setHeld] = useState<HeldEntry[]>([]);
+  const next = nextHeldEntries(held, requests, buckets, idOf);
+  if (!sameEntries(next, held)) {
+    // The documented "adjust state while rendering" pattern: React re-renders right away with it.
+    setHeld(next);
+  }
+  return holdPlaces(buckets, next, idOf);
 }

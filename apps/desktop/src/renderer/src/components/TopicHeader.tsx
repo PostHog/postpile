@@ -6,7 +6,7 @@ import { lineTarget } from '../lib/sources.ts';
 import { updatingNow } from '../lib/staleness.ts';
 import { proposalPrs, proposalText, suggestedBy } from '../lib/proposals.ts';
 import { prMixTitle } from '../lib/pr-mix.ts';
-import { sectionLook } from '../lib/sections.ts';
+import { holdingPrLine, sectionLook } from '../lib/sections.ts';
 import { Avatar } from './Avatar.tsx';
 import { Button } from './Button.tsx';
 import { DossierPanel } from './DossierPanel.tsx';
@@ -200,6 +200,8 @@ export function TopicHeader(props: {
   // Only a whole-topic catch-up rewrites the dossier; a glance-only refresh on look does not (server decides).
   const updating = updatingNow({ syncing: actions.syncing, writing: props.detail.memoryUpdating });
   const crumbs = breadcrumbs(props.detail, props.rowSection);
+  // The PR that holds the topic in its ask section, when its tile is folded away in Dealt with.
+  const holding = holdingPrLine(props.detail.tiles, props.rowSection ?? props.detail.section);
   return (
     <div className="flex flex-col">
       <div className="flex items-center gap-[5px] text-[11px] text-hint">
@@ -241,6 +243,7 @@ export function TopicHeader(props: {
         <div className="mt-1.5">
           <RelationLine
             placement={placement}
+            driver={driver}
             repo={repoLine}
             topicId={topic.id}
             dossierVersion={dossier?.dossier.relation ? dossier.version : null}
@@ -248,6 +251,7 @@ export function TopicHeader(props: {
           />
         </div>
       )}
+      {holding && <p className="mt-1 text-[11.5px] leading-normal text-hint">{holding}</p>}
       {/* Without a placement there is no owner line, but the repo still shows in its spot. */}
       {!placement && repoLine && (
         <div className="mt-1.5 text-[11.5px] leading-normal">

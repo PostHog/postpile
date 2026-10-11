@@ -4,7 +4,7 @@ import { useActions } from '../api/actions.tsx';
 import { useNextAutoSyncAt } from '../api/live.ts';
 import { useAgentOffReason } from '../api/tools.ts';
 import { assessment, type AssessmentLine, type AssessmentMark } from '../lib/assessment.ts';
-import { glanceClaim, glanceStateText } from '../lib/glance.ts';
+import { glanceClaim, glanceStateText, STACK_LAYER_NOTE } from '../lib/glance.ts';
 import { staleGlanceNote, staleWord, updatingNow } from '../lib/staleness.ts';
 import { useNow } from '../lib/use-now.ts';
 import { Button } from './Button.tsx';
@@ -266,7 +266,7 @@ export function GlanceCard(props: GlanceCardProps) {
       {!folded && glance && <KeyFiles keyFiles={glance.keyFiles} pr={props.detail.pr} />}
       {!glance && !stackLayer && <MissingGlance detail={props.detail} />}
       {stackLayer && (
-        <p className="px-3 text-xs text-muted">Pulled in to complete the stack. Stack layers get no glance until GitHub pings you about them.</p>
+        <p className="px-3 text-xs text-muted">{STACK_LAYER_NOTE}</p>
       )}
       {canUnrelate && summary && (
         <div>

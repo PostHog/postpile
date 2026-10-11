@@ -62,25 +62,27 @@ function holdsYours(item: TopicListItem): boolean {
 /**
  * Other work and its area folds start open when they hold the viewer's open
  * PR, a move of theirs or an unread topic; else folded. It stays open while
- * it holds the selected topic, so marking that topic read does not close it.
+ * it holds a kept topic (`keptIds`: the selected one, and the one the
+ * sidebar holds until the pointer leaves), so marking that topic read does
+ * not close it.
  */
-export function startsOpen(items: TopicListItem[], activeTopicId: string | null = null): boolean {
-  return items.some((item) => holdsYours(item) || item.unreadTiles > 0 || item.topic.id === activeTopicId);
+export function startsOpen(items: TopicListItem[], keptIds: readonly string[] = []): boolean {
+  return items.some((item) => holdsYours(item) || item.unreadTiles > 0 || keptIds.includes(item.topic.id));
 }
 
 /**
  * Other work's default while its dealt-with topics are hidden: `startsOpen`
  * over the listed topics only, so a dealt-with topic holding your open PR
- * does not open it; it stays open while the selected topic sits behind its
+ * does not open it; it stays open while a kept topic sits behind its
  * dealt-with line.
  */
-export function otherWorkStartsOpen(listed: TopicListItem[], dealt: TopicListItem[], activeTopicId: string | null): boolean {
-  return startsOpen(listed, activeTopicId) || dealt.some((item) => item.topic.id === activeTopicId);
+export function otherWorkStartsOpen(listed: TopicListItem[], dealt: TopicListItem[], keptIds: readonly string[]): boolean {
+  return startsOpen(listed, keptIds) || dealt.some((item) => keptIds.includes(item.topic.id));
 }
 
-/** The rows a folded fold keeps showing: urgent unread ones (coral) and the selected topic, so nothing urgent hides and the open row stays. */
-export function rowsWhileFolded(items: TopicListItem[], activeTopicId: string | null = null): TopicListItem[] {
-  return items.filter((item) => unreadLook(item) === 'urgent' || item.topic.id === activeTopicId);
+/** The rows a folded fold keeps showing: urgent unread ones (coral) and the kept topics, so nothing urgent hides and the open row stays. */
+export function rowsWhileFolded(items: TopicListItem[], keptIds: readonly string[] = []): TopicListItem[] {
+  return items.filter((item) => unreadLook(item) === 'urgent' || keptIds.includes(item.topic.id));
 }
 
 /** "· 4 unread · 1 urgent" for a folded header, counted by topic; empty when nothing is unread. */

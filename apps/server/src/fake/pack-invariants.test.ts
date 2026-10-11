@@ -72,7 +72,12 @@ describe.each(PACKS)('pack %s: rules agree', (pack) => {
       }
       const row = view.prs.find((pr) => pr.key === view.turn.prKey);
       expect(view.offers.leadPrKey, view.tile.id).toBe(view.turn.prKey);
-      // A stack's blocked merge names the holding layer, whose own row waits on the same person.
+      expect(row, view.tile.id).toBeDefined();
+      // A stack's blocked merge names the holding layer. On your own stack its row waits on the same person; on
+      // someone else's (2026-10-11) the layer's row can be nobody's move for you, a team review you are not asked for.
+      if (view.turn.kind === 'them' && view.turn.lead === 'Blocked:') {
+        continue;
+      }
       expect(row?.turn.kind, view.tile.id).toBe(view.turn.kind);
     }
   });

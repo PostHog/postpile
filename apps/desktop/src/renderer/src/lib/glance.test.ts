@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { glanceClaim, glanceStateText, type GlanceStateInput } from './glance.ts';
+import { glanceClaim, glanceStateText, STACK_LAYER_NOTE, type GlanceStateInput } from './glance.ts';
 
 const AT = '2026-09-29T10:00:00.000Z';
 const NOW = new Date('2026-09-29T10:00:00.000Z');
@@ -51,5 +51,13 @@ describe('glanceClaim', () => {
       createdAt: '2026-09-27T10:00:00.000Z',
     };
     expect(glanceClaim(glance)).toBe('Look closer. Changes cache keys. Does: Moves the cache. Risk: medium - cold runs');
+  });
+});
+
+describe('STACK_LAYER_NOTE', () => {
+  // Owner, 2026-10-11 (UI-A-14): plain words, no "glance"; it covers every pulled-in layer, open ones too.
+  it('says why the layer is here without the word glance', () => {
+    expect(STACK_LAYER_NOTE).toBe("This PR is only here because it's part of the stack. PostPile writes no summary for a stack layer GitHub hasn't pinged you about.");
+    expect(STACK_LAYER_NOTE).not.toMatch(/glance/i);
   });
 });

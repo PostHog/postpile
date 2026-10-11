@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { holdPlace, placeIn, type Bucket } from './hold-place.ts';
+import { holdPlace, holdPlaces, nextHeldEntries, placeIn, type Bucket } from './hold-place.ts';
 
 const id = (item: string) => item;
 
@@ -38,5 +38,20 @@ describe('holdPlace', () => {
     expect(holdPlace(buckets, null, id)).toBe(buckets);
     expect(holdPlace(buckets, { id: 'z', bucket: 'live', index: 0 }, id)).toBe(buckets);
     expect(holdPlace(buckets, { id: 'a', bucket: 'nope', index: 0 }, id)).toBe(buckets);
+  });
+});
+
+describe('nextHeldEntries and holdPlaces', () => {
+  it('keeps each held item at the place it had under its key, and lets go of the ones no longer asked for', () => {
+    const first = nextHeldEntries([], [{ key: 'k1', itemId: 'a' }], layout(['a', 'b', 'c']), id);
+    const second = nextHeldEntries(first, [{ key: 'k1', itemId: 'a' }, { key: 'k2', itemId: 'c' }], layout(['b', 'c'], ['a']), id);
+    expect(second[0]).toBe(first[0]);
+    expect(holdPlaces(layout(['b'], ['a', 'c']), second, id)).toEqual(layout(['a', 'b', 'c']));
+    expect(nextHeldEntries(second, [{ key: 'k2', itemId: 'c' }], layout(['b'], ['a', 'c']), id)).toEqual([second[1]]);
+  });
+
+  it('takes the current place when the key changes', () => {
+    const first = nextHeldEntries([], [{ key: 'k1', itemId: 'a' }], layout(['a', 'b']), id);
+    expect(nextHeldEntries(first, [{ key: 'k2', itemId: 'a' }], layout(['b', 'a']), id)[0]?.place).toEqual({ id: 'a', bucket: 'live', index: 1 });
   });
 });

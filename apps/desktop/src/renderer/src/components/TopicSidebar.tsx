@@ -10,7 +10,8 @@ import { bucketItems, dealtItems, dealtKey, rowSection, sidebarBuckets, topicRow
 import { ARCHIVE_FLIGHT_MS, flyToArchive } from '../lib/archive-flight.ts';
 import { reducedMotion } from '../lib/motion.ts';
 import { useFlip } from '../lib/use-flip.ts';
-import { useHeldPlace } from '../lib/use-held-place.ts';
+import { useHeldPlaces } from '../lib/use-held-place.ts';
+import { useSidebarHold } from '../lib/use-sidebar-hold.ts';
 import { type SearchFilter } from '../lib/search.ts';
 import { stateMix } from '../lib/pr-mix.ts';
 import { sectionLook } from '../lib/sections.ts';
@@ -380,14 +381,14 @@ function FinishedDrawer(props: { open: boolean; onToggle: () => void; activeTopi
   );
 }
 
-function InboxItem(props: { count: number; active: boolean; onSelect: () => void }) {
+function SuggestionsItem(props: { count: number; active: boolean; onSelect: () => void }) {
   const badge = props.active ? 'bg-accent text-on-accent' : 'bg-chip text-ink-2';
   return (
     <button
       type="button"
       onClick={props.onSelect}
       aria-current={props.active ? 'true' : undefined}
-      title="Suggestions waiting for you: topic changes and standing rules the agent proposes. Not your GitHub inbox."
+      title="Topic changes and standing rules the agent suggests. Nothing changes until you accept."
       className={`flex items-center gap-2 rounded-row px-2 py-[7px] text-left text-[13px] ${
         props.active ? 'bg-surface font-semibold shadow-active-row' : 'text-ink-2 hover:bg-surface/60'
       }`}
@@ -395,7 +396,7 @@ function InboxItem(props: { count: number; active: boolean; onSelect: () => void
       <span className="text-muted">
         <InboxIcon />
       </span>
-      <span className="flex-1">Inbox</span>
+      <span className="flex-1">Suggestions</span>
       {props.count > 0 && (
         <span className={`flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-[5px] font-mono text-[10.5px] font-semibold ${badge}`}>
           {props.count}
@@ -566,6 +567,9 @@ export function TopicSidebar(props: TopicSidebarProps) {
   useFlip(navRef, { landed: false });
   const { topicMoves } = useActions();
   const holdKey = props.selectedTileId === null ? null : `${props.selectedTileId}#${topicMoves}`;
+  // A click inside the sidebar keeps the row it leaves until the pointer leaves the sidebar, so rows don't move under the cursor.
+  const sidebarHold = useSidebarHold({ key: holdKey, topicId: props.activeTopicId });
+  const keptIds = sidebarHold.keptIds;
   // A topic that just went to the Archive stays a moment in its old place, hidden, while a copy flies there.
   const archivedIds = new Set((useFinishedTopics().data ?? []).map((topic) => topic.id));
   const leaving = useLeavingRow(props.shown, props.activeTopicId, archivedIds);
@@ -577,7 +581,7 @@ export function TopicSidebar(props: TopicSidebarProps) {
     }
   }, [leaving]);
   // Dealt-with topics leave the owner sections, except while the search or a queue filter narrows: filters are for finding things.
-  const buckets = useHeldPlace(holdKey, props.activeTopicId, sidebarBuckets(listed, !narrowed), topicRowId);
+  const buckets = useHeldPlaces(sidebarHold.rows, sidebarBuckets(listed, !narrowed), topicRowId);
   const activeSection = props.activeTopicId === null ? null : rowSection(buckets, props.activeTopicId);
   const { onRowSection, activeTopicId } = props;
   useEffect(() => {
@@ -613,18 +617,18 @@ export function TopicSidebar(props: TopicSidebarProps) {
     return (
       <>
         <DealtLine count={dealt.length} open={open} onToggle={() => toggle(key, open)} flipKey={`group:${key}`} />
-        {(open ? dealt : rowsWhileFolded(dealt, props.activeTopicId)).map((item) => topicItem(item, key))}
+        {(open ? dealt : rowsWhileFolded(dealt, keptIds)).map((item) => topicItem(item, key))}
       </>
     );
   };
   // Other work and its area folds open by what they hold (`startsOpen`, over the topics the queue filter left and not dealt with); folded, urgent unread rows and the selected topic stay.
-  const otherWorkOpen = isOpen('other_work', otherWorkStartsOpen(otherWork, otherWorkDealt, props.activeTopicId), searching);
+  const otherWorkOpen = isOpen('other_work', otherWorkStartsOpen(otherWork, otherWorkDealt, keptIds), searching);
   const areaFold = (fold: AreaFold) => {
-    const open = isOpen(fold.key, startsOpen(fold.items, props.activeTopicId), searching);
+    const open = isOpen(fold.key, startsOpen(fold.items, keptIds), searching);
     return (
       <div key={fold.key} className="flex flex-col gap-px">
         <GroupHeader small label={fold.label} open={open} onToggle={() => toggle(fold.key, open)} flipKey={`group:${fold.key}`} summary={foldedSummary(fold.items)} />
-        {(open ? fold.items : rowsWhileFolded(fold.items, props.activeTopicId)).map((item) => topicItem(item, fold.key))}
+        {(open ? fold.items : rowsWhileFolded(fold.items, keptIds)).map((item) => topicItem(item, fold.key))}
       </div>
     );
   };
@@ -633,9 +637,14 @@ export function TopicSidebar(props: TopicSidebarProps) {
   const fyiOpen = isOpen('fyi', false, narrowed);
   const finishedOpen = isOpen('finished', false, false);
   return (
-    <nav ref={navRef} aria-label="Topics" className="pane-scroll flex min-h-0 flex-col gap-3.5 overflow-auto bg-sidebar pl-2.5 pr-0 pt-3 pb-2.5 shadow-[inset_-1px_0_0_var(--hairline-strong)]">
+    <nav
+      ref={navRef}
+      aria-label="Topics"
+      onPointerEnter={sidebarHold.onPointerEnter}
+      onPointerLeave={sidebarHold.onPointerLeave}
+      className="pane-scroll flex min-h-0 flex-col gap-3.5 overflow-auto bg-sidebar pl-2.5 pr-0 pt-3 pb-2.5 shadow-[inset_-1px_0_0_var(--hairline-strong)]">
       <QueueFilters counts={props.filterCounts} active={props.queueFilter} viewer={props.viewer} onChange={props.onQueueFilter} />
-      <InboxItem count={props.inboxCount} active={props.inboxOpen} onSelect={props.onOpenInbox} />
+      <SuggestionsItem count={props.inboxCount} active={props.inboxOpen} onSelect={props.onOpenInbox} />
       {/* Right above the topics: a busy inbox is where topics go missing. Renders nothing unless busy. */}
       <BusyInboxCard />
       {!props.error && !narrowed && nothingWaits(props.topics) && <p className={`text-xs text-faint ${TEXT_COLUMN}`}>Nothing waits on you.</p>}
@@ -674,7 +683,7 @@ export function TopicSidebar(props: TopicSidebarProps) {
             </>
           ) : (
             <div className="flex flex-col gap-px">
-              {rowsWhileFolded([...otherWork, ...otherWorkDealt], props.activeTopicId).map((item) => topicItem(item, 'other_work'))}
+              {rowsWhileFolded([...otherWork, ...otherWorkDealt], keptIds).map((item) => topicItem(item, 'other_work'))}
             </div>
           )}
         </div>

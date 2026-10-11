@@ -153,11 +153,17 @@ export function tileUnreadPrKeys(state: TileState, prs: PrSummary[]): PrKey[] {
 /**
  * The strip's coral NEW pill: only on an unread tile, and never on a
  * headline (the last unread reason) made by automation unless it is loud
- * (DESIGN.md "Tile faces" › Headline event).
+ * (DESIGN.md "Tile faces" › Headline event). Nor on a merge without your
+ * review that the glance calls Not yours (`notYours`): the tile stays
+ * Unread while GitHub says unread, but quiet (2026-10-11, "Merged without
+ * your review").
  */
-export function tileNewBadge(state: Pick<TileState, 'kind' | 'unreadBecause'>): boolean {
+export function tileNewBadge(state: Pick<TileState, 'kind' | 'unreadBecause'>, notYours: ReadonlySet<PrKey> = new Set()): boolean {
   const headline = state.unreadBecause[state.unreadBecause.length - 1];
   if (state.kind !== 'unread' || !headline) {
+    return false;
+  }
+  if (headline.kind === 'merged_without_review' && notYours.has(headline.prKey)) {
     return false;
   }
   return !headline.automation || headline.loud;
@@ -218,7 +224,7 @@ export function buildTileView(input: TileViewInput): TileView {
     draft: isDraftTile(prs),
     unreadPrKeys,
     group: tileGroup(input.state),
-    newBadge: tileNewBadge(input.state),
+    newBadge: tileNewBadge(input.state, input.notYours),
     quietRepo: input.quietRepo,
     repoLabel: input.repoLabel,
   };

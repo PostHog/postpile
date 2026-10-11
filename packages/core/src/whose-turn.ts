@@ -85,6 +85,9 @@ const RE_REVIEW = 'to re-review';
 /** The move on the viewer's own approved PR. It shows on the tile, but it is not urgent. */
 export const MERGE_APPROVED_MOVE = 'Merge, it is approved';
 
+/** The author's move on someone else's PR once it can merge: "sol to merge". */
+const AUTHOR_MERGE = 'to merge';
+
 /** A PR sits in the merge queue, the viewer's or not: nobody's move but the queue's. */
 const MERGE_QUEUE_WAIT = 'Waiting on the merge queue';
 
@@ -166,6 +169,27 @@ function blockedTurn(viewer: Viewer, blocker: StackBlocker): WhoseTurn {
     case 'approval':
       return { kind: 'them', who: null, what: `${BLOCKED_LEAD} ${number} needs an approving review`, prKey: pr.key };
   }
+}
+
+/**
+ * On someone else's stack only someone else's hold replaces the author's
+ * merge. The viewer's own part shows on that layer's own row, and a PR
+ * whose part is over for the viewer never turns into their move.
+ */
+function isOthersHold(held: WhoseTurn): boolean {
+  return held.kind === 'them';
+}
+
+/**
+ * Someone else's PR waits on its author to merge it, unless a stack layer
+ * below holds it back: then that layer's move, "Blocked: team-security to
+ * review #12", as on the viewer's own stack (2026-10-11). Only while
+ * someone else holds it (`isOthersHold`).
+ */
+function authorToMerge(ctx: PrContext): WhoseTurn {
+  const below = firstBlocker(ctx.layersBelow);
+  const held = below ? blockedTurn(ctx.viewer, below) : null;
+  return held && isOthersHold(held) ? held : them(ctx, prOwner(ctx.pr), AUTHOR_MERGE);
 }
 
 /**
@@ -354,7 +378,7 @@ function othersPrTurn(ctx: PrContext): WhoseTurn {
   const ask = reviewRequest(ctx.pr, ctx.viewer);
   // An approval on any commit stands; a push after it is not the viewer's move.
   if (isApprovedByViewer(pr, ctx.userState, ctx.viewer.login)) {
-    return them(ctx, prOwner(pr), 'to merge');
+    return authorToMerge(ctx);
   }
   const reviewed = viewerHeadReview(ctx.pr, ctx.viewer);
   const hold = reviewed === null ? teamRequestHold(pr, ctx.viewer, ctx.notYours) : null;
@@ -383,7 +407,7 @@ function othersPrTurn(ctx: PrContext): WhoseTurn {
     return you(ctx, 're_review', reviewText(ctx, ask, 'Re-review'));
   }
   if (reviewed?.state === 'APPROVED') {
-    return them(ctx, prOwner(pr), 'to merge');
+    return authorToMerge(ctx);
   }
   if (reviewed) {
     const opened = threadsViewerOpened(ctx);
@@ -394,7 +418,7 @@ function othersPrTurn(ctx: PrContext): WhoseTurn {
   }
   if (ask === 'team_taken') {
     if (pr.reviewDecision === 'APPROVED') {
-      return them(ctx, prOwner(pr), 'to merge');
+      return authorToMerge(ctx);
     }
     const changes = standingChanges(pr);
     if (changes?.kind === 're_review') {
@@ -518,8 +542,15 @@ export function tileLandableBelow(tile: Tile, turn: WhoseTurn, prs: ReadonlyMap<
   return landableBelow(layers).map((pr) => pr.key);
 }
 
-/** The move is merging an approved own PR, not re-submitting it to the merge queue. */
-function isApprovedMerge(turn: WhoseTurn): boolean {
+/**
+ * The move is merging an approved PR: your own ("Merge, it is approved") or
+ * its author's on someone else's ("sol to merge"), not re-submitting it to
+ * the merge queue. `where` is the tile's " on #n".
+ */
+function isApprovedMerge(turn: WhoseTurn, where: string): boolean {
+  if (turn.kind === 'them') {
+    return turn.what === `${AUTHOR_MERGE}${where}`;
+  }
   return turn.kind === 'you' && turn.move === 'merge' && turn.what.startsWith(MERGE_APPROVED_MOVE);
 }
 
@@ -547,19 +578,21 @@ export function whoseTurn(input: WhoseTurnInput): WhoseTurn {
     }
     const events = input.events.get(pr.key) ?? [];
     const layers = stackLayersAround(input.tile.stacks, pr.key, input.prs);
+    const where = multi ? ` on #${pr.ref.number}` : '';
     let turn = prTurn({
       pr,
       events,
       userState: input.userStates.get(pr.key) ?? null,
       viewer,
-      where: multi ? ` on #${pr.ref.number}` : '',
+      where,
       notYours: input.notYours?.has(pr.key) ?? false,
       layersBelow: layers.below,
     });
     // The tile speaks for the whole stack: merging stays the move only while every layer it ships with can land too.
-    const above = isApprovedMerge(turn) ? firstBlocker(layers.above) : null;
-    if (above) {
-      turn = blockedTurn(viewer, above);
+    const above = isApprovedMerge(turn, where) ? firstBlocker(layers.above) : null;
+    const held = above ? blockedTurn(viewer, above) : null;
+    if (held && (turn.kind === 'you' || isOthersHold(held))) {
+      turn = held;
     }
     const news = newestUnseenLoudAt(events);
     const moreUrgent = TURN_ORDER[turn.kind] < TURN_ORDER[best.kind];

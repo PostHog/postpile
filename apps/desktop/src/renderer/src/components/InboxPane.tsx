@@ -78,7 +78,7 @@ function RuleProposalCard(props: { proposal: RuleProposal; topicName: (topicId: 
   );
 }
 
-/** Middle pane when "Inbox" is picked: what consolidation proposes, nothing applied until accepted. */
+/** Middle pane when "Suggestions" is picked (the code still calls it the inbox): what consolidation proposes, nothing applied until accepted. */
 export function InboxPane(props: { proposals: PendingProposals | undefined; topics: TopicListItem[]; error: string | null }) {
   const topicName = (topicId: string) => props.topics.find((item) => item.topic.id === topicId)?.topic.name ?? topicId;
   const topics = props.proposals?.topics ?? [];
@@ -86,7 +86,7 @@ export function InboxPane(props: { proposals: PendingProposals | undefined; topi
   return (
     <main className="pane-scroll flex min-w-0 flex-col gap-[18px] overflow-auto pl-[26px] pr-[16px] py-[22px]">
       <div className="flex flex-col gap-1.5">
-        <h1 className="text-[23px] leading-tight font-[650] tracking-[-0.022em]">Inbox</h1>
+        <h1 className="text-[23px] leading-tight font-[650] tracking-[-0.022em]">Suggestions</h1>
         <p className="max-w-[680px] text-[13px] text-ink-2">The agent proposes topic changes and standing rules. Nothing changes until you accept.</p>
       </div>
       {props.error && <p className="text-xs text-status-bad">Could not load proposals: {props.error}</p>}

@@ -170,7 +170,7 @@ import {
   debugEventLines,
   emptyAgentCallStats,
   fixedClaimNote,
-  topicMove,
+  urgencyTileOf,
   OFF_POLL_STATUS,
   systemTimers,
   ownerRelation,
@@ -1202,17 +1202,7 @@ export class FakeEngine implements EngineService {
     const items = this.listedTopics(scope).map((topic): TopicListItem => {
       const tiles = this.tilesOfTopic(topic.id);
       const views = tiles.map((tile) => this.tileView(tile));
-      const urgency = topicUrgency(
-        views.map((view) => ({
-          state: view.state.kind,
-          unreadOnGitHub: view.state.unreadOnGitHub,
-          loud: view.state.loud,
-          unreadPrKeys: view.unreadPrKeys,
-          prStates: view.prs.filter((pr) => !pr.quietRepo).map((pr) => pr.state),
-          move: topicMove(view.turn),
-          quiet: view.quietRepo,
-        })),
-      );
+      const urgency = topicUrgency(views.map(urgencyTileOf));
       const prs = this.topicPrs(tiles);
       const queues = this.topicQueuesOf(tiles);
       const prRollup = topicPrRollup(tiles, prs.map(({ pr }) => pr));

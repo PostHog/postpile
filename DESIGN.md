@@ -875,7 +875,7 @@ logs a line and sends `board_trimmed { kept, dropped }` at most once an
 hour.
 
 **The busy inbox card** (2026-10-05, design "C, the robot"). While `busy`,
-a card sits at the top of the sidebar, right after Inbox and above the
+a card sits at the top of the sidebar, right after Suggestions and above the
 topics: that is where a busy inbox shows, as topics that are not there.
 "Busy inbox", then "Focusing on what is aimed at you. 4,640 quiet PRs wait
 for news." and what is kept per tier ("Kept 940 for you · 560 for your
@@ -996,7 +996,8 @@ the reasons and does not flip back:
    Quiet is about pings and loudness only: while the thread is unread on
    GitHub the tile is `unread`, with the merge as its headline, and a merge
    by a person shows the coral NEW pill like any unread person's event
-   (`tileNewBadge`; a bot's merge does not). Mark read (rule 5) settles both.
+   (`tileNewBadge`; a bot's merge does not), except when the glance says
+   Not yours (rule 3). Mark read (rule 5) settles both.
 2. *Not done until seen.* `isPrDone`: a merged PR is done, except while its
    `merged_without_review` event is unseen. Such a tile is `open`, whose turn
    "none", in the normal tile list (not in Dealt with), and carries the
@@ -1014,10 +1015,12 @@ the reasons and does not flip back:
    question is whether it concerns the user. For open PRs the team request
    hold still ignores NOT_YOURS on personal requests (see whose turn).
    The glance is no evidence that the user saw the thread, so it does not
-   read it: while the thread is unread on GitHub the tile stays `unread`
-   (with NEW for a person's merge, rule 1), and the Not yours pill says it
-   can go. Mark read clears it, and the tile then shows in Dealt with with
-   the verdict.
+   read it: while the thread is unread on GitHub the tile stays `unread`,
+   but as a quiet unread: unread dot and count, no coral NEW, even for a
+   person's merge (owner 2026-10-11, bug hunt B-A-08; `tileNewBadge` reads
+   the glance's NOT_YOURS set). The Not yours pill says it can go. Mark
+   read clears it, and the tile then shows in Dealt with with the
+   verdict.
 4. *Glanced after the merge.* Glance targets include merged PRs with an
    unseen `merged_without_review` event. The glance then answers "worth a
    look after the fact?": LOOK_CLOSER is worth a look (what the user would
@@ -2013,12 +2016,12 @@ topics already retired. The bar, deterministic where it can be
   (`changeTopicStatus`) and at the end of every full sync, no agent call
   (`withdrawStaleProposals`). Accepting a merge records the decision first,
   so the accepted merge itself is never withdrawn by the archive it causes.
-  Withdrawn proposals are not pending (Inbox, topic), are not fed to
+  Withdrawn proposals are not pending (Suggestions, topic), are not fed to
   consolidation as decided, never block the same idea later, and the MCP
   `topic` read says "withdrawn ... not a rejection". `status` is TEXT, so
   the new value needed no migration.
 - **A Decline can be taken back** (2026-10-10, bug hunt B-A-15). Decline
-  blocks the same idea for good, and the Inbox cards are identical
+  blocks the same idea for good, and the Suggestions cards are identical
   Accept / Decline pairs, so a slip of the mouse cost a good suggestion.
   Declining a topic or rule proposal returns an undo token (prefix
   `proposal:` or `rule:`, `UndoWindow`, `UNDO_WINDOW_MS`, in memory like
@@ -2026,7 +2029,7 @@ topics already retired. The bar, deterministic where it can be
   this again." with Undo, which puts the proposal back to pending
   (`reopen`, only from `rejected`).
 - **The card says what Accept moves** (2026-10-10, MEM-A-07). A split or
-  move card (Inbox and the topic header row) lists each named PR as "#N
+  move card (Suggestions and the topic header row) lists each named PR as "#N
   title" from the source topic's tiles, plus "+ N stack layers that come
   along" for the other layers of their stacks (Accept moves whole stacks).
   A merge card quotes what the user told the agent in the merged topic,
@@ -2928,6 +2931,8 @@ The rules (core `stack-readiness.ts`, used by `whose-turn.ts`):
 - **A PR's row** (`PrSummary.turn`, the detail pane, `pr_context`'s move):
   your approved PR in a stack gets "Merge, it is approved" only while no
   layer below it is held; else the lowest held layer below names the move.
+  Someone else's approved PR ("sol to merge") does the same since
+  2026-10-11 (below).
 - **The tile** (`whoseTurn`, the footer, `whats_on_me`, `pr_context`'s
   "Its tile:" line): a row's merge move also gives way to the lowest held
   layer above it, so the tile speaks for the whole stack. The tile then
@@ -2941,8 +2946,17 @@ The rules (core `stack-readiness.ts`, used by `whose-turn.ts`):
   person: "Blocked: #12 needs an approving review" (no face, like the
   merge queue). The turn's `prKey` is the holding layer, so the tile's
   lead PR and "Open on GitHub" go there. No " on #n": the words name it.
-- Only the approved-merge move changes. Re-submitting to the merge queue,
-  "Waiting on", and "to merge" on someone else's stack stay as they are.
+- Only the approved-merge move changes: yours, and since 2026-10-11 the
+  author's "to merge" on someone else's stack (owner, bug hunt B-A-12:
+  testers could not tell whether sol's stack could land while it read "sol
+  to merge on #2121" and #2122 waited on team-security). It now reads
+  "Blocked: acme/team-security to review #2122" like your own stack. On
+  someone else's stack only someone else's hold replaces the author's
+  merge: when the holding layer is the viewer's to fix ("Review #12"), that
+  layer's own row already says so, and a PR whose part is over for the
+  viewer (approved by them, done) never turns into their move, so the row
+  keeps "sol to merge" (core `authorToMerge`, `isOthersHold`).
+  Re-submitting to the merge queue and "Waiting on" stay as they are.
   Tiers and Done still read the PR alone: the merge move is never urgent
   and holding it changes neither.
 - Works on any stack a tile holds (`Tile.stacks`), whether git branches
@@ -3395,7 +3409,13 @@ happened when it did. Chosen from a clickable mockup:
   Open and Dealt with groups,
   `TopicSidebar` holds the open topic's row across the queue sections and
   Other topics (`layoutBuckets` / `layoutFromBuckets` in `lib/queues.ts`)
-  while its selected tile stays selected.
+  while its selected tile stays selected. A selection made with the
+  pointer over the sidebar (a click on another topic) keeps the rows it
+  left, held place and folded-away dealt-with row included, until the
+  pointer leaves the sidebar; then they move (owner 2026-10-11, bug hunt
+  B-A-16: rows moved up under the cursor on its way and testers misclicked;
+  `nextKeptHolds` in `lib/sidebar-hold.ts`, `useSidebarHold`). A selection
+  from anywhere else releases at once, as before.
 - Opened in PostPile: core `openedReadCheck` (per PR), engine
   `OpenedReads.markOpened` (was `QuietReads.markOpened` until 2026-10-01),
   renderer `opensMarkRead`; see "You already dealt
@@ -5054,7 +5074,12 @@ avatars and filters", QueuesB2).
   (`yourMoveChip` in `lib/your-move.ts`, from `WhoseTurn.move`). Was "N your
   move". Because each topic now shows once, the chip is where the row hints
   at what else is inside. The grey "merged without you" chip stays next to
-  it.
+  it. Since 2026-10-11 (owner, bug hunt B-A-17) the moves sort first by the
+  ask tier of the PR each is about, in section order (Needs reply, Changes
+  you requested, To review, Team mentioned, then every other tier), then
+  by the move order above (`topicUrgency`, `UrgencyTile.moveTier`). A topic
+  under To review with a team mention's reply and a team review now leads
+  with "Review", the move that put it there, not "Reply".
 - **Your move in the header and the group headings** (2026-10-01): the
   topic header ends its pills with the same `YourMoveChip` as the sidebar
   row, and a group heading reads "Open 4 · 2 your move", the second part in
@@ -5989,7 +6014,7 @@ Owner decisions (2026-09-30):
   covered (`prCount`), so never over a draft or pulled-in layer. Else
   "Approve 2 of 3 PRs" (approvable PRs), or "Approve 2 PRs" when it covers
   every approvable PR and only drafts or pulled-in layers stay out. Greyed
-  is a plain "Approve".
+  is a plain "Approve" on a tile, "Approve all" on the topic (below).
 - **Topic Approve** (topic header). It covers the approvable PRs in the
   topic's tiles, leaving out snoozed tiles. It approves only the agent-safe
   ones: "Approve 3 of 5 PRs", or "Approve 3 PRs" when all qualify. Each PR
@@ -5998,7 +6023,12 @@ Owner decisions (2026-09-30):
   A PR whose recheck comes back safe joins the count. Greyed out when no
   approvable PR is agent-safe, with the first PR without a verdict
   (checking, then agent off, agent limit, glance failed), else `look
-  closer`.
+  closer`. Under a search filter it counts and approves only the PRs of
+  the tiles still on screen (owner 2026-10-11, bug hunt B-A-25: "Approve 2
+  of 3 PRs" next to "3 filtered out" read as if a shown PR could not be
+  approved): "Approve 2 PRs". The topic's "Mark N read" narrows the same
+  way (renderer `shownTopicOffers`, the union of the shown tiles' offers
+  with core's orders).
 - **Approve is final, so it asks first.** Both Approve buttons open a
   confirm list: each PR with its verdict and risk line, plus the PRs left
   out and why. Each PR goes through the existing approve path with its
@@ -6024,13 +6054,17 @@ Owner decisions (2026-09-30):
   or closed PR waits for none and its older glance is ignored) only feeds the topic's "Mark N read", which covers the
   unread, unsnoozed tiles whose backing is active. Tiles with an ask for you
   are skipped and stay unread. It is gone when no tile is unread; when tiles
-  are unread but none qualify it shows a plain "Mark read" greyed out, with
-  `✨ Needs you` or `✨ Rechecking…`. Active, it says `✨ No ask for you`.
+  are unread but none qualify it shows "Mark all read" greyed out, with
+  `✨ Needs you` or `✨ Checking…`. Active, it says `✨ No ask for you`.
   It keeps the 6s Undo for the whole batch.
 - **Pill wording and placement.** Approve: `✨ Low risk` / `✨ Medium risk`
   when active (tooltip "Agent verdict: Looks safe."), `✨ Look closer`,
-  `✨ High risk`, `✨ Rechecking…` when greyed. A greyed Approve is a plain
-  "Approve" plus the pill, never a count. The topic buttons sit on their own
+  `✨ High risk`, `✨ Checking…` when greyed. A greyed Approve is a plain
+  "Approve" plus the pill, never a count. The topic's two buttons are bulk
+  actions and start with a verb, the pill after a dot: "Mark all read · ✨
+  Needs you", "Approve all · ✨ Checking…" when greyed, "Approve 3 PRs · ✨
+  Low risk" (owner 2026-10-11, bug hunt UI-A-17: the bare "Approve ✨ Low
+  risk" read as a label and the dashed greyed one as a status). The topic buttons sit on their own
   row under the "Tiles N" line (only the count: the Unread label below says
   how many are unread), with a muted "for this topic" trailing them, above
   the first group; the row is gone when both offers are. Active Approve is
@@ -6146,6 +6180,24 @@ Tracing basics leave Your team owns for Other work, and a
 teammate-driven topic owned by another team (Python upgrade soak)
 stays under Your team owns. The owner team counts as home when it is any
 of the home teams, not only the first.
+
+**The header says which one decided** (2026-10-11, owner, bug hunt
+BOARD-A-13). The relation line read "Owned by acme/team-platform" on Usage
+report exports, which sits in Other work because omar (not a teammate)
+drives it. When the driver places the topic below the asks somewhere else
+than the owner team alone would (`TopicDriverView.driverDecides`), the line
+reads "omar drives · usually team-platform" (renderer `ownerLine`); else
+"Owned by acme/team-platform" as before.
+
+**The header names a PR the section hides** (2026-10-11, owner, bug hunt
+BOARD-A-14). An ask holds a topic in its section even when the PR that asks
+sits in a tile folded away under Dealt with (Frontend build stays under
+Changes you requested for #1963, which waits on tove; the only visible tile
+is a merged PR). The header then adds one line under the relation line:
+"In Changes you requested: #1963 waits on tove" (renderer `holdingPrLine`:
+an ask section, every tracked PR of that tier in a Dealt with tile; the
+first one is named, with whom its turn waits on, else "is under Dealt
+with"). Nothing shows while any tile outside Dealt with holds the ask.
 
 **No dossier yet.** A real ask or a known driver places the topic as above
 (without a dossier the sync names the most frequent PR author as driver).
@@ -7389,7 +7441,10 @@ calls in the last sync"; pill "Not looked at yet", 2026-10-10, was
 "Waiting (agent limit)"), "Glance failed: the agent gave no usable answer
 for this PR." with Retry. The parser's own reason ("left out of the
 answer") is only the tooltip.
-Pulled-in stack layers keep "Pulled in to complete the stack".
+Pulled-in stack layers say "This PR is only here because it's part of the
+stack. PostPile writes no summary for a stack layer GitHub hasn't pinged you about."
+(2026-10-11, was "Pulled in to complete the stack": "glance" is a spec
+word users don't know).
 
 **Retry** (`POST /api/prs/:owner/:repo/:number/glance/retry`,
 `retryGlance`): clears the PR's glance gap and requests a run for its topic
@@ -8528,8 +8583,8 @@ for now (Julian, 2026-09-29: "okay, don't do now").
   split. "The same move" is the same source, target and set of PRs that
   would move, stacks included, so a rejected move of #1 does not block
   moving #2, but it does block naming another layer of #1's stack
-  (2026-10-10, bug hunt B-A-01: an agent got a rejected move back into the
-  Inbox by naming #1862 in place of #1911). Both sides are expanded with
+  (2026-10-10, bug hunt B-A-01: an agent got a rejected move back into
+  Suggestions by naming #1862 in place of #1911). Both sides are expanded with
   `movesWith` over the board as it is now; the stored proposal keeps the
   PRs as named. The same holds for splits.
 - `prs_moved` in the answer counts every open PR accepting would move to
@@ -8562,7 +8617,7 @@ for now (Julian, 2026-09-29: "okay, don't do now").
   folded, at most 60 characters, null when none). Self-reported: a label,
   never an identity. Before, two sessions of the same client filing
   suggestions looked the same.
-- Inbox card: the meta line names who suggested it, "topic · suggested by
+- Suggestions card: the meta line names who suggested it, "topic · suggested by
   Claude Code · 2h ago" (client names map to a display name; unknown ones show
   as "an outside agent"), with the session name when the agent gave one:
   "suggested by Claude Code · ph3 session · 2h ago". The reason shows as
@@ -8576,7 +8631,7 @@ for now (Julian, 2026-09-29: "okay, don't do now").
   with the fake engine), `OutsideProposals` in the engine, migration 017.
   Decided while building: expiry is derived from `created_at`, never stored
   (`proposalOutcome`), so the read-only MCP process and the app agree
-  without a job; an expired suggestion drops out of the Inbox, can't be
+  without a job; an expired suggestion drops out of Suggestions, can't be
   accepted and may be filed again. "The same change" is the same kind and
   topic with the same name (case and spaces aside) or merge target,
   against proposals from any source, so a rejected consolidation proposal

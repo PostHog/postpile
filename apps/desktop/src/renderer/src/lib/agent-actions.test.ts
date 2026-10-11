@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { AgentApproveOffer, AgentApprovePr } from '@postpile/core';
-import { agentApproveLook, approvePillWord, approveTitle, batchMarkReadMessage, leftOutReason, tileApproveLabel, topicApproveLabel } from './agent-actions.ts';
+import type { AgentApproveOffer, AgentApprovePr, TopicMarkReadOffer } from '@postpile/core';
+import { agentApproveLook, approvePillWord, approveTitle, batchMarkReadMessage, leftOutReason, shownTopicOffers, tileApproveLabel, topicApproveLabel, topicMarkReadLabel, type ShownTile } from './agent-actions.ts';
 
 function offer(overrides: Partial<AgentApproveOffer>): AgentApproveOffer {
   return { state: 'active', risk: 'medium', reason: null, covered: [], leftOut: [], coveredCount: 3, totalCount: 5, prCount: 5, naming: 'some', ...overrides };
@@ -27,7 +27,7 @@ describe('approve wording', () => {
   it('never counts PRs on a greyed button', () => {
     expect(topicApproveLabel(offer({}))).toBe('Approve 3 of 5 PRs');
     expect(topicApproveLabel(offer({ totalCount: 3 }))).toBe('Approve 3 PRs');
-    expect(topicApproveLabel(offer({ state: 'greyed', coveredCount: 0, totalCount: 1, naming: 'none' }))).toBe('Approve');
+    expect(topicApproveLabel(offer({ state: 'greyed', coveredCount: 0, totalCount: 1, naming: 'none' }))).toBe('Approve all');
     expect(tileApproveLabel(offer({ totalCount: 3, prCount: 3, naming: 'every' }), 'set')).toBe('Approve 3 PRs');
     expect(tileApproveLabel(offer({ totalCount: 3, prCount: 3, naming: 'every' }), 'stack')).toBe('Approve stack');
     expect(tileApproveLabel(offer({ coveredCount: 1, totalCount: 1, prCount: 1, naming: 'every' }), 'single')).toBe('Approve');
@@ -72,5 +72,47 @@ describe('batchMarkReadMessage', () => {
     expect(batchMarkReadMessage(3, skipped, 'x', true)).toBe('Marked 3 read · 1 skipped (asks for you)');
     expect(batchMarkReadMessage(3, [], 'x', true)).toBe('Marked 3 read');
     expect(batchMarkReadMessage(1, [{ tileId: 'b', reason: 'agent_off' }], 'x', true)).toBe('Marked 1 read · 1 skipped (agent off)');
+  });
+});
+
+// Owner, 2026-10-11 (UI-A-17 item 8): the topic's bulk buttons start with a verb, also greyed.
+describe('topic bulk labels', () => {
+  it('say what the button does to the whole topic when greyed', () => {
+    expect(topicApproveLabel(offer({ state: 'greyed', risk: null, reason: 'rechecking', coveredCount: 0, naming: 'none' }))).toBe('Approve all');
+    const markRead: TopicMarkReadOffer = { state: 'greyed', risk: null, reason: 'asks_for_you', coveredTileIds: [], skipped: [], coveredCount: 0, totalCount: 2 };
+    expect(topicMarkReadLabel(markRead)).toBe('Mark all read');
+    expect(topicMarkReadLabel({ ...markRead, state: 'active', reason: null, risk: 'low', coveredTileIds: ['a', 'b'], coveredCount: 2 })).toBe('Mark 2 read');
+  });
+});
+
+// Owner, 2026-10-11 (B-A-25 item 2): under a filter the topic buttons count only what is on screen.
+describe('shownTopicOffers', () => {
+  const safe = (number: number): AgentApprovePr => ({ ...BASE, prKey: `acme/app#${number}`, title: `PR ${number}` });
+  const tile = (id: string, numbers: number[], markRead: ShownTile['agent']['markRead'] = null): ShownTile => ({
+    tile: { id },
+    state: { kind: 'unread', unreadBecause: [], unreadOnGitHub: true, loud: false },
+    agent: { approve: null, markRead },
+    prs: numbers.map((number) => ({ key: `acme/app#${number}` })),
+  });
+  const topic = offer({ covered: [safe(1), safe(2), safe(3)], coveredCount: 3, totalCount: 3, prCount: 3, risk: 'low', naming: 'every' });
+
+  it('counts the shown PRs only: "Approve 2 PRs", not "Approve 2 of 3 PRs"', () => {
+    const shown = shownTopicOffers({ approve: topic, markRead: null }, [tile('a', [1]), tile('b', [2])]);
+    expect(shown.approve).toMatchObject({ state: 'active', coveredCount: 2, totalCount: 2, prCount: 2, naming: 'every' });
+    expect(topicApproveLabel(shown.approve!)).toBe('Approve 2 PRs');
+    expect(shown.approve?.covered.map((pr) => pr.prKey)).toEqual(['acme/app#1', 'acme/app#2']);
+  });
+
+  it('greys out when only left-out PRs are shown, and goes when none is shown', () => {
+    const mixed = offer({ covered: [safe(1)], leftOut: [{ prKey: 'acme/app#2', title: 'PR 2', reason: 'rechecking', waitsOn: null, verdict: null, riskLine: null }], coveredCount: 1, totalCount: 2, prCount: 2, naming: 'one' });
+    expect(shownTopicOffers({ approve: mixed, markRead: null }, [tile('b', [2])]).approve).toMatchObject({ state: 'greyed', reason: 'rechecking', naming: 'none', coveredCount: 0 });
+    expect(shownTopicOffers({ approve: mixed, markRead: null }, [tile('c', [9])]).approve).toBeNull();
+  });
+
+  it('marks only the shown tiles read', () => {
+    const markRead: TopicMarkReadOffer = { state: 'active', risk: 'medium', reason: null, coveredTileIds: ['a', 'b'], skipped: [{ tileId: 'c', reason: 'asks_for_you' }], coveredCount: 2, totalCount: 3 };
+    const shown = shownTopicOffers({ approve: null, markRead }, [tile('a', [1], { state: 'active', risk: 'low', reason: null }), tile('c', [3])]);
+    expect(shown.markRead).toMatchObject({ state: 'active', risk: 'low', coveredTileIds: ['a'], coveredCount: 1, totalCount: 2 });
+    expect(shownTopicOffers({ approve: null, markRead }, [tile('c', [3])]).markRead).toMatchObject({ state: 'greyed', reason: 'asks_for_you', coveredCount: 0 });
   });
 });

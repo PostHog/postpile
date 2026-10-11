@@ -75,6 +75,7 @@ import {
   type PrSummaryInput,
   type TilePendingWrite,
   type PrTier,
+  type WhoseTurn,
   type RepoOverview,
   type RepoSettings,
   type SearchableTopic,
@@ -286,6 +287,12 @@ export class ReadModels {
     return prTier({ pr, events: board.events.get(pr.key) ?? [], viewer, userState: board.userStates.get(pr.key) ?? null, reason });
   }
 
+  /** The tier of the PR a tile's move is about, so the sidebar chip orders moves like the sections (`UrgencyTile.moveTier`). */
+  private moveTierOf(board: Board, turn: WhoseTurn, viewer: Viewer | null): PrTier {
+    const pr = turn.prKey === null ? undefined : board.prs.get(turn.prKey);
+    return pr ? this.tierOf(board, pr, viewer) : 'rest';
+  }
+
   /** The PR's move is a re-review, which sorts it first under Changes you requested. */
   private isReReview(board: Board, pr: Pr, viewer: Viewer | null): boolean {
     if (!viewer) {
@@ -484,6 +491,7 @@ export class ReadModels {
             ),
             prStates: loudMembers.flatMap((member) => board.prs.get(member.prKey)?.state ?? []),
             move: topicMove(turn),
+            moveTier: this.moveTierOf(board, turn, viewer),
             quiet: isQuietTile(memberKeys(tile), settings),
           };
         }),

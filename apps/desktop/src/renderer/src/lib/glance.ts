@@ -15,6 +15,13 @@ export interface GlanceStateText {
   problem: boolean;
 }
 
+/**
+ * The glance card of a pulled-in stack layer: PostPile runs no agent call on
+ * a layer it only fetched to complete a stack (2026-10-11, plainer than
+ * "Stack layers get no glance").
+ */
+export const STACK_LAYER_NOTE = "This PR is only here because it's part of the stack. PostPile writes no summary for a stack layer GitHub hasn't pinged you about.";
+
 export interface GlanceStateInput {
   state: GlanceState;
   gap: GlanceGap | null;

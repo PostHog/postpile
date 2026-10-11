@@ -100,7 +100,7 @@ Not for: polling (the app checks GitHub about every minute while it runs), or CI
 Pass exactly one of pr or topic.
 Example: refresh_from_github(pr: "acme/app#1902")`;
 
-const PROPOSE_DESCRIPTION = `File a topic change for the user to decide in PostPile's Inbox: split moves PRs into a NEW topic (name), move moves PRs into an EXISTING topic (into_topic), merge moves a whole topic into another (into_topic), rename renames it. Never applied by itself: the user accepts or rejects it. The answer previews what accepting would do (a stack moves as a whole) and says whether it was filed; dry_run: true only previews.
+const PROPOSE_DESCRIPTION = `File a topic change for the user to decide under Suggestions in PostPile: split moves PRs into a NEW topic (name), move moves PRs into an EXISTING topic (into_topic), merge moves a whole topic into another (into_topic), rename renames it. Never applied by itself: the user accepts or rejects it. The answer previews what accepting would do (a stack moves as a whole) and says whether it was filed; dry_run: true only previews.
 Checks: the topic is active, split and move PRs belong to it and at least one PR stays, the same change is not pending and was not rejected before. At most 3 pending suggestions per topic, 10 in total, 20 a day; unanswered ones expire after 14 days. topic lists earlier outcomes.
 Use when: you know from the code or the user that PRs belong to different work, or a topic's name no longer fits.
 Not for: small taste differences, or changes the user did not ask about and would not care for.
@@ -216,7 +216,7 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/** The client's name from its initialize handshake, cut to a plain word: it lands in the app's Inbox. */
+/** The client's name from its initialize handshake, cut to a plain word: it lands in the app's Suggestions. */
 export function clientName(name: string | undefined): string {
   const plain = (name ?? '').replace(/[^\w. -]/g, '').trim().slice(0, 64);
   return plain === '' ? 'unknown' : plain;
@@ -367,7 +367,7 @@ export function createMcpServer(reader: PostPileReader, options: McpServerOption
         into_topic: z.string().optional().describe('move: the existing topic the PRs go to; merge: the topic to merge into'),
         reason: z
           .string()
-          .min(1, { error: 'reason is required: one or two sentences the user reads in the Inbox' })
+          .min(1, { error: 'reason is required: one or two sentences the user reads under Suggestions' })
           .max(OUTSIDE_REASON_MAX, { error: `reason must be at most ${OUTSIDE_REASON_MAX} characters` })
           .describe(`Why, for the user, at most ${OUTSIDE_REASON_MAX} characters`),
         dry_run: z.boolean().default(false).describe('true: only preview, file nothing'),

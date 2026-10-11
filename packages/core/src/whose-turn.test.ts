@@ -401,7 +401,14 @@ describe('whoseTurn: multi-PR tiles', () => {
     const news = makeEvent({ prKey: approved.key, kind: 'commits_after_approval', ruleLoudness: 'loud', at: at(50) });
     // A push after the approval (even one the agent raised) is not a re-check move; the review on #2 is.
     expect(turnOf(tile, [pushedOnFirst, asked, pulled], [news])).toMatchObject({ what: 'Review on #2' });
+    // The layer above still needs an approval, so the stack cannot land yet ("Blocked:" on every stack, 2026-10-11).
     expect(turnOf(tile, [approved, { ...asked, state: 'MERGED' }, pulled])).toEqual({
+      kind: 'them',
+      who: null,
+      what: 'Blocked: #3 needs an approving review',
+      prKey: pulled.key,
+    });
+    expect(turnOf(tile, [approved, { ...asked, state: 'MERGED' }, { ...pulled, reviewDecision: 'APPROVED' }])).toEqual({
       kind: 'them',
       who: 'rowan',
       what: 'to merge on #1',
@@ -466,6 +473,27 @@ describe('whoseTurn: stacks land together', () => {
     expect(turnOf(stackTile([bottom, draftTop], [bottom]), [bottom, draftTop])).toEqual({ kind: 'you', move: 'merge', who: null, what: 'Mark #2 ready for review', prKey: draftTop.key });
     const changesTop = { ...top, reviewerTeams: [], reviewDecision: 'CHANGES_REQUESTED' as const, reviews: [makeReview({ author: 'ada', state: 'CHANGES_REQUESTED' })] };
     expect(turnOf(stackTile([bottom, changesTop], [bottom]), [bottom, changesTop])).toMatchObject({ kind: 'you', move: 'address_changes', what: "Address ada's changes on #2" });
+  });
+
+  // Owner, 2026-10-11 (B-A-12): "Blocked:" on every stack, not only the viewer's.
+  it("says Blocked on someone else's stack too, instead of the author's merge", () => {
+    const solBottom = makePr({ number: 1, author: 'sol', reviewDecision: 'APPROVED', reviews: [makeReview({ author: me, state: 'APPROVED' })] });
+    const solTop = makePr({ number: 2, author: 'sol', reviewDecision: 'REVIEW_REQUIRED', reviewerTeams: ['acme/team-security'] });
+    expect(turnOf(stackTile([solBottom, solTop], [solBottom]), [solBottom, solTop])).toEqual({
+      kind: 'them',
+      who: 'acme/team-security',
+      what: 'to review #2',
+      lead: 'Blocked:',
+      prKey: solTop.key,
+    });
+    const approvedTop = { ...solTop, reviewDecision: 'APPROVED' as const, reviewerTeams: [], reviews: [makeReview({ author: me, state: 'APPROVED' })] };
+    expect(prWhoseTurn({ pr: approvedTop, events: [], userState: null, viewer, layersBelow: [{ ...solBottom, reviewDecision: 'REVIEW_REQUIRED', reviewerUsers: ['ada'] }] })).toMatchObject({
+      kind: 'them',
+      who: 'ada',
+      what: 'to review #1',
+      lead: 'Blocked:',
+    });
+    expect(turnOf(stackTile([solBottom, approvedTop]), [solBottom, approvedTop])).toMatchObject({ kind: 'them', who: 'sol', what: 'to merge on #1' });
   });
 
   it('says a layer needs an approval when nobody is asked', () => {
