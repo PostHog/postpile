@@ -227,7 +227,7 @@ describe('topicDriverView', () => {
       placement: { relation: 'routed', ownerTeam: ALERTS },
       viewer: jo,
     });
-    expect(view).toMatchObject({ kind: 'team', login: null, picked: true, heldByAsk: 'to_review' });
+    expect(view).toMatchObject({ kind: 'team', login: null, picked: true, heldByAsk: 'to_review', driverDecides: true });
     expect(view.choices.map((choice) => [choice.value, choice.kind, choice.section, choice.current])).toEqual([
       ['jo', 'you', 'you_drive', false],
       ['gabe', 'person', 'team_owns', false],
@@ -235,6 +235,28 @@ describe('topicDriverView', () => {
       [TEAM_DRIVER, 'team', 'team_owns', true],
       [OUTSIDE_DRIVER, 'outside', 'other_work', false],
     ]);
+  });
+});
+
+// Owner, 2026-10-11 (BOARD-A-13): the header softens "Owned by" only when the driver, not the owner team, placed the topic.
+describe('topicDriverView: driverDecides', () => {
+  const source = (driverPick: string | null, ownerTeam: string) => ({
+    topic: { status: 'active' as const, driver: null },
+    driverPick,
+    queues: { tiers: emptyTierCounts(), byYou: 0 },
+    moves: 0,
+    placement: { relation: 'team' as const, ownerTeam },
+    viewer: jo,
+  });
+
+  it('is true when the driver moves the topic away from where its owner team puts it', () => {
+    expect(topicDriverView(source(OUTSIDE_DRIVER, 'acme/team-devex')).driverDecides).toBe(true);
+    expect(topicDriverView(source(TEAM_DRIVER, ALERTS)).driverDecides).toBe(true);
+  });
+
+  it('is false without a driver, or when the driver puts it where the owner team would', () => {
+    expect(topicDriverView(source(null, ALERTS)).driverDecides).toBe(false);
+    expect(topicDriverView(source(TEAM_DRIVER, 'acme/team-devex')).driverDecides).toBe(false);
   });
 });
 

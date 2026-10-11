@@ -3,6 +3,7 @@
 // all merged or closed only has news to read, nothing to act on, and a tile
 // unread with only quiet news (DESIGN.md "GitHub unread is PostPile unread")
 // counts but never lights the topic up: urgency follows loud news.
+import { ASK_TIERS, type PrTier } from './pr-tier.ts';
 import { tileGroup, type TileGroup } from './tile-groups.ts';
 import type { PrSummary, TileView } from './views.ts';
 import type { PrKey, PrState, TileStateKind } from './types.ts';
@@ -33,6 +34,8 @@ export interface UrgencyTile {
   prStates: PrState[];
   /** The viewer's move when whose turn says it is theirs, else null. `merge` only makes a topic urgent with more to do. */
   move: TopicMove | null;
+  /** The tier of the PR the move is about (`WhoseTurn.prKey`), 'rest' without a move: the chip orders moves like the sections. */
+  moveTier: PrTier;
   /** Every PR of the tile is in a quiet repo ("Let it go stale"): it never makes the topic urgent. */
   quiet: boolean;
 }
@@ -47,8 +50,11 @@ export interface TopicUrgency {
   urgentUnreadTiles: number;
   /**
    * The moves on live (not done, not snoozed) tiles where it is the
-   * viewer's move, merging an approved PR included; most urgent first
-   * (`YOUR_MOVE_ORDER`), tile order on a tie. Its length is the chip's count.
+   * viewer's move, merging an approved PR included; most urgent first: by
+   * the ask tier of the move's PR, in section order (`ASK_TIERS`, any other
+   * tier after them), then `YOUR_MOVE_ORDER`, tile order on a tie. So the
+   * chip leads with the move that put the topic in its section
+   * (2026-10-11). Its length is the chip's count.
    */
   yourMoves: TopicMove[];
   /**
@@ -63,8 +69,20 @@ export function isUrgentUnread(tile: UrgencyTile): boolean {
   return !tile.quiet && tile.state === 'unread' && tile.loud && tile.prStates.includes('OPEN');
 }
 
-function byMoveUrgency(a: TopicMove, b: TopicMove): number {
-  return YOUR_MOVE_ORDER.indexOf(a.move) - YOUR_MOVE_ORDER.indexOf(b.move);
+/** Where a tier sorts among the asks: its section's place, every tier that asks nothing after them. */
+function askRank(tier: PrTier): number {
+  const rank = (ASK_TIERS as readonly PrTier[]).indexOf(tier);
+  return rank === -1 ? ASK_TIERS.length : rank;
+}
+
+/** A move with the tier of its PR, for sorting. */
+interface TieredMove {
+  move: TopicMove;
+  tier: PrTier;
+}
+
+function byMoveUrgency(a: TieredMove, b: TieredMove): number {
+  return askRank(a.tier) - askRank(b.tier) || YOUR_MOVE_ORDER.indexOf(a.move.move) - YOUR_MOVE_ORDER.indexOf(b.move.move);
 }
 
 /** A tile counts for your move only while live: not done, not snoozed. */
@@ -73,7 +91,12 @@ function isLive(tile: Pick<UrgencyTile, 'state'>): boolean {
 }
 
 /** The part of a built tile (`TileView`) that urgency reads. */
-export type UrgencyView = Pick<TileView, 'state' | 'unreadPrKeys' | 'turn' | 'quietRepo'> & { prs: Pick<PrSummary, 'state' | 'quietRepo'>[] };
+export type UrgencyView = Pick<TileView, 'state' | 'unreadPrKeys' | 'turn' | 'quietRepo'> & { prs: Pick<PrSummary, 'key' | 'state' | 'quietRepo' | 'tier'>[] };
+
+/** The tier of the row the tile's move is about; 'rest' when the move names no row of the tile. */
+function moveTierOf(view: UrgencyView): PrTier {
+  return view.prs.find((pr) => pr.key === view.turn.prKey)?.tier ?? 'rest';
+}
 
 /** The urgency input of a built tile, so a topic's detail uses the same rule as its sidebar row. */
 export function urgencyTileOf(view: UrgencyView): UrgencyTile {
@@ -84,6 +107,7 @@ export function urgencyTileOf(view: UrgencyView): UrgencyTile {
     unreadPrKeys: view.unreadPrKeys,
     prStates: view.prs.filter((pr) => !pr.quietRepo).map((pr) => pr.state),
     move: topicMove(view.turn),
+    moveTier: moveTierOf(view),
     quiet: view.quietRepo,
   };
 }
@@ -110,7 +134,8 @@ export function topicUrgency(tiles: UrgencyTile[]): TopicUrgency {
   const unreadPrKeys = [...new Set(tiles.flatMap((tile) => tile.unreadPrKeys))];
   const urgentUnreadTiles = tiles.filter(isUrgentUnread).length;
   const live = tiles.filter(isLive);
-  const yourMoves = live.flatMap((tile) => (tile.move === null ? [] : [tile.move])).toSorted(byMoveUrgency);
+  const tiered = live.flatMap((tile) => (tile.move === null ? [] : [{ move: tile.move, tier: tile.moveTier }]));
+  const yourMoves = tiered.toSorted(byMoveUrgency).map((entry) => entry.move);
   const urgentMoves = live.filter((tile) => tile.move !== null && tile.move.move !== 'merge' && !tile.quiet).length;
   return { unreadTiles, unreadPrs: unreadPrKeys.length, unreadPrKeys, urgentUnreadTiles, yourMoves, needsYou: urgentUnreadTiles > 0 || urgentMoves > 0 };
 }

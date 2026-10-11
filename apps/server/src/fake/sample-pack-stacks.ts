@@ -8,9 +8,9 @@
 //   your move.
 // - Session export: sol's 2 layers, you approved the bottom, the top waits
 //   on team-security, a team you are not on. Next to it your own 2 layers
-//   in the same shape, where the tile reads "Blocked: team-security to
-//   review #2124" (someone else's stack keeps "sol to merge", DESIGN.md
-//   "Stacks land together").
+//   in the same shape. Both tiles read "Blocked: team-security to review
+//   #2122" / "#2124" (every stack since 2026-10-11, DESIGN.md "Stacks land
+//   together").
 // - Query result cache: rowan's 3 layers (safe, look closer, safe) and
 //   nell's 2 (both safe), all asking you, for the agent-backed Approve.
 // - Flag cleanup: nell's 3 layers with only the middle one merged.

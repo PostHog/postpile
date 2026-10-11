@@ -38,6 +38,13 @@ export type PrTierOrder = readonly ['needs_reply', 'changes_requested', 'mine', 
  */
 export const PR_TIER_ORDER: PrTierOrder = ['needs_reply', 'changes_requested', 'mine', 'team', 'to_review', 'team_mentioned', 'rest'];
 
+/**
+ * The tiers that ask something of the viewer, most urgent first: the
+ * sidebar's ask sections in their order. `mine` and `team` say whose PR it
+ * is, not what it asks.
+ */
+export const ASK_TIERS = ['needs_reply', 'changes_requested', 'to_review', 'team_mentioned'] as const;
+
 export interface PrTierInput {
   pr: Pr;
   events: PrEvent[];

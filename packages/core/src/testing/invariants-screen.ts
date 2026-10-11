@@ -79,6 +79,7 @@ export const unreadCountIsUnreadTiles: Invariant = {
         unreadPrKeys: view.unreadPrKeys,
         prStates: view.prs.map((row) => row.state),
         move: topicMove(view.turn),
+        moveTier: view.prs.find((row) => row.key === view.turn.prKey)?.tier ?? 'rest',
         quiet: false,
       })),
     );
@@ -93,7 +94,8 @@ export const unreadCountIsUnreadTiles: Invariant = {
  * The coral NEW pill shows exactly on an unread tile whose headline (the
  * last unread reason) is not automation left quiet: never on a bot's or CI's
  * headline unless it was raised to loud. A reason without an event (new
- * activity on GitHub) is not automation.
+ * activity on GitHub) is not automation. Nor on a merge without your
+ * review the glance calls Not yours.
  */
 export const newBadgeNeverOnAutomationHeadline: Invariant = {
   name: 'the NEW pill shows on unread tiles only, never on an automation headline left quiet',
@@ -104,7 +106,9 @@ export const newBadgeNeverOnAutomationHeadline: Invariant = {
       if (view.state.kind === 'unread' && headline) {
         const event = eventsOf(board, headline.prKey).find((candidate) => candidate.id === headline.eventId);
         const automation = event !== undefined && isAutomationEvent(fullPrOf(board, headline.prKey), board.viewer, event);
-        expected = !automation || effectiveLoudnessOf(event) === 'loud';
+        // A merge without your review the glance calls Not yours stays a quiet unread (2026-10-11).
+        const quietMerge = headline.kind === 'merged_without_review' && board.notYours.has(headline.prKey);
+        expected = !quietMerge && (!automation || effectiveLoudnessOf(event) === 'loud');
       }
       ensure(view.newBadge === expected, `${view.tile.id}: NEW ${view.newBadge}, expected ${expected} (headline ${headline?.eventId ?? 'none'})`);
     }

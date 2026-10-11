@@ -316,6 +316,16 @@ function reviewWords(pr: Pr, viewer: Viewer, request: SpecRequest, verb: 'Review
 }
 
 /**
+ * The author's merge on someone else's PR, unless someone else holds a
+ * stack layer below it back (2026-10-11: "Blocked:" on every stack). The
+ * viewer's own part shows on that layer's row instead.
+ */
+function authorToMerge(input: TurnInput): ExpectedTurn {
+  const hold = expectedStackHold(input.layersBelow ?? [], input.viewer);
+  return hold?.kind === 'them' ? hold : them(namedOwner(input.pr), 'to merge');
+}
+
+/**
  * Someone else's open PR. An approval stands on any commit. A review is the
  * viewer's move only with a real request (personal, their team on a
  * teammate's PR, or routed and not waiting) and no review of the head; while
@@ -325,7 +335,7 @@ function reviewWords(pr: Pr, viewer: Viewer, request: SpecRequest, verb: 'Review
 function othersPrTurn(input: TurnInput): ExpectedTurn {
   const { pr, viewer } = input;
   if (viewerApproved(pr, viewer, input.userState)) {
-    return them(namedOwner(pr), 'to merge');
+    return authorToMerge(input);
   }
   const headReview = viewerHeadReview(pr, viewer);
   const waits = headReview === null ? routedRequestWaits(pr, viewer, input.notYours) : null;
@@ -346,7 +356,7 @@ function othersPrTurn(input: TurnInput): ExpectedTurn {
   if (headReview !== null) {
     const opened = threadsViewerOpened(pr, viewer);
     if (headReview.state === 'APPROVED') {
-      return them(namedOwner(pr), 'to merge');
+      return authorToMerge(input);
     }
     if (opened > 0) {
       return them(namedOwner(pr), `to address ${plural(opened, 'thread')}`);
@@ -355,7 +365,7 @@ function othersPrTurn(input: TurnInput): ExpectedTurn {
   }
   if (request === 'team_taken') {
     if (pr.reviewDecision === 'APPROVED') {
-      return them(namedOwner(pr), 'to merge');
+      return authorToMerge(input);
     }
     const standing = standingChangesBy(pr);
     if (standing.length > 0 && standing.every((reviewer) => askedToReReview(pr, reviewer))) {

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { at, makeEvent, makePr, makeUserState, NO_OPENED_READ, NO_OPENED_READ_INPUT, NO_PR_FACTS, viewer } from './fixtures.ts';
 import { tileVerdict } from './tile-verdict.ts';
-import { buildPrSummary, tileUnreadPrKeys, type PrSummaryInput } from './tile-view.ts';
-import type { Pr, PrEvent, TileMember, TileState } from './types.ts';
+import { buildPrSummary, tileNewBadge, tileUnreadPrKeys, type PrSummaryInput } from './tile-view.ts';
+import type { Pr, PrEvent, TileMember, TileState, UnreadReason } from './types.ts';
 import type { PrSummary } from './views.ts';
 
 const pinged: TileMember['provenance'] = { kind: 'pinged', reason: 'subscribed' };
@@ -155,5 +155,27 @@ describe('tileVerdict: the tile pill shows the worst open tracked glance', () =>
     expect(tileVerdict([row(1, { ...merged, verdict: 'NOT_YOURS' }), row(2, { ...merged, verdict: 'LOOK_CLOSER' })], 'acme/app#1')).toMatchObject({ prKey: 'acme/app#1' });
     const pulled = { provenance: { kind: 'pulled_in', reason: 'stack layer below #2' } } as const;
     expect(tileVerdict([row(1, { ...pulled, verdict: 'LOOK_CLOSER' }), row(2)], 'acme/app#2')).toMatchObject({ prKey: 'acme/app#2', verdict: 'LOOKS_SAFE' });
+  });
+});
+
+describe('tileNewBadge', () => {
+  const reason = (kind: UnreadReason['kind']): UnreadReason => ({
+    prKey: 'acme/app#2014',
+    eventId: 'e1',
+    kind,
+    actor: 'sol',
+    summary: 'merged',
+    at: at(10),
+    automation: false,
+    loud: false,
+    importance: 3,
+  });
+
+  // Owner, 2026-10-11 (B-A-08): a merge without your review the glance calls Not yours stays Unread, but quiet.
+  it('leaves NEW off a merge without your review that the glance calls Not yours', () => {
+    const state: Pick<TileState, 'kind' | 'unreadBecause'> = { kind: 'unread', unreadBecause: [reason('merged_without_review')] };
+    expect(tileNewBadge(state)).toBe(true);
+    expect(tileNewBadge(state, new Set(['acme/app#2014']))).toBe(false);
+    expect(tileNewBadge({ kind: 'unread', unreadBecause: [reason('comment')] }, new Set(['acme/app#2014']))).toBe(true);
   });
 });

@@ -15,7 +15,7 @@ import {
 /** An unread tile is unread on GitHub with loud news and one unread PR unless the overrides say otherwise. */
 function tile(overrides: Partial<UrgencyTile>): UrgencyTile {
   const unread = overrides.state === 'unread';
-  return { state: 'open', unreadOnGitHub: unread, unreadPrKeys: unread ? ['acme/app#1'] : [], loud: unread, prStates: ['OPEN'], move: null, quiet: false, ...overrides };
+  return { state: 'open', unreadOnGitHub: unread, unreadPrKeys: unread ? ['acme/app#1'] : [], loud: unread, prStates: ['OPEN'], move: null, moveTier: 'rest', quiet: false, ...overrides };
 }
 
 const review: TopicMove = { move: 'review', text: 'Review, rowan asked' };
@@ -82,6 +82,16 @@ describe('topicUrgency: your moves', () => {
     expect(topicUrgency(tiles).yourMoves).toEqual([reply, review, other, fix, merge]);
   });
 
+  // Owner, 2026-10-11 (B-A-17): the chip leads with the move that put the topic in its section.
+  it('orders the moves by the ask tier of their PR first, like the sections', () => {
+    const teamMention: TopicMove = { move: 'reply', text: 'ines mentioned your team' };
+    const forTeam: TopicMove = { move: 'review', text: 'Review for team-platform' };
+    const tiles = [tile({ move: teamMention, moveTier: 'team_mentioned' }), tile({ move: forTeam, moveTier: 'to_review' }), tile({ move: merge, moveTier: 'mine' })];
+    expect(topicUrgency(tiles).yourMoves).toEqual([forTeam, teamMention, merge]);
+    const asked: TopicMove = { move: 'reply', text: "Answer lyra's question" };
+    expect(topicUrgency([...tiles, tile({ move: asked, moveTier: 'needs_reply' })]).yourMoves[0]).toEqual(asked);
+  });
+
   it('takes the move from a turn that is yours only', () => {
     expect(topicMove({ kind: 'you', move: 're_review', who: null, what: 'pim addressed your changes: re-review', prKey: 'acme/app#1' })).toEqual({
       move: 're_review',
@@ -97,7 +107,7 @@ function view(group: TileGroup, state: UrgencyView['state']['kind'], move: Topic
     ? { kind: 'you', move: move.move, who: null, what: move.text, prKey: 'acme/app#1' }
     : { kind: 'them', who: 'pim', what: 'to merge', prKey: 'acme/app#1' };
   const tileState = { kind: state, unreadOnGitHub: false, loud: false } as UrgencyView['state'];
-  return { group, state: tileState, unreadPrKeys: [], turn, quietRepo: false, prs: [{ state: 'OPEN', quietRepo: false }] };
+  return { group, state: tileState, unreadPrKeys: [], turn, quietRepo: false, prs: [{ key: 'acme/app#1', state: 'OPEN', quietRepo: false, tier: 'rest' }] };
 }
 
 describe('topic detail: your moves', () => {
@@ -111,7 +121,7 @@ describe('topic detail: your moves', () => {
 
   it('gives the header the sidebar rule: live tiles only, most urgent first', () => {
     expect(topicYourMoves(tiles)).toEqual([review, merge]);
-    expect(topicYourMoves(tiles)).toEqual(topicUrgency(tiles.map((tile) => ({ ...tile, state: tile.state.kind, unreadOnGitHub: false, loud: false, prStates: ['OPEN'], move: topicMove(tile.turn), quiet: false }))).yourMoves);
+    expect(topicYourMoves(tiles)).toEqual(topicUrgency(tiles.map((tile) => ({ ...tile, state: tile.state.kind, unreadOnGitHub: false, loud: false, prStates: ['OPEN'], move: topicMove(tile.turn), moveTier: 'rest', quiet: false }))).yourMoves);
   });
 
   it('counts the live moves per group, snoozed and done tiles left out', () => {

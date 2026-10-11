@@ -48,9 +48,10 @@ describe('pack stacks: the shapes it is there to show', () => {
     expect(view?.prs.every((pr) => pr.provenance.kind === 'pinged')).toBe(true);
   });
 
-  it('Session export: a teammate stack keeps "to merge", your own stack reads Blocked on team-security', async () => {
+  // Owner, 2026-10-11 (B-A-12): "Blocked:" on every stack, a teammate's too.
+  it('Session export: a teammate stack and your own stack both read Blocked on team-security', async () => {
     const [theirs, yours] = await topicTiles(engineWith('stacks'), 'topic-session-export');
-    expect(theirs?.turn).toMatchObject({ kind: 'them', who: 'sol', what: 'to merge on #2121' });
+    expect(theirs?.turn).toMatchObject({ kind: 'them', who: 'acme/team-security', what: 'to review #2122', lead: 'Blocked:' });
     expect(rowOf(theirs!, 2121).status.review).toBe('approved');
     expect(yours?.turn).toMatchObject({ kind: 'them', who: 'acme/team-security', what: 'to review #2124', lead: 'Blocked:' });
     expect(yours?.landableBelow).toEqual(['acme/app#2123']);

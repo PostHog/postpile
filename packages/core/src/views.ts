@@ -373,6 +373,12 @@ export interface TopicDriverView {
   picked: boolean;
   /** The ask section that holds the topic whatever the driver, while the ask lasts; null when none does. */
   heldByAsk: TopicSection | null;
+  /**
+   * A driver is known and places the topic below the asks somewhere else
+   * than its owner team alone would: the header then reads "omar drives ·
+   * usually team-platform" instead of "Owned by" (BOARD-A-13, 2026-10-11).
+   */
+  driverDecides: boolean;
   /** You, each teammate, Your team, Someone outside your team. */
   choices: DriverChoice[];
 }

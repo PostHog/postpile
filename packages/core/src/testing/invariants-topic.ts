@@ -5,7 +5,7 @@
 import { topicQueues, emptyTierCounts, pingedPrKeys, ownerRelation, type TopicQueues } from '../topic-queues.ts';
 import { topicSectionOf } from '../topic-sections.ts';
 import { topicMove, topicUrgency } from '../topic-urgency.ts';
-import { prTier } from '../pr-tier.ts';
+import { prTier, type PrTier } from '../pr-tier.ts';
 import type { PrEvent } from '../types.ts';
 import type { TileView } from '../views.ts';
 import { isReReviewMove, prWhoseTurn, type YourMove } from '../whose-turn.ts';
@@ -22,6 +22,9 @@ function tileHasNews(board: PropertyBoard, view: TileView): boolean {
 /** Most urgent first, like the sidebar sections: spelled out here, not read from `YOUR_MOVE_ORDER`. */
 const MOVE_ORDER: readonly YourMove[] = ['reply', 're_review', 'review', 'address_changes', 'merge'];
 
+/** The ask sections' tiers, most urgent first: spelled out here, not read from `ASK_TIERS`. */
+const ASK_TIER_ORDER: readonly PrTier[] = ['needs_reply', 'changes_requested', 'to_review', 'team_mentioned'];
+
 /** The row's urgency as the read models build it, from the tiles. */
 function urgencyOf(views: TileView[]) {
   return topicUrgency(
@@ -32,6 +35,7 @@ function urgencyOf(views: TileView[]) {
       unreadPrKeys: view.unreadPrKeys,
       prStates: view.prs.map((row) => row.state),
       move: topicMove(view.turn),
+      moveTier: view.prs.find((row) => row.key === view.turn.prKey)?.tier ?? 'rest',
       quiet: false,
     })),
   );
@@ -57,8 +61,17 @@ export const topicCountsMatchTiles: Invariant = {
     const live = views.filter((view) => view.state.kind === 'unread' || view.state.kind === 'open');
     const moves = live.flatMap((view) => (view.turn.kind === 'you' ? [view.turn.move] : []));
     ensure(urgency.yourMoves.length === moves.length, `your moves ${urgency.yourMoves.length}, live tiles your move ${moves.length}`);
-    const order = urgency.yourMoves.map((move) => MOVE_ORDER.indexOf(move.move));
-    ensure(order.every((rank, index) => index === 0 || order[index - 1]! <= rank), 'your moves out of order');
+    // Most urgent first: the ask tier of the move's PR in section order, then the move (2026-10-11), tile order on a tie.
+    const rank = (view: TileView) => {
+      const tier = view.prs.find((row) => row.key === view.turn.prKey)?.tier ?? 'rest';
+      const ask = ASK_TIER_ORDER.indexOf(tier);
+      return [ask === -1 ? ASK_TIER_ORDER.length : ask, view.turn.kind === 'you' ? MOVE_ORDER.indexOf(view.turn.move) : 0] as const;
+    };
+    const expectedOrder = live
+      .filter((view) => view.turn.kind === 'you')
+      .toSorted((a, b) => rank(a)[0] - rank(b)[0] || rank(a)[1] - rank(b)[1])
+      .map((view) => view.turn.what);
+    ensure(JSON.stringify(urgency.yourMoves.map((move) => move.text)) === JSON.stringify(expectedOrder), 'your moves out of order');
     const urgentUnread = loudUnread.some((view) => view.prs.some((row) => row.state === 'OPEN'));
     const urgentMove = moves.some((move) => move !== 'merge');
     ensure(urgency.needsYou === (urgentUnread || urgentMove), `needs you ${urgency.needsYou}, open unread ${urgentUnread}, move ${urgentMove}`);

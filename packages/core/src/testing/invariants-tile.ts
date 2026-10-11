@@ -285,9 +285,13 @@ interface TileCandidate {
  */
 function tileCandidates(board: PropertyBoard, view: TileView): TileCandidate[] {
   return trackedRows(view).map((row) => {
-    const approvedMerge = row.turn.kind === 'you' && row.turn.move === 'merge' && row.turn.what === 'Merge, it is approved';
+    const ownMerge = row.turn.kind === 'you' && row.turn.move === 'merge' && row.turn.what === 'Merge, it is approved';
+    const authorMerge = row.turn.kind === 'them' && row.turn.what === 'to merge';
+    const approvedMerge = ownMerge || authorMerge;
     const hold = approvedMerge && board.viewer ? expectedStackHold(stackLayersOf(board, view, row.key).above, board.viewer) : null;
-    if (hold && hold.kind !== 'none') {
+    // On someone else's stack only someone else's hold replaces the author's merge.
+    const replaces = hold !== null && hold.kind !== 'none' && (ownMerge || hold.kind === 'them');
+    if (hold && replaces) {
       return { row, turn: heldTurn(hold), held: true };
     }
     // A row whose merge a layer below holds names that layer already.

@@ -4,6 +4,7 @@
 // drive it. The engine and FakeEngine call the same function for the
 // sidebar row, the topic header's breadcrumb and telemetry.
 import { isOwnTeam } from './mentions.ts';
+import { ASK_TIERS } from './pr-tier.ts';
 import { driverKind, driverLogin, driverPickValues, driverRelation, effectiveDriver } from './topic-driver.ts';
 import type { PersonRelation, TopicQueues } from './topic-queues.ts';
 import { homeTeamsOf } from './team-roles.ts';
@@ -50,9 +51,6 @@ export const TOPIC_SECTION_ORDER: TopicSectionOrder = [
   'other_topics',
   'archive',
 ];
-
-/** The PR tiers that ask something of the viewer, most urgent first. `mine` and `team` say whose PR it is, not what it asks. */
-const ASK_TIERS = ['needs_reply', 'changes_requested', 'to_review', 'team_mentioned'] as const;
 
 /** The section is one of the asks (the tiers share their names with their sections). */
 function isAskSection(section: TopicSection): section is (typeof ASK_TIERS)[number] {
@@ -213,6 +211,7 @@ export function topicDriverView(source: TopicSectionSource): TopicDriverView {
     picked: driver.picked,
     // A retired topic sits in the Archive, asks or not.
     heldByAsk: source.topic.status === 'retired' ? null : openAsk(source.queues),
+    driverDecides: driver.value !== null && sectionBelowAsks(sectionInputOf(source, driver.relation)) !== sectionBelowAsks(sectionInputOf(source, null)),
     choices,
   };
 }
