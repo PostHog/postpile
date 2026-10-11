@@ -10,7 +10,7 @@ import { bucketItems, dealtItems, dealtKey, rowSection, sidebarBuckets, topicRow
 import { ARCHIVE_FLIGHT_MS, flyToArchive } from '../lib/archive-flight.ts';
 import { reducedMotion } from '../lib/motion.ts';
 import { useFlip } from '../lib/use-flip.ts';
-import { useHeldPlace } from '../lib/use-held-place.ts';
+import { useHeldPlaces } from '../lib/use-held-place.ts';
 import { useSidebarHold } from '../lib/use-sidebar-hold.ts';
 import { type SearchFilter } from '../lib/search.ts';
 import { stateMix } from '../lib/pr-mix.ts';
@@ -581,7 +581,7 @@ export function TopicSidebar(props: TopicSidebarProps) {
     }
   }, [leaving]);
   // Dealt-with topics leave the owner sections, except while the search or a queue filter narrows: filters are for finding things.
-  const buckets = useHeldPlace(sidebarHold.hold.key, sidebarHold.hold.topicId, sidebarBuckets(listed, !narrowed), topicRowId);
+  const buckets = useHeldPlaces(sidebarHold.rows, sidebarBuckets(listed, !narrowed), topicRowId);
   const activeSection = props.activeTopicId === null ? null : rowSection(buckets, props.activeTopicId);
   const { onRowSection, activeTopicId } = props;
   useEffect(() => {

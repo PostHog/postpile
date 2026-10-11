@@ -5,7 +5,9 @@
 // sidebar keeps the previous hold until the pointer leaves the sidebar; the
 // rows then slide to their new places.
 
-/** What the sidebar holds in place: the selected tile's hold key (`useHeldPlace`) and the open topic. */
+import type { HoldRequest } from './hold-place.ts';
+
+/** What the sidebar holds in place: the selected tile's hold key (`useHeldPlaces`) and the open topic. */
 export interface SidebarHold {
   key: string | null;
   topicId: string | null;
@@ -32,9 +34,14 @@ export function nextKeptHolds(kept: SidebarHold[], last: SidebarHold, current: S
   return last.topicId === current.topicId ? others : [...others, last];
 }
 
-/** The hold `useHeldPlace` applies: the row left last, else the current selection's. */
-export function placeHold(current: SidebarHold, kept: SidebarHold[]): SidebarHold {
-  return kept.at(-1) ?? current;
+/**
+ * The rows `useHeldPlaces` holds in place: every kept row, oldest first,
+ * then the current selection's, each under the key it was selected with,
+ * so a row keeps the place it had while it was selected until the pointer
+ * leaves the sidebar. A hold without a selected tile holds no place.
+ */
+export function heldRows(current: SidebarHold, kept: SidebarHold[]): HoldRequest[] {
+  return [...kept, current].flatMap((hold) => (hold.key !== null && hold.topicId !== null ? [{ key: hold.key, itemId: hold.topicId }] : []));
 }
 
 /** The topics whose rows stay put: the selected one and every kept one. */
