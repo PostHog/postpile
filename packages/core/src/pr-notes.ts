@@ -294,6 +294,23 @@ export interface PrNotesView {
    * "Replaced:" line never dangles under no note.
    */
   replaced: PrNoteView | null;
+  /**
+   * The newest note the user cleared in the PR pane, so an agent does not
+   * set again what the user just took away. Null when there is none, or a
+   * newer note sits in its slot.
+   */
+  userCleared: UserClearedNote | null;
+}
+
+/** The PR pane's Clear: `cleared_by` of a note the user cleared. */
+export const CLEARED_BY_USER = 'user';
+
+/** A note the user cleared: whose it was and when it went. `client` and `by` are agent-written. */
+export interface UserClearedNote {
+  kind: PrNoteKind;
+  client: string;
+  by: string;
+  clearedAt: IsoTime;
 }
 
 /** What a note's staleness is checked against: the PRs as stored now. */
@@ -363,10 +380,24 @@ export function prNoteView(note: PrNote, read: NoteReadContext): PrNoteView {
   };
 }
 
+/** The newest note the user cleared, unless a newer note took its slot since. */
+function userClearedNote(own: PrNote[], current: (slot: PrNoteSlot) => PrNote | null): UserClearedNote | null {
+  const cleared = own.filter((note) => note.clearedBy === CLEARED_BY_USER && note.clearedAt !== null).at(-1);
+  if (!cleared || cleared.clearedAt === null) {
+    return null;
+  }
+  const since = current(cleared.slot);
+  if (since && since.seq > cleared.seq) {
+    return null;
+  }
+  return { kind: cleared.kind, client: cleared.client, by: cleared.by, clearedAt: cleared.clearedAt };
+}
+
 /**
- * One PR's notes from its stored rows (current ones and replaced ones, any
- * order): the current note of each slot, and the newest replaced note while
- * the note that replaced it is still current.
+ * One PR's notes from its stored rows (current, replaced and user-cleared
+ * ones, any order): the current note of each slot, the newest replaced note
+ * while the note that replaced it is still current, and the newest note the
+ * user cleared.
  */
 export function prNotesView(prKey: PrKey, token: string, notes: PrNote[], read: NoteReadContext): PrNotesView {
   const own = notes.filter((note) => note.prKey === prKey).toSorted((a, b) => a.seq - b.seq);
@@ -382,6 +413,7 @@ export function prNotesView(prKey: PrKey, token: string, notes: PrNote[], read: 
     durable: durable ? prNoteView(durable, read) : null,
     lease: lease ? prNoteView(lease, read) : null,
     replaced: replaced ? prNoteView(replaced, read) : null,
+    userCleared: userClearedNote(own, current),
   };
 }
 

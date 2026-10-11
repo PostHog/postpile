@@ -102,6 +102,7 @@ import {
   approvalsSummary,
   CATCH_UP_CONFIRM_EVERY_MS,
   CATCH_UP_PACE_MS,
+  CLEARED_BY_USER,
   driverKind,
   emptyAgentCallStats,
   interruptionsView,
@@ -1066,7 +1067,7 @@ export class Engine implements EngineService {
   }
 
   async clearPrNote(noteId: string): Promise<PrNoteResult> {
-    return this.prNotes.clear(noteId, 'user');
+    return this.prNotes.clear(noteId, CLEARED_BY_USER);
   }
 
   async listPrNotes(prKeys: PrKey[]): Promise<PrNotesView[]> {

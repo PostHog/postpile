@@ -31,6 +31,7 @@ describe('agentNoteLines', () => {
         durable: note({ status: 'stale', staleReasons: ['head changed'] }),
         lease: note({ id: 'l1', kind: 'in_progress', coveredBy: null, note: 'reviewing', expiresAt: '2026-10-08T13:00:00Z' }),
         replaced: null,
+        userCleared: null,
       },
       NOW,
     );
@@ -50,6 +51,7 @@ describe('agentNoteLines', () => {
         durable: note({ coverReviewed: false }),
         lease: note({ id: 'l1', kind: 'in_progress', coveredBy: null, coverReviewed: null, note: 'reviewing', status: 'stale', staleReasons: ['new review from alice'], expiresAt: '2026-10-08T13:00:00Z' }),
         replaced: null,
+        userCleared: null,
       },
       NOW,
     );
@@ -57,7 +59,7 @@ describe('agentNoteLines', () => {
   });
 
   it('leaves out an ended lease', () => {
-    const lines = agentNoteLines({ prKey: 'acme/app#1902', token: 't', durable: null, lease: note({ kind: 'in_progress', status: 'expired' }), replaced: null }, NOW);
+    const lines = agentNoteLines({ prKey: 'acme/app#1902', token: 't', durable: null, lease: note({ kind: 'in_progress', status: 'expired' }), replaced: null, userCleared: null }, NOW);
     expect(lines).toEqual([]);
   });
 });

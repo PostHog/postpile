@@ -200,6 +200,19 @@ describe('prNotesView', () => {
     expect(hasLiveNote(stale)).toBe(false);
     expect(prNotesView(KEY, 't', [note({ clearedAt: at(15), clearedBy: 'user' })], read(at(20))).durable).toBeNull();
   });
+
+  it('names the newest note the user cleared until a newer note takes its slot', () => {
+    const byUser = note({ seq: 1, id: 'n1', clearedAt: at(15), clearedBy: 'user' });
+    const view = prNotesView(KEY, 't', [byUser], read(at(20)));
+    expect(view.userCleared).toEqual({ kind: byUser.kind, client: byUser.client, by: byUser.by, clearedAt: at(15) });
+    // An agent's own clear is not the user's word.
+    expect(prNotesView(KEY, 't', [note({ clearedAt: at(15), clearedBy: 'claude-code' })], read(at(20))).userCleared).toBeNull();
+    // A newer note in the same slot: the clear is history.
+    expect(prNotesView(KEY, 't', [byUser, note({ seq: 2, id: 'n2' })], read(at(20))).userCleared).toBeNull();
+    // A lease set since leaves the durable note's clear standing.
+    const lease = note({ seq: 2, id: 'l1', slot: 'lease', kind: 'in_progress', expiresAt: at(120) });
+    expect(prNotesView(KEY, 't', [byUser, lease], read(at(20))).userCleared?.clearedAt).toBe(at(15));
+  });
 });
 
 describe('planNoteSet', () => {

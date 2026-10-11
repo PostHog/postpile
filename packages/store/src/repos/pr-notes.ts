@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { NoteAnchor, PrKey, PrNote, PrNoteKind, PrNoteSlot } from '@postpile/core';
+import { CLEARED_BY_USER, type NoteAnchor, type PrKey, type PrNote, type PrNoteKind, type PrNoteSlot } from '@postpile/core';
 import { all, insertReturningId, one, placeholders, run } from '../sql.ts';
 
 interface PrNoteRow {
@@ -94,7 +94,8 @@ export class PrNoteRepo {
 
   /**
    * One query for many PRs: each PR's current notes plus its newest
-   * replaced one (pr_context's "replaced ..."), oldest first.
+   * replaced one (pr_context's "replaced ...") and its newest one the user
+   * cleared (pr_context's "the user cleared ..."), oldest first.
    */
   listForPrs(prKeys: PrKey[]): PrNote[] {
     if (prKeys.length === 0) {
@@ -105,10 +106,14 @@ export class PrNoteRepo {
       this.db,
       `SELECT * FROM pr_note
        WHERE pr_key IN (${marks})
-         AND ((${CURRENT}) OR seq IN (SELECT MAX(seq) FROM pr_note WHERE pr_key IN (${marks}) AND superseded_by IS NOT NULL GROUP BY pr_key))
+         AND ((${CURRENT})
+           OR seq IN (SELECT MAX(seq) FROM pr_note WHERE pr_key IN (${marks}) AND superseded_by IS NOT NULL GROUP BY pr_key)
+           OR seq IN (SELECT MAX(seq) FROM pr_note WHERE pr_key IN (${marks}) AND cleared_by = ? GROUP BY pr_key))
        ORDER BY seq`,
       ...prKeys,
       ...prKeys,
+      ...prKeys,
+      CLEARED_BY_USER,
     ).map(toNote);
   }
 

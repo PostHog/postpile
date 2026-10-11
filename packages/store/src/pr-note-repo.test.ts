@@ -57,9 +57,21 @@ describe('PrNoteRepo', () => {
     expect(store.prNotes.listForPrs(['acme/app#1']).map((row) => row.id)).toEqual(['n2', 'n3', 'l1']);
     // A replaced note gives up its idempotency key, so the same request can write again.
     expect(store.prNotes.get('n1')?.idempotencyKey).toBeNull();
-    expect(store.prNotes.listForPrs(['acme/app#5'])).toEqual([]);
+    // The newest note the user cleared comes along, so pr_context can say so.
+    expect(store.prNotes.listForPrs(['acme/app#5']).map((row) => row.id)).toEqual(['o1']);
     expect(store.prNotes.get('o1')).toMatchObject({ clearedAt: at(20), clearedBy: 'user', idempotencyKey: null });
     expect(store.prNotes.listForPrs([])).toEqual([]);
+  });
+
+  it('lists only the newest user-cleared note, and none an agent cleared', () => {
+    store.prNotes.insert(note({ id: 'u1', idempotencyKey: 'k1' }));
+    store.prNotes.clear('u1', at(20), 'user');
+    store.prNotes.insert(note({ id: 'u2', idempotencyKey: 'k2' }));
+    store.prNotes.clear('u2', at(30), 'user');
+    store.prNotes.insert(note({ id: 'a1', prKey: 'acme/app#6', idempotencyKey: 'k3' }));
+    store.prNotes.clear('a1', at(20), 'claude-code');
+
+    expect(store.prNotes.listForPrs(['acme/app#1', 'acme/app#6']).map((row) => row.id)).toEqual(['u2']);
   });
 
   it('renews a lease and counts live notes on open PRs only, per client and in total', () => {
