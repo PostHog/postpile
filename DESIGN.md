@@ -1771,6 +1771,11 @@ read time in `getTopic` / `getPr` (does not write, only sets
 | dossier timeline entry for a PR that is no longer a member | stale claim `left_topic`, and the PR is in the next delta's `leftPrKeys` |
 | dossier status or goal line whose refs fail (`headerLineIssues`: head moved for the status, PR missing, source deleted) | stale claim in the read model only (2026-10-10) |
 
+A fact's stale outcomes (not `pr_missing`, not an invalidate) are waived
+while its `verifiedAt` is after the `updatedAt` of every PR it touches: a
+"Keep it" holds until something new happens on those PRs (2026-10-11,
+see "Recheck instead of Wrong").
+
 The status and goal lines are checked in the read model
 (`MemoryReads.dossierView`), not in `verifyDossier`: `withoutStaleClaims`
 drops what `verifyDossier` flags before a version is stored, and a push
@@ -2035,7 +2040,9 @@ back to `rejected` (so consolidation does not propose it again and it
 leaves `standingRules`), logs `rule_removed` with the rule as the note, and
 returns an undo token that restores `accepted` with the old `decided_at`.
 A topic's tailoring is one entry per line (core `tailoring.ts`); the topic
-header shows it under "You told the agent:" one line each, with Remove:
+header shows it under "Kept for this topic" (was "You told the agent:",
+renamed 2026-10-11 since kept lessons, rules and merged lines are not the
+user's words) one line each, with Remove:
 `removeTailoringLine` drops the first equal line, logs `tailoring_removed`,
 and its undo puts the line back. Accepted topic rules live in the tailoring
 and are removed there.
@@ -2152,9 +2159,17 @@ until the user accepts in the dialog, through `correctMemory`:
 - holds -> `confirm` ("Keep it"): a fact gets `markVerified` (not stale,
   verified now) and its refs move to each PR's current head, like the
   agent's own recheck confirm (`reanchorRefs`), so the next read doesn't
-  find it out of date again; Undo puts the old heads back. A fact that is
-  stale for another reason (person no longer involved, source gone) still
-  reads stale after "Keep it". A dossier line logs `memory_confirmed` so the next update
+  find it out of date again. "Keep it" clears any stale reason until
+  something new happens (2026-10-11, owner): `verifyFact` waives its stale
+  checks (status outlived, head moved, person no longer involved, source
+  gone) while the fact was verified after the last update of every PR it
+  touches (`confirmedSinceLastChange`). A new event on one of those PRs
+  moves its `updatedAt` past the keep, and the checks apply again. A
+  missing PR and a merge or close that ends a lifecycle fact are never
+  waived. The agent's own confirm sets `verifiedAt` only when the checks
+  pass, so the waiver is the same claim for both: confirmed against the
+  PRs as they still are. Undo puts the old heads, stale mark and
+  `verifiedAt` back, so the fact reads stale again. A dossier line logs `memory_confirmed` so the next update
   keeps it, and until then it shows "checked by you" instead of out of
   date (`confirmedClaims`, 2026-10-10).
 - fix -> `fix` + `fixedText`: a fact is closed (superseded) by a copy with
@@ -2264,8 +2279,8 @@ picks where it applies. Types and rules: core `lessons.ts`; table `lesson`
   topic's tailoring (logged as `tailoring_kept`), which every later prompt
   for the topic reads. The line keeps where it came from ("From your
   review on #4521: When …", or "From your note on #N:" for a taught one,
-  `lessonTailoringLine`, 2026-10-10, MEM-A-21), so "You told the agent"
-  does not claim words the user never typed. "Use across topics…" asks
+  `lessonTailoringLine`, 2026-10-10, MEM-A-21), so "Kept for this topic"
+  does not pass off words the user never typed as theirs. "Use across topics…" asks
   `proposeInstructionsFromLesson` for the instructions with that one line
   added: the prompt gets the chosen line and the review fenced as context,
   and the engine drops any answer that changes or removes an existing line
@@ -2313,9 +2328,10 @@ target already has are skipped, and the carried lines are logged as
 `tailoring_kept` on the target. Before, the line stayed on the archived
 topic and silently left every prompt.
 An answer that lands while another topic is on screen (the user asked,
-then moved on) shows a quiet toast "The agent answered on <topic>." with
-Open, which opens that topic's agent pane (2026-10-10, B-A-14). A question
-on its way cannot be cancelled. A turn's
+then moved on) shows a quiet toast "The agent answered on <topic> · Open";
+Open selects that topic and opens its agent pane (2026-10-10, B-A-14,
+confirmed by the owner 2026-10-11). A question on its way cannot be
+cancelled: no Cancel button (owner, 2026-10-11). A turn's
 two messages are stored together once the answer is in: a failed call
 stores nothing, so the history never holds an unanswered message.
 
@@ -3482,12 +3498,15 @@ thread, reading the diff.
   you", "... from team-devex", "Your PR", "Your review"), then Approve with
   its "+ note" half, Comment review, and "Ask <owner>" on the right. Same
   order on every PR; Approve fills green when it is core's lead, else
-  outlined. Shown when core offers Approve or Ask. Core offers Approve on
-  an open PR the viewer approved even once the PR is done (2026-10-10,
-  PANE-A-06, option a): the row then shows "You approved 4h ago, commits
-  since" and an outlined "Approve again", never the lead, so "rowan pushed
-  after your approval" has a next step. Ask, Remove team and the mark
-  button follow the done rules as before. While the write is blocked every
+  outlined. Shown when core offers Approve or Ask. Core offers Approve,
+  + note and Comment review on every open PR someone else wrote, done or
+  not (2026-10-11, owner: approving a colleague's PR the read timer
+  already marked done is still useful): on a done PR the row stays
+  outlined and Approve is never the lead. An open PR the viewer approved
+  shows "You approved 4h ago, commits since" and an outlined "Approve
+  again" (2026-10-10, PANE-A-06), so "rowan pushed after your approval"
+  has a next step. Ask, Remove team and the mark button follow the done
+  rules as before. While the write is blocked every
   button of the row is disabled with the reason as its tooltip, Approve too
   (2026-10-10). Rejected 2026-10-05:
   welding the buttons into the glance's footer (the glance is agent output
@@ -3500,8 +3519,8 @@ thread, reading the diff.
   hovered). Close to the tile like the review buttons, apart from them by
   look. When core's lead is the mark or Snooze (nothing else to do), that
   one is outlined. The opened mark's note ("✓ Marked read · Undo") takes
-  the mark button's place, as before. With no review row (own PR, done PR)
-  the line sits after the glance alone.
+  the mark button's place, as before. With no review row (own PR, merged
+  or closed PR) the line sits after the glance alone.
 - Description, facts, reviews (`ReviewList`: who reviewed, newest verdict
   each, without the empty reviews GitHub makes for thread replies), what
   the agent knows, then the activity
@@ -4504,8 +4523,9 @@ any review ask; on top of that:
   "After a mark-read"). On a done PR "Open on GitHub" stays outlined
   (`PaneLead` `none`, 2026-10-07, owner): with an ink one there, a
   dealt-with topic showed two black buttons at once, and "Archive now" is
-  the next move. "Approve again" and "Approve draft" stay outlined next to it
-  ("Approve again" also on a done PR the viewer approved, 2026-10-10).
+  the next move. "Approve again" and "Approve draft" stay outlined next to it,
+  and the whole review row stays outlined on a done open PR by someone else
+  (2026-10-11).
   The filled button is ink, except Approve (2026-09-30): it leads in `--safe`
   green, the same color as the "Approved" state it produces, because it is
   the one action that is both final and positive. Accent blue stays for
@@ -5695,13 +5715,15 @@ too, also with the merged row off).
 | first run, full (> 300) | same, Clear tagged Recommended | merged all + older 30 | Clear |
 | from the sidebar, any day | "Clean up your inbox" | merged all + older 14 | Clear (Cancel instead of Start as usual) |
 
-On the first run Enter never clears (2026-10-10): the dialog is the first
-screen after setup and the first GitHub write the app mentions, so the
-preselect stays but only a click on the button writes. The main button
-names its effect ("Mark 28 read on GitHub"; "Queue marking 28 read" while
-writes are locked) and carries no ⏎ hint; Start as usual still takes Enter
-when it is the main button. The other start cases keep Enter on their main
-button.
+On a start dialog Enter never clears: on the first run (2026-10-10) the
+dialog is the first screen after setup and the first GitHub write the app
+mentions, and coming back (2026-10-11, owner) a stray Enter would mark the
+whole preselected pile of a 5+ day absence read on GitHub. The preselect
+stays but only a click on the button writes. The Clear button names its
+effect ("Mark 28 read on GitHub"; "Queue marking 28 read" while writes are
+locked) and carries no ⏎ hint; Start as usual still takes Enter when it is
+the main button. Only the sidebar's dialog, opened to clear, keeps Enter on
+"Clear N".
 
 A row with nothing in it starts unticked. The saving line ("Clearing first
 means the agent reads N PRs instead of M") shows for vacation, busy and
@@ -5918,7 +5940,10 @@ Owner decisions (2026-09-30):
   out; the pane's own Approve stays.
 - **Greyed out or gone.** Something to act on but no agent backing: the
   button stays, disabled, with the reason in its pill. Nothing to act on at
-  all: no button.
+  all: no button. While GitHub writes are locked, ✨ Approve (tile and
+  topic) is greyed and disabled too, with the lock reason as its tooltip,
+  like the pane's Approve (2026-10-11, owner): an approval has no pending
+  queue, so a click could only fail. The pill keeps the agent's verdict.
 - **Tile Approve** (new button in the tile footer). Gone when the tile has no
   approvable PR. Active when at least one approvable PR in the tile is
   covered: it approves only those (a stack base to head), names the rest
@@ -8793,10 +8818,13 @@ more than PR facts (PR vs whole tile, snooze, lock, pending writes), so
 offers come from their own core function with that context passed in, and
 the renderer only displays them. Consequences:
 
-- A done PR in the detail pane offers only Open, like a done tile (a handled
-  PR by someone else with no ask still got a primary Approve). One exception
-  since 2026-10-10: an open PR the viewer approved keeps an outlined
-  "Approve again" in its review row (never the lead).
+- A done PR in the detail pane leads with nothing but Open, like a done
+  tile (a handled PR by someone else with no ask still got a primary
+  Approve). Since 2026-10-11 the review row (Approve, + note, Comment
+  review) stays, outlined, on every open PR someone else wrote: GitHub
+  still takes the review, and the owner still wants to approve PRs the read
+  timer marked done. Ask, Remove team and the mark button keep the done
+  rules.
 - Whether a person is automation comes from core (the renderer's `[bot]`
   check missed the other automation accounts and decided whether Ask shows).
 
@@ -8939,8 +8967,8 @@ state and whose turn per snapshot (`stateOf`, `turnOf`). Offers are
 `tileOffers` / `paneOffers` in `core/offers.ts`, shipped as
 `TileView.offers` (footer action and label, GitHub link, lead PR, and the
 pane's buttons per PR key); the pane (`PaneHousekeeping`, `ReviewRow`, `OpenOnGitHub`) and `Tile` only lay them out. A done
-PR (or one on a done tile) gets no Ask or Remove team, and Approve only as
-the outlined "Approve again" on an open PR the viewer approved; a done PR
+PR (or one on a done tile) gets no Ask or Remove team, and its review row
+only outlined, on an open PR someone else wrote (2026-10-11); a done PR
 whose news keeps its tile unread keeps Mark read. The renderer's tier order
 is typed with core's `PrTierOrder`, so a drift fails to compile. The fake
 engine reads through `planRead` and sends pending writes through
@@ -9008,7 +9036,7 @@ tables. Tests cover input partitions and precedence collisions, not every
 combination.
 
 **Tests across rules.** Invariants over the sample boards and real-shaped
-fixtures: a done tile or PR offers only Open, the lead PR is the turn's PR,
+fixtures: a done tile or PR leads with nothing but Open, the lead PR is the turn's PR,
 MCP and the pane name the same move, same events twice give the same facts.
 Where rules differ on purpose (routed team requests, team coverage) the
 invariant says so instead of asserting equality. One scenario test per bug
