@@ -1,5 +1,5 @@
 import { useActions } from '../api/actions.tsx';
-import { tailoringLines } from '../lib/tailoring.ts';
+import { TAILORING_HEADER, tailoringLines } from '../lib/tailoring.ts';
 import { QuoteIcon } from './icons.tsx';
 
 /**
@@ -21,7 +21,7 @@ export function TopicTailoring(props: { topicId: string; tailoring: string }) {
         <QuoteIcon />
       </span>
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span>You told the agent:</span>
+        <span>{TAILORING_HEADER}</span>
         <ul className="flex flex-col gap-0.5">
           {lines.map((line, index) => (
             <li key={`${index}:${line}`} className="group flex items-baseline gap-2">
