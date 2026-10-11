@@ -338,10 +338,12 @@ export class FactRepo {
 
   /**
    * Adds refs to an existing fact, ignoring ones it already has (NOOP
-   * reconcile), and sets verified_at. Keeps the oldest ref (where the fact
-   * came from) and the newest NEWEST_REFS_KEPT.
+   * reconcile, consolidation merge). Keeps the oldest ref (where the fact
+   * came from) and the newest NEWEST_REFS_KEPT. Never sets verified_at:
+   * `verifyFact` waives stale checks for a fact verified after its PRs last
+   * changed, so only a passed check or the user's "Keep it" may stamp it.
    */
-  addRefs(factId: string, refs: FactRef[], at: string): void {
+  addRefs(factId: string, refs: FactRef[]): void {
     inTransaction(this.db, () => {
       this.insertRefs(factId, refs);
       run(
@@ -354,7 +356,6 @@ export class FactRepo {
         factId,
         NEWEST_REFS_KEPT,
       );
-      run(this.db, 'UPDATE fact SET verified_at = ? WHERE id = ?', at, factId);
     });
   }
 

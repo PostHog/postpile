@@ -198,18 +198,18 @@ describe('FactRepo', () => {
     expect(store.facts.listActiveTouchingPrs([])).toEqual([]);
   });
 
-  it('merges refs on a noop without duplicates and marks it verified', () => {
+  it('merges refs on a noop without duplicates and leaves verified_at alone', () => {
     store.facts.add(makeFact());
-    store.facts.addRefs('f1', [makeFactRef(), makeFactRef({ kind: 'comment', sourceId: 'c2', at: at(30) })], at(31));
+    store.facts.addRefs('f1', [makeFactRef(), makeFactRef({ kind: 'comment', sourceId: 'c2', at: at(30) })]);
     const fact = store.facts.get('f1');
     expect(fact?.refs.map((ref) => ref.sourceId)).toEqual([null, 'c2']);
-    expect(fact?.verifiedAt).toBe(at(31));
+    expect(fact?.verifiedAt).toBeNull();
   });
 
   it('keeps the oldest ref and the newest ten when refs pile up', () => {
     store.facts.add(makeFact());
     const refs = Array.from({ length: 15 }, (_, i) => makeFactRef({ kind: 'comment', sourceId: `c${i}`, at: at(20 + i) }));
-    store.facts.addRefs('f1', refs, at(40));
+    store.facts.addRefs('f1', refs);
     const kept = store.facts.get('f1')?.refs.map((ref) => ref.sourceId) ?? [];
     expect(kept).toHaveLength(11);
     expect(kept[0]).toBeNull();

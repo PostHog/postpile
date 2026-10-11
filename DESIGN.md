@@ -2166,9 +2166,11 @@ until the user accepts in the dialog, through `correctMemory`:
   touches (`confirmedSinceLastChange`). A new event on one of those PRs
   moves its `updatedAt` past the keep, and the checks apply again. A
   missing PR and a merge or close that ends a lifecycle fact are never
-  waived. The agent's own confirm sets `verifiedAt` only when the checks
-  pass, so the waiver is the same claim for both: confirmed against the
-  PRs as they still are. Undo puts the old heads, stale mark and
+  waived. The agent's own confirm (a NOOP reconcile, `FactWriter.confirm`)
+  checks every fact first and sets `verifiedAt` only when the checks pass;
+  adding refs (`addRefs`, NOOP or consolidation merge) never stamps it. So
+  the waiver is the same claim for both: confirmed against the PRs as they
+  still are. Undo puts the old heads, stale mark and
   `verifiedAt` back, so the fact reads stale again. A dossier line logs `memory_confirmed` so the next update
   keeps it, and until then it shows "checked by you" instead of out of
   date (`confirmedClaims`, 2026-10-10).
