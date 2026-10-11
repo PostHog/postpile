@@ -78,10 +78,10 @@ describe('Other work folds', () => {
 
   it('keep the selected topic while folded and open while it sits inside', () => {
     const items = [item('quiet'), item('open-one')];
-    expect(ids(rowsWhileFolded(items, 'open-one'))).toEqual(['open-one']);
+    expect(ids(rowsWhileFolded(items, ['open-one']))).toEqual(['open-one']);
     expect(startsOpen(items)).toBe(false);
-    expect(startsOpen(items, 'open-one')).toBe(true);
-    expect(startsOpen(items, 'elsewhere')).toBe(false);
+    expect(startsOpen(items, ['open-one'])).toBe(true);
+    expect(startsOpen(items, ['elsewhere'])).toBe(false);
   });
 
   it('keep urgent unread rows while folded and say what is unread', () => {
@@ -105,7 +105,7 @@ describe('dealt-with topics', () => {
   it('keep only the selected topic while the line is folded', () => {
     const dealt = [item('a', { quiet: true }), item('b', { quiet: true })];
     expect(ids(rowsWhileFolded(dealt))).toEqual([]);
-    expect(ids(rowsWhileFolded(dealt, 'b'))).toEqual(['b']);
+    expect(ids(rowsWhileFolded(dealt, ['b']))).toEqual(['b']);
   });
 
   it('leave the area folds of Other work, so a fold with nothing left goes and areas count listed topics only', () => {
@@ -119,9 +119,9 @@ describe('dealt-with topics', () => {
 
   it("open Other work by the listed topics only, and keep it open while the selected topic is behind the line", () => {
     const dealt = [item('mine-done', { quiet: true, byYou: 1 })];
-    expect(otherWorkStartsOpen([], dealt, null)).toBe(false);
-    expect(otherWorkStartsOpen([item('news', { unread: 1 })], dealt, null)).toBe(true);
-    expect(otherWorkStartsOpen([], dealt, 'mine-done')).toBe(true);
+    expect(otherWorkStartsOpen([], dealt, [])).toBe(false);
+    expect(otherWorkStartsOpen([item('news', { unread: 1 })], dealt, [])).toBe(true);
+    expect(otherWorkStartsOpen([], dealt, ['mine-done'])).toBe(true);
   });
 });
 

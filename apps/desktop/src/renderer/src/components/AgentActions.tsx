@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { AgentApproveOffer, AgentActionFrom, MarkReadBlock, TopicDetail, TopicMarkReadOffer } from '@postpile/core';
+import type { AgentApproveOffer, AgentActionFrom, MarkReadBlock, TopicAgentOffers, TopicDetail, TopicMarkReadOffer } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { agentApproveLook, approvePillWord, leftOutReason, markReadPillWord, topicApproveLabel, topicMarkReadLabel, topicMarkReadTitle } from '../lib/agent-actions.ts';
 import { markReadNote } from '../lib/guard.ts';
@@ -34,6 +34,15 @@ export function AgentPill(props: { word: string; off: boolean; reason: MarkReadB
     <span className={`box-border flex h-[18px] shrink-0 items-center gap-1 rounded-full px-1.5 text-[11px] leading-none font-semibold ${look}`}>
       <span aria-hidden="true">✨</span>
       {props.word}
+    </span>
+  );
+}
+
+/** "Mark all read · ✨ Needs you": on the topic's bulk buttons the verb comes first, the pill after a dot (2026-10-11). */
+function BulkDot() {
+  return (
+    <span aria-hidden="true" className="text-hint">
+      ·
     </span>
   );
 }
@@ -104,7 +113,7 @@ function ConfirmApprove(props: { offer: AgentApproveOffer; onCancel: () => void;
  * greyed too, with the lock reason as its tooltip (`agentApproveLook`). A
  * click asks first; nothing is sent before "Approve N".
  */
-export function AgentApproveButton(props: { offer: AgentApproveOffer | null; label: string; busyKey: string; from: AgentActionFrom }) {
+export function AgentApproveButton(props: { offer: AgentApproveOffer | null; label: string; busyKey: string; from: AgentActionFrom; bulk?: boolean }) {
   const actions = useActions();
   const [asking, setAsking] = useState(false);
   const { offer } = props;
@@ -132,6 +141,7 @@ export function AgentApproveButton(props: { offer: AgentApproveOffer | null; lab
         onClick={() => setAsking(true)}
       >
         {props.label}
+        {props.bulk && <BulkDot />}
         <AgentPill word={approvePillWord(offer)} off={!active} reason={offer.reason} />
       </Button>
       {asking && <ConfirmApprove offer={offer} onCancel={() => setAsking(false)} onConfirm={confirm} />}
@@ -156,14 +166,19 @@ export function TopicMarkReadButton(props: { offer: TopicMarkReadOffer | null; t
       onClick={() => void actions.markTilesRead({ busyKey, tileIds: offer.coveredTileIds, skipped: offer.skipped })}
     >
       {topicMarkReadLabel(offer)}
+      <BulkDot />
       <AgentPill word={markReadPillWord(offer)} off={!active} reason={offer.reason} />
     </Button>
   );
 }
 
-/** The topic's buttons on their own row under the Tiles count, "for this topic" trailing. Gone when both offers are. */
-export function TopicActions(props: { detail: TopicDetail }) {
-  const { agent, topic } = props.detail;
+/**
+ * The topic's buttons on their own row under the Tiles count, "for this
+ * topic" trailing. `agent` is the topic's offers, narrowed to the shown
+ * tiles while a filter is on (`shownTopicOffers`). Gone when both offers are.
+ */
+export function TopicActions(props: { topic: TopicDetail['topic']; agent: TopicAgentOffers }) {
+  const { agent, topic } = props;
   if (!agent.approve && !agent.markRead) {
     return null;
   }
@@ -174,6 +189,7 @@ export function TopicActions(props: { detail: TopicDetail }) {
         label={agent.approve ? topicApproveLabel(agent.approve) : ''}
         busyKey={`approveTopic:${topic.id}`}
         from="agent_topic"
+        bulk
       />
       <TopicMarkReadButton offer={agent.markRead} topicId={topic.id} />
       <span className="pl-1 text-[11.5px] text-hint">for this topic</span>

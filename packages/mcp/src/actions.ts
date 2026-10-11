@@ -254,7 +254,7 @@ export async function proposeTopicChange(ctx: ActionContext, args: ProposeArgs):
   }
   const head =
     change.status === 'filed'
-      ? `Filed as a suggestion for the user (id ${change.proposalId}). Nothing changes until they accept it in PostPile's Inbox.`
+      ? `Filed as a suggestion for the user (id ${change.proposalId}). Nothing changes until they accept it under Suggestions in PostPile.`
       : 'Dry run: nothing was filed.';
   const footer =
     change.status === 'filed'

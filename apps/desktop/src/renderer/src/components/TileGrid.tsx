@@ -1,7 +1,8 @@
 import { useRef, type ReactNode } from 'react';
 import { TopicActions } from './AgentActions.tsx';
 import { TopicArchiveBox } from './TopicArchiveBox.tsx';
-import type { TileGroup, TileView, TopicDetail, TopicListItem } from '@postpile/core';
+import type { TileGroup, TileView, TopicAgentOffers, TopicDetail, TopicListItem } from '@postpile/core';
+import { shownTopicOffers } from '../lib/agent-actions.ts';
 import { GROUP_LABELS, gridGroups, headingGroup, headingLabel } from '../lib/queues.ts';
 import { useFlip } from '../lib/use-flip.ts';
 import { useHeldPlace } from '../lib/use-held-place.ts';
@@ -220,8 +221,8 @@ function tileId(view: TileView): string {
  * place at +320ms; its "Archive now" then rises in (`arrived`). Keyed by
  * topic by the caller: another topic just shows its own.
  */
-function TopicBoxes(props: { detail: TopicDetail }) {
-  const hasActions = props.detail.agent.approve !== null || props.detail.agent.markRead !== null;
+function TopicBoxes(props: { detail: TopicDetail; agent: TopicAgentOffers }) {
+  const hasActions = props.agent.approve !== null || props.agent.markRead !== null;
   const hasArchive = props.detail.archive !== null;
   const arrived = useSettling(hasArchive);
   const timing = 'delay-320 duration-320 ease-[cubic-bezier(.3,.7,.2,1)]';
@@ -229,7 +230,7 @@ function TopicBoxes(props: { detail: TopicDetail }) {
     <>
       <Fold open={hasActions} className={timing}>
         <div className="pt-3">
-          <TopicActions detail={props.detail} />
+          <TopicActions topic={props.detail.topic} agent={props.agent} />
         </div>
       </Fold>
       <Fold open={hasArchive} className={timing}>
@@ -250,6 +251,8 @@ export function TileGrid(props: Omit<TileGridProps, 'showYourMove'>) {
   // A held tile shows in a group other than its core one; core's counts would then disagree with the headings.
   const held = groups.some((bucket) => bucket.items.some((view) => view.group !== bucket.key));
   const showYourMove = matching === null && !held;
+  // Under a filter the topic's buttons count and act on the shown tiles only (2026-10-11).
+  const agent = matching === null ? props.detail.agent : shownTopicOffers(props.detail.agent, tiles);
   return (
     <div ref={listRef} className="flex flex-col gap-5">
       <div className="flex flex-col pt-[13px] shadow-[inset_0_1px_0_var(--hairline)]">
@@ -269,7 +272,7 @@ export function TileGrid(props: Omit<TileGridProps, 'showYourMove'>) {
             )}
           </span>
         </div>
-        <TopicBoxes key={props.detail.topic.id} detail={props.detail} />
+        <TopicBoxes key={props.detail.topic.id} detail={props.detail} agent={agent} />
       </div>
       {tiles.length === 0 && (
         <p className="rounded-tile border border-dashed border-frame px-4 py-8 text-center text-xs text-muted">

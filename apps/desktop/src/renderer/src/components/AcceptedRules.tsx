@@ -11,7 +11,7 @@ import { useActions } from '../api/actions.tsx';
 export function AcceptedRules(props: { rules: RuleProposal[] }) {
   const actions = useActions();
   if (props.rules.length === 0) {
-    return <p className="text-xs text-hint">None yet. The agent proposes a rule in the Inbox after you correct the same thing a few times.</p>;
+    return <p className="text-xs text-hint">None yet. The agent suggests a rule under Suggestions after you correct the same thing a few times.</p>;
   }
   return (
     <ul className="flex flex-col gap-1">
