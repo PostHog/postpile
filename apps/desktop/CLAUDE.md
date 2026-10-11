@@ -266,7 +266,8 @@ with agent, Recheck): while the agent is off or paused, disable it with
 - Topic proposals come from consolidation or, through the MCP server, from
   an outside agent (`source: 'agent'`, `client`). Say who suggested an
   outside one wherever it shows: the Inbox card's meta line
-  (`proposalMeta`: "topic · suggested by Claude Code · 2h ago") and the
+  (`proposalMeta`: "topic · suggested by Claude Code · 2h ago", plus the
+  agent's session name before the age when it gave one) and the
   topic header row ("Claude Code suggests: …"), both from `suggestedBy` in
   `lib/proposals.ts` (unknown clients read "an outside agent"). Accept can
   come back refused when the proposal no longer fits; show the message,

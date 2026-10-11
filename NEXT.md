@@ -1782,6 +1782,30 @@ the app meanwhile.
 - **One "Agent off" pill** (2026-10-11, owner): no split into off vs paused.
 - **Removed rules stay `rejected`** (2026-10-11, owner): no `removed`
   status or migration.
+- **Update reminder: Later on the pill once the bar is due hides it**
+  (2026-10-11, owner, bug hunt OPS-A-26; DESIGN.md "Update reminder"): the
+  pill the bar's Later leaves hides for 24h on its own Later, then the bar
+  returns. Escalation otherwise unchanged; the snooze now stores where Later
+  was clicked.
+- **Title bar names both tools** (2026-10-11, owner, bug hunt OPS-A-11;
+  DESIGN.md "Missing tools" › UI): "sync off · gh and claude need a fix"
+  when claude is missing or logged out next to a broken gh. A claude usage
+  limit stays a footer matter.
+- **`pr_context` says when the user cleared a note** (2026-10-11, owner;
+  DESIGN.md "Agent notes on PRs"): "The user cleared claude-code's
+  no_action note (by ph3 session) 2 h ago: don't set it again unless they
+  ask", from the PR's newest user-cleared note, until a newer note takes
+  its slot. JSON: `agentNotes.userCleared`.
+- **Topic proposals record the session** (2026-10-11, owner; DESIGN.md
+  "propose_topic_change"): optional `by` on `propose_topic_change`,
+  migration 040 (`topic_proposal."by"`, nullable, quoted keyword; Codex
+  agreed, preferring `session_name` only for a fresh table). Shown as
+  "suggested by Claude Code · ph3 session · 2h ago" on the card and
+  "suggested by claude-code (ph3 session)" in `topic`.
+- **Move preview leads with finished PRs when no open PR moves**
+  (2026-10-11, owner; DESIGN.md "propose_topic_change"): "Move 3 merged or
+  closed PRs from … into …" instead of "Move 0 open PRs", same for split.
+  The move is not refused: the finished layers do go along.
 
 - **`note_pr` covered without a review stays accepted, but says so**
   (2026-10-10, bug hunt Q8, recommended option applied; DESIGN.md "Agent

@@ -8,6 +8,8 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 - "Your instructions" lists the standing rules you accepted for every topic, each with Remove. What you told the agent in a topic shows one line each, also with Remove. Both offer Undo.
 - Inbox Decline offers Undo for a few seconds. A declined suggestion is never made again, so a misclick used to lose it for good.
+- `propose_topic_change` takes an optional `by` (the agent's session name). The suggestion card reads "suggested by Claude Code · ph3 session · 2h ago", and `topic` lists it with the outcome.
+- `pr_context` says when you cleared an agent's note in the PR pane, so another agent does not set it again.
 
 ### Changed
 
@@ -33,6 +35,9 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - Topic move and split previews count only open PRs and list the merged and closed stack layers that go along.
 - `whats_on_me` marks merged and closed PRs inside open tiles, and `pr_context` finds PRs whatever the case of the owner and repo.
 - A topic name an agent suggests is refused above 80 characters instead of being cut without a word.
+- Later on the update pill hides it for a day once the bar is due. It used to snooze again with no visible change.
+- The title bar says "gh and claude need a fix" when both are broken, not only gh.
+- A topic move or split with only merged or closed PRs says "Move 3 merged or closed PRs …" instead of "Move 0 open PRs".
 - A note "covered by" a PR nobody has reviewed yet now says "(no review yet)" in the PR pane and in `pr_context`.
 - An agent clearing a note you already cleared is told you cleared it, and no "Replaced:" line is left under a cleared note.
 - The connect popover no longer calls the MCP server read-only: agents can leave notes and suggest topic changes.
