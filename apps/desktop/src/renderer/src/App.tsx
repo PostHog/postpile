@@ -48,6 +48,7 @@ import {
   resolveSelection,
   revealedFor,
   topicClickOutcome,
+  topicPickExpired,
   withSelectedTile,
   type KeptView,
   type UserPick,
@@ -267,6 +268,14 @@ export function App() {
   };
   // Once the clicked topic's tiles are in, the PR it shows is the user's pick; tiles still loading keep the click waiting.
   const topicClick = topicClickOutcome(clickedTopicId, pane === 'topic' ? activeTopicId : null, topic.data?.topic.id ?? null, selected);
+  // A topic click's pick ends once the pane shows another PR, so a search that comes and goes can't re-arm it.
+  // Declared before the click's effect: a click done in the same render sets the new pick last.
+  const pickExpired = topicPickExpired(userPick, selected);
+  useEffect(() => {
+    if (pickExpired) {
+      setUserPick(null);
+    }
+  }, [pickExpired]);
   useEffect(() => {
     if (!topicClick.done) {
       return;

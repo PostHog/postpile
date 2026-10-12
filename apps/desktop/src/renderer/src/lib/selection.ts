@@ -195,6 +195,17 @@ export function dwellPrKey(selected: { prKey: string | null; auto: boolean }, us
   return pickedByUser(selected, userPick) ? selected.prKey : null;
 }
 
+/**
+ * Whether a topic click's pick is over: the pane moved on to another PR (a
+ * search's first match, the next tile after a mark). The app could bring the
+ * PR back later (clearing the search) without a new click, so the pick must
+ * not wait for it. A pick from a tile or PR click stays, as its PR is the
+ * nav entry itself.
+ */
+export function topicPickExpired(userPick: UserPick | null, selected: { prKey: string | null }): boolean {
+  return userPick !== null && userPick.fromTopicClick && selected.prKey !== userPick.prKey;
+}
+
 /** What a topic click waiting for its tile comes to: nothing yet (`done` false), or done, with the PR to count as picked (null for none). */
 export interface TopicClickOutcome {
   done: boolean;

@@ -14,6 +14,7 @@ import {
   pickedByUser,
   resolveSelection,
   topicClickOutcome,
+  topicPickExpired,
   withSelectedTile,
   type KeptView,
   type UserPick,
@@ -321,7 +322,23 @@ describe("dwellPrKey: only the user's pick arms the open-read dwell", () => {
   });
 });
 
-describe('topicClickOutcome: a topic click picks the tile it opens on (2026-10-12)', () => {
+describe('topicPickExpired: a topic click picks once, not again when its PR comes back', () => {
+  it('ends a topic click pick once the pane shows another PR (a search first match)', () => {
+    expect(topicPickExpired(topicPick('o/r#1'), { prKey: 'o/r#2' })).toBe(true);
+    expect(topicPickExpired(topicPick('o/r#1'), { prKey: null })).toBe(true);
+  });
+
+  it('keeps it while its PR is on screen', () => {
+    expect(topicPickExpired(topicPick('o/r#1'), { prKey: 'o/r#1' })).toBe(false);
+  });
+
+  it('leaves tile picks and no pick alone', () => {
+    expect(topicPickExpired(tilePick('o/r#1'), { prKey: 'o/r#2' })).toBe(false);
+    expect(topicPickExpired(null, { prKey: 'o/r#2' })).toBe(false);
+  });
+});
+
+describe('topicClickOutcome:a topic click picks the tile it opens on (2026-10-12)', () => {
   const tiles = [tile('t1', ['o/r#1'], UNREAD), tile('t2', ['o/r#2'], UNREAD)];
 
   it('has nothing to do without a click', () => {
