@@ -657,8 +657,8 @@ export interface OpenedReadInput {
   pr: Pr | null;
   /** Every tile that holds the PR. */
   tiles: OpenedTile[];
-  /** A mark-read of this PR alone would leave it done: nothing asked of the user (`PrSummary.afterRead.done`). */
-  doneAfterRead: boolean;
+  /** A mark-read of this PR alone would leave nothing asked of the user (`PrSummary.afterRead.nothingAsked`), held open by their change request or done. */
+  nothingAskedAfterRead: boolean;
 }
 
 /**
@@ -679,8 +679,10 @@ function openedSnapshotCovers(thread: NotificationThread, prFetchedAt: IsoTime |
  * Whether opening the PR in PostPile's detail pane may mark it read on
  * GitHub, like a visit on github.com does, and handle it in PostPile, limited
  * to cases where that cannot hide a to-do (DESIGN.md "You already dealt with
- * it", part 3). Checked per PR since 2026-09-29: that PR done after a
- * mark-read, no tile holding it snoozed. An unread thread also needs a
+ * it", part 3). Checked per PR since 2026-09-29: nothing asked of the user
+ * on that PR after a mark-read (since 2026-10-12 also when their change
+ * request holds it open, so it stays out of done), no tile holding it
+ * snoozed. An unread thread also needs a
  * snapshot that showed its unread activity (`openedSnapshotCovers`).
  */
 export function openedReadCheck(input: OpenedReadInput): OpenedReadCheck {
@@ -693,7 +695,7 @@ export function openedReadCheck(input: OpenedReadInput): OpenedReadCheck {
   if (input.tiles.some((tile) => tile.snoozed)) {
     return { kind: 'skip', why: 'snoozed' };
   }
-  if (!input.doneAfterRead) {
+  if (!input.nothingAskedAfterRead) {
     return { kind: 'skip', why: 'asks_you' };
   }
   if (!input.thread.unread) {

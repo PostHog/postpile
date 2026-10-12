@@ -5,8 +5,8 @@ import { isMarkReadUndoToken, markReadNotice, moveWords, snoozeMessage } from '.
 const NONE: WhoseTurn = { kind: 'none', who: null, what: '', prKey: null };
 const REREVIEW: WhoseTurn = { kind: 'you', move: 're_review', who: null, what: 'pim addressed your changes: re-review', prKey: 'acme/app#1960' };
 
-const stillYours: TileAfterRead = { done: false, turn: REREVIEW };
-const doneAfter: TileAfterRead = { done: true, turn: NONE };
+const stillYours: TileAfterRead = { done: false, nothingAsked: false, turn: REREVIEW };
+const doneAfter: TileAfterRead = { done: true, nothingAsked: true, turn: NONE };
 
 describe('moveWords', () => {
   it('keeps just the move of an answer to your changes', () => {
@@ -37,7 +37,7 @@ describe('snoozeMessage', () => {
 describe('markReadNotice', () => {
   it('names the PR marked from the pane and drops the mention that was just seen', () => {
     const mention: WhoseTurn = { kind: 'you', move: 'review', who: null, what: 'Review, lyra mentioned you', prKey: 'acme/app#1907' };
-    expect(markReadNotice({ message: 'x', ok: true, writesOn: true, afterRead: { done: false, turn: mention }, prKey: 'acme/app#1907' }).message).toBe(
+    expect(markReadNotice({ message: 'x', ok: true, writesOn: true, afterRead: { done: false, nothingAsked: false, turn: mention }, prKey: 'acme/app#1907' }).message).toBe(
       'Marked #1907 read. Still your move: review.',
     );
   });

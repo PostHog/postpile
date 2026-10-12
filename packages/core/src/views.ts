@@ -217,7 +217,8 @@ export interface PrSummary {
   /** The PR's notification thread is unread on GitHub: its tile is unread, and the PR keeps a mark button even when done. */
   unreadOnGitHub: boolean;
   /**
-   * Nothing is asked of the viewer on this PR (`isPrDone`). A tile is done
+   * Nothing is asked of the viewer on this PR and their change request does
+   * not hold it open (`isPrDone`). A tile is done
    * when every tracked member is; the renderer dots the tracked members that
    * are not (DESIGN.md "Actions act on what you look at").
    */

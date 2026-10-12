@@ -1,7 +1,7 @@
 import { effectiveLoudness, isUnseenLoud, isUnseenMergeWithoutReview } from './loudness.ts';
 import { headlineClass, isAutomationEvent, pickHeadlineEvent } from './headline.ts';
 import { isTracked, provenanceFor } from './provenance.ts';
-import { isApprovedByViewer, reviewPending } from './review-request.ts';
+import { isApprovedByViewer, reviewPending, viewerRequestedChanges } from './review-request.ts';
 import { actedAfterSeeing } from './saw-before-acting.ts';
 import { snoozePhase } from './snooze.ts';
 import { stackByPrKey } from './stacks.ts';
@@ -99,20 +99,22 @@ export function prKeyFromTileId(tileId: string): PrKey | null {
 }
 
 /**
- * A pinged PR is done only when nothing is asked of the viewer (2026-09-28):
- * merged or closed (but not while a merge without their review is unseen,
- * unless the glance says not theirs), or approved by them while whose turn is not theirs (on
- * any commit; a later push stays quiet, a later question or mention to them
- * is their move), or handled
- * (marked read) while whose turn is not theirs and no review is still
- * pending of them or their team. Marking read a PR that still waits on the
- * viewer's review makes it read, not done. Without a viewer, handled is
- * enough. Handled is also derived, never stored (2026-09-30): the viewer
- * acted after everyone else and had read what came before
- * (`actedAfterSeeing`, from `lastReadAt`, GitHub's read time of the
- * PR's thread).
+ * Nothing is asked of the viewer on a pinged PR (2026-09-28): merged or
+ * closed (but not while a merge without their review is unseen, unless the
+ * glance says not theirs), or approved by them while whose turn is not
+ * theirs (on any commit; a later push stays quiet, a later question or
+ * mention to them is their move), or handled (marked read) while whose turn
+ * is not theirs and no review is still pending of them or their team.
+ * Marking read a PR that still waits on the viewer's review makes it read,
+ * not done. Without a viewer, handled is enough. Handled is also derived,
+ * never stored (2026-09-30): the viewer acted after everyone else and had
+ * read what came before (`actedAfterSeeing`, from `lastReadAt`, GitHub's
+ * read time of the PR's thread).
+ *
+ * This is what a read may clear: the open-read dwell goes ahead when it
+ * holds after the read. Done is stricter (`isPrDone`).
  */
-export function isPrDone(
+export function nothingAskedOfViewer(
   pr: Pr,
   userState: UserPrState | null,
   viewer: Viewer | null = null,
@@ -139,6 +141,42 @@ export function isPrDone(
     return false;
   }
   return prWhoseTurn({ pr, events, userState, viewer, notYours }).kind !== 'you';
+}
+
+/**
+ * "Your change request holds the PR open" (2026-10-12): an open PR whose
+ * viewer's newest verdict asks for changes (`viewerRequestedChanges`, the
+ * same notion as the Changes you requested tier; a later comment review
+ * does not cover it) and that they have not approved since, in the app or
+ * on GitHub. It ends when their verdict changes (approved, or the review
+ * dismissed) or the PR is merged or closed. The glance's NOT_YOURS does not
+ * end it: the change request makes the PR theirs.
+ */
+export function changeRequestHoldsOpen(pr: Pr, userState: UserPrState | null, viewer: Viewer | null): boolean {
+  if (viewer === null || pr.state !== 'OPEN') {
+    return false;
+  }
+  return viewerRequestedChanges(pr, viewer) && !isApprovedByViewer(pr, userState, viewer.login);
+}
+
+/**
+ * A pinged PR is done when nothing is asked of the viewer
+ * (`nothingAskedOfViewer`) and their change request does not hold it open
+ * (`changeRequestHoldsOpen`): a PR that waits on its author to address the
+ * viewer's changes never folds under Dealt with, read or not.
+ */
+export function isPrDone(
+  pr: Pr,
+  userState: UserPrState | null,
+  viewer: Viewer | null = null,
+  events: PrEvent[] = [],
+  notYours = false,
+  lastReadAt: IsoTime | null = null,
+): boolean {
+  if (changeRequestHoldsOpen(pr, userState, viewer)) {
+    return false;
+  }
+  return nothingAskedOfViewer(pr, userState, viewer, events, notYours, lastReadAt);
 }
 
 function reasonOf(input: TileStateInput, prKey: PrKey, event: PrEvent): UnreadReason {

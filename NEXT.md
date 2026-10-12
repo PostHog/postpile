@@ -1749,6 +1749,20 @@ the app meanwhile.
 
 ## Decided
 
+- **Your change request holds the PR open** (2026-10-12, owner, after a
+  topic folded every tile under Dealt with, including an open PR whose
+  change request the author had not addressed): an open PR whose newest
+  verdict of yours asks for changes is never done (core
+  `changeRequestHoldsOpen` inside `isPrDone`); its tile stays in Open. It
+  ends only when your verdict changes (approve, dismissed) or the PR is
+  merged or closed; NOT_YOURS does not end it, Snooze still parks it. Reads
+  are split from done: `nothingAskedOfViewer` /
+  `TileAfterRead.nothingAsked` drives the open-read dwell
+  (`OpenedReadInput.nothingAskedAfterRead`), so a held PR waiting on the
+  author still gets its thread marked read; its button says "Mark read",
+  never "Done for now". BOARD-A-14's `holdingPrLine` stays for read team
+  mentions and not-yours review requests. DESIGN.md "Tile state" (done),
+  "Changes you requested", "You already dealt with it" part 3.
 - **Owner answers, board and copy** (2026-10-11, bug hunt wave 2, group B):
   - Sidebar "Inbox" is now **Suggestions** (OPS-A-15): the row, pane title,
     cards, MCP descriptions and docs. Code names keep "inbox"; "inbox" in

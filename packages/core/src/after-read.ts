@@ -6,14 +6,20 @@
 // the action does.
 import { isTracked } from './provenance.ts';
 import { applyReadPlan, planRead, prReadScope, tileReadScope } from './read-plan.ts';
-import { isPrDone } from './tiles.ts';
+import { isPrDone, nothingAskedOfViewer } from './tiles.ts';
 import type { IsoTime, Pr, PrEvent, PrKey, Tile, UserPrState, Viewer } from './types.ts';
 import { NO_TURN, prWhoseTurn, whoseTurn, type WhoseTurn } from './whose-turn.ts';
 
 /** What a mark-read would leave, for a whole tile (`tileAfterMarkRead`) or one PR (`prAfterMarkRead`). */
 export interface TileAfterRead {
-  /** Every pinged PR would be done (for one PR: that PR would be): nothing is asked of the viewer any more. */
+  /** Every pinged PR would be done (for one PR: that PR would be): "Done for now" says so. */
   done: boolean;
+  /**
+   * Nothing would be asked of the viewer (`nothingAskedOfViewer`), even when
+   * their change request keeps the PR open and so not done (2026-10-12):
+   * the open-read dwell may mark it read. Always true when `done` is.
+   */
+  nothingAsked: boolean;
   /** Whose move it would be. A team mention stops asking once read; a review or an answer to your changes does not. */
   turn: WhoseTurn;
 }
@@ -37,22 +43,26 @@ function tileAfterRead(input: AfterReadInput): { events: Map<PrKey, PrEvent[]>; 
 }
 
 /**
- * The tile after a mark-read: done only when nothing is asked of the viewer
- * any more (`isPrDone` for every pinged PR), and whose move it would be.
- * "Done for now" is honest only when `done` is true.
+ * The tile after a mark-read: done only when every pinged PR is (`isPrDone`),
+ * nothing asked when no pinged PR asks anything (`nothingAskedOfViewer`),
+ * and whose move it would be. "Done for now" is honest only when `done` is
+ * true.
  */
 export function tileAfterMarkRead(input: AfterReadInput): TileAfterRead {
   const { events, userStates } = tileAfterRead(input);
   const tracked = input.tile.members.filter((m) => isTracked(m.provenance));
-  const done = tracked.every((member) => {
+  let done = true;
+  let nothingAsked = true;
+  for (const member of tracked) {
     const pr = input.prs.get(member.prKey);
-    if (!pr) {
-      return false;
-    }
-    return isPrDone(pr, userStates.get(member.prKey) ?? null, input.viewer, events.get(member.prKey) ?? [], input.notYours?.has(member.prKey) ?? false);
-  });
+    const userState = userStates.get(member.prKey) ?? null;
+    const prEvents = events.get(member.prKey) ?? [];
+    const notYours = input.notYours?.has(member.prKey) ?? false;
+    done &&= pr !== undefined && isPrDone(pr, userState, input.viewer, prEvents, notYours);
+    nothingAsked &&= pr !== undefined && nothingAskedOfViewer(pr, userState, input.viewer, prEvents, notYours);
+  }
   const turn = whoseTurn({ tile: input.tile, prs: input.prs, events, userStates, viewer: input.viewer, notYours: input.notYours });
-  return { done, turn };
+  return { done, nothingAsked, turn };
 }
 
 export interface PrAfterReadInput {
@@ -72,8 +82,9 @@ export interface PrAfterReadInput {
 /**
  * One PR after a mark-read of that PR alone (the detail pane's Mark read /
  * Done for now, 2026-09-29): its events seen, handled when tracked. `done` is
- * `isPrDone` over that, `turn` the PR's own whose turn. The detail pane says
- * "Done for now" only when `done` is true.
+ * `isPrDone` over that, `nothingAsked` is `nothingAskedOfViewer`, `turn` the
+ * PR's own whose turn. The detail pane says "Done for now" only when `done`
+ * is true; the open-read dwell reads `nothingAsked`.
  */
 export function prAfterMarkRead(input: PrAfterReadInput): TileAfterRead {
   const key = input.pr.key;
@@ -86,6 +97,7 @@ export function prAfterMarkRead(input: PrAfterReadInput): TileAfterRead {
   const events = after.events.get(key) ?? [];
   const userState = after.userStates.get(key) ?? null;
   const done = input.tracked && isPrDone(input.pr, userState, input.viewer, events, input.notYours);
+  const nothingAsked = input.tracked && nothingAskedOfViewer(input.pr, userState, input.viewer, events, input.notYours);
   const turn = input.viewer ? prWhoseTurn({ pr: input.pr, events, userState, viewer: input.viewer, notYours: input.notYours, layersBelow: input.layersBelow }) : NO_TURN;
-  return { done, turn };
+  return { done, nothingAsked, turn };
 }

@@ -492,14 +492,14 @@ export function expectedActedAfterSeeing(input: { pr: Pr; events: PrEvent[]; vie
 }
 
 /**
- * Done (2026-09-28): a merged or closed PR once its merge without the
- * viewer's review is seen (or the glance says not theirs); an open PR only
- * when approved by the viewer, or handled (marked read, or acted on after
- * reading everything a person said: `expectedActedAfterSeeing`) with no
- * review still owed, and in both cases not the viewer's move. Without a
+ * Nothing asked (2026-09-28): a merged or closed PR once its merge without
+ * the viewer's review is seen (or the glance says not theirs); an open PR
+ * only when approved by the viewer, or handled (marked read, or acted on
+ * after reading everything a person said: `expectedActedAfterSeeing`) with
+ * no review still owed, and in both cases not the viewer's move. Without a
  * viewer, approved in the app or marked read is enough.
  */
-export function expectedDone(input: Omit<TurnInput, 'viewer'> & { viewer: Viewer | null; lastReadAt: IsoTime | null }): boolean {
+export function expectedNothingAsked(input: Omit<TurnInput, 'viewer'> & { viewer: Viewer | null; lastReadAt: IsoTime | null }): boolean {
   const { pr, viewer, userState } = input;
   if (pr.state !== 'OPEN') {
     return input.notYours || !input.events.some(isUnseenMergeWithoutViewer);
@@ -516,6 +516,21 @@ export function expectedDone(input: Omit<TurnInput, 'viewer'> & { viewer: Viewer
     return false;
   }
   return !reviewStillOwed(pr, viewer, userState, input.notYours) && notYourMove();
+}
+
+/**
+ * Held open by the viewer's change request (2026-10-12): an open PR whose
+ * viewer's newest verdict asks for changes and that they have not approved
+ * since. Whatever the glance says.
+ */
+export function expectedChangeRequestHold(input: { pr: Pr; viewer: Viewer | null; userState: UserPrState | null }): boolean {
+  const { pr, viewer } = input;
+  return viewer !== null && pr.state === 'OPEN' && viewerAskedForChanges(pr, viewer) && !viewerApproved(pr, viewer, input.userState);
+}
+
+/** Done: nothing asked (`expectedNothingAsked`) and not held open by the viewer's change request. */
+export function expectedDone(input: Omit<TurnInput, 'viewer'> & { viewer: Viewer | null; lastReadAt: IsoTime | null }): boolean {
+  return !expectedChangeRequestHold(input) && expectedNothingAsked(input);
 }
 
 // ---------------------------------------------------------------------------
@@ -1145,11 +1160,12 @@ export function expectedRequestGoneRead(input: QuietReadSpecInput): RequestGoneR
 
 /**
  * Opening a PR in PostPile reads it only where that hides nothing: it has
- * a thread and a tile, no tile holding it is snoozed, a mark-read leaves it
- * done; an unread thread also needs a snapshot fetched at or after its
+ * a thread and a tile, no tile holding it is snoozed, a mark-read leaves
+ * nothing asked of the viewer (done, or held open by their change
+ * request); an unread thread also needs a snapshot fetched at or after its
  * last update that our caps cut nothing from since the read.
  */
-export function expectedOpenedRead(input: { thread: NotificationThread | null; prFetchedAt: IsoTime | null; pr: Pr | null; tilesSnoozed: boolean[]; doneAfterRead: boolean }): OpenedReadCheck {
+export function expectedOpenedRead(input: { thread: NotificationThread | null; prFetchedAt: IsoTime | null; pr: Pr | null; tilesSnoozed: boolean[]; nothingAskedAfterRead: boolean }): OpenedReadCheck {
   if (input.thread === null) {
     return { kind: 'skip', why: 'no_thread' };
   }
@@ -1159,7 +1175,7 @@ export function expectedOpenedRead(input: { thread: NotificationThread | null; p
   if (input.tilesSnoozed.some((snoozed) => snoozed)) {
     return { kind: 'skip', why: 'snoozed' };
   }
-  if (!input.doneAfterRead) {
+  if (!input.nothingAskedAfterRead) {
     return { kind: 'skip', why: 'asks_you' };
   }
   if (!input.thread.unread) {
