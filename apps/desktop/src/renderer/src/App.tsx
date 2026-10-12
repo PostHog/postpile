@@ -38,7 +38,21 @@ import type { SetupStepKey } from './lib/setup.ts';
 import { noSelectionText } from './lib/empty-states.ts';
 import { applyQueueFilter, filterCounts, type QueueFilter } from './lib/queues.ts';
 import { filterTopics, searchFilter, visibleTopic } from './lib/search.ts';
-import { dwellPrKey, filterKey, keptFor, listedTopics, nextKept, resolveSelection, revealedFor, withSelectedTile, type KeptView } from './lib/selection.ts';
+import {
+  dwellPrKey,
+  filterKey,
+  keptFor,
+  listedTopics,
+  nextKept,
+  pickedByUser,
+  resolveSelection,
+  revealedFor,
+  topicClickOutcome,
+  topicPickExpired,
+  withSelectedTile,
+  type KeptView,
+  type UserPick,
+} from './lib/selection.ts';
 import { clampPaneWidth, DETAIL_MIN_WIDTH, paneColumns, resolvedColumnWidths, type ResizablePane } from './lib/pane-widths.ts';
 import { tileOpenedProps } from './lib/tile-telemetry.ts';
 import { prNumber } from './lib/tiles.ts';
@@ -120,18 +134,23 @@ export function App() {
   // Navigation is a back / forward history; the current entry is what the user picked.
   const nav = useNavHistory(new Set([...items.map((item) => item.topic.id), ...finishedIds]));
   // The PR the user picked with their last navigation (a tile or PR click, a ping click, a jump from a
-  // list), else null. Only that one arms the open-read dwell; a tile the app picked never does (2026-10-10).
-  const [userPick, setUserPick] = useState<string | null>(null);
+  // list, a topic click once its tile is known), else null. Only that one arms the open-read dwell; a tile
+  // the app picked on its own never does (2026-10-10, topic clicks since 2026-10-12).
+  const [userPick, setUserPick] = useState<UserPick | null>(null);
+  // The topic the user just clicked, until the tile it opens on is known (`topicClickOutcome`).
+  const [clickedTopicId, setClickedTopicId] = useState<string | null>(null);
   // Back and forward pick another entry like any pick: the agent pane closes first, as in go().
   // They are not a fresh pick of a PR, so they arm no dwell.
   const back = () => {
     setAgentRequest(null);
     setUserPick(null);
+    setClickedTopicId(null);
     nav.back();
   };
   const forward = () => {
     setAgentRequest(null);
     setUserPick(null);
+    setClickedTopicId(null);
     nav.forward();
   };
   useNavShortcuts(back, forward);
@@ -190,8 +209,9 @@ export function App() {
   const go = (next: NavEntry) => {
     // Any pick hands the right pane back to the PR.
     setAgentRequest(null);
-    // A navigation is not a pick of a PR; openByUser sets it again right after.
+    // A navigation is not a pick of a PR; openByUser and openTopicByUser set it again right after.
     setUserPick(null);
+    setClickedTopicId(null);
     if (!sameView(shown, next)) {
       nav.navigate(next);
     } else if (selected.auto && next.pane === 'topic' && next.tileId !== null) {
@@ -206,7 +226,7 @@ export function App() {
   // The user opened this tile and PR themselves: go there, and let the dwell count it.
   const openByUser = (next: NavEntry) => {
     go(next);
-    setUserPick(next.prKey);
+    setUserPick(next.prKey === null ? null : { prKey: next.prKey, fromTopicClick: false });
     setUserOpens((count) => count + 1);
   };
   // Write the fallbacks into the current entry, so a reorder or refetch does
@@ -233,6 +253,38 @@ export function App() {
     openByUser({ pane: 'topic', topicId: activeTopicId, tileId, prKey });
     setVisits((count) => count + 1);
   };
+  // A click on a topic (a sidebar row, the Archive drawer, a topic link in Instructions) picks the tile
+  // it opens on (2026-10-12): it arms the dwell and counts as a visit, like a click on that tile.
+  // Re-clicking the open topic counts as picking what it shows again, like re-clicking the open tile.
+  const openTopicByUser = (topicId: string) => {
+    go({ pane: 'topic', topicId, tileId: null, prKey: null });
+    setClickedTopicId(topicId);
+    setUserOpens((count) => count + 1);
+    setVisits((count) => count + 1);
+    if (pane === 'topic' && topicId === activeTopicId && selected.prKey !== null) {
+      // Set now, not once the click is done: clearing it in between would end the open, its Undo included.
+      setUserPick({ prKey: selected.prKey, fromTopicClick: true });
+    }
+  };
+  // Once the clicked topic's tiles are in, the PR it shows is the user's pick; tiles still loading keep the click waiting.
+  const topicClick = topicClickOutcome(clickedTopicId, pane === 'topic' ? activeTopicId : null, topic.data?.topic.id ?? null, selected);
+  // A topic click's pick ends once the pane shows another PR, so a search that comes and goes can't re-arm it.
+  // Declared before the click's effect: a click done in the same render sets the new pick last.
+  const pickExpired = topicPickExpired(userPick, selected);
+  useEffect(() => {
+    if (pickExpired) {
+      setUserPick(null);
+    }
+  }, [pickExpired]);
+  useEffect(() => {
+    if (!topicClick.done) {
+      return;
+    }
+    setClickedTopicId(null);
+    if (topicClick.prKey !== null) {
+      setUserPick({ prKey: topicClick.prKey, fromTopicClick: true });
+    }
+  }, [topicClick.done, topicClick.prKey]);
   const inboxCount = (proposals.data?.topics.length ?? 0) + (proposals.data?.rules.length ?? 0);
 
   // A topic counts as seen when the user leaves it: picks another topic, the
@@ -295,7 +347,7 @@ export function App() {
   if (pane === 'inbox') {
     main = <InboxPane proposals={proposals.data} topics={items} error={proposals.error?.message ?? null} />;
   } else if (pane === 'instructions') {
-    main = <InstructionsPane onOpenTopic={(topicId) => go({ pane: 'topic', topicId, tileId: null, prKey: null })} onRunSetup={openSetup} />;
+    main = <InstructionsPane onOpenTopic={openTopicByUser} onRunSetup={openSetup} />;
   } else if (pane === 'notifications') {
     // A jump goes through go(), so back returns to this list.
     main = <NotificationsPane onOpenTile={(pick) => openByUser({ pane: 'topic', topicId: pick.topicId, tileId: pick.tileId, prKey: pick.prKey })} />;
@@ -370,8 +422,9 @@ export function App() {
   // A PR open in the detail pane counts like a visit on github.com when nothing is asked of the user (DESIGN "You already dealt with it").
   const detailShown = !showSetup && !wideList && !agentShown;
   const openedRead = useOpenedRead(detailShown ? selected.view : null, detailShown ? dwellPrKey(selected, userPick) : null, userOpens);
-  // The user's pick clears its Mac pings from Notification Center; a tile the app picked does not.
-  useTileVisit(detailShown && !selected.auto ? selected.view : null, visits);
+  // The user's pick clears its Mac pings from Notification Center, the tile a topic click opened on
+  // included; a tile the app picked on its own does not.
+  useTileVisit(detailShown && (!selected.auto || pickedByUser(selected, userPick)) ? selected.view : null, visits);
 
   const tellAgent = {
     available: selected.view !== null,
@@ -414,7 +467,7 @@ export function App() {
                 if (item) {
                   sendTelemetry('topic_opened', { section: item.section });
                 }
-                go({ pane: 'topic', topicId, tileId: null, prKey: null });
+                openTopicByUser(topicId);
               }}
               inboxCount={inboxCount}
               inboxOpen={pane === 'inbox'}

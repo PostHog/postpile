@@ -38,7 +38,7 @@ function actingKeys(prKey: PrKey): string[] {
  * when it stayed open for OPENED_READ_DELAY_MS while the window was visible
  * and `opensMarkRead` says so ("Marked when the dwell ends", 2026-10-01).
  * `prKey` is the user's own pick only: the caller passes null for a tile the
- * app picked (2026-10-10). The dwell waits while a menu is open.
+ * app picked (2026-10-10), except the one a topic click opened on (2026-10-12). The dwell waits while a menu is open.
  * The mark goes out when the dwell ends, while the PR is still on screen; the
  * tile and its topic row keep their place until the selection moves
  * (`useHeldPlace`). Once per open (`OpenedReadTimer`): re-renders and

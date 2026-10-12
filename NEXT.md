@@ -1763,6 +1763,17 @@ the app meanwhile.
   never "Done for now". BOARD-A-14's `holdingPrLine` stays for read team
   mentions and not-yours review requests. DESIGN.md "Tile state" (done),
   "Changes you requested", "You already dealt with it" part 3.
+- **A topic click picks the tile it opens on** (2026-10-12, owner; revises
+  Q1 from 2026-10-10; DESIGN.md "You already dealt with it" part 3, "Marked
+  when the dwell ends"): a click on a topic (sidebar row, Archive drawer, a
+  topic link in Instructions) arms the open-read dwell and the Mac ping
+  visit for the tile and PR the topic opens on, like a click on that tile.
+  It waits for the topic's tiles to load and never carries over to a later
+  app pick there. Clicking the open topic again counts like re-clicking the
+  open tile. Search's first match, back and forward, the next tile after one
+  left, an app pick turned user-like and the agent toast's topic still never
+  mark. Why: skimming topics and dwelling on a one-tile topic (say, a merged
+  PR) left everything unread and had to be marked by hand.
 - **Owner answers, board and copy** (2026-10-11, bug hunt wave 2, group B):
   - Sidebar "Inbox" is now **Suggestions** (OPS-A-15): the row, pane title,
     cards, MCP descriptions and docs. Code names keep "inbox"; "inbox" in
@@ -1877,7 +1888,8 @@ the app meanwhile.
   (BOARD-A-10), and the "Merged without your review" rules 1–3 and "Team
   roles" were reworded to match the code (Q2: behaviour stays).
 
-- **Only your own pick marks a PR read on open** (2026-10-10, owner
+- **Only your own pick marks a PR read on open** (revised 2026-10-12, see
+  "A topic click picks the tile it opens on"; 2026-10-10, owner
   decision Q1 after the blind bug hunt, 11 testers; DESIGN.md "You already
   dealt with it" part 3, "Marked when the dwell ends"): the dwell runs only
   for a tile or PR the user clicked (also the app-picked one), a ping click

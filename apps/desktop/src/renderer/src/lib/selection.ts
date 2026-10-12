@@ -166,15 +166,76 @@ export function withSelectedTile(tileIds: Set<string> | null, selectedTileId: st
 }
 
 /**
- * The PR the open-read dwell may run for (2026-10-10): the PR in the pane
- * when the user picked it with their last navigation (`userPick`), else
- * null. A tile the app picked (a topic opening, search's first match, the
- * next tile after one left) never arms it, also once it counts as the
- * user's pick for the grid after a group change.
+ * The PR the user picked with their last navigation. `fromTopicClick` is set
+ * when they clicked a topic and this is the PR it opened on (2026-10-12): that
+ * one counts as their pick even though the app chose the tile.
  */
-export function dwellPrKey(selected: { prKey: string | null; auto: boolean }, userPick: string | null): string | null {
-  if (selected.auto || selected.prKey === null || selected.prKey !== userPick) {
-    return null;
+export interface UserPick {
+  prKey: string;
+  fromTopicClick: boolean;
+}
+
+/**
+ * Whether the PR in the pane is the user's own pick (2026-10-10, revised
+ * 2026-10-12): they picked it with their last navigation (`userPick`), by a
+ * click on its tile or PR, or by a click on its topic that opened on it. A
+ * tile the app picked otherwise never counts: search's first match, the next
+ * tile after one left, back and forward, also once it counts as the user's
+ * pick for the grid after a group change.
+ */
+export function pickedByUser(selected: { prKey: string | null; auto: boolean }, userPick: UserPick | null): boolean {
+  if (userPick === null || selected.prKey === null || selected.prKey !== userPick.prKey) {
+    return false;
   }
-  return selected.prKey;
+  return !selected.auto || userPick.fromTopicClick;
+}
+
+/** The PR the open-read dwell may run for: the PR in the pane when the user picked it (`pickedByUser`), else null. */
+export function dwellPrKey(selected: { prKey: string | null; auto: boolean }, userPick: UserPick | null): string | null {
+  return pickedByUser(selected, userPick) ? selected.prKey : null;
+}
+
+/**
+ * Whether a topic click's pick is over: the pane moved on to another PR (a
+ * search's first match, the next tile after a mark). The app could bring the
+ * PR back later (clearing the search) without a new click, so the pick must
+ * not wait for it. A pick from a tile or PR click stays, as its PR is the
+ * nav entry itself.
+ */
+export function topicPickExpired(userPick: UserPick | null, selected: { prKey: string | null }): boolean {
+  return userPick !== null && userPick.fromTopicClick && selected.prKey !== userPick.prKey;
+}
+
+/** What a topic click waiting for its tile comes to: nothing yet (`done` false), or done, with the PR to count as picked (null for none). */
+export interface TopicClickOutcome {
+  done: boolean;
+  prKey: string | null;
+}
+
+/**
+ * A click on a topic picks the tile and PR the topic opens on (2026-10-12).
+ * While the clicked topic's tiles load there is nothing to pick yet, so the
+ * click waits; once they are in, the PR shown then is the pick (none when the
+ * topic opens on no tile). It never carries over to a later pick by the app
+ * in that topic. When another topic shows instead (a filter's first match, an
+ * archived topic under a filter) or another pane, the click comes to nothing.
+ * `shownTopicId` is null outside the topic pane; `loadedTopicId` is the topic
+ * whose tiles `selected` was resolved from.
+ */
+export function topicClickOutcome(
+  clickedTopicId: string | null,
+  shownTopicId: string | null,
+  loadedTopicId: string | null,
+  selected: { prKey: string | null },
+): TopicClickOutcome {
+  if (clickedTopicId === null) {
+    return { done: false, prKey: null };
+  }
+  if (shownTopicId !== clickedTopicId) {
+    return { done: true, prKey: null };
+  }
+  if (loadedTopicId !== clickedTopicId) {
+    return { done: false, prKey: null };
+  }
+  return { done: true, prKey: selected.prKey };
 }

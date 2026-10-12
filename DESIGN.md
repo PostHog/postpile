@@ -3289,7 +3289,8 @@ happened when it did. Chosen from a clickable mockup:
   open. The dwell still needs the window visible and focused (hidden during
   it, it starts over); after it, hiding or leaving the window changes
   nothing. Only the user's own pick starts a dwell (2026-10-10, see "You
-  already dealt with it" part 3).
+  already dealt with it" part 3); a click on a topic counts as picking the
+  tile it opens on (2026-10-12).
 - When no mark is wanted as the dwell ends (writes locked, an ask, a stale
   snapshot), the open does not wait for one to become wanted by itself
   (2026-10-10). Unlocking writes, "Discard" in the lock popover (which also
@@ -5219,7 +5220,10 @@ avatars and filters", QueuesB2).
   ("Pick a tile to see it."). A tile the app picked is not the user's pick:
   it is not written into history, and it never marks read on open, also
   while a search shows its first match (2026-10-10, "You already dealt with
-  it" part 3); a click on it makes it the user's pick. When an app-picked tile changes group
+  it" part 3); a click on it makes it the user's pick. The one exception is
+  the tile a click on its topic opens on: for the dwell and Mac pings it
+  counts as the user's pick (2026-10-12), though it still is not written
+  into history. When an app-picked tile changes group
   while it is shown (read or done through a sync, the move-on mark), it
   stays in the pane and counts as the user's pick from then on, so the
   grid keeps it too: pane and grid never disagree, and it drops out once
@@ -6651,13 +6655,24 @@ nobody ("Bot talk leaves agent work" › Bot talk answers nobody).
      (2026-10-10, owner decision Q1, replaces "the first tile the app shows by
      itself counts too: it is on screen"): a click on a tile or one of its PR
      rows (also on the tile the app picked), a Mac ping click, a jump from
-     Notifications or Handled quietly. A tile the app picks by itself (a
-     topic opening, search's first match, the next tile after one left, an
-     app pick that turned user-like after a group change) never marks; nor
-     do back and forward, which show an earlier pick but are not a new one.
-     Why: 11 testers of the 2026-10 bug hunt read the auto mark as "looking
-     at a topic marked things read"; it matches `useTileVisit`, which never
-     counted app picks for Mac pings. Renderer `dwellPrKey`
+     Notifications or Handled quietly, and since 2026-10-12 a click on a
+     topic (a sidebar row, the Archive drawer, a topic link in Instructions),
+     which picks the tile and PR the topic opens on. That pick waits while
+     the topic's tiles load and applies once they are in; a topic that opens
+     on no tile picks nothing. Clicking the open topic again counts like
+     clicking the open tile again: an open that marked nothing starts over, a
+     mark keeps its Undo. A tile the app picks by itself otherwise (search's
+     first match when a filter moves the view, the next tile after one left,
+     an app pick that turned user-like after a group change, a topic opened
+     some other way, such as the agent toast) never marks; nor do back and
+     forward, which show an earlier pick but are not a new one. A topic
+     click never carries over to a later app pick in that topic. Why (Q1):
+     11 testers of the 2026-10 bug hunt read the auto mark as "looking at a
+     topic marked things read". Why topic clicks count again (owner,
+     2026-10-12): skimming topics by clicking through the sidebar and
+     dwelling on a one-tile topic is a deliberate look, and without the mark
+     each one had to be marked by hand. `useTileVisit` follows the same
+     rule for Mac pings. Renderer `dwellPrKey` and `topicClickOutcome`
      (`lib/selection.ts`). One request per open; re-renders and refetches of
      the same PR send nothing.
    - The renderer asks only when the opened PR's `afterRead.done`, the
@@ -7340,7 +7355,8 @@ teammate even".
   topic when the list does not hold it). It holds while the user stays in
   that topic under the same filters.
 - Owner request: opening a tile in the app (a click on the tile or one of
-  its PRs, a ping click; not a tile the app picked on its own) takes that
+  its PRs, a ping click, a topic click for the tile it opens on since
+  2026-10-12; not a tile the app picked on its own) takes that
   tile's pings, and only those, out of Notification Center. The renderer
   sends the tile's PR keys over `postpile:tile-visited` (preload
   `tileVisited`); `PingShelf.closeVisited` closes every ping about any of
