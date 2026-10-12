@@ -306,7 +306,12 @@ with agent, Recheck): while the agent is off or paused, disable it with
   (2026-10-01, DESIGN.md "Marked when the dwell ends").
   Since 2026-10-10: `App.tsx` passes only the user's own pick
   (`dwellPrKey` in `lib/selection.ts`, from `userPick`, which every `go()`
-  clears and `openByUser` sets), never an app-picked tile. A mark that turns
+  clears and `openByUser` sets), never an app-picked tile. Since 2026-10-12
+  a topic click (`openTopicByUser`) counts as picking the tile it opens on:
+  it waits in `clickedTopicId` until `topicClickOutcome` says the topic's
+  tiles are in, then sets `userPick` with `fromTopicClick`. Open a topic
+  for the user through `openTopicByUser`, not a bare `go()`; `useTileVisit`
+  follows the same rule (`pickedByUser`). A mark that turns
   wanted after the dwell fires only after `OpenedReadTimer.userActed()`
   (the hook calls it while the pane's Approve, comment review or Remove
   team is busy). Any open `Menu` holds the dwell (`lib/open-menus.ts`):

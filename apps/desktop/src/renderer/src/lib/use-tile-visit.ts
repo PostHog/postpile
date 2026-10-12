@@ -5,8 +5,9 @@ import type { TileView } from '@postpile/core';
  * Tells the desktop app which tile the user opened, so its Mac pings leave
  * Notification Center (2026-10-01). Main does the matching by PR key; this
  * only says what is open. The caller passes the user's pick (a click on the
- * tile or one of its PRs, a ping click), not a tile the app picked on its
- * own: that one can change while nobody looks. `visits` grows with every
+ * tile or one of its PRs, a ping click, a topic click for the tile it opens
+ * on), not a tile the app picked on its own: that one can change while
+ * nobody looks. `visits` grows with every
  * explicit open, so opening the tile that is already open tells it again.
  */
 export function useTileVisit(view: TileView | null, visits: number): void {

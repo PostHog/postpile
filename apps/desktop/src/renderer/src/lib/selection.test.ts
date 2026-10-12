@@ -4,7 +4,21 @@ import { at, NO_OPENED_READ, NO_PR_FACTS, withOffers } from '@postpile/core/fixt
 import type { NavEntry } from './history.ts';
 import { applyQueueFilter } from './queues.ts';
 import { visibleTopic } from './search.ts';
-import { autoTile, dwellPrKey, filterKey, keptFor, listedTopics, nextKept, resolveSelection, withSelectedTile, type KeptView } from './selection.ts';
+import {
+  autoTile,
+  dwellPrKey,
+  filterKey,
+  keptFor,
+  listedTopics,
+  nextKept,
+  pickedByUser,
+  resolveSelection,
+  topicClickOutcome,
+  topicPickExpired,
+  withSelectedTile,
+  type KeptView,
+  type UserPick,
+} from './selection.ts';
 
 /** A topic with `mine` open PRs of the viewer's. */
 function item(id: string, mine: number): TopicListItem {
@@ -231,19 +245,29 @@ describe('autoTile and the auto selection', () => {
   });
 });
 
+/** The user's pick by a click on a tile or PR. */
+function tilePick(prKey: string): UserPick {
+  return { prKey, fromTopicClick: false };
+}
+
+/** The user's pick by a click on a topic, once the topic opened on `prKey`. */
+function topicPick(prKey: string): UserPick {
+  return { prKey, fromTopicClick: true };
+}
+
 describe("dwellPrKey: only the user's pick arms the open-read dwell", () => {
   const tiles = [tile('t1', ['o/r#1'], UNREAD), tile('t2', ['o/r#2'], UNREAD)];
 
   it("arms for the PR the user picked", () => {
     const selected = resolveSelection(entry('t', 't2', 'o/r#2'), tiles, tiles, null, null);
-    expect(dwellPrKey(selected, 'o/r#2')).toBe('o/r#2');
+    expect(dwellPrKey(selected, tilePick('o/r#2'))).toBe('o/r#2');
   });
 
   it('never arms for the tile the app picks when a topic opens', () => {
     const selected = resolveSelection(entry('t'), tiles, tiles, null, null);
     expect(dwellPrKey(selected, null)).toBeNull();
     // Even when the user had picked that PR before and navigated away since.
-    expect(dwellPrKey(selected, 'o/r#1')).toBeNull();
+    expect(dwellPrKey(selected, tilePick('o/r#1'))).toBeNull();
   });
 
   it("never arms for search's first match, also for a half-typed query (BOARD-A-02)", () => {
@@ -256,14 +280,14 @@ describe("dwellPrKey: only the user's pick arms the open-read dwell", () => {
   it("arms once the user clicks a search result", () => {
     const matching = [tiles[1]!];
     const selected = resolveSelection(entry('t', 't2', 'o/r#2'), matching, tiles, new Set(['o/r#2']), null);
-    expect(dwellPrKey(selected, 'o/r#2')).toBe('o/r#2');
+    expect(dwellPrKey(selected, tilePick('o/r#2'))).toBe('o/r#2');
   });
 
   it('never arms for the next tile the app picks after the picked one left', () => {
     const left = [tiles[0]!];
     const selected = resolveSelection(entry('t', 't2', 'o/r#2'), left, left, null, null);
     expect(selected.view?.tile.id).toBe('t1');
-    expect(dwellPrKey(selected, 'o/r#2')).toBeNull();
+    expect(dwellPrKey(selected, tilePick('o/r#2'))).toBeNull();
   });
 
   it('never arms for an app pick that turned user-like after a group change while shown', () => {
@@ -272,5 +296,86 @@ describe("dwellPrKey: only the user's pick arms the open-read dwell", () => {
     const selected = resolveSelection(entry('t'), read, read, null, kept);
     expect(selected.auto).toBe(false);
     expect(dwellPrKey(selected, null)).toBeNull();
+  });
+
+  it('arms for the tile a topic click opened on, the app-picked tile included (2026-10-12)', () => {
+    const selected = resolveSelection(entry('t'), tiles, tiles, null, null);
+    expect([selected.view?.tile.id, selected.auto]).toEqual(['t1', true]);
+    expect(dwellPrKey(selected, topicPick('o/r#1'))).toBe('o/r#1');
+    expect(pickedByUser(selected, topicPick('o/r#1'))).toBe(true);
+  });
+
+  it('keeps the dwell when the tile a topic click opened on turns user-like after its mark', () => {
+    const kept = nextKept(null, filterKey(null, null), entry('t'), entry('t', 't1', 'o/r#1'), { group: 'unread' });
+    const read = [tile('t1', ['o/r#1'], DONE), tile('t2', ['o/r#2'], UNREAD)];
+    const selected = resolveSelection(entry('t'), read, read, null, kept);
+    expect([selected.view?.tile.id, selected.auto]).toEqual(['t1', false]);
+    expect(dwellPrKey(selected, topicPick('o/r#1'))).toBe('o/r#1');
+  });
+
+  it('never carries a topic click over to the next tile the app picks in that topic', () => {
+    const left = [tiles[1]!];
+    const selected = resolveSelection(entry('t'), left, left, null, null);
+    expect([selected.view?.tile.id, selected.auto]).toEqual(['t2', true]);
+    expect(dwellPrKey(selected, topicPick('o/r#1'))).toBeNull();
+    expect(pickedByUser(selected, topicPick('o/r#1'))).toBe(false);
+  });
+});
+
+describe('topicPickExpired: a topic click picks once, not again when its PR comes back', () => {
+  it('ends a topic click pick once the pane shows another PR (a search first match)', () => {
+    expect(topicPickExpired(topicPick('o/r#1'), { prKey: 'o/r#2' })).toBe(true);
+    expect(topicPickExpired(topicPick('o/r#1'), { prKey: null })).toBe(true);
+  });
+
+  it('keeps it while its PR is on screen', () => {
+    expect(topicPickExpired(topicPick('o/r#1'), { prKey: 'o/r#1' })).toBe(false);
+  });
+
+  it('leaves tile picks and no pick alone', () => {
+    expect(topicPickExpired(tilePick('o/r#1'), { prKey: 'o/r#2' })).toBe(false);
+    expect(topicPickExpired(null, { prKey: 'o/r#2' })).toBe(false);
+  });
+});
+
+describe('topicClickOutcome:a topic click picks the tile it opens on (2026-10-12)', () => {
+  const tiles = [tile('t1', ['o/r#1'], UNREAD), tile('t2', ['o/r#2'], UNREAD)];
+
+  it('has nothing to do without a click', () => {
+    const selected = resolveSelection(entry('t'), tiles, tiles, null, null);
+    expect(topicClickOutcome(null, 't', 't', selected)).toEqual({ done: false, prKey: null });
+  });
+
+  it('picks the PR the clicked topic opens on', () => {
+    const selected = resolveSelection(entry('t'), tiles, tiles, null, null);
+    expect(topicClickOutcome('t', 't', 't', selected)).toEqual({ done: true, prKey: 'o/r#1' });
+  });
+
+  it('waits while the clicked topic still loads, then picks its tile', () => {
+    const loading = resolveSelection(entry('t'), [], [], null, null);
+    expect(topicClickOutcome('t', 't', null, loading)).toEqual({ done: false, prKey: null });
+    // The previous topic's tiles never count for the clicked one.
+    const previous = resolveSelection(entry('t'), tiles, tiles, null, null);
+    expect(topicClickOutcome('t', 't', 'other', previous)).toEqual({ done: false, prKey: null });
+    expect(topicClickOutcome('t', 't', 't', previous)).toEqual({ done: true, prKey: 'o/r#1' });
+  });
+
+  it('picks the first matching tile while a search narrows the clicked topic', () => {
+    const matching = [tiles[1]!];
+    const selected = resolveSelection(entry('t'), matching, tiles, new Set(['o/r#2']), null);
+    expect(topicClickOutcome('t', 't', 't', selected)).toEqual({ done: true, prKey: 'o/r#2' });
+  });
+
+  it('comes to nothing when the topic opens on no tile, so a later app pick does not count', () => {
+    const quiet = [tile('t1', ['o/r#1'], DONE)];
+    const selected = resolveSelection(entry('t'), quiet, quiet, null, null);
+    expect(selected.view).toBeNull();
+    expect(topicClickOutcome('t', 't', 't', selected)).toEqual({ done: true, prKey: null });
+  });
+
+  it("comes to nothing when another topic shows instead (a filter's first match) or another pane", () => {
+    const selected = resolveSelection(entry('t'), tiles, tiles, null, null);
+    expect(topicClickOutcome('clicked', 't', 't', selected)).toEqual({ done: true, prKey: null });
+    expect(topicClickOutcome('t', null, 't', selected)).toEqual({ done: true, prKey: null });
   });
 });
