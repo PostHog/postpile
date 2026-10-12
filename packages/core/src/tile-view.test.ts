@@ -98,7 +98,7 @@ function row(number: number, overrides: Partial<PrSummary> = {}): PrSummary {
     pendingWrite: null,
     turn: { kind: 'none', who: null, what: '', prKey: null },
     facts: NO_PR_FACTS,
-    afterRead: { done: false, turn: { kind: 'none', who: null, what: '', prKey: null } },
+    afterRead: { done: false, nothingAsked: false, turn: { kind: 'none', who: null, what: '', prKey: null } },
     openedRead: NO_OPENED_READ,
     whatsNew: null,
     updatedAt: at(number),

@@ -36,7 +36,7 @@ function summary(number: number, overrides: Partial<PrSummary> = {}): PrSummary 
     pendingWrite: null,
     turn: REVIEW,
     facts: NO_PR_FACTS,
-    afterRead: { done: true, turn: NONE },
+    afterRead: { done: true, nothingAsked: true, turn: NONE },
     openedRead: NO_OPENED_READ,
     whatsNew: null,
     updatedAt: at(number),
@@ -58,7 +58,7 @@ function unreadTile(prs: PrSummary[]): TileView {
     people: [],
     turn: REVIEW,
     landableBelow: [],
-    afterRead: { done: true, turn: NONE },
+    afterRead: { done: true, nothingAsked: true, turn: NONE },
     pendingWrite: null,
     quietRepo: false,
     repoLabel: null,
@@ -67,7 +67,7 @@ function unreadTile(prs: PrSummary[]): TileView {
 
 describe('markedReadTile', () => {
   it('takes state and turn from afterRead and marks every row, a pulled-in layer only seen', () => {
-    const layer = summary(2, { provenance: { kind: 'pulled_in', reason: 'stack' }, afterRead: { done: false, turn: NONE } });
+    const layer = summary(2, { provenance: { kind: 'pulled_in', reason: 'stack' }, afterRead: { done: false, nothingAsked: false, turn: NONE } });
     const marked = markedReadTile({ ...unreadTile([summary(1), layer]), unreadPrKeys: ['acme/app#1', 'acme/app#2'] });
     expect(marked.unreadPrKeys).toEqual([]);
 
@@ -81,7 +81,7 @@ describe('markedReadTile', () => {
   });
 
   it('leaves a tile that stays your move open, and a snoozed tile snoozed', () => {
-    const stillYours = { ...unreadTile([summary(1)]), afterRead: { done: false, turn: REVIEW } };
+    const stillYours = { ...unreadTile([summary(1)]), afterRead: { done: false, nothingAsked: false, turn: REVIEW } };
     expect(markedReadTile(stillYours).state.kind).toBe('open');
     expect(markedReadTile(stillYours).group).toBe('open');
     expect(markedReadTile(snoozedTile(stillYours)).state.kind).toBe('snoozed');

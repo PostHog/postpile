@@ -38,6 +38,9 @@ export type HoldingTile = Pick<TileView, 'group'> & { prs: Pick<TileView['prs'][
  * 2026-10-11): the topic sits in an ask section only because of a PR whose
  * tile is folded away in Dealt with, so the header names it. Null when the
  * section is no ask, or a tile outside Dealt with already shows the ask.
+ * Since 2026-10-12 a PR in Changes you requested is never done (core's
+ * `changeRequestHoldsOpen`), so it no longer lands here; a read team
+ * mention, or a review request the glance calls not yours, still can.
  */
 export function holdingPrLine(tiles: HoldingTile[], section: TopicSection): string | null {
   if (!ASK_SECTIONS.includes(section)) {

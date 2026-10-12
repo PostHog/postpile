@@ -2,11 +2,12 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
-## 0.29.0 (unreleased)
+## 0.28.1 (unreleased)
 
 ### Changed
 
 - Clicking a topic counts as picking the tile it opens on again: when that tile stays open for 1.5 s, its PR is marked read like a tile you clicked. Search, Back and Forward and the next tile PostPile picks after one leaves still mark nothing.
+- A PR you requested changes on stays under Open until you approve it, your review is dismissed, or it is merged or closed. It no longer folds under Dealt with while the author has not addressed your changes. Opening it or Mark read still marks it read on GitHub; the button says "Mark read", not "Done for now".
 
 ## 0.28.0 (2026-10-11)
 

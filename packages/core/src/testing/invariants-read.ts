@@ -10,7 +10,7 @@ import type { IsoTime, FullPr as Pr, PrKey, Tile, UserPrState } from '../types.t
 import { tileViewOf, tileStateOf, withReadState, type PropertyBoard } from './build-board.ts';
 import { describeTurn, ensure, eventsOf, isTrackedHere, fullPrOf, sameMove, trackedRows, type Invariant } from './invariant.ts';
 import { pendingRequest } from './spec-facts.ts';
-import { expectedOpenedRead, expectedReadPlan } from './spec-rules.ts';
+import { expectedChangeRequestHold, expectedNothingAsked, expectedOpenedRead, expectedReadPlan } from './spec-rules.ts';
 
 /** The board with the threads of `keys` read on GitHub up to their last update, as a mark-read that reached GitHub leaves them. */
 export function withThreadsRead(board: PropertyBoard, keys: PrKey[]): PropertyBoard {
@@ -153,22 +153,36 @@ export const prAfterReadIsTheRealRead: Invariant = {
         const read = afterRead(board, prReadScope(row.key, true), { kind: 'button' });
         const next = tileViewOf(read, view.tile).prs.find((candidate) => candidate.key === row.key)!;
         ensure(next.done === row.afterRead.done, `${row.key}: preview done ${row.afterRead.done}, real ${next.done}`);
+        const nothingAsked = expectedNothingAsked({
+          pr: fullPrOf(read, row.key),
+          events: eventsOf(read, row.key),
+          viewer: read.viewer,
+          userState: read.userStates.get(row.key) ?? null,
+          notYours: read.notYours.has(row.key),
+          lastReadAt: null,
+        });
+        ensure(nothingAsked === row.afterRead.nothingAsked, `${row.key}: preview nothing asked ${row.afterRead.nothingAsked}, spec after the read ${nothingAsked}`);
+        ensure(!row.afterRead.done || row.afterRead.nothingAsked, `${row.key}: preview done but something asked`);
         ensure(JSON.stringify(next.turn) === JSON.stringify(row.afterRead.turn), `${row.key}: preview ${describeTurn(row.afterRead.turn)}, real ${describeTurn(next.turn)}`);
       }
     }
   },
 };
 
-/** Opening a PR marks it read only when that leaves it done: afterwards it is done and not the viewer's move. */
+/**
+ * Opening a PR marks it read only when that leaves nothing asked: afterwards
+ * it is not the viewer's move, and it is done unless their change request
+ * holds it open (2026-10-12).
+ */
 export const openedReadLeavesDone: Invariant = {
-  name: 'opening a PR reads it only when that leaves it done',
+  name: 'opening a PR reads it only when that leaves nothing asked',
   check(board, views) {
     for (const view of views) {
       for (const row of trackedRows(view)) {
         const thread = board.threads.get(row.key) ?? null;
         const holding = board.tiles.filter((tile) => tile.members.some((member) => member.prKey === row.key));
         const tilesSnoozed = holding.map((tile) => tileStateOf(board, tile).kind === 'snoozed');
-        const input = { thread, prFetchedAt: board.prFetchedAt.get(row.key) ?? null, pr: fullPrOf(board, row.key), tilesSnoozed, doneAfterRead: row.afterRead.done };
+        const input = { thread, prFetchedAt: board.prFetchedAt.get(row.key) ?? null, pr: fullPrOf(board, row.key), tilesSnoozed, nothingAskedAfterRead: row.afterRead.nothingAsked };
         const check = openedReadCheck({ ...input, tiles: tilesSnoozed.map((snoozed) => ({ snoozed })) });
         // Also as if no tile held it, or it had no thread: nothing to mirror then.
         for (const variant of [input, { ...input, tilesSnoozed: [] }, { ...input, thread: null }]) {
@@ -181,7 +195,8 @@ export const openedReadLeavesDone: Invariant = {
         }
         const read = afterRead(board, prReadScope(row.key, true), { kind: 'opened' });
         const next = tileViewOf(read, view.tile).prs.find((candidate) => candidate.key === row.key)!;
-        ensure(next.done && next.turn.kind !== 'you', `${row.key}: opened read leaves done ${next.done}, ${describeTurn(next.turn)}`);
+        const held = expectedChangeRequestHold({ pr: fullPrOf(read, row.key), viewer: read.viewer, userState: read.userStates.get(row.key) ?? null });
+        ensure(next.done !== held && next.turn.kind !== 'you', `${row.key}: opened read leaves done ${next.done}, held ${held}, ${describeTurn(next.turn)}`);
       }
     }
   },

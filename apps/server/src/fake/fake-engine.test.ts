@@ -577,6 +577,10 @@ describe('FakeEngine addressed your changes', () => {
     const waiting = frontend.find((item) => item.tile.id === 'pr:acme/app#1963');
     expect(waiting?.turn).toMatchObject({ kind: 'them', who: 'tove' });
     expect(waiting?.prs[0]?.tier).toBe('changes_requested');
+    // Your change request holds it open (2026-10-12): read, yet under Open, never Dealt with.
+    expect(waiting?.state.kind).toBe('open');
+    expect(waiting?.group).toBe('open');
+    expect(waiting?.prs[0]?.afterRead).toMatchObject({ done: false, nothingAsked: true });
     const topics = await engine.listTopics();
     const queues = (id: string) => topics.find((item) => item.topic.id === id)?.queues;
     expect(queues('topic-dev-env')).toMatchObject({ tiers: { changes_requested: 1 }, changesAddressed: 1 });

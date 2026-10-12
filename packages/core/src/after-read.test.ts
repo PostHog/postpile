@@ -66,7 +66,7 @@ describe('tileAfterMarkRead', () => {
     const mention = makeEvent({ kind: 'mention', actor: 'ada', at: at(20), ruleLoudness: 'loud' });
     const pushed = makeEvent({ id: 'own-push', kind: 'commits_pushed', actor: viewer.login, at: at(30), sourceId: 'c-own' });
     expect(afterRead(own, [mention]).done).toBe(false);
-    expect(afterRead(own, [mention, pushed])).toEqual({ done: true, turn: NO_TURN });
+    expect(afterRead(own, [mention, pushed])).toEqual({ done: true, nothingAsked: true, turn: NO_TURN });
   });
 
   it('is done when the events agent lowered the reply: a plain thanks is not still your move', () => {
@@ -104,7 +104,7 @@ describe('prAfterMarkRead', () => {
 
   it('is done when reading the PR answers everything on it', () => {
     const mention = makeEvent({ kind: 'team_mention', actor: 'ada', at: at(20), ruleLoudness: 'loud' });
-    expect(prAfter(makePr({ author: 'ada' }), [mention])).toEqual({ done: true, turn: NO_TURN });
+    expect(prAfter(makePr({ author: 'ada' }), [mention])).toEqual({ done: true, nothingAsked: true, turn: NO_TURN });
   });
 
   it('stays not done, and says whose move, while the PR asks something of you', () => {
@@ -123,6 +123,24 @@ describe('prAfterMarkRead', () => {
     const routed = makePr({ author: 'ada', reviewerTeams: ['acme/team-platform'] });
     expect(prAfter(routed, []).done).toBe(false);
     expect(prAfter(routed, [], { notYours: true }).done).toBe(true);
+  });
+
+  it('leaves nothing asked but not done while your change request waits on the author (2026-10-12)', () => {
+    const waiting = makePr({
+      author: 'pim',
+      headOid: 'c1',
+      reviews: [makeReview({ author: viewer.login, state: 'CHANGES_REQUESTED', submittedAt: at(10), commitOid: 'c1' })],
+      commits: [makeCommit({ oid: 'c1', author: 'pim', committedAt: at(5) })],
+    });
+    const review = makeEvent({ kind: 'review_changes_requested', actor: viewer.login, at: at(10) });
+    const result = prAfter(waiting, [review]);
+    expect(result.done).toBe(false);
+    expect(result.nothingAsked).toBe(true);
+    expect(result.turn.kind).toBe('them');
+  });
+
+  it('asks something when the author addressed your changes: nothing to read away', () => {
+    expect(prAfter(addressed, [push]).nothingAsked).toBe(false);
   });
 
   it('keeps an earlier handled time and never changes the data it gets', () => {

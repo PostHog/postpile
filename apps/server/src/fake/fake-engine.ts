@@ -796,7 +796,7 @@ export class FakeEngine implements EngineService {
     const tiles = this.tilesHolding(prKey);
     const pr = this.prsByKey().get(prKey);
     const tracked = tiles.some((tile) => tile.members.some((member) => member.prKey === prKey && isTracked(member.provenance)));
-    const doneAfterRead =
+    const nothingAskedAfterRead =
       pr !== undefined &&
       prAfterMarkRead({
         pr,
@@ -806,13 +806,13 @@ export class FakeEngine implements EngineService {
         notYours: this.notYours().has(prKey),
         tracked,
         readAt: this.timestamp(),
-      }).done;
+      }).nothingAsked;
     return {
       thread,
       prFetchedAt: thread?.updatedAt ?? null,
       pr: pr ?? null,
       tiles: tiles.map((tile) => ({ snoozed: this.tileState(tile).kind === 'snoozed' })),
-      doneAfterRead,
+      nothingAskedAfterRead,
     };
   }
 

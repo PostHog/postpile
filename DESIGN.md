@@ -284,6 +284,16 @@ team-devex" instead of the bot's name.
   head not reviewed by them). Marking read a PR that
   still waits on their review makes it read (no strip, no coral) but leaves it open in the
   normal tile list with its turn footer, and in To review; it never lands in Dealt with.
+  That is `nothingAskedOfViewer`; `isPrDone` adds one more condition
+  (2026-10-12, owner, "Your change request holds the PR open"): an open PR
+  whose user's newest verdict asks for changes (`changeRequestHoldsOpen`, the
+  same `viewerRequestedChanges` the Changes you requested tier reads; a later
+  plain comment review does not cover it) and that they have not approved since
+  is never done, read or not, whoever's move it is. Its tile stays in Open with
+  its turn footer ("waiting on alice to address your changes"). The hold ends
+  only when their verdict changes (approve, in the app or on GitHub; the review
+  dismissed) or the PR is merged or closed; the glance's NOT_YOURS does not end
+  it. Snooze is the way to park one whose author went quiet.
   An approval counts on any commit (2026-09-28): a PR the user approved stays done after later
   pushes. `commits_after_approval` events are quiet by the rules; the tile comes back only
   through the normal loud events (re-review requested, mention, question, changes requested)
@@ -4460,6 +4470,11 @@ four times on a PR whose author addressed his changes; the thread went read,
 the tile stayed, nothing visible changed). `afterRead` runs the same
 `isPrDone` and `whoseTurn` over the data as a mark-read leaves it (every
 event seen, pinged and found PRs handled): `done` and the `turn` left.
+Since 2026-10-12 also `nothingAsked` (`nothingAskedOfViewer` over the
+same data): true as well for a PR the viewer's change request holds open
+while it waits on the author, which is never `done`. The open-read dwell
+reads it; the labels keep reading `done`, so such a PR shows "Mark read"
+and, once read with nothing unread, leads with Snooze.
 
 - Tile footer: "Mark read" on an unread tile. On a read tile "Mark done"
   only when `afterRead.done`, else "Mark read". A read (open) tile that is
@@ -5033,6 +5048,10 @@ avatars and filters", QueuesB2).
   (your move first, `tilesInTierOrder`). Before, only the
   addressed case had a section (To review), and a change request the author
   had not touched fell to Team's PRs or Other topics (both gone since).
+  Inside the topic such a PR's tile is never Dealt with (2026-10-12, "Your
+  change request holds the PR open", see the done rule under Tile state): a
+  read change request waiting on the author sits in Open, so the section
+  never points at a folded tile.
 - **Authorship** no longer picks a section (2026-10-02): who drives the
   topic does. The viewer's own PR (`prOwners`: also a bot's PR assigned to
   them, 2026-09-30) sorts its topic first inside whatever section it sits
@@ -5899,8 +5918,9 @@ check), a second copy of core's rules. Owner decisions (2026-09-30):
   `TileView` carries its `group` in the topic (core `tileGroup` in
   `tile-groups.ts`): `unread` (the tile is unread by "GitHub unread is
   PostPile unread", a snoozed tile with an unread thread too), `open` (read,
-  not dealt with: your move, waiting on someone, snoozed) or `dealt_with`
-  (tile state `done`). It also carries `newBadge` (`tileNewBadge`: the coral
+  not dealt with: your move, waiting on someone, snoozed, or held open by
+  your change request while it waits on the author, 2026-10-12) or
+  `dealt_with` (tile state `done`). It also carries `newBadge` (`tileNewBadge`: the coral
   NEW pill, never on a headline made by automation unless it is loud). The
   topic's unread count (`TopicListItem.unreadTiles`, the sidebar bubble; the
   footer adds the topics up) counts the Unread group (`topicUrgency` calls
@@ -6202,6 +6222,11 @@ is a merged PR). The header then adds one line under the relation line:
 an ask section, every tracked PR of that tier in a Dealt with tile; the
 first one is named, with whom its turn waits on, else "is under Dealt
 with"). Nothing shows while any tile outside Dealt with holds the ask.
+Since 2026-10-12 the Changes you requested case no longer happens: the
+change request holds #1963 open, so its tile sits in Open (see the done
+rule). The line stays for the asks that can still fold away: a team
+mention read since (Team mentioned) and a review request the glance calls
+not yours (To review).
 
 **No dossier yet.** A real ask or a known driver places the topic as above
 (without a dossier the sync names the most frequent PR author as driver).
@@ -6294,7 +6319,10 @@ topic has no unread tile, no your-move (the same `yourMoves` the chip shows,
 so "Merge, it is approved" counts although it never makes a topic urgent), no
 unseen merge without the viewer's review, and it sits in no ask section
 (Needs reply, Changes you requested, To review, Team mentioned). Archive rows
-are never quiet: the drawer is its own context.
+are never quiet: the drawer is its own context. A topic holding a PR the
+viewer's change request holds open (2026-10-12) sits in Changes you
+requested, so it is never quiet either, and the PR's tile is in Open, not
+Dealt with.
 
 **Where they go** (renderer layout, `sidebarBuckets` with `hideDealt` in
 `lib/queues.ts`, labels in `lib/sidebar.ts`): in the owner sections (You
@@ -6597,10 +6625,14 @@ nobody ("Bot talk leaves agent work" › Bot talk answers nobody).
 3. *Opening a PR in PostPile*: opening a PR in the detail pane marks its
    GitHub thread read and handles the PR in PostPile too (events seen,
    `handledAt`; since 2026-09-29, before it only marked the thread read),
-   only when a mark-read of that PR would leave it done
-   (`PrSummary.afterRead.done`: nothing asked of the viewer; checked per PR
-   since 2026-09-29, before it was the whole tile's `afterRead.done`), no
-   tile holding it is snoozed, and only while writes are unlocked. It
+   only when a mark-read of that PR would leave nothing asked of the viewer
+   (`PrSummary.afterRead.nothingAsked`; checked per PR since 2026-09-29,
+   before it was the whole tile's `afterRead.done`; until 2026-10-12 it read
+   `afterRead.done`, which is the same except for a PR the viewer's change
+   request holds open: that one is never done, yet with the author's move
+   and no review pending a read hides nothing, so the dwell and Mark read
+   still clear its thread and its button says "Mark read", never "Done for
+   now"), no tile holding it is snoozed, and only while writes are unlocked. It
    mirrors what github.com does on a visit, limited to cases where it
    cannot hide a to-do. Until 2026-10-01 also listed under Handled quietly
    ("opened in PostPile") when the thread was unread on GitHub; since then

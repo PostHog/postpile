@@ -296,7 +296,9 @@ with agent, Recheck): while the agent is off or paused, disable it with
   window visible and focused (`OpenedReadTimer`: the dwell end fires;
   hidden before that restarts the wait, after it changes nothing). Only
   when `opensMarkRead` (`lib/opened-read.ts`) says a mark-read of that PR
-  leaves it done (`PrSummary.afterRead.done`, per PR, not the tile's). The
+  leaves nothing asked of the user (core's `PrSummary.openedRead`, from
+  `afterRead.nothingAsked`, per PR, not the tile's; a PR the user's change
+  request holds open qualifies though it never turns done, 2026-10-12). The
   server checks again and marks it read like the pane's Mark read (its own
   batch, undo token in `OpenedReadResult`). The pane then shows
   `OpenedMarkNote` ("✓ Marked read" / "✓ Done for now") in the mark

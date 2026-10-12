@@ -7,8 +7,8 @@ import type { WhoseTurn } from './whose-turn.ts';
 
 const NONE: WhoseTurn = { kind: 'none', who: null, what: '', prKey: null };
 const REREVIEW: WhoseTurn = { kind: 'you', move: 're_review', who: null, what: 'pim addressed your changes: re-review', prKey: 'acme/app#1' };
-const stillYours: TileAfterRead = { done: false, turn: REREVIEW };
-const doneAfter: TileAfterRead = { done: true, turn: NONE };
+const stillYours: TileAfterRead = { done: false, nothingAsked: false, turn: REREVIEW };
+const doneAfter: TileAfterRead = { done: true, nothingAsked: true, turn: NONE };
 const pinged = { kind: 'pinged', reason: 'review_requested' } as const;
 const pulled = { kind: 'pulled_in', reason: 'stack layer' } as const;
 
@@ -49,7 +49,7 @@ describe('tile footer', () => {
   it('says Mark read on an unread tile, Done for now only where a mark-read makes it done', () => {
     expect(tileOffers(view('unread', REREVIEW, stillYours)).markLabel).toBe('Mark read');
     expect(tileOffers(view('open', NONE, doneAfter)).markLabel).toBe('Done for now');
-    expect(tileOffers(view('open', NONE, { done: false, turn: NONE }, [row(1, { unreadOnGitHub: true })])).markLabel).toBe('Mark read');
+    expect(tileOffers(view('open', NONE, { done: false, nothingAsked: false, turn: NONE }, [row(1, { unreadOnGitHub: true })])).markLabel).toBe('Mark read');
     expect(tileOffers(view('snoozed', NONE, doneAfter)).markLabel).toBe('Done for now');
   });
 
@@ -58,11 +58,11 @@ describe('tile footer', () => {
   it('leads with Snooze, not Mark read, on a read tile that stays not done with nothing unread', () => {
     const blocked: WhoseTurn = { kind: 'them', who: 'acme/team-security', what: 'Blocked: acme/team-security to review #2', prKey: 'acme/app#2' };
     const own = [row(1, { authorRelation: 'you', primaryAction: 'open_on_github' }), row(2, { authorRelation: 'you', primaryAction: 'open_on_github' })];
-    const offers = tileOffers(view('open', blocked, { done: false, turn: blocked }, own));
+    const offers = tileOffers(view('open', blocked, { done: false, nothingAsked: false, turn: blocked }, own));
     expect(offers).toMatchObject({ footer: 'snooze', markLabel: null, snooze: true });
     expect(offers.github).toEqual({ label: 'Open on GitHub', url: 'https://github.com/acme/app/pull/2', filesTab: false });
     const news = [row(1, { authorRelation: 'you', unseenLoudEvents: 1 }), own[1]!];
-    expect(tileFooterAction(view('open', blocked, { done: false, turn: blocked }, news))).toBe('mark_read');
+    expect(tileFooterAction(view('open', blocked, { done: false, nothingAsked: false, turn: blocked }, news))).toBe('mark_read');
   });
 
   it('leads with Snooze and a GitHub link on a read tile that is still your move', () => {
@@ -76,7 +76,7 @@ describe('tile footer', () => {
 
   it('opens a done tile and offers nothing else', () => {
     expect(tileFooterAction(view('done', NONE, doneAfter))).toBe('open');
-    expect(tileOffers(view('done', NONE, { done: false, turn: NONE }))).toMatchObject({ markLabel: null, snooze: false });
+    expect(tileOffers(view('done', NONE, { done: false, nothingAsked: false, turn: NONE }))).toMatchObject({ markLabel: null, snooze: false });
   });
 
   // Bug fixed 2026-09-29: the footer still said "Done for now" where the pane led with Open.

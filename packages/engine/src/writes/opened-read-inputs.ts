@@ -37,8 +37,8 @@ export class OpenedReadInputs {
     return this.fetchedAt.get(prKey) ?? null;
   }
 
-  /** A mark-read of this PR alone would leave it done (the rule behind `PrSummary.afterRead`); tracked when any tile tracks it. */
-  private doneAfterRead(prKey: PrKey, tiles: Tile[]): boolean {
+  /** A mark-read of this PR alone would leave nothing asked of the user (`PrSummary.afterRead.nothingAsked`); tracked when any tile tracks it. */
+  private nothingAskedAfterRead(prKey: PrKey, tiles: Tile[]): boolean {
     const pr = this.board.prs.get(prKey);
     if (!pr) {
       return false;
@@ -52,7 +52,7 @@ export class OpenedReadInputs {
       notYours: this.board.notYours.has(prKey),
       tracked,
       readAt: this.board.now,
-    }).done;
+    }).nothingAsked;
   }
 
   of(prKey: PrKey): OpenedReadInput {
@@ -62,7 +62,7 @@ export class OpenedReadInputs {
       prFetchedAt: this.prFetchedAt(prKey),
       pr: this.board.prs.get(prKey) ?? null,
       tiles: tiles.map((tile) => ({ snoozed: this.board.stateOf(tile).kind === 'snoozed' })),
-      doneAfterRead: this.doneAfterRead(prKey, tiles),
+      nothingAskedAfterRead: this.nothingAskedAfterRead(prKey, tiles),
     };
   }
 }

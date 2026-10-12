@@ -379,16 +379,16 @@ describe('openedReadCheck', () => {
   const unreadThread = makeThreadFor(pr, { lastReadAt: at(20), updatedAt: at(30), unread: true });
   const tile = { snoozed: false };
   const opened = (overrides: Partial<Parameters<typeof openedReadCheck>[0]> = {}) =>
-    openedReadCheck({ thread: unreadThread, prFetchedAt: at(30), pr, tiles: [tile], doneAfterRead: true, ...overrides });
+    openedReadCheck({ thread: unreadThread, prFetchedAt: at(30), pr, tiles: [tile], nothingAskedAfterRead: true, ...overrides });
 
-  it('marks an unread thread when a mark-read of that PR would leave it done', () => {
+  it('marks an unread thread when a mark-read of that PR would leave nothing asked', () => {
     expect(opened()).toEqual({ kind: 'mark' });
   });
 
   it('checks the PR, not the whole tile: other PRs of a set may still ask something', () => {
     // The tile's own after-read is not an input any more; only this PR's is.
     expect(opened({ tiles: [tile, tile] })).toEqual({ kind: 'mark' });
-    expect(opened({ doneAfterRead: false })).toEqual({ kind: 'skip', why: 'asks_you' });
+    expect(opened({ nothingAskedAfterRead: false })).toEqual({ kind: 'skip', why: 'asks_you' });
   });
 
   it('never acts while a tile holding the PR is snoozed', () => {
@@ -399,7 +399,7 @@ describe('openedReadCheck', () => {
     expect(opened({ thread: { ...unreadThread, unread: false } })).toEqual({ kind: 'handle' });
     // Read on GitHub: an older snapshot cannot hide anything unread there.
     expect(opened({ thread: { ...unreadThread, unread: false }, prFetchedAt: at(10) })).toEqual({ kind: 'handle' });
-    expect(opened({ thread: { ...unreadThread, unread: false }, doneAfterRead: false })).toEqual({ kind: 'skip', why: 'asks_you' });
+    expect(opened({ thread: { ...unreadThread, unread: false }, nothingAskedAfterRead: false })).toEqual({ kind: 'skip', why: 'asks_you' });
   });
 
   it('leaves PRs without a thread or a tile, and stale snapshots of unread threads, alone', () => {
