@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { boardShape, type PrSet, type Topic } from '@postpile/core';
 import { at, makeCommit, makeEvent, makePr, makeThreadFor } from '@postpile/core/fixtures';
 import { Store } from './index.ts';
+import { ASKS_AFTER_MERGE_SQL } from './repos/events.ts';
 
 let store: Store;
 
@@ -303,16 +304,56 @@ describe('EventRepo', () => {
 
   it('finds merged PRs with a personal ask made after the merge', () => {
     const merged = { state: 'MERGED' as const, mergedAt: at(5) };
+    const loud = { ruleLoudness: 'loud' as const };
     store.prs.upsert(makePr({ number: 1, ...merged }), at(9));
     store.prs.upsert(makePr({ number: 2, ...merged }), at(9));
     store.prs.upsert(makePr({ number: 3 }), at(9));
     store.prs.upsert(makePr({ number: 4, ...merged }), at(9));
-    store.events.upsertDerived('acme/app#1', [makeEvent({ id: 'b1', prKey: 'acme/app#1', kind: 'question_to_user', at: at(6) })]);
-    store.events.upsertDerived('acme/app#2', [makeEvent({ id: 'b2', prKey: 'acme/app#2', kind: 'mention', at: at(4) })]);
-    store.events.upsertDerived('acme/app#3', [makeEvent({ id: 'b3', prKey: 'acme/app#3', kind: 'mention', at: at(6) })]);
-    store.events.upsertDerived('acme/app#4', [makeEvent({ id: 'b4', prKey: 'acme/app#4', kind: 'team_mention', at: at(6) })]);
+    store.events.upsertDerived('acme/app#1', [makeEvent({ id: 'b1', prKey: 'acme/app#1', kind: 'question_to_user', at: at(6), ...loud })]);
+    store.events.upsertDerived('acme/app#2', [makeEvent({ id: 'b2', prKey: 'acme/app#2', kind: 'mention', at: at(4), ...loud })]);
+    store.events.upsertDerived('acme/app#3', [makeEvent({ id: 'b3', prKey: 'acme/app#3', kind: 'mention', at: at(6), ...loud })]);
+    store.events.upsertDerived('acme/app#4', [makeEvent({ id: 'b4', prKey: 'acme/app#4', kind: 'team_mention', at: at(6), ...loud })]);
 
-    expect([...store.events.prKeysWithAsksAfterMerge()]).toEqual(['acme/app#1']);
+    expect([...store.events.prKeysWithAsksAfterMerge('alice')]).toEqual(['acme/app#1']);
+  });
+
+  it('counts a comment edited after the merge to mention the viewer as an ask, not any other edit', () => {
+    const merged = { state: 'MERGED' as const, mergedAt: at(5) };
+    store.prs.upsert(makePr({ number: 1, ...merged }), at(9));
+    store.prs.upsert(makePr({ number: 2, ...merged }), at(9));
+    const mentionEdit = { kind: 'comment_edited' as const, at: at(6), ruleLoudness: 'loud' as const, ruleReason: 'edited to mention you' };
+    store.events.upsertDerived('acme/app#1', [makeEvent({ id: 'e1', prKey: 'acme/app#1', ...mentionEdit })]);
+    store.events.upsertDerived('acme/app#2', [makeEvent({ id: 'e2', prKey: 'acme/app#2', kind: 'comment_edited', at: at(6), ruleReason: 'edited a comment' })]);
+
+    expect([...store.events.prKeysWithAsksAfterMerge('alice')]).toEqual(['acme/app#1']);
+  });
+
+  it('leaves out post-merge asks the viewer answered, demoted ones and automation, seeking each merged PR through the index', () => {
+    const merged = { state: 'MERGED' as const, mergedAt: at(5) };
+    const ask = { kind: 'mention' as const, at: at(6), ruleLoudness: 'loud' as const };
+    for (const number of [1, 2, 3, 4, 5]) {
+      store.prs.upsert(makePr({ number, ...merged }), at(9));
+    }
+    store.events.upsertDerived('acme/app#1', [
+      makeEvent({ id: 'f1', prKey: 'acme/app#1', ...ask }),
+      makeEvent({ id: 'f1-reply', prKey: 'acme/app#1', kind: 'comment', actor: 'Alice', at: at(7) }),
+    ]);
+    store.events.upsertDerived('acme/app#2', [
+      makeEvent({ id: 'f2', prKey: 'acme/app#2', ...ask }),
+      makeEvent({ id: 'f2-bot-talk', prKey: 'acme/app#2', kind: 'comment', actor: 'alice', at: at(7), chatter: true }),
+    ]);
+    store.events.upsertDerived('acme/app#3', [makeEvent({ id: 'f3', prKey: 'acme/app#3', ...ask })]);
+    store.events.setOverride('f3', { loudness: 'quiet', reason: 'just a thank-you', by: 'agent' });
+    store.events.upsertDerived('acme/app#4', [makeEvent({ id: 'f4', prKey: 'acme/app#4', ...ask, actor: 'acme-bot', isBot: true })]);
+    store.events.upsertDerived('acme/app#5', [
+      makeEvent({ id: 'f5', prKey: 'acme/app#5', ...ask }),
+      makeEvent({ id: 'f5-earlier', prKey: 'acme/app#5', kind: 'comment', actor: 'alice', at: at(5) }),
+    ]);
+
+    // #2: bot talk answers nobody; #5: the viewer's comment came before the ask.
+    expect([...store.events.prKeysWithAsksAfterMerge('alice')].sort()).toEqual(['acme/app#2', 'acme/app#5']);
+    const plan = store.db.prepare(`EXPLAIN QUERY PLAN ${ASKS_AFTER_MERGE_SQL}`).all('alice', 'alice') as Array<{ detail: string }>;
+    expect(plan.map((row) => row.detail)).toContain('SEARCH e USING INDEX pr_event_pr_key_at_id (pr_key=? AND at>?)');
   });
 
   it('finds the PRs with an event aimed at the viewer in person, through the partial index', () => {

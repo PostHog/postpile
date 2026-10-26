@@ -120,6 +120,15 @@ describe('the hot board', () => {
     expect((await h.engine.listTopics({ allRepos: true })).map((item) => item.topic.id)).toEqual(['charts']);
   });
 
+  it('keeps an old, read merged PR on the board when a comment from before the merge is edited after it to mention you', async () => {
+    const edited = makeComment({ id: 'c-bob', author: 'bob', body: '@viewer can you check the follow-up?', createdAt: at(4), lastEditedAt: at(6) });
+    const asked = mergedPr(8, { comments: [edited] });
+    const h = makeHarness({ now: () => LATER });
+    await syncedAndRead(h, 'charts', [asked]);
+
+    expect(Board.load(h.store, LATER.toISOString()).prs.has(asked.key)).toBe(true);
+  });
+
   it('counts the kept PRs per tier for the busy inbox card', async () => {
     const h = makeHarness({ now: () => LATER });
     await syncedAndRead(h, 'depot', [old, open, stackedBelow, recent]);

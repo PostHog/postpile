@@ -453,10 +453,13 @@ hot when any of these holds:
 - it is merged and a person's ask after the merge still waits for the user
   (`HotFacts.askAfterMerge`, "Asked after the merge"): read and older than
   7 days, it is still their move, so its topic stays under Needs reply.
-  The store lists merged PRs with a personal ask event after `mergedAt`
+  The store lists merged PRs with a person's loud ask after `mergedAt` (a
+  mention, a reply or question, or a comment edited to mention them) that
+  they have not answered with a comment or review since
   (`prKeysWithAsksAfterMerge`); only those get their snapshot read to check
-  the ask is unanswered. Added 2026-10-26 (raised in review of the merged-ask
-  change);
+  the ask is unanswered, so answered and demoted asks in merged history cost
+  nothing on later board builds. Added 2026-10-26 (raised in review of the
+  merged-ask change);
 - it shares a stack or an active set with a hot PR (`withGroups`): stacks
   and sets load whole or not at all, so a pulled-in layer of a hot PR is
   hot too.

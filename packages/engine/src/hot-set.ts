@@ -58,12 +58,16 @@ export interface HotSet {
 
 /**
  * Merged PRs where a person's ask of the viewer after the merge still waits
- * for their answer (`askAfterMerge`). Only the few PRs with such an ask
- * stored get their snapshot read.
+ * for their answer (`askAfterMerge`). Only the few PRs whose stored events
+ * show such an ask still open (`prKeysWithAsksAfterMerge`) get their
+ * snapshot read.
  */
 function waitingAsksAfterMerge(store: Store, viewer: Viewer | null): Set<PrKey> {
-  const keys = [...store.events.prKeysWithAsksAfterMerge()];
-  if (viewer === null || keys.length === 0) {
+  if (viewer === null) {
+    return new Set();
+  }
+  const keys = [...store.events.prKeysWithAsksAfterMerge(viewer.login)];
+  if (keys.length === 0) {
     return new Set();
   }
   const prs = store.prs.getMany(keys);

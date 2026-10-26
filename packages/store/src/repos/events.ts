@@ -65,6 +65,33 @@ const STORED_IDS_CHUNK = 500;
  */
 const MACHINE_COMMENT_KINDS: readonly EventKind[] = ['deploy', 'bot_comment'];
 
+/**
+ * Merged PRs with a person's loud ask of the viewer after the merge that
+ * the viewer has not answered with a comment or review since. Asks are a
+ * mention, a reply or question to them, or a comment edited to mention them
+ * (rule reason "edited to mention you", what `askKindOf` reads as a
+ * mention). It mirrors `isUnansweredAsk`: no automation, no own events,
+ * loud after overrides. Its touches are a subset of `lastTouch`'s (a push
+ * needs the snapshot's committer), so it never drops a PR `askAfterMerge`
+ * keeps. Answered and demoted asks drop out here, so merged history does not
+ * grow the snapshots read on every board build. CROSS JOIN keeps pr the
+ * outer loop: each merged PR seeks its events after merged_at, and each
+ * candidate the events after it, through the (pr_key, at) index; a plain
+ * JOIN let SQLite scan every event. Both ? are the viewer's login.
+ */
+export const ASKS_AFTER_MERGE_SQL = `SELECT DISTINCT e.pr_key FROM pr p
+  CROSS JOIN pr_event e ON e.pr_key = p.key AND e.at > p.merged_at
+  WHERE p.state = 'MERGED'
+    AND (e.kind IN ('mention', 'reply_to_user', 'question_to_user')
+      OR (e.kind = 'comment_edited' AND e.rule_reason = 'edited to mention you'))
+    AND e.is_bot = 0 AND e.actor <> '' AND e.actor <> ? COLLATE NOCASE
+    AND COALESCE(e.override_loudness, e.rule_loudness) = 'loud'
+    AND NOT EXISTS (
+      SELECT 1 FROM pr_event t
+      WHERE t.pr_key = e.pr_key AND t.at > e.at AND t.actor = ? COLLATE NOCASE AND t.chatter = 0
+        AND t.kind IN ('comment', 'reply_to_user', 'question_to_user', 'mention', 'team_mention',
+                       'review_commented', 'review_approved', 'review_changes_requested'))`;
+
 interface StoredId {
   id: string;
   kind: string;
@@ -241,18 +268,12 @@ export class EventRepo {
   }
 
   /**
-   * Merged PRs with a mention, reply or question to the viewer made after
-   * the merge. Whether one still waits for an answer needs the snapshot
-   * (`askAfterMerge`); this narrows the PRs to read. Each merged PR seeks its
-   * events after merged_at through the (pr_key, at) index.
+   * Merged PRs where a person's ask of the viewer after the merge may still
+   * wait for their answer (`ASKS_AFTER_MERGE_SQL`). The snapshot check
+   * (`askAfterMerge`) decides; this narrows the PRs to read.
    */
-  prKeysWithAsksAfterMerge(): Set<PrKey> {
-    const rows = all<{ pr_key: string }>(
-      this.db,
-      `SELECT DISTINCT e.pr_key FROM pr p
-       JOIN pr_event e ON e.pr_key = p.key AND e.at > p.merged_at
-       WHERE p.state = 'MERGED' AND e.kind IN ('mention', 'reply_to_user', 'question_to_user')`,
-    );
+  prKeysWithAsksAfterMerge(viewerLogin: string): Set<PrKey> {
+    const rows = all<{ pr_key: string }>(this.db, ASKS_AFTER_MERGE_SQL, viewerLogin, viewerLogin);
     return new Set(rows.map((row) => row.pr_key));
   }
 
