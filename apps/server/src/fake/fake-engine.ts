@@ -1350,7 +1350,7 @@ export class FakeEngine implements EngineService {
       const thread = threads.get(pr.key) ?? null;
       const facts = hotFactsOf(
         { ...pr, assignees: pr.assignees ?? [], lastEventAt: null },
-        { thread, found: null, personalAsk: false },
+        { thread, found: null, personalAsk: false, askAfterMerge: false },
       );
       keptByTier[hotTier(facts, this.viewer())] += 1;
     }

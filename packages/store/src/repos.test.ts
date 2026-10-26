@@ -301,6 +301,20 @@ describe('PullInRepo', () => {
 describe('EventRepo', () => {
   const key = 'acme/app#1';
 
+  it('finds merged PRs with a personal ask made after the merge', () => {
+    const merged = { state: 'MERGED' as const, mergedAt: at(5) };
+    store.prs.upsert(makePr({ number: 1, ...merged }), at(9));
+    store.prs.upsert(makePr({ number: 2, ...merged }), at(9));
+    store.prs.upsert(makePr({ number: 3 }), at(9));
+    store.prs.upsert(makePr({ number: 4, ...merged }), at(9));
+    store.events.upsertDerived('acme/app#1', [makeEvent({ id: 'b1', prKey: 'acme/app#1', kind: 'question_to_user', at: at(6) })]);
+    store.events.upsertDerived('acme/app#2', [makeEvent({ id: 'b2', prKey: 'acme/app#2', kind: 'mention', at: at(4) })]);
+    store.events.upsertDerived('acme/app#3', [makeEvent({ id: 'b3', prKey: 'acme/app#3', kind: 'mention', at: at(6) })]);
+    store.events.upsertDerived('acme/app#4', [makeEvent({ id: 'b4', prKey: 'acme/app#4', kind: 'team_mention', at: at(6) })]);
+
+    expect([...store.events.prKeysWithAsksAfterMerge()]).toEqual(['acme/app#1']);
+  });
+
   it('finds the PRs with an event aimed at the viewer in person, through the partial index', () => {
     store.events.upsertDerived('acme/app#1', [makeEvent({ id: 'a1', prKey: 'acme/app#1', kind: 'reply_to_user' })]);
     store.events.upsertDerived('acme/app#2', [makeEvent({ id: 'a2', prKey: 'acme/app#2', kind: 'review_requested', ruleReason: 'review requested from you' })]);

@@ -15,7 +15,10 @@ now".
   a backlog run. A sync whose agent-call cap skipped work brings the next
   background sync forward to 2 minutes, like the PR cap (91 glances waited
   an hour). Threads the cleanup's bulk PUTs read are no longer logged and
-  recorded as read elsewhere on the next inbox read.
+  recorded as read elsewhere on the next inbox read. The resumed sync
+  walks the stacks of the held fetch's PRs (listed like the poll's), and a
+  resumed sync that fails no longer leaves the auto sync and the poll
+  blocked once the dialog is answered (review bot on #187).
 - Asked after the merge (2026-10-26, owner test after a week away;
   DESIGN.md "Asked after the merge"): a person's unanswered personal ask
   after the merge is the user's move on a merged PR (`askAfterMerge`:
@@ -24,8 +27,9 @@ now".
   mention, team mention or assignment get a glance (`prWantsGlance` takes
   the thread); its unread bubble is coral (`isUrgentUnread` takes the
   reply move, owner); the inbox catch-up leaves your-move merged PRs out of its
-  counts and every clear, and stops the older-than PUT short of them.
-  Not covered by the property tests: the board generator never adds steps
+  counts and every clear, and stops the older-than PUT short of them; such
+  a PR stays on the hot board while the ask waits, however old and read
+  (`HotFacts.askAfterMerge`, review bot on #187). Not covered by the property tests: the board generator never adds steps
   after a merge.
 - The open topic stays after its last read (2026-10-26, owner report;
   DESIGN.md "Selection stays put"): the engine lists a topic by its hot

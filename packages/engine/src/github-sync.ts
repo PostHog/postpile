@@ -774,7 +774,7 @@ export class GitHubSync {
     }
   }
 
-  /** Remembers what the poll fetched, so the next full sync verifies facts and walks stacks for them too. */
+  /** Remembers what the poll (or a held sync) fetched, so the next full sync verifies facts and walks stacks for them too. */
   private rememberPolled(keys: PrKey[]): void {
     const known = JSON.parse(this.store.meta.get(POLLED_KEY) ?? '[]') as PrKey[];
     this.store.meta.set(POLLED_KEY, JSON.stringify([...new Set([...known, ...keys])]));
@@ -913,7 +913,8 @@ export class GitHubSync {
    * the picked PRs, found PRs and the moved PRs with an unread thread. When
    * the gate then holds, the fetch ends there; the other moved PRs, stack
    * layers, diffs and CODEOWNERS wait for the sync that resumes it (it
-   * fetches again). DESIGN.md "Inbox cleanup" › Before agent work.
+   * fetches again, and walks the stacks of the held fetch's PRs, whose
+   * unchanged snapshots it skips). DESIGN.md "Inbox cleanup" › Before agent work.
    */
   private async fetchAll(maxPrs: number, gate: FetchGate): Promise<GitHubSyncResult> {
     this.beginRun();
@@ -957,6 +958,8 @@ export class GitHubSync {
     };
     if (gate.holds()) {
       this.textLog(`sync: held for the inbox catch-up dialog; ${movedLater.length} moved PRs without an unread thread, stack layers, diffs and CODEOWNERS wait for its answer`);
+      // The resumed fetch skips these unchanged snapshots; listed like the poll's, their stacks still get walked then.
+      this.rememberPolled([...fetched.keys(), ...found.map((pr) => pr.key)]);
       this.reconcileTouches(viewer);
       return {
         ...common,

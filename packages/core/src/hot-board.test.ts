@@ -37,6 +37,7 @@ function facts(key: string, overrides: Partial<HotFacts> = {}): HotFacts {
     thread: null,
     found: null,
     personalAsk: false,
+    askAfterMerge: false,
     activityAt: OLD,
     ...overrides,
   };
@@ -63,8 +64,8 @@ describe('hotFactsOf', () => {
       lastEventAt: '2026-09-20T12:00:00.000Z',
     };
     const thread = { unread: false, reason: 'author' as const, updatedAt: RECENT };
-    expect(hotFactsOf(light, { thread, found: null, personalAsk: false })).toMatchObject({ activityAt: RECENT, thread: { unread: false, reason: 'author' } });
-    expect(hotFactsOf(light, { thread: null, found: 'own_open', personalAsk: true })).toMatchObject({ activityAt: '2026-09-20T12:00:00.000Z', found: 'own_open', personalAsk: true });
+    expect(hotFactsOf(light, { thread, found: null, personalAsk: false, askAfterMerge: false })).toMatchObject({ activityAt: RECENT, thread: { unread: false, reason: 'author' } });
+    expect(hotFactsOf(light, { thread: null, found: 'own_open', personalAsk: true, askAfterMerge: false })).toMatchObject({ activityAt: '2026-09-20T12:00:00.000Z', found: 'own_open', personalAsk: true });
   });
 });
 
@@ -86,6 +87,12 @@ describe('isHotByRule', () => {
     const read = { unread: false, reason: 'subscribed' as const };
     expect(isHotByRule(facts('acme/app#1', { thread: read, activityAt: RECENT }), SINCE)).toBe(true);
     expect(isHotByRule(facts('acme/app#2', { thread: read, activityAt: OLD }), SINCE)).toBe(false);
+  });
+
+  it('takes an old, read merged PR while an ask after the merge waits for the viewer', () => {
+    const read = { unread: false, reason: 'mention' as const };
+    expect(isHotByRule(facts('acme/app#1', { thread: read, personalAsk: true, askAfterMerge: true }), SINCE)).toBe(true);
+    expect(isHotByRule(facts('acme/app#2', { thread: read, personalAsk: true }), SINCE)).toBe(false);
   });
 });
 

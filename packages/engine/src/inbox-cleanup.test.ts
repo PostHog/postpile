@@ -137,6 +137,23 @@ describe('inbox catch-up: getting to the dialog fast', () => {
     expect(h.reader.fetchedRefs.slice(fetchesBefore).flat().map((ref) => `${ref.repo}#${ref.number}`)).toContain(readOpen.key);
     expect(h.reader.codeOwnersCalls.length).toBeGreaterThan(codeOwnersBefore);
   });
+
+  it('walks the stack of a merged PR the held fetch stored, though the resumed fetch skips its unchanged snapshot', async () => {
+    const top = makePr({ number: 31, baseRef: 'layer-30', headRef: 'layer-31', state: 'MERGED', mergedAt: daysAgo(1), mergedBy: 'alice', updatedAt: daysAgo(1) });
+    const below = makePr({ number: 30, baseRef: 'master', headRef: 'layer-30', author: 'bob' });
+    const h = harnessWith([...mergedPile(), top]);
+    h.reader.addStackPr(below);
+
+    const held = await h.engine.sync({ maxAgentCalls: 0 });
+    expect(held.heldForCatchUp).toBe(true);
+    expect(h.store.pullIns.get(below.key)).toBeNull();
+
+    await h.engine.startAsUsual();
+    const resumed = await h.engine.sync({ maxAgentCalls: 0 });
+
+    expect(resumed.heldForCatchUp).toBeUndefined();
+    expect(h.store.pullIns.get(below.key)).toMatchObject({ anchorPrKey: top.key });
+  });
 });
 
 describe('inbox catch-up: background syncs while it holds', () => {
@@ -160,6 +177,36 @@ describe('inbox catch-up: background syncs while it holds', () => {
     await vi.waitFor(() => expect(lines.filter((line) => line.startsWith('sync: done'))).toHaveLength(2));
     await vi.waitFor(async () => expect((await h.engine.livePollStatus()).nextAutoSyncAt).toBe(new Date(skippedAt + 60 * 60_000).toISOString()));
     h.engine.stopAutoSync();
+  });
+
+  it('lets the auto sync and the poll go on when the sync resuming it fails after the answer', async () => {
+    const lines: string[] = [];
+    const h = harnessWith(mergedPile(), { syncLog: (line) => lines.push(line) });
+    h.engine.startAutoSync({ minutes: 60, maxAgentCalls: 0 });
+    expect((await h.engine.sync({ maxAgentCalls: 0 })).heldForCatchUp).toBe(true);
+
+    h.reader.failNext = new Error('GitHub answered 502');
+    await h.engine.startAsUsual();
+    const failed = await h.engine.sync({ maxAgentCalls: 0 });
+
+    expect(failed.errors).toContain('sync: GitHub answered 502');
+    expect(await h.engine.pollOnce()).not.toEqual({ kind: 'blocked', reason: 'waiting for the inbox catch-up answer' });
+    h.timers.advance(60 * 60_000);
+    await vi.waitFor(() => expect(lines).toContain('auto sync: starting (every 60 min)'));
+    await vi.waitFor(() => expect(lines.filter((line) => line.startsWith('sync: done'))).toHaveLength(3));
+    expect(lines).not.toContain('auto sync: skipped, waiting for the inbox catch-up answer (the answer starts the sync)');
+    h.engine.stopAutoSync();
+  });
+
+  it('keeps waiting when a sync fails while the start dialog is still unanswered', async () => {
+    const h = harnessWith(mergedPile());
+    expect((await h.engine.sync({ maxAgentCalls: 0 })).heldForCatchUp).toBe(true);
+
+    h.reader.failNext = new Error('GitHub answered 502');
+    await h.engine.sync({ maxAgentCalls: 0 });
+
+    expect(await h.engine.pollOnce()).toEqual({ kind: 'blocked', reason: 'waiting for the inbox catch-up answer' });
+    expect((await h.engine.inboxCleanup()).start).not.toBeNull();
   });
 });
 

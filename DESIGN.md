@@ -450,6 +450,13 @@ hot when any of these holds:
 - it had activity in the last 7 days (`SETTLED_DAYS`): the newest of its
   last update on GitHub (a merge or close moves it), its newest stored
   event and its thread's last update;
+- it is merged and a person's ask after the merge still waits for the user
+  (`HotFacts.askAfterMerge`, "Asked after the merge"): read and older than
+  7 days, it is still their move, so its topic stays under Needs reply.
+  The store lists merged PRs with a personal ask event after `mergedAt`
+  (`prKeysWithAsksAfterMerge`); only those get their snapshot read to check
+  the ask is unanswered. Added 2026-10-26 (raised in review of the merged-ask
+  change);
 - it shares a stack or an active set with a hot PR (`withGroups`): stacks
   and sets load whole or not at all, so a pulled-in layer of a hot PR is
   hot too.
@@ -1113,6 +1120,9 @@ question is still a question after the merge.
    second before it, and the selected threads between that and the cutoff go
    by repo PUT or PATCH (`planCleanup`). A repo holding one never gets a
    repo-wide PUT.
+5. *Hot board.* Such a PR stays hot while the ask waits, whatever its age
+   and read state (`isHotByRule`, "Big inboxes"): reading it and navigating
+   away does not drop its topic from Needs reply after a week.
 
 ## CI is not tracked
 
@@ -5898,7 +5908,14 @@ would assign topics and start catch-ups). The answer starts the sync again
 (`resumeHeldSync`, with the held sync's options): it fetches again, which
 is cheap (unchanged PRs are skipped) and picks up what the cleanup's bulk
 calls read, and digests both fetches (fetched PRs, new events and GitHub
-read times of the held one count too). Clear resumes it once the run
+read times of the held one count too). The held fetch's PRs (fetched and
+found) are listed like the poll's PRs, so the resumed sync walks their
+stacks though it skips their unchanged snapshots; before, a merged PR
+first stored by the held fetch never had its stack walked. If the resumed
+sync fails, the held fetch is kept for the next sync, but waiting ends
+once the dialog is answered (`CatchUpGate.mayHold` false): the auto sync
+and the poll go on and retry. A sync that fails while the dialog is still
+unanswered keeps waiting. Both added 2026-10-26 (raised in review). Clear resumes it once the run
 ended; locked, nothing to clear, or Start as usual resume it at once. Only
 an app with a window holds (`EngineDeps.catchUpGate`, set by createEngine
 except for the CLI); a CLI sync never waits. The one-time topic tidy still

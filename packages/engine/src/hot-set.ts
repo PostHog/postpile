@@ -1,4 +1,5 @@
 import {
+  askAfterMerge,
   buildStacks,
   hotFactsOf,
   prKey,
@@ -9,6 +10,7 @@ import {
   type NotificationThread,
   type PrKey,
   type Stack,
+  type Viewer,
 } from '@postpile/core';
 import type { Store } from '@postpile/store';
 import { loadViewer } from './viewer-meta.ts';
@@ -54,14 +56,41 @@ export interface HotSet {
   facts: Map<PrKey, HotFacts>;
 }
 
+/**
+ * Merged PRs where a person's ask of the viewer after the merge still waits
+ * for their answer (`askAfterMerge`). Only the few PRs with such an ask
+ * stored get their snapshot read.
+ */
+function waitingAsksAfterMerge(store: Store, viewer: Viewer | null): Set<PrKey> {
+  const keys = [...store.events.prKeysWithAsksAfterMerge()];
+  if (viewer === null || keys.length === 0) {
+    return new Set();
+  }
+  const prs = store.prs.getMany(keys);
+  const events = store.events.listForPrs(keys);
+  return new Set(
+    keys.filter((key) => {
+      const pr = prs.get(key);
+      return pr !== undefined && askAfterMerge(pr, events.get(key) ?? [], viewer) !== null;
+    }),
+  );
+}
+
 /** The hot PRs as the store stands (`selectHotBoard`), from PR headers, threads, found PRs and personal asks. */
 export function readHotSet(store: Store, now: string, threads: Map<PrKey, NotificationThread>): HotSet {
   const shape = readStoreShape(store);
+  const viewer = loadViewer(store);
   const found = store.foundPrs.listAll();
   const asks = store.events.prKeysWithPersonalAsks();
+  const asksAfterMerge = waitingAsksAfterMerge(store, viewer);
   const facts = shape.headers.map((pr) =>
-    hotFactsOf(pr, { thread: threads.get(pr.key) ?? null, found: found.get(pr.key)?.via ?? null, personalAsk: asks.has(pr.key) }),
+    hotFactsOf(pr, {
+      thread: threads.get(pr.key) ?? null,
+      found: found.get(pr.key)?.via ?? null,
+      personalAsk: asks.has(pr.key),
+      askAfterMerge: asksAfterMerge.has(pr.key),
+    }),
   );
-  const selection = selectHotBoard({ facts, groups: shape.groups, viewer: loadViewer(store), now });
+  const selection = selectHotBoard({ facts, groups: shape.groups, viewer, now });
   return { selection, shape, facts: new Map(facts.map((entry) => [entry.key, entry])) };
 }

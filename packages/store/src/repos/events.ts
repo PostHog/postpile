@@ -240,6 +240,22 @@ export class EventRepo {
     return new Set(rows.map((row) => row.pr_key));
   }
 
+  /**
+   * Merged PRs with a mention, reply or question to the viewer made after
+   * the merge. Whether one still waits for an answer needs the snapshot
+   * (`askAfterMerge`); this narrows the PRs to read. Each merged PR seeks its
+   * events after merged_at through the (pr_key, at) index.
+   */
+  prKeysWithAsksAfterMerge(): Set<PrKey> {
+    const rows = all<{ pr_key: string }>(
+      this.db,
+      `SELECT DISTINCT e.pr_key FROM pr p
+       JOIN pr_event e ON e.pr_key = p.key AND e.at > p.merged_at
+       WHERE p.state = 'MERGED' AND e.kind IN ('mention', 'reply_to_user', 'question_to_user')`,
+    );
+    return new Set(rows.map((row) => row.pr_key));
+  }
+
   /** Which of these ids are stored now. */
   storedIds(ids: string[]): Set<string> {
     const stored = new Set<string>();

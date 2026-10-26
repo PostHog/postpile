@@ -65,6 +65,11 @@ export interface HotFacts {
    * not seen that may be a review request for them (`threadNewsFacts`).
    */
   personalAsk: boolean;
+  /**
+   * Merged, and a person's ask of the viewer after the merge still waits
+   * for their answer (`askAfterMerge`): their move, hot whatever its age.
+   */
+  askAfterMerge: boolean;
   /** The newest of the PR's last update on GitHub, its newest stored event and its thread's last update. */
   activityAt: IsoTime;
 }
@@ -80,7 +85,7 @@ export interface HotRank {
 /** The hot facts of a stored PR, from its header and what sits beside it. */
 export function hotFactsOf(
   pr: PrHeader,
-  parts: { thread: Pick<NotificationThread, 'unread' | 'reason' | 'updatedAt'> | null; found: FoundVia | null; personalAsk: boolean },
+  parts: { thread: Pick<NotificationThread, 'unread' | 'reason' | 'updatedAt'> | null; found: FoundVia | null; personalAsk: boolean; askAfterMerge: boolean },
 ): HotFacts {
   const times = [pr.updatedAt, pr.lastEventAt, parts.thread?.updatedAt ?? null].filter((time): time is IsoTime => time !== null);
   return {
@@ -93,6 +98,7 @@ export function hotFactsOf(
     thread: parts.thread === null ? null : { unread: parts.thread.unread, reason: parts.thread.reason },
     found: parts.found,
     personalAsk: parts.personalAsk,
+    askAfterMerge: parts.askAfterMerge,
     activityAt: times.reduce((newest, time) => (time > newest ? time : newest)),
   };
 }
@@ -118,6 +124,7 @@ export function threadOnlyFacts(
     thread: { unread: thread.unread, reason: thread.reason },
     found,
     personalAsk: thread.reason === 'review_requested',
+    askAfterMerge: false,
     activityAt: thread.updatedAt,
   };
 }
@@ -163,12 +170,14 @@ export function settledSince(now: IsoTime): IsoTime {
 /**
  * Hot by itself: its thread is unread on GitHub, or it is open and tracked
  * (a thread or a found PR), or it had activity in the last SETTLED_DAYS
- * (a merge or close counts: it moves the PR's last update). Stack layers
- * and set mates of a hot PR come along in `selectHotBoard`.
+ * (a merge or close counts: it moves the PR's last update), or someone's
+ * ask after the merge still waits for the viewer (2026-10-26: read and
+ * old, it is still their move). Stack layers and set mates of a hot PR
+ * come along in `selectHotBoard`.
  */
 export function isHotByRule(facts: HotFacts, since: IsoTime): boolean {
   const tracked = facts.thread !== null || facts.found !== null;
-  return facts.thread?.unread === true || (facts.state === 'OPEN' && tracked) || facts.activityAt >= since;
+  return facts.thread?.unread === true || (facts.state === 'OPEN' && tracked) || facts.activityAt >= since || facts.askAfterMerge;
 }
 
 /** Thread reasons that name the viewer in person: mentioned, assigned, their own PR. */
