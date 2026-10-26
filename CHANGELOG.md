@@ -9,7 +9,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - Coming back after a few days away, the catch-up dialog shows sooner: PostPile reads only what the dialog counts before asking, and reads the rest after your answer.
 - While the catch-up dialog waits for an answer, PostPile no longer runs a background sync every few minutes. Your answer starts the sync.
 - When a sync hits its agent-call limit, the next background sync runs a few minutes later instead of an hour later, so skipped glances and summaries catch up soon.
-- A question or mention aimed at you after a PR merged is your move again: the tile says "Answer bob's question", the topic sits under Needs reply, and the PR stays out of Dealt with until you answer.
+- A question or mention aimed at you after a PR merged is your move again: the tile says "Answer bob's question", the topic sits under Needs reply with a coral unread bubble, and the PR stays out of Dealt with until you answer.
 - Event lines show the author's own words when a comment opens with a quote, not the quoted text.
 - A merged PR that reached you through a mention, a team mention or an assignment gets an agent glance while its notification is unread.
 - The inbox catch-up dialog no longer counts or clears a merged PR where someone asked you something after the merge, also not with "everything older than".

@@ -503,8 +503,8 @@ describe('FakeEngine queues', () => {
   it('puts a topic whose only unread tile is merged under needs you while a question after the merge waits for you', async () => {
     const topics = await new FakeEngine().listTopics();
     const frontend = topics.find((item) => item.topic.id === 'topic-frontend-build');
-    // #1857 merged, then jude asked you about snapshots: a reply owed, though no open PR is unread.
-    expect(frontend).toMatchObject({ group: 'needs_you', unreadTiles: 1, urgentUnreadTiles: 0 });
+    // #1857 merged, then jude asked you about snapshots: a reply owed, so the bubble is coral though no open PR is unread.
+    expect(frontend).toMatchObject({ group: 'needs_you', unreadTiles: 1, urgentUnreadTiles: 1 });
     expect(frontend?.yourMoves.map((move) => move.text)).toContain("Answer jude's question");
   });
 

@@ -46,7 +46,7 @@ export interface TopicUrgency {
   /** Distinct unread PRs across the tiles (a PR in two set tiles counts once): the sidebar bubble's number. */
   unreadPrs: number;
   unreadPrKeys: PrKey[];
-  /** Unread tiles with loud news and at least one open PR. These light up the topic. */
+  /** Unread tiles with loud news and at least one open PR or a reply move (`isUrgentUnread`). These light up the topic. */
   urgentUnreadTiles: number;
   /**
    * The moves on live (not done, not snoozed) tiles where it is the
@@ -65,8 +65,16 @@ export interface TopicUrgency {
   needsYou: boolean;
 }
 
+/**
+ * Unread with loud news and still something to act on: an open PR, or a
+ * question to answer after the merge (the `reply` move, `askAfterMerge`;
+ * coral since 2026-10-26, owner).
+ */
 export function isUrgentUnread(tile: UrgencyTile): boolean {
-  return !tile.quiet && tile.state === 'unread' && tile.loud && tile.prStates.includes('OPEN');
+  if (tile.quiet || tile.state !== 'unread' || !tile.loud) {
+    return false;
+  }
+  return tile.prStates.includes('OPEN') || tile.move?.move === 'reply';
 }
 
 /** Where a tier sorts among the asks: its section's place, every tier that asks nothing after them. */

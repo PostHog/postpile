@@ -22,7 +22,8 @@ now".
   `reply`, Needs reply, not done, NOT_YOURS does not hide it); event
   excerpts skip a leading `> quote`; merged PRs whose unread thread is a
   mention, team mention or assignment get a glance (`prWantsGlance` takes
-  the thread); the inbox catch-up leaves your-move merged PRs out of its
+  the thread); its unread bubble is coral (`isUrgentUnread` takes the
+  reply move, owner); the inbox catch-up leaves your-move merged PRs out of its
   counts and every clear, and stops the older-than PUT short of them.
   Not covered by the property tests: the board generator never adds steps
   after a merge.

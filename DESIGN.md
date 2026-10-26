@@ -5248,7 +5248,9 @@ avatars and filters", QueuesB2).
   (not done, not snoozed) tile and that move is more than "Merge, it is approved" on your own PR
   or "Re-submit to the merge queue" (`isMergeApprovedMove`). That move still shows on the tile footer and in
   the chip count, it just doesn't make the topic urgent. Only then is its unread bubble coral and does it rank as
-  `needs_you`. When every unread tile is merged or closed the row shows a
+  `needs_you`. An unread merged tile with a question to answer after the
+  merge ("Asked after the merge", the `reply` move) counts like an open one:
+  coral bubble (2026-10-26, owner). When every other unread tile is merged or closed the row shows a
   grey bubble ("merged or closed since you looked") and ranks below the urgent
   ones (`compareTopicUrgency`: needs you, then open unread tiles, then any
   unread). Tiles still show unread as before.
