@@ -728,8 +728,10 @@ or a queue filter narrows; a finished topic is not in `useTopics`, so
 The open topic can also leave `useTopics` while the user is in it (its PRs
 went cold and its last unread PR was read): `App` keeps its last row
 (`heldTopic`, `nextHeldTopic` / `withHeldTopic` in `lib/selection.ts`) and
-uses that list as `items` everywhere, until the user navigates or
-`heldTopicGone` says it was merged, archived or deleted (2026-10-26). Read
+uses that list as `items` everywhere, until the user navigates, the repo
+scope changes (the server's scope, not the cold list, hides the topic then)
+or `heldTopicGone` says it was merged, archived or deleted (a 404; offline
+or a server error keeps the row, `ApiError.status`) (2026-10-26). Read
 `items`, never `topics.data`, for anything that decides what is open. The "Topics with
 any PR | my PRs | team PRs" switch (`QueueFilters`) is plain UI state in
 `App.tsx`, not a history entry; it narrows together with the search, and

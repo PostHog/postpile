@@ -6,6 +6,16 @@ const params = new URLSearchParams(window.location.search);
 const baseUrl = window.postpile?.apiUrl || params.get('api') || 'http://127.0.0.1:4870';
 const token = window.postpile?.token || params.get('token') || '';
 
+/** A non-2xx answer from the API. `status` lets callers tell "not found" from a server error. */
+export class ApiError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
 /** One JSON request against the local API. Non-2xx answers throw with the server's error text. */
 export async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = { 'x-postpile-token': token };
@@ -20,7 +30,7 @@ export async function request<T>(method: string, path: string, body?: unknown): 
   const json: unknown = await response.json();
   if (!response.ok) {
     const message = (json as { error?: string }).error ?? response.statusText;
-    throw new Error(message);
+    throw new ApiError(message, response.status);
   }
   return json as T;
 }

@@ -243,11 +243,16 @@ export function topicClickOutcome(
 /**
  * Whether the open topic, held on screen after it left the topic list, is
  * really gone (DESIGN "Selection stays put"): its detail says it is no
- * longer active (merged into another topic, archived, retired) or it no
- * longer loads (deleted). Then the fallback runs as before.
+ * longer active (merged into another topic, archived, retired) or the
+ * server confirms it does not exist (404, deleted). Any other failure
+ * (offline, a server error) is transient, so the row stays and the user
+ * keeps their place. Then the fallback runs as before.
  */
-export function heldTopicGone(topic: { status: string } | null, failed: boolean): boolean {
-  return failed || (topic !== null && topic.status !== 'active');
+export function heldTopicGone(topic: { status: string } | null, errorStatus: number | null): boolean {
+  if (errorStatus === 404) {
+    return true;
+  }
+  return topic !== null && topic.status !== 'active';
 }
 
 function hasUnread(item: TopicListItem): boolean {
@@ -261,7 +266,8 @@ function hasUnread(item: TopicListItem): boolean {
  * merged PR, right after the dwell read), the topic leaves the list, and
  * the view used to fall back to another topic in front of the user. Now the
  * last row seen stays while the current entry is that topic; navigating
- * away or `gone` (`heldTopicGone`) lets it go. An unread thread always
+ * away, `gone` (`heldTopicGone`) or a changed repo scope (`App` drops
+ * `previous`, since the server no longer lists the topic by choice) lets it go. An unread thread always
  * keeps a topic listed, so a row off the list shows nothing unread.
  * Returns `previous` itself when nothing changed, so a state update can be
  * skipped.

@@ -420,11 +420,16 @@ describe('the open topic stays listed after the engine drops it (2026-10-26)', (
   it('lets the row go when the topic is really gone (merged, archived, deleted)', () => {
     const held = nextHeldTopic(unreadItem('docs'), [], 'docs', false);
     expect(nextHeldTopic(held, [], 'docs', true)).toBeNull();
-    expect(heldTopicGone({ status: 'active' }, false)).toBe(false);
-    expect(heldTopicGone(null, false)).toBe(false);
-    expect(heldTopicGone({ status: 'archived' }, false)).toBe(true);
-    expect(heldTopicGone({ status: 'retired' }, false)).toBe(true);
-    expect(heldTopicGone(null, true)).toBe(true);
+    expect(heldTopicGone({ status: 'active' }, null)).toBe(false);
+    expect(heldTopicGone(null, null)).toBe(false);
+    expect(heldTopicGone({ status: 'archived' }, null)).toBe(true);
+    expect(heldTopicGone({ status: 'retired' }, null)).toBe(true);
+    expect(heldTopicGone(null, 404)).toBe(true);
+  });
+
+  it('keeps the row through a transient detail failure (offline, server error)', () => {
+    expect(heldTopicGone(null, 500)).toBe(false);
+    expect(heldTopicGone(null, 503)).toBe(false);
   });
 
   it('leaves the list as it is while the engine still lists the topic', () => {

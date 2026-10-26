@@ -5300,9 +5300,12 @@ avatars and filters", QueuesB2).
   (`nextHeldTopic`, `withHeldTopic`) and treats it as listed: the row keeps
   its held place, shown read (a topic off the list has no unread thread),
   and the topic and its tile stay in the middle and right panes. It goes
-  when the user navigates, or when the topic is really gone: its detail
-  says it is no longer active (merged, archived, retired) or no longer
-  loads (`heldTopicGone`). The engine is unchanged: the retire step moves
+  when the user navigates, when the repo scope changes (the scope hides
+  the topic then, not a cold list), or when the topic is really gone: its
+  detail says it is no longer active (merged, archived, retired) or the
+  server answers 404 (`heldTopicGone`). A failed load that is not a 404
+  (offline, a server error) keeps the row, so a blip never costs the
+  user's place. The engine is unchanged: the retire step moves
   the topic to the Archive on a later full sync, never under the user's
   eyes.
 - **Nothing is selected until there is something to look at**: when a

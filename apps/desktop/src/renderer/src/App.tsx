@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { PingTarget, TopicListItem } from '@postpile/core';
 import { useActions } from './api/actions.tsx';
+import { ApiError } from './api/client.ts';
 import { useAppConfig } from './api/config.ts';
 import { useLivePoll } from './api/live.ts';
 import { useProposals } from './api/proposals.ts';
+import { useRepos } from './api/repos.ts';
 import { useSearch } from './api/search.ts';
 import { useSetupStatus } from './api/setup.ts';
 import { sendTelemetry } from './api/telemetry.ts';
@@ -136,7 +138,12 @@ export function App() {
   const finishedIds = new Set((finished.data ?? []).map((entry) => entry.id));
   // The open topic's row, kept on screen after the engine stops listing it (`nextHeldTopic`, 2026-10-26):
   // reading the last unread PR of a topic whose PRs went cold drops it from the list under the user's eyes.
-  const [heldTopic, setHeldTopic] = useState<TopicListItem | null>(null);
+  const [heldState, setHeldState] = useState<TopicListItem | null>(null);
+  // The repo scope the held row was kept under. A topic the server leaves out because the scope changed is
+  // not "gone cold": the row is released, so the scope still decides what is listed (review of #187).
+  const repoScope = useRepos().data?.scope ?? null;
+  const [heldScope, setHeldScope] = useState<string | null>(repoScope);
+  const heldTopic = heldScope === repoScope ? heldState : null;
   // Navigation is a back / forward history; the current entry is what the user picked.
   const heldIds = heldTopic === null ? [] : [heldTopic.topic.id];
   const nav = useNavHistory(new Set([...listedItems.map((item) => item.topic.id), ...heldIds, ...finishedIds]));
@@ -144,12 +151,16 @@ export function App() {
   const heldOffList = heldTopic !== null && heldTopic.topic.id === pickedEntryTopicId && !listedItems.some((item) => item.topic.id === heldTopic.topic.id);
   // Only asked while the row is held off the list: it shows whether the topic is really gone (merged, deleted).
   const heldDetail = useTopic(heldOffList ? heldTopic.topic.id : null);
-  const heldGone = heldTopicGone(heldDetail.data?.topic ?? null, heldDetail.isError);
+  const heldErrorStatus = heldDetail.error instanceof ApiError ? heldDetail.error.status : null;
+  const heldGone = heldTopicGone(heldDetail.data?.topic ?? null, heldErrorStatus);
   const heldAfter = nextHeldTopic(heldTopic, listedItems, pickedEntryTopicId, heldGone);
-  // oxlint-disable-next-line react-hooks/exhaustive-deps -- runs after every render on purpose; setHeldTopic is guarded by the comparison
+  // oxlint-disable-next-line react-hooks/exhaustive-deps -- runs after every render on purpose; the setters are guarded by the comparison
   useEffect(() => {
-    if (heldAfter !== heldTopic) {
-      setHeldTopic(heldAfter);
+    if (heldAfter !== heldState) {
+      setHeldState(heldAfter);
+    }
+    if (heldScope !== repoScope) {
+      setHeldScope(repoScope);
     }
   });
   const items = withHeldTopic(listedItems, heldAfter);
