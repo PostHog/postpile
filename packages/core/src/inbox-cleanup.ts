@@ -67,6 +67,12 @@ export interface CleanupThread {
   merged: boolean;
   /** Merged with an unseen merged_without_review event ("Merged without your review"). */
   withoutReview: boolean;
+  /**
+   * Merged, and someone asked the user after the merge (`askAfterMerge`):
+   * their move. Never counted as a merged PR and never cleared, also not
+   * by the older-than PUT (`planCleanup`).
+   */
+  yourMove: boolean;
   /** The coming sync would glance this PR. Clearing a merged one ends that; an open one is glanced anyway. */
   glanced: boolean;
   /** A merged PR's stored glance; null without one (and for PRs that are not merged). Read only, never a reason to glance. */
@@ -214,10 +220,19 @@ function mergedQuietDays(pick: MergedPick): number | null {
   return pick === 'quiet14' ? 14 : null;
 }
 
+/**
+ * A merged PR the Merged PRs row offers to clear: merged and asking nothing
+ * of the user. One where it is their move (`yourMove`) stays out, so "a
+ * merged PR asks nothing of you" stays true (2026-10-26).
+ */
+function isClearableMerged(thread: CleanupThread): boolean {
+  return thread.merged && !thread.yourMove;
+}
+
 /** Quiet means no activity on the thread for that long, not the merge date. */
 function isMergedPicked(thread: CleanupThread, pick: MergedPick, at: IsoTime): boolean {
   const days = mergedQuietDays(pick);
-  return thread.merged && (days === null || thread.updatedAt < daysBefore(at, days));
+  return isClearableMerged(thread) && (days === null || thread.updatedAt < daysBefore(at, days));
 }
 
 /**
@@ -228,14 +243,14 @@ function isMergedPicked(thread: CleanupThread, pick: MergedPick, at: IsoTime): b
  */
 export function isSafeMerged(thread: CleanupThread): boolean {
   const glance = thread.glance;
-  if (!thread.merged || glance === null || glance.stale || glance.writing) {
+  if (!isClearableMerged(thread) || glance === null || glance.stale || glance.writing) {
     return false;
   }
   return glance.verdict === 'LOOKS_SAFE' || glance.verdict === 'NOT_YOURS';
 }
 
 export function cleanupCounts(threads: CleanupThread[], at: IsoTime): CleanupCounts {
-  const merged = threads.filter((thread) => thread.merged);
+  const merged = threads.filter(isClearableMerged);
   const others = threads.filter((thread) => !thread.merged);
   return {
     unread: threads.length,
@@ -250,15 +265,36 @@ export function cleanupCounts(threads: CleanupThread[], at: IsoTime): CleanupCou
 }
 
 /**
+ * The older-than PUT's `last_read_at`: the cutoff, or one second before the
+ * oldest your-move thread under it. The PUT reads every thread with no
+ * activity since that time and cannot leave one out, so it stops short of
+ * them; the selected threads between it and the cutoff go by repo PUT or
+ * PATCH instead (`planSelection`). Null without the older row.
+ */
+function olderReadBefore(threads: CleanupThread[], picks: CleanupPicks, at: IsoTime): IsoTime | null {
+  if (picks.older === null) {
+    return null;
+  }
+  const cutoff = daysBefore(at, picks.older);
+  const kept = threads.filter((thread) => thread.yourMove && thread.updatedAt < cutoff).map((thread) => thread.updatedAt);
+  if (kept.length === 0) {
+    return cutoff;
+  }
+  const oldest = kept.sort()[0]!;
+  return new Date(new Date(oldest).getTime() - 1000).toISOString();
+}
+
+/**
  * The threads a set of picks marks read: the picked merged PRs, plus every
  * thread older than the "everything else" cutoff. The PUT for that cutoff
  * reads merged threads that old too, whatever the merged row says, so they
- * count. Nothing with activity after `at`.
+ * count. Never a your-move thread (`yourMove`), nothing with activity after
+ * `at`.
  */
 function selectedThreads(threads: CleanupThread[], picks: CleanupPicks, at: IsoTime): CleanupThread[] {
   const readBefore = picks.older === null ? null : daysBefore(at, picks.older);
   return threads.filter((thread) => {
-    if (thread.updatedAt > at) {
+    if (thread.updatedAt > at || thread.yourMove) {
       return false;
     }
     const merged = picks.merged !== null && isMergedPicked(thread, picks.merged, at);
@@ -311,14 +347,13 @@ function planSelection(threads: CleanupThread[], selected: CleanupThread[], read
 
 /** The write plan for a set of picks over the unread threads. */
 export function planCleanup(threads: CleanupThread[], picks: CleanupPicks, at: IsoTime): CleanupPlan {
-  const readBefore = picks.older === null ? null : daysBefore(at, picks.older);
-  return planSelection(threads, selectedThreads(threads, picks, at), readBefore, at);
+  return planSelection(threads, selectedThreads(threads, picks, at), olderReadBefore(threads, picks, at), at);
 }
 
-/** The write plan for an explicit thread list: those still unread, nothing with activity after `at`. */
+/** The write plan for an explicit thread list: those still unread and not the user's move, nothing with activity after `at`. */
 export function planThreadCleanup(threads: CleanupThread[], ids: string[], at: IsoTime): CleanupPlan {
   const wanted = new Set(ids);
-  return planSelection(threads, threads.filter((thread) => wanted.has(thread.id) && thread.updatedAt <= at), null, at);
+  return planSelection(threads, threads.filter((thread) => wanted.has(thread.id) && thread.updatedAt <= at && !thread.yourMove), null, at);
 }
 
 /** What the sidebar's "look safe" item clears: unread merged PRs the agent already called fine (`isSafeMerged`), up to `at`. */

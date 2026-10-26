@@ -32,7 +32,8 @@ export type WhoseTurnKind = 'you' | 'them' | 'none';
 
 /**
  * The kind of move a `you` turn asks for, so the sidebar row can name it.
- * reply: an ask (question, mention, reply, team mention), also on a draft.
+ * reply: an ask (question, mention, reply, team mention), also on a draft,
+ * and a personal ask after the merge on a merged PR (`askAfterMerge`).
  * re_review: the author addressed your changes, or asked you again while
  * they stand. review: a review request, personal or for your team.
  * address_changes: threads or a change request on your own PR or draft.
@@ -257,6 +258,25 @@ export function unansweredAsk(pr: Pr, events: PrEvent[], viewer: Viewer, kinds: 
 }
 
 /**
+ * A person's personal ask of the viewer (mention, question, reply) made
+ * after the merge and not answered since (`unansweredAsk`): "@ada any
+ * thoughts here?" two minutes after the merge still waits for ada's
+ * answer, so it is her move like on an open PR (2026-10-26, owner test
+ * after a week away). Asks from before the merge, team mentions and bots
+ * ask nothing on a merged PR. Null on open and closed PRs.
+ */
+export function askAfterMerge(pr: Pr, events: PrEvent[], viewer: Viewer): PrEvent | null {
+  if (pr.state !== 'MERGED' || pr.mergedAt === null) {
+    return null;
+  }
+  const ask = unansweredAsk(pr, events, viewer, PERSONAL_ASK_KINDS);
+  if (ask === null || ask.at <= pr.mergedAt) {
+    return null;
+  }
+  return ask;
+}
+
+/**
  * Who asked the viewer (or their team) for a review: the newest human
  * request aimed at them in the timeline. A bot's request still asks (see
  * `isAutomation`), the text just does not name the bot.
@@ -459,9 +479,18 @@ function changesAnsweredText(author: string, answer: ChangesAnswer): string {
   return answer.pushed ? `${author} addressed your changes: re-review` : `${author} replied to your review`;
 }
 
+/** A merged PR is nobody's move, unless someone asked the viewer after the merge (`askAfterMerge`). Closed PRs never are. */
+function mergedTurn(ctx: PrContext): WhoseTurn {
+  const ask = askAfterMerge(ctx.pr, ctx.events, ctx.viewer);
+  if (ask === null) {
+    return NO_TURN;
+  }
+  return you(ctx, 'reply', askText(ctx, ask, false));
+}
+
 function prTurn(ctx: PrContext): WhoseTurn {
   if (ctx.pr.state !== 'OPEN') {
-    return NO_TURN;
+    return mergedTurn(ctx);
   }
   if (ctx.pr.isDraft) {
     return draftTurn(ctx);

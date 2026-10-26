@@ -1,5 +1,5 @@
 import { CATCH_UP_CONFIRM_TRIES, CLEANUP_ALREADY_PENDING, SAFE_CLEAR_WAITS_FOR_SYNC, type NotificationThread, type FullPr, type Verdict } from '@postpile/core';
-import { makePr, makeThreadFor, makeTimelineItem, viewer } from '@postpile/core/fixtures';
+import { makeComment, makePr, makeThreadFor, makeTimelineItem, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it, vi } from 'vitest';
 import { Board } from './board.ts';
 import { glanceTargetKeys } from './glance-inputs.ts';
@@ -198,6 +198,26 @@ describe('inbox catch-up: clearing', () => {
     expect(h.store.actionLog.listRecent(50).find((row) => row.action === 'inbox_cleanup')).toMatchObject({ origin: 'cleanup', outcome: 'github', detail: 'marked 23 read on GitHub' });
     expect(h.telemetry.events).toContainEqual({ event: 'marked_read', props: { count: 23, origin: 'cleanup' } });
     expect((await h.engine.inboxCleanup()).lastRun).toMatchObject({ marked: 23, failed: 0 });
+  });
+
+  it('leaves a merged PR someone asked you about after the merge out of the counts and every clear, and glances it', async () => {
+    const question = makeComment({ id: 'c-bob', author: 'bob', body: '> an earlier line\n\n@viewer any thoughts here?', createdAt: daysAgo(1) });
+    const asked = makePr({ number: 170, repo: 'acme/charts', state: 'MERGED', mergedAt: daysAgo(2), mergedBy: 'bob', updatedAt: daysAgo(1), comments: [question] });
+    const h = harnessWith(mergedPile());
+    h.reader.addPr(asked, makeThreadFor(asked, { reason: 'mention' }));
+    await h.engine.sync({ maxAgentCalls: 0 });
+    expect(glanceTargetKeys(Board.load(h.store, NOW.toISOString())).has(asked.key)).toBe(true);
+
+    const view = await h.engine.inboxCleanup();
+    expect(view.counts).toMatchObject({ unread: 22, mergedAll: 21 });
+
+    githubAfterCleanup(h, [makeThreadFor(asked, { reason: 'mention' })]);
+    await h.engine.clearInbox({ merged: 'all', older: 14, countedAt: view.countedAt, from: 'start' });
+    await h.engine.inboxCleanupSettled();
+
+    expect(h.writer.calls).toEqual([`markAllReadBefore ${daysAgo(14)}`, `markRepoReadBefore acme/app ${view.countedAt}`]);
+    await h.engine.sync({ maxAgentCalls: 0 });
+    expect(h.store.notifications.list().filter((thread) => thread.unread).map((thread) => thread.id)).toEqual(['thread-170']);
   });
 
   it('counts bulk-covered threads only once the inbox shows them read, and says what GitHub is still working on', async () => {

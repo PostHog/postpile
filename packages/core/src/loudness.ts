@@ -6,7 +6,7 @@ import { mergeQueueFailureAt } from './merge-queue.ts';
 import { isPrOwner } from './pr-owners.ts';
 import { viewerAskedToReview } from './review-request.ts';
 import { isRoutingTeam } from './team-roles.ts';
-import type { EventDisplayState, EventKind, IsoTime, Loudness, Pr, PrEvent, UserPrState, Viewer } from './types.ts';
+import type { EventDisplayState, EventKind, IsoTime, Loudness, NotificationReason, NotificationThread, Pr, PrEvent, UserPrState, Viewer } from './types.ts';
 import type { EventView } from './views.ts';
 
 export interface LoudnessInput {
@@ -343,12 +343,35 @@ export function isUnseenMergeWithoutReview(event: PrEvent): boolean {
 }
 
 /**
- * Whether the PR gets a glance: open PRs, and merged ones while a merge
- * without the user's review is unseen ("worth a look after the fact?").
- * Closed PRs and merged ones otherwise get none.
+ * The thread reasons that name the user or their team: a merged PR whose
+ * unread thread has one of these reached them in person, not as a
+ * subscriber or a state change. GitHub's `team_mention` does not say which
+ * team, so a routing team's mention counts too.
  */
-export function prWantsGlance(pr: Pick<Pr, 'state'>, events: PrEvent[]): boolean {
-  return pr.state === 'OPEN' || (pr.state === 'MERGED' && events.some(isUnseenMergeWithoutReview));
+const NAMED_REASONS: readonly NotificationReason[] = ['mention', 'team_mention', 'assign'];
+
+/** A PR's notification thread as the glance rule reads it; null without a thread. */
+export type GlanceThread = Pick<NotificationThread, 'unread' | 'reason'> | null;
+
+/**
+ * Whether the PR gets a glance: open PRs, and merged ones while a merge
+ * without the user's review is unseen ("worth a look after the fact?") or
+ * while their unread thread names the user or their team (mention, team
+ * mention, assign: 2026-10-26, owner test after a week away, most merged
+ * PRs waiting there had reached them that way and got no glance). Closed
+ * PRs and merged ones otherwise get none.
+ */
+export function prWantsGlance(pr: Pick<Pr, 'state'>, events: PrEvent[], thread: GlanceThread): boolean {
+  if (pr.state === 'OPEN') {
+    return true;
+  }
+  if (pr.state !== 'MERGED') {
+    return false;
+  }
+  if (events.some(isUnseenMergeWithoutReview)) {
+    return true;
+  }
+  return thread !== null && thread.unread && NAMED_REASONS.includes(thread.reason);
 }
 
 export function isUnseenLoud(event: PrEvent): boolean {

@@ -5,7 +5,7 @@ import { isApprovedByViewer, reviewPending, viewerRequestedChanges } from './rev
 import { actedAfterSeeing } from './saw-before-acting.ts';
 import { snoozePhase } from './snooze.ts';
 import { stackByPrKey } from './stacks.ts';
-import { prWhoseTurn } from './whose-turn.ts';
+import { askAfterMerge, prWhoseTurn } from './whose-turn.ts';
 import type {
   FoundPr,
   IsoTime,
@@ -101,7 +101,8 @@ export function prKeyFromTileId(tileId: string): PrKey | null {
 /**
  * Nothing is asked of the viewer on a pinged PR (2026-09-28): merged or
  * closed (but not while a merge without their review is unseen, unless the
- * glance says not theirs), or approved by them while whose turn is not
+ * glance says not theirs, and never while a person's ask after the merge
+ * waits for them, `askAfterMerge`, 2026-10-26), or approved by them while whose turn is not
  * theirs (on any commit; a later push stays quiet, a later question or
  * mention to them is their move), or handled (marked read) while whose turn
  * is not theirs and no review is still pending of them or their team.
@@ -123,6 +124,10 @@ export function nothingAskedOfViewer(
   lastReadAt: IsoTime | null = null,
 ): boolean {
   if (pr.state !== 'OPEN') {
+    // Someone asked them after the merge: their move, whatever the glance says (2026-10-26).
+    if (viewer !== null && askAfterMerge(pr, events, viewer) !== null) {
+      return false;
+    }
     // A merge without the user's review stays until they saw it, unless the glance says it is not theirs.
     return notYours || !events.some(isUnseenMergeWithoutReview);
   }

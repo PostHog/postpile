@@ -22,7 +22,7 @@ function daysAgo(days: number): string {
 }
 
 function thread(id: string, days: number, overrides: Partial<CleanupThread> = {}): CleanupThread {
-  return { id, repo: 'acme/app', updatedAt: daysAgo(days), merged: false, withoutReview: false, glanced: false, glance: null, ...overrides };
+  return { id, repo: 'acme/app', updatedAt: daysAgo(days), merged: false, withoutReview: false, yourMove: false, glanced: false, glance: null, ...overrides };
 }
 
 function merged(id: string, days: number, overrides: Partial<CleanupThread> = {}): CleanupThread {
@@ -89,6 +89,46 @@ describe('inbox cleanup write plan', () => {
     const options = cleanupOptions(threads, NOW);
     expect(cleanupOption(options, { merged: null, older: 14 })).toMatchObject({ clears: 2, bulkCalls: 1, threadCalls: 0 });
     expect(cleanupOption(options, { merged: 'quiet7', older: null })).toMatchObject({ clears: 1, bulkCalls: 0, threadCalls: 1 });
+  });
+});
+
+describe('merged PRs where it is your move', () => {
+  const current = (verdict: CleanupGlance['verdict']): CleanupGlance => ({ verdict, stale: false, writing: false });
+
+  it('leaves a merged PR someone asked you about after the merge out of the counts', () => {
+    const threads = [merged('m1', 1), merged('asked', 9, { yourMove: true, glance: current('LOOKS_SAFE') }), merged('m3', 20)];
+    expect(cleanupCounts(threads, NOW)).toMatchObject({ unread: 3, mergedQuiet7: 1, mergedQuiet14: 1, mergedAll: 2, mergedSafe: 0, olderThan14: 0 });
+    expect(safeMergedIds(threads, NOW)).toEqual([]);
+  });
+
+  it('never clears it with the merged row, and a repo PUT does not cover its repo', () => {
+    const threads = [merged('a1', 3), merged('asked', 3, { yourMove: true })];
+    const plan = planCleanup(threads, { merged: 'all', older: null }, NOW);
+    expect(plan).toMatchObject({ repos: [], threadIds: ['a1'], selectedIds: ['a1'], clears: 1 });
+  });
+
+  it('stops the older-than PUT short of it and sends the threads in between one by one', () => {
+    const threads = [
+      thread('old', 40, { repo: 'acme/docs' }),
+      merged('asked', 30, { yourMove: true }),
+      thread('between', 20, { repo: 'acme/web' }),
+      merged('between-merged', 18, { repo: 'acme/web' }),
+    ];
+    const plan = planCleanup(threads, { merged: null, older: 14 }, NOW);
+    const justBefore = new Date(new Date(daysAgo(30)).getTime() - 1000).toISOString();
+    expect(plan).toMatchObject({
+      readBefore: justBefore,
+      readBeforeIds: ['old'],
+      repos: [{ repo: 'acme/web', ids: ['between', 'between-merged'] }],
+      threadIds: [],
+      clears: 3,
+    });
+    expect(plan.selectedIds).not.toContain('asked');
+  });
+
+  it('keeps the plain cutoff when no your-move thread is that old', () => {
+    const threads = [thread('old', 40), merged('asked', 3, { yourMove: true })];
+    expect(planCleanup(threads, { merged: 'all', older: 14 }, NOW)).toMatchObject({ readBefore: daysAgo(14), readBeforeIds: ['old'], clears: 1 });
   });
 });
 

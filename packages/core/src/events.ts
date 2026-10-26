@@ -49,8 +49,24 @@ export function oneLine(text: string, max = 100): string {
   return trimmed.length > max ? `${trimmed.slice(0, max - 1)}…` : trimmed;
 }
 
+/**
+ * The body from the author's own words on: a reply often opens with a quote
+ * of someone else ("> man the bot is really giving you a hard time"), and
+ * an excerpt of that quote reads as if the author said it (2026-10-26).
+ * Leading quoted and blank lines are dropped; a body that is only a quote
+ * stays as it is.
+ */
+export function withoutLeadingQuote(body: string): string {
+  const lines = body.split('\n');
+  const start = lines.findIndex((line) => line.trim() !== '' && !line.trim().startsWith('>'));
+  if (start === -1) {
+    return body;
+  }
+  return lines.slice(start).join('\n');
+}
+
 function withText(prefix: string, body: string): string {
-  const text = oneLine(body);
+  const text = oneLine(withoutLeadingQuote(body));
   return text === '' ? prefix : `${prefix}: ${text}`;
 }
 

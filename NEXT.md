@@ -16,6 +16,16 @@ now".
   background sync forward to 2 minutes, like the PR cap (91 glances waited
   an hour). Threads the cleanup's bulk PUTs read are no longer logged and
   recorded as read elsewhere on the next inbox read.
+- Asked after the merge (2026-10-26, owner test after a week away;
+  DESIGN.md "Asked after the merge"): a person's unanswered personal ask
+  after the merge is the user's move on a merged PR (`askAfterMerge`:
+  `reply`, Needs reply, not done, NOT_YOURS does not hide it); event
+  excerpts skip a leading `> quote`; merged PRs whose unread thread is a
+  mention, team mention or assignment get a glance (`prWantsGlance` takes
+  the thread); the inbox catch-up leaves your-move merged PRs out of its
+  counts and every clear, and stops the older-than PUT short of them.
+  Not covered by the property tests: the board generator never adds steps
+  after a merge.
 - MCP and CLI contract (2026-10-10, bug hunt batch P5; DESIGN.md "MCP
   server", "propose_topic_change", "Agent notes on PRs"): a rejected move
   is compared by the stack that would move, so naming another layer is

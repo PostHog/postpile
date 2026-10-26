@@ -276,7 +276,8 @@ team-devex" instead of the bot's name.
 - `done`: every pinged member is done, nothing loud is unseen and no thread is unread
   on GitHub. A PR is done only when
   nothing is asked of the user (`isPrDone`, 2026-09-28): merged or closed (except a merge
-  without their review they have not seen yet, see "Merged without your review"), or approved by
+  without their review they have not seen yet, see "Merged without your review", and a
+  person's ask after the merge, see "Asked after the merge"), or approved by
   them while whose turn is not "you" (a later question or mention after the approval keeps
   it out of Done), or handled (marked read) while whose turn is not "you" and no review is pending of
   them (`reviewPending`: a personal request, a team request on a teammate's PR, or a routed
@@ -1045,7 +1046,9 @@ the reasons and does not flip back:
    read clears it, and the tile then shows in Dealt with with the
    verdict.
 4. *Glanced after the merge.* Glance targets include merged PRs with an
-   unseen `merged_without_review` event. The glance then answers "worth a
+   unseen `merged_without_review` event (and, since 2026-10-26, merged PRs
+   whose unread thread names the user or their team, see "Asked after the
+   merge"). The glance then answers "worth a
    look after the fact?": LOOK_CLOSER is worth a look (what the user would
    have pushed back on), LOOKS_SAFE is fine, NOT_YOURS is rule 3. History:
    glances were for open PRs only since the first build, when agent calls had
@@ -1070,6 +1073,46 @@ the reasons and does not flip back:
    and it includes these threads; the dialog says how many ("Includes N
    merged without your review"). Idea from 2026-09-28: "when people come
    from vacation, I had 500".
+
+## Asked after the merge
+
+Decided 2026-10-26 (owner test after a week away). A merged PR used to ask
+nothing of the user, whatever happened on it after the merge. The case that
+broke it: bob merged a PR and two minutes later commented on it, opening
+with a quote of someone else's line and ending with "@user any thoughts
+here?"; later carol replied that the user was out. GitHub's thread said
+`mention`, unread. PostPile showed "Nobody's move", an excerpt of the quote
+instead of bob's words, no glance, and counted the PR among the merged PRs
+the welcome-back dialog's preset Clear would mark read on GitHub. A direct
+question is still a question after the merge.
+
+1. *Whose move.* A person's personal ask (mention, question, reply to the
+   user; an edit that now mentions them) made after `mergedAt` and not
+   answered since is the user's move, as on an open PR (`askAfterMerge` in
+   `whose-turn.ts`): `reply`, "Answer bob's question", tier `needs_reply`,
+   so the topic sits under Needs reply. It ends the same way: the user's
+   touch (comment, review; `lastTouch`), or the events agent lowering the ask
+   to quiet. Asks from before the merge, team mentions and bots stay out
+   (the merge ended that conversation; a team mention is FYI after the
+   fact). Closed PRs stay nobody's move. The PR is not done while it waits
+   (`nothingAskedOfViewer`), and the glance's NOT_YOURS does not change that:
+   the question names the user.
+2. *Excerpt.* Event summaries skip leading quoted lines (`> ...`) and blank
+   lines and show the author's own words (`withoutLeadingQuote` in
+   `events.ts`); a comment that is only a quote keeps the quote.
+3. *Glance.* A merged PR whose thread is unread with reason `mention`,
+   `team_mention` or `assign` gets a glance, like an unseen merge without
+   review (`prWantsGlance`, which now takes the thread). GitHub's reason does
+   not say which team, so a routing team's mention counts too. Subscribed,
+   state change and other reasons, read threads and closed PRs get none.
+4. *Inbox catch-up.* A merged PR where it is the user's move (rule 1,
+   `CleanupThread.yourMove`) is not counted in the Merged PRs row (nor in
+   the "look safe" item) and is never cleared, so "a merged PR asks nothing
+   of you" stays true. The older-than PUT cannot leave a thread out, so when
+   such a thread is older than the cutoff the PUT's `last_read_at` stops one
+   second before it, and the selected threads between that and the cutoff go
+   by repo PUT or PATCH (`planCleanup`). A repo holding one never gets a
+   repo-wide PUT.
 
 ## CI is not tracked
 
@@ -4201,7 +4244,8 @@ only when nothing else is unseen, and the coral NEW badge never shows on it
 unless the event is loud. `TileState.unreadBecause` is ordered least important
 first, so its last entry is the headline. Event summaries drop HTML comments
 (`<!-- ... -->`, bot markers) and collapse whitespace; an empty one falls back
-to the kind label.
+to the kind label. They skip a leading quote (`> ...`) and show the author's
+own words, the quote only when nothing else is there (2026-10-26).
 
 **For whom** (`forWhom`, `tileForWhom` in `for-whom.ts`; 2026-09-28, mockup
 ForWhom2 part 1 variant B). The codes still decide; the UI shows words, not
@@ -4351,7 +4395,9 @@ request stands, push or not), `review` (review request, personal or team), `addr
 draft), `merge`. No CI move: `fix_ci` ("Fix failing CI") was dropped
 2026-09-29 ("CI is not a signal"). Rules per pinged PR, first match wins:
 
-1. merged or closed: none.
+1. merged or closed: none, except a person's unanswered personal ask after
+   the merge: `reply`, worded as in rule 2 (2026-10-26, "Asked after the
+   merge").
 2. you: a human mentioned you, your team, replied to you or asked you a
    question, and you have not touched the PR since (a comment or review, or
    a push to your own PR; core `lastTouch`, the definition of "You already
@@ -4894,6 +4940,8 @@ review on someone else's PR asks for changes, drafts included; added
 2026-09-29), `mine`, `team` (author in `teamMembers`),
 `to_review` (review asked of the viewer or their team, head not reviewed),
 `team_mentioned` (thread reason or a stored team_mention event), `rest`.
+A PR that is not open is `rest`, except a merged one with a person's ask
+after the merge: `needs_reply` (2026-10-26, "Asked after the merge").
 A personal request and a team request on a teammate's PR (see whose turn)
 are `to_review` and checked before `team` (2026-09-28): a review owed to a
 teammate is a review, not the `team` tier. A teammate's PR whose team request
@@ -5752,7 +5800,8 @@ older "everything older than N days" cleanup. Rules in core
 `POST /api/inbox-cleanup/start-as-usual`.
 
 **Why keeping them is fine too.** A merged PR asks nothing of the user and
-never pings. PostPile shows what needs the user first; these stay unread
+never pings. One that does (someone asked them after the merge, "Asked
+after the merge") is left out of the dialog: not counted, never cleared. PostPile shows what needs the user first; these stay unread
 until they get to them. Clearing is the user's explicit choice, never a
 rule ("Not marked read from a guess" still holds).
 
@@ -5760,7 +5809,8 @@ rule ("Not marked read from a guess" still holds).
 
 1. *Merged PRs*: `Quiet 7+ days | Quiet 14+ days | All`. Counts unread
    threads whose PR PostPile fetched and knows is merged; a merged PR it
-   never fetched (PR cap) is not counted. Quiet means the thread's last
+   never fetched (PR cap) is not counted, nor one where it is the user's
+   move (2026-10-26). Quiet means the thread's last
    activity (`updatedAt`), not the merge date. A 7 / 14 option is disabled
    when it holds nothing or equals All. All includes merges without your
    review ("Includes N merged without your review").
@@ -5841,7 +5891,9 @@ notification mutations):
 
 1. Older row picked: one `PUT /notifications` with `last_read_at` = the
    cutoff (`GitHubWrites.markAllReadBefore`). Merged threads that old are
-   covered by it.
+   covered by it. When a your-move thread is older than the cutoff, the
+   `last_read_at` is one second before the oldest one instead, and the
+   picked threads after it go by steps 2 and 3 (2026-10-26).
 2. Remaining merged threads, per repo: when every unread thread of the repo
    (up to the time the dialog counted) is selected, one `PUT
    /repos/{owner}/{repo}/notifications` with `last_read_at` = that time,
@@ -5895,7 +5947,8 @@ the same calls again over what is stored then and starts the run. Stored
 
 **Glance targets after a clear** (checked 2026-10-03, no change needed): a
 merged PR is a glance target only while its merge without your review is
-unseen (`wantsGlance`). The PATCH mirror marks that event seen through the
+unseen or its unread thread names the user or their team (`prWantsGlance`,
+2026-10-26). The PATCH mirror marks that event seen through the
 read, so a cleared merged PR is not glanced; the bulk calls do the same
 through the next inbox read.
 
@@ -6114,8 +6167,9 @@ Owner decisions (2026-09-30):
   old route. Core's tile backing (the unread news holds no ask for you, and
   every unread PR that gets a glance has a current one that is not
   `LOOK_CLOSER`, low or medium risk; it waits for a glance only on PRs that
-  get one: open PRs, and merged PRs merged without your review until you
-  have seen that (`prWantsGlance`, shared with the engine). Any other merged
+  get one: open PRs, merged PRs merged without your review until you
+  have seen that, and merged PRs whose unread thread names you or your
+  team (`prWantsGlance`, shared with the engine). Any other merged
   or closed PR waits for none and its older glance is ignored) only feeds the topic's "Mark N read", which covers the
   unread, unsnoozed tiles whose backing is active. Tiles with an ask for you
   are skipped and stay unread. It is gone when no tile is unread; when tiles
