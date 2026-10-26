@@ -846,7 +846,20 @@ until a fetch; while busy it is shed. The
 order is the board's: tier, unread first, newest first. One full sync
 takes at most 60 PRs (`SYNC_MAX_PRS`); when it stops at that cap the next
 background sync runs 2 minutes later (`BACKLOG_SYNC_MINUTES`), unless the
-board is full (`isBoardFull`), where more would only be cut. The poll
+board is full (`isBoardFull`), where more would only be cut. The same
+2 minutes apply when the sync's agent-call cap skipped work
+(`skippedByBudget` on any kind, core `syncLeftBacklog`), full board or not:
+the skipped work is on PRs the board already shows. It counts only when
+some call of that sync came back without failing, so a cap of 0 or an
+agent that fails every call never loops every 2 minutes. A sync held for
+the inbox catch-up dialog never brings the next one forward, and the auto
+sync skips its turn while one holds: another sync would only fetch and
+hold again, and the answer starts one. Added 2026-10-26 (owner test after
+a week away): the first real sync spent its 150 calls on dossiers and
+skipped 91 glances, and the next sync was an hour off; meanwhile the held
+start sync refetched every 2.5 minutes until the dialog was answered. The
+auto sync's log line says which kind of run it is ("starting (backlog,
+2 min after the last sync)" or "starting (every 60 min)"). The poll
 picks the same way. The freshness check and the stack walk look at PRs on
 the hot board only. Found PRs (the user's own open PRs, review requests,
 recent merges) still come in every full sync. Before 2026-09-29 a year of
@@ -1423,7 +1436,8 @@ Each numbered step is one `AgentJob` or a deterministic pass.
 
 1. **fetch** (no agent): notifications, PR snapshots, events with rule
    loudness. When the inbox catch-up's start dialog is due, the sync stops
-   here until it is answered ("Inbox cleanup" › Before agent work). Every
+   as soon as what the dialog counts is in, before stack layers, diffs and
+   CODEOWNERS, until it is answered ("Inbox cleanup" › Before agent work). Every
    derived event of a fetched PR goes to `event_log.append`
    in time order; ids already logged are ignored, so events stored before
    the log existed are picked up on the PR's next fetch. Then the missing
@@ -1523,7 +1537,9 @@ wall time is the cost, and at 4 most of a 5-minute sync sat in the queue).
 With a call cap (`--max-agent-calls`) the budget is spent in the order jobs
 ask for it (`budget.take` is synchronous, so parallel jobs cannot overshoot
 it): topic assignment, dossiers, sets, events, then glances as their
-dossiers land, then fact reconcile. Consolidation is
+dossiers land, then fact reconcile. Work the cap skipped brings the next
+background sync forward to `BACKLOG_SYNC_MINUTES` (see "Big inboxes"), so
+it waits minutes, not an hour. Consolidation is
 not part of `sync()` and never overlaps with it (each waits for the other,
 so every call lands in the right run's stats); see below.
 
@@ -5796,7 +5812,19 @@ now: hidden 7 days" and the 14 / 30-days banner are gone.
 **Before agent work.** The count needs PR states, so the fetch runs first.
 When the start dialog is due, the sync stops right after the fetch
 (`SyncReport.heldForCatchUp`, `SyncRun.holding`): no digest, quiet reads or
-retire steps, no telemetry. While it holds, the live poll is blocked (it
+retire steps, no telemetry. While the dialog may be due (`CatchUpGate.mayHold`:
+an app with a window and a noted reason), the fetch gets the count in
+first and asks the gate (`holds`) right then: viewer, inbox, the picked
+PRs, the freshness check with the moved PRs that have an unread thread,
+and found PRs (a found merge can change a count). When it holds, the rest
+waits for the resumed sync: moved PRs without an unread thread, stack
+layers (they never have a thread), diffs and CODEOWNERS. The count is the
+same as reading everything first; the saving line's glance count can move
+by the PRs whose fetch waits. Added 2026-10-26 (owner test after a week
+away): the dialog came 75 seconds after the start, most of it fetching
+97 moved PRs, stack layers and CODEOWNERS of 12 repos that the count never
+reads. While a sync holds, background syncs skip their turn (see "Big
+inboxes"). While it holds, the live poll is blocked (it
 would assign topics and start catch-ups). The answer starts the sync again
 (`resumeHeldSync`, with the held sync's options): it fetches again, which
 is cheap (unchanged PRs are skipped) and picks up what the cleanup's bulk
@@ -5837,7 +5865,20 @@ keeps waiting meanwhile, so its fetch sees them read instead of spending
 agent work on them. Still unread at the end: the run ends anyway and says
 so ("Marked 170 read on GitHub; GitHub is still working on 21"). The PUTs
 then show up here with the next inbox read (the resumed sync, else one poll
-cycle). A failed call is logged and the run goes on; writes turned off
+cycle). That read knows they were PostPile's own: `GitHubWrites` remembers
+each bulk PUT that reached GitHub (scope and `last_read_at`, in memory),
+and a thread that left the inbox and that a PUT covers as stored (same
+repo or all, no activity after `last_read_at`, core `ownBulkReadAt`) is
+read here at that time with one summary log line, no "read elsewhere" line
+and no `observed` action-log row. Newer activity on such a thread, read on
+github.com later, is a read elsewhere again. After a restart the memory is
+gone and the next inbox read logs them like before. Added 2026-10-26
+(owner test after a week away): right after "inbox cleanup: marked 11
+read on GitHub" the next sync logged the same 11 threads as read
+elsewhere. The PATCHes and the other own mark-reads (clicked, quiet reads,
+retries) already read the thread here before the next inbox read, so only
+the bulk PUTs had this gap, the stored pre-dialog `mark_all_read_before`
+pending writes included. A failed call is logged and the run goes on; writes turned off
 mid-run stop it. One `inbox_cleanup` action-log row per run sums it up
 ("marked 191 read on GitHub; 2 failed"), next to the rows of each call
 (origin `cleanup`, one batch id). Telemetry: `marked_read` with origin
@@ -7161,6 +7202,8 @@ standalone server never starts it.
   says read while the unread list answered 304. The action log from real
   use (2026-09-28) had only the first kind: GitHub's inbox ETag moves when
   a thread is read elsewhere. A 304 case in main.log would say otherwise.
+  Threads PostPile's own bulk PUTs read (the inbox cleanup) are not logged
+  as read elsewhere (2026-10-26, see "Inbox cleanup").
 
 **Incremental sync** (`PollRun`), only after a 200 of either list, a
 focus refresh or a moved PR from the freshness check: the PRs whose
@@ -7630,7 +7673,13 @@ time and report sit in the tooltip. Full syncs were
 start-only and manual before (2026-09-29). While the GitHub quota is low, a
 due auto sync (the backlog follow-up too) waits until the reset instead
 (see "GitHub quota"). After the Mac wakes from sleep the next auto sync
-waits at least 3 minutes (see "Memory on big boards").
+waits at least 3 minutes (see "Memory on big boards"). While a sync waits
+for the inbox catch-up dialog, a due auto sync skips its turn and sets no
+new one: the answer starts the sync, whose end schedules the next
+(2026-10-26, owner test after a week away; before, the held start sync
+counted as a backlog and refetched every 2.5 minutes). A sync that left a
+backlog (PRs over the PR cap, or agent work the call cap skipped) brings
+the next one forward to 2 minutes (see "Big inboxes").
 
 ## GitHub quota
 

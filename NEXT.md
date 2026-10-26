@@ -6,6 +6,16 @@ now".
 
 ## Done
 
+- Coming back after a week (2026-10-26, owner test after 9 days away;
+  DESIGN.md "Big inboxes", "Inbox cleanup", "Auto sync"): the start sync
+  holds for the catch-up dialog as soon as the count is in, so moved PRs
+  without an unread thread, stack layers, diffs and CODEOWNERS wait for
+  the answer (the dialog took 75 s). While it holds, auto syncs skip
+  instead of refetching every 2.5 minutes, and the log says when a run is
+  a backlog run. A sync whose agent-call cap skipped work brings the next
+  background sync forward to 2 minutes, like the PR cap (91 glances waited
+  an hour). Threads the cleanup's bulk PUTs read are no longer logged and
+  recorded as read elsewhere on the next inbox read.
 - MCP and CLI contract (2026-10-10, bug hunt batch P5; DESIGN.md "MCP
   server", "propose_topic_change", "Agent notes on PRs"): a rejected move
   is compared by the stack that would move, so naming another layer is

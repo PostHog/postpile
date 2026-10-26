@@ -64,7 +64,9 @@ export function noteSyncStart(store: Store, at: IsoTime): void {
 export interface CatchUpGate {
   /** At every sync start. */
   noteStart(at: IsoTime): void;
-  /** After the fetch: true while the start dialog is due, so the sync's agent work waits for its answer. */
+  /** At the fetch's start: the start dialog may be due, so the fetch gets what it counts in first. */
+  mayHold(): boolean;
+  /** Once the count is in: true while the start dialog is due, so the sync's agent work waits for its answer. */
   holds(): boolean;
 }
 
@@ -164,6 +166,10 @@ export class InboxCleanup implements CatchUpGate {
       mergedUnread: counts.mergedAll,
       answeredMerged: answered === null ? null : Number(answered),
     });
+  }
+
+  mayHold(): boolean {
+    return this.deps.asksOnStart && this.reason() !== null;
   }
 
   holds(): boolean {

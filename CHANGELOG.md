@@ -2,6 +2,18 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## Unreleased
+
+### Changed
+
+- Coming back after a few days away, the catch-up dialog shows sooner: PostPile reads only what the dialog counts before asking, and reads the rest after your answer.
+- While the catch-up dialog waits for an answer, PostPile no longer runs a background sync every few minutes. Your answer starts the sync.
+- When a sync hits its agent-call limit, the next background sync runs a few minutes later instead of an hour later, so skipped glances and summaries catch up soon.
+
+### Fixed
+
+- Notifications the inbox cleanup marked read are no longer logged as read on github.com or another client.
+
 ## 0.28.1 (2026-10-12)
 
 ### Changed

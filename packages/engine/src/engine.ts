@@ -112,6 +112,7 @@ import {
   parsePrKey,
   rateLimitSourceFromErrors,
   snoozeTelemetryBucket,
+  syncLeftBacklog,
   systemTimers,
   withHomeTeams,
   withQuietRepo,
@@ -470,6 +471,7 @@ export class Engine implements EngineService {
       deps.syncLog ?? ((line) => console.log(line)),
       this.heldThreads,
       () => deps.markReadQueue.threadIds(),
+      (thread) => deps.writes.ownBulkReadAt(thread),
     );
     this.github = github;
     this.clickedReadRetry = new ClickedReadRetry(store, deps.reader, deps.writes, (key) => this.refreshForRetry(key), this.heldThreads);
@@ -837,14 +839,19 @@ export class Engine implements EngineService {
       // Waiting quiet news stays: the sync may never digest, and a run after one that did makes no call.
       this.catchUps.dropQueued();
       const before = Engine.settled([this.consolidating, this.polling, this.catchUps.settled()]);
-      // PRs left over by the PR cap bring the next background sync forward, until the board is full:
-      // what a full board would cut is not worth a sync every 2 minutes.
+      // PRs left over by the PR cap (until the board is full) or agent work the call cap skipped bring the
+      // next background sync forward. A sync held for the catch-up dialog never: its answer starts the next one.
       let backlog = false;
       this.syncing = before
         .then(() => this.syncIfGhWorks(options))
         .then((report) => {
           const selection = Board.lastSelection(this.deps.store);
-          backlog = report.prsSkipped > 0 && !(selection !== null && isBoardFull(selection));
+          backlog = syncLeftBacklog({
+            heldForCatchUp: report.heldForCatchUp === true,
+            prsSkipped: report.prsSkipped,
+            boardFull: selection !== null && isBoardFull(selection),
+            agentCallStats: report.agentCallStats,
+          });
           return report;
         })
         .finally(() => {
@@ -952,6 +959,7 @@ export class Engine implements EngineService {
     }
     const target = {
       isSyncing: () => this.syncing !== null,
+      holding: () => this.syncRun.holding(),
       pausedUntil: () => this.quota.backgroundPausedUntil(),
       sync: (maxAgentCalls: number) => this.sync({ maxAgentCalls, auto: true }),
     };

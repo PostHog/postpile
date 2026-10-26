@@ -71,8 +71,23 @@ export const READ_TIME_LOOKUPS = 20;
 /** Found PRs: merged ones count when merged this many days back. */
 export const FOUND_MERGED_DAYS = 7;
 
+/**
+ * The inbox catch-up's say over a full sync's fetch (CatchUpGate). `holds`
+ * is asked once, as soon as what the start dialog counts is stored; true
+ * ends the fetch there.
+ */
+export interface FetchGate {
+  /** The start dialog may be due: the fetch gets the count in first. */
+  mayHold(): boolean;
+  holds(): boolean;
+}
+
+const NEVER_HOLDS: FetchGate = { mayHold: () => false, holds: () => false };
+
 export interface GitHubSyncResult {
   viewer: Viewer;
+  /** The gate held: the fetch stopped once the count was in. */
+  heldForCatchUp: boolean;
   notModified: boolean;
   threads: number;
   prsFetched: number;
@@ -169,6 +184,8 @@ export class GitHubSync {
     private readonly heldThreads: ReadonlySet<string> = new Set(),
     /** Threads of clicked mark-reads still in their undo window or being sent (MarkReadQueue): read here already, not yet on GitHub. */
     private readonly queuedThreads: () => ReadonlySet<string> = () => new Set(),
+    /** The last_read_at of PostPile's own bulk mark-read that covers the thread (GitHubWrites.ownBulkReadAt), else null. */
+    private readonly ownBulkReadAt: (thread: NotificationThread) => IsoTime | null = () => null,
   ) {
     this.layers = new StackLayerFinder(reader, now);
     this.lessons = new LessonKeeper(store, now);
@@ -289,6 +306,9 @@ export class GitHubSync {
    * read now, was read on github.com or another client, and that lands in
    * the action log as observed. A pending write for such a thread is
    * cleared: GitHub already has it read. Nothing here writes to GitHub.
+   * Threads PostPile's own bulk mark-read covers (`ownBulkReadAt`) turn
+   * read too, with one summary line and no observed row: the cleanup run
+   * already logged its calls.
    *
    * The full sync asks for the read list since its last start (a thread
    * can come and go between syncs and leave the inbox unchanged); the poll
@@ -318,11 +338,20 @@ export class GitHubSync {
     }
     const inboxIds = new Set((inbox ?? []).map((t) => t.id));
     const readById = new Map((readList ?? []).filter((t) => !inboxIds.has(t.id)).map((t) => [t.id, t]));
-    // The inbox lists unread threads only. One that dropped out, or that the read list now says is read, was read somewhere else.
-    const readElsewhere = this
+    // The inbox lists unread threads only. One that dropped out, or that the read list now says is read, was read.
+    const leftInbox = this
       .threads()
       .filter((stored) => stored.unread && !inboxIds.has(stored.id))
       .filter((stored) => inbox !== null || readById.get(stored.id)?.unread === false);
+    // PostPile's own bulk mark-read (the inbox cleanup's PUTs) read some of them; the rest were read somewhere else.
+    const ownReadAt = new Map<string, IsoTime>();
+    for (const stored of leftInbox) {
+      const at = this.ownBulkReadAt(stored);
+      if (at !== null) {
+        ownReadAt.set(stored.id, readById.get(stored.id)?.lastReadAt ?? at);
+      }
+    }
+    const readElsewhere = leftInbox.filter((stored) => !ownReadAt.has(stored.id));
     const readAt = await this.readTimes(readElsewhere, readById);
     // A held thread keeps its row until the clicked mark-read's retry writes what GitHub says.
     // A queued one is read here while GitHub still lists it unread until the write lands: only
@@ -337,7 +366,13 @@ export class GitHubSync {
       if (!result.notModified) {
         this.store.notifications.upsertMany(notHeld(result.threads));
       }
-      const hadPending = this.pendingWrites.observeRead(new Set(readElsewhere.map((thread) => thread.id)), origin);
+      const hadPending = this.pendingWrites.observeRead(new Set(leftInbox.map((thread) => thread.id)), origin);
+      for (const [threadId, at] of ownReadAt) {
+        this.store.notifications.markRead(threadId, at);
+      }
+      if (ownReadAt.size > 0) {
+        this.textLog(`${origin}: ${ownReadAt.size} threads left the unread list after PostPile's own bulk mark-read (inbox cleanup)`);
+      }
       const noticed = inbox !== null ? 'it left the unread list (unread list 200)' : 'the read list says read (unread list 304)';
       for (const stored of readElsewhere) {
         this.textLog(`${origin}: ${threadPrKey(stored) ?? `thread ${stored.id}`} was read elsewhere, noticed because ${noticed}`);
@@ -356,7 +391,7 @@ export class GitHubSync {
         this.setMeta(LAST_MODIFIED_KEY, result.lastModified);
       }
       this.storedThreads = null;
-      const changed = new Set([...readById.keys(), ...inboxIds, ...readElsewhere.map((thread) => thread.id)]);
+      const changed = new Set([...readById.keys(), ...inboxIds, ...leftInbox.map((thread) => thread.id)]);
       this.reconcileReadTimes(changed);
     });
     const threads = inbox?.filter((t) => threadPrKey(t) !== null).length ?? this.unreadPrThreadCount();
@@ -857,8 +892,30 @@ export class GitHubSync {
     }
   }
 
-  /** The full sync's fetch; `run` counts it. */
-  private async fetchAll(maxPrs: number): Promise<GitHubSyncResult> {
+  /** Moved PRs with an unread thread, then the rest: the inbox catch-up dialog counts only the first. */
+  private splitByUnreadThread(refs: PrRef[]): [PrRef[], PrRef[]] {
+    const unread = new Set(this.threads().flatMap((thread) => (thread.unread ? (threadPrKey(thread) ?? []) : [])));
+    return [refs.filter((ref) => unread.has(prKey(ref))), refs.filter((ref) => !unread.has(prKey(ref)))];
+  }
+
+  /** Fetches PRs the freshness check found moved and stores them into this run's fetch. */
+  private async fetchMoved(refs: PrRef[], run: { fetched: Map<PrKey, FullPr>; newEventIds: string[]; capFiller: CapFiller; viewer: Viewer; errors: string[] }): Promise<void> {
+    const movedAt = this.now().toISOString();
+    for (const [key, pr] of await run.capFiller.fill(await this.fetchPartial(refs, run.errors, 'moved PRs'))) {
+      run.fetched.set(key, pr);
+      run.newEventIds.push(...this.storePr(pr, run.viewer, movedAt));
+    }
+  }
+
+  /**
+   * The full sync's fetch; `run` counts it. While the inbox catch-up dialog
+   * may be due (`gate.mayHold`), what its count reads comes first: the inbox,
+   * the picked PRs, found PRs and the moved PRs with an unread thread. When
+   * the gate then holds, the fetch ends there; the other moved PRs, stack
+   * layers, diffs and CODEOWNERS wait for the sync that resumes it (it
+   * fetches again). DESIGN.md "Inbox cleanup" › Before agent work.
+   */
+  private async fetchAll(maxPrs: number, gate: FetchGate): Promise<GitHubSyncResult> {
     this.beginRun();
     // Roles first: only home teams' members are teammates.
     const viewer = await this.teamMembers.attach(await this.teamRoles.attach(await this.reader.viewer()));
@@ -877,6 +934,7 @@ export class GitHubSync {
     const fetchedAt = this.now().toISOString();
     const fetched = await capFiller.fill(await this.fetchPartial(picked.map((candidate) => candidate.ref), errors, 'PRs'));
     const newEventIds = this.storeAll(fetched, viewer, fetchedAt);
+    const run = { fetched, newEventIds, capFiller, viewer, errors };
     // PRs whose thread did not move but GitHub has a newer updatedAt: approvals, merges, pushes.
     let movedRefs: PrRef[] = [];
     try {
@@ -884,14 +942,34 @@ export class GitHubSync {
     } catch (error) {
       errors.push(`freshness check: ${errorText(error)}`);
     }
-    const movedAt = this.now().toISOString();
-    for (const [key, pr] of await capFiller.fill(await this.fetchPartial(movedRefs, errors, 'moved PRs'))) {
-      fetched.set(key, pr);
-      newEventIds.push(...this.storePr(pr, viewer, movedAt));
+    const [movedNow, movedLater] = gate.mayHold() ? this.splitByUnreadThread(movedRefs) : [movedRefs, []];
+    await this.fetchMoved(movedNow, run);
+    const found = await this.syncFound(viewer, fetched, errors);
+    const common = {
+      viewer,
+      notModified: notifications.notModified,
+      threads: notifications.threads,
+      prsFetched: fetched.size,
+      prsSkipped: candidates.length - picked.length,
+      prsFound: found.length,
+      newEventIds,
+      errors,
+    };
+    if (gate.holds()) {
+      this.textLog(`sync: held for the inbox catch-up dialog; ${movedLater.length} moved PRs without an unread thread, stack layers, diffs and CODEOWNERS wait for its answer`);
+      this.reconcileTouches(viewer);
+      return {
+        ...common,
+        heldForCatchUp: true,
+        prsPulledIn: 0,
+        fetchedPrKeys: [...fetched.keys(), ...found.map((pr) => pr.key)],
+        readOnGitHub: this.takeReadOnGitHub(),
+      };
     }
+    const foundKeys = new Set(found.map((pr) => pr.key));
+    await this.fetchMoved(movedLater.filter((ref) => !foundKeys.has(prKey(ref))), run);
     // The poll fetched these already; they still get their stacks walked and facts verified here.
     const polled = this.polledPrs(fetched);
-    const found = await this.syncFound(viewer, fetched, errors);
     let pulledIn: Pr[] = [];
     try {
       pulledIn = await this.pullInStackLayers([...fetched.values(), ...polled, ...found], viewer);
@@ -904,17 +982,12 @@ export class GitHubSync {
     this.store.meta.delete(POLLED_KEY);
     this.reconcileTouches(viewer);
     return {
-      viewer,
-      notModified: notifications.notModified,
-      threads: notifications.threads,
+      ...common,
+      heldForCatchUp: false,
       prsFetched: fetched.size,
-      prsSkipped: candidates.length - picked.length,
       prsPulledIn: pulledIn.length,
-      prsFound: found.length,
       fetchedPrKeys: [...fetched.keys(), ...polled.map((pr) => pr.key), ...pulledIn.map((pr) => pr.key), ...found.map((pr) => pr.key)],
-      newEventIds,
       readOnGitHub: this.takeReadOnGitHub(),
-      errors,
     };
   }
 
@@ -923,10 +996,10 @@ export class GitHubSync {
     return this.count ? { ...this.count } : null;
   }
 
-  async run(maxPrs: number): Promise<GitHubSyncResult> {
+  async run(maxPrs: number, gate: FetchGate = NEVER_HOLDS): Promise<GitHubSyncResult> {
     this.count = { read: 0, planned: null };
     try {
-      return await this.fetchAll(maxPrs);
+      return await this.fetchAll(maxPrs, gate);
     } finally {
       this.count = null;
     }

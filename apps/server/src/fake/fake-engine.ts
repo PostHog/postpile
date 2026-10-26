@@ -2680,7 +2680,12 @@ export class FakeEngine implements EngineService {
     if (this.autoSync) {
       return;
     }
-    const target = { isSyncing: () => this.syncing !== null, pausedUntil: () => this.quota.backgroundPausedUntil(), sync: () => this.sync() };
+    const target = {
+      isSyncing: () => this.syncing !== null,
+      holding: () => this.heldSync,
+      pausedUntil: () => this.quota.backgroundPausedUntil(),
+      sync: () => this.sync(),
+    };
     this.autoSync = new AutoSyncSchedule(target, systemTimers, options, (line) => console.log(line));
     this.autoSync.start();
   }

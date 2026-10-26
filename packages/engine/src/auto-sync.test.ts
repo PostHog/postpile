@@ -18,7 +18,7 @@ class SleepyTimers extends FakeTimers {
   }
 }
 
-function schedule(minutes: number, isSyncing: () => boolean = () => false) {
+function schedule(minutes: number, isSyncing: () => boolean = () => false, holding: () => boolean = () => false) {
   const timers = new SleepyTimers();
   const syncs: number[] = [];
   const lines: string[] = [];
@@ -26,6 +26,7 @@ function schedule(minutes: number, isSyncing: () => boolean = () => false) {
   const auto = new AutoSyncSchedule(
     {
       isSyncing,
+      holding,
       pausedUntil: () => quota.backgroundPausedUntil(),
       sync: async (maxAgentCalls) => {
         syncs.push(maxAgentCalls);
@@ -77,6 +78,38 @@ describe('AutoSyncSchedule', () => {
     expect(auto.nextSyncAt()).toBe(new Date(timers.now() + 2 * MINUTE).toISOString());
     auto.reschedule(false);
     expect(auto.nextSyncAt()).toBe(new Date(timers.now() + 60 * MINUTE).toISOString());
+  });
+
+  it('says a backlog run is one, not an hourly one', async () => {
+    const { timers, lines, auto } = schedule(60);
+    auto.start();
+
+    auto.reschedule(true);
+    timers.advance(2 * MINUTE);
+    await Promise.resolve();
+
+    expect(lines).toEqual(['auto sync: starting (backlog, 2 min after the last sync)']);
+  });
+
+  it('does not sync while a sync waits for the inbox catch-up answer; the answer\'s sync sets the next one', async () => {
+    let holding = true;
+    const { timers, syncs, lines, auto } = schedule(60, () => false, () => holding);
+    auto.start();
+
+    timers.advance(60 * MINUTE);
+    await Promise.resolve();
+    timers.advance(120 * MINUTE);
+    await Promise.resolve();
+
+    expect(syncs).toEqual([]);
+    expect(lines).toEqual(['auto sync: skipped, waiting for the inbox catch-up answer (the answer starts the sync)']);
+
+    // The answer's sync ended and rescheduled.
+    holding = false;
+    auto.reschedule();
+    timers.advance(60 * MINUTE);
+    await Promise.resolve();
+    expect(syncs).toEqual([150]);
   });
 
   it('skips when a sync is running at the due time', () => {
@@ -239,6 +272,7 @@ describe('AutoSyncSchedule', () => {
     const auto = new AutoSyncSchedule(
       {
         isSyncing: () => false,
+        holding: () => false,
         pausedUntil: () => null,
         // Never ends, like a sync still running at the wake.
         sync: () => {
