@@ -1,4 +1,4 @@
-import type { ActionOrigin, IsoTime, LoggedAction, PrKey, PrRef, WriteSwitchState } from '@postpile/core';
+import { ownBulkReadAt, type ActionOrigin, type BulkRead, type IsoTime, type LoggedAction, type PrKey, type PrRef, type WriteSwitchState } from '@postpile/core';
 import { errorText } from '../errors.ts';
 import type { ActionLog } from './action-log.ts';
 import type { WriteSwitch } from './write-switch.ts';
@@ -32,6 +32,9 @@ export function notTakenDetail(reason: string): string {
  * sent because writes are off. Nothing in the engine holds the raw writer.
  */
 export class GitHubWrites {
+  /** Bulk mark-reads that reached GitHub since the app started (`ownBulkReadAt`). */
+  private readonly bulkReads: BulkRead[] = [];
+
   constructor(
     private readonly writeSwitch: WriteSwitch,
     readonly log: ActionLog,
@@ -100,16 +103,37 @@ export class GitHubWrites {
     return this.send('mark_read', { ...context, threadId }, () => this.writeSwitch.writer().markThreadRead(threadId), notTakenDetail);
   }
 
+  /** A bulk mark-read reached GitHub: remembered, so the inbox read that sees its threads go knows who read them. */
+  private noteBulkRead(result: WriteResult, read: BulkRead): WriteResult {
+    if (result === 'sent') {
+      this.bulkReads.push(read);
+    }
+    return result;
+  }
+
   /** The inbox cleanup: one PUT /notifications with last_read_at. */
-  markAllReadBefore(lastReadAt: IsoTime, context: WriteContext): Promise<WriteResult> {
+  async markAllReadBefore(lastReadAt: IsoTime, context: WriteContext): Promise<WriteResult> {
     const detail = `last_read_at=${lastReadAt}`;
-    return this.send('mark_all_read_before', { detail, ...context }, () => this.writeSwitch.writer().markAllReadBefore(lastReadAt), (reason) => `${detail}: ${reason}`);
+    const result = await this.send('mark_all_read_before', { detail, ...context }, () => this.writeSwitch.writer().markAllReadBefore(lastReadAt), (reason) => `${detail}: ${reason}`);
+    return this.noteBulkRead(result, { repo: null, lastReadAt });
   }
 
   /** The inbox cleanup for a repo it covers whole: one PUT /repos/{repo}/notifications with last_read_at. */
-  markRepoReadBefore(repo: string, lastReadAt: IsoTime, context: WriteContext): Promise<WriteResult> {
+  async markRepoReadBefore(repo: string, lastReadAt: IsoTime, context: WriteContext): Promise<WriteResult> {
     const detail = `repo=${repo} last_read_at=${lastReadAt}`;
-    return this.send('mark_all_read_before', { detail, ...context }, () => this.writeSwitch.writer().markRepoReadBefore(repo, lastReadAt), (reason) => `${detail}: ${reason}`);
+    const result = await this.send('mark_all_read_before', { detail, ...context }, () => this.writeSwitch.writer().markRepoReadBefore(repo, lastReadAt), (reason) => `${detail}: ${reason}`);
+    return this.noteBulkRead(result, { repo, lastReadAt });
+  }
+
+  /**
+   * The last_read_at of a bulk mark-read PostPile sent that covers this
+   * thread as stored, else null. Such a thread leaving the unread list was
+   * read by PostPile, not elsewhere (GitHub may finish a bulk PUT minutes
+   * later, after the cleanup run ended). Kept in memory: after a restart
+   * the next inbox read logs them like any read elsewhere.
+   */
+  ownBulkReadAt(thread: { repo: string; updatedAt: IsoTime }): IsoTime | null {
+    return ownBulkReadAt(this.bulkReads, thread);
   }
 
   approvePr(ref: PrRef, body: string, commitOid: string, context: WriteContext): Promise<WriteResult> {

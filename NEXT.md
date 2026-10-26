@@ -6,6 +6,43 @@ now".
 
 ## Done
 
+- Coming back after a week (2026-10-26, owner test after 9 days away;
+  DESIGN.md "Big inboxes", "Inbox cleanup", "Auto sync"): the start sync
+  holds for the catch-up dialog as soon as the count is in, so moved PRs
+  without an unread thread, stack layers, diffs and CODEOWNERS wait for
+  the answer (the dialog took 75 s). While it holds, auto syncs skip
+  instead of refetching every 2.5 minutes, and the log says when a run is
+  a backlog run. A sync whose agent-call cap skipped work brings the next
+  background sync forward to 2 minutes, like the PR cap (91 glances waited
+  an hour). Threads the cleanup's bulk PUTs read are no longer logged and
+  recorded as read elsewhere on the next inbox read. The resumed sync
+  walks the stacks of the held fetch's PRs (listed like the poll's), and a
+  resumed sync that fails no longer leaves the auto sync and the poll
+  blocked once the dialog is answered (review bot on #187).
+- Asked after the merge (2026-10-26, owner test after a week away;
+  DESIGN.md "Asked after the merge"): a person's unanswered personal ask
+  after the merge is the user's move on a merged PR (`askAfterMerge`:
+  `reply`, Needs reply, not done, NOT_YOURS does not hide it); event
+  excerpts skip a leading `> quote`; merged PRs whose unread thread is a
+  mention, team mention or assignment get a glance (`prWantsGlance` takes
+  the thread); its unread bubble is coral (`isUrgentUnread` takes the
+  reply move, owner); the inbox catch-up leaves your-move merged PRs out of its
+  counts and every clear, and stops the older-than PUT short of them; such
+  a PR stays on the hot board while the ask waits, however old and read
+  (`HotFacts.askAfterMerge`, review bot on #187). Not covered by the property tests: the board generator never adds steps
+  after a merge.
+- The open topic stays after its last read (2026-10-26, owner report;
+  DESIGN.md "Selection stays put"): the engine lists a topic by its hot
+  PRs, so reading the last unread PR of a topic whose PRs all went cold
+  (often one merged PR, right after a topic click's dwell read) dropped it
+  from `/api/topics`, and the renderer fell back to another topic. `App`
+  now keeps the last listed row while the current entry is that topic
+  (`nextHeldTopic`, `withHeldTopic`, `heldTopicGone` in
+  `lib/selection.ts`), shown read, until the user navigates or the topic
+  is merged, archived or deleted. No engine change: the retire step still
+  moves it to the Archive on a later full sync. Checked in fake mode with
+  the topic list answer filtered like the hot board (the fake engine does
+  not model cold PRs).
 - MCP and CLI contract (2026-10-10, bug hunt batch P5; DESIGN.md "MCP
   server", "propose_topic_change", "Agent notes on PRs"): a rejected move
   is compared by the stack that would move, so naming another layer is

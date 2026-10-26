@@ -1,5 +1,5 @@
 import { CATCH_UP_CONFIRM_TRIES, CLEANUP_ALREADY_PENDING, SAFE_CLEAR_WAITS_FOR_SYNC, type NotificationThread, type FullPr, type Verdict } from '@postpile/core';
-import { makePr, makeThreadFor, makeTimelineItem, viewer } from '@postpile/core/fixtures';
+import { makeComment, makePr, makeThreadFor, makeTimelineItem, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it, vi } from 'vitest';
 import { Board } from './board.ts';
 import { glanceTargetKeys } from './glance-inputs.ts';
@@ -55,6 +55,14 @@ function githubAfterCleanup(h: Harness, unread: NotificationThread[]): void {
   h.reader.etag = 'etag-after-cleanup';
 }
 
+/** Action-log rows that say a thread was read on github.com or another client. */
+function observedReads(h: Harness): string[] {
+  return h.store.actionLog
+    .listRecent(200)
+    .filter((row) => row.action === 'mark_read' && row.outcome === 'observed')
+    .map((row) => row.threadId ?? '');
+}
+
 describe('inbox catch-up: the sync gate', () => {
   it('holds the first sync after the fetch while the start dialog is due; Start as usual lets it go on', async () => {
     const open = reviewRequestedPr(100, { repo: 'acme/web' });
@@ -90,6 +98,118 @@ describe('inbox catch-up: the sync gate', () => {
   });
 });
 
+describe('inbox catch-up: getting to the dialog fast', () => {
+  it('holds as soon as the count is in: moved PRs without an unread thread, diffs and CODEOWNERS wait for the answer', async () => {
+    let clock = NOW.getTime();
+    const hoursAgo = (hours: number) => new Date(clock - hours * 3_600_000).toISOString();
+    const h = harnessWith(mergedPile(), { now: () => new Date(clock) });
+    const silentlyMerged = reviewRequestedPr(100, { repo: 'acme/web', updatedAt: hoursAgo(1) });
+    const readOpen = reviewRequestedPr(101, { repo: 'acme/web', updatedAt: hoursAgo(1) });
+    h.reader.addPr(silentlyMerged, makeThreadFor(silentlyMerged));
+    h.reader.addPr(readOpen, makeThreadFor(readOpen, { unread: false, lastReadAt: hoursAgo(1) }));
+    await h.engine.sync({ maxAgentCalls: 0 });
+    await h.engine.startAsUsual();
+    await h.engine.sync({ maxAgentCalls: 0 });
+
+    // Six days away. Both PRs moved without their threads moving: one merged, one got a push.
+    clock += 6 * DAY_MS;
+    h.reader.addStackPr({ ...silentlyMerged, state: 'MERGED', mergedAt: hoursAgo(1), mergedBy: 'alice', updatedAt: hoursAgo(1) });
+    h.reader.addStackPr({ ...readOpen, updatedAt: hoursAgo(1) });
+    const fetchesBefore = h.reader.fetchedRefs.length;
+    const codeOwnersBefore = h.reader.codeOwnersCalls.length;
+    const diffsBefore = h.reader.diffCalls.length;
+
+    const held = await h.engine.sync({ maxAgentCalls: 0 });
+
+    expect(held.heldForCatchUp).toBe(true);
+    // The silent merge counts: its PR has an unread thread, so it was fetched before the hold.
+    expect((await h.engine.inboxCleanup()).counts).toMatchObject({ mergedAll: 22 });
+    const fetchedWhileHeld = h.reader.fetchedRefs.slice(fetchesBefore).flat().map((ref) => `${ref.repo}#${ref.number}`);
+    expect(fetchedWhileHeld).toContain(silentlyMerged.key);
+    expect(fetchedWhileHeld).not.toContain(readOpen.key);
+    expect(h.reader.codeOwnersCalls.length).toBe(codeOwnersBefore);
+    expect(h.reader.diffCalls.length).toBe(diffsBefore);
+
+    await h.engine.startAsUsual();
+    const resumed = await h.engine.sync({ maxAgentCalls: 0 });
+
+    expect(resumed.heldForCatchUp).toBeUndefined();
+    expect(h.reader.fetchedRefs.slice(fetchesBefore).flat().map((ref) => `${ref.repo}#${ref.number}`)).toContain(readOpen.key);
+    expect(h.reader.codeOwnersCalls.length).toBeGreaterThan(codeOwnersBefore);
+  });
+
+  it('walks the stack of a merged PR the held fetch stored, though the resumed fetch skips its unchanged snapshot', async () => {
+    const top = makePr({ number: 31, baseRef: 'layer-30', headRef: 'layer-31', state: 'MERGED', mergedAt: daysAgo(1), mergedBy: 'alice', updatedAt: daysAgo(1) });
+    const below = makePr({ number: 30, baseRef: 'master', headRef: 'layer-30', author: 'bob' });
+    const h = harnessWith([...mergedPile(), top]);
+    h.reader.addStackPr(below);
+
+    const held = await h.engine.sync({ maxAgentCalls: 0 });
+    expect(held.heldForCatchUp).toBe(true);
+    expect(h.store.pullIns.get(below.key)).toBeNull();
+
+    await h.engine.startAsUsual();
+    const resumed = await h.engine.sync({ maxAgentCalls: 0 });
+
+    expect(resumed.heldForCatchUp).toBeUndefined();
+    expect(h.store.pullIns.get(below.key)).toMatchObject({ anchorPrKey: top.key });
+  });
+});
+
+describe('inbox catch-up: background syncs while it holds', () => {
+  it('does not bring the next sync forward for a held sync, even with PRs over the cap, and skips auto syncs until the answer', async () => {
+    const lines: string[] = [];
+    const pile = Array.from({ length: 25 }, (_, index) => mergedPr(index + 1, 1 + (index % 3)));
+    const h = harnessWith(pile, { syncLog: (line) => lines.push(line) });
+    h.engine.startAutoSync({ minutes: 60, maxAgentCalls: 0 });
+
+    const held = await h.engine.sync({ maxAgentCalls: 0, maxPrs: 22 });
+
+    expect([held.heldForCatchUp, held.prsSkipped > 0]).toEqual([true, true]);
+    expect((await h.engine.livePollStatus()).nextAutoSyncAt).toBe(new Date(h.timers.now() + 60 * 60_000).toISOString());
+    h.timers.advance(60 * 60_000);
+    await vi.waitFor(() => expect(lines).toContain('auto sync: skipped, waiting for the inbox catch-up answer (the answer starts the sync)'));
+    expect(lines.filter((line) => line.startsWith('sync: started'))).toHaveLength(1);
+
+    // The answer resumes the sync, and its end sets the next auto sync.
+    const skippedAt = h.timers.now();
+    await h.engine.startAsUsual();
+    await vi.waitFor(() => expect(lines.filter((line) => line.startsWith('sync: done'))).toHaveLength(2));
+    await vi.waitFor(async () => expect((await h.engine.livePollStatus()).nextAutoSyncAt).toBe(new Date(skippedAt + 60 * 60_000).toISOString()));
+    h.engine.stopAutoSync();
+  });
+
+  it('lets the auto sync and the poll go on when the sync resuming it fails after the answer', async () => {
+    const lines: string[] = [];
+    const h = harnessWith(mergedPile(), { syncLog: (line) => lines.push(line) });
+    h.engine.startAutoSync({ minutes: 60, maxAgentCalls: 0 });
+    expect((await h.engine.sync({ maxAgentCalls: 0 })).heldForCatchUp).toBe(true);
+
+    h.reader.failNext = new Error('GitHub answered 502');
+    await h.engine.startAsUsual();
+    const failed = await h.engine.sync({ maxAgentCalls: 0 });
+
+    expect(failed.errors).toContain('sync: GitHub answered 502');
+    expect(await h.engine.pollOnce()).not.toEqual({ kind: 'blocked', reason: 'waiting for the inbox catch-up answer' });
+    h.timers.advance(60 * 60_000);
+    await vi.waitFor(() => expect(lines).toContain('auto sync: starting (every 60 min)'));
+    await vi.waitFor(() => expect(lines.filter((line) => line.startsWith('sync: done'))).toHaveLength(3));
+    expect(lines).not.toContain('auto sync: skipped, waiting for the inbox catch-up answer (the answer starts the sync)');
+    h.engine.stopAutoSync();
+  });
+
+  it('keeps waiting when a sync fails while the start dialog is still unanswered', async () => {
+    const h = harnessWith(mergedPile());
+    expect((await h.engine.sync({ maxAgentCalls: 0 })).heldForCatchUp).toBe(true);
+
+    h.reader.failNext = new Error('GitHub answered 502');
+    await h.engine.sync({ maxAgentCalls: 0 });
+
+    expect(await h.engine.pollOnce()).toEqual({ kind: 'blocked', reason: 'waiting for the inbox catch-up answer' });
+    expect((await h.engine.inboxCleanup()).start).not.toBeNull();
+  });
+});
+
 describe('inbox catch-up: clearing', () => {
   it('sends one PUT for everything older, a repo PUT and a PATCH, reads the PATCHed thread here, then resumes the sync', async () => {
     const skipped = mergedWithoutReview(200, 'acme/web');
@@ -120,9 +240,31 @@ describe('inbox catch-up: clearing', () => {
     expect([targets.has(skipped.key), targets.has(open.key)]).toEqual([false, true]);
     expect(resumed.heldForCatchUp).toBeUndefined();
     expect(h.store.notifications.list().filter((thread) => thread.unread).map((thread) => thread.id)).toEqual(['thread-201']);
+    // The bulk calls' threads left the inbox because PostPile read them, not because they were read elsewhere.
+    expect(observedReads(h)).toEqual([]);
     expect(h.store.actionLog.listRecent(50).find((row) => row.action === 'inbox_cleanup')).toMatchObject({ origin: 'cleanup', outcome: 'github', detail: 'marked 23 read on GitHub' });
     expect(h.telemetry.events).toContainEqual({ event: 'marked_read', props: { count: 23, origin: 'cleanup' } });
     expect((await h.engine.inboxCleanup()).lastRun).toMatchObject({ marked: 23, failed: 0 });
+  });
+
+  it('leaves a merged PR someone asked you about after the merge out of the counts and every clear, and glances it', async () => {
+    const question = makeComment({ id: 'c-bob', author: 'bob', body: '> an earlier line\n\n@viewer any thoughts here?', createdAt: daysAgo(1) });
+    const asked = makePr({ number: 170, repo: 'acme/charts', state: 'MERGED', mergedAt: daysAgo(2), mergedBy: 'bob', updatedAt: daysAgo(1), comments: [question] });
+    const h = harnessWith(mergedPile());
+    h.reader.addPr(asked, makeThreadFor(asked, { reason: 'mention' }));
+    await h.engine.sync({ maxAgentCalls: 0 });
+    expect(glanceTargetKeys(Board.load(h.store, NOW.toISOString())).has(asked.key)).toBe(true);
+
+    const view = await h.engine.inboxCleanup();
+    expect(view.counts).toMatchObject({ unread: 22, mergedAll: 21 });
+
+    githubAfterCleanup(h, [makeThreadFor(asked, { reason: 'mention' })]);
+    await h.engine.clearInbox({ merged: 'all', older: 14, countedAt: view.countedAt, from: 'start' });
+    await h.engine.inboxCleanupSettled();
+
+    expect(h.writer.calls).toEqual([`markAllReadBefore ${daysAgo(14)}`, `markRepoReadBefore acme/app ${view.countedAt}`]);
+    await h.engine.sync({ maxAgentCalls: 0 });
+    expect(h.store.notifications.list().filter((thread) => thread.unread).map((thread) => thread.id)).toEqual(['thread-170']);
   });
 
   it('counts bulk-covered threads only once the inbox shows them read, and says what GitHub is still working on', async () => {
@@ -139,6 +281,35 @@ describe('inbox catch-up: clearing', () => {
     expect(h.reader.notificationCalls - callsBefore).toBeGreaterThanOrEqual(CATCH_UP_CONFIRM_TRIES);
     expect((await h.engine.inboxCleanup()).lastRun).toMatchObject({ marked: 0, stillOnGitHub: 21 });
     expect(h.store.actionLog.listRecent(50).find((row) => row.action === 'inbox_cleanup')?.detail).toBe('marked 0 read on GitHub; GitHub is still working on 21');
+
+    // GitHub finished the PUT later: the next inbox read sees PostPile's own read, not a read elsewhere.
+    githubAfterCleanup(h, []);
+    await h.engine.sync({ maxAgentCalls: 0 });
+
+    expect(h.store.notifications.list().filter((thread) => thread.unread)).toEqual([]);
+    expect(h.store.notifications.get('thread-1')?.lastReadAt).toBe(view.countedAt);
+    expect(observedReads(h)).toEqual([]);
+  });
+
+  it('still logs a thread with activity after the bulk call\'s last_read_at as read elsewhere', async () => {
+    const h = harnessWith(mergedPile());
+    await h.engine.sync({ maxAgentCalls: 0 });
+    const view = await h.engine.inboxCleanup();
+    githubAfterCleanup(h, []);
+    await h.engine.clearInbox({ merged: 'all', older: null, countedAt: view.countedAt, from: 'start' });
+    await h.engine.inboxCleanupSettled();
+    await h.engine.sync({ maxAgentCalls: 0 });
+
+    // New activity on a cleared thread, then the user reads it on github.com.
+    const later = makeThreadFor(mergedPr(1, 1), { updatedAt: new Date(NOW.getTime() + 60_000).toISOString() });
+    h.reader.threads = [later];
+    h.reader.etag = 'etag-new-activity';
+    await h.engine.sync({ maxAgentCalls: 0 });
+    githubAfterCleanup(h, []);
+    h.reader.etag = 'etag-read-elsewhere';
+    await h.engine.sync({ maxAgentCalls: 0 });
+
+    expect(observedReads(h)).toEqual(['thread-1']);
   });
 
   it('parks one pending write while locked and lets the held sync go on; Send runs the same plan', async () => {

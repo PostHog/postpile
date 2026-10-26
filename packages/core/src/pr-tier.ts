@@ -7,7 +7,7 @@ import { PERSONAL_ASK_KINDS } from './kinds.ts';
 import { isPrOwner } from './pr-owners.ts';
 import { isPersonalRequest, ownedByTeammate, reviewedHead, reviewRequest, viewerRequestedChanges } from './review-request.ts';
 import type { NotificationReason, Pr, PrEvent, UserPrState, Viewer } from './types.ts';
-import { unansweredAsk } from './whose-turn.ts';
+import { askAfterMerge, unansweredAsk } from './whose-turn.ts';
 
 /**
  * needs_reply: a human spoke to the viewer (mention, question, reply) and
@@ -21,7 +21,8 @@ import { unansweredAsk } from './whose-turn.ts';
  * team's request go before `team`; a teammate's PR with only a taken team
  * request stays `team`.
  * team_mentioned: the team was @-mentioned. rest: everything else, and every
- * PR that is not open.
+ * PR that is not open, except a merged one with a personal ask after the
+ * merge (`askAfterMerge`): needs_reply.
  */
 export type PrTier = 'needs_reply' | 'changes_requested' | 'mine' | 'team' | 'to_review' | 'team_mentioned' | 'rest';
 
@@ -67,7 +68,8 @@ function teamMentioned(input: PrTierInput): boolean {
 export function prTier(input: PrTierInput): PrTier {
   const { pr, viewer } = input;
   if (pr.state !== 'OPEN') {
-    return 'rest';
+    // A person asked the viewer after the merge: still a reply owed (2026-10-26).
+    return askAfterMerge(pr, input.events, viewer) === null ? 'rest' : 'needs_reply';
   }
   // Personal asks only: team mentions have their own tier.
   const ask = unansweredAsk(pr, input.events, viewer, PERSONAL_ASK_KINDS);

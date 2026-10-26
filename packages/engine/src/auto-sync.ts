@@ -5,9 +5,10 @@ import { errorText } from './errors.ts';
 export const DEFAULT_AUTO_SYNC_MINUTES = 60;
 
 /**
- * Minutes to the next background sync when the last one stopped at the PR
- * cap (SYNC_MAX_PRS): a backlog, e.g. after two weeks away, drains in
- * batches a few minutes apart instead of one batch an hour.
+ * Minutes to the next background sync when the last one left a backlog
+ * (`syncLeftBacklog`): it stopped at the PR cap (SYNC_MAX_PRS), or the
+ * agent-call cap skipped work. A backlog, e.g. after two weeks away, drains
+ * in batches a few minutes apart instead of one batch an hour.
  */
 export const BACKLOG_SYNC_MINUTES = 2;
 
@@ -28,6 +29,8 @@ export interface AutoSyncOptions {
 
 export interface AutoSyncTarget {
   isSyncing(): boolean;
+  /** A sync waits for the inbox catch-up dialog's answer; the answer starts the next sync. */
+  holding(): boolean;
   /** Epoch ms until which background GitHub work waits (the GitHub quota is low), else null. */
   pausedUntil(): number | null;
   sync(maxAgentCalls: number): Promise<unknown>;
@@ -38,8 +41,11 @@ export interface AutoSyncTarget {
  * interval counts from the end of the last sync, whoever started it (the
  * engine calls reschedule() when any sync ends), so a "Sync now" pushes the
  * next auto sync out. Skipped when a sync is running at the due time; that
- * sync's end schedules the next one. While the GitHub quota is low it waits
- * for the reset (DESIGN.md "GitHub quota"). Failures are logged, never thrown.
+ * sync's end schedules the next one. Skipped too while a sync waits for the
+ * inbox catch-up dialog: another sync would only fetch and hold again, and
+ * the answer starts one, whose end schedules the next. While the GitHub
+ * quota is low it waits for the reset (DESIGN.md "GitHub quota"). Failures
+ * are logged, never thrown.
  */
 export class AutoSyncSchedule {
   private timer: unknown = null;
@@ -47,6 +53,8 @@ export class AutoSyncSchedule {
   private started = false;
   /** Between suspend() and wake(): due times are kept, but no timer runs. */
   private suspended = false;
+  /** The due sync drains a backlog (BACKLOG_SYNC_MINUTES), for its log line. */
+  private backlog = false;
 
   constructor(
     private readonly target: AutoSyncTarget,
@@ -83,13 +91,17 @@ export class AutoSyncSchedule {
       this.log('auto sync: skipped, a sync is running');
       return;
     }
+    if (this.target.holding()) {
+      this.log('auto sync: skipped, waiting for the inbox catch-up answer (the answer starts the sync)');
+      return;
+    }
     const pausedUntil = this.target.pausedUntil();
     if (pausedUntil !== null) {
       this.log(`auto sync: GitHub quota low, waiting until ${new Date(pausedUntil).toISOString()}`);
       this.scheduleIn(Math.max(0, pausedUntil - this.timers.now()));
       return;
     }
-    this.log(`auto sync: starting (every ${this.options.minutes} min)`);
+    this.log(this.backlog ? `auto sync: starting (backlog, ${this.backlogMinutes()} min after the last sync)` : `auto sync: starting (every ${this.options.minutes} min)`);
     try {
       await this.target.sync(this.options.maxAgentCalls);
     } catch (error) {
@@ -97,8 +109,13 @@ export class AutoSyncSchedule {
     }
     // The engine reschedules on every sync end; this covers a target that does not.
     if (this.started && this.timer === null) {
+      this.backlog = false;
       this.schedule();
     }
+  }
+
+  private backlogMinutes(): number {
+    return Math.min(BACKLOG_SYNC_MINUTES, this.options.minutes);
   }
 
   start(): void {
@@ -106,6 +123,7 @@ export class AutoSyncSchedule {
       return;
     }
     this.started = true;
+    this.backlog = false;
     this.schedule();
   }
 
@@ -118,11 +136,12 @@ export class AutoSyncSchedule {
 
   /**
    * Any sync ended: the next auto sync is a full interval from now, or
-   * BACKLOG_SYNC_MINUTES when that sync left PRs over (`backlog`).
+   * BACKLOG_SYNC_MINUTES when that sync left a backlog (`backlog`).
    */
   reschedule(backlog = false): void {
     if (this.started) {
-      this.schedule(backlog ? Math.min(BACKLOG_SYNC_MINUTES, this.options.minutes) : this.options.minutes);
+      this.backlog = backlog;
+      this.schedule(backlog ? this.backlogMinutes() : this.options.minutes);
     }
   }
 

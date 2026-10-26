@@ -1,5 +1,5 @@
 import { prPaneView, type FullPr } from '@postpile/core';
-import { at, makeThreadFor } from '@postpile/core/fixtures';
+import { at, makeComment, makeThreadFor, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { Board } from './board.ts';
 import { makeHarness, type Harness } from './testing/fakes.ts';
@@ -103,6 +103,30 @@ describe('the hot board', () => {
     h.store.notifications.upsertMany([{ ...makeThreadFor(old), unread: true }]);
 
     expect(Board.load(h.store, LATER.toISOString()).prs.has(old.key)).toBe(true);
+  });
+
+  it('keeps an old, read merged PR on the board while a question after the merge waits for you, not once you answered', async () => {
+    const question = makeComment({ id: 'c-bob', author: 'bob', body: '@viewer any thoughts here?', createdAt: at(6) });
+    const answer = makeComment({ id: 'c-me', author: viewer.login, body: 'Looking now', createdAt: at(7) });
+    const asked = mergedPr(8, { comments: [question] });
+    const answered = mergedPr(9, { comments: [question, answer] });
+    const h = makeHarness({ now: () => LATER });
+    await syncedAndRead(h, 'charts', [asked]);
+    await syncedAndRead(h, 'docs', [answered]);
+
+    const board = Board.load(h.store, LATER.toISOString());
+
+    expect([board.prs.has(asked.key), board.prs.has(answered.key)]).toEqual([true, false]);
+    expect((await h.engine.listTopics({ allRepos: true })).map((item) => item.topic.id)).toEqual(['charts']);
+  });
+
+  it('keeps an old, read merged PR on the board when a comment from before the merge is edited after it to mention you', async () => {
+    const edited = makeComment({ id: 'c-bob', author: 'bob', body: '@viewer can you check the follow-up?', createdAt: at(4), lastEditedAt: at(6) });
+    const asked = mergedPr(8, { comments: [edited] });
+    const h = makeHarness({ now: () => LATER });
+    await syncedAndRead(h, 'charts', [asked]);
+
+    expect(Board.load(h.store, LATER.toISOString()).prs.has(asked.key)).toBe(true);
   });
 
   it('counts the kept PRs per tier for the busy inbox card', async () => {

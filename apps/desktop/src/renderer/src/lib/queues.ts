@@ -242,8 +242,9 @@ export function headingLabel(bucket: TileGroup, shown: TileGroup, onScreen: Tile
 }
 
 /**
- * Unread on a topic row: coral when an unread tile is still open, grey when
- * every unread tile is merged or closed (news, nothing to act on), else none.
+ * Unread on a topic row: coral when an unread tile is still open or asks a
+ * reply after its merge, grey when every unread tile is merged or closed
+ * with nothing to act on, else none.
  */
 export function unreadLook(item: TopicListItem): 'urgent' | 'calm' | null {
   if (item.urgentUnreadTiles > 0) {

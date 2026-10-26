@@ -45,6 +45,17 @@ describe('topicUrgency', () => {
     expect(urgency.unreadPrKeys).toEqual(['acme/app#1', 'acme/app#2']);
   });
 
+  it('lights up a merged tile with a question to answer after the merge', () => {
+    const reply: TopicMove = { move: 'reply', text: "Answer bob's question" };
+    const urgency = topicUrgency([tile({ state: 'unread', prStates: ['MERGED'], move: reply })]);
+    expect(urgency).toMatchObject({ urgentUnreadTiles: 1, needsYou: true });
+  });
+
+  it('keeps a merged tile with a reply move calm once its news is quiet', () => {
+    const reply: TopicMove = { move: 'reply', text: "Answer bob's question" };
+    expect(topicUrgency([tile({ state: 'unread', prStates: ['MERGED'], move: reply, loud: false })]).urgentUnreadTiles).toBe(0);
+  });
+
   it('counts a stack as open while one of its layers is', () => {
     expect(topicUrgency([tile({ state: 'unread', prStates: ['MERGED', 'OPEN'] })]).urgentUnreadTiles).toBe(1);
   });

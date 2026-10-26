@@ -91,7 +91,7 @@ function itemsByUrgency(board: Board): Map<PrKey, GlanceBatchItem> {
     for (const member of tile.members) {
       const pr = board.prs.get(member.prKey);
       const seen = yours.has(member.prKey) || rest.has(member.prKey);
-      if (!pr || !isTracked(member.provenance) || seen || !prWantsGlance(pr, board.events.get(pr.key) ?? [])) {
+      if (!pr || !isTracked(member.provenance) || seen || !prWantsGlance(pr, board.events.get(pr.key) ?? [], board.threads.get(pr.key) ?? null)) {
         continue;
       }
       const part = isViewersMove(board, pr) ? yours : rest;

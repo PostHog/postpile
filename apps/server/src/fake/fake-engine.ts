@@ -128,6 +128,7 @@ import {
   viewerOpenThreads,
   type ReviewOwnership,
   agentPrFacts,
+  askAfterMerge,
   agentApproveRefusal,
   agentApproveSkip,
   agentMarkReadRefusal,
@@ -1248,13 +1249,14 @@ export class FakeEngine implements EngineService {
     return this.listRepos();
   }
 
-  /** Sample PRs the coming sync would glance: open ones in tiles, and merged ones with an unseen merge without your review. */
+  /** Sample PRs the coming sync would glance: open ones in tiles, and merged ones with an unseen merge without your review or an unread thread naming you. */
   private glanceTargets(): Set<PrKey> {
     const keys = new Set(this.data.tiles.flatMap((tile) => tile.members.filter((member) => isTracked(member.provenance)).map((member) => member.prKey)));
+    const threads = new Map(this.threadsOnGitHub().map((thread) => [threadPrKey(thread), thread]));
     return new Set(
       this.data.prs
         .filter((pr) => keys.has(pr.key))
-        .filter((pr) => prWantsGlance(pr, this.eventsOf(pr.key)))
+        .filter((pr) => prWantsGlance(pr, this.eventsOf(pr.key), threads.get(pr.key) ?? null))
         .map((pr) => pr.key),
     );
   }
@@ -1287,6 +1289,7 @@ export class FakeEngine implements EngineService {
           updatedAt: thread.updatedAt,
           merged,
           withoutReview: merged && key !== null && this.eventsOf(key).some(isUnseenMergeWithoutReview),
+          yourMove: merged && pr !== undefined && askAfterMerge(pr, this.eventsOf(pr.key), this.viewer()) !== null,
           glanced: key !== null && glanced.has(key),
           glance: merged ? this.cleanupGlanceOf(thread.id, key) : null,
         };
@@ -1347,7 +1350,7 @@ export class FakeEngine implements EngineService {
       const thread = threads.get(pr.key) ?? null;
       const facts = hotFactsOf(
         { ...pr, assignees: pr.assignees ?? [], lastEventAt: null },
-        { thread, found: null, personalAsk: false },
+        { thread, found: null, personalAsk: false, askAfterMerge: false },
       );
       keptByTier[hotTier(facts, this.viewer())] += 1;
     }
@@ -2680,7 +2683,12 @@ export class FakeEngine implements EngineService {
     if (this.autoSync) {
       return;
     }
-    const target = { isSyncing: () => this.syncing !== null, pausedUntil: () => this.quota.backgroundPausedUntil(), sync: () => this.sync() };
+    const target = {
+      isSyncing: () => this.syncing !== null,
+      holding: () => this.heldSync,
+      pausedUntil: () => this.quota.backgroundPausedUntil(),
+      sync: () => this.sync(),
+    };
     this.autoSync = new AutoSyncSchedule(target, systemTimers, options, (line) => console.log(line));
     this.autoSync.start();
   }

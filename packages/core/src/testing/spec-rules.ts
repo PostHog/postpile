@@ -376,8 +376,18 @@ function othersPrTurn(input: TurnInput): ExpectedTurn {
   return NONE;
 }
 
+/** The newest open personal ask on a merged PR, if it came after the merge (2026-10-26). Null on open and closed PRs. */
+export function mergedPrAsk(pr: Pr, events: PrEvent[], viewer: Viewer): PrEvent | null {
+  if (pr.state !== 'MERGED' || pr.mergedAt === null) {
+    return null;
+  }
+  const ask = openAsk(pr, events, viewer, SPEC_PERSONAL_ASK_KINDS);
+  return ask !== null && ask.at > pr.mergedAt ? ask : null;
+}
+
 /**
- * Whose move on one PR and its words: nobody's once merged or closed; on
+ * Whose move on one PR and its words: nobody's once closed, or merged
+ * unless a person asked the viewer after the merge (then a reply); on
  * an open PR the author's answer to the viewer's changes request is a
  * re-review (their thread reply included), any other open ask is a reply
  * ("Review, ada asked you something" when a personal review is owed too),
@@ -386,7 +396,8 @@ function othersPrTurn(input: TurnInput): ExpectedTurn {
 export function expectedTurn(input: TurnInput): ExpectedTurn {
   const { pr, viewer } = input;
   if (pr.state !== 'OPEN') {
-    return NONE;
+    const ask = mergedPrAsk(pr, input.events, viewer);
+    return ask === null ? NONE : you('reply', ASK_WORDS[askKindOfEvent(pr, viewer, ask)]!.alone(ask.actor));
   }
   if (pr.isDraft) {
     return draftTurn(input);
@@ -418,12 +429,13 @@ export function expectedTurn(input: TurnInput): ExpectedTurn {
  * can be), a teammate's PR, a taken request, a team mention, the rest.
  * Your PR and a teammate's go by owners (DESIGN "PR ownership"), and only
  * home teams have teammates (DESIGN "Team roles").
- * Only open PRs have a queue. Drafts and reviewed heads never sit in To review.
+ * Only open PRs have a queue, and merged ones with a person's ask after the
+ * merge (Needs reply). Drafts and reviewed heads never sit in To review.
  */
 export function expectedTier(input: TurnInput & { reason: NotificationReason | null }): PrTier {
   const { pr, viewer } = input;
   if (pr.state !== 'OPEN') {
-    return 'rest';
+    return mergedPrAsk(pr, input.events, viewer) === null ? 'rest' : 'needs_reply';
   }
   const ask = openAsk(pr, input.events, viewer, SPEC_PERSONAL_ASK_KINDS);
   if (ask !== null && !(changesAnswer(pr, viewer) !== null && isOwner(pr, ask.actor))) {
@@ -493,7 +505,8 @@ export function expectedActedAfterSeeing(input: { pr: Pr; events: PrEvent[]; vie
 
 /**
  * Nothing asked (2026-09-28): a merged or closed PR once its merge without
- * the viewer's review is seen (or the glance says not theirs); an open PR
+ * the viewer's review is seen (or the glance says not theirs) and no
+ * person's ask after the merge waits (`mergedPrAsk`); an open PR
  * only when approved by the viewer, or handled (marked read, or acted on
  * after reading everything a person said: `expectedActedAfterSeeing`) with
  * no review still owed, and in both cases not the viewer's move. Without a
@@ -502,6 +515,9 @@ export function expectedActedAfterSeeing(input: { pr: Pr; events: PrEvent[]; vie
 export function expectedNothingAsked(input: Omit<TurnInput, 'viewer'> & { viewer: Viewer | null; lastReadAt: IsoTime | null }): boolean {
   const { pr, viewer, userState } = input;
   if (pr.state !== 'OPEN') {
+    if (viewer !== null && mergedPrAsk(pr, input.events, viewer) !== null) {
+      return false;
+    }
     return input.notYours || !input.events.some(isUnseenMergeWithoutViewer);
   }
   const notYourMove = () => viewer === null || expectedTurn({ ...input, viewer }).kind !== 'you';

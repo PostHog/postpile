@@ -500,12 +500,12 @@ describe('FakeEngine queues', () => {
     expect(otherWork).toEqual(['topic-usage-exports', 'topic-replay-storage', 'topic-replay-player', 'topic-alert-presets']);
   });
 
-  it('keeps a topic whose only unread tile is merged calm and ranks it below the urgent ones', async () => {
+  it('puts a topic whose only unread tile is merged under needs you while a question after the merge waits for you', async () => {
     const topics = await new FakeEngine().listTopics();
     const frontend = topics.find((item) => item.topic.id === 'topic-frontend-build');
-    expect(frontend).toMatchObject({ group: 'quiet', unreadTiles: 1, urgentUnreadTiles: 0 });
-    const lastUrgent = topics.findLastIndex((item) => item.group === 'needs_you');
-    expect(topics.indexOf(frontend!)).toBeGreaterThan(lastUrgent);
+    // #1857 merged, then jude asked you about snapshots: a reply owed, so the bubble is coral though no open PR is unread.
+    expect(frontend).toMatchObject({ group: 'needs_you', unreadTiles: 1, urgentUnreadTiles: 1 });
+    expect(frontend?.yourMoves.map((move) => move.text)).toContain("Answer jude's question");
   });
 
   it('counts merging your approved PR as a move without making the topic urgent', async () => {

@@ -72,7 +72,7 @@ export const topicCountsMatchTiles: Invariant = {
       .toSorted((a, b) => rank(a)[0] - rank(b)[0] || rank(a)[1] - rank(b)[1])
       .map((view) => view.turn.what);
     ensure(JSON.stringify(urgency.yourMoves.map((move) => move.text)) === JSON.stringify(expectedOrder), 'your moves out of order');
-    const urgentUnread = loudUnread.some((view) => view.prs.some((row) => row.state === 'OPEN'));
+    const urgentUnread = loudUnread.some((view) => view.prs.some((row) => row.state === 'OPEN') || (view.turn.kind === 'you' && view.turn.move === 'reply'));
     const urgentMove = moves.some((move) => move !== 'merge');
     ensure(urgency.needsYou === (urgentUnread || urgentMove), `needs you ${urgency.needsYou}, open unread ${urgentUnread}, move ${urgentMove}`);
   },

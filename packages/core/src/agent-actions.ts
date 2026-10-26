@@ -11,7 +11,7 @@ import type { GlanceRefreshBlock, GlanceState } from './glance-state.ts';
 import { isTracked } from './provenance.ts';
 import { prWantsGlance } from './loudness.ts';
 import { isNewYourMove } from './quiet-reads.ts';
-import type { IsoTime, Pr, PrEvent, PrKey, Tile, TileStack, TileState, UserPrState, Verdict, Viewer } from './types.ts';
+import type { IsoTime, NotificationReason, Pr, PrEvent, PrKey, Tile, TileStack, TileState, UserPrState, Verdict, Viewer } from './types.ts';
 import type { PrApproveResult, TileView } from './views.ts';
 import { prWhoseTurn } from './whose-turn.ts';
 
@@ -233,6 +233,10 @@ export interface AgentPrFactsInput {
   glanceRefreshBlock: GlanceRefreshBlock | null;
   /** GitHub's read time of the PR's thread: the "New moves only" boundary. Null when never read. */
   lastReadAt: IsoTime | null;
+  /** The notification thread's reason; null without a thread. A merged PR named in an unread thread wants a glance (`prWantsGlance`). */
+  reason: NotificationReason | null;
+  /** The PR's notification thread is unread on GitHub. */
+  unreadOnGitHub: boolean;
 }
 
 /** Your move asks something (not merging your approved PR) and is new since the last read; never read, any such move is new. */
@@ -289,7 +293,7 @@ export function agentPrFacts(input: AgentPrFactsInput): AgentPrFacts {
     riskLine: glance?.risk ?? null,
     risk: glance ? riskLevelOf(glance.risk) : null,
     headOid: input.pr.headOid,
-    glanceWanted: prWantsGlance(input.pr, input.events),
+    glanceWanted: prWantsGlance(input.pr, input.events, input.reason === null ? null : { unread: input.unreadOnGitHub, reason: input.reason }),
     askForYou: asksForYou(input),
     approvedOnGitHub: approvedByAnyone(input.pr),
   };

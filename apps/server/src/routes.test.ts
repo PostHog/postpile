@@ -105,18 +105,18 @@ describe('server routes over the fake engine', () => {
 
     expect((await post<SyncReport>(app, '/api/sync')).json.heldForCatchUp).toBe(true);
     const view = await cleanup();
-    // 24 merged PRs only in the inbox, plus the merged sample tiles still unread.
-    expect(view).toMatchObject({ start: { kind: 'first_run' }, counts: { mergedAll: 28 }, pending: false });
+    // 24 merged PRs only in the inbox, plus the merged sample tiles still unread, minus #1857: jude asked you after the merge.
+    expect(view).toMatchObject({ start: { kind: 'first_run' }, counts: { mergedAll: 27 }, pending: false });
 
     const parked = await post<{ ok: boolean; message: string }>(app, '/api/inbox-cleanup/clear', { merged: 'all', older: null, countedAt: view.countedAt, from: 'start' });
-    expect(parked.json.message).toMatch(/^Pending: clears 28/);
+    expect(parked.json.message).toMatch(/^Pending: clears 27/);
     const writes = (await (await app.request('/api/github-writes')).json()) as GitHubWritesStatus;
-    expect(writes.pending).toEqual([expect.objectContaining({ kind: 'catch_up', origin: 'cleanup', threadCount: 28 })]);
+    expect(writes.pending).toEqual([expect.objectContaining({ kind: 'catch_up', origin: 'cleanup', threadCount: 27 })]);
     expect((await cleanup()).start).toBeNull();
 
     await post(app, '/api/github-writes', { enabled: true });
     await post(app, '/api/github-writes/pending/send');
-    await vi.waitFor(async () => expect((await cleanup()).lastRun).toMatchObject({ marked: 28 }));
+    await vi.waitFor(async () => expect((await cleanup()).lastRun).toMatchObject({ marked: 27 }));
     expect((await cleanup()).counts.mergedAll).toBe(0);
 
     expect((await post(app, '/api/inbox-cleanup/clear', { merged: 'quiet3', older: null, countedAt: view.countedAt, from: 'start' })).status).toBe(400);
@@ -128,11 +128,11 @@ describe('server routes over the fake engine', () => {
     const cleanup = async () => (await (await app.request('/api/inbox-cleanup')).json()) as InboxCleanupView;
     await post(app, '/api/github-writes', { enabled: true });
     const view = await cleanup();
-    expect(view.counts).toMatchObject({ mergedAll: 28, mergedSafe: 8 });
+    expect(view.counts).toMatchObject({ mergedAll: 27, mergedSafe: 8 });
 
     expect((await post<{ message: string }>(app, '/api/inbox-cleanup/clear-safe', { countedAt: view.countedAt })).json.message).toBe('Clearing 8 on GitHub in the background');
     await vi.waitFor(async () => expect((await cleanup()).lastRun).toMatchObject({ marked: 8 }));
-    expect((await cleanup()).counts).toMatchObject({ mergedAll: 20, mergedSafe: 0 });
+    expect((await cleanup()).counts).toMatchObject({ mergedAll: 19, mergedSafe: 0 });
   });
 
   it('lists repos, keeps the topics of the chosen repo, labels other repos and sets a repo quiet', async () => {
@@ -195,7 +195,8 @@ describe('server routes over the fake engine', () => {
     const depot = topics.find((item) => item.topic.id === 'topic-depot');
     expect(depot?.group).toBe('needs_you');
     expect(depot?.unreadTiles).toBe(3);
-    expect(topics.find((item) => item.topic.id === 'topic-frontend-build')?.group).toBe('quiet');
+    // Merged, but jude asked the user after the merge: their move (2026-10-26).
+    expect(topics.find((item) => item.topic.id === 'topic-frontend-build')?.group).toBe('needs_you');
   });
 
   it('lists finished topics apart from the sidebar topics, and opens one like any topic', async () => {
@@ -614,7 +615,7 @@ describe('server routes over the fake engine', () => {
     const replies = [...detail.activity.fresh, ...detail.activity.earlier].filter((line) => line.actor === 'you' && line.kind === 'comment');
     // Newest first, and both may share a millisecond: compare sorted.
     expect(replies.map((line) => [line.summary, line.body]).sort()).toEqual([
-      ['you commented: > @you does the warm-up job need a feature flag, or is one cold hour fine?', expect.stringMatching(/^> @you does the warm-up job need a feature flag[^\n]*\n\n@lyra One cold hour is fine\.$/)],
+      ['you commented: @lyra One cold hour is fine.', expect.stringMatching(/^> @you does the warm-up job need a feature flag[^\n]*\n\n@lyra One cold hour is fine\.$/)],
       ['you replied to rowan on turbo.json: Yes, next layer.', 'Yes, next layer.'],
     ]);
     expect((await post<ActionResult>(app, '/api/prs/acme/app/1902/reply', { commentId: 'nope', body: 'x' })).json.ok).toBe(false);

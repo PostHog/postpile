@@ -276,7 +276,8 @@ team-devex" instead of the bot's name.
 - `done`: every pinged member is done, nothing loud is unseen and no thread is unread
   on GitHub. A PR is done only when
   nothing is asked of the user (`isPrDone`, 2026-09-28): merged or closed (except a merge
-  without their review they have not seen yet, see "Merged without your review"), or approved by
+  without their review they have not seen yet, see "Merged without your review", and a
+  person's ask after the merge, see "Asked after the merge"), or approved by
   them while whose turn is not "you" (a later question or mention after the approval keeps
   it out of Done), or handled (marked read) while whose turn is not "you" and no review is pending of
   them (`reviewPending`: a personal request, a team request on a teammate's PR, or a routed
@@ -449,6 +450,16 @@ hot when any of these holds:
 - it had activity in the last 7 days (`SETTLED_DAYS`): the newest of its
   last update on GitHub (a merge or close moves it), its newest stored
   event and its thread's last update;
+- it is merged and a person's ask after the merge still waits for the user
+  (`HotFacts.askAfterMerge`, "Asked after the merge"): read and older than
+  7 days, it is still their move, so its topic stays under Needs reply.
+  The store lists merged PRs with a person's loud ask after `mergedAt` (a
+  mention, a reply or question, or a comment edited to mention them) that
+  they have not answered with a comment or review since
+  (`prKeysWithAsksAfterMerge`); only those get their snapshot read to check
+  the ask is unanswered, so answered and demoted asks in merged history cost
+  nothing on later board builds. Added 2026-10-26 (raised in review of the
+  merged-ask change);
 - it shares a stack or an active set with a hot PR (`withGroups`): stacks
   and sets load whole or not at all, so a pulled-in layer of a hot PR is
   hot too.
@@ -846,7 +857,20 @@ until a fetch; while busy it is shed. The
 order is the board's: tier, unread first, newest first. One full sync
 takes at most 60 PRs (`SYNC_MAX_PRS`); when it stops at that cap the next
 background sync runs 2 minutes later (`BACKLOG_SYNC_MINUTES`), unless the
-board is full (`isBoardFull`), where more would only be cut. The poll
+board is full (`isBoardFull`), where more would only be cut. The same
+2 minutes apply when the sync's agent-call cap skipped work
+(`skippedByBudget` on any kind, core `syncLeftBacklog`), full board or not:
+the skipped work is on PRs the board already shows. It counts only when
+some call of that sync came back without failing, so a cap of 0 or an
+agent that fails every call never loops every 2 minutes. A sync held for
+the inbox catch-up dialog never brings the next one forward, and the auto
+sync skips its turn while one holds: another sync would only fetch and
+hold again, and the answer starts one. Added 2026-10-26 (owner test after
+a week away): the first real sync spent its 150 calls on dossiers and
+skipped 91 glances, and the next sync was an hour off; meanwhile the held
+start sync refetched every 2.5 minutes until the dialog was answered. The
+auto sync's log line says which kind of run it is ("starting (backlog,
+2 min after the last sync)" or "starting (every 60 min)"). The poll
 picks the same way. The freshness check and the stack walk look at PRs on
 the hot board only. Found PRs (the user's own open PRs, review requests,
 recent merges) still come in every full sync. Before 2026-09-29 a year of
@@ -1032,7 +1056,9 @@ the reasons and does not flip back:
    read clears it, and the tile then shows in Dealt with with the
    verdict.
 4. *Glanced after the merge.* Glance targets include merged PRs with an
-   unseen `merged_without_review` event. The glance then answers "worth a
+   unseen `merged_without_review` event (and, since 2026-10-26, merged PRs
+   whose unread thread names the user or their team, see "Asked after the
+   merge"). The glance then answers "worth a
    look after the fact?": LOOK_CLOSER is worth a look (what the user would
    have pushed back on), LOOKS_SAFE is fine, NOT_YOURS is rule 3. History:
    glances were for open PRs only since the first build, when agent calls had
@@ -1057,6 +1083,49 @@ the reasons and does not flip back:
    and it includes these threads; the dialog says how many ("Includes N
    merged without your review"). Idea from 2026-09-28: "when people come
    from vacation, I had 500".
+
+## Asked after the merge
+
+Decided 2026-10-26 (owner test after a week away). A merged PR used to ask
+nothing of the user, whatever happened on it after the merge. The case that
+broke it: bob merged a PR and two minutes later commented on it, opening
+with a quote of someone else's line and ending with "@user any thoughts
+here?"; later carol replied that the user was out. GitHub's thread said
+`mention`, unread. PostPile showed "Nobody's move", an excerpt of the quote
+instead of bob's words, no glance, and counted the PR among the merged PRs
+the welcome-back dialog's preset Clear would mark read on GitHub. A direct
+question is still a question after the merge.
+
+1. *Whose move.* A person's personal ask (mention, question, reply to the
+   user; an edit that now mentions them) made after `mergedAt` and not
+   answered since is the user's move, as on an open PR (`askAfterMerge` in
+   `whose-turn.ts`): `reply`, "Answer bob's question", tier `needs_reply`,
+   so the topic sits under Needs reply. It ends the same way: the user's
+   touch (comment, review; `lastTouch`), or the events agent lowering the ask
+   to quiet. Asks from before the merge, team mentions and bots stay out
+   (the merge ended that conversation; a team mention is FYI after the
+   fact). Closed PRs stay nobody's move. The PR is not done while it waits
+   (`nothingAskedOfViewer`), and the glance's NOT_YOURS does not change that:
+   the question names the user.
+2. *Excerpt.* Event summaries skip leading quoted lines (`> ...`) and blank
+   lines and show the author's own words (`withoutLeadingQuote` in
+   `events.ts`); a comment that is only a quote keeps the quote.
+3. *Glance.* A merged PR whose thread is unread with reason `mention`,
+   `team_mention` or `assign` gets a glance, like an unseen merge without
+   review (`prWantsGlance`, which now takes the thread). GitHub's reason does
+   not say which team, so a routing team's mention counts too. Subscribed,
+   state change and other reasons, read threads and closed PRs get none.
+4. *Inbox catch-up.* A merged PR where it is the user's move (rule 1,
+   `CleanupThread.yourMove`) is not counted in the Merged PRs row (nor in
+   the "look safe" item) and is never cleared, so "a merged PR asks nothing
+   of you" stays true. The older-than PUT cannot leave a thread out, so when
+   such a thread is older than the cutoff the PUT's `last_read_at` stops one
+   second before it, and the selected threads between that and the cutoff go
+   by repo PUT or PATCH (`planCleanup`). A repo holding one never gets a
+   repo-wide PUT.
+5. *Hot board.* Such a PR stays hot while the ask waits, whatever its age
+   and read state (`isHotByRule`, "Big inboxes"): reading it and navigating
+   away does not drop its topic from Needs reply after a week.
 
 ## CI is not tracked
 
@@ -1423,7 +1492,8 @@ Each numbered step is one `AgentJob` or a deterministic pass.
 
 1. **fetch** (no agent): notifications, PR snapshots, events with rule
    loudness. When the inbox catch-up's start dialog is due, the sync stops
-   here until it is answered ("Inbox cleanup" › Before agent work). Every
+   as soon as what the dialog counts is in, before stack layers, diffs and
+   CODEOWNERS, until it is answered ("Inbox cleanup" › Before agent work). Every
    derived event of a fetched PR goes to `event_log.append`
    in time order; ids already logged are ignored, so events stored before
    the log existed are picked up on the PR's next fetch. Then the missing
@@ -1523,7 +1593,9 @@ wall time is the cost, and at 4 most of a 5-minute sync sat in the queue).
 With a call cap (`--max-agent-calls`) the budget is spent in the order jobs
 ask for it (`budget.take` is synchronous, so parallel jobs cannot overshoot
 it): topic assignment, dossiers, sets, events, then glances as their
-dossiers land, then fact reconcile. Consolidation is
+dossiers land, then fact reconcile. Work the cap skipped brings the next
+background sync forward to `BACKLOG_SYNC_MINUTES` (see "Big inboxes"), so
+it waits minutes, not an hour. Consolidation is
 not part of `sync()` and never overlaps with it (each waits for the other,
 so every call lands in the right run's stats); see below.
 
@@ -4185,7 +4257,8 @@ only when nothing else is unseen, and the coral NEW badge never shows on it
 unless the event is loud. `TileState.unreadBecause` is ordered least important
 first, so its last entry is the headline. Event summaries drop HTML comments
 (`<!-- ... -->`, bot markers) and collapse whitespace; an empty one falls back
-to the kind label.
+to the kind label. They skip a leading quote (`> ...`) and show the author's
+own words, the quote only when nothing else is there (2026-10-26).
 
 **For whom** (`forWhom`, `tileForWhom` in `for-whom.ts`; 2026-09-28, mockup
 ForWhom2 part 1 variant B). The codes still decide; the UI shows words, not
@@ -4335,7 +4408,9 @@ request stands, push or not), `review` (review request, personal or team), `addr
 draft), `merge`. No CI move: `fix_ci` ("Fix failing CI") was dropped
 2026-09-29 ("CI is not a signal"). Rules per pinged PR, first match wins:
 
-1. merged or closed: none.
+1. merged or closed: none, except a person's unanswered personal ask after
+   the merge: `reply`, worded as in rule 2 (2026-10-26, "Asked after the
+   merge").
 2. you: a human mentioned you, your team, replied to you or asked you a
    question, and you have not touched the PR since (a comment or review, or
    a push to your own PR; core `lastTouch`, the definition of "You already
@@ -4878,6 +4953,8 @@ review on someone else's PR asks for changes, drafts included; added
 2026-09-29), `mine`, `team` (author in `teamMembers`),
 `to_review` (review asked of the viewer or their team, head not reviewed),
 `team_mentioned` (thread reason or a stored team_mention event), `rest`.
+A PR that is not open is `rest`, except a merged one with a person's ask
+after the merge: `needs_reply` (2026-10-26, "Asked after the merge").
 A personal request and a team request on a teammate's PR (see whose turn)
 are `to_review` and checked before `team` (2026-09-28): a review owed to a
 teammate is a review, not the `team` tier. A teammate's PR whose team request
@@ -5184,7 +5261,9 @@ avatars and filters", QueuesB2).
   (not done, not snoozed) tile and that move is more than "Merge, it is approved" on your own PR
   or "Re-submit to the merge queue" (`isMergeApprovedMove`). That move still shows on the tile footer and in
   the chip count, it just doesn't make the topic urgent. Only then is its unread bubble coral and does it rank as
-  `needs_you`. When every unread tile is merged or closed the row shows a
+  `needs_you`. An unread merged tile with a question to answer after the
+  merge ("Asked after the merge", the `reply` move) counts like an open one:
+  coral bubble (2026-10-26, owner). When every other unread tile is merged or closed the row shows a
   grey bubble ("merged or closed since you looked") and ranks below the urgent
   ones (`compareTopicUrgency`: needs you, then open unread tiles, then any
   unread). Tiles still show unread as before.
@@ -5212,6 +5291,26 @@ avatars and filters", QueuesB2).
   adds history entries. Why: after an approve the user often moves on to
   the next tile they had in sight; a jump to "the next best item" loses
   their place (2026-09-29). Pure rules in `lib/selection.ts`.
+  **The open topic outlives the topic list** (2026-10-26, owner report: "I
+  clicked on the topic, and then it auto-selected the first tile in the
+  topic. This was marked read after a few seconds, so it vanished in front
+  of my eyes."). The engine lists a topic by its hot PRs (see "Big
+  inboxes"): once the last unread PR of a topic whose PRs all went cold is
+  read, often a one-PR topic with a merged PR right after the dwell read,
+  `/api/topics` no longer holds it, and the view fell back to another
+  topic. A tile click hit it the same way. The dwell read stays. Now `App`
+  keeps the last listed row of the topic the current entry points at
+  (`nextHeldTopic`, `withHeldTopic`) and treats it as listed: the row keeps
+  its held place, shown read (a topic off the list has no unread thread),
+  and the topic and its tile stay in the middle and right panes. It goes
+  when the user navigates, when the repo scope changes (the scope hides
+  the topic then, not a cold list), or when the topic is really gone: its
+  detail says it is no longer active (merged, archived, retired) or the
+  server answers 404 (`heldTopicGone`). A failed load that is not a 404
+  (offline, a server error) keeps the row, so a blip never costs the
+  user's place. The engine is unchanged: the retire step moves
+  the topic to the Archive on a later full sync, never under the user's
+  eyes.
 - **Nothing is selected until there is something to look at**: when a
   topic opens or a filter changes and the user has not picked a tile, the
   app selects the first tile of the Unread group in tier order, else the
@@ -5736,7 +5835,8 @@ older "everything older than N days" cleanup. Rules in core
 `POST /api/inbox-cleanup/start-as-usual`.
 
 **Why keeping them is fine too.** A merged PR asks nothing of the user and
-never pings. PostPile shows what needs the user first; these stay unread
+never pings. One that does (someone asked them after the merge, "Asked
+after the merge") is left out of the dialog: not counted, never cleared. PostPile shows what needs the user first; these stay unread
 until they get to them. Clearing is the user's explicit choice, never a
 rule ("Not marked read from a guess" still holds).
 
@@ -5744,7 +5844,8 @@ rule ("Not marked read from a guess" still holds).
 
 1. *Merged PRs*: `Quiet 7+ days | Quiet 14+ days | All`. Counts unread
    threads whose PR PostPile fetched and knows is merged; a merged PR it
-   never fetched (PR cap) is not counted. Quiet means the thread's last
+   never fetched (PR cap) is not counted, nor one where it is the user's
+   move (2026-10-26). Quiet means the thread's last
    activity (`updatedAt`), not the merge date. A 7 / 14 option is disabled
    when it holds nothing or equals All. All includes merges without your
    review ("Includes N merged without your review").
@@ -5796,12 +5897,31 @@ now: hidden 7 days" and the 14 / 30-days banner are gone.
 **Before agent work.** The count needs PR states, so the fetch runs first.
 When the start dialog is due, the sync stops right after the fetch
 (`SyncReport.heldForCatchUp`, `SyncRun.holding`): no digest, quiet reads or
-retire steps, no telemetry. While it holds, the live poll is blocked (it
+retire steps, no telemetry. While the dialog may be due (`CatchUpGate.mayHold`:
+an app with a window and a noted reason), the fetch gets the count in
+first and asks the gate (`holds`) right then: viewer, inbox, the picked
+PRs, the freshness check with the moved PRs that have an unread thread,
+and found PRs (a found merge can change a count). When it holds, the rest
+waits for the resumed sync: moved PRs without an unread thread, stack
+layers (they never have a thread), diffs and CODEOWNERS. The count is the
+same as reading everything first; the saving line's glance count can move
+by the PRs whose fetch waits. Added 2026-10-26 (owner test after a week
+away): the dialog came 75 seconds after the start, most of it fetching
+97 moved PRs, stack layers and CODEOWNERS of 12 repos that the count never
+reads. While a sync holds, background syncs skip their turn (see "Big
+inboxes"). While it holds, the live poll is blocked (it
 would assign topics and start catch-ups). The answer starts the sync again
 (`resumeHeldSync`, with the held sync's options): it fetches again, which
 is cheap (unchanged PRs are skipped) and picks up what the cleanup's bulk
 calls read, and digests both fetches (fetched PRs, new events and GitHub
-read times of the held one count too). Clear resumes it once the run
+read times of the held one count too). The held fetch's PRs (fetched and
+found) are listed like the poll's PRs, so the resumed sync walks their
+stacks though it skips their unchanged snapshots; before, a merged PR
+first stored by the held fetch never had its stack walked. If the resumed
+sync fails, the held fetch is kept for the next sync, but waiting ends
+once the dialog is answered (`CatchUpGate.mayHold` false): the auto sync
+and the poll go on and retry. A sync that fails while the dialog is still
+unanswered keeps waiting. Both added 2026-10-26 (raised in review). Clear resumes it once the run
 ended; locked, nothing to clear, or Start as usual resume it at once. Only
 an app with a window holds (`EngineDeps.catchUpGate`, set by createEngine
 except for the CLI); a CLI sync never waits. The one-time topic tidy still
@@ -5813,7 +5933,9 @@ notification mutations):
 
 1. Older row picked: one `PUT /notifications` with `last_read_at` = the
    cutoff (`GitHubWrites.markAllReadBefore`). Merged threads that old are
-   covered by it.
+   covered by it. When a your-move thread is older than the cutoff, the
+   `last_read_at` is one second before the oldest one instead, and the
+   picked threads after it go by steps 2 and 3 (2026-10-26).
 2. Remaining merged threads, per repo: when every unread thread of the repo
    (up to the time the dialog counted) is selected, one `PUT
    /repos/{owner}/{repo}/notifications` with `last_read_at` = that time,
@@ -5837,7 +5959,20 @@ keeps waiting meanwhile, so its fetch sees them read instead of spending
 agent work on them. Still unread at the end: the run ends anyway and says
 so ("Marked 170 read on GitHub; GitHub is still working on 21"). The PUTs
 then show up here with the next inbox read (the resumed sync, else one poll
-cycle). A failed call is logged and the run goes on; writes turned off
+cycle). That read knows they were PostPile's own: `GitHubWrites` remembers
+each bulk PUT that reached GitHub (scope and `last_read_at`, in memory),
+and a thread that left the inbox and that a PUT covers as stored (same
+repo or all, no activity after `last_read_at`, core `ownBulkReadAt`) is
+read here at that time with one summary log line, no "read elsewhere" line
+and no `observed` action-log row. Newer activity on such a thread, read on
+github.com later, is a read elsewhere again. After a restart the memory is
+gone and the next inbox read logs them like before. Added 2026-10-26
+(owner test after a week away): right after "inbox cleanup: marked 11
+read on GitHub" the next sync logged the same 11 threads as read
+elsewhere. The PATCHes and the other own mark-reads (clicked, quiet reads,
+retries) already read the thread here before the next inbox read, so only
+the bulk PUTs had this gap, the stored pre-dialog `mark_all_read_before`
+pending writes included. A failed call is logged and the run goes on; writes turned off
 mid-run stop it. One `inbox_cleanup` action-log row per run sums it up
 ("marked 191 read on GitHub; 2 failed"), next to the rows of each call
 (origin `cleanup`, one batch id). Telemetry: `marked_read` with origin
@@ -5854,7 +5989,8 @@ the same calls again over what is stored then and starts the run. Stored
 
 **Glance targets after a clear** (checked 2026-10-03, no change needed): a
 merged PR is a glance target only while its merge without your review is
-unseen (`wantsGlance`). The PATCH mirror marks that event seen through the
+unseen or its unread thread names the user or their team (`prWantsGlance`,
+2026-10-26). The PATCH mirror marks that event seen through the
 read, so a cleared merged PR is not glanced; the bulk calls do the same
 through the next inbox read.
 
@@ -6073,8 +6209,9 @@ Owner decisions (2026-09-30):
   old route. Core's tile backing (the unread news holds no ask for you, and
   every unread PR that gets a glance has a current one that is not
   `LOOK_CLOSER`, low or medium risk; it waits for a glance only on PRs that
-  get one: open PRs, and merged PRs merged without your review until you
-  have seen that (`prWantsGlance`, shared with the engine). Any other merged
+  get one: open PRs, merged PRs merged without your review until you
+  have seen that, and merged PRs whose unread thread names you or your
+  team (`prWantsGlance`, shared with the engine). Any other merged
   or closed PR waits for none and its older glance is ignored) only feeds the topic's "Mark N read", which covers the
   unread, unsnoozed tiles whose backing is active. Tiles with an ask for you
   are skipped and stay unread. It is gone when no tile is unread; when tiles
@@ -7161,6 +7298,8 @@ standalone server never starts it.
   says read while the unread list answered 304. The action log from real
   use (2026-09-28) had only the first kind: GitHub's inbox ETag moves when
   a thread is read elsewhere. A 304 case in main.log would say otherwise.
+  Threads PostPile's own bulk PUTs read (the inbox cleanup) are not logged
+  as read elsewhere (2026-10-26, see "Inbox cleanup").
 
 **Incremental sync** (`PollRun`), only after a 200 of either list, a
 focus refresh or a moved PR from the freshness check: the PRs whose
@@ -7630,7 +7769,13 @@ time and report sit in the tooltip. Full syncs were
 start-only and manual before (2026-09-29). While the GitHub quota is low, a
 due auto sync (the backlog follow-up too) waits until the reset instead
 (see "GitHub quota"). After the Mac wakes from sleep the next auto sync
-waits at least 3 minutes (see "Memory on big boards").
+waits at least 3 minutes (see "Memory on big boards"). While a sync waits
+for the inbox catch-up dialog, a due auto sync skips its turn and sets no
+new one: the answer starts the sync, whose end schedules the next
+(2026-10-26, owner test after a week away; before, the held start sync
+counted as a backlog and refetched every 2.5 minutes). A sync that left a
+backlog (PRs over the PR cap, or agent work the call cap skipped) brings
+the next one forward to 2 minutes (see "Big inboxes").
 
 ## GitHub quota
 

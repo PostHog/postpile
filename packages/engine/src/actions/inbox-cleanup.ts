@@ -1,4 +1,5 @@
 import {
+  askAfterMerge,
   CATCH_UP_CONFIRM_TRIES,
   catchUpReason,
   CLEANUP_ALREADY_PENDING,
@@ -36,6 +37,7 @@ import { advanceSeenFromGitHub } from '../memory/seen-from-github.ts';
 import type { Telemetry } from '../telemetry/telemetry.ts';
 import type { GitHubWrites } from '../writes/github-writes.ts';
 import type { PendingWrites } from '../writes/pending-writes.ts';
+import { loadViewer } from '../viewer-meta.ts';
 import { readLocally } from './local-change.ts';
 import { failed, ok } from './results.ts';
 
@@ -64,7 +66,9 @@ export function noteSyncStart(store: Store, at: IsoTime): void {
 export interface CatchUpGate {
   /** At every sync start. */
   noteStart(at: IsoTime): void;
-  /** After the fetch: true while the start dialog is due, so the sync's agent work waits for its answer. */
+  /** At the fetch's start: the start dialog may be due, so the fetch gets what it counts in first. */
+  mayHold(): boolean;
+  /** Once the count is in: true while the start dialog is due, so the sync's agent work waits for its answer. */
   holds(): boolean;
 }
 
@@ -139,6 +143,12 @@ export class InboxCleanup implements CatchUpGate {
     const mergedKeys = keys.filter(isMerged);
     const events = store.events.listForPrs(mergedKeys);
     const glances = this.deps.glances(mergedKeys);
+    const viewer = loadViewer(store);
+    // Someone asked the user after the merge: their move, never cleared (2026-10-26).
+    const isYourMove = (key: PrKey) => {
+      const pr = prs.get(key);
+      return viewer !== null && pr !== undefined && askAfterMerge(pr, events.get(key) ?? [], viewer) !== null;
+    };
     return unread.map((thread) => {
       const key = threadPrKey(thread);
       const merged = isMerged(key);
@@ -148,6 +158,7 @@ export class InboxCleanup implements CatchUpGate {
         updatedAt: thread.updatedAt,
         merged,
         withoutReview: merged && key !== null && (events.get(key) ?? []).some(isUnseenMergeWithoutReview),
+        yourMove: merged && key !== null && isYourMove(key),
         glanced: key !== null && glanced.has(key),
         glance: merged && key !== null ? (glances.get(key) ?? null) : null,
       };
@@ -164,6 +175,10 @@ export class InboxCleanup implements CatchUpGate {
       mergedUnread: counts.mergedAll,
       answeredMerged: answered === null ? null : Number(answered),
     });
+  }
+
+  mayHold(): boolean {
+    return this.deps.asksOnStart && this.reason() !== null;
   }
 
   holds(): boolean {

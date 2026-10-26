@@ -121,8 +121,14 @@ interface LiveSync {
  */
 export class SyncRun {
   private live: LiveSync | null = null;
-  /** Set while the inbox catch-up holds the last sync after its fetch (DESIGN.md "Inbox cleanup" › Before agent work). */
+  /**
+   * What a sync the inbox catch-up held after its fetch fetched (DESIGN.md
+   * "Inbox cleanup" › Before agent work). Kept until a sync runs through and
+   * digests it, also when the sync resuming it fails.
+   */
   private held: HeldSync | null = null;
+  /** The held sync waits for the start dialog's answer: no auto sync and no poll until then. */
+  private waitingForAnswer = false;
   /** The first sync in this process is "start" (the app's own auto-sync); every later one is "manual" ("Sync now"). */
   private syncedOnceInProcess = false;
 
@@ -299,7 +305,7 @@ export class SyncRun {
 
   /** A sync waits for the inbox catch-up's answer: no agent work, no poll, until it resumes. */
   holding(): boolean {
-    return this.held !== null;
+    return this.waitingForAnswer;
   }
 
   /** How the held sync was asked to run, for the one that resumes it. */
@@ -337,7 +343,7 @@ export class SyncRun {
       const tidyTried = await this.tidyFirst(options.agentJobs, { phases, budget, tally, errors });
       // The first sync into an empty store is a baseline: none of it is news to ping about.
       const firstLook = store.notifications.list().length === 0;
-      const fetched = await phases.time('fetch', () => this.github.run(options.maxPrs ?? SYNC_MAX_PRS));
+      const fetched = await phases.time('fetch', () => this.github.run(options.maxPrs ?? SYNC_MAX_PRS, this.catchUpGate));
       report.notificationsNotModified = fetched.notModified;
       report.threads = fetched.threads;
       report.prsFetched = fetched.prsFetched;
@@ -350,14 +356,15 @@ export class SyncRun {
       if (!firstLook) {
         this.deps.pingDecider?.keepSyncedNews(fetched.fetchedPrKeys, fetched.newEventIds);
       }
-      // The start dialog is due: the agent work waits for its answer, which resumes the sync (fetching
-      // again is cheap: unchanged PRs are skipped, and the bulk mark-reads show up in the inbox).
       const forDigest = withHeld(fetched, this.held);
       // What GitHub brought, held fetch included. Not fetchedPrKeys: it also carries PRs the poll stored earlier.
       const prsFromGitHub = fetched.prsFetched + fetched.prsFound + (this.held?.prsFromGitHub ?? 0);
       live.fromGitHub = { prsFetched: prsFromGitHub, newEvents: forDigest.newEventIds.length };
-      held = this.catchUpGate.holds();
+      // The start dialog is due: the agent work waits for its answer, which resumes the sync (fetching
+      // again is cheap: unchanged PRs are skipped, and the bulk mark-reads show up in the inbox).
+      held = fetched.heldForCatchUp;
       this.held = held ? { fetched: forDigest, options, prsFromGitHub } : null;
+      this.waitingForAnswer = held;
       if (held) {
         report.heldForCatchUp = true;
         this.log('sync: held after the fetch until the inbox catch-up dialog is answered');
@@ -366,6 +373,9 @@ export class SyncRun {
       }
     } catch (error) {
       crashed = true;
+      // A failed resume keeps the held fetch for the next sync. Once the dialog is answered nothing waits for
+      // it any more: the auto sync and the poll go on, and the next sync digests the held fetch too.
+      this.waitingForAnswer = this.held !== null && this.catchUpGate.mayHold();
       errors.push(`sync: ${errorText(error)}`);
       // The stack only goes to the log; the report keeps the message.
       this.log(`sync: failed: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);
