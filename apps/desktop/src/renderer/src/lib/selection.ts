@@ -239,3 +239,54 @@ export function topicClickOutcome(
   }
   return { done: true, prKey: selected.prKey };
 }
+
+/**
+ * Whether the open topic, held on screen after it left the topic list, is
+ * really gone (DESIGN "Selection stays put"): its detail says it is no
+ * longer active (merged into another topic, archived, retired) or it no
+ * longer loads (deleted). Then the fallback runs as before.
+ */
+export function heldTopicGone(topic: { status: string } | null, failed: boolean): boolean {
+  return failed || (topic !== null && topic.status !== 'active');
+}
+
+function hasUnread(item: TopicListItem): boolean {
+  return item.unreadTiles > 0 || item.unreadPrs > 0 || item.unreadPrKeys.length > 0 || item.urgentUnreadTiles > 0;
+}
+
+/**
+ * The open topic's sidebar row, kept while the user stays in that topic
+ * (2026-10-26, owner report). The engine lists a topic by its hot PRs: once
+ * the last unread PR of a topic whose PRs all went cold is read (often one
+ * merged PR, right after the dwell read), the topic leaves the list, and
+ * the view used to fall back to another topic in front of the user. Now the
+ * last row seen stays while the current entry is that topic; navigating
+ * away or `gone` (`heldTopicGone`) lets it go. An unread thread always
+ * keeps a topic listed, so a row off the list shows nothing unread.
+ * Returns `previous` itself when nothing changed, so a state update can be
+ * skipped.
+ */
+export function nextHeldTopic(previous: TopicListItem | null, items: TopicListItem[], pickedTopicId: string | null, gone: boolean): TopicListItem | null {
+  if (pickedTopicId === null || gone) {
+    return null;
+  }
+  const listed = items.find((item) => item.topic.id === pickedTopicId);
+  if (listed) {
+    return listed;
+  }
+  if (previous === null || previous.topic.id !== pickedTopicId) {
+    return null;
+  }
+  if (!hasUnread(previous)) {
+    return previous;
+  }
+  return { ...previous, unreadTiles: 0, unreadPrs: 0, unreadPrKeys: [], urgentUnreadTiles: 0 };
+}
+
+/** The topic list with the held row (`nextHeldTopic`) added back, at the end, while the engine no longer lists it. */
+export function withHeldTopic(items: TopicListItem[], held: TopicListItem | null): TopicListItem[] {
+  if (held === null || items.some((item) => item.topic.id === held.topic.id)) {
+    return items;
+  }
+  return [...items, held];
+}

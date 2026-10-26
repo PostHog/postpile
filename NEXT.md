@@ -26,6 +26,18 @@ now".
   counts and every clear, and stops the older-than PUT short of them.
   Not covered by the property tests: the board generator never adds steps
   after a merge.
+- The open topic stays after its last read (2026-10-26, owner report;
+  DESIGN.md "Selection stays put"): the engine lists a topic by its hot
+  PRs, so reading the last unread PR of a topic whose PRs all went cold
+  (often one merged PR, right after a topic click's dwell read) dropped it
+  from `/api/topics`, and the renderer fell back to another topic. `App`
+  now keeps the last listed row while the current entry is that topic
+  (`nextHeldTopic`, `withHeldTopic`, `heldTopicGone` in
+  `lib/selection.ts`), shown read, until the user navigates or the topic
+  is merged, archived or deleted. No engine change: the retire step still
+  moves it to the Archive on a later full sync. Checked in fake mode with
+  the topic list answer filtered like the hot board (the fake engine does
+  not model cold PRs).
 - MCP and CLI contract (2026-10-10, bug hunt batch P5; DESIGN.md "MCP
   server", "propose_topic_change", "Agent notes on PRs"): a rejected move
   is compared by the stack that would move, so naming another layer is

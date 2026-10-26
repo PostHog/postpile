@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import type { PingTarget } from '@postpile/core';
+import type { PingTarget, TopicListItem } from '@postpile/core';
 import { useActions } from './api/actions.tsx';
 import { useAppConfig } from './api/config.ts';
 import { useLivePoll } from './api/live.ts';
@@ -41,14 +41,17 @@ import { filterTopics, searchFilter, visibleTopic } from './lib/search.ts';
 import {
   dwellPrKey,
   filterKey,
+  heldTopicGone,
   keptFor,
   listedTopics,
+  nextHeldTopic,
   nextKept,
   pickedByUser,
   resolveSelection,
   revealedFor,
   topicClickOutcome,
   topicPickExpired,
+  withHeldTopic,
   withSelectedTile,
   type KeptView,
   type UserPick,
@@ -129,10 +132,27 @@ export function App() {
     setSetupStep('checks');
   };
 
-  const items = topics.data ?? [];
+  const listedItems = topics.data ?? [];
   const finishedIds = new Set((finished.data ?? []).map((entry) => entry.id));
+  // The open topic's row, kept on screen after the engine stops listing it (`nextHeldTopic`, 2026-10-26):
+  // reading the last unread PR of a topic whose PRs went cold drops it from the list under the user's eyes.
+  const [heldTopic, setHeldTopic] = useState<TopicListItem | null>(null);
   // Navigation is a back / forward history; the current entry is what the user picked.
-  const nav = useNavHistory(new Set([...items.map((item) => item.topic.id), ...finishedIds]));
+  const heldIds = heldTopic === null ? [] : [heldTopic.topic.id];
+  const nav = useNavHistory(new Set([...listedItems.map((item) => item.topic.id), ...heldIds, ...finishedIds]));
+  const pickedEntryTopicId = nav.current.pane === 'topic' ? nav.current.topicId : null;
+  const heldOffList = heldTopic !== null && heldTopic.topic.id === pickedEntryTopicId && !listedItems.some((item) => item.topic.id === heldTopic.topic.id);
+  // Only asked while the row is held off the list: it shows whether the topic is really gone (merged, deleted).
+  const heldDetail = useTopic(heldOffList ? heldTopic.topic.id : null);
+  const heldGone = heldTopicGone(heldDetail.data?.topic ?? null, heldDetail.isError);
+  const heldAfter = nextHeldTopic(heldTopic, listedItems, pickedEntryTopicId, heldGone);
+  // oxlint-disable-next-line react-hooks/exhaustive-deps -- runs after every render on purpose; setHeldTopic is guarded by the comparison
+  useEffect(() => {
+    if (heldAfter !== heldTopic) {
+      setHeldTopic(heldAfter);
+    }
+  });
+  const items = withHeldTopic(listedItems, heldAfter);
   // The PR the user picked with their last navigation (a tile or PR click, a ping click, a jump from a
   // list, a topic click once its tile is known), else null. Only that one arms the open-read dwell; a tile
   // the app picked on its own never does (2026-10-10, topic clicks since 2026-10-12).

@@ -17,6 +17,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 ### Fixed
 
 - Notifications the inbox cleanup marked read are no longer logged as read on github.com or another client.
+- A topic you open stays on screen after its last unread PR is marked read. A small topic, such as one with a single merged PR, used to leave the list a few seconds after you opened it, and another topic showed in its place. It now stays in its place in the list until you pick something else.
 
 ## 0.28.1 (2026-10-12)
 

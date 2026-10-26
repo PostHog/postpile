@@ -5276,6 +5276,23 @@ avatars and filters", QueuesB2).
   adds history entries. Why: after an approve the user often moves on to
   the next tile they had in sight; a jump to "the next best item" loses
   their place (2026-09-29). Pure rules in `lib/selection.ts`.
+  **The open topic outlives the topic list** (2026-10-26, owner report: "I
+  clicked on the topic, and then it auto-selected the first tile in the
+  topic. This was marked read after a few seconds, so it vanished in front
+  of my eyes."). The engine lists a topic by its hot PRs (see "Big
+  inboxes"): once the last unread PR of a topic whose PRs all went cold is
+  read, often a one-PR topic with a merged PR right after the dwell read,
+  `/api/topics` no longer holds it, and the view fell back to another
+  topic. A tile click hit it the same way. The dwell read stays. Now `App`
+  keeps the last listed row of the topic the current entry points at
+  (`nextHeldTopic`, `withHeldTopic`) and treats it as listed: the row keeps
+  its held place, shown read (a topic off the list has no unread thread),
+  and the topic and its tile stay in the middle and right panes. It goes
+  when the user navigates, or when the topic is really gone: its detail
+  says it is no longer active (merged, archived, retired) or no longer
+  loads (`heldTopicGone`). The engine is unchanged: the retire step moves
+  the topic to the Archive on a later full sync, never under the user's
+  eyes.
 - **Nothing is selected until there is something to look at**: when a
   topic opens or a filter changes and the user has not picked a tile, the
   app selects the first tile of the Unread group in tier order, else the

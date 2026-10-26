@@ -724,7 +724,13 @@ gets news; `DealtLine` ("+ N dealt with", `dealtLineLabel`, fold key
 work's default is `otherWorkStartsOpen`. `hideDealt` is off while the
 search or a queue filter narrows. The Archive drawer (retired topics, `useFinishedTopics`) hides while search
 or a queue filter narrows; a finished topic is not in `useTopics`, so
-`App` opens it by id (`pickedFinishedId`) instead of through `visibleTopic`. The "Topics with
+`App` opens it by id (`pickedFinishedId`) instead of through `visibleTopic`.
+The open topic can also leave `useTopics` while the user is in it (its PRs
+went cold and its last unread PR was read): `App` keeps its last row
+(`heldTopic`, `nextHeldTopic` / `withHeldTopic` in `lib/selection.ts`) and
+uses that list as `items` everywhere, until the user navigates or
+`heldTopicGone` says it was merged, archived or deleted (2026-10-26). Read
+`items`, never `topics.data`, for anything that decides what is open. The "Topics with
 any PR | my PRs | team PRs" switch (`QueueFilters`) is plain UI state in
 `App.tsx`, not a history entry; it narrows together with the search, and
 `App` passes how many topics it hides for the "N topics … hidden · Show

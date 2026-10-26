@@ -8,13 +8,16 @@ import {
   autoTile,
   dwellPrKey,
   filterKey,
+  heldTopicGone,
   keptFor,
   listedTopics,
+  nextHeldTopic,
   nextKept,
   pickedByUser,
   resolveSelection,
   topicClickOutcome,
   topicPickExpired,
+  withHeldTopic,
   withSelectedTile,
   type KeptView,
   type UserPick,
@@ -377,5 +380,57 @@ describe('topicClickOutcome:a topic click picks the tile it opens on (2026-10-12
     const selected = resolveSelection(entry('t'), tiles, tiles, null, null);
     expect(topicClickOutcome('clicked', 't', 't', selected)).toEqual({ done: true, prKey: null });
     expect(topicClickOutcome('t', null, 't', selected)).toEqual({ done: true, prKey: null });
+  });
+});
+
+describe('the open topic stays listed after the engine drops it (2026-10-26)', () => {
+  /** A one-tile topic with its merged PR unread, as the sidebar listed it before the dwell read. */
+  function unreadItem(id: string): TopicListItem {
+    return { ...item(id, 0), unreadTiles: 1, unreadPrs: 1, unreadPrKeys: ['o/r#1'], urgentUnreadTiles: 0 };
+  }
+
+  it('remembers the listed row of the topic the user is in', () => {
+    const docs = unreadItem('docs');
+    const items = [item('depot', 1), docs];
+    expect(nextHeldTopic(null, items, 'docs', false)).toBe(docs);
+    expect(nextHeldTopic(null, items, null, false)).toBeNull();
+  });
+
+  it('keeps the row, read, once the topic left the list, and adds it back to the list', () => {
+    const docs = unreadItem('docs');
+    const afterRead = [item('depot', 1)];
+    const held = nextHeldTopic(docs, afterRead, 'docs', false);
+    expect(held?.topic.id).toBe('docs');
+    // Off the list means nothing unread there: no coral bubble or dot on the kept row.
+    expect(held).toMatchObject({ unreadTiles: 0, unreadPrs: 0, unreadPrKeys: [], urgentUnreadTiles: 0 });
+    // Settled: the same object again, so the state update stops.
+    expect(nextHeldTopic(held, afterRead, 'docs', false)).toBe(held);
+    const listed = withHeldTopic(afterRead, held);
+    expect(listed.map((row) => row.topic.id)).toEqual(['depot', 'docs']);
+    expect(visibleTopic(listed, 'docs', null)?.topic.id).toBe('docs');
+    expect(listedTopics(listed, listed, 'docs').map((row) => row.topic.id)).toEqual(['depot', 'docs']);
+  });
+
+  it('lets the row go once the user navigates to another topic or pane', () => {
+    const held = nextHeldTopic(unreadItem('docs'), [item('depot', 1)], 'docs', false);
+    expect(nextHeldTopic(held, [item('depot', 1)], 'depot', false)?.topic.id).toBe('depot');
+    expect(nextHeldTopic(held, [item('depot', 1)], null, false)).toBeNull();
+  });
+
+  it('lets the row go when the topic is really gone (merged, archived, deleted)', () => {
+    const held = nextHeldTopic(unreadItem('docs'), [], 'docs', false);
+    expect(nextHeldTopic(held, [], 'docs', true)).toBeNull();
+    expect(heldTopicGone({ status: 'active' }, false)).toBe(false);
+    expect(heldTopicGone(null, false)).toBe(false);
+    expect(heldTopicGone({ status: 'archived' }, false)).toBe(true);
+    expect(heldTopicGone({ status: 'retired' }, false)).toBe(true);
+    expect(heldTopicGone(null, true)).toBe(true);
+  });
+
+  it('leaves the list as it is while the engine still lists the topic', () => {
+    const docs = unreadItem('docs');
+    const items = [item('depot', 1), docs];
+    expect(withHeldTopic(items, docs)).toBe(items);
+    expect(withHeldTopic(items, null)).toBe(items);
   });
 });
