@@ -23,7 +23,7 @@ import { memberTier, ownerRelation, tileTier } from './topic-queues.ts';
 import type { Glance, IsoTime, NotificationReason, Pr, PrEvent, PrKey, Tile, TileMember, TileState, UserPrState, Viewer } from './types.ts';
 import type { GlanceRefreshBlock, GlanceState } from './glance-state.ts';
 import { tileVerdict } from './tile-verdict.ts';
-import type { GlanceGap, PrFacts, PrSummary, TilePendingWrite, TileView } from './views.ts';
+import type { GlanceGap, NewestPr, PrFacts, PrSummary, TilePendingWrite, TileView } from './views.ts';
 import { whatsNew } from './whats-new.ts';
 import { NO_TURN, prWhoseTurn, tileLandableBelow, unansweredAsk, whoseTurn } from './whose-turn.ts';
 import { tileWhy, whyHere } from './why-here.ts';
@@ -227,6 +227,7 @@ export function buildTileView(input: TileViewInput): TileView {
     newBadge: tileNewBadge(input.state, input.notYours),
     quietRepo: input.quietRepo,
     repoLabel: input.repoLabel,
+    newestPr: newestPrOf(memberPrs),
   };
 }
 
@@ -240,4 +241,51 @@ export function tileListRank(view: Pick<TileView, 'state' | 'turn'>): number {
     return TILE_STATE_ORDER.unread;
   }
   return TILE_STATE_ORDER[view.state.kind];
+}
+
+/** The tile's most recently opened PR (`TileView.newestPr`), the PR key on a tie; null without PRs. */
+export function newestPrOf(prs: Pick<Pr, 'key' | 'createdAt'>[]): NewestPr | null {
+  let newest: NewestPr | null = null;
+  for (const pr of prs) {
+    if (newest === null || pr.createdAt > newest.createdAt || (pr.createdAt === newest.createdAt && pr.key > newest.key)) {
+      newest = { key: pr.key, createdAt: pr.createdAt };
+    }
+  }
+  return newest;
+}
+
+/** Newest first; a tile without PRs last. */
+function byNewestPr(a: NewestPr | null, b: NewestPr | null): number {
+  if (a === null || b === null) {
+    return (a === null ? 1 : 0) - (b === null ? 1 : 0);
+  }
+  if (a.createdAt !== b.createdAt) {
+    return a.createdAt > b.createdAt ? -1 : 1;
+  }
+  if (a.key !== b.key) {
+    return a.key > b.key ? -1 : 1;
+  }
+  return 0;
+}
+
+/** The fields `compareTileViews` reads; `TileView` has them all. */
+export type OrderedTile = Pick<TileView, 'state' | 'turn' | 'newestPr'> & { tile: Pick<Tile, 'id'> };
+
+/**
+ * The engine's tile order in a topic, the same in the FakeEngine
+ * (2026-10-27, stability over recency): `tileListRank`, then the newest
+ * PR first by when it was opened (a stack or set by its newest member),
+ * then the PR key, then the tile id. Nothing here changes when someone
+ * comments or the viewer acts, so tiles keep their places. The renderer's
+ * sorts are stable, so this is the last tie-break on screen.
+ */
+export function compareTileViews(a: OrderedTile, b: OrderedTile): number {
+  if (tileListRank(a) !== tileListRank(b)) {
+    return tileListRank(a) - tileListRank(b);
+  }
+  const byPr = byNewestPr(a.newestPr, b.newestPr);
+  if (byPr !== 0) {
+    return byPr;
+  }
+  return a.tile.id < b.tile.id ? -1 : a.tile.id > b.tile.id ? 1 : 0;
 }

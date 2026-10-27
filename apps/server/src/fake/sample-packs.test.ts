@@ -20,6 +20,11 @@ async function sectionOf(engine: FakeEngine, topicId: string): Promise<string | 
   return (await engine.listTopics()).find((item) => item.topic.id === topicId)?.section;
 }
 
+/** The tile holding PR #number: tiles sort by activity (`compareTileViews`), so tests find them by a PR. */
+function tileWith(views: TileView[], number: number): TileView | undefined {
+  return views.find((view) => view.prs.some((pr) => pr.key === `acme/app#${number}`));
+}
+
 function rowOf(view: TileView, number: number): PrSummary {
   const row = view.prs.find((pr) => pr.key === `acme/app#${number}`);
   if (!row) {
@@ -50,7 +55,9 @@ describe('pack stacks: the shapes it is there to show', () => {
 
   // Owner, 2026-10-11 (B-A-12): "Blocked:" on every stack, a teammate's too.
   it('Session export: a teammate stack and your own stack both read Blocked on team-security', async () => {
-    const [theirs, yours] = await topicTiles(engineWith('stacks'), 'topic-session-export');
+    const views = await topicTiles(engineWith('stacks'), 'topic-session-export');
+    const theirs = tileWith(views, 2121);
+    const yours = tileWith(views, 2124);
     expect(theirs?.turn).toMatchObject({ kind: 'them', who: 'acme/team-security', what: 'to review #2122', lead: 'Blocked:' });
     expect(rowOf(theirs!, 2121).status.review).toBe('approved');
     expect(yours?.turn).toMatchObject({ kind: 'them', who: 'acme/team-security', what: 'to review #2124', lead: 'Blocked:' });
@@ -58,7 +65,9 @@ describe('pack stacks: the shapes it is there to show', () => {
   });
 
   it('Query result cache: the agent Approve covers the safe bottom only on the 3-stack and both layers on the 2-stack', async () => {
-    const [three, two] = await topicTiles(engineWith('stacks'), 'topic-query-cache');
+    const views = await topicTiles(engineWith('stacks'), 'topic-query-cache');
+    const three = views.find((view) => view.prs.length === 3);
+    const two = views.find((view) => view.prs.length === 2);
     expect(three?.agent?.approve).toMatchObject({ state: 'active', coveredCount: 1, totalCount: 3, naming: 'one' });
     expect(three?.agent?.approve?.leftOut.map((entry) => [entry.reason, entry.waitsOn])).toEqual([
       ['look_closer', null],
@@ -75,11 +84,11 @@ describe('pack stacks: the shapes it is there to show', () => {
 
   it('Lockfile bumps: a set of 5 renovate PRs and one single bump', async () => {
     const tiles = await topicTiles(engineWith('stacks'), 'topic-lockfile-bumps');
-    expect(tiles.map((view) => [view.tile.kind, view.prs.length])).toEqual([
+    expect(tiles.map((view) => [view.tile.kind, view.prs.length]).toSorted()).toEqual([
       ['set', 5],
       ['single', 1],
     ]);
-    expect(tiles[0]?.prs.every((pr) => pr.author === 'renovate[bot]')).toBe(true);
+    expect(tiles.find((view) => view.tile.kind === 'set')?.prs.every((pr) => pr.author === 'renovate[bot]')).toBe(true);
   });
 });
 

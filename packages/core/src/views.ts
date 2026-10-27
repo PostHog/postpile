@@ -333,6 +333,14 @@ export interface TileView {
    * than the chosen one (or, under "All repos", the topic's main repo).
    */
   repoLabel: string | null;
+  /** The tile's most recently opened PR (`newestPrOf`): the tile order inside a group and tier (`compareTileViews`). Null without PRs. */
+  newestPr: NewestPr | null;
+}
+
+/** A PR by when it was opened, for the tile order. */
+export interface NewestPr {
+  key: PrKey;
+  createdAt: IsoTime;
 }
 
 /** One PR's glance, as its row has it, picked for the tile's verdict pill (`tileVerdict`). */

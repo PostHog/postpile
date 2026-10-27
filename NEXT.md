@@ -14,6 +14,18 @@ now".
   To review level, and the glance reads the reasons inside the fence. The
   `stamphog` label itself is not tracked. Sample PR #1991 in the fake
   engine's "CI & tests" topic.
+- Stable sidebar and tile order (2026-10-27, owner: the order seemed to
+  move around after touching something; DESIGN.md "Ownership sections" ›
+  Inside a section, "Groups inside a topic"): inside a section topics sort
+  in two bands (unread tile, your move or your open PR; then the rest),
+  each A-Z with Unsorted last, no counts (`compareTopics`, now in core with
+  `UNSORTED_TOPIC_ID`; `compareTopicUrgency` is gone). Tiles sort by
+  `tileListRank`, then newest PR first by `createdAt` (a stack or set by
+  its newest member), then PR key and tile id (`compareTileViews`,
+  `TileView.newestPr`). Engine and FakeEngine share both; the FakeEngine
+  had no tile sort before. Sidebar rows already slide with `useFlip`;
+  checked in the static renderer build: a read topic slides below an
+  unread one once the selection and pointer move on.
 - Coming back after a week (2026-10-26, owner test after 9 days away;
   DESIGN.md "Big inboxes", "Inbox cleanup", "Auto sync"): the start sync
   holds for the catch-up dialog as soon as the count is in, so moved PRs
@@ -1794,6 +1806,13 @@ the app meanwhile.
 
 ## Decided
 
+- **Sidebar and tile order favour stability over recency** (2026-10-27,
+  owner). Inside a section: unread tile, your move or your open PR first,
+  then the rest, each A-Z; no counts, so reading one tile of several
+  moves nothing and nobody's comment moves a row. Tiles inside a group and
+  tier: newest PR first by when it was opened, which never changes. An
+  activity tie-break (newest event by others) was built first and dropped
+  for this.
 - **Your change request holds the PR open** (2026-10-12, owner, after a
   topic folded every tile under Dealt with, including an open PR whose
   change request the author had not addressed): an open PR whose newest

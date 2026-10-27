@@ -101,6 +101,7 @@ function tile(id: string, prKeys: string[], state: TileState = { kind: 'open', u
     pendingWrite: null,
     quietRepo: false,
     repoLabel: null,
+    newestPr: null,
   });
 }
 

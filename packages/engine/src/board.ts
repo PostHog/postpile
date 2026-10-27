@@ -8,6 +8,7 @@ import {
   setIdFromTileId,
   whoseTurn,
   withGroups,
+  UNSORTED_TOPIC_ID,
   type HotSelection,
   type NotificationThread,
   type Pr,
@@ -29,8 +30,8 @@ import type { Store } from '@postpile/store';
 import { readHotSet, readStoreShape, threadsByPrKey, type StoreShape } from './hot-set.ts';
 import { loadViewer } from './viewer-meta.ts';
 
-/** PRs the agent has not placed yet. Not stored: it is whatever has no membership. */
-export const UNSORTED_TOPIC_ID = 'unsorted';
+// PRs the agent has not placed yet; core owns the id so its sidebar order can put Unsorted last.
+export { UNSORTED_TOPIC_ID };
 
 function unsortedTopic(): Topic {
   return { ...newTopic(UNSORTED_TOPIC_ID, 'Unsorted', ''), summary: 'Waiting for the agent. Each sync places these in a topic.' };

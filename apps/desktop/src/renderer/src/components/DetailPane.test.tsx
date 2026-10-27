@@ -108,6 +108,7 @@ const stackView: TileView = withOffers({
   pendingWrite: null,
   quietRepo: false,
   repoLabel: null,
+  newestPr: null,
 });
 
 afterEach(() => {

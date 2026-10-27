@@ -102,6 +102,7 @@ function tile(id: string, tier: PrTier, prs: PrSummary[] = []): TileView {
     pendingWrite: null,
     quietRepo: false,
     repoLabel: null,
+    newestPr: null,
   });
 }
 

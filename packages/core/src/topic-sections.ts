@@ -8,7 +8,7 @@ import { ASK_TIERS } from './pr-tier.ts';
 import { driverKind, driverLogin, driverPickValues, driverRelation, effectiveDriver } from './topic-driver.ts';
 import type { PersonRelation, TopicQueues } from './topic-queues.ts';
 import { homeTeamsOf } from './team-roles.ts';
-import { compareTopicUrgency, type RankedTopic, type TopicMove } from './topic-urgency.ts';
+import type { TopicMove } from './topic-urgency.ts';
 import type { Topic, Viewer } from './types.ts';
 import type { DriverChoice, TopicDriverView, TopicPlacement } from './views.ts';
 
@@ -216,19 +216,35 @@ export function topicDriverView(source: TopicSectionSource): TopicDriverView {
   };
 }
 
-/** The fields `compareInSection` reads; `TopicListItem` has them all. */
-export interface SectionRankedTopic extends RankedTopic {
+/** PRs the agent has not placed yet. Not stored: the engine lists whatever has no membership under it. */
+export const UNSORTED_TOPIC_ID = 'unsorted';
+
+/** The fields `compareTopics` reads; `TopicListItem` has them all. */
+export interface ListedTopic {
+  topic: Pick<Topic, 'id' | 'name'>;
+  unreadTiles: number;
   queues: Pick<TopicQueues, 'byYou'>;
   yourMoves: TopicMove[];
 }
 
 /**
- * Inside a section: topics with the viewer's open PR or move first, then
- * unread ones, then the urgency order (`compareTopicUrgency`). 0 on a tie,
- * so callers add their own tie-break.
+ * The first band inside a section: an unread tile, a move of the viewer's,
+ * or their open PR. Counts never matter, so reading one tile of several
+ * moves nothing; reading the last one moves the topic down, unless the
+ * viewer's open PR or move keeps it up.
  */
-export function compareInSection(a: SectionRankedTopic, b: SectionRankedTopic): number {
-  const yours = (topic: SectionRankedTopic) => (holdsYours(topic.queues.byYou, topic.yourMoves.length) ? 0 : 1);
-  const unread = (topic: SectionRankedTopic) => (topic.unreadTiles > 0 ? 0 : 1);
-  return yours(a) - yours(b) || unread(a) - unread(b) || compareTopicUrgency(a, b);
+function inFirstBand(item: ListedTopic): boolean {
+  return item.unreadTiles > 0 || holdsYours(item.queues.byYou, item.yourMoves.length);
+}
+
+/**
+ * The order inside a sidebar section, the same in the engine and the
+ * FakeEngine (2026-10-27, stability over recency): the first band
+ * (`inFirstBand`), then the rest; inside each band by name A-Z, Unsorted
+ * last. No counts and no times, so a row moves only when it changes band.
+ */
+export function compareTopics(a: ListedTopic, b: ListedTopic): number {
+  const band = (item: ListedTopic) => (inFirstBand(item) ? 0 : 1);
+  const unsorted = (item: ListedTopic) => (item.topic.id === UNSORTED_TOPIC_ID ? 1 : 0);
+  return band(a) - band(b) || unsorted(a) - unsorted(b) || a.topic.name.localeCompare(b.topic.name);
 }

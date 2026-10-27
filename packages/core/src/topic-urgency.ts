@@ -147,25 +147,3 @@ export function topicUrgency(tiles: UrgencyTile[]): TopicUrgency {
   const urgentMoves = live.filter((tile) => tile.move !== null && tile.move.move !== 'merge' && !tile.quiet).length;
   return { unreadTiles, unreadPrs: unreadPrKeys.length, unreadPrKeys, urgentUnreadTiles, yourMoves, needsYou: urgentUnreadTiles > 0 || urgentMoves > 0 };
 }
-
-/** The fields `compareTopicUrgency` reads; `TopicListItem` has them all. */
-export interface RankedTopic {
-  group: 'needs_you' | 'quiet';
-  urgentUnreadTiles: number;
-  unreadTiles: number;
-}
-
-/**
- * Needs-you topics first, then more open unread tiles, then more unread
- * tiles of any kind (merged since you looked). 0 on a tie, so callers add
- * their own tie-break.
- */
-export function compareTopicUrgency(a: RankedTopic, b: RankedTopic): number {
-  if (a.group !== b.group) {
-    return a.group === 'needs_you' ? -1 : 1;
-  }
-  if (a.urgentUnreadTiles !== b.urgentUnreadTiles) {
-    return b.urgentUnreadTiles - a.urgentUnreadTiles;
-  }
-  return b.unreadTiles - a.unreadTiles;
-}

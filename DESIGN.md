@@ -5321,9 +5321,9 @@ avatars and filters", QueuesB2).
   `needs_you`. An unread merged tile with a question to answer after the
   merge ("Asked after the merge", the `reply` move) counts like an open one:
   coral bubble (2026-10-26, owner). When every other unread tile is merged or closed the row shows a
-  grey bubble ("merged or closed since you looked") and ranks below the urgent
-  ones (`compareTopicUrgency`: needs you, then open unread tiles, then any
-  unread). Tiles still show unread as before.
+  grey bubble ("merged or closed since you looked"). Since 2026-10-27 the
+  bubble's colour and count no longer change the order (see "Ownership
+  sections" › Inside a section). Tiles still show unread as before.
 - **Filters**: Mine (your avatar), Team (up to three teammates), Reply,
   Review, each with its PR count over all topics. One at a time, a second
   click clears. A filter keeps topics with a matching PR (Mine: open PR you
@@ -5392,8 +5392,9 @@ avatars and filters", QueuesB2).
   with (see "Groups inside a topic"); inside a group tiles sort by
   `TileView.tier` (the most urgent tier among its PRs), needs reply first,
   rest last, snoozed ones last; inside a tier the engine's order
-  (`tileListRank`: a read tile that is still your move first). Single
-  column as before.
+  (`compareTileViews`: `tileListRank`, a read tile that is still your move
+  first, then the newest PR first, 2026-10-27, see "Groups inside a
+  topic"). Single column as before.
 
 ### Repo scope and quiet repos
 
@@ -6142,6 +6143,16 @@ check), a second copy of core's rules. Owner decisions (2026-09-30):
   so the Archive gate ignores them and the hint must agree). Its tooltip
   names them: "Still open: devex-depot-tools#3 (draft). The topic moves to the
   Archive once every PR is merged or closed." Decided 2026-10-02.
+- **Newest PR first inside a group and tier (2026-10-27, owner: stability
+  over recency).** The renderer's sorts are stable, so the engine's order
+  is the last tie-break on screen. The engine and FakeEngine sort tiles
+  with core's `compareTileViews`: `tileListRank`, then the newest PR first
+  by when it was opened (`TileView.newestPr`; a stack or set by its newest
+  member), then the PR key, then the tile id, so the order is fully
+  deterministic. When a PR was opened never changes, so comments, reviews
+  and the viewer's own actions never move a tile inside its tier. Before,
+  ties fell back to build order (stacks, then sets, then single PRs by
+  when they joined); nothing depended on stacks coming first.
 - **No toggle.** The All / Unread buttons, "switching to Unread deselects",
   the filter-aware auto pick and the "show All" empty text are gone.
 - **Selection:** the selected tile keeps its place (`useHeldPlace`, now over
@@ -6430,9 +6441,29 @@ move, a known driver, an owner team, or a team or routed relation; a
 missing relation does not count. A topic with a dossier but no driver and
 no owner team also stays in Other topics, without the marker.
 
-**Inside a section** core orders the topics (`compareInSection`): the
-viewer's open PR or move first, then unread ones, then the urgency order as
-before. Changes you requested still lists re-reviews first.
+**Inside a section** (2026-10-27, owner: stability over recency; the
+order seemed to move around after touching something) core orders the
+topics with `compareTopics`, the same in the engine and the FakeEngine:
+two bands, then A-Z.
+
+- First band: the topic has an unread tile, a move of the viewer's, or
+  their open PR. Then the rest.
+- Inside each band by name A-Z, Unsorted last in its band.
+- No counts and no times: how many tiles are unread, whether they are
+  urgent (coral) and when something happened never change the order. So
+  reading one tile of several moves nothing, and nobody's comment moves a
+  row. Reading the last unread tile moves the topic down to the read
+  band, unless the viewer's open PR or move keeps it in the first band.
+  The open PR stays in the first band on purpose: reading never moves the
+  viewer's own topics.
+- Before, the urgency order (`compareTopicUrgency`: needs you, then more
+  open unread tiles, then more unread tiles) decided inside the bands, so
+  reading one tile of three could drop a topic below another.
+- The selected row still keeps its place while selected (and the rows left
+  while the pointer stays over the sidebar, "kept rows"); once let go it
+  slides to its new place (`useFlip`, reduced motion respected).
+
+Changes you requested still lists re-reviews first (renderer).
 
 **Folds.** You drive and Your team owns are short lists without folds.
 Other work folds and folds by area: areas with two or more topics get a
