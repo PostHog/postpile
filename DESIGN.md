@@ -874,6 +874,9 @@ sync is the early one (`LivePollStatus.nextAutoSyncIsBacklog`), it reads "stoppe
 cap: 91 left, next sync in 2 min" (minutes from `nextAutoSyncAt`) and the dot stays
 quiet, since the app drains it alone. With auto sync off, or a cap that skips everything,
 it keeps "for the next sync" or "for the hourly sync", amber. The
+default cap (`POSTPILE_MAX_AGENT_CALLS`) went from 150 to 300 the same day:
+that week away took ~295 calls over two syncs, so a week now fits in one,
+and only a longer absence or a very busy board waits for the early sync. The
 auto sync's log line says which kind of run it is ("starting (backlog,
 2 min after the last sync)" or "starting (every 60 min)"). The poll
 picks the same way. The freshness check and the stack walk look at PRs on

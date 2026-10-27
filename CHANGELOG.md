@@ -7,6 +7,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 ### Fixed
 
 - When a sync stops at the agent-call limit and auto sync is on, the title bar and the sync message say "stopped at call cap: 91 left, next sync in 2 min" instead of "left for the hourly sync", and the dot no longer turns amber while PostPile catches up by itself. Before, it read as if the rest waited an hour and invited a manual "Sync now". With auto sync off, or a limit that skips everything, the old wording stays.
+- A sync makes up to 300 agent calls before it stops (was 150), so the first sync after a week away gets through topic summaries and glances in one go. `POSTPILE_MAX_AGENT_CALLS` still overrides it.
 
 ## 0.28.4 (2026-10-27)
 
