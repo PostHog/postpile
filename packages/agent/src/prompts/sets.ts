@@ -1,5 +1,5 @@
 import { SET_MAX_MEMBERS, setIsFull, type Pr, type PrSet } from '@postpile/core';
-import { activeSets, unplacedKeys } from '../set-answer.ts';
+import { activeSets, setKeysShown, unplacedKeys } from '../set-answer.ts';
 import type { SetGroupingInput } from '../service.ts';
 import { clip, contextBlock, GITHUB_DATA_RULE, githubData, jsonOnly, NO_CI_RULE, prLine, WORK_GLOSSARY } from './shared.ts';
 
@@ -24,7 +24,7 @@ function setBlock(input: SetGroupingInput, set: PrSet, prs: Map<string, Pr>): st
     set.removedKeys.length > 0
       ? `\n  the user said NOT related, never group again with the PRs above: ${set.removedKeys.join(', ')}`
       : '';
-  const size = input.setSizes?.[set.id] ?? set.members.length;
+  const size = setKeysShown(input, set).length;
   const full = setIsFull(size) ? ` (FULL: ${size} PRs, takes no joins and no merges)` : ` (${size} PRs)`;
   return `- set id ${set.id}${full}
 ${githubData(`  title: ${set.title}\n  take: ${set.take}\n${memberLines(input, set, prs)}`)}${removed}`;

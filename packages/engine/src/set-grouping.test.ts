@@ -264,6 +264,24 @@ describe('lasting sets', () => {
     expect(changes(h)[0]).toBe('ended - (rules): fewer than two PRs left');
   });
 
+  it('counts a layer stacked onto a set member later as placed, so no other set takes it', async () => {
+    const prs = [reviewRequestedPr(1), reviewRequestedPr(2), reviewRequestedPr(3)];
+    const { h, setId } = await depotWithSet(prs);
+    // #5 stacks onto #2 after the set was made: the set's tile shows it, the stored members do not hold it.
+    const layer = reviewRequestedPr(5, { baseRef: prs[1]!.headRef, headRef: 'layer-5' });
+    h.reader.addPr(layer, makeThreadFor(layer));
+    h.store.memberships.assign({ prKey: layer.key, topicId: 'depot', assignedBy: 'user', reason: '', createdAt: at(0) });
+    h.store.glances.put(glance(prs[2]!.key, 'low - same'));
+    h.runner.answer('set_grouping', { newSets: [{ title: 'Other pair', take: '', members: [member(layer), member(prs[2]!)] }] });
+    await h.engine.sync({ agentJobs: ['sets'] });
+
+    expect(h.runner.promptsFor('set_grouping')).toHaveLength(2);
+    const prompt = h.runner.promptsFor('set_grouping').at(-1) ?? '';
+    expect(prompt).toContain(prs[2]!.key);
+    expect(prompt.slice(prompt.indexOf('Open PRs in no set yet'))).not.toContain(layer.key);
+    expect(h.store.sets.listActiveForTopic('depot').map((set) => set.id)).toEqual([setId]);
+  });
+
   it('regroups again after a PR left a set, so it can join another one', async () => {
     const prs = [reviewRequestedPr(1), reviewRequestedPr(2), reviewRequestedPr(3)];
     const { h, setId } = await depotWithSet(prs);

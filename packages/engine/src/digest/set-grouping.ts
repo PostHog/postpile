@@ -119,9 +119,9 @@ function underCap(units: PrSetMember[][]): PrSetMember[][] {
   return kept;
 }
 
-/** Keys of every PR in one of the sets. */
-function placedKeys(sets: Map<string, PrSet>): Set<PrKey> {
-  return new Set([...sets.values()].flatMap((set) => set.members.map((member) => member.prKey)));
+/** Keys of every PR one of the sets' tiles holds, stack layers stacked onto a member later included. */
+function placedKeys(sets: Map<string, PrSet>, stackOf: Map<PrKey, Stack>): Set<PrKey> {
+  return new Set([...sets.values()].flatMap((set) => setShownKeys(set.members, stackOf)));
 }
 
 /**
@@ -261,11 +261,11 @@ export class SetGrouper {
       risks[key] = glance.risk;
     }
     const stackOf = this.stacks();
-    const setSizes: Record<string, number> = {};
+    const shownKeys: Record<string, PrKey[]> = {};
     for (const set of existingSets) {
-      setSizes[set.id] = setShownKeys(set.members, stackOf).length;
+      shownKeys[set.id] = setShownKeys(set.members, stackOf);
     }
-    return { topic, prs, existingSets, setSizes, risks, context: this.deps.contexts.forTopic(topic.id) };
+    return { topic, prs, existingSets, shownKeys, risks, context: this.deps.contexts.forTopic(topic.id) };
   }
 
   /**
@@ -362,7 +362,7 @@ export class SetGrouper {
     for (const join of changes.joined) {
       const set = openSet(sets, join.setId);
       const unit = unitsOf([join.member], stackOf)[0];
-      const taken = placedKeys(sets);
+      const taken = placedKeys(sets, stackOf);
       if (!set || !unit || setShownKeys([...set.members, ...unit], stackOf).length > SET_MAX_MEMBERS) {
         continue;
       }
@@ -379,7 +379,7 @@ export class SetGrouper {
     const at = this.deps.now().toISOString();
     const dissolved = new Set(current.filter((s) => s.status === 'dissolved').map((s) => memberSignature(s.members.map((m) => m.prKey))));
     for (const proposal of changes.created) {
-      const taken = placedKeys(sets);
+      const taken = placedKeys(sets, stackOf);
       // The prompt says to respect the user's corrections; enforce it.
       const free = unitsOf(proposal.members, stackOf).filter((unit) => !unit.some((member) => taken.has(member.prKey)));
       const units = underCap(withoutRejected(free, rejected));

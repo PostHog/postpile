@@ -14,12 +14,18 @@ export function activeSets(input: SetGroupingInput): PrSet[] {
   return input.existingSets.filter((set) => set.status === 'active' && !set.closedAt);
 }
 
+/** The PRs a set's tile holds: `shownKeys` when the engine gave them, else its stored members. */
+export function setKeysShown(input: SetGroupingInput, set: PrSet): PrKey[] {
+  return input.shownKeys?.[set.id] ?? set.members.map((member) => member.prKey);
+}
+
 /**
  * Open PRs in no active set, closed ones included: the only ones a regroup
- * may place. A PR reopened inside a closed set keeps that tile.
+ * may place. A PR reopened inside a closed set keeps that tile, and a layer
+ * stacked onto a set member counts as placed, since the set's tile shows it.
  */
 export function unplacedKeys(input: SetGroupingInput): PrKey[] {
-  const placed = new Set(input.existingSets.filter((set) => set.status === 'active').flatMap((set) => set.members.map((member) => member.prKey)));
+  const placed = new Set(input.existingSets.filter((set) => set.status === 'active').flatMap((set) => setKeysShown(input, set)));
   return input.prs.filter((pr) => pr.state === 'OPEN' && !placed.has(pr.key)).map((pr) => pr.key);
 }
 

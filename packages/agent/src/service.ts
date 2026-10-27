@@ -159,11 +159,12 @@ export interface SetGroupingInput {
   /** Active and dissolved sets of the topic. */
   existingSets: PrSet[];
   /**
-   * How many PRs each set's tile holds, stack layers included (`setShownKeys`):
+   * The PRs each set's tile holds, stack layers included (`setShownKeys`):
    * a layer stacked onto a member later shows in the tile without being a
-   * stored member. Missing for a set: its stored members.
+   * stored member. They count as placed and toward the cap. Missing for a
+   * set: its stored members.
    */
-  setSizes?: Record<string, number>;
+  shownKeys?: Record<string, PrKey[]>;
   /** The glance's risk line per PR ("medium - touches the worker loop"), where a glance exists. */
   risks: Record<PrKey, string>;
   context: PromptContext;

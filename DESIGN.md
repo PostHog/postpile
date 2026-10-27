@@ -6659,7 +6659,9 @@ Owner decisions (2026-09-30 and 2026-10-01), after research on grouping PRs
   stacks). The engine enforces it where answers land
   (`SetGrouper.apply`); the prompt states the cap and marks full sets
   (`SET_PROMPT_VERSION` s3). Sets already past 12 stay as they are and
-  stop growing.
+  stop growing. A layer stacked onto a member later also counts as placed
+  (`SetGroupingInput.shownKeys`), so the regroup never offers it for
+  another set.
 - **A set ends** when fewer than two units are left (a set of one PR or one
   stack is just that tile); its history stays. One that holds the user's
   "not related" corrections is kept as dissolved, so they keep holding, and
