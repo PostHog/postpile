@@ -159,15 +159,22 @@ export function rowSection(buckets: Bucket<TopicListItem>[], topicId: string): T
   return SECTION_ORDER.find((section) => bucket.key === section || bucket.key === dealtKey(section)) ?? null;
 }
 
+/** A PR in the tile that stamphog declined (core's `PrStatus.agentDecline`): its author asked for a fast approval and now waits on a person. */
+function holdsAgentDecline(view: TileView): boolean {
+  return view.prs.some((pr) => pr.status.agentDecline !== null);
+}
+
 /**
  * Inside To review: reviews for you (personal requests and team requests on
- * a teammate's PR, both "For you") before routed team requests. Inside
+ * a teammate's PR, both "For you") before routed team requests, and inside
+ * each of those a tile with a stamphog decline first (2026-10-27). Inside
  * Changes you requested: tiles on your move (the author addressed the
  * changes) before tiles waiting on the author. 0 elsewhere.
  */
 function reviewRank(view: TileView): number {
   if (view.tier === 'to_review') {
-    return view.forWhom.kind === 'you' ? 0 : 1;
+    const level = view.forWhom.kind === 'you' ? 0 : 2;
+    return holdsAgentDecline(view) ? level : level + 1;
   }
   if (view.tier === 'changes_requested') {
     return view.turn.kind === 'you' ? 0 : 1;
@@ -177,7 +184,7 @@ function reviewRank(view: TileView): number {
 
 /**
  * Tiles by queue, most urgent tier first; inside To review, reviews for you
- * first; inside Changes you requested, your move first; else the order
+ * first, a stamphog decline first at each level; inside Changes you requested, your move first; else the order
  * inside a tier stays.
  */
 export function tilesInTierOrder(views: TileView[]): TileView[] {

@@ -83,7 +83,7 @@ export function ReviewRow(props: ReviewRowProps) {
               >
                 {/* What you approve into: lifecycle, then review state; words in each glyph's tooltip. */}
                 <span className="mr-px flex items-center gap-[3px] opacity-75">
-                  {approveStateGlyphs(props.detail.status.lifecycle, pr.reviewDecision, props.detail.agentApprovers).map((part) => (
+                  {approveStateGlyphs(props.detail.status.lifecycle, pr.reviewDecision, props.detail.agentApprovers, props.detail.agentDecline).map((part) => (
                     <span key={part.glyph} role="img" aria-label={part.title} title={part.title} className="flex">
                       <Glyph glyph={part.glyph} size={11} strokeWidth={1.8} />
                     </span>

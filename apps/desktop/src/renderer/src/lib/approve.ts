@@ -1,9 +1,9 @@
 // The detail pane's Approve button: its label, its look and the small state
 // glyphs in front of the label. Pure, so the rules stay tested and the
 // review row stays dumb.
-import type { PaneReview, PrLifecycle, PrPaneView, ViewerApproval } from '@postpile/core';
+import type { AgentDeclineView, PaneReview, PrLifecycle, PrPaneView, ViewerApproval } from '@postpile/core';
 import type { EventGlyph } from './events.ts';
-import { approvedText, capitalize } from './pr.ts';
+import { approvedText, capitalize, declinedText } from './pr.ts';
 
 export interface ApproveButtonInput {
   isDraft: boolean;
@@ -86,13 +86,22 @@ const REVIEW_GLYPHS: Record<PrPaneView['reviewDecision'], StateGlyph | null> = {
  * when the repo has a review rule. Unlike the status pill, drafts keep their
  * review glyph here, so "Approve draft" still shows existing approvals.
  * `agentApprovers` (`PrDetail.agentApprovers`) names the agents in the
- * tooltip when only agents approved.
+ * tooltip when only agents approved; `agentDecline` adds stamphog's decline
+ * to a needed review's tooltip.
  */
-export function approveStateGlyphs(lifecycle: PrLifecycle, reviewDecision: PrPaneView['reviewDecision'], agentApprovers: string[]): StateGlyph[] {
+export function approveStateGlyphs(
+  lifecycle: PrLifecycle,
+  reviewDecision: PrPaneView['reviewDecision'],
+  agentApprovers: string[],
+  agentDecline: AgentDeclineView | null = null,
+): StateGlyph[] {
   const glyphs = [LIFECYCLE_GLYPHS[lifecycle]];
   const review = REVIEW_GLYPHS[reviewDecision];
   if (review && reviewDecision === 'APPROVED' && agentApprovers.length > 0) {
-    glyphs.push({ glyph: review.glyph, title: capitalize(approvedText(agentApprovers)) });
+    const declined = agentDecline === null ? '' : ` · ${declinedText(agentDecline)}`;
+    glyphs.push({ glyph: review.glyph, title: `${capitalize(approvedText(agentApprovers))}${declined}` });
+  } else if (review && reviewDecision === 'REVIEW_REQUIRED' && agentDecline !== null) {
+    glyphs.push({ glyph: review.glyph, title: `${review.title} · ${declinedText(agentDecline)}` });
   } else if (review) {
     glyphs.push(review);
   }

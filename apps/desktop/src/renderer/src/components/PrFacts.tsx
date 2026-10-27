@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { PrPaneView } from '@postpile/core';
+import type { AgentDeclineView, PrPaneView } from '@postpile/core';
 import { mergeStatus } from '../lib/pr.ts';
 import { whenLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
@@ -30,8 +30,12 @@ function Fact(props: { label: string; children: ReactNode }) {
 }
 
 /** Size, age and what stands between the PR and a merge. No checks: PostPile does not fetch CI (0.21.0). */
-/** `agentApprovers` (`PrDetail.agentApprovers`) lets "To merge" say "approved by reviewbot (agent)". */
-export function PrFacts(props: { pr: PrPaneView; agentApprovers: string[] }) {
+/**
+ * `agentApprovers` (`PrDetail.agentApprovers`) lets "To merge" say "approved
+ * by reviewbot (agent)", `agentDecline` "stamphog declined: …" with its
+ * reasons in the tooltip.
+ */
+export function PrFacts(props: { pr: PrPaneView; agentApprovers: string[]; agentDecline: AgentDeclineView | null }) {
   const now = useNow();
   const { pr } = props;
   const pushedAt = pr.lastCommitAt;
@@ -64,7 +68,9 @@ export function PrFacts(props: { pr: PrPaneView; agentApprovers: string[] }) {
         </span>
       </Fact>
       <Fact label="To merge">
-        <span className="text-[12.5px] leading-[normal] text-ink">{mergeStatus(pr, props.agentApprovers)}</span>
+        <span title={props.agentDecline?.reason || undefined} className="text-[12.5px] leading-[normal] text-ink">
+          {mergeStatus(pr, props.agentApprovers, props.agentDecline)}
+        </span>
       </Fact>
     </div>
   );

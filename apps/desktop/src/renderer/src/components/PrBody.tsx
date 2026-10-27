@@ -210,7 +210,7 @@ export function PrBody(props: PrBodyProps) {
             <PaneHousekeeping view={props.view} prKey={pr.key} offers={offers} />
           </div>
           <PrDescription body={pr.body} />
-          <PrFacts pr={pr} agentApprovers={props.detail.agentApprovers} />
+          <PrFacts pr={pr} agentApprovers={props.detail.agentApprovers} agentDecline={props.detail.agentDecline} />
           <ReviewList pr={pr} />
           <AgentFacts facts={props.detail.facts} updating={updating} />
           <ActivityTimeline activity={props.detail.activity} prKey={pr.key} />

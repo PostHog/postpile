@@ -20,6 +20,7 @@ import {
   type IsoTime,
   type LayerShape,
   type Viewer,
+  hasTrimmedAgentVerdict,
   hotSyncThreads,
   isTracked,
   selectSyncThreads,
@@ -743,10 +744,13 @@ export class GitHubSync {
     // Snapshots stored before assignees were read (2026-09-30) refetch once, or a bot PR's owners stay unknown until it moves.
     const checked = this.store.prs.getMany(refs.map(prKey));
     const withoutAssignees = new Set([...checked.values()].filter((pr) => pr.assignees === undefined).map((pr) => pr.key));
+    // Open PRs whose stamphog verdict was cut on save before 2026-10-27 refetch once: the cut may have taken its gate table.
+    const trimmedVerdicts = new Set([...checked.values()].filter(hasTrimmedAgentVerdict).map((pr) => pr.key));
+    const refetchOnce = (key: PrKey) => withoutAssignees.has(key) || trimmedVerdicts.has(key);
     const moved = refs.filter((ref) => {
       const updatedAt = remote.get(prKey(ref));
       const was = stored.get(prKey(ref));
-      return updatedAt !== undefined && (was === undefined || updatedAt > was || withoutAssignees.has(prKey(ref)));
+      return updatedAt !== undefined && (was === undefined || updatedAt > was || refetchOnce(prKey(ref)));
     });
     const stale = this.staleRereads(new Set([...skip, ...moved.map(prKey)]));
     if (origin === 'sync' || moved.length > 0 || stale.length > 0) {

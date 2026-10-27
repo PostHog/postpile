@@ -245,6 +245,30 @@ describe('glanceBatchPrompt, who approved', () => {
   });
 });
 
+describe('glanceBatchPrompt, agent approver decline', () => {
+  const declined = {
+    id: 'rs',
+    author: 'stamphog[bot]',
+    state: 'COMMENTED',
+    body: '**Not approved — escalated to a human reviewer.**\n\nRe-add the `stamphog` label to request another review.\n\nPlease ask @acme/team-billing.',
+    submittedAt: '2026-09-01T00:00:00Z',
+    commitOid: 'old',
+  } as const;
+
+  it('adds the decline with its reasons inside the GitHub data fence', () => {
+    const prompt = oneGlancePrompt(makePr({ author: 'bob', headOid: 'new', reviews: [declined] }), { kind: 'pinged', reason: 'review_requested' });
+    const line =
+      'Agent approver: the author asked stamphog (an agent that approves small, low-risk changes) to approve; it declined (on an earlier commit): it escalated to a person. Its reasons: Please ask @acme/team-billing.';
+    expect(prompt).toContain(line);
+    const at = prompt.indexOf(line);
+    expect(prompt.lastIndexOf('<github_data>', at)).toBeGreaterThan(prompt.lastIndexOf('</github_data>', at));
+  });
+
+  it('has no decline line without a decline', () => {
+    expect(oneGlancePrompt(makePr({ author: 'bob' }), { kind: 'pinged', reason: 'review_requested' })).not.toContain('Agent approver: the author');
+  });
+});
+
 describe('glanceBatchPrompt, answer shape', () => {
   it('asks for one entry per PR, and says so again on the retry', () => {
     const pr = makePr();

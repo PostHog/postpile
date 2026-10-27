@@ -2,7 +2,7 @@
 // cut when saved"). Bots write most of the comment text PostPile stores
 // (review summaries, CI reports, preview tables), and the rules and prompts
 // read little of it. A body a rule reads further stays whole. Rules only, no IO.
-import { isBot, isMergeQueueBot } from './bots.ts';
+import { isBot, isMergeQueueBot, STAMPHOG_LOGIN } from './bots.ts';
 import { sameLogin } from './mentions.ts';
 import { isBotAuthor } from './pr-owners.ts';
 import type { FullComment, FullPr, FullReview } from './types.ts';
@@ -42,8 +42,9 @@ function editedByPerson(item: BodyAuthorship): boolean {
 /**
  * A body some board rule reads: a person's (a deleted author's too, who
  * may have been one), a merge queue bot's (`mergeQueueState` looks for its
- * markers anywhere in the body) and one a person edited last
- * (`editMentionOf`). It answers two questions (DESIGN.md "The board
+ * markers anywhere in the body), stamphog's (`agentDecline` reads its
+ * verdict and gate table, which sit past the cut on a long one) and one a
+ * person edited last (`editMentionOf`). It answers two questions (DESIGN.md "The board
  * diet"): which bodies the cut on save keeps whole, however long, and
  * which bodies a board read loads at all. Every other body is a bot's that
  * only event derivation, reply drafts and "Why?" excerpts read, from
@@ -51,7 +52,7 @@ function editedByPerson(item: BodyAuthorship): boolean {
  * follows this build's bot list and never goes stale in the data.
  */
 export function isBodyReadByRules(item: BodyAuthorship): boolean {
-  return !isBotAuthor(item.author) || isMergeQueueBot(item.author) || editedByPerson(item);
+  return !isBotAuthor(item.author) || isMergeQueueBot(item.author) || item.author === STAMPHOG_LOGIN || editedByPerson(item);
 }
 
 /** A bot body longer than PostPile keeps, and no rule reads past the cut. */

@@ -1,4 +1,4 @@
-import { glanceRiskLevel, humanReviews, isBot, isMachineComment, prOwners, standingApprovals } from '@postpile/core';
+import { agentDecline, glanceRiskLevel, humanReviews, isBot, isMachineComment, prOwners, standingApprovals } from '@postpile/core';
 import type { Comment, IsoTime, Pr, Review } from '@postpile/core';
 import { inputHash } from './hash.ts';
 import { modelFor } from './models.ts';
@@ -78,7 +78,8 @@ function glanceDiscussionWithBotTalk(pr: Pr, writtenAt: IsoTime): GlanceDiscussi
  * What a glance depends on: code, description, review state and human
  * discussion. Agent approvals are in the prompt ("Approved by"), so they
  * count too; the key is only added when there are some, so hashes of PRs
- * without them stayed the same when it came in.
+ * without them stayed the same when it came in. The same for stamphog's
+ * decline (2026-10-27).
  */
 function prGlanceSnapshot(pr: Pr, discussion: GlanceDiscussion): unknown {
   const agentApprovals = standingApprovals(pr).agents;
@@ -98,7 +99,10 @@ function prGlanceSnapshot(pr: Pr, discussion: GlanceDiscussion): unknown {
   // Owners change the prompt (own-PR note, "for @owner"). Only added when they differ from the author, so older hashes stay valid.
   const owners = prOwners(pr);
   const withOwners = owners.length === 1 && owners[0] === pr.author ? snapshot : { ...snapshot, owners };
-  return agentApprovals.length > 0 ? { ...withOwners, agentApprovals } : withOwners;
+  const withApprovals = agentApprovals.length > 0 ? { ...withOwners, agentApprovals } : withOwners;
+  // stamphog's decline is in the prompt ("Agent approver"). Only added when there is one, so other PRs' hashes stay the same.
+  const decline = agentDecline(pr);
+  return decline === null ? withApprovals : { ...withApprovals, agentDecline: decline };
 }
 
 /**

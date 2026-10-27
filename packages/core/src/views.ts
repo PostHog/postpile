@@ -25,6 +25,7 @@ import type { WaitingThread } from './waiting-threads.ts';
 import type { TileAfterRead } from './after-read.ts';
 import type { GlanceRefreshBlock, GlanceState } from './glance-state.ts';
 import type { AgentCallStats, DossierStatus, TopicRelation } from './memory.ts';
+import type { AgentDeclineView } from './agent-decline.ts';
 import type { BotFinding } from './bot-findings.ts';
 import type { DossierView, FactChangeCounts, FactView, MemoryTarget } from './memory-views.ts';
 import type { PrNotesView } from './pr-notes.ts';
@@ -512,6 +513,11 @@ export interface PrDetail {
    * "approved by reviewbot (agent)" with it.
    */
   agentApprovers: string[];
+  /**
+   * stamphog's standing decline (`agentDeclineView`), also on drafts; null
+   * when there is none. "To merge" says it in words.
+   */
+  agentDecline: AgentDeclineView | null;
   /**
    * Each bot whose standing review asks for changes, with a line of what it
    * found (`botFindings`), so "Address <bot>'s changes" can say what the

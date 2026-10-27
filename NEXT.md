@@ -6,6 +6,14 @@ now".
 
 ## Done
 
+- stamphog declines (2026-10-27; DESIGN.md "An agent approver's
+  decline"): core `agentDecline` reads stamphog's latest verdict review
+  (needs a person, escalated, or outside its gates; "not approved yet"
+  with only prerequisites failing is waiting). The tile says "stamphog
+  declined", "To merge" says why, a declined tile ranks first inside its
+  To review level, and the glance reads the reasons inside the fence. The
+  `stamphog` label itself is not tracked. Sample PR #1991 in the fake
+  engine's "CI & tests" topic.
 - Stable sidebar and tile order (2026-10-27, owner: the order seemed to
   move around after touching something; DESIGN.md "Ownership sections" ›
   Inside a section, "Groups inside a topic"): inside a section topics sort

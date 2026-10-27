@@ -6,6 +6,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ### Changed
 
+- When stamphog declines a PR, the tile says "stamphog declined" and the PR pane's "To merge" says why: it needs a person to review, it escalated to a person, or the change is outside what it may auto-approve. Inside a topic's To review tiles, a declined PR ranks first at its level, since its author asked for a fast approval and now waits on a person. The agent's glance weighs stamphog's reasons and says when they ask for you or your team.
 - The sidebar and tile order stay put. Inside a section, topics with an unread tile, your move or your open PR come first, then the rest, each sorted by name. How many tiles are unread no longer reorders topics, so reading one tile of several moves nothing. Inside a topic, tiles in the same group and queue sort newest PR first, so comments never reshuffle them.
 
 ## 0.28.2 (2026-10-26)

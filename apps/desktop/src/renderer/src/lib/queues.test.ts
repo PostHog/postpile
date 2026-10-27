@@ -61,7 +61,7 @@ function pr(overrides: Partial<PrSummary>): PrSummary {
     forWhom: { kind: 'you' },
     tier: 'rest',
     authorRelation: 'other',
-    status: { lifecycle: 'open', review: 'review', agentApprovers: [], mergeQueue: null, icon: 'open' },
+    status: { lifecycle: 'open', review: 'review', agentApprovers: [], agentDecline: null, mergeQueue: null, icon: 'open' },
     openThreads: 0,
     verdict: null,
     glanceStale: false,
@@ -261,6 +261,24 @@ describe('tilesInTierOrder', () => {
     const routed = { ...tile('routed', 'to_review'), forWhom: { kind: 'team' as const, team: 'team-platform' } };
     const views = [routed, tile('personal', 'to_review'), tile('rest', 'rest'), tile('teammate', 'to_review')];
     expect(tilesInTierOrder(views).map((view) => view.tile.id)).toEqual(['personal', 'teammate', 'routed', 'rest']);
+  });
+
+  it('puts a stamphog decline first at each To review level', () => {
+    const declined = pr({
+      status: {
+        lifecycle: 'open',
+        review: 'review',
+        agentApprovers: [],
+        agentDecline: { agent: 'stamphog', kind: 'needs_person', reason: 'Touches the billing schema.', earlierCommit: false },
+        mergeQueue: null,
+        icon: 'open',
+      },
+    });
+    const routedTeam = { kind: 'team' as const, team: 'team-platform' };
+    const routed = { ...tile('routed', 'to_review', [pr({})]), forWhom: routedTeam };
+    const routedDeclined = { ...tile('routed-declined', 'to_review', [declined]), forWhom: routedTeam };
+    const views = [routed, routedDeclined, tile('personal', 'to_review', [pr({})]), tile('personal-declined', 'to_review', [declined]), tile('mine', 'mine', [declined])];
+    expect(tilesInTierOrder(views).map((view) => view.tile.id)).toEqual(['mine', 'personal-declined', 'personal', 'routed-declined', 'routed']);
   });
 });
 
