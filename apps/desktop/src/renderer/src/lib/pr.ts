@@ -1,4 +1,4 @@
-import type { MergeQueueStep, PaneReview, PrIcon, PrPaneView, PrStatus, TileStack } from '@postpile/core';
+import type { AgentDeclineKind, AgentDeclineView, MergeQueueStep, PaneReview, PrIcon, PrPaneView, PrStatus, TileStack } from '@postpile/core';
 import { prNumber } from './tiles.ts';
 import { sinceLabel } from './time.ts';
 
@@ -60,6 +60,22 @@ export function approvedText(agentApprovers: string[]): string {
   return `approved by ${names} (agents)`;
 }
 
+const DECLINE_WHY: Record<AgentDeclineKind, string> = {
+  needs_person: 'needs a person to review',
+  escalated: 'escalated to a person',
+  gates: 'outside what it may auto-approve',
+};
+
+/**
+ * An agent approver's decline in words (core `AgentDeclineView`): "stamphog
+ * declined: needs a person to review", plus "on an earlier commit" when the
+ * head moved since.
+ */
+export function declinedText(decline: Pick<AgentDeclineView, 'agent' | 'kind' | 'earlierCommit'>): string {
+  const earlier = decline.earlierCommit ? ' on an earlier commit' : '';
+  return `${decline.agent} declined${earlier}: ${DECLINE_WHY[decline.kind]}`;
+}
+
 /** Sentence case for tooltips: "approved by ..." -> "Approved by ...". */
 export function capitalize(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
@@ -78,9 +94,14 @@ function stillAsked(pr: Pick<PrPaneView, 'reviewerTeams' | 'reviewerUsers'>): st
  * as in `approvedText`. GitHub says approved while a request is still
  * pending, so the line names who is still asked ("approved · team-platform
  * still asked", B-A-12): next to a waiting team, "approved" alone read as
- * a contradiction.
+ * a contradiction. `agentDecline` (`PrDetail.agentDecline`) says a needed
+ * review in words: "needs review · stamphog declined: needs a person to review".
  */
-export function mergeStatus(pr: Pick<PrPaneView, 'state' | 'mergedBy' | 'isDraft' | 'reviewDecision' | 'reviewerTeams' | 'reviewerUsers'>, agentApprovers: string[]): string {
+export function mergeStatus(
+  pr: Pick<PrPaneView, 'state' | 'mergedBy' | 'isDraft' | 'reviewDecision' | 'reviewerTeams' | 'reviewerUsers'>,
+  agentApprovers: string[],
+  agentDecline: AgentDeclineView | null = null,
+): string {
   if (pr.state === 'MERGED') {
     return pr.mergedBy ? `merged by ${pr.mergedBy}` : 'merged';
   }
@@ -97,10 +118,11 @@ export function mergeStatus(pr: Pick<PrPaneView, 'state' | 'mergedBy' | 'isDraft
   if (pr.reviewDecision === 'CHANGES_REQUESTED') {
     return 'changes requested';
   }
+  const declined = agentDecline === null ? '' : ` · ${declinedText(agentDecline)}`;
   if (pr.reviewDecision === 'REVIEW_REQUIRED') {
-    return 'needs review';
+    return `needs review${declined}`;
   }
-  return 'no review rule';
+  return `no review rule${declined}`;
 }
 
 /** The state icon (core `PrStatus.icon`) in words, as the detail pane's state line and the icon's tooltip say it. */
@@ -129,9 +151,16 @@ export interface StateWord {
 /**
  * The review state in words, null when none applies (merged, closed,
  * drafts, repos without a review rule). Only agents approved: says so, and
- * names them in the tooltip.
+ * names them in the tooltip. stamphog declined and no person approved or
+ * asked for changes: "stamphog declined", the review color, why in the
+ * tooltip.
  */
 export function reviewWord(status: PrStatus): StateWord | null {
+  const decline = status.agentDecline;
+  const declineShows = decline !== null && status.lifecycle !== 'draft' && status.review !== 'approved' && status.review !== 'changes';
+  if (declineShows) {
+    return { kind: 'review', text: `${decline.agent} declined`, title: declinedText(decline) };
+  }
   if (status.review === 'review') {
     return { kind: 'review', text: 'Needs review', title: 'Review required' };
   }

@@ -6,6 +6,14 @@ now".
 
 ## Done
 
+- stamphog declines (2026-10-27; DESIGN.md "An agent approver's
+  decline"): core `agentDecline` reads stamphog's latest verdict review
+  (needs a person, escalated, or outside its gates; "not approved yet"
+  with only prerequisites failing is waiting). The tile says "stamphog
+  declined", "To merge" says why, a declined tile ranks first inside its
+  To review level, and the glance reads the reasons inside the fence. The
+  `stamphog` label itself is not tracked. Sample PR #1991 in the fake
+  engine's "CI & tests" topic.
 - Coming back after a week (2026-10-26, owner test after 9 days away;
   DESIGN.md "Big inboxes", "Inbox cleanup", "Auto sync"): the start sync
   holds for the catch-up dialog as soon as the count is in, so moved PRs

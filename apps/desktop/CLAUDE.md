@@ -640,7 +640,11 @@ tints (`lib/why.ts`, `lib/events.ts`, `reviewWord` / `rowStateWord` in `lib/pr.t
   state keeps its color on done tiles; title and counts go grey. When only
   agents approved (`PrStatus.agentApprovers`) the word reads "Approved by
   agent", names in the tooltip; the detail uses `PrDetail.agentApprovers`
-  with `approvedText` in `lib/pr.ts`. **No CI anywhere**: PostPile fetches no
+  with `approvedText` in `lib/pr.ts`. A stamphog decline
+  (`PrStatus.agentDecline` / `PrDetail.agentDecline`) reads "stamphog
+  declined" in the review color while no person approved or asked for
+  changes, why in the tooltip (`declinedText`); never a warning color.
+  **No CI anywhere**: PostPile fetches no
   checks (DESIGN.md "CI is not tracked"; `PrStatus` and `PrPaneView` have none).
 - PR rows: a single-PR tile's row has no title (`PrRow` `showTitle`
   false; the heading is the title). The author's avatar is who opened it

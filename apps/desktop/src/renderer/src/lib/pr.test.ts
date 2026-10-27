@@ -49,6 +49,13 @@ describe('pr helpers', () => {
     expect(mergeStatus(approved, [])).toBe('approved');
   });
 
+  it('says a stamphog decline next to a needed review', () => {
+    const decline = { agent: 'stamphog', kind: 'escalated' as const, reason: 'Drops a column.', earlierCommit: false };
+    expect(mergeStatus(prPaneView(makePr()), [], decline)).toBe('needs review · stamphog declined: escalated to a person');
+    expect(mergeStatus(prPaneView(makePr({ reviewDecision: 'CHANGES_REQUESTED' })), [], decline)).toBe('changes requested');
+    expect(mergeStatus(prPaneView(makePr({ isDraft: true })), [], decline)).toBe('draft');
+  });
+
   // 2026-10-10 (B-A-12): "approved" next to a team still waiting read as a contradiction.
   it('names who is still asked on an approved PR', () => {
     const approved = { ...prPaneView(makePr({ reviewDecision: 'APPROVED' })), reviewerTeams: ['acme/team-platform'], reviewerUsers: ['tove'] };
@@ -63,7 +70,7 @@ describe('pr helpers', () => {
 });
 
 describe('state words', () => {
-  const open: PrStatus = { lifecycle: 'open', review: null, agentApprovers: [], mergeQueue: null, icon: 'open' };
+  const open: PrStatus = { lifecycle: 'open', review: null, agentApprovers: [], agentDecline: null, mergeQueue: null, icon: 'open' };
 
   it('says the review state in words, never CI', () => {
     expect(reviewWord({ ...open, review: 'review' })).toEqual({ kind: 'review', text: 'Needs review', title: 'Review required' });
@@ -81,6 +88,20 @@ describe('state words', () => {
     expect(reviewWord({ ...open, review: 'approved', agentApprovers: ['reviewbot', 'lintbot'] })?.text).toBe('Approved by agents');
   });
 
+  it('says "stamphog declined" in the review color while no person approved or asked for changes', () => {
+    const decline = { agent: 'stamphog', kind: 'needs_person' as const, reason: 'Touches billing.', earlierCommit: false };
+    expect(reviewWord({ ...open, review: 'review', agentDecline: decline })).toEqual({
+      kind: 'review',
+      text: 'stamphog declined',
+      title: 'stamphog declined: needs a person to review',
+    });
+    expect(reviewWord({ ...open, agentDecline: { ...decline, kind: 'gates', earlierCommit: true } })?.title).toBe(
+      'stamphog declined on an earlier commit: outside what it may auto-approve',
+    );
+    expect(reviewWord({ ...open, review: 'changes', agentDecline: decline })?.text).toBe('Changes requested');
+    expect(reviewWord({ ...open, review: 'approved', agentDecline: decline })?.text).toBe('Approved');
+  });
+
   it('puts merged, closed and draft in place of the review on a row', () => {
     const now = new Date(at(60));
     expect(rowStateWord({ ...open, lifecycle: 'merged', icon: 'merged' }, now)?.text).toBe('Merged');
@@ -96,7 +117,7 @@ describe('state words', () => {
 });
 
 describe('merge queue words', () => {
-  const open: PrStatus = { lifecycle: 'open', review: 'approved', agentApprovers: [], mergeQueue: null, icon: 'open' };
+  const open: PrStatus = { lifecycle: 'open', review: 'approved', agentApprovers: [], agentDecline: null, mergeQueue: null, icon: 'open' };
   const now = new Date(at(60));
   const clock = (minutes: number) => {
     const date = new Date(at(minutes));
@@ -122,7 +143,7 @@ describe('merge queue words', () => {
 });
 
 describe('stack queue word', () => {
-  const open: PrStatus = { lifecycle: 'open', review: 'approved', agentApprovers: [], mergeQueue: null, icon: 'open' };
+  const open: PrStatus = { lifecycle: 'open', review: 'approved', agentApprovers: [], agentDecline: null, mergeQueue: null, icon: 'open' };
   const queued: PrStatus = { ...open, icon: 'merge_queue', mergeQueue: { state: 'submitted', since: at(28), reason: null, testingOn: null } };
   const failed: PrStatus = { ...open, icon: 'merge_queue_failed', mergeQueue: { state: 'failed', since: at(28), reason: 'tests failed', testingOn: null } };
   const stacks = [{ id: 'stack:acme/app#1861', prKeys: ['acme/app#1861', 'acme/app#1862', 'acme/app#1863'] }];

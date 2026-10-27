@@ -4838,6 +4838,52 @@ worth seeing, so the app says who approved instead of a bare "approved".
   user's areas. Agent approvals count in the glance input hash; the key is
   only added when there are some, so other PRs' hashes did not move.
 
+**An agent approver's decline (2026-10-27).** stamphog (`stamphog[bot]`)
+is an agent approver: an author asks for it with the `stamphog` label when
+they see the change as small and low-risk and want it in soon. When it
+says no, a person has to look, and its reasons often name the team. That
+is worth seeing on the tile, and the glance should weigh the reasons.
+
+- The rule (core `agentDecline`, `agent-decline.ts`, no agent call): only
+  reviews by the exact `stamphog[bot]` login, and only the latest verdict
+  counts. A verdict is a review whose body starts with a bold "Approved"
+  or "Not approved" (the prefix, not the full sentence, so small wording
+  changes keep working); its plain status comments never count. "Not
+  approved … escalated" is `escalated`, other "Not approved" lines are
+  `needs_person`. "Not approved yet" reads the gate table in the
+  `<details>` block: only `prerequisites` failing (merge conflicts,
+  changes requested) is waiting, no decline; any other failed gate (size,
+  tier, deny-list) is `gates`. A later approval cancels an earlier decline,
+  also one a push dismissed since. No decline on merged or closed PRs, or
+  once a person has a standing approval.
+- The reason is the prose after the "Re-add the `stamphog` label" line,
+  without the gate details and HTML comments, whitespace collapsed,
+  clipped to 300 characters. stamphog bodies are read by the board and
+  kept whole on save (`isBodyReadByRules`), since the gate table sits at
+  the end of a long body.
+- Where it shows, in words and the neutral review color (no warning
+  colors, no coral, no honey): `PrStatus.agentDecline` /
+  `PrDetail.agentDecline` (`agentDeclineView`). While no person approved
+  or asked for changes, the review word reads "stamphog declined", tooltip
+  "stamphog declined: needs a person to review" (or "escalated to a
+  person", "outside what it may auto-approve"), with "on an earlier
+  commit" once the head moved. "To merge" says "needs review · stamphog
+  declined: …" with the reasons as its tooltip; the Approve button's
+  review glyph says the same.
+- Order: inside a topic's To review tiles, a tile holding a declined PR
+  ranks first inside its To review level (for you + declined, for you,
+  team-routed + declined, team-routed; `reviewRank`). The author asked for
+  a fast approval and now waits on a person. Whose turn, tiers, urgency
+  and the sidebar's topic order do not change.
+- Glance: `prDetails` adds "Agent approver: the author asked stamphog (an
+  agent that approves small, low-risk changes) to approve; it declined: …
+  Its reasons: …" inside the GitHub data fence, only when there is a
+  decline. The glance prompt says the ask means the author sees the change
+  as small and wants it in soon, to weigh the reasons in risk and verdict,
+  and to say in forYou when they ask for a review from the user or their
+  teams. The decline counts in the glance input hash, added only when there
+  is one, so no other PR's stored glance went out of date.
+
 A tile takes the most urgent member (you over them over none); on a tie the
 PR with the newest unseen loud event wins, so the footer and the unread strip
 talk about the same PR, else tile order. Multi-PR tiles add " on #N".

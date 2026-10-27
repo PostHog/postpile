@@ -1,5 +1,5 @@
-import { homeTeamsOf, humanDiscussion, humanReviews, isPrOwner, prOwners, sameLogin, standingApprovals } from '@postpile/core';
-import type { EntityRef, Feedback, FeedbackKind, FullComment, Pr, Provenance, Viewer } from '@postpile/core';
+import { agentDecline, homeTeamsOf, humanDiscussion, humanReviews, isPrOwner, prOwners, sameLogin, standingApprovals } from '@postpile/core';
+import type { AgentDeclineKind, EntityRef, Feedback, FeedbackKind, FullComment, Pr, Provenance, Viewer } from '@postpile/core';
 import type { PromptContext } from '../service.ts';
 
 /** Trims a body to keep prompts bounded without losing the point. */
@@ -237,6 +237,26 @@ export function approvedByLine(pr: Pr, viewer: Viewer | null): string | null {
   return all.length > 0 ? `Approved by: ${all.join(', ')}` : null;
 }
 
+const DECLINE_WORDS: Record<AgentDeclineKind, string> = {
+  needs_person: 'it needs a person to review',
+  escalated: 'it escalated to a person',
+  gates: 'the change is outside what it may auto-approve',
+};
+
+/**
+ * stamphog's standing decline in words, null without one (`agentDecline`).
+ * Inside the GitHub data fence: the reasons are stamphog's text.
+ */
+export function agentDeclineLine(pr: Pr): string | null {
+  const decline = agentDecline(pr);
+  if (decline === null) {
+    return null;
+  }
+  const earlier = decline.commitOid !== null && decline.commitOid !== pr.headOid ? ' (on an earlier commit)' : '';
+  const reasons = decline.reason === '' ? '(none given)' : decline.reason;
+  return `Agent approver: the author asked ${decline.agent} (an agent that approves small, low-risk changes) to approve; it declined${earlier}: ${DECLINE_WORDS[decline.kind]}. Its reasons: ${reasons}`;
+}
+
 export function prDetails(pr: Pr, viewer: Viewer | null, limits: PrDetailLimits): string {
   const lines: string[] = [prLine(pr), `Base ${pr.baseRef} <- head ${pr.headRef}`];
   if (pr.labels.length > 0) {
@@ -267,6 +287,10 @@ export function prDetails(pr: Pr, viewer: Viewer | null, limits: PrDetailLimits)
   const approvedBy = approvedByLine(pr, viewer);
   if (approvedBy) {
     lines.push(approvedBy);
+  }
+  const declined = agentDeclineLine(pr);
+  if (declined) {
+    lines.push(declined);
   }
   // The user's own thread reply must not stand in for their approval or changes request.
   const ownReview = viewer ? human.filter((r) => r.author === viewer.login).at(-1) : undefined;
