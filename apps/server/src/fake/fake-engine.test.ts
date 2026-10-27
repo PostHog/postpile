@@ -472,7 +472,7 @@ describe('FakeEngine queues', () => {
     expect(sectionOf('topic-egress-allowlist')).toBe('team_owns');
     // Driven outside the team, though the owner signal names the home team (you wrote a PR there).
     expect(sectionOf('topic-usage-exports')).toBe('other_work');
-    expect(topics.filter((item) => item.section === 'other_work').map((item) => item.topic.area)).toEqual(['Billing', 'Replay', 'Alerting', 'Replay']);
+    expect(topics.filter((item) => item.section === 'other_work').map((item) => item.topic.area)).toEqual(['Replay', 'Billing', 'Alerting', 'Replay']);
     // No dossier and no driver: not sorted yet. FYI stays FYI.
     expect(topics.find((item) => item.topic.id === 'topic-docs-search')).toMatchObject({ section: 'other_topics', placement: null });
     expect(sectionOf('topic-desktop-release')).toBe('other_topics');
@@ -494,10 +494,10 @@ describe('FakeEngine queues', () => {
     expect(await sectionOf('topic-usage-exports')).toBe('other_work');
   });
 
-  it("lists topics with your open PR or move first inside a section, then unread ones, then the newest activity", async () => {
+  it("lists topics with an unread tile, your move or your open PR first inside a section, each band by name", async () => {
     const topics = await new FakeEngine().listTopics();
     const otherWork = topics.filter((item) => item.section === 'other_work').map((item) => item.topic.id);
-    expect(otherWork).toEqual(['topic-usage-exports', 'topic-replay-storage', 'topic-alert-presets', 'topic-replay-player']);
+    expect(otherWork).toEqual(['topic-replay-storage', 'topic-usage-exports', 'topic-alert-presets', 'topic-replay-player']);
   });
 
   it('puts a topic whose only unread tile is merged under needs you while a question after the merge waits for you', async () => {

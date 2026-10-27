@@ -72,9 +72,9 @@ describe('topic list queues', () => {
     await h.engine.sync({ maxAgentCalls: 0 });
 
     const items = await h.engine.listTopics();
-    expect(items.map((item) => item.topic.id)).toEqual(['open', 'merged']);
-    expect(items[0]).toMatchObject({ group: 'needs_you', unreadTiles: 1, urgentUnreadTiles: 1 });
-    expect(items[1]).toMatchObject({ group: 'quiet', unreadTiles: 1, urgentUnreadTiles: 0 });
+    const byId = (id: string) => items.find((item) => item.topic.id === id);
+    expect(byId('open')).toMatchObject({ group: 'needs_you', unreadTiles: 1, urgentUnreadTiles: 1 });
+    expect(byId('merged')).toMatchObject({ group: 'quiet', unreadTiles: 1, urgentUnreadTiles: 0 });
   });
 
   it('does not make a topic urgent for merging your own approved PR, but counts the move', async () => {

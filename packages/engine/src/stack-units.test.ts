@@ -211,7 +211,7 @@ describe('a stack is one unit in sets', () => {
 
     expect(h.store.sets.listActiveForTopic('depot')).toEqual([]);
     const tiles = await tileMembers(h, 'depot');
-    expect(tiles.map(([id]) => id)).toEqual([stackId, `pr:${lone.key}`]);
+    expect(tiles.map(([id]) => id).toSorted()).toEqual([`pr:${lone.key}`, stackId].toSorted());
   });
 });
 

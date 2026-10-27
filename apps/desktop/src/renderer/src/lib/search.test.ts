@@ -17,7 +17,6 @@ function item(id: string, unreadTiles: number, section: TopicSection = 'other_to
     people: [],
     prState: null,
     prStateCounts: { open: 0, merge_queue: 0, merge_queue_failed: 0, draft: 0, merged: 0, closed: 0 },
-    othersActivityAt: null,
   };
 }
 

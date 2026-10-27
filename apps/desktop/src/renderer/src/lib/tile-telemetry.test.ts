@@ -59,7 +59,7 @@ function view(prs: PrSummary[], forWhom: TileView['forWhom'] = { kind: 'you' }):
     pendingWrite: null,
     quietRepo: false,
     repoLabel: null,
-    othersActivityAt: null,
+    newestPr: null,
   });
 }
 

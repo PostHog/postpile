@@ -126,11 +126,6 @@ export interface TopicListItem {
   prState: TopicPrState | null;
   /** Tracked PRs per state, for the icon's tooltip only. */
   prStateCounts: TopicPrStateCounts;
-  /**
-   * The newest activity by someone else across the topic's PRs on the board
-   * (`othersActivityAt`): the tie-break of the sidebar order. Null when there is none.
-   */
-  othersActivityAt: IsoTime | null;
 }
 
 /** A PR that is open while all its tiles are dealt with; `label` is "repo#number" without the owner. */
@@ -337,11 +332,14 @@ export interface TileView {
    * than the chosen one (or, under "All repos", the topic's main repo).
    */
   repoLabel: string | null;
-  /**
-   * The newest activity by someone else across the tile's PRs
-   * (`othersActivityAt`): the tie-break of the tile order. Null when there is none.
-   */
-  othersActivityAt: IsoTime | null;
+  /** The tile's most recently opened PR (`newestPrOf`): the tile order inside a group and tier (`compareTileViews`). Null without PRs. */
+  newestPr: NewestPr | null;
+}
+
+/** A PR by when it was opened, for the tile order. */
+export interface NewestPr {
+  key: PrKey;
+  createdAt: IsoTime;
 }
 
 /** One PR's glance, as its row has it, picked for the tile's verdict pill (`tileVerdict`). */

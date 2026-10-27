@@ -147,7 +147,6 @@ import {
   eventView,
   compareTileViews,
   compareTopics,
-  newestActivity,
   actionTrail,
   isUnseenMergeWithoutReview,
   prWantsGlance,
@@ -1232,7 +1231,6 @@ export class FakeEngine implements EngineService {
         people: topicFaces(topicPeople(prs.map(({ pr }) => pr), viewer)),
         prState: prRollup.state,
         prStateCounts: prRollup.counts,
-        othersActivityAt: newestActivity(views.map((view) => view.othersActivityAt)),
       };
     });
     return items.sort(compareTopics);

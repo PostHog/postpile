@@ -84,11 +84,11 @@ describe('pack stacks: the shapes it is there to show', () => {
 
   it('Lockfile bumps: a set of 5 renovate PRs and one single bump', async () => {
     const tiles = await topicTiles(engineWith('stacks'), 'topic-lockfile-bumps');
-    expect(tiles.map((view) => [view.tile.kind, view.prs.length])).toEqual([
+    expect(tiles.map((view) => [view.tile.kind, view.prs.length]).toSorted()).toEqual([
       ['set', 5],
       ['single', 1],
     ]);
-    expect(tiles[0]?.prs.every((pr) => pr.author === 'renovate[bot]')).toBe(true);
+    expect(tiles.find((view) => view.tile.kind === 'set')?.prs.every((pr) => pr.author === 'renovate[bot]')).toBe(true);
   });
 });
 

@@ -26,7 +26,6 @@ import {
   topicAgentOffers,
   compareTileViews,
   compareTopics,
-  othersActivityAt,
   eventView,
   topicMove,
   isPrInQuietRepo,
@@ -511,7 +510,6 @@ export class ReadModels {
         people: topicFaces(topicPeople(prs, viewer)),
         prState: prRollup.state,
         prStateCounts: prRollup.counts,
-        othersActivityAt: othersActivityAt(prs.flatMap((pr) => board.events.get(pr.key) ?? []), viewer),
       });
     }
     return items.sort(compareTopics);

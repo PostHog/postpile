@@ -1,12 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { TileGroup } from './tile-groups.ts';
 import {
-  compareTopicUrgency,
   topicMove,
   topicUrgency,
   topicYourMoves,
   yourMovesByGroup,
-  type RankedTopic,
   type TopicMove,
   type UrgencyTile,
   type UrgencyView,
@@ -142,22 +140,6 @@ describe('topic detail: your moves', () => {
   it('has every group at 0 when no tile waits on you', () => {
     expect(yourMovesByGroup([view('open', 'open', null)])).toEqual({ unread: 0, open: 0, dealt_with: 0 });
     expect(topicYourMoves([])).toEqual([]);
-  });
-});
-
-describe('compareTopicUrgency', () => {
-  const rank = (overrides: Partial<RankedTopic>): RankedTopic => ({ group: 'quiet', urgentUnreadTiles: 0, unreadTiles: 0, ...overrides });
-
-  it('ranks needs-you first, then open unread, then merged-since-you-looked', () => {
-    const calm = rank({ unreadTiles: 5 });
-    const urgent = rank({ group: 'needs_you', urgentUnreadTiles: 1, unreadTiles: 1 });
-    const moreUrgent = rank({ group: 'needs_you', urgentUnreadTiles: 2, unreadTiles: 2 });
-    const quiet = rank({});
-    expect([quiet, calm, urgent, moreUrgent].sort(compareTopicUrgency)).toEqual([moreUrgent, urgent, calm, quiet]);
-  });
-
-  it('is a tie for equal topics', () => {
-    expect(compareTopicUrgency(rank({ unreadTiles: 1 }), rank({ unreadTiles: 1 }))).toBe(0);
   });
 });
 

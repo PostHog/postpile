@@ -62,7 +62,7 @@ function unreadTile(prs: PrSummary[]): TileView {
     pendingWrite: null,
     quietRepo: false,
     repoLabel: null,
-    othersActivityAt: null,
+    newestPr: null,
   });
 }
 

@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import { emptyTierCounts } from './topic-queues.ts';
 import { effectiveDriver, OUTSIDE_DRIVER, TEAM_DRIVER } from './topic-driver.ts';
-import { compareInSection, topicDriverView, topicQuiet, topicSection, type TopicSection } from './topic-sections.ts';
+import { compareTopics, topicDriverView, topicQuiet, topicSection, UNSORTED_TOPIC_ID, type TopicSection } from './topic-sections.ts';
 import type { PrTier } from './pr-tier.ts';
 import type { TopicRelation } from './memory.ts';
 import type { Viewer } from './types.ts';
@@ -260,24 +260,40 @@ describe('topicDriverView: driverDecides', () => {
   });
 });
 
-describe('compareInSection', () => {
-  const topic = (name: string, extra: { byYou?: number; moves?: number; unread?: number; urgent?: number }) => ({
-    name,
-    group: (extra.urgent ?? 0) > 0 || (extra.moves ?? 0) > 0 ? ('needs_you' as const) : ('quiet' as const),
-    urgentUnreadTiles: extra.urgent ?? 0,
+describe('compareTopics', () => {
+  const topic = (name: string, extra: { byYou?: number; moves?: number; unread?: number; id?: string } = {}) => ({
+    topic: { id: extra.id ?? name, name },
     unreadTiles: extra.unread ?? 0,
     queues: { byYou: extra.byYou ?? 0 },
     yourMoves: Array.from({ length: extra.moves ?? 0 }, () => ({ move: 'review' as const, text: 'Review' })),
   });
+  const names = (topics: ReturnType<typeof topic>[]) => topics.toSorted(compareTopics).map((entry) => entry.topic.name);
 
-  it("puts the viewer's open PR or move first, then unread, then the urgency order", () => {
-    const quiet = topic('quiet', {});
-    const calm = topic('calm', { unread: 1 });
-    const urgent = topic('urgent', { unread: 2, urgent: 2 });
-    const yourPr = topic('your PR', { byYou: 1 });
-    const yourMove = topic('your move', { moves: 1, unread: 1, urgent: 1 });
-    const sorted = [quiet, calm, urgent, yourPr, yourMove].sort(compareInSection).map((entry) => entry.name);
-    expect(sorted).toEqual(['your move', 'your PR', 'urgent', 'calm', 'quiet']);
+  it('puts unread, your move or your open PR first, then the rest, each band A-Z', () => {
+    const sorted = names([topic('Zeta'), topic('Yak', { unread: 3 }), topic('Beta'), topic('Mole', { moves: 1 }), topic('Ant', { byYou: 1 }), topic('Cat', { unread: 1 })]);
+    expect(sorted).toEqual(['Ant', 'Cat', 'Mole', 'Yak', 'Beta', 'Zeta']);
+  });
+
+  it('ignores counts: reading one tile of several moves nothing', () => {
+    const before = names([topic('Alpha', { unread: 1 }), topic('Beta', { unread: 3 })]);
+    const after = names([topic('Alpha', { unread: 1 }), topic('Beta', { unread: 2 })]);
+    expect(before).toEqual(['Alpha', 'Beta']);
+    expect(after).toEqual(before);
+  });
+
+  it('moves a topic down once its last unread tile is read', () => {
+    expect(names([topic('Alpha', { unread: 1 }), topic('Beta', { unread: 1 })])).toEqual(['Alpha', 'Beta']);
+    expect(names([topic('Alpha'), topic('Beta', { unread: 1 })])).toEqual(['Beta', 'Alpha']);
+  });
+
+  it('keeps a topic with your open PR up after you read it', () => {
+    expect(names([topic('Beta', { unread: 1 }), topic('Alpha', { byYou: 1, unread: 1 })])).toEqual(['Alpha', 'Beta']);
+    expect(names([topic('Beta', { unread: 1 }), topic('Alpha', { byYou: 1 })])).toEqual(['Alpha', 'Beta']);
+  });
+
+  it('puts Unsorted last in its band', () => {
+    const unsorted = topic('Unsorted', { id: UNSORTED_TOPIC_ID, unread: 1 });
+    expect(names([unsorted, topic('Zeta', { unread: 1 }), topic('Alpha')])).toEqual(['Zeta', 'Unsorted', 'Alpha']);
   });
 });
 

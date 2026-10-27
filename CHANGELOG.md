@@ -6,7 +6,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ### Changed
 
-- Topics in a sidebar section and tiles in a topic that would otherwise tie now sort by the latest activity from other people, newest first. Your own reads, approvals, replies and snoozes never move a topic or tile up. Bot noise and pushes don't count.
+- The sidebar and tile order stay put. Inside a section, topics with an unread tile, your move or your open PR come first, then the rest, each sorted by name. How many tiles are unread no longer reorders topics, so reading one tile of several moves nothing. Inside a topic, tiles in the same group and queue sort newest PR first, so comments never reshuffle them.
 
 ## 0.28.2 (2026-10-26)
 

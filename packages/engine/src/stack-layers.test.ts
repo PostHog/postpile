@@ -114,7 +114,9 @@ describe('stack layers', () => {
     // Every layer shows at the bottom of its stack, whatever its state or age.
     const topic = await h.engine.getTopic('depot');
     const stacks = topic?.tiles.filter((view) => view.tile.kind === 'stack') ?? [];
-    expect(stacks.map((view) => view.prs.map((pr) => [pr.key, pr.status.lifecycle]))).toEqual([
+    // Tiles sort newest PR first (`compareTileViews`); this test is about the layers, so sort by the bottom one.
+    const layers = stacks.map((view) => view.prs.map((pr) => [pr.key, pr.status.lifecycle]));
+    expect(layers.toSorted((a, b) => String(a[0]?.[0]).localeCompare(String(b[0]?.[0])))).toEqual([
       [
         [recent.key, 'merged'],
         ['acme/app#31', 'open'],

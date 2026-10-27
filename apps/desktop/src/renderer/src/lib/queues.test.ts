@@ -42,7 +42,6 @@ function item(id: string, tiers: Tiers, extra: Partial<TopicListItem> = {}, sect
     people: [],
     prState: null,
     prStateCounts: { open: 0, merge_queue: 0, merge_queue_failed: 0, draft: 0, merged: 0, closed: 0 },
-    othersActivityAt: null,
     ...extra,
   };
 }
@@ -103,7 +102,7 @@ function tile(id: string, tier: PrTier, prs: PrSummary[] = []): TileView {
     pendingWrite: null,
     quietRepo: false,
     repoLabel: null,
-    othersActivityAt: null,
+    newestPr: null,
   });
 }
 
