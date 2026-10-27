@@ -89,6 +89,27 @@ const TRUNK_WAITING = '<!-- Trunk Merge -->\n⏳\u2002Waiting to start tests on 
 const TRUNK_MERGED = '<!-- Trunk Merge -->\n😎\u2002Merged successfully - [details](https://app.trunk.io/acme/merge/1974).';
 const TRUNK_REMOVED =
   "<!-- Trunk Merge -->\n🚫\u2002This pull request was removed from the merge queue because it was waiting to become mergeable for too long (for example: missing required approvals or checks, or a merge conflict). Submit it again once it's ready to merge. See more details [here](https://app.trunk.io/acme/merge/1950).";
+/** An invented stamphog decline: bold verdict, the re-add line, reasons, then the gate table folded away. */
+const STAMPHOG_DECLINE = [
+  '**Not approved — this change needs a human reviewer.**',
+  '',
+  'Re-add the `stamphog` label to request another review once you have addressed this.',
+  '',
+  'This changes two CI workflow files that every test run reads. A wrong shard count splits tests unevenly or skips some.',
+  '',
+  '- `.github/workflows/ci-backend.yml` is owned by @acme/team-platform',
+  '- please get a review from someone on team-platform',
+  '',
+  '<details><summary>Gate mechanics and policy version</summary>',
+  '',
+  '| gate | result | detail |',
+  '| --- | --- | --- |',
+  '| prerequisites | ✓ | no conflicts |',
+  '| deny-list | ✗ | .github/workflows/** |',
+  '| size | ✓ | 68 lines |',
+  '',
+  '</details>',
+].join('\n');
 
 function buildTopics(clock: SampleClock): Topic[] {
   return [
@@ -581,6 +602,13 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
       number: 1870, title: 'Make devbox start default to minimal stack', author: 'sol', state: 'OPEN',
       size: [70, 12, 4], openedHoursAgo: 72, reviewerTeams: ['acme/team-platform'],
     }),
+    // The author asked stamphog (an agent approver) for a fast approval; it declined and asks for a person.
+    samplePr(clock, {
+      number: 1991, title: 'Read the shard count from the CI matrix', author: 'remy', state: 'OPEN',
+      size: [48, 20, 3], openedHoursAgo: 6, reviewerUsers: [SAMPLE_VIEWER],
+      body: 'The shard count was hardcoded in two workflows. This reads it from the matrix so the two cannot drift.',
+      reviews: [['stamphog[bot]', 'COMMENTED', STAMPHOG_DECLINE, undefined, 5]],
+    }),
     // Found outside the inbox: the viewer's own open PR, and a review asked of them they already read on GitHub.
     // Approved, submitted to the Trunk merge queue, and taken out again: its checks never finished.
     samplePr(clock, {
@@ -861,6 +889,12 @@ function buildEvents(clock: SampleClock): PrEvent[] {
       { kind: 'merged', actor: 'lyra', text: 'merged', hoursAgo: 3, rule: 'quiet', seen: true },
       { kind: 'question_to_user', actor: 'jude', text: 'asked you: @you are the stale snapshots gone after this?', hoursAgo: 2, rule: 'loud', sourceId: 'issuecomment-6' },
     ]),
+    ...sampleEvents(clock, 1991, [
+      // Read on GitHub already: the decline shows on a calm, open tile.
+      { kind: 'review_commented', actor: 'stamphog[bot]', text: 'reviewed: **Not approved — this change needs a human reviewer.**', hoursAgo: 5, rule: 'quiet', isBot: true, sourceId: 'review-1991-0', seen: true },
+      { kind: 'bot_comment', actor: 'stamphog[bot]', text: 'commented: **Not approved — this change needs a human reviewer.**', hoursAgo: 5, rule: 'quiet', isBot: true, sourceId: 'review-1991-0', seen: true },
+      { kind: 'review_requested', actor: 'remy', text: 'requested a review from you', hoursAgo: 4.5, rule: 'loud', seen: true },
+    ]),
     ...sampleEvents(clock, 1870, [
       { kind: 'review_requested', actor: 'sol', text: 'requested a review from acme/team-platform', hoursAgo: 72, rule: 'loud' },
     ]),
@@ -1015,6 +1049,13 @@ function buildGlances(clock: SampleClock): Glance[] {
       does: 'Removes three env vars no devbox service reads.',
       risk: 'Low. A service that did read one would fall back to its default.',
       othersSaid: 'No comments yet.',
+    }),
+    sampleGlance(clock, 1991, {
+      verdict: 'LOOK_CLOSER',
+      forYou: 'remy asked stamphog for a fast approval; it wants a person because the change touches the CI workflows you own.',
+      does: 'Reads the shard count from the CI matrix instead of two hardcoded numbers.',
+      risk: 'Medium. A wrong matrix value changes how every test run is split.',
+      othersSaid: 'stamphog declined: workflow files are outside what it may approve alone.',
     }),
     sampleGlance(clock, 1870, {
       verdict: 'LOOK_CLOSER',
@@ -1218,6 +1259,9 @@ function buildTiles(): Tile[] {
     ]),
     sampleTile(TOPIC.frontend, 'single', `pr:${sampleKey(1963)}`, 'Your icon sprite changes wait on tove', [
       pinged(1963, 'comment'),
+    ]),
+    sampleTile(TOPIC.ci, 'single', `pr:${sampleKey(1991)}`, 'stamphog wants a person on the shard count change', [
+      pinged(1991, 'review_requested'),
     ]),
     sampleTile(TOPIC.devEnv, 'single', `pr:${sampleKey(1870)}`, 'devbox start would default to minimal stack', [
       pinged(1870, 'review_requested'),

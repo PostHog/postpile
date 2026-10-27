@@ -268,6 +268,9 @@ describe('boardShape', () => {
     expect(isBodyReadByRules({ author: 'bob' })).toBe(true);
     expect(isBodyReadByRules({ author: '' })).toBe(true);
     expect(isBodyReadByRules({ author: 'mergify[bot]' })).toBe(true);
+    // agentDecline reads stamphog's verdict and gate table.
+    expect(isBodyReadByRules({ author: 'stamphog[bot]' })).toBe(true);
+    expect(isBodyReadByRules({ author: 'stamphog' })).toBe(false);
     expect(isBodyReadByRules({ author: 'vercel[bot]', editor: 'bob' })).toBe(true);
     expect(isBodyReadByRules({ author: 'vercel[bot]', editor: 'vercel[bot]' })).toBe(false);
     expect(isBodyReadByRules({ author: 'vercel[bot]', editor: null })).toBe(false);

@@ -87,4 +87,10 @@ describe('approveStateGlyphs', () => {
   it('names the agent in the tooltip when only an agent approved', () => {
     expect(approveStateGlyphs('open', 'APPROVED', ['reviewbot'])[1]).toEqual({ glyph: 'check', title: 'Approved by reviewbot (agent)' });
   });
+
+  it('adds a stamphog decline to the review glyph tooltip', () => {
+    const decline = { agent: 'stamphog', kind: 'escalated' as const, reason: 'Drops a column.', earlierCommit: false };
+    expect(approveStateGlyphs('open', 'REVIEW_REQUIRED', [], decline)[1]?.title).toBe('Review required · stamphog declined: escalated to a person');
+    expect(approveStateGlyphs('open', 'APPROVED', ['reviewbot'], decline)[1]?.title).toBe('Approved by reviewbot (agent) · stamphog declined: escalated to a person');
+  });
 });

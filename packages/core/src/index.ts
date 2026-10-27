@@ -31,6 +31,7 @@ export * from './tiles.ts';
 export * from './why-here.ts';
 export * from './for-whom.ts';
 export * from './approvals.ts';
+export * from './agent-decline.ts';
 export * from './reviewer-states.ts';
 export * from './author-scope.ts';
 export * from './codeowners.ts';

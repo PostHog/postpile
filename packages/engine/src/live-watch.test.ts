@@ -1,4 +1,4 @@
-import { UNDO_WINDOW_MS, type FullPr } from '@postpile/core';
+import { TRIMMED_MARKER, UNDO_WINDOW_MS, type FullPr } from '@postpile/core';
 import { makeComment, makeReview, makeThreadFor, makeTimelineItem, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness, NOW, type Harness } from './testing/fakes.ts';
@@ -205,6 +205,24 @@ describe('freshness check', () => {
     const report = await h.engine.sync({ maxAgentCalls: 0 });
     expect(report.prsFetched).toBe(1);
     expect(h.store.prs.get(pr.key)?.assignees).toEqual(['viewer']);
+
+    const again = await h.engine.sync({ maxAgentCalls: 0 });
+    expect(again.prsFetched).toBe(0);
+  });
+
+  it('refetches once an open PR whose stamphog verdict was cut on save', async () => {
+    const h = makeHarness();
+    const body = '**Not approved yet — waiting on the conditions below.**\n\nFix these.\n\n| gate | result | detail |\n| size | ✗ | too large |';
+    const verdict = makeReview({ id: 'rs', author: 'stamphog[bot]', state: 'COMMENTED', body });
+    const pr = reviewRequestedPr(1, { reviews: [verdict], comments: [makeComment({ id: 'rs', author: 'stamphog[bot]', kind: 'review', body })] });
+    h.reader.addPr(pr, makeThreadFor(pr));
+    await h.engine.sync({ maxAgentCalls: 0 });
+    const cut = `**Not approved yet — waiting on the conditions below.**\n\nFix these.${TRIMMED_MARKER}`;
+    h.store.prs.upsert({ ...pr, reviews: [{ ...verdict, body: cut }], comments: [{ ...pr.comments[0]!, body: cut }] }, NOW.toISOString());
+
+    const report = await h.engine.sync({ maxAgentCalls: 0 });
+    expect(report.prsFetched).toBe(1);
+    expect(h.store.prs.get(pr.key)?.comments[0]?.body).toBe(body);
 
     const again = await h.engine.sync({ maxAgentCalls: 0 });
     expect(again.prsFetched).toBe(0);

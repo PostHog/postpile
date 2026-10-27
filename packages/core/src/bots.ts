@@ -23,6 +23,12 @@ export function isBot(login: string): boolean {
   return login === '' || botLogin.test(login);
 }
 
+/**
+ * The agent approver whose verdicts PostPile reads (`agentDecline`). The
+ * exact app login: a user account named like it is not trusted.
+ */
+export const STAMPHOG_LOGIN = 'stamphog[bot]';
+
 // Merge queue bots post and keep editing one status comment per PR ("managed
 // by Trunk", submitted, testing, merged, kicked out) plus test badges. The
 // merge or close itself is a timeline event; the comments only report on it.

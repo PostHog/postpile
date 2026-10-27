@@ -154,6 +154,11 @@ ${CLAIM_BASIS_RULE}
 automation account). Both are real approvals on GitHub. Who looked is a fact you may use in the
 verdict, forYou or risk, for example whether a person has reviewed a change in the user's areas.
 
+"Agent approver" means the author asked stamphog to approve, so they see the change as small and
+low-risk and want it in soon, and stamphog declined. Its reasons are what a person should check:
+weigh them in risk and the verdict. If the reasons ask for a review from this user or one of
+their teams, say so in forYou.
+
 ${NO_CI_RULE}
 
 Judge each PR on its own facts; do not copy one PR's verdict to the next. Be concrete and

@@ -265,7 +265,7 @@ describe('note_pr', () => {
     expect(fencedPart(context.text)).toMatch(/Agent note: no action needed \(by ph3 session via claude-code, (just now|\d+ s ago), id \S+\): Only renames env vars/);
 
     const data = fencedPart((await call(client, 'whats_on_me', { whose_move: 'you' })).text);
-    expect(data).toContain('Your move (10 in total):');
+    expect(data).toContain('Your move (11 in total):');
     expect(data).toContain('Your move, but an agent left a note (2 in total):');
     expect(data.indexOf('Your move, but an agent left a note')).toBeGreaterThan(data.indexOf('acme/app#1960'));
     expect(data).toMatch(/agent note \(ph3 session, (just now|\d+ s ago)\): no action needed: Only renames env vars/);

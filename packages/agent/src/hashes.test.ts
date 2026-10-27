@@ -44,6 +44,13 @@ describe('glanceItemInputHash', () => {
     expect(glanceHash(makePr({ reviews: [{ ...botComment, state: 'APPROVED' }] }))).not.toBe(base);
   });
 
+  it('changes on a stamphog decline, not on its other reviews', () => {
+    const review = { id: 'rs', author: 'stamphog[bot]', state: 'COMMENTED', body: 'Looking.', submittedAt: '2026-09-01T00:00:00Z', commitOid: null } as const;
+    expect(glanceHash(makePr({ reviews: [review] }))).toBe(base);
+    const declined = { ...review, body: '**Not approved — this change needs a human reviewer.**\n\nTouches billing.' };
+    expect(glanceHash(makePr({ reviews: [declined] }))).not.toBe(base);
+  });
+
   it('changes on a new push, a human comment, instructions or tailoring', () => {
     expect(glanceHash(makePr({ headOid: 'def' }))).not.toBe(base);
     expect(glanceHash(makePr({ comments: [makeComment()] }))).not.toBe(base);
