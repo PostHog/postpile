@@ -24,7 +24,8 @@ function setBlock(input: SetGroupingInput, set: PrSet, prs: Map<string, Pr>): st
     set.removedKeys.length > 0
       ? `\n  the user said NOT related, never group again with the PRs above: ${set.removedKeys.join(', ')}`
       : '';
-  const full = setIsFull(set) ? ` (FULL: ${set.members.length} PRs, takes no joins and no merges)` : ` (${set.members.length} PRs)`;
+  const size = input.setSizes?.[set.id] ?? set.members.length;
+  const full = setIsFull(size) ? ` (FULL: ${size} PRs, takes no joins and no merges)` : ` (${size} PRs)`;
   return `- set id ${set.id}${full}
 ${githubData(`  title: ${set.title}\n  take: ${set.take}\n${memberLines(input, set, prs)}`)}${removed}`;
 }

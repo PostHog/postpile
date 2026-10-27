@@ -6634,8 +6634,10 @@ Owner decisions (2026-09-30 and 2026-10-01), after research on grouping PRs
   joins, one of them weeks after its last merge: the regroup showed the
   agent every set in the topic, so an old tile kept pulling in new work.
   Reusing a set for a quick follow-up is good; reopening an old, finished
-  tile is not. A set is finished when every member (removed ones aside)
-  is merged or closed; its finish time is the latest merge or close
+  tile is not. A set is finished when every PR its tile holds (removed
+  ones aside) is merged or closed, counted through the current stacks
+  (`setShownKeys`): a layer stacked onto a member after the set was made
+  is not a stored member, yet it shows in the tile and holds the set open; its finish time is the latest merge or close
   among them (the timeline's close, or `updatedAt` when the timeline was
   cut off). `SET_CLOSE_AFTER_DAYS` (2) later it closes (core
   `setCloseReason`): it takes no joins, merges or new members, and the
@@ -6651,7 +6653,7 @@ Owner decisions (2026-09-30 and 2026-10-01), after research on grouping PRs
 - **Sets cap at 12 members** (2026-10-27, owner). Two sets on real data
   grew to 27 and 15 PRs over two weeks, which is topic-sized; a set is
   PRs one judgement covers. A set of `SET_MAX_MEMBERS` (12, removed ones
-  aside) takes no joins: the next matching PR starts a new set or stays
+  aside, stack layers counted as the tile shows them) takes no joins: the next matching PR starts a new set or stays
   single. A merge of two sets that together go past 12 is dropped, and a
   new set the agent proposes too big keeps its first 12 PRs (whole
   stacks). The engine enforces it where answers land

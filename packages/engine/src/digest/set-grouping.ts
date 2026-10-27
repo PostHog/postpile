@@ -3,6 +3,7 @@ import {
   buildStacks,
   SET_MAX_MEMBERS,
   setCloseReason,
+  setShownKeys,
   stackByPrKey,
   stackTopicId,
   type PrKey,
@@ -102,6 +103,8 @@ function openSet(sets: Map<string, PrSet>, id: string): PrSet | null {
 /**
  * Whole units, in order, while they fit under SET_MAX_MEMBERS: a new set the
  * agent proposed too big keeps its first PRs and stacks, the rest stay out.
+ * Units already hold whole stacks, each PR once (`unitsOf`), so this counts
+ * what the tile will show, like `setShownKeys`.
  */
 function underCap(units: PrSetMember[][]): PrSetMember[][] {
   const kept: PrSetMember[][] = [];
@@ -229,10 +232,13 @@ export class SetGrouper {
     if (sets.length === 0) {
       return;
     }
-    const prs = store.prs.getMany(sets.flatMap((set) => set.members.map((member) => member.prKey)));
+    // Every PR the tile shows: a layer stacked onto a member later holds the set open too.
+    const stackOf = this.stacks();
+    const shown = new Map(sets.map((set) => [set.id, setShownKeys(set.members, stackOf)]));
+    const prs = store.prs.getMany([...shown.values()].flat());
     const now = this.deps.now().toISOString();
     for (const set of sets) {
-      const reason = setCloseReason(set, prs, now);
+      const reason = setCloseReason(set, shown.get(set.id) ?? [], prs, now);
       if (reason === null) {
         continue;
       }
@@ -254,7 +260,12 @@ export class SetGrouper {
     for (const [key, glance] of store.glances.getMany(prs.map((pr) => pr.key))) {
       risks[key] = glance.risk;
     }
-    return { topic, prs, existingSets, risks, context: this.deps.contexts.forTopic(topic.id) };
+    const stackOf = this.stacks();
+    const setSizes: Record<string, number> = {};
+    for (const set of existingSets) {
+      setSizes[set.id] = setShownKeys(set.members, stackOf).length;
+    }
+    return { topic, prs, existingSets, setSizes, risks, context: this.deps.contexts.forTopic(topic.id) };
   }
 
   /**
@@ -293,7 +304,7 @@ export class SetGrouper {
     return [...new Set([...setGroupingTriggers(input), ...made])];
   }
 
-  private applyMerges(topicId: string, sets: Map<string, PrSet>, changes: SetChanges, rejected: Set<string>): void {
+  private applyMerges(topicId: string, sets: Map<string, PrSet>, changes: SetChanges, stackOf: Map<PrKey, Stack>, rejected: Set<string>): void {
     const { store } = this.deps;
     for (const merge of changes.merged) {
       const from = openSet(sets, merge.setId);
@@ -302,8 +313,8 @@ export class SetGrouper {
         continue;
       }
       const moving = from.members.filter((member) => !into.members.some((m) => m.prKey === member.prKey));
-      // Two sets that together go past the cap stay two sets.
-      if (into.members.length + moving.length > SET_MAX_MEMBERS) {
+      // Two sets that together go past the cap stay two sets, counted as their tiles show them.
+      if (setShownKeys([...into.members, ...moving], stackOf).length > SET_MAX_MEMBERS) {
         continue;
       }
       into.members = [...into.members, ...moving];
@@ -352,7 +363,7 @@ export class SetGrouper {
       const set = openSet(sets, join.setId);
       const unit = unitsOf([join.member], stackOf)[0];
       const taken = placedKeys(sets);
-      if (!set || !unit || set.members.length + unit.length > SET_MAX_MEMBERS) {
+      if (!set || !unit || setShownKeys([...set.members, ...unit], stackOf).length > SET_MAX_MEMBERS) {
         continue;
       }
       if (unit.some((member) => taken.has(member.prKey)) || rejectedTogether(unit, set.members, rejected)) {
@@ -402,7 +413,7 @@ export class SetGrouper {
       const active = current.filter((set) => set.status === 'active');
       const sets = new Map(active.map((set) => [set.id, { ...set, members: [...set.members], removedKeys: [...set.removedKeys] }]));
       const before = new Map(active.map((set) => [set.id, JSON.stringify([set.title, set.take, set.members])]));
-      this.applyMerges(topic.id, sets, changes, rejected);
+      this.applyMerges(topic.id, sets, changes, stackOf, rejected);
       this.applyUpdates(topic.id, sets, changes);
       this.applyLeaves(topic.id, sets, changes, stackOf);
       this.applyJoins(topic.id, sets, changes, stackOf, rejected);

@@ -326,6 +326,20 @@ describe('finished sets close', () => {
     expect(changes(h).filter((line) => line.startsWith('closed'))).toHaveLength(1);
   });
 
+  it('stays open while a layer stacked onto a member later is still open', async () => {
+    const { h, setId, prs, later } = await finishedSet();
+    // #5 stacks onto #2 after the set was made: the tile shows it, the stored members do not hold it.
+    const layer = reviewRequestedPr(5, { baseRef: prs[1]!.headRef, headRef: 'layer-5' });
+    h.reader.addPr(layer, makeThreadFor(layer));
+    h.store.memberships.assign({ prKey: layer.key, topicId: 'depot', assignedBy: 'user', reason: '', createdAt: at(0) });
+    h.runner.answer('set_grouping', {});
+    later(5);
+    await h.engine.sync({ agentJobs: ['sets'] });
+
+    expect(h.store.sets.get(setId)?.members.map((m) => m.prKey)).not.toContain(layer.key);
+    expect(h.store.sets.get(setId)?.closedAt).toBeNull();
+  });
+
   it('still shows as the same tile with the same members', async () => {
     const { h, setId, prs, later } = await finishedSet();
     later(1);
@@ -376,6 +390,20 @@ describe('sets cap at twelve members', () => {
 
     expect(h.store.sets.get(setId)?.members).toHaveLength(12);
     expect(h.runner.promptsFor('set_grouping')[1]).toContain(`set id ${setId} (FULL: 12 PRs`);
+  });
+
+  it('counts a layer stacked onto a member later toward the cap', async () => {
+    const { h, setId, prs } = await bigSet(12, 11);
+    // #20 stacks onto #11 after the set was made: 11 stored members, 12 PRs on the tile.
+    const layer = reviewRequestedPr(20, { baseRef: prs[10]!.headRef, headRef: 'layer-20' });
+    h.reader.addPr(layer, makeThreadFor(layer));
+    h.store.memberships.assign({ prKey: layer.key, topicId: 'depot', assignedBy: 'user', reason: '', createdAt: at(0) });
+    h.store.glances.put(glance(prs[11]!.key, 'low - same cap'));
+    h.runner.answer('set_grouping', { joins: [{ setId, prKey: prs[11]!.key, reason: 'same cap' }] });
+    await h.engine.sync({ agentJobs: ['sets'] });
+
+    expect(h.store.sets.get(setId)?.members).toHaveLength(11);
+    expect(h.runner.promptsFor('set_grouping').at(-1)).toContain(`set id ${setId} (FULL: 12 PRs`);
   });
 
   it('keeps a new set the agent proposed too big to its first twelve', async () => {

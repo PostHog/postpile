@@ -382,6 +382,10 @@ describe('setGroupingPrompt', () => {
     expect(prompt).toContain('- set id full (FULL: 12 PRs, takes no joins and no merges)');
     expect(prompt).toContain('- set id small (3 PRs)');
     expect(prompt).toContain('A set holds 12 PRs at most');
+
+    // Counted as the tile shows it: stack layers outside the stored members count too.
+    const withLayers = setGroupingPrompt({ topic: makeTopic(), prs: [], existingSets: [set('small', 11, null)], setSizes: { small: 12 }, risks: {}, context: emptyContext });
+    expect(withLayers).toContain('- set id small (FULL: 12 PRs');
   });
 });
 
