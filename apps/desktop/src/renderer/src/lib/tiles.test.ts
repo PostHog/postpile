@@ -64,6 +64,7 @@ function setView(prs: PrSummary[], unreadKeys: string[] = []): TileView {
     pendingWrite: null,
     quietRepo: false,
     repoLabel: null,
+    othersActivityAt: null,
   });
 }
 

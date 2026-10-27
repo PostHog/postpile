@@ -5335,8 +5335,9 @@ avatars and filters", QueuesB2).
   with (see "Groups inside a topic"); inside a group tiles sort by
   `TileView.tier` (the most urgent tier among its PRs), needs reply first,
   rest last, snoozed ones last; inside a tier the engine's order
-  (`tileListRank`: a read tile that is still your move first). Single
-  column as before.
+  (`compareTileViews`: `tileListRank`, a read tile that is still your move
+  first, then the newest activity by someone else, `TileView.othersActivityAt`,
+  2026-10-27, see "Groups inside a topic"). Single column as before.
 
 ### Repo scope and quiet repos
 
@@ -6085,6 +6086,16 @@ check), a second copy of core's rules. Owner decisions (2026-09-30):
   so the Archive gate ignores them and the hint must agree). Its tooltip
   names them: "Still open: devex-depot-tools#3 (draft). The topic moves to the
   Archive once every PR is merged or closed." Decided 2026-10-02.
+- **Ties go by newest activity (2026-10-27).** The renderer's sorts are
+  stable, so the engine's order is the last tie-break on screen. The engine
+  and FakeEngine sort tiles with core's `compareTileViews`: `tileListRank`,
+  then the newest activity by someone else across the tile's PRs first
+  (`othersActivityAt`, same rule as the sidebar's, see "Ownership
+  sections" › Ties go by newest activity), tiles without any last. Before,
+  ties fell back to build order. That order (stacks, then sets, then
+  single PRs by when they joined) now only decides a full tie: nothing
+  depends on stacks coming first. The viewer's own actions never count, so
+  approving or replying never moves a tile up.
 - **No toggle.** The All / Unread buttons, "switching to Unread deselects",
   the filter-aware auto pick and the "show All" empty text are gone.
 - **Selection:** the selected tile keeps its place (`useHeldPlace`, now over
@@ -6376,6 +6387,20 @@ no owner team also stays in Other topics, without the marker.
 **Inside a section** core orders the topics (`compareInSection`): the
 viewer's open PR or move first, then unread ones, then the urgency order as
 before. Changes you requested still lists re-reviews first.
+
+**Ties go by newest activity** (2026-10-27, owner: the order seemed to move
+around after touching something). Core's `compareTopics`, used by the
+engine and the FakeEngine alike: `compareInSection`, then Unsorted last,
+then the newest activity first, then by name. A topic's activity
+(`TopicListItem.othersActivityAt`) is the newest event across its PRs on
+the board that someone else made and that topic memory counts as newer
+(`isMemoryTrigger`: loud news, a person's event, a state change; muted
+events, bot talk, pushes and bot comments that only ride along stay out;
+the app's own Look closer too). Seen or not does not matter. The viewer's
+own reads, approvals, replies and snoozes are never activity, so this rule
+never moves a topic up after the viewer acted; the rules above it still
+can (an answered ask leaves its section, a read topic leaves the unread
+ones).
 
 **Folds.** You drive and Your team owns are short lists without folds.
 Other work folds and folds by area: areas with two or more topics get a

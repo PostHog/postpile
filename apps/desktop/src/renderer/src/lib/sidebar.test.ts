@@ -39,6 +39,7 @@ function item(id: string, extra: Extra = {}): TopicListItem {
     people: [],
     prState: null,
     prStateCounts: { open: 0, merge_queue: 0, merge_queue_failed: 0, draft: 0, merged: 0, closed: 0 },
+    othersActivityAt: null,
   };
 }
 

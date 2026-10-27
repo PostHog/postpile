@@ -24,7 +24,9 @@ import {
   buildPrSummary,
   buildTileView,
   topicAgentOffers,
-  compareInSection,
+  compareTileViews,
+  compareTopics,
+  othersActivityAt,
   eventView,
   topicMove,
   isPrInQuietRepo,
@@ -43,7 +45,6 @@ import {
   searchTopics,
   tileRepoLabels,
   topicRepoLine,
-  tileListRank,
   topicFaces,
   topicPeople,
   topicQueues,
@@ -130,19 +131,6 @@ function isUnsortedTopic(topicId: string): boolean {
 
 function memberKeys(tile: Tile): PrKey[] {
   return tile.members.map((member) => member.prKey);
-}
-
-/** The order inside each sidebar section (`compareInSection`), then Unsorted last, then by name. */
-function compareTopics(a: TopicListItem, b: TopicListItem): number {
-  const inSection = compareInSection(a, b);
-  if (inSection !== 0) {
-    return inSection;
-  }
-  // Unsorted goes last within its group so real topics come first.
-  if ((a.topic.id === UNSORTED_TOPIC_ID) !== (b.topic.id === UNSORTED_TOPIC_ID)) {
-    return a.topic.id === UNSORTED_TOPIC_ID ? 1 : -1;
-  }
-  return a.topic.name.localeCompare(b.topic.name);
 }
 
 /** What the glance state needs from outside the store: the agent switch, the catch-up runs and the daily catch-up cap. */
@@ -381,7 +369,7 @@ export class ReadModels {
         now: board.now,
       });
     });
-    return views.sort((a, b) => tileListRank(a) - tileListRank(b));
+    return views.sort(compareTileViews);
   }
 
   /**
@@ -523,6 +511,7 @@ export class ReadModels {
         people: topicFaces(topicPeople(prs, viewer)),
         prState: prRollup.state,
         prStateCounts: prRollup.counts,
+        othersActivityAt: othersActivityAt(prs.flatMap((pr) => board.events.get(pr.key) ?? []), viewer),
       });
     }
     return items.sort(compareTopics);

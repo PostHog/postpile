@@ -43,6 +43,7 @@ function item(id: string, mine: number): TopicListItem {
     people: [],
     prState: null,
     prStateCounts: { open: 0, merge_queue: 0, merge_queue_failed: 0, draft: 0, merged: 0, closed: 0 },
+    othersActivityAt: null,
   };
 }
 
@@ -101,6 +102,7 @@ function tile(id: string, prKeys: string[], state: TileState = { kind: 'open', u
     pendingWrite: null,
     quietRepo: false,
     repoLabel: null,
+    othersActivityAt: null,
   });
 }
 

@@ -5,6 +5,7 @@ import { prAfterMarkRead, tileAfterMarkRead } from './after-read.ts';
 import { tileAgentOffers, type AgentPrFacts } from './agent-actions.ts';
 import { isBot } from './bots.ts';
 import { forWhom, tileForWhom } from './for-whom.ts';
+import { compareByActivity, othersActivityAt } from './last-activity.ts';
 import { lastTouch } from './last-touch.ts';
 import { isUnseenLoud } from './loudness.ts';
 import { tileOffers } from './offers.ts';
@@ -227,6 +228,7 @@ export function buildTileView(input: TileViewInput): TileView {
     newBadge: tileNewBadge(input.state, input.notYours),
     quietRepo: input.quietRepo,
     repoLabel: input.repoLabel,
+    othersActivityAt: othersActivityAt(tile.members.flatMap((member) => input.events.get(member.prKey) ?? []), viewer),
   };
 }
 
@@ -240,4 +242,14 @@ export function tileListRank(view: Pick<TileView, 'state' | 'turn'>): number {
     return TILE_STATE_ORDER.unread;
   }
   return TILE_STATE_ORDER[view.state.kind];
+}
+
+/**
+ * The engine's tile order in a topic: `tileListRank`, then the newest
+ * activity by someone else first (2026-10-27). The renderer's sorts are
+ * stable, so this is the last tie-break on screen. Tiles with no activity
+ * keep the order they were built in (stacks, sets, then single PRs).
+ */
+export function compareTileViews(a: Pick<TileView, 'state' | 'turn' | 'othersActivityAt'>, b: Pick<TileView, 'state' | 'turn' | 'othersActivityAt'>): number {
+  return tileListRank(a) - tileListRank(b) || compareByActivity(a.othersActivityAt, b.othersActivityAt);
 }

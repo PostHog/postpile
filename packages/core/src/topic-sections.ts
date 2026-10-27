@@ -3,13 +3,14 @@
 // topic sits by who drives it, the owner team only when nobody is known to
 // drive it. The engine and FakeEngine call the same function for the
 // sidebar row, the topic header's breadcrumb and telemetry.
+import { compareByActivity } from './last-activity.ts';
 import { isOwnTeam } from './mentions.ts';
 import { ASK_TIERS } from './pr-tier.ts';
 import { driverKind, driverLogin, driverPickValues, driverRelation, effectiveDriver } from './topic-driver.ts';
 import type { PersonRelation, TopicQueues } from './topic-queues.ts';
 import { homeTeamsOf } from './team-roles.ts';
 import { compareTopicUrgency, type RankedTopic, type TopicMove } from './topic-urgency.ts';
-import type { Topic, Viewer } from './types.ts';
+import type { IsoTime, Topic, Viewer } from './types.ts';
 import type { DriverChoice, TopicDriverView, TopicPlacement } from './views.ts';
 
 /**
@@ -231,4 +232,32 @@ export function compareInSection(a: SectionRankedTopic, b: SectionRankedTopic): 
   const yours = (topic: SectionRankedTopic) => (holdsYours(topic.queues.byYou, topic.yourMoves.length) ? 0 : 1);
   const unread = (topic: SectionRankedTopic) => (topic.unreadTiles > 0 ? 0 : 1);
   return yours(a) - yours(b) || unread(a) - unread(b) || compareTopicUrgency(a, b);
+}
+
+/** PRs the agent has not placed yet. Not stored: the engine lists whatever has no membership under it. */
+export const UNSORTED_TOPIC_ID = 'unsorted';
+
+/** The fields `compareTopics` reads; `TopicListItem` has them all. */
+export interface ListedTopic extends SectionRankedTopic {
+  topic: Pick<Topic, 'id' | 'name'>;
+  othersActivityAt: IsoTime | null;
+}
+
+/**
+ * The sidebar order the engine and FakeEngine both use: `compareInSection`,
+ * then Unsorted last, then the newest activity by someone else first
+ * (`othersActivityAt`, 2026-10-27), then by name. The viewer's own actions
+ * never count as activity, so reading, approving or replying never moves a
+ * topic up by this rule.
+ */
+export function compareTopics(a: ListedTopic, b: ListedTopic): number {
+  const inSection = compareInSection(a, b);
+  if (inSection !== 0) {
+    return inSection;
+  }
+  // Unsorted goes last within its group so real topics come first.
+  if ((a.topic.id === UNSORTED_TOPIC_ID) !== (b.topic.id === UNSORTED_TOPIC_ID)) {
+    return a.topic.id === UNSORTED_TOPIC_ID ? 1 : -1;
+  }
+  return compareByActivity(a.othersActivityAt, b.othersActivityAt) || a.topic.name.localeCompare(b.topic.name);
 }

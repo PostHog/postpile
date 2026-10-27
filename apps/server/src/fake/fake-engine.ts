@@ -145,7 +145,9 @@ import {
   archiveEndsAt,
   snoozeWrites,
   eventView,
-  compareInSection,
+  compareTileViews,
+  compareTopics,
+  newestActivity,
   actionTrail,
   isUnseenMergeWithoutReview,
   prWantsGlance,
@@ -907,14 +909,15 @@ export class FakeEngine implements EngineService {
     });
   }
 
-  /** An opened topic: every tile, the ones from another repo labelled. */
+  /** An opened topic: every tile, the ones from another repo labelled, in the engine's order (`compareTileViews`). */
   private topicTileViews(topicId: string): TileView[] {
     const baseRepo = labelBaseRepo(this.topicPrKeys(topicId), this.repoSettings);
     const orgs = viewerOrgs(this.data.viewerTeams);
-    return this.tilesOfTopic(topicId).map((tile) => {
+    const views = this.tilesOfTopic(topicId).map((tile) => {
       const keys = tile.members.map((member) => member.prKey);
       return this.tileView(tile, tileRepoLabels(keys, baseRepo, orgs));
     });
+    return views.sort(compareTileViews);
   }
 
   /** Same landing rules as the engine's debug view, over the sample data. */
@@ -1229,9 +1232,10 @@ export class FakeEngine implements EngineService {
         people: topicFaces(topicPeople(prs.map(({ pr }) => pr), viewer)),
         prState: prRollup.state,
         prStateCounts: prRollup.counts,
+        othersActivityAt: newestActivity(views.map((view) => view.othersActivityAt)),
       };
     });
-    return items.sort(compareInSection);
+    return items.sort(compareTopics);
   }
 
   async listRepos(): Promise<RepoOverview> {

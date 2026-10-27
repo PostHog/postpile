@@ -6,6 +6,17 @@ now".
 
 ## Done
 
+- Order ties by newest activity (2026-10-27, owner: the order seemed to move
+  around after touching something; DESIGN.md "Ownership sections" › Inside a
+  section, "Groups inside a topic"): when the sidebar rules tie, topics sort
+  by the newest activity by someone else across their PRs, then by name;
+  tiles in a topic sort by `tileListRank`, then the same activity
+  (`compareTileViews`). Activity is core's `othersActivityAt`: the newest
+  event that topic memory counts as newer (`isMemoryTrigger`), not by the
+  viewer and not the app's Look closer. Engine and FakeEngine share
+  `compareTopics` (now in core, with `UNSORTED_TOPIC_ID`); the FakeEngine
+  had no name tie-break and no tile sort before. Stacks and sets keep their
+  first place only on a full tie.
 - Coming back after a week (2026-10-26, owner test after 9 days away;
   DESIGN.md "Big inboxes", "Inbox cleanup", "Auto sync"): the start sync
   holds for the catch-up dialog as soon as the count is in, so moved PRs
