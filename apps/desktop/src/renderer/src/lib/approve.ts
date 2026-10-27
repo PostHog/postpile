@@ -98,9 +98,10 @@ export function approveStateGlyphs(
   const glyphs = [LIFECYCLE_GLYPHS[lifecycle]];
   const review = REVIEW_GLYPHS[reviewDecision];
   if (review && reviewDecision === 'APPROVED' && agentApprovers.length > 0) {
-    glyphs.push({ glyph: review.glyph, title: capitalize(approvedText(agentApprovers)) });
+    const declined = agentDecline === null ? '' : ` · ${declinedText(agentDecline)}`;
+    glyphs.push({ glyph: review.glyph, title: `${capitalize(approvedText(agentApprovers))}${declined}` });
   } else if (review && reviewDecision === 'REVIEW_REQUIRED' && agentDecline !== null) {
-    glyphs.push({ glyph: review.glyph, title: `${review.title}: ${declinedText(agentDecline)}` });
+    glyphs.push({ glyph: review.glyph, title: `${review.title} · ${declinedText(agentDecline)}` });
   } else if (review) {
     glyphs.push(review);
   }

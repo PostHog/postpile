@@ -56,6 +56,15 @@ describe('pr helpers', () => {
     expect(mergeStatus(prPaneView(makePr({ isDraft: true })), [], decline)).toBe('draft');
   });
 
+  it('adds the decline after an agent-only approval, before who is still asked', () => {
+    const decline = { agent: 'stamphog', kind: 'gates' as const, reason: 'Too large.', earlierCommit: false };
+    const approved = prPaneView(makePr({ reviewDecision: 'APPROVED' }));
+    expect(mergeStatus(approved, ['reviewbot'], decline)).toBe('approved by reviewbot (agent) · stamphog declined: outside what it may auto-approve');
+    expect(mergeStatus({ ...approved, reviewerTeams: ['acme/team-platform'] }, ['reviewbot'], decline)).toBe(
+      'approved by reviewbot (agent) · stamphog declined: outside what it may auto-approve · team-platform still asked',
+    );
+  });
+
   // 2026-10-10 (B-A-12): "approved" next to a team still waiting read as a contradiction.
   it('names who is still asked on an approved PR', () => {
     const approved = { ...prPaneView(makePr({ reviewDecision: 'APPROVED' })), reviewerTeams: ['acme/team-platform'], reviewerUsers: ['tove'] };
@@ -100,6 +109,15 @@ describe('state words', () => {
     );
     expect(reviewWord({ ...open, review: 'changes', agentDecline: decline })?.text).toBe('Changes requested');
     expect(reviewWord({ ...open, review: 'approved', agentDecline: decline })?.text).toBe('Approved');
+  });
+
+  it('keeps "Approved by agent" after an agent-only approval and adds the decline to the tooltip', () => {
+    const decline = { agent: 'stamphog', kind: 'needs_person' as const, reason: 'Touches billing.', earlierCommit: false };
+    expect(reviewWord({ ...open, review: 'approved', agentApprovers: ['reviewbot'], agentDecline: decline })).toEqual({
+      kind: 'approved',
+      text: 'Approved by agent',
+      title: 'Approved by reviewbot (agent) · stamphog declined: needs a person to review',
+    });
   });
 
   it('puts merged, closed and draft in place of the review on a row', () => {

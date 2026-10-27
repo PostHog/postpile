@@ -4861,6 +4861,14 @@ is worth seeing on the tile, and the glance should weigh the reasons.
   clipped to 300 characters. stamphog bodies are read by the board and
   kept whole on save (`isBodyReadByRules`), since the gate table sits at
   the end of a long body.
+- Bodies cut on save before that (ending in the "trimmed by PostPile"
+  marker) may have lost the gate table. Such a "Not approved yet" is a
+  `gates` decline only when the part that is left already shows a failed
+  gate other than prerequisites; otherwise it is unknown and shows no
+  decline. The freshness check fetches an open PR with a cut stamphog
+  verdict once more (`hasTrimmedAgentVerdict`, like the one-time refetch
+  for snapshots without assignees); the new copy is kept whole, so it
+  stops there. No migration.
 - Where it shows, in words and the neutral review color (no warning
   colors, no coral, no honey): `PrStatus.agentDecline` /
   `PrDetail.agentDecline` (`agentDeclineView`). While no person approved
@@ -4869,7 +4877,10 @@ is worth seeing on the tile, and the glance should weigh the reasons.
   person", "outside what it may auto-approve"), with "on an earlier
   commit" once the head moved. "To merge" says "needs review · stamphog
   declined: …" with the reasons as its tooltip; the Approve button's
-  review glyph says the same.
+  review glyph says the same. After an agent-only approval (another bot
+  approved, GitHub says APPROVED) the word stays "Approved by agent", and
+  its tooltip and "To merge" add the decline: "approved by reviewbot
+  (agent) · stamphog declined: …".
 - Order: inside a topic's To review tiles, a tile holding a declined PR
   ranks first inside its To review level (for you + declined, for you,
   team-routed + declined, team-routed; `reviewRank`). The author asked for

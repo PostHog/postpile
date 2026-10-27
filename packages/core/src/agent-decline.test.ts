@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { agentDecline, agentDeclineView, DECLINE_REASON_MAX } from './agent-decline.ts';
+import { agentDecline, agentDeclineView, DECLINE_REASON_MAX, hasTrimmedAgentVerdict } from './agent-decline.ts';
+import { TRIMMED_MARKER } from './bot-bodies.ts';
 import { at, makeComment, makePr, makeReview } from './fixtures.ts';
 import type { FullPr, FullReview } from './types.ts';
 
@@ -126,6 +127,30 @@ describe('agentDecline', () => {
     expect(reason.length).toBeLessThanOrEqual(DECLINE_REASON_MAX);
     expect(reason.endsWith('…')).toBe(true);
     expect(reason).not.toMatch(/hidden|gate|\s{2}/);
+  });
+});
+
+describe('a verdict cut on save', () => {
+  const head = '**Not approved yet — waiting on the conditions below.**\n\n' + READD + '\n\nFix these first.';
+
+  it('is unknown, not waiting: no decline, and no earlier decline either', () => {
+    const cut = `${head}${TRIMMED_MARKER}`;
+    expect(agentDecline(prWith([verdict('r1', cut, 5)]))).toBeNull();
+    expect(agentDecline(prWith([verdict('r1', NEEDS_PERSON, 4), verdict('r2', cut, 5)]))).toBeNull();
+  });
+
+  it('is a gates decline when what is left already shows a failed gate, without the marker in the reason', () => {
+    const cut = `${head}\n\n<details><summary>Gate mechanics</summary>\n\n| gate | result | detail |\n| size | ✗ | too large |${TRIMMED_MARKER}`;
+    expect(agentDecline(prWith([verdict('r1', cut, 5)]))).toMatchObject({ kind: 'gates', reason: 'Fix these first.' });
+    const prose = `**Not approved — escalated to a human reviewer.**\n\n${READD}\n\nThe migration drops${TRIMMED_MARKER}`;
+    expect(agentDecline(prWith([verdict('r1', prose, 5)]))?.reason).toBe('The migration drops');
+  });
+
+  it('asks for a refetch only on open PRs with a cut stamphog verdict', () => {
+    const cut = [verdict('r1', `${head}${TRIMMED_MARKER}`, 5)];
+    expect(hasTrimmedAgentVerdict(prWith(cut))).toBe(true);
+    expect(hasTrimmedAgentVerdict(prWith(cut, { state: 'MERGED' }))).toBe(false);
+    expect(hasTrimmedAgentVerdict(prWith([verdict('r1', head, 5)]))).toBe(false);
   });
 });
 

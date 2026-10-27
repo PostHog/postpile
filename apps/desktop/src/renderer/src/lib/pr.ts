@@ -94,8 +94,11 @@ function stillAsked(pr: Pick<PrPaneView, 'reviewerTeams' | 'reviewerUsers'>): st
  * as in `approvedText`. GitHub says approved while a request is still
  * pending, so the line names who is still asked ("approved · team-platform
  * still asked", B-A-12): next to a waiting team, "approved" alone read as
- * a contradiction. `agentDecline` (`PrDetail.agentDecline`) says a needed
- * review in words: "needs review · stamphog declined: needs a person to review".
+ * a contradiction. `agentDecline` (`PrDetail.agentDecline`) adds stamphog's
+ * decline: "needs review · stamphog declined: needs a person to review", or
+ * after an agent-only approval "approved by reviewbot (agent) · stamphog
+ * declined: …" (GitHub still says approved; a person's approval leaves no
+ * decline in core).
  */
 export function mergeStatus(
   pr: Pick<PrPaneView, 'state' | 'mergedBy' | 'isDraft' | 'reviewDecision' | 'reviewerTeams' | 'reviewerUsers'>,
@@ -111,14 +114,15 @@ export function mergeStatus(
   if (pr.isDraft) {
     return 'draft';
   }
+  const declined = agentDecline === null ? '' : ` · ${declinedText(agentDecline)}`;
   if (pr.reviewDecision === 'APPROVED') {
     const asked = stillAsked(pr);
-    return asked.length === 0 ? approvedText(agentApprovers) : `${approvedText(agentApprovers)} · ${asked.join(', ')} still asked`;
+    const approved = `${approvedText(agentApprovers)}${declined}`;
+    return asked.length === 0 ? approved : `${approved} · ${asked.join(', ')} still asked`;
   }
   if (pr.reviewDecision === 'CHANGES_REQUESTED') {
     return 'changes requested';
   }
-  const declined = agentDecline === null ? '' : ` · ${declinedText(agentDecline)}`;
   if (pr.reviewDecision === 'REVIEW_REQUIRED') {
     return `needs review${declined}`;
   }
@@ -151,9 +155,10 @@ export interface StateWord {
 /**
  * The review state in words, null when none applies (merged, closed,
  * drafts, repos without a review rule). Only agents approved: says so, and
- * names them in the tooltip. stamphog declined and no person approved or
+ * names them in the tooltip. stamphog declined and nobody approved or
  * asked for changes: "stamphog declined", the review color, why in the
- * tooltip.
+ * tooltip. After an agent-only approval the word stays GitHub's "Approved
+ * by agent" and the tooltip adds the decline.
  */
 export function reviewWord(status: PrStatus): StateWord | null {
   const decline = status.agentDecline;
@@ -170,13 +175,14 @@ export function reviewWord(status: PrStatus): StateWord | null {
   if (status.review !== 'approved') {
     return null;
   }
+  const declined = decline === null ? '' : ` · ${declinedText(decline)}`;
   if (status.agentApprovers.length === 0) {
-    return { kind: 'approved', text: 'Approved', title: 'Approved' };
+    return { kind: 'approved', text: 'Approved', title: `Approved${declined}` };
   }
   return {
     kind: 'approved',
     text: status.agentApprovers.length === 1 ? 'Approved by agent' : 'Approved by agents',
-    title: capitalize(approvedText(status.agentApprovers)),
+    title: `${capitalize(approvedText(status.agentApprovers))}${declined}`,
   };
 }
 
