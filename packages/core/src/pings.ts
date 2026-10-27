@@ -145,6 +145,8 @@ export interface LivePollStatus {
   syncRunning: boolean;
   /** When the next background full sync is due; null while auto sync is off or not started. */
   nextAutoSyncAt: IsoTime | null;
+  /** The next background full sync comes early because the last one left a backlog (PRs or agent work over the caps). */
+  nextAutoSyncIsBacklog: boolean;
   /** Grows when a glance catch-up run is queued, starts or ends; the renderer refetches when it moves. */
   catchUpChanges: number;
   /** Set while the GitHub quota is low or critical and background work waits (DESIGN.md "GitHub quota"); null when ok. */
@@ -180,6 +182,7 @@ export const OFF_POLL_STATUS: LivePollStatus = {
   notificationsShown: 0,
   syncRunning: false,
   nextAutoSyncAt: null,
+  nextAutoSyncIsBacklog: false,
   catchUpChanges: 0,
   githubQuota: null,
   keptUnread: null,

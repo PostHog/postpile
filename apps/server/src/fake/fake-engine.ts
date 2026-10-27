@@ -2677,6 +2677,7 @@ export class FakeEngine implements EngineService {
       changeCount: poll.changeCount + this.cleanup.changeCount() + this.prNotes.changes() + this.script.changes(),
       syncRunning: this.syncing !== null,
       nextAutoSyncAt: this.autoSync?.nextSyncAt() ?? null,
+      nextAutoSyncIsBacklog: this.autoSync?.nextSyncIsBacklog() ?? false,
       catchUpChanges: this.catchUp.changes(),
       githubQuota: this.quota.view(poll.everySeconds),
     };

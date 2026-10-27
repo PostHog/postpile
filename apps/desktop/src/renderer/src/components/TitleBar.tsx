@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react';
 import type { LivePollStatus, SyncProgress, SyncReport } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
-import { useLiveStatus } from '../api/live.ts';
+import { useLiveStatus, useNextSync } from '../api/live.ts';
 import { useSyncProgress } from '../api/sync.ts';
 import { useTools } from '../api/tools.ts';
-import { capNote } from '../lib/agent-stats.ts';
+import { backlogSyncMinutes, capNote } from '../lib/agent-stats.ts';
 import { pollIsFresh } from '../lib/live.ts';
 import { syncProgressDetail, syncProgressText } from '../lib/sync-progress.ts';
 import { syncReportDetail } from '../lib/sync-report.ts';
@@ -87,6 +87,7 @@ function SyncStatus() {
   const progress = useSyncProgress(actions.syncing).data;
   const tools = useTools().data;
   const live = useLiveStatus().data;
+  const nextSync = useNextSync();
   if (actions.syncing) {
     return <SyncProgressStatus progress={progress} />;
   }
@@ -113,7 +114,9 @@ function SyncStatus() {
       </StatusText>
     );
   }
-  const capped = capNote(report.agentCallStats, actions.config?.autoSyncMinutes ?? 0);
+  const capped = capNote(report.agentCallStats, actions.config?.autoSyncMinutes ?? 0, nextSync, now);
+  // A backlog sync the app starts by itself needs nothing from the user: no amber.
+  const draining = capped !== null && backlogSyncMinutes(nextSync, now) !== null;
   const errors = report.errors.length;
   const pollOn = live !== undefined && live.state !== 'off';
   const fresh = pollIsFresh(live, now);
@@ -126,7 +129,7 @@ function SyncStatus() {
   if (paused || behind || unreachable) {
     dot = 'amber';
   }
-  if (capped) {
+  if (capped && !draining) {
     dot = 'amber';
   }
   if (errors > 0) {

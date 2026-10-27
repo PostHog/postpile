@@ -860,7 +860,7 @@ export interface AppConfig {
   /**
    * Agent-call cap for syncs and consolidations when the request names
    * none (launch, "Sync now", /api/consolidate, and the CLI without
-   * --max-agent-calls). POSTPILE_MAX_AGENT_CALLS, default 150. Work over the
+   * --max-agent-calls). POSTPILE_MAX_AGENT_CALLS, default 300. Work over the
    * cap waits for the next run.
    */
   syncCallCap: number;

@@ -2946,7 +2946,7 @@ Env switches:
   ```
 - `POSTPILE_MAX_AGENT_CALLS`: agent-call cap for syncs and consolidations
   without an explicit cap (launch, "Sync now", `/api/consolidate`, and the
-  CLI without `--max-agent-calls`), default 150 (was 30).
+  CLI without `--max-agent-calls`), default 300 (150 until 2026-10-27, 30 before).
 - `POSTPILE_CLAUDE_DIR`: the Claude Code folder the work context sweep
   reads, default `~/.claude`. `POSTPILE_SWEEP_MODEL`: its model, default
   `opus`. `POSTPILE_SWEEP_SKIP`: comma-separated project folders the sweep

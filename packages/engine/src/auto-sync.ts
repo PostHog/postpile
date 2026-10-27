@@ -149,6 +149,11 @@ export class AutoSyncSchedule {
     return this.dueAt === null ? null : new Date(this.dueAt).toISOString();
   }
 
+  /** The next sync is due early because the last one left a backlog (see `reschedule`); false while off. */
+  nextSyncIsBacklog(): boolean {
+    return this.dueAt !== null && this.backlog;
+  }
+
   /**
    * The Mac goes to sleep: the timer is cleared and the due time kept until
    * wake(). Otherwise a due time that passes during sleep could fire right

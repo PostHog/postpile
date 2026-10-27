@@ -76,8 +76,10 @@ describe('AutoSyncSchedule', () => {
 
     auto.reschedule(true);
     expect(auto.nextSyncAt()).toBe(new Date(timers.now() + 2 * MINUTE).toISOString());
+    expect(auto.nextSyncIsBacklog()).toBe(true);
     auto.reschedule(false);
     expect(auto.nextSyncAt()).toBe(new Date(timers.now() + 60 * MINUTE).toISOString());
+    expect(auto.nextSyncIsBacklog()).toBe(false);
   });
 
   it('says a backlog run is one, not an hourly one', async () => {

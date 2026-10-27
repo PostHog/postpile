@@ -97,9 +97,11 @@ export function engineFromEnv(options: EngineFromEnvOptions = {}): EngineService
 /**
  * Default agent-call cap for app syncs. Raised from 30 to 150 (2026-09-28):
  * cost is not a concern (subscription), and a full first sync of ~120 calls
- * now fits in one. The cap still guards against a runaway loop.
+ * fit in one. Raised to 300 (2026-10-27): the first sync after a week away
+ * took ~295 calls over two syncs. Work over the cap waits only
+ * BACKLOG_SYNC_MINUTES, so the cap mostly guards against a runaway loop.
  */
-export const DEFAULT_SYNC_CALL_CAP = 150;
+export const DEFAULT_SYNC_CALL_CAP = 300;
 
 /** POSTPILE_MAX_AGENT_CALLS, when it is a whole number >= 0; the default otherwise. */
 export function syncCallCapFromEnv(value: string | undefined): number {

@@ -277,11 +277,11 @@ describe('server app', () => {
   });
 
   it('reads the call cap from the environment', () => {
-    expect(syncCallCapFromEnv(undefined)).toBe(150);
+    expect(syncCallCapFromEnv(undefined)).toBe(300);
     expect(syncCallCapFromEnv('12')).toBe(12);
     expect(syncCallCapFromEnv('0')).toBe(0);
-    expect(syncCallCapFromEnv('lots')).toBe(150);
-    expect(syncCallCapFromEnv('-3')).toBe(150);
+    expect(syncCallCapFromEnv('lots')).toBe(300);
+    expect(syncCallCapFromEnv('-3')).toBe(300);
   });
 
   it('syncs on start unless POSTPILE_SYNC_ON_START=0', () => {

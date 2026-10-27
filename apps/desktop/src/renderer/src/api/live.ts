@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { LivePollStatus } from '@postpile/core';
 import { request } from './client.ts';
 import { queryKeys } from './keys.ts';
+import type { NextSync } from '../lib/agent-stats.ts';
 
 /** The footer's refresh rate; the poll itself runs in the main process. */
 const STATUS_REFRESH_MS = 5000;
@@ -45,6 +46,12 @@ export function useLivePoll() {
     lastSeen.current = signal;
   }, [signal, queryClient]);
   return status;
+}
+
+/** The next background full sync as the footer shows it: when it is due and whether it drains a backlog. */
+export function useNextSync(): NextSync | null {
+  const live = useLiveStatus().data;
+  return live ? { at: live.nextAutoSyncAt, isBacklog: live.nextAutoSyncIsBacklog } : null;
 }
 
 /** When the next background full sync is due, for "next full sync in 42 min"; null while auto sync is off. */
