@@ -34,15 +34,35 @@ export function skippedByCap(stats: AgentCallStats): number {
   return Object.values(stats.byKind).reduce((sum, count) => sum + (count?.skippedByBudget ?? 0), 0);
 }
 
+/** The live status' view of the next background sync: when it is due, and whether it comes early to drain a backlog. */
+export interface NextSync {
+  at: string | null;
+  isBacklog: boolean;
+}
+
+/** Minutes until a backlog sync, at least 1; null when none is due early (auto sync off, or the full interval applies). */
+export function backlogSyncMinutes(next: NextSync | null, now: Date): number | null {
+  if (next === null || !next.isBacklog || next.at === null) {
+    return null;
+  }
+  return Math.max(1, Math.ceil((new Date(next.at).getTime() - now.getTime()) / 60_000));
+}
+
 /**
- * "stopped at call cap: 7 left for the hourly sync", or null when the cap
- * was not reached. Without auto sync the leftovers wait for the next "Sync now".
+ * "stopped at call cap: 7 left, next sync in 2 min" while the app drains the
+ * backlog by itself, "... 7 left for the hourly sync" while the full interval
+ * applies, or null when the cap was not reached. Without auto sync the
+ * leftovers wait for the next "Sync now".
  */
-export function capNote(stats: AgentCallStats, autoSyncMinutes = 0): string | null {
+export function capNote(stats: AgentCallStats, autoSyncMinutes: number, next: NextSync | null, now: Date): string | null {
   const left = skippedByCap(stats);
   if (left === 0) {
     return null;
   }
-  const next = autoSyncMinutes === 60 ? 'the hourly sync' : autoSyncMinutes > 0 ? `the auto sync (every ${autoSyncMinutes} min)` : 'the next sync';
-  return `stopped at call cap: ${left} left for ${next}`;
+  const backlogMinutes = backlogSyncMinutes(next, now);
+  if (backlogMinutes !== null) {
+    return `stopped at call cap: ${left} left, next sync in ${backlogMinutes} min`;
+  }
+  const wait = autoSyncMinutes === 60 ? 'the hourly sync' : autoSyncMinutes > 0 ? `the auto sync (every ${autoSyncMinutes} min)` : 'the next sync';
+  return `stopped at call cap: ${left} left for ${wait}`;
 }

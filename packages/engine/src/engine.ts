@@ -1108,6 +1108,7 @@ export class Engine implements EngineService {
       changeCount: poll.changeCount + this.writeRefreshesDone + this.deps.markReadQueue.mirrored() + this.syncsDone + this.clickedReadRetry.decided() + this.cleanup.changeCount() + this.prNotes.changes(),
       syncRunning: this.syncing !== null,
       nextAutoSyncAt: this.autoSync?.nextSyncAt() ?? null,
+      nextAutoSyncIsBacklog: this.autoSync?.nextSyncIsBacklog() ?? false,
       catchUpChanges: this.catchUps.changes(),
       githubQuota: this.quota.view(poll.everySeconds),
       keptUnread: this.clickedReadRetry.notice(),

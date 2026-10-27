@@ -868,7 +868,12 @@ sync skips its turn while one holds: another sync would only fetch and
 hold again, and the answer starts one. Added 2026-10-26 (owner test after
 a week away): the first real sync spent its 150 calls on dossiers and
 skipped 91 glances, and the next sync was an hour off; meanwhile the held
-start sync refetched every 2.5 minutes until the dialog was answered. The
+start sync refetched every 2.5 minutes until the dialog was answered. The call cap
+note in the title bar and the sync toast follows the schedule (2026-10-27): while the next
+sync is the early one (`LivePollStatus.nextAutoSyncIsBacklog`), it reads "stopped at call
+cap: 91 left, next sync in 2 min" (minutes from `nextAutoSyncAt`) and the dot stays
+quiet, since the app drains it alone. With auto sync off, or a cap that skips everything,
+it keeps "for the next sync" or "for the hourly sync", amber. The
 auto sync's log line says which kind of run it is ("starting (backlog,
 2 min after the last sync)" or "starting (every 60 min)"). The poll
 picks the same way. The freshness check and the stack walk look at PRs on
