@@ -58,7 +58,7 @@ import type {
   WorkContextSweepResult,
   WorkThreadForget,
 } from '@postpile/core';
-import { backlogSyncMinutes, capNote } from '../lib/agent-stats.ts';
+import { backlogSyncMinutes, capNote, type NextSync } from '../lib/agent-stats.ts';
 import { writeBlockedReason, type GithubWrite } from '../lib/guard.ts';
 import { isTransientWriteFailure, writeFailureText, type PaneWrite } from '../lib/write-failure.ts';
 import { approvedMessage, batchMarkReadMessage } from '../lib/agent-actions.ts';
@@ -628,8 +628,13 @@ export function ActionsProvider(props: { children: ReactNode }) {
       }
       setLastSync(report);
       // The engine set the next sync just before answering; the cached live status may still be the old one.
-      const live = await request<LivePollStatus>('GET', '/api/live');
-      const nextSync = { at: live.nextAutoSyncAt, isBacklog: live.nextAutoSyncIsBacklog };
+      let nextSync: NextSync | null = null;
+      try {
+        const live = await request<LivePollStatus>('GET', '/api/live');
+        nextSync = { at: live.nextAutoSyncAt, isBacklog: live.nextAutoSyncIsBacklog };
+      } catch {
+        // Only the cap note's countdown needs it: without it the note keeps the plain wording.
+      }
       const now = new Date();
       const capped = capNote(report.agentCallStats, config?.autoSyncMinutes ?? 0, nextSync, now);
       if (report.errors.length > 0) {
