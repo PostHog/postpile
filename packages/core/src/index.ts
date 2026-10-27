@@ -99,6 +99,7 @@ export * from './tile-verdict.ts';
 export * from './tile-groups.ts';
 export * from './agent-actions.ts';
 export * from './set-history.ts';
+export * from './set-lifecycle.ts';
 export * from './lessons.ts';
 export * from './glance-basis.ts';
 export * from './glance-risk.ts';

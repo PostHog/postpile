@@ -1,7 +1,7 @@
 import type { FullPr, Glance, Pr } from '@postpile/core';
 import { at, makeThreadFor } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
-import { makeHarness, type Harness } from './testing/fakes.ts';
+import { makeHarness, NOW, type Harness } from './testing/fakes.ts';
 import { reviewRequestedPr } from './testing/prs.ts';
 import { makeTopic, topicWithPrs } from './testing/topics.ts';
 
@@ -278,5 +278,133 @@ describe('lasting sets', () => {
     h.runner.answer('set_grouping', {});
     const report = await h.engine.sync({ agentJobs: ['sets'] });
     expect(report.agentCallStats.byKind.set_grouping?.calls).toBe(1);
+  });
+});
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function mergedPr(pr: FullPr, mergedAt: string): FullPr {
+  return { ...pr, state: 'MERGED', mergedAt, mergedBy: 'alice', updatedAt: mergedAt };
+}
+
+// Finished sets close, and sets cap at SET_MAX_MEMBERS (DESIGN.md "Tiles hold still", 2026-10-27).
+describe('finished sets close', () => {
+  /** "depot" with a set over #1 and #2, #3 and #4 open in no set, and a clock the test moves. */
+  async function finishedSet(): Promise<{ h: Harness; setId: string; prs: FullPr[]; later: (days: number) => void }> {
+    let now = NOW;
+    const h = makeHarness({ now: () => now });
+    const prs = [1, 2, 3, 4].map((n) => reviewRequestedPr(n));
+    topicWithPrs(h, 'depot', prs);
+    h.runner.answer('set_grouping', { newSets: [{ title: 'Runner switch', take: 'Both switch runners.', members: [member(prs[0]!), member(prs[1]!)] }] });
+    await h.engine.sync({ agentJobs: ['sets'] });
+    const setId = h.store.sets.listActiveForTopic('depot')[0]!.id;
+    const mergedAt = new Date(NOW.getTime() - DAY_MS).toISOString();
+    h.reader.addPr(mergedPr(prs[0]!, mergedAt), makeThreadFor(prs[0]!));
+    h.reader.addPr(mergedPr(prs[1]!, mergedAt), makeThreadFor(prs[1]!));
+    return { h, setId, prs, later: (days) => (now = new Date(NOW.getTime() + days * DAY_MS)) };
+  }
+
+  it('stays open for a quick follow-up the first two days', async () => {
+    const { h, setId } = await finishedSet();
+    await h.engine.sync({ agentJobs: ['sets'] });
+
+    expect(h.store.sets.get(setId)?.closedAt).toBeNull();
+    expect(changes(h).some((line) => line.startsWith('closed'))).toBe(false);
+  });
+
+  it('closes two days after the last merge, once, without asking the agent', async () => {
+    const { h, setId, later } = await finishedSet();
+    later(1);
+    const report = await h.engine.sync({ agentJobs: ['sets'] });
+
+    expect(report.agentCalls).toBe(0);
+    expect(h.store.sets.get(setId)?.closedAt).toBe(new Date(NOW.getTime() + DAY_MS).toISOString());
+    expect(changes(h)[0]).toBe('closed - (rules): every PR merged or closed 2 days ago');
+
+    later(5);
+    await h.engine.sync({ agentJobs: ['sets'] });
+    expect(changes(h).filter((line) => line.startsWith('closed'))).toHaveLength(1);
+  });
+
+  it('still shows as the same tile with the same members', async () => {
+    const { h, setId, prs, later } = await finishedSet();
+    later(1);
+    await h.engine.sync({ agentJobs: ['sets'] });
+
+    const tiles = (await h.engine.getTopic('depot'))?.tiles ?? [];
+    const tile = tiles.find((view) => view.tile.id === `set:${setId}`);
+    expect(tile?.tile.members.map((m) => m.prKey)).toEqual([prs[0]!.key, prs[1]!.key]);
+  });
+
+  it('is not offered to the agent, and a join into it is dropped', async () => {
+    const { h, setId, prs, later } = await finishedSet();
+    later(1);
+    await h.engine.sync({ agentJobs: ['sets'] });
+
+    h.store.glances.put(glance(prs[2]!.key, 'low - same switch'));
+    h.runner.answer('set_grouping', {
+      joins: [{ setId, prKey: prs[2]!.key, reason: 'a follow-up to the runner switch' }],
+      updates: [{ setId, title: 'Runner switch again', take: 'Reopened.' }],
+    });
+    await h.engine.sync({ agentJobs: ['sets'] });
+
+    const prompts = h.runner.promptsFor('set_grouping');
+    expect(prompts).toHaveLength(2);
+    expect(prompts[1]).not.toContain(setId);
+    const set = h.store.sets.get(setId);
+    expect(set?.members.map((m) => m.prKey)).toEqual([prs[0]!.key, prs[1]!.key]);
+    expect(set?.title).toBe('Runner switch');
+  });
+});
+
+describe('sets cap at twelve members', () => {
+  /** "depot" with `count` open PRs and one set over the first `size` of them. */
+  async function bigSet(count: number, size: number): Promise<{ h: Harness; setId: string; prs: FullPr[] }> {
+    const h = makeHarness();
+    const prs = Array.from({ length: count }, (_, index) => reviewRequestedPr(index + 1));
+    topicWithPrs(h, 'depot', prs);
+    h.runner.answer('set_grouping', { newSets: [{ title: 'Version cap', take: '', members: prs.slice(0, size).map((pr) => member(pr)) }] });
+    await h.engine.sync({ agentJobs: ['sets'] });
+    return { h, setId: h.store.sets.listActiveForTopic('depot')[0]!.id, prs };
+  }
+
+  it('drops a join into a set of twelve, and marks it full in the prompt', async () => {
+    const { h, setId, prs } = await bigSet(13, 12);
+    h.store.glances.put(glance(prs[12]!.key, 'low - same cap'));
+    h.runner.answer('set_grouping', { joins: [{ setId, prKey: prs[12]!.key, reason: 'same cap' }] });
+    await h.engine.sync({ agentJobs: ['sets'] });
+
+    expect(h.store.sets.get(setId)?.members).toHaveLength(12);
+    expect(h.runner.promptsFor('set_grouping')[1]).toContain(`set id ${setId} (FULL: 12 PRs`);
+  });
+
+  it('keeps a new set the agent proposed too big to its first twelve', async () => {
+    const { h, prs } = await bigSet(14, 14);
+    const sets = h.store.sets.listActiveForTopic('depot');
+    expect(sets.map((set) => set.members.map((m) => m.prKey))).toEqual([prs.slice(0, 12).map((pr) => pr.key)]);
+  });
+
+  it('drops a merge of two sets that together go past twelve', async () => {
+    const h = makeHarness();
+    const prs = Array.from({ length: 15 }, (_, index) => reviewRequestedPr(index + 1));
+    topicWithPrs(h, 'depot', prs);
+    h.runner.answer('set_grouping', {
+      newSets: [
+        { title: 'Version cap', take: '', members: prs.slice(0, 10).map((pr) => member(pr)) },
+        { title: 'Version cap too', take: '', members: prs.slice(10, 13).map((pr) => member(pr)) },
+      ],
+    });
+    await h.engine.sync({ agentJobs: ['sets'] });
+    const created = h.store.sets.listActiveForTopic('depot');
+    const big = created.find((set) => set.title === 'Version cap');
+    const small = created.find((set) => set.title === 'Version cap too');
+
+    h.store.glances.put(glance(prs[13]!.key, 'low - same cap'));
+    h.runner.answer('set_grouping', { merges: [{ setId: small!.id, intoSetId: big!.id, reason: 'one version cap' }] });
+    await h.engine.sync({ agentJobs: ['sets'] });
+
+    expect(h.store.sets.get(big!.id)?.members).toHaveLength(10);
+    expect(h.store.sets.get(small!.id)?.members).toHaveLength(3);
+    expect(changes(h).some((line) => line.startsWith('merged'))).toBe(false);
   });
 });

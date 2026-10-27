@@ -577,6 +577,14 @@ export interface PrSet {
    */
   removedKeys: PrKey[];
   status: PrSetStatus;
+  /**
+   * When the set closed (`setCloseReason`): every member merged or closed
+   * a while ago. A closed set still shows as its tile with the same id and
+   * members; it only takes no joins, merges or new members, and a regroup
+   * no longer sees it. Written only by the sets repo's `close`, never by
+   * `save`. Missing or null: still open to changes.
+   */
+  closedAt?: IsoTime | null;
   inputHash: string;
   createdAt: IsoTime;
   updatedAt: IsoTime;
@@ -584,11 +592,12 @@ export interface PrSet {
 
 /**
  * What happened to a set: created, a PR joined or left, merged into another
- * set, title or take rewritten, ended (fewer than two PRs left).
+ * set, title or take rewritten, ended (fewer than two PRs left), closed
+ * (finished a while ago, takes nothing new).
  */
-export type PrSetChangeKind = 'created' | 'joined' | 'left' | 'merged' | 'updated' | 'ended';
+export type PrSetChangeKind = 'created' | 'joined' | 'left' | 'merged' | 'updated' | 'ended' | 'closed';
 
-/** agent: a regroup. user: "not related". rules: the PR moved to another topic. */
+/** agent: a regroup. user: "not related". rules: the PR moved to another topic, or the set finished and closed. */
 export type PrSetChangeBy = 'agent' | 'user' | 'rules';
 
 /**

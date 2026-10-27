@@ -5,21 +5,30 @@ import type { SetChanges, SetGroupingInput } from './service.ts';
 
 type SetAnswer = z.infer<typeof setGroupingOutput>;
 
+/**
+ * The sets a regroup keeps and may change: active and not closed. A closed
+ * set (finished a while ago, `setCloseReason`) still shows as its tile, but
+ * the agent no longer sees it, so nothing joins or merges into it.
+ */
 export function activeSets(input: SetGroupingInput): PrSet[] {
-  return input.existingSets.filter((set) => set.status === 'active');
+  return input.existingSets.filter((set) => set.status === 'active' && !set.closedAt);
 }
 
-/** Open PRs in no active set: the only ones a regroup may place. */
+/**
+ * Open PRs in no active set, closed ones included: the only ones a regroup
+ * may place. A PR reopened inside a closed set keeps that tile.
+ */
 export function unplacedKeys(input: SetGroupingInput): PrKey[] {
-  const placed = new Set(activeSets(input).flatMap((set) => set.members.map((member) => member.prKey)));
+  const placed = new Set(input.existingSets.filter((set) => set.status === 'active').flatMap((set) => set.members.map((member) => member.prKey)));
   return input.prs.filter((pr) => pr.state === 'OPEN' && !placed.has(pr.key)).map((pr) => pr.key);
 }
 
 /**
  * Keeps what the input allows: joins and new sets only from unplaced PRs,
  * each PR placed once (joins first, an existing tile wins over a new one),
- * leaves only of current members, merges and updates only of active sets.
- * The engine still enforces stacks and the user's corrections.
+ * leaves only of current members, merges and updates only of active sets
+ * (closed ones are left out). The engine still enforces stacks, the user's
+ * corrections and the size cap (SET_MAX_MEMBERS).
  */
 export function mapSetAnswer(answer: SetAnswer, input: SetGroupingInput): SetChanges {
   const active = new Map(activeSets(input).map((set) => [set.id, set]));
