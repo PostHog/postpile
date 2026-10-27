@@ -23,6 +23,18 @@ describe('migrations', () => {
     db.close();
   });
 
+  it('adds closed_at to sets stored before 041, all of them still open', () => {
+    const db = new DatabaseSync(':memory:');
+    runMigrations(db, 40);
+    db.exec(`INSERT INTO topic (id, name, user_role, created_at, updated_at) VALUES ('t1', 'Depot', 'watcher', '', '')`);
+    db.exec(`INSERT INTO pr_set (id, topic_id, title, take, input_hash, created_at, updated_at) VALUES ('s1', 't1', '', '', '', '', '')`);
+
+    runMigrations(db);
+
+    expect(db.prepare('SELECT id, status, closed_at FROM pr_set').all()).toEqual([{ id: 's1', status: 'active', closed_at: null }]);
+    db.close();
+  });
+
   it('drops a start-fresh baseline stored before 021, and keeps the rest of meta', () => {
     const db = new DatabaseSync(':memory:');
     db.exec(init.sql);

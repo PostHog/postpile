@@ -9,6 +9,7 @@ interface SetRow {
   title: string;
   take: string;
   status: string;
+  closed_at: string | null;
   input_hash: string;
   created_at: string;
   updated_at: string;
@@ -70,6 +71,7 @@ export class PrSetRepo {
       members: this.membersOf(row.id),
       removedKeys: this.removedKeysOf(row.id),
       status: row.status as PrSetStatus,
+      closedAt: row.closed_at,
       inputHash: row.input_hash,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -79,7 +81,7 @@ export class PrSetRepo {
   /**
    * Insert or replace the set and its members. set.removedKeys is not written:
    * only removeMember records a removal, and a removed PR stays removed even
-   * if `members` lists it again.
+   * if `members` lists it again. Neither is set.closedAt: only close does that.
    */
   save(set: PrSet): void {
     inTransaction(this.db, () => {
@@ -200,6 +202,11 @@ export class PrSetRepo {
   /** Hard delete, for an agent set the agent itself dropped on regroup. User-dissolved sets use dissolve. */
   delete(id: string): void {
     run(this.db, 'DELETE FROM pr_set WHERE id = ?', id);
+  }
+
+  /** The set finished a while ago: it stays a tile but takes nothing new (`setCloseReason`). */
+  close(id: string, at: string): void {
+    run(this.db, 'UPDATE pr_set SET closed_at = ?, updated_at = ? WHERE id = ? AND closed_at IS NULL', at, at, id);
   }
 
   /** Keeps the row and its members so the agent remembers not to regroup them. */

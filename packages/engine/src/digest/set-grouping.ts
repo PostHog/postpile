@@ -1,6 +1,9 @@
 import { activeSets, setGroupingTriggers, unplacedKeys, type SetChanges, type SetGroupingInput } from '@postpile/agent';
 import {
   buildStacks,
+  SET_MAX_MEMBERS,
+  setCloseReason,
+  setShownKeys,
   stackByPrKey,
   stackTopicId,
   type PrKey,
@@ -91,9 +94,34 @@ function hasNewTrigger(seen: string[], now: string[]): boolean {
   return now.some((trigger) => !before.has(trigger));
 }
 
-/** Keys of every PR in one of the sets. */
-function placedKeys(sets: Map<string, PrSet>): Set<PrKey> {
-  return new Set([...sets.values()].flatMap((set) => set.members.map((member) => member.prKey)));
+/** The set when the agent may still change it: there, and not closed. */
+function openSet(sets: Map<string, PrSet>, id: string): PrSet | null {
+  const set = sets.get(id);
+  return set && !set.closedAt ? set : null;
+}
+
+/**
+ * Whole units, in order, while they fit under SET_MAX_MEMBERS: a new set the
+ * agent proposed too big keeps its first PRs and stacks, the rest stay out.
+ * Units already hold whole stacks, each PR once (`unitsOf`), so this counts
+ * what the tile will show, like `setShownKeys`.
+ */
+function underCap(units: PrSetMember[][]): PrSetMember[][] {
+  const kept: PrSetMember[][] = [];
+  let size = 0;
+  for (const unit of units) {
+    if (size + unit.length > SET_MAX_MEMBERS) {
+      break;
+    }
+    kept.push(unit);
+    size += unit.length;
+  }
+  return kept;
+}
+
+/** Keys of every PR one of the sets' tiles holds, stack layers stacked onto a member later included. */
+function placedKeys(sets: Map<string, PrSet>, stackOf: Map<PrKey, Stack>): Set<PrKey> {
+  return new Set([...sets.values()].flatMap((set) => setShownKeys(set.members, stackOf)));
 }
 
 /**
@@ -191,18 +219,53 @@ export class SetGrouper {
     }
   }
 
-  /** The topic's open PRs and every member of its sets, with their glance's risk line. */
+  /**
+   * A set whose members all merged or closed SET_CLOSE_AFTER_DAYS ago closes
+   * (`setCloseReason`): its tile stays as it is, but it takes nothing new and
+   * a regroup no longer sees it. No trigger notices time passing, so it is
+   * checked on every pass, before the triggers. Closing once: a closed set
+   * is never checked again, so its history line is written once.
+   */
+  private closeFinishedSets(topic: Topic): void {
+    const { store } = this.deps;
+    const sets = store.sets.listActiveForTopic(topic.id).filter((set) => !set.closedAt);
+    if (sets.length === 0) {
+      return;
+    }
+    // Every PR the tile shows: a layer stacked onto a member later holds the set open too.
+    const stackOf = this.stacks();
+    const shown = new Map(sets.map((set) => [set.id, setShownKeys(set.members, stackOf)]));
+    const prs = store.prs.getMany([...shown.values()].flat());
+    const now = this.deps.now().toISOString();
+    for (const set of sets) {
+      const reason = setCloseReason(set, shown.get(set.id) ?? [], prs, now);
+      if (reason === null) {
+        continue;
+      }
+      store.transaction(() => {
+        store.sets.close(set.id, now);
+        this.record(topic.id, set.id, null, 'closed', reason, 'rules');
+      });
+    }
+  }
+
+  /** The topic's open PRs and every member of its open sets, with their glance's risk line. */
   input(topic: Topic): SetGroupingInput {
     const { store } = this.deps;
     const existingSets = store.sets.listForTopic(topic.id);
-    const setKeys = new Set(existingSets.filter((set) => set.status === 'active').flatMap((set) => set.members.map((member) => member.prKey)));
+    const setKeys = new Set(existingSets.filter((set) => set.status === 'active' && !set.closedAt).flatMap((set) => set.members.map((member) => member.prKey)));
     const keys = [...new Set([...store.memberships.listForTopic(topic.id).map((m) => m.prKey), ...setKeys])];
     const prs = [...store.prs.getMany(keys).values()].filter((pr) => pr.state === 'OPEN' || setKeys.has(pr.key));
     const risks: Record<PrKey, string> = {};
     for (const [key, glance] of store.glances.getMany(prs.map((pr) => pr.key))) {
       risks[key] = glance.risk;
     }
-    return { topic, prs, existingSets, risks, context: this.deps.contexts.forTopic(topic.id) };
+    const stackOf = this.stacks();
+    const shownKeys: Record<string, PrKey[]> = {};
+    for (const set of existingSets) {
+      shownKeys[set.id] = setShownKeys(set.members, stackOf);
+    }
+    return { topic, prs, existingSets, shownKeys, risks, context: this.deps.contexts.forTopic(topic.id) };
   }
 
   /**
@@ -212,6 +275,7 @@ export class SetGrouper {
   due(topic: Topic): SetGroupingInput | null {
     this.dropMovedMembers(topic);
     this.endSingleUnitSets(topic);
+    this.closeFinishedSets(topic);
     const input = this.input(topic);
     if (activeSets(input).length === 0 && unplacedKeys(input).length < 2) {
       return null;
@@ -240,15 +304,19 @@ export class SetGrouper {
     return [...new Set([...setGroupingTriggers(input), ...made])];
   }
 
-  private applyMerges(topicId: string, sets: Map<string, PrSet>, changes: SetChanges, rejected: Set<string>): void {
+  private applyMerges(topicId: string, sets: Map<string, PrSet>, changes: SetChanges, stackOf: Map<PrKey, Stack>, rejected: Set<string>): void {
     const { store } = this.deps;
     for (const merge of changes.merged) {
-      const from = sets.get(merge.setId);
-      const into = sets.get(merge.intoSetId);
+      const from = openSet(sets, merge.setId);
+      const into = openSet(sets, merge.intoSetId);
       if (!from || !into || rejectedTogether(from.members, into.members, rejected)) {
         continue;
       }
       const moving = from.members.filter((member) => !into.members.some((m) => m.prKey === member.prKey));
+      // Two sets that together go past the cap stay two sets, counted as their tiles show them.
+      if (setShownKeys([...into.members, ...moving], stackOf).length > SET_MAX_MEMBERS) {
+        continue;
+      }
       into.members = [...into.members, ...moving];
       // The merged-away set's "not related" corrections now hold for the set it went into.
       from.removedKeys.forEach((key) => store.sets.addRemoved(into.id, key, this.deps.now().toISOString()));
@@ -262,7 +330,7 @@ export class SetGrouper {
 
   private applyUpdates(topicId: string, sets: Map<string, PrSet>, changes: SetChanges): void {
     for (const update of changes.updated) {
-      const set = sets.get(update.setId);
+      const set = openSet(sets, update.setId);
       if (set && (set.title !== update.title || set.take !== update.take)) {
         set.title = update.title;
         set.take = update.take;
@@ -273,7 +341,7 @@ export class SetGrouper {
 
   private applyLeaves(topicId: string, sets: Map<string, PrSet>, changes: SetChanges, stackOf: Map<PrKey, Stack>): void {
     for (const leave of changes.left) {
-      const set = sets.get(leave.setId);
+      const set = openSet(sets, leave.setId);
       if (!set || !set.members.some((member) => member.prKey === leave.prKey)) {
         continue;
       }
@@ -285,13 +353,20 @@ export class SetGrouper {
     }
   }
 
-  /** A PR (or its stack) that is in a set by now, the user's doing during the call included, joins nothing. */
+  /**
+   * A PR (or its stack) that is in a set by now, the user's doing during the
+   * call included, joins nothing. Nor does a closed set, or one the join
+   * would take past SET_MAX_MEMBERS: a full set stays as it is.
+   */
   private applyJoins(topicId: string, sets: Map<string, PrSet>, changes: SetChanges, stackOf: Map<PrKey, Stack>, rejected: Set<string>): void {
     for (const join of changes.joined) {
-      const set = sets.get(join.setId);
+      const set = openSet(sets, join.setId);
       const unit = unitsOf([join.member], stackOf)[0];
-      const taken = placedKeys(sets);
-      if (!set || !unit || unit.some((member) => taken.has(member.prKey)) || rejectedTogether(unit, set.members, rejected)) {
+      const taken = placedKeys(sets, stackOf);
+      if (!set || !unit || setShownKeys([...set.members, ...unit], stackOf).length > SET_MAX_MEMBERS) {
+        continue;
+      }
+      if (unit.some((member) => taken.has(member.prKey)) || rejectedTogether(unit, set.members, rejected)) {
         continue;
       }
       set.members = [...set.members, ...unit];
@@ -304,10 +379,10 @@ export class SetGrouper {
     const at = this.deps.now().toISOString();
     const dissolved = new Set(current.filter((s) => s.status === 'dissolved').map((s) => memberSignature(s.members.map((m) => m.prKey))));
     for (const proposal of changes.created) {
-      const taken = placedKeys(sets);
+      const taken = placedKeys(sets, stackOf);
       // The prompt says to respect the user's corrections; enforce it.
       const free = unitsOf(proposal.members, stackOf).filter((unit) => !unit.some((member) => taken.has(member.prKey)));
-      const units = withoutRejected(free, rejected);
+      const units = underCap(withoutRejected(free, rejected));
       const members = units.flat();
       // Two units at least: a set of one stack and nothing else is just that stack.
       if (units.length < 2 || dissolved.has(memberSignature(members.map((m) => m.prKey)))) {
@@ -326,7 +401,8 @@ export class SetGrouper {
    * agent saw them: a set the user dissolved during the call stays
    * dissolved. Order: merges, rewrites, leaves, joins, then new sets; a set
    * left with fewer than two units ends. A merge, join or new set the user's
-   * "not related" rules out is skipped. Then remembers what the regroup saw.
+   * "not related" rules out is skipped, and so is any change to a closed set
+   * or past SET_MAX_MEMBERS. Then remembers what the regroup saw.
    */
   apply(topic: Topic, input: SetGroupingInput, changes: SetChanges): void {
     const { store } = this.deps;
@@ -337,7 +413,7 @@ export class SetGrouper {
       const active = current.filter((set) => set.status === 'active');
       const sets = new Map(active.map((set) => [set.id, { ...set, members: [...set.members], removedKeys: [...set.removedKeys] }]));
       const before = new Map(active.map((set) => [set.id, JSON.stringify([set.title, set.take, set.members])]));
-      this.applyMerges(topic.id, sets, changes, rejected);
+      this.applyMerges(topic.id, sets, changes, stackOf, rejected);
       this.applyUpdates(topic.id, sets, changes);
       this.applyLeaves(topic.id, sets, changes, stackOf);
       this.applyJoins(topic.id, sets, changes, stackOf, rejected);

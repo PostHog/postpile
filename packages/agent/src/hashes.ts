@@ -108,16 +108,18 @@ function prGlanceSnapshot(pr: Pr, discussion: GlanceDiscussion): unknown {
 /**
  * Wording version of the set prompt alone, like DOSSIER_PROMPT_VERSION. s2:
  * sets as lasting tiles one judgement covers, answered as changes only
- * (2026-10-01). Part of the context trigger, so every topic regroups once.
+ * (2026-10-01). s3: sets cap at SET_MAX_MEMBERS and full sets are marked
+ * (2026-10-27). Part of the context trigger, so every topic regroups once.
  */
-export const SET_PROMPT_VERSION = 's2';
+export const SET_PROMPT_VERSION = 's3';
 
 /**
  * What a set regroup reacts to, one string per fact. The engine runs a
  * regroup only when a fact shows up that the last run did not see: an open
  * PR to place, a PR whose risk level changed, a new correction, a dissolved
  * set, changed instructions or prompt. A PR that merges or leaves only takes
- * facts away, so it never triggers one: sets do not move on status.
+ * facts away, so it never triggers one: sets do not move on status. A set
+ * closing takes its member facts away too, so it triggers nothing either.
  */
 export function setGroupingTriggers(input: SetGroupingInput): string[] {
   const context = inputHash(

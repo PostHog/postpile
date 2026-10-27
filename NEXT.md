@@ -6,6 +6,20 @@ now".
 
 ## Done
 
+- Finished sets close, sets cap at 12 (2026-10-27, owner after a look at
+  real data: most sets had been fully merged for one to four weeks and
+  still took joins, two grew to topic size; DESIGN.md "Tiles hold
+  still"): core `setCloseReason` (`SET_CLOSE_AFTER_DAYS = 2`, finish time
+  = latest merge or close, removed members aside) runs in
+  `SetGrouper.closeFinishedSets` on every set pass before the triggers,
+  with no agent call, and writes one `closed` line by `rules`. Stored as
+  `pr_set.closed_at` (migration 041), not a third status: every reader of
+  `status = 'active'` keeps showing the tile. `activeSets` leaves closed
+  sets out, so the regroup never sees them; the engine drops joins,
+  merges, leaves and updates on them. `SET_MAX_MEMBERS = 12`: a join or
+  merge past it is dropped in `SetGrouper.apply`, a new set proposed too
+  big keeps its first 12, and the prompt marks full sets
+  (`SET_PROMPT_VERSION` s3, so every topic with sets regroups once).
 - stamphog declines (2026-10-27; DESIGN.md "An agent approver's
   decline"): core `agentDecline` reads stamphog's latest verdict review
   (needs a person, escalated, or outside its gates; "not approved yet"
@@ -1806,6 +1820,11 @@ the app meanwhile.
 
 ## Decided
 
+- **Finished sets close after 2 days, sets cap at 12 members**
+  (2026-10-27, owner). A set whose members all merged or closed takes
+  nothing new two days after the last one; its tile stays as it was. A
+  set of 12 takes no joins, and two sets never merge past 12. A quick
+  follow-up still joins a set; an old finished tile is never reopened.
 - **Sidebar and tile order favour stability over recency** (2026-10-27,
   owner). Inside a section: unread tile, your move or your open PR first,
   then the rest, each A-Z; no counts, so reading one tile of several

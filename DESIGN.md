@@ -6629,6 +6629,39 @@ Owner decisions (2026-09-30 and 2026-10-01), after research on grouping PRs
   carries the newest 20; the CLI `topic` command and the MCP `topic` tool
   (detail full) show them. The app shows each member's reason as before; no
   new UI for now.
+- **A finished set closes after 2 days** (2026-10-27, owner). On real data
+  most sets had been fully merged for one to four weeks and still took
+  joins, one of them weeks after its last merge: the regroup showed the
+  agent every set in the topic, so an old tile kept pulling in new work.
+  Reusing a set for a quick follow-up is good; reopening an old, finished
+  tile is not. A set is finished when every PR its tile holds (removed
+  ones aside) is merged or closed, counted through the current stacks
+  (`setShownKeys`): a layer stacked onto a member after the set was made
+  is not a stored member, yet it shows in the tile and holds the set open; its finish time is the latest merge or close
+  among them (the timeline's close, or `updatedAt` when the timeline was
+  cut off). `SET_CLOSE_AFTER_DAYS` (2) later it closes (core
+  `setCloseReason`): it takes no joins, merges or new members, and the
+  regroup input no longer offers it to the agent (`activeSets`). The
+  engine checks it on every set pass before the triggers, like a set that
+  became one stack, with no agent call, and writes one `closed` line by
+  `rules`. Closed is about growth, not display: the tile keeps its id and
+  members, so snooze, Dealt with and selection hold. It is stored as
+  `pr_set.closed_at` (migration 041), not as a third status, so every
+  reader of active sets keeps showing it. A follow-up that arrives later
+  becomes its own tile, or a new set with other open PRs. A closed set
+  stays closed; a member reopened inside it keeps that tile.
+- **Sets cap at 12 members** (2026-10-27, owner). Two sets on real data
+  grew to 27 and 15 PRs over two weeks, which is topic-sized; a set is
+  PRs one judgement covers. A set of `SET_MAX_MEMBERS` (12, removed ones
+  aside, stack layers counted as the tile shows them) takes no joins: the next matching PR starts a new set or stays
+  single. A merge of two sets that together go past 12 is dropped, and a
+  new set the agent proposes too big keeps its first 12 PRs (whole
+  stacks). The engine enforces it where answers land
+  (`SetGrouper.apply`); the prompt states the cap and marks full sets
+  (`SET_PROMPT_VERSION` s3). Sets already past 12 stay as they are and
+  stop growing. A layer stacked onto a member later also counts as placed
+  (`SetGroupingInput.shownKeys`), so the regroup never offers it for
+  another set.
 - **A set ends** when fewer than two units are left (a set of one PR or one
   stack is just that tile); its history stays. One that holds the user's
   "not related" corrections is kept as dissolved, so they keep holding, and

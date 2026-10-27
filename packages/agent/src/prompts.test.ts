@@ -8,7 +8,7 @@ import { pingDecisionPrompt } from './prompts/ping-decision.ts';
 import { setGroupingPrompt } from './prompts/sets.ts';
 import { contextBlock, githubData, NO_CI_RULE, OWN_PR_NOTE, viewerLine } from './prompts/shared.ts';
 import { topicAssignmentPrompt } from './prompts/topics.ts';
-import type { Pr, Provenance } from '@postpile/core';
+import type { Pr, PrSet, Provenance } from '@postpile/core';
 import type { PromptContext } from './service.ts';
 import { emptyContext, fullContext, makeComment, makeEvent, makePr, makeTopic, viewer } from './test-fixtures.ts';
 
@@ -355,6 +355,37 @@ describe('setGroupingPrompt', () => {
     expect(prompt).toContain('risk: high - touches migrations');
     expect(prompt).toContain('Answer only with what changes; anything you leave out stays as it is');
     expect(prompt).toContain('Never group by status');
+  });
+
+  it('leaves closed sets out and marks full ones', () => {
+    const set = (id: string, count: number, closedAt: string | null): PrSet => ({
+      id,
+      topicId: 'topic-1',
+      title: 'Version cap',
+      take: '',
+      members: Array.from({ length: count }, (_, index) => ({ prKey: `acme/${id}#${index + 1}`, reason: 'cap' })),
+      removedKeys: [],
+      status: 'active',
+      closedAt,
+      inputHash: '',
+      createdAt: '',
+      updatedAt: '',
+    });
+    const prompt = setGroupingPrompt({
+      topic: makeTopic(),
+      prs: [],
+      existingSets: [set('closed', 2, '2026-10-20T09:00:00.000Z'), set('full', 12, null), set('small', 3, null)],
+      risks: {},
+      context: emptyContext,
+    });
+    expect(prompt).not.toContain('set id closed');
+    expect(prompt).toContain('- set id full (FULL: 12 PRs, takes no joins and no merges)');
+    expect(prompt).toContain('- set id small (3 PRs)');
+    expect(prompt).toContain('A set holds 12 PRs at most');
+
+    // Counted as the tile shows it: stack layers outside the stored members count too.
+    const withLayers = setGroupingPrompt({ topic: makeTopic(), prs: [], existingSets: [set('small', 11, null)], shownKeys: { small: [...Array.from({ length: 11 }, (_, index) => `acme/small#${index + 1}`), 'acme/small#20'] }, risks: {}, context: emptyContext });
+    expect(withLayers).toContain('- set id small (FULL: 12 PRs');
   });
 });
 

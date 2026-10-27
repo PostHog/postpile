@@ -1,5 +1,5 @@
-import type { Pr, PrSet } from '@postpile/core';
-import { activeSets, unplacedKeys } from '../set-answer.ts';
+import { SET_MAX_MEMBERS, setIsFull, type Pr, type PrSet } from '@postpile/core';
+import { activeSets, setKeysShown, unplacedKeys } from '../set-answer.ts';
 import type { SetGroupingInput } from '../service.ts';
 import { clip, contextBlock, GITHUB_DATA_RULE, githubData, jsonOnly, NO_CI_RULE, prLine, WORK_GLOSSARY } from './shared.ts';
 
@@ -24,7 +24,9 @@ function setBlock(input: SetGroupingInput, set: PrSet, prs: Map<string, Pr>): st
     set.removedKeys.length > 0
       ? `\n  the user said NOT related, never group again with the PRs above: ${set.removedKeys.join(', ')}`
       : '';
-  return `- set id ${set.id}
+  const size = setKeysShown(input, set).length;
+  const full = setIsFull(size) ? ` (FULL: ${size} PRs, takes no joins and no merges)` : ` (${size} PRs)`;
+  return `- set id ${set.id}${full}
 ${githubData(`  title: ${set.title}\n  take: ${set.take}\n${memberLines(input, set, prs)}`)}${removed}`;
 }
 
@@ -88,6 +90,9 @@ Sets are lasting. Answer only with what changes; anything you leave out stays as
 - updates: a new title or take for a current set, only when its members changed.
 - title: 2 to 6 words naming the shared change. take: one sentence on what one approval covers,
   for example "Same one-line version cap in four repos". reason: one short sentence per PR.
+- A set holds ${SET_MAX_MEMBERS} PRs at most. Never join a PR into a set marked FULL, and never merge two
+  sets that together hold more than ${SET_MAX_MEMBERS}. A PR that would fit a full set starts a new set with
+  other open PRs, or stays a tile of its own.
 - A PR goes into one set at most. Copy set ids and PR keys exactly as above.
 - Changing nothing is the most common good answer.`;
 

@@ -632,6 +632,18 @@ describe('PrSetRepo', () => {
     expect(store.sets.listForTopic('topic-1')).toHaveLength(1);
   });
 
+  it('closes a set once, keeps it among the active tiles, and a save leaves it closed', () => {
+    store.sets.save(makeSet());
+    expect(store.sets.get('set-1')?.closedAt).toBeNull();
+    store.sets.close('set-1', at(1));
+    store.sets.close('set-1', at(2));
+    expect(store.sets.get('set-1')).toMatchObject({ status: 'active', closedAt: at(1) });
+    expect(store.sets.listActiveForTopic('topic-1').map((set) => set.id)).toEqual(['set-1']);
+    expect(store.sets.listActiveForPr('acme/app#1').map((set) => set.id)).toEqual(['set-1']);
+    store.sets.save(makeSet({ title: 'Renamed', updatedAt: at(3) }));
+    expect(store.sets.get('set-1')?.closedAt).toBe(at(1));
+  });
+
   it('keeps dissolved sets, and finds active sets by PR', () => {
     store.sets.save(makeSet());
     store.sets.save(makeSet({ id: 'set-2', members: [{ prKey: 'acme/app#1', reason: 'x' }] }));
