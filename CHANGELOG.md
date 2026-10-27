@@ -2,16 +2,18 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## 0.28.4 (2026-10-27)
+
+### Fixed
+
+- Agent-grouped sets stop growing once their work is done. Two days after every PR in a set merged or closed, the set takes no new PRs; its tile stays as it was. A follow-up that comes later gets its own tile or a new set. Sets also hold 12 PRs at most, so one set never turns into a whole topic.
+
 ## 0.28.3 (2026-10-27)
 
 ### Changed
 
 - When stamphog declines a PR, the tile says "stamphog declined" and the PR pane's "To merge" says why: it needs a person to review, it escalated to a person, or the change is outside what it may auto-approve. Inside a topic's To review tiles, a declined PR ranks first at its level, since its author asked for a fast approval and now waits on a person. The agent's glance weighs stamphog's reasons and says when they ask for you or your team.
 - The sidebar and tile order stay put. Inside a section, topics with an unread tile, your move or your open PR come first, then the rest, each sorted by name. How many tiles are unread no longer reorders topics, so reading one tile of several moves nothing. Inside a topic, tiles in the same group and queue sort newest PR first, so comments never reshuffle them.
-
-### Fixed
-
-- Agent-grouped sets stop growing once their work is done. Two days after every PR in a set merged or closed, the set takes no new PRs; its tile stays as it was. A follow-up that comes later gets its own tile or a new set. Sets also hold 12 PRs at most, so one set never turns into a whole topic.
 
 ## 0.28.2 (2026-10-26)
 
