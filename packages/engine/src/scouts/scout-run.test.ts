@@ -156,6 +156,29 @@ describe('the scout step of a full sync', () => {
     expect(h.reader.scoutCalls).toContain('numbers acme/app#2');
   });
 
+  it('judges a draft that was marked ready without a push, after a rule had left it out', async () => {
+    let now = NOW;
+    const h = setup(LOOKOUT, () => now);
+    const files: ScoutFile[] = [{ path: 'billing/main.ts', changeType: 'ADDED' }];
+    onGitHub(h, candidate(1), files);
+    await h.engine.sync({ maxAgentCalls: 0 });
+    expect(h.store.scoutJudgements.get('lookout', 'acme/app#1')).toMatchObject({ status: 'pending' });
+
+    now = new Date(NOW.getTime() + 60 * 60 * 1000);
+    onGitHub(h, candidate(1, { isDraft: true, updatedAt: hoursAgo(0.5, now) }), files);
+    await h.engine.sync({});
+    expect(h.store.scoutJudgements.get('lookout', 'acme/app#1')).toMatchObject({ status: 'judged', verdict: 'skipped', leftOut: 'draft' });
+
+    // Ready for review: same head, same scouts.md, only the draft flag moved.
+    now = new Date(NOW.getTime() + 2 * 60 * 60 * 1000);
+    onGitHub(h, candidate(1, { updatedAt: hoursAgo(0.5, now) }), files);
+    pulls(h, [1, 'pull', 'adds billing/']);
+    await h.engine.sync({});
+
+    expect(h.store.scoutJudgements.get('lookout', 'acme/app#1')).toMatchObject({ status: 'judged', verdict: 'pulled', leftOut: null });
+    expect(h.store.scoutedPrs.get('acme/app#1')).not.toBeNull();
+  });
+
   it('leaves work pending at the agent-call cap and still covers the window', async () => {
     const h = setup();
     onGitHub(h, candidate(1), [{ path: 'billing/main.ts', changeType: 'ADDED' }]);
