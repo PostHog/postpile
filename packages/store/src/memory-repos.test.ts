@@ -82,6 +82,15 @@ describe('EventLogRepo', () => {
     expect(store.eventLog.maxSeqForPr(pr2)).toBe(2);
     expect(store.eventLog.maxSeqForPr('acme/app#9999')).toBe(0);
   });
+
+  it('lists a PR\'s unseen event ids up to a seq, oldest first', () => {
+    const pr1 = 'acme/app#1';
+    store.events.upsertDerived(pr1, [event(pr1, 'a', 1), event(pr1, 'b', 2), event(pr1, 'c', 3)]);
+    store.eventLog.append([{ id: `${pr1}:comment:a`, prKey: pr1 }, { id: `${pr1}:comment:b`, prKey: pr1 }, { id: `${pr1}:comment:c`, prKey: pr1 }], at(4));
+    store.events.markSeen([`${pr1}:comment:a`], at(5));
+    expect(store.eventLog.unseenIdsThrough(pr1, 2)).toEqual([`${pr1}:comment:b`]);
+    expect(store.eventLog.unseenIdsThrough(pr1, 3)).toEqual([`${pr1}:comment:b`, `${pr1}:comment:c`]);
+  });
 });
 
 describe('CursorRepo', () => {

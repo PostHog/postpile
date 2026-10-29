@@ -91,8 +91,9 @@ export class AgentMarkRead {
       const stored = store.prs.get(pr.prKey) !== null;
       const tracking = this.tracking(tiles, pr.prKey);
       const seenThrough = parseSeenThrough(pr.seenThrough);
-      const logged = stored ? store.eventLog.listSince([pr.prKey], 0) : [];
       const seq = seenThrough?.seq ?? 0;
+      // Only the events after the token's seq: a busy PR's whole history is not loaded for the check.
+      const logged = stored ? store.eventLog.listSince([pr.prKey], seq) : [];
       const check = agentMarkReadCheck({
         stored,
         tracked: tracking.tracked,
@@ -100,7 +101,7 @@ export class AgentMarkRead {
         // The unseen events the token's list stood for, as the store has them now.
         unreadHashNow: unreadIdsHash(stored ? unseenIdsThrough(store, pr.prKey, seq) : []),
         newestSeq: stored ? store.eventLog.maxSeqForPr(pr.prKey) : 0,
-        newer: logged.filter((entry) => entry.seq > seq).map((entry) => entry.event),
+        newer: logged.map((entry) => entry.event),
         snapshotBehind: stored && this.snapshotBehind(pr.prKey),
         alreadyQueued: waiting.has(pr.prKey),
         changesAnything: stored && this.changesAnything(pr.prKey),

@@ -3,10 +3,7 @@ import type { Store } from '@postpile/store';
 
 /** The PR's unseen events logged at or before `seq`, as the store has them now. */
 export function unseenIdsThrough(store: Store, key: PrKey, seq: number): string[] {
-  return store.eventLog
-    .listSince([key], 0)
-    .filter((entry) => entry.seq <= seq && entry.event.seenAt === null)
-    .map((entry) => entry.event.id);
+  return store.eventLog.unseenIdsThrough(key, seq);
 }
 
 /**
