@@ -109,6 +109,7 @@ import {
   type ReviewOwnership,
   isScoutedUnseen,
   scoutedPrView,
+  withScoutSeen,
   scoutIdOfTopic,
   stackByPrKey,
   scoutTopicId,
@@ -903,19 +904,21 @@ export class ReadModels {
     const scoutTopicIdOfPr = board.scoutTopicIdOf(key);
     const holding = scoutTopicIdOfPr === null ? board.allTiles() : board.tilesForTopic(scoutTopicIdOfPr);
     const tileIds = new Set(holding.filter((tile) => tile.members.some((m) => m.prKey === key)).map((tile) => tile.id));
-    const events = (board.events.get(key) ?? []).map(eventView);
+    const scoutedRow = this.store.scoutedPrs.get(key);
+    const tracked = board.threads.has(key) || board.found.has(key);
+    // A PR only a scout holds reads seen through its scout seen boundary, like mark_read and the Scouted section.
+    const prEvents = scoutedRow && !tracked ? withScoutSeen(board.events.get(key) ?? [], scoutedRow.seenUpdatedAt) : (board.events.get(key) ?? []);
+    const events = prEvents.map(eventView);
     const viewer = loadViewer(this.store);
-    const news = whatsNew(pr, board.events.get(key) ?? [], viewer);
+    const news = whatsNew(pr, prEvents, viewer);
     const stale = this.staleGlances(board, [key]).has(key);
     const gap = this.glanceGap(key, glance !== null);
     const wanted = this.wantedGlances(board, [key]);
-    const scoutedRow = this.store.scoutedPrs.get(key);
-    const tracked = board.threads.has(key) || board.found.has(key);
-    const scouted = scoutedRow ? { scouted: scoutedPrView(scoutedRow, pr.updatedAt, { tracked, inInbox: board.threads.has(key) }, this.scoutInfo.followStates().get(key) ?? null) } : {};
+    const scouted = scoutedRow ? { scouted: scoutedPrView(scoutedRow, pr.updatedAt, { tracked, inInbox: board.threads.has(key), onSection: scoutTopicIdOfPr !== null }, this.scoutInfo.followStates().get(key) ?? null) } : {};
     // The activity list shows a folded bot review's comments by their first line and checks bot text for mentions of
     // you, and a bot's change request says what it found: bodies the board leaves out, so it reads this one PR whole.
     const full = this.store.prs.getFull(key);
-    const unread = unreadSinceLooked(board.events.get(key) ?? [], full);
+    const unread = unreadSinceLooked(prEvents, full);
     return {
       pr: prPaneView(pr),
       status: prStatus(pr),

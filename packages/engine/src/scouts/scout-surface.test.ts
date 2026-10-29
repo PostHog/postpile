@@ -83,6 +83,38 @@ describe('the Scouted section', () => {
     expect(byScout.topics[0]?.tileIds).toEqual(expect.arrayContaining(['pr:acme/app#1', 'pr:acme/app#2']));
   });
 
+  it('reads a scouted PR seen through its scout seen boundary, in the pane as for mark_read', async () => {
+    const h = await pulled();
+    h.store.events.upsertDerived('acme/app#1', [makeEvent({ id: 'acme/app#1:reply:r1', prKey: 'acme/app#1', kind: 'reply_to_user', ruleLoudness: 'loud', at: new Date(NOW.getTime() - 2 * 60 * 60 * 1000).toISOString() })]);
+    expect((await h.engine.getPr('acme/app#1'))?.unread).toHaveLength(1);
+
+    await h.engine.markScoutedSeen('acme/app#1');
+
+    const pr = await h.engine.getPr('acme/app#1');
+    expect(pr?.unread).toEqual([]);
+    expect(pr?.whatsNew).toBeNull();
+    // GitHub's and the event log's own read state stay as they were.
+    expect(h.store.events.listForPr('acme/app#1')[0]?.seenAt).toBeNull();
+  });
+
+  it('lets a quit flush wait for a Follow still looking up its PR', async () => {
+    const h = await pulled();
+    const lookup = h.reader.scoutPrNodeId.bind(h.reader);
+    let release: () => void = () => {};
+    vi.spyOn(h.reader, 'scoutPrNodeId').mockImplementationOnce(async (ref) => {
+      await new Promise<void>((resolve) => (release = resolve));
+      return lookup(ref);
+    });
+
+    const follow = h.engine.followScouted('acme/app#1', 'tile');
+    const flushed = h.engine.flushPendingWrites();
+    release();
+    await flushed;
+
+    expect((await follow).ok).toBe(true);
+    expect(h.writer.calls).toContain('followPr PR_1');
+  });
+
   it('says in the PR pane who scouted it and why', async () => {
     const h = await pulled();
     const pr = await h.engine.getPr('acme/app#1');
@@ -314,6 +346,8 @@ describe('the Scouted section', () => {
     expect(await h.engine.listScouts()).toEqual([]);
     const unsorted = (await h.engine.getTopic('unsorted'))?.tiles ?? [];
     expect(unsorted.flatMap((view) => view.tile.members.map((member) => member.prKey))).toEqual([bottom.key, top.key]);
+    // The PR's own answer says so too: it is not on the Scouted section, though its row is active.
+    expect((await h.engine.getPr(top.key))?.scouted).toMatchObject({ active: true, tracked: false, onSection: false });
   });
 
   it('refuses tile actions on a scout tile: nothing there is the user\'s to mark read', async () => {

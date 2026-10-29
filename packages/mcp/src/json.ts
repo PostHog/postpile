@@ -264,7 +264,8 @@ export function prJson(input: PrJsonInput): PrJson {
           // A notification thread, not PostPile's own tracking: a followed PR is tracked before GitHub notifies about it.
           inInbox: detail.scouted.inInbox,
           tracked: detail.scouted.tracked,
-          onScoutedSection: detail.scouted.active && !detail.scouted.tracked,
+          // Where the board places it: a scouted layer of a stack with a tracked layer shows in that topic instead.
+          onScoutedSection: detail.scouted.onSection,
           followed: detail.scouted.followedAt !== null,
         }
       : null,
