@@ -63,7 +63,7 @@ import { backlogSyncMinutes, capNote, type NextSync } from '../lib/agent-stats.t
 import { writeBlockedReason, type GithubWrite } from '../lib/guard.ts';
 import { isTransientWriteFailure, writeFailureText, type PaneWrite } from '../lib/write-failure.ts';
 import { approvedMessage, batchMarkReadMessage } from '../lib/agent-actions.ts';
-import { agentReadsToast, isMarkReadUndoToken, markReadNotice, snoozeMessage } from '../lib/mark-read.ts';
+import { agentReadsToast, combinedUndoResult, isMarkReadUndoToken, markReadNotice, snoozeMessage } from '../lib/mark-read.ts';
 import { approvedDetail, markedReadPr, markedReadTile, mutedTile, snoozedTile, withApprovedPrs, withTile, withTiles } from '../lib/optimistic.ts';
 import { newerReport } from '../lib/sync-report.ts';
 import { teamRoleNotice } from '../lib/team-roles.ts';
@@ -213,6 +213,8 @@ export interface Actions {
    */
   unsnooze(tileId: string, muted?: boolean): Promise<void>;
   undo(undoToken: string): Promise<void>;
+  /** Undo for several batches at once (a combined agent toast): every engine undo goes out before the one refetch. */
+  undoMany(undoTokens: string[]): Promise<void>;
   feedback(input: FeedbackInput): Promise<void>;
   unmute(eventId: string): Promise<void>;
   /** True when it was stored (or logged, for just this once). */
@@ -440,9 +442,9 @@ export function ActionsProvider(props: { children: ReactNode }) {
     }
     const toast = seenAgentRead.current === undefined ? null : agentReadsToast(agentReads, seenAgentRead.current, Date.now());
     if (toast) {
-      const [first, ...more] = toast.undoTokens;
+      const [first, ...more] = toast.batches.map((batch) => batch.token);
       setNotice({ id: Date.now(), tone: 'ok', message: toast.message, undoToken: first ?? null, moreUndoTokens: more, undoUntil: toast.undoUntil, snoozeTileId: null });
-      setPendingUndos((current) => [...current, ...toast.undoTokens.map((token) => ({ token, until: toast.undoUntil }))]);
+      setPendingUndos((current) => [...current, ...toast.batches]);
       void refreshAll();
     }
     seenAgentRead.current = Math.max(seenAgentRead.current ?? 0, newestAgentRead);
@@ -730,6 +732,12 @@ export function ActionsProvider(props: { children: ReactNode }) {
   async function undo(undoToken: string): Promise<void> {
     setPendingUndos((current) => current.filter((entry) => entry.token !== undoToken));
     await run(`undo:${undoToken}`, null, () => request('POST', '/api/undo', { undoToken }));
+  }
+
+  async function undoMany(undoTokens: string[]): Promise<void> {
+    setPendingUndos((current) => current.filter((entry) => !undoTokens.includes(entry.token)));
+    const task = async () => combinedUndoResult(await Promise.all(undoTokens.map((undoToken) => request<ActionResult>('POST', '/api/undo', { undoToken }))));
+    await run(`undo:${undoTokens.join(',')}`, null, task);
   }
 
   async function feedback(input: FeedbackInput): Promise<void> {
@@ -1133,6 +1141,7 @@ export function ActionsProvider(props: { children: ReactNode }) {
       await run(`snooze:${tileId}`, muted ? 'mute' : null, () => request('DELETE', `${tilePath(tileId)}/snooze`));
     },
     undo,
+    undoMany,
     feedback,
     unmute: async (eventId) => {
       await run(`unmute:${eventId}`, null, () => request('POST', `/api/events/${encodeURIComponent(eventId)}/unmute`));

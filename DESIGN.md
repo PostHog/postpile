@@ -9280,7 +9280,10 @@ that flow, without a separate ask.
   renderer shows the new ones in one toast, "Claude Code marked #1902 and
   #1911 read", whose Undo takes back every batch in it and disappears when
   the first window ends (`Notice.undoUntil`), and counts them like clicked
-  mark-reads. Once the queue has sent it
+  mark-reads, each with its own window end, so the refetch after a later
+  locked batch shows its pending write. That Undo sends every engine undo
+  at once and refetches once after them (`undoMany`), so a slow refetch
+  never eats the window of a later batch. Once the queue has sent it
   to GitHub it can't be undone, because GitHub can't mark unread; the tool
   description and the answer say so.
 - **MCP annotations:** `destructiveHint: true`, since once sent GitHub

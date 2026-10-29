@@ -14,13 +14,6 @@ const TONES: Record<NoticeTone, string> = {
  * notifications view lists what each thread's last action was), and "Open"
  * when the agent answered on a topic that is not on screen.
  */
-/** One Undo for every batch the toast stands for, one after another. */
-async function undoAll(undo: (token: string) => Promise<void>, tokens: string[]): Promise<void> {
-  for (const token of tokens) {
-    await undo(token);
-  }
-}
-
 export function Toast(props: { onShowActionLog: () => void; onOpenAgent?: (topicId: string) => void }) {
   const actions = useActions();
   const notice = actions.notice;
@@ -55,7 +48,7 @@ export function Toast(props: { onShowActionLog: () => void; onOpenAgent?: (topic
         </button>
       )}
       {undoToken && (
-        <button type="button" className="font-semibold underline-offset-2 hover:underline" onClick={() => void undoAll(actions.undo, [undoToken, ...moreUndoTokens])}>
+        <button type="button" className="font-semibold underline-offset-2 hover:underline" onClick={() => void (moreUndoTokens.length > 0 ? actions.undoMany([undoToken, ...moreUndoTokens]) : actions.undo(undoToken))}>
           Undo
         </button>
       )}

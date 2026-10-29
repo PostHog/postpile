@@ -1,7 +1,7 @@
 // The toast after a mark-read, from what core says the mark-read leaves
 // (`TileView.afterRead`). What the buttons say and which one leads come from
 // core too (`TileView.offers`); the renderer only displays them.
-import type { AgentReadNotice, TileAfterRead } from '@postpile/core';
+import type { ActionResult, AgentReadNotice, TileAfterRead } from '@postpile/core';
 import { clientDisplayName } from './proposals.ts';
 import { prNumber } from './tiles.ts';
 
@@ -88,9 +88,9 @@ export function agentReadText(notice: Pick<AgentReadNotice, 'client' | 'prKeys' 
 
 export interface AgentReadsToast {
   message: string;
-  /** One per batch: the toast's Undo takes them all back. */
-  undoTokens: string[];
-  /** When the first of their undo windows ends: the Undo goes then. */
+  /** One per batch, with its own window end: the provider refetches after each, so a locked batch shows as pending once it parked. */
+  batches: { token: string; until: number }[];
+  /** When the first of their undo windows ends: the toast's Undo, which takes them all back, goes then. */
   undoUntil: number;
 }
 
@@ -104,9 +104,15 @@ export function agentReadsToast(notices: AgentReadNotice[], seenId: number, now:
   if (fresh.length === 0) {
     return null;
   }
+  const batches = fresh.map((notice) => ({ token: notice.undoToken, until: Date.parse(notice.undoUntil) }));
   return {
     message: fresh.map(agentReadText).join('; '),
-    undoTokens: fresh.map((notice) => notice.undoToken),
-    undoUntil: Math.min(...fresh.map((notice) => Date.parse(notice.undoUntil))),
+    batches,
+    undoUntil: Math.min(...batches.map((batch) => batch.until)),
   };
+}
+
+/** One result for several undos sent together: the first failure, else the first answer. */
+export function combinedUndoResult(results: ActionResult[]): ActionResult {
+  return results.find((result) => !result.ok) ?? results[0] ?? { ok: false, message: 'Nothing to undo', undoToken: null };
 }

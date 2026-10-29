@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TileAfterRead, WhoseTurn } from '@postpile/core';
-import { agentReadsToast, agentReadText, isMarkReadUndoToken, markReadNotice, moveWords, snoozeMessage } from './mark-read.ts';
+import { agentReadsToast, agentReadText, combinedUndoResult, isMarkReadUndoToken, markReadNotice, moveWords, snoozeMessage } from './mark-read.ts';
 
 const NONE: WhoseTurn = { kind: 'none', who: null, what: '', prKey: null };
 const REREVIEW: WhoseTurn = { kind: 'you', move: 're_review', who: null, what: 'pim addressed your changes: re-review', prKey: 'acme/app#1960' };
@@ -90,11 +90,28 @@ describe('agentReadsToast', () => {
 
   it('puts every new notice into one toast with an undo per batch, gone when the first window ends', () => {
     const toast = agentReadsToast([notice(1, 'acme/app#1', '2026-10-29T12:00:03Z'), notice(2, 'acme/app#2', '2026-10-29T12:00:05Z'), notice(3, 'acme/app#3', '2026-10-29T12:00:06Z')], 1, NOW);
-    expect(toast).toEqual({ message: 'Claude Code marked #2 read; Claude Code marked #3 read', undoTokens: ['t2', 't3'], undoUntil: Date.parse('2026-10-29T12:00:05Z') });
+    expect(toast).toEqual({
+      message: 'Claude Code marked #2 read; Claude Code marked #3 read',
+      // Each batch keeps its own window end, so the refetch after the later one sees it parked.
+      batches: [
+        { token: 't2', until: Date.parse('2026-10-29T12:00:05Z') },
+        { token: 't3', until: Date.parse('2026-10-29T12:00:06Z') },
+      ],
+      undoUntil: Date.parse('2026-10-29T12:00:05Z'),
+    });
   });
 
   it('shows nothing when no new notice can still be undone', () => {
     expect(agentReadsToast([notice(2, 'acme/app#2', '2026-10-29T11:59:59Z')], 1, NOW)).toBeNull();
     expect(agentReadsToast([notice(1, 'acme/app#1', '2026-10-29T12:00:05Z')], 1, NOW)).toBeNull();
+  });
+});
+
+describe('combinedUndoResult', () => {
+  it('reports the first failure of undos sent together, else the first answer', () => {
+    const done = { ok: true, message: 'Undone', undoToken: null };
+    const gone = { ok: false, message: 'Nothing to undo: already sent to GitHub', undoToken: null };
+    expect(combinedUndoResult([done, gone, done])).toBe(gone);
+    expect(combinedUndoResult([done, done])).toBe(done);
   });
 });
