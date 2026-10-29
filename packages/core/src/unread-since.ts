@@ -83,7 +83,12 @@ export function unreadRows(unread: UnreadEvent[]): UnreadRow[] {
   const groups = new Map<string, UnreadEvent[]>();
   for (const event of unread) {
     const key = foldKey(event);
-    groups.set(key, [...(groups.get(key) ?? []), event]);
+    const group = groups.get(key);
+    if (group) {
+      group.push(event);
+    } else {
+      groups.set(key, [event]);
+    }
   }
   const rows: UnreadRow[] = [];
   const placed = new Set<string>();
