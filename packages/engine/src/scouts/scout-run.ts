@@ -32,7 +32,11 @@ import { chunk } from '../lists.ts';
 import type { PromptContextSource } from '../prompt-context.ts';
 import type { ScoutsHistory } from './history.ts';
 
-/** Listing pages per repo and run: 500 PRs. A busier hour leaves the cursor where it was, and the next run lists again. */
+/**
+ * Listing pages per repo and run: 500 PRs. A busier window leaves the
+ * cursor where it was, and the next run goes on below where this one
+ * stopped (`ListingResume`) after the updates since.
+ */
 export const SCOUT_LIST_MAX_PAGES = 10;
 /** PRs per scout_judge call. */
 export const SCOUT_JUDGE_BATCH = 12;
@@ -64,8 +68,8 @@ export interface ScoutRunInput {
   errors: string[];
   /** The claude headline while the agent is off, else null: judgements then stay pending. */
   agentOff: string | null;
-  /** Background GitHub reads are allowed (the quota is not low). */
-  quotaAllows: boolean;
+  /** Background GitHub reads are allowed now (the quota is not low). Asked before each read, since the scouts' own reads lower it. */
+  quotaAllows: () => boolean;
   /** Glances the active scouted PRs that need one (`GlanceBatchWriter.runScouted`). */
   glance: () => Promise<void>;
 }
@@ -83,6 +87,24 @@ interface RepoListing {
   prs: Map<PrKey, ScoutCandidate>;
   /** Down to the oldest floor of the scouts on the repo, without a cap, error or partial answer. */
   complete: boolean;
+}
+
+/**
+ * Where a capped listing stopped, kept in meta per repo: GitHub's cursor
+ * after the last page read, and when the run that started the pass began.
+ * The next run lists the updates since that start, then goes on below the
+ * cursor down to the floor, instead of reading the same top pages again.
+ */
+interface ListingResume {
+  after: string;
+  startedAt: IsoTime;
+}
+
+/** How one paging pass ended: down to its floor, at the page budget, or on a failed read. */
+type PassEnd = { kind: 'done' } | { kind: 'capped'; after: string } | { kind: 'failed' };
+
+function resumeKey(repo: string): string {
+  return `scout_listing_resume:${repo.toLowerCase()}`;
 }
 
 /** One scout's work on one repo in this run, written in one transaction with the cursor. */
@@ -122,6 +144,10 @@ function refOf(key: PrKey): PrRef {
 export class ScoutRun {
   /** Root folders per "repo@commit", kept across runs: a commit's tree never changes. */
   private readonly trees = new Map<string, string[]>();
+  /** Whole file lists read in this run, by "PR@head": scouts on the same repo share them. Cleared at each run's start. */
+  private runFiles = new Map<string, ScoutFilesRead>();
+  /** The running sync's quota check; reads stop once it says no and the rest stays pending. */
+  private quotaAllows: () => boolean = () => true;
 
   constructor(private readonly deps: ScoutRunDeps) {}
 
@@ -151,17 +177,26 @@ export class ScoutRun {
     return { ...base, status: 'judged', verdict, reason, inputHash, lastError: null, judgedAt: at, attempts: base.attempts + (attempted ? 1 : 0) };
   }
 
-  /** Pages the repo newest first down to `floor` (inclusive). A failed page or the page cap leaves it incomplete. */
-  private async list(repo: string, floor: IsoTime, errors: string[]): Promise<RepoListing> {
-    const prs = new Map<PrKey, ScoutCandidate>();
-    let after: string | null = null;
-    for (let page = 0; page < SCOUT_LIST_MAX_PAGES; page++) {
+  /**
+   * One paging pass, newest first from `after` down to `floor` (inclusive),
+   * adding what it lists to `prs`. Stops at the page budget it shares with
+   * the run's other pass on the repo, on a failed read, or when the quota
+   * says no.
+   */
+  private async pass(repo: string, after: string | null, floor: IsoTime, budget: { pages: number }, prs: Map<PrKey, ScoutCandidate>, errors: string[]): Promise<PassEnd> {
+    let cursor = after;
+    while (budget.pages > 0) {
+      if (!this.quotaAllows()) {
+        this.deps.log(`scouts: GitHub quota low, stopped listing ${repo}`);
+        return { kind: 'failed' };
+      }
+      budget.pages -= 1;
       let result;
       try {
-        result = await this.deps.reader.listScoutPrs(repo, after);
+        result = await this.deps.reader.listScoutPrs(repo, cursor);
       } catch (error) {
         errors.push(`scouts: listing ${repo}: ${errorText(error)}`);
-        return { prs, complete: false };
+        return { kind: 'failed' };
       }
       let reachedFloor = false;
       for (const pr of result.prs) {
@@ -172,18 +207,58 @@ export class ScoutRun {
         prs.set(pr.key, pr);
       }
       if (reachedFloor || result.nextCursor === null) {
-        return { prs, complete: true };
+        return { kind: 'done' };
       }
-      after = result.nextCursor;
+      cursor = result.nextCursor;
     }
-    this.deps.log(`scouts: ${repo} has more than ${SCOUT_LIST_MAX_PAGES} pages of updates since the cursor; the next sync lists it again`);
-    return { prs, complete: false };
+    return cursor === null ? { kind: 'done' } : { kind: 'capped', after: cursor };
+  }
+
+  private readResume(repo: string): ListingResume | null {
+    const raw = this.deps.store.meta.get(resumeKey(repo));
+    return raw === null ? null : (JSON.parse(raw) as ListingResume);
+  }
+
+  /** After the pass that reaches the floor: done clears the resume point, a cap moves it, a failed read keeps it. */
+  private settle(repo: string, end: PassEnd, startedAt: IsoTime): boolean {
+    if (end.kind === 'done') {
+      this.deps.store.meta.delete(resumeKey(repo));
+      return true;
+    }
+    if (end.kind === 'capped') {
+      this.deps.store.meta.set(resumeKey(repo), JSON.stringify({ after: end.after, startedAt } satisfies ListingResume));
+      this.deps.log(`scouts: ${repo} has more than ${SCOUT_LIST_MAX_PAGES} pages of updates to list; the next sync goes on where this one stopped`);
+    }
+    return false;
+  }
+
+  /**
+   * The repo's listing down to `floor`, in at most SCOUT_LIST_MAX_PAGES
+   * pages. After a capped run it first lists the updates since that run
+   * started (PRs updated since moved to the top), then goes on below where
+   * it stopped. Complete only once a pass reached the floor.
+   */
+  private async list(repo: string, floor: IsoTime, runStart: IsoTime, errors: string[]): Promise<RepoListing> {
+    const prs = new Map<PrKey, ScoutCandidate>();
+    const budget = { pages: SCOUT_LIST_MAX_PAGES };
+    const resume = this.readResume(repo);
+    if (resume === null) {
+      const end = await this.pass(repo, null, floor, budget, prs, errors);
+      return { prs, complete: this.settle(repo, end, runStart) };
+    }
+    const sinceStop = scoutListingFloor(resume.startedAt, runStart);
+    const top = await this.pass(repo, null, sinceStop > floor ? sinceStop : floor, budget, prs, errors);
+    if (top.kind !== 'done') {
+      return { prs, complete: false };
+    }
+    const lower = await this.pass(repo, resume.after, floor, budget, prs, errors);
+    return { prs, complete: this.settle(repo, lower, resume.startedAt) };
   }
 
   /** Root folders of the bases that need them, from the cache or one read. A failed read leaves them unknown. */
   private async baseFolders(repo: string, oids: string[]): Promise<void> {
     const wanted = [...new Set(oids)].filter((oid) => !this.trees.has(`${repo}@${oid}`));
-    if (wanted.length === 0) {
+    if (wanted.length === 0 || !this.quotaAllows()) {
       return;
     }
     try {
@@ -195,17 +270,36 @@ export class ScoutRun {
     }
   }
 
-  /** Whole file lists; a failed read leaves them unknown, so their candidates stay pending. */
-  private async files(keys: PrKey[]): Promise<Map<PrKey, ScoutFilesRead>> {
-    if (keys.length === 0) {
-      return new Map();
+  /**
+   * Whole file lists, from this run's reads when another scout on the repo
+   * read the same head already. A failed read, or a quota that says no,
+   * leaves them unknown, so their candidates stay pending.
+   */
+  private async files(candidates: ScoutCandidate[]): Promise<Map<PrKey, ScoutFilesRead>> {
+    const result = new Map<PrKey, ScoutFilesRead>();
+    const unread: ScoutCandidate[] = [];
+    for (const candidate of candidates) {
+      const read = this.runFiles.get(`${candidate.key}@${candidate.headOid}`);
+      if (read) {
+        result.set(candidate.key, read);
+      } else {
+        unread.push(candidate);
+      }
+    }
+    if (unread.length === 0 || !this.quotaAllows()) {
+      return result;
     }
     try {
-      return await this.deps.reader.scoutFiles(keys.map(refOf));
+      for (const [key, read] of await this.deps.reader.scoutFiles(unread.map((candidate) => refOf(candidate.key)))) {
+        result.set(key, read);
+        if (read.files !== null) {
+          this.runFiles.set(`${key}@${read.headOid}`, read);
+        }
+      }
     } catch (error) {
       this.deps.log(`scouts: file lists: ${errorText(error)}`);
-      return new Map();
     }
+    return result;
   }
 
   /** The scout's candidates on this repo: the listed ones in its own window, plus its pending ones whatever the cursor says. */
@@ -271,14 +365,15 @@ export class ScoutRun {
       if (scouted.get(candidate.key)?.scoutId === scout.id) {
         continue;
       }
-      // Same head as last judged: the files are the same. A title or description edit alone is not read again.
-      if (before?.status === 'judged' && before.headOid === candidate.headOid) {
+      // Same head and scouts.md as last judged: the files are the same. A title or description edit alone is not read
+      // again; an edited scouts.md reads the files once more, and the hash then says whether this scout changed.
+      if (before?.status === 'judged' && before.headOid === candidate.headOid && before.configVersion === (version?.version ?? 0)) {
         work.rows.push({ ...before, observedUpdatedAt: candidate.updatedAt });
         continue;
       }
       needFiles.push(candidate);
     }
-    const files = await this.files(needFiles.map((candidate) => candidate.key));
+    const files = await this.files(needFiles);
     const wantsTree = scout.paths.some((hint) => hint.newTopLevelFolder);
     if (wantsTree) {
       await this.baseFolders(repo, [...files.values()].filter((read) => read.files !== null).map((read) => read.baseOid));
@@ -301,7 +396,7 @@ export class ScoutRun {
       const inputHash = scoutInputHash(scout, candidate, read.files, signals);
       const step = scoutJudgeStep({ existing: before, pulledByThisScout: false, inputHash, hasPathHints: scout.paths.length > 0, signals: signals.length });
       if (step === 'unchanged') {
-        work.rows.push({ ...before!, headOid: candidate.headOid, observedUpdatedAt: candidate.updatedAt });
+        work.rows.push({ ...before!, headOid: candidate.headOid, observedUpdatedAt: candidate.updatedAt, configVersion: version?.version ?? 0 });
       } else if (step === 'no_signal') {
         work.rows.push(this.judged(base, 'skipped', 'no path signal', inputHash, false));
       } else {
@@ -405,35 +500,56 @@ export class ScoutRun {
     return new Set([...threadsByPrKey(store.notifications.list()).keys(), ...store.foundPrs.listAll().keys(), ...store.scoutedPrs.followedKeys()]);
   }
 
-  /** Active scouted PRs whose updatedAt moved, or that have no snapshot yet, fetched again. */
-  private async refresh(alreadyStored: Set<PrKey>, errors: string[]): Promise<void> {
+  /**
+   * Active scouted PRs whose updatedAt moved, or that have no snapshot yet,
+   * fetched again. Returns the ones whose stored snapshot is now known to be
+   * current: only those may expire.
+   */
+  private async refresh(alreadyStored: Set<PrKey>, errors: string[]): Promise<Set<PrKey>> {
     const keys = this.deps.store.scoutedPrs
       .listActive()
       .map((row) => row.prKey)
       .filter((key) => !alreadyStored.has(key));
-    if (keys.length === 0) {
-      return;
+    const current = new Set(alreadyStored);
+    if (keys.length === 0 || !this.quotaAllows()) {
+      return current;
     }
     let remote: Map<PrKey, IsoTime>;
     try {
       remote = await this.deps.reader.prUpdatedAts(keys.map(refOf));
     } catch (error) {
       errors.push(`scouts: refresh: ${errorText(error)}`);
-      return;
+      return current;
     }
     const stored = this.deps.store.prs.updatedAtByKey();
-    const moved = keys.filter((key) => {
+    const moved: PrKey[] = [];
+    for (const key of keys) {
       const updatedAt = remote.get(key);
-      return updatedAt !== undefined && (stored.get(key) === undefined || updatedAt > stored.get(key)!);
-    });
-    await this.deps.storePrs(moved.map(refOf), errors);
+      if (updatedAt === undefined) {
+        continue;
+      }
+      if (stored.get(key) === undefined || updatedAt > stored.get(key)!) {
+        moved.push(key);
+      } else {
+        current.add(key);
+      }
+    }
+    for (const key of await this.deps.storePrs(moved.map(refOf), errors)) {
+      current.add(key);
+    }
+    return current;
   }
 
-  /** Takes scouted PRs off the board three days after their merge, close or last activity. Returns how many. */
-  private expire(): number {
+  /**
+   * Takes scouted PRs off the board three days after their merge, close or
+   * last activity, judged on snapshots this run checked against GitHub
+   * (`current`): a stale snapshot after a failed refresh never expires one.
+   * Returns how many.
+   */
+  private expire(current: ReadonlySet<PrKey>): number {
     const { store } = this.deps;
     const now = this.deps.now().toISOString();
-    const active = store.scoutedPrs.listActive();
+    const active = store.scoutedPrs.listActive().filter((row) => current.has(row.prKey));
     const prs = store.prs.getMany(active.map((row) => row.prKey));
     let expired = 0;
     for (const row of active) {
@@ -455,7 +571,9 @@ export class ScoutRun {
       const using = active.version === null ? 'no scouts run' : `scouts from version ${active.version.version} run`;
       input.errors.push(`scouts.md: ${active.errors[0]}${active.errors.length > 1 ? ` (+${active.errors.length - 1} more)` : ''}; ${using} until it is fixed`);
     }
-    if (!input.quotaAllows) {
+    this.quotaAllows = input.quotaAllows;
+    this.runFiles = new Map();
+    if (!this.quotaAllows()) {
       this.deps.log('scouts: GitHub quota low, skipped this sync');
       return report;
     }
@@ -474,7 +592,7 @@ export class ScoutRun {
           .filter((scout) => scout.repos.includes(repo))
           .map((scout) => floors.get(`${scout.id} ${repo}`)!)
           .sort()[0]!;
-        const listing = await this.list(repo, oldest, input.errors);
+        const listing = await this.list(repo, oldest, runStart, input.errors);
         listings.set(repo, listing);
         report.listed += listing.prs.size;
       }
@@ -494,8 +612,7 @@ export class ScoutRun {
       report.pulled = pulled.length;
     }
     const stored = new Set(await this.deps.storePrs(pulled.map(refOf), input.errors));
-    await this.refresh(stored, input.errors);
-    report.expired = this.expire();
+    report.expired = this.expire(await this.refresh(stored, input.errors));
     store.scoutJudgements.deleteSkippedBefore(scoutRetentionCutoff(runStart));
     if (input.agentOff === null && store.scoutedPrs.listActive().length > 0) {
       await input.glance();

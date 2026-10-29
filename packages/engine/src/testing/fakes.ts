@@ -298,8 +298,12 @@ export class FakeReader implements GitHubReader {
   /** Every scout read, for asserting on GitHub traffic. */
   scoutCalls: string[] = [];
 
+  /** Runs on every listScoutPrs, e.g. to note a quota reading the answer carried. */
+  onListScoutPrs: (() => void) | null = null;
+
   async listScoutPrs(repo: string, after: string | null): Promise<ScoutListPage> {
     this.scoutCalls.push(`list ${repo} ${after ?? '-'}`);
+    this.onListScoutPrs?.();
     if (this.failingScoutRepos.has(repo)) {
       throw new Error(`GitHub scout listing of ${repo} failed`);
     }

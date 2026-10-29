@@ -3,12 +3,16 @@ import { clip, contextBlock, GITHUB_DATA_RULE, githubData, jsonOnly, NO_CI_RULE,
 
 /** Changed files listed per PR; the matched ones are always listed in full above them. */
 export const SCOUT_JUDGE_FILES = 40;
+/** Matching files listed per PR; a broad hint on a big PR can match thousands. */
+export const SCOUT_JUDGE_SIGNALS = 20;
 /** Root folders of the base listed per PR. */
 const SCOUT_JUDGE_FOLDERS = 60;
 
 function itemSection(item: ScoutJudgeItem): string {
   const state = item.state === 'OPEN' ? 'open' : item.state.toLowerCase();
-  const signals = item.signals.length === 0 ? 'none' : item.signals.map((signal) => `${signal.changeType} ${signal.path} (hint ${signal.hint})`).join('\n');
+  const shownSignals = item.signals.slice(0, SCOUT_JUDGE_SIGNALS).map((signal) => `${signal.changeType} ${signal.path} (hint ${signal.hint})`);
+  const moreSignals = item.signals.length > shownSignals.length ? `\n... and ${item.signals.length - shownSignals.length} more matching files` : '';
+  const signals = item.signals.length === 0 ? 'none' : `${shownSignals.join('\n')}${moreSignals}`;
   const shown = item.files.slice(0, SCOUT_JUDGE_FILES).map((file) => `${file.changeType} ${file.path}`);
   const more = item.files.length > shown.length ? `\n... and ${item.files.length - shown.length} more files` : '';
   const folders = item.baseFolders.slice(0, SCOUT_JUDGE_FOLDERS).join(', ');
@@ -17,7 +21,7 @@ function itemSection(item: ScoutJudgeItem): string {
     `${item.prKey} (${state}, by @${item.author})`,
     `Title: ${item.title}`,
     `Description (start): ${item.bodyHead === '' ? '(none)' : item.bodyHead}`,
-    `Files matching the scout's path hints:\n${signals}`,
+    `Files matching the scout's path hints (${item.signals.length}):\n${signals}`,
     `Changed files (${item.files.length}):\n${shown.join('\n')}${more}`,
     `Top-level folders of the base branch: ${folders === '' ? '(unknown)' : folders}`,
   ].join('\n');
