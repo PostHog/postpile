@@ -15,13 +15,14 @@ export function segmentMatches(pattern: string, name: string): boolean {
   let star = -1;
   let starAt = 0;
   while (n < name.length) {
-    if (p < pattern.length && (pattern[p] === '?' || pattern[p] === name[n])) {
-      p += 1;
-      n += 1;
-    } else if (p < pattern.length && pattern[p] === '*') {
+    // A "*" is always a wildcard, also against a "*" in the name.
+    if (p < pattern.length && pattern[p] === '*') {
       star = p;
       starAt = n;
       p += 1;
+    } else if (p < pattern.length && (pattern[p] === '?' || pattern[p] === name[n])) {
+      p += 1;
+      n += 1;
     } else if (star >= 0) {
       p = star + 1;
       starAt += 1;
@@ -46,8 +47,9 @@ function hasWildcard(segment: string): boolean {
  * any depth, `**` spans any number of folders, a trailing "/" only matches
  * inside that folder, and a pattern that names a file or folder also covers
  * everything under it, except when its last segment has a wildcard.
- * Segment by segment with a memo, so every (pattern segment, path segment)
- * pair is tried once.
+ * Segment by segment with a memo over (pattern segment, path segment), and
+ * each state does constant work besides one segment match: a `**` either
+ * stops or takes one more folder and stays.
  */
 export function globPathMatches(pattern: string, path: string): boolean {
   const dirOnly = pattern.endsWith('/');
@@ -76,13 +78,12 @@ export function globPathMatches(pattern: string, path: string): boolean {
     if (g === globs.length) {
       const rest = names.length - n;
       result = dirOnly ? rest >= 1 : exactEnd ? rest === 0 : true;
+    } else if (globs[g] === '**' && g === globs.length - 1) {
+      // Last: everything below, one segment at least.
+      result = n < names.length;
     } else if (globs[g] === '**') {
-      // Last: one or more folders or files below. Elsewhere: zero or more folders.
-      const atLeast = g === globs.length - 1 ? 1 : 0;
-      result = false;
-      for (let skip = atLeast; n + skip <= names.length && !result; skip++) {
-        result = from(g + 1, n + skip);
-      }
+      // Zero folders here, or take one and stay on the `**`.
+      result = from(g + 1, n) || (n < names.length && from(g, n + 1));
     } else {
       result = n < names.length && segmentMatches(globs[g]!, names[n]!) && from(g + 1, n + 1);
     }

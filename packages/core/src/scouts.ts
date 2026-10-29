@@ -137,6 +137,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * for people are not on it; their PRs are work like anyone's.
  */
 const SCOUT_SKIPPED_BOT = /^(dependabot|renovate|trunk-io|mergify|snyk-bot|pre-commit-ci|depfu|imgbot|greenkeeper)(\[bot\])?$/i;
+/** Dependency and upgrade bots by name ("dependabot-preview[bot]", "acme-js-upgrader[bot]"); agents that open PRs for people stay in. */
+const SCOUT_SKIPPED_BOT_NAME = /dependabot|renovate|upgrader/i;
 
 /** Why a PR is left out of every scout before any file read or model call; null when it is a candidate. */
 export type ScoutPrefilterReason = 'draft' | 'dependency_bot' | 'you' | 'your_team' | 'tracked';
@@ -158,7 +160,7 @@ export function scoutPrefilter(candidate: Pick<ScoutCandidate, 'key' | 'author' 
   if (candidate.state === 'OPEN' && candidate.isDraft) {
     return 'draft';
   }
-  if (SCOUT_SKIPPED_BOT.test(candidate.author)) {
+  if (SCOUT_SKIPPED_BOT.test(candidate.author) || SCOUT_SKIPPED_BOT_NAME.test(candidate.author)) {
     return 'dependency_bot';
   }
   // Whose PR it is, as everywhere else: an agent PR belongs to the people it is assigned to.
@@ -175,10 +177,23 @@ export function scoutPrefilter(candidate: Pick<ScoutCandidate, 'key' | 'author' 
   return null;
 }
 
-/** First path segment: "services/api/x.ts" -> "services". Null for a file at the top level. */
-function topLevelFolder(path: string): string | null {
-  const slash = path.indexOf('/');
-  return slash <= 0 ? null : path.slice(0, slash);
+/**
+ * The folder directly inside `parent` that holds the file, as a repo path:
+ * "products/billing/x.ts" in "products" -> "products/billing", in "" ->
+ * "products". Null when the file is not under `parent`, or sits right in it.
+ */
+function folderIn(parent: string, path: string): string | null {
+  const prefix = parent === '' ? '' : `${parent}/`;
+  if (!path.startsWith(prefix)) {
+    return null;
+  }
+  const slash = path.indexOf('/', prefix.length);
+  return slash <= prefix.length ? null : path.slice(0, slash);
+}
+
+/** The folders whose base tree a scout's new-folder hints read: "" for the repo root, "products" for "+products/*\/". */
+export function scoutFolderParents(scout: Pick<ScoutConfig, 'paths'>): string[] {
+  return [...new Set(scout.paths.flatMap((hint) => (hint.newFolderIn === null ? [] : [hint.newFolderIn])))];
 }
 
 /** ADDED, or RENAMED to this path: a file that was not there before. */
@@ -188,9 +203,11 @@ function isAdded(changeType: ScoutChangeType): boolean {
 
 /**
  * The files that match the scout's path hints, each file once (the first
- * hint that takes it). "+" hints take added or renamed-to files only. The
- * new-top-level-folder hint takes an added file whose first folder is not
- * a directory of the PR's base tree (`baseFolders`).
+ * hint that takes it). "+" hints take added or renamed-to files only. A
+ * new-folder hint ("+*\/", "+products/*\/") takes an added file in a folder
+ * directly inside its parent that the PR's base tree does not have:
+ * `baseFolders` holds the base's folders as repo paths ("src",
+ * "products/billing") for every parent the scout reads (`scoutFolderParents`).
  */
 export function scoutSignals(scout: Pick<ScoutConfig, 'paths'>, files: ScoutFile[], baseFolders: ReadonlySet<string>): ScoutSignal[] {
   const signals: ScoutSignal[] = [];
@@ -199,8 +216,8 @@ export function scoutSignals(scout: Pick<ScoutConfig, 'paths'>, files: ScoutFile
       if (candidate.addedOnly && !isAdded(file.changeType)) {
         return false;
       }
-      if (candidate.newTopLevelFolder) {
-        const folder = topLevelFolder(file.path);
+      if (candidate.newFolderIn !== null) {
+        const folder = folderIn(candidate.newFolderIn, file.path);
         return folder !== null && !baseFolders.has(folder);
       }
       return scoutHintMatches(candidate, file.path);
