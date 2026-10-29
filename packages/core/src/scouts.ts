@@ -96,6 +96,12 @@ export interface ScoutJudgement {
   /** Why it is still pending, for the sync report. */
   lastError: string | null;
   judgedAt: IsoTime | null;
+  /**
+   * The pre-filter rule that skipped it before any read, else null. Such a
+   * skip is no verdict on the PR: once the rule stops applying (a draft
+   * marked ready, a PR no longer tracked) it is judged like a new one.
+   */
+  leftOut: ScoutPrefilterReason | null;
 }
 
 /** A PR a scout pulled in: what the board's Scouted section shows. One row per PR, first scout wins. */

@@ -206,6 +206,7 @@ export class ScoutRun {
       attempts: existing?.attempts ?? 0,
       lastError: null,
       judgedAt: null,
+      leftOut: null,
     };
   }
 
@@ -407,7 +408,7 @@ export class ScoutRun {
       if (out !== null) {
         // Only a pending row needs closing; a PR never judged leaves no trace.
         if (before?.status === 'pending') {
-          work.rows.push(this.judged(base, 'skipped', `left out: ${PREFILTER_WORDS[out]}`, null, false));
+          work.rows.push({ ...this.judged(base, 'skipped', `left out: ${PREFILTER_WORDS[out]}`, null, false), leftOut: out });
         }
         continue;
       }
@@ -416,7 +417,8 @@ export class ScoutRun {
       }
       // Same head and scouts.md as last judged: the files are the same. A title or description edit alone is not read
       // again; an edited scouts.md reads the files once more, and the hash then says whether this scout changed.
-      if (before?.status === 'judged' && before.headOid === candidate.headOid && before.configVersion === (version?.version ?? 0)) {
+      // A rule's skip is no verdict: the rule no longer applies (a draft marked ready without a push), so judge it now.
+      if (before?.status === 'judged' && before.leftOut === null && before.headOid === candidate.headOid && before.configVersion === (version?.version ?? 0)) {
         work.rows.push({ ...before, observedUpdatedAt: candidate.updatedAt });
         continue;
       }

@@ -7,7 +7,10 @@
 // scout_judgement: one scout's call on one PR. Pending rows (files not read
 // in full, the model call capped or failed, an answer that left the PR out)
 // are worked on every run whatever the cursor says. input_hash decides
-// whether a judged PR is judged again. Skipped rows go 30 days after their
+// whether a judged PR is judged again. left_out names the pre-filter rule
+// that skipped a PR before any read (a draft, a bot, yours, tracked): such a
+// skip is reconsidered on every listing, since the rule can stop applying
+// without a push. Skipped rows go 30 days after their
 // observed update; pulled ones stay.
 //
 // pr_scouted: the PRs the Scouted section shows, one row per PR, the first
@@ -40,6 +43,7 @@ CREATE TABLE scout_judgement (
   attempts             INTEGER NOT NULL DEFAULT 0,
   last_error           TEXT,
   judged_at            TEXT,
+  left_out             TEXT,
   PRIMARY KEY (scout_id, pr_key),
   CHECK ((status = 'pending') = (verdict IS NULL))
 );
