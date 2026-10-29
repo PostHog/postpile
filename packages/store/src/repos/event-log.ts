@@ -58,6 +58,24 @@ export class EventLogRepo {
   }
 
   /**
+   * Ids of one PR's events logged at or before `seq` that are still unseen,
+   * oldest first: mark_read's token hash (DESIGN.md "Agents mark read").
+   * Ids only, so a busy PR's seen history is not loaded for it.
+   */
+  unseenIdsThrough(prKey: PrKey, seq: number): string[] {
+    const rows = all<{ id: string }>(
+      this.db,
+      `SELECT e.id FROM event_log l
+       JOIN pr_event e ON e.id = l.event_id
+       WHERE l.pr_key = ? AND l.seq <= ? AND e.seen_at IS NULL
+       ORDER BY l.seq`,
+      prKey,
+      seq,
+    );
+    return rows.map((row) => row.id);
+  }
+
+  /**
    * Events of these PRs logged after afterSeq, oldest seq first, joined with
    * pr_event. Log rows whose pr_event is gone (deleted comment) are skipped.
    */

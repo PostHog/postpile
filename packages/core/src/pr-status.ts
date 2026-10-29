@@ -24,7 +24,7 @@ export interface PrStatus {
   review: PrReviewStatus | null;
   /**
    * Bot names ("reviewbot") when the review is approved and only agents
-   * approved, so the pill can say "approved by agent". Empty otherwise,
+   * approved, so the pill can name it ("Approved by reviewbot"). Empty otherwise,
    * including as soon as a person approved.
    */
   agentApprovers: string[];

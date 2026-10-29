@@ -157,8 +157,8 @@ export interface StateWord {
  * drafts, repos without a review rule). Only agents approved: says so, and
  * names them in the tooltip. stamphog declined and nobody approved or
  * asked for changes: "stamphog declined", the review color, why in the
- * tooltip. After an agent-only approval the word stays GitHub's "Approved
- * by agent" and the tooltip adds the decline.
+ * tooltip. After an agent-only approval the word names the agent like the
+ * decline does ("Approved by reviewbot") and the tooltip adds the decline.
  */
 export function reviewWord(status: PrStatus): StateWord | null {
   const decline = status.agentDecline;
@@ -181,7 +181,7 @@ export function reviewWord(status: PrStatus): StateWord | null {
   }
   return {
     kind: 'approved',
-    text: status.agentApprovers.length === 1 ? 'Approved by agent' : 'Approved by agents',
+    text: status.agentApprovers.length === 1 ? `Approved by ${status.agentApprovers[0]}` : 'Approved by agents',
     title: `${capitalize(approvedText(status.agentApprovers))}${declined}`,
   };
 }

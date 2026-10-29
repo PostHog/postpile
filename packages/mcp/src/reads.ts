@@ -39,6 +39,7 @@ import { overlapLines, overlapMarker, overlapNotes } from './overlaps.ts';
 import { jsonAnswer, prJson, prUnreadReason, tileJson, topicJson, type Format, type MetaJson, type PrJson } from './json.ts';
 import { effortText, ownershipLines, ownershipShort } from './ownership-text.ts';
 import { parsePrInput } from './pr-input.ts';
+import { unreadSectionLines } from './unread-text.ts';
 import {
   ago,
   answer, authorTag, teamSlug,
@@ -156,7 +157,7 @@ function runningSync(progress: RecordedSyncProgress | null, report: SyncReport |
 }
 
 /** Outside the fence: the last full sync, the one running now if any, and whom the app works for. No GitHub text. */
-async function header(ctx: ReadContext): Promise<string[]> {
+export async function header(ctx: ReadContext): Promise<string[]> {
   const { reader } = ctx;
   const [report, viewer, progress] = await Promise.all([reader.lastSyncReport(), reader.getViewer(), reader.recordedSyncProgress()]);
   const lines = [freshness(report)];
@@ -447,28 +448,6 @@ function briefPrLines(detail: PrDetail, tiles: TileView[], authors: Authors): st
   return lines;
 }
 
-/**
- * "Unread since you looked": every event a mark-read would mark seen, from
- * the stored seen state, oldest first. People's comments, replies and
- * reviews with their whole text; everything else one line each. Nothing is
- * folded, muted or capped, however long: mark_read's seen_through vouches
- * for this list only (DESIGN.md "Agents mark read").
- */
-function unreadSectionLines(detail: PrDetail): string[] {
-  if (detail.unread.length === 0) {
-    return ['Unread since you looked: nothing.'];
-  }
-  const lines = [`Unread since you looked (${detail.unread.length}, oldest first, every one; mark_read marks exactly these read):`];
-  for (const event of detail.unread) {
-    lines.push(`  ${day(event.at)}  ${withActor(event.actor, event.summary)}${event.isBot ? ' (bot)' : ''}`);
-    if (event.body !== null) {
-      // One entry for the whole body: a body can have tens of thousands of lines, too many to spread into push.
-      lines.push(event.body.split('\n').map((row) => `      ${row}`).join('\n'));
-    }
-  }
-  return lines;
-}
-
 function fullPrLines(detail: PrDetail, tiles: TileView[], authors: Authors): string[] {
   const lines = [...prHeadLines(detail, tiles, authors), ...reviewSizeLines(detail, true)];
   lines.push('', ...(detail.glance ? glanceLines(detail.glance, detail.glanceStale) : [`No agent glance yet (${detail.glanceState}).`]));
@@ -490,7 +469,7 @@ function fullPrLines(detail: PrDetail, tiles: TileView[], authors: Authors): str
     lines.push(`  Folded: ${[activity.freshNoiseLabel, activity.noiseLabel].filter((label) => label !== '').join('; ')}`);
   }
   lines.push('');
-  for (const line of unreadSectionLines(detail)) {
+  for (const line of unreadSectionLines(detail.unread)) {
     lines.push(line);
   }
   return lines;
@@ -626,7 +605,7 @@ async function prLinesWithOverlaps(reader: PostPileReader, read: PrRead, authors
   return [...prLines(read, authors, detail), ...overlapLines(overlaps, read.key, authorOf), ...(notes.length > 0 ? ['', ...notes] : [])];
 }
 
-interface PrFailure {
+export interface PrFailure {
   input: string;
   error: ToolAnswer;
 }
@@ -654,7 +633,7 @@ async function readPr(reader: PostPileReader, input: string, topics: Map<string,
 }
 
 /** '- "#999": PostPile tracks no PR #999. ...': one PR pr_context could not answer for, the caller's input echoed. */
-function failureLine(failure: PrFailure): string {
+export function failureLine(failure: PrFailure): string {
   return `- "${echo(failure.input)}": ${failure.error.text.replace(/\s*\n\s*/g, ' ')}`;
 }
 
@@ -731,7 +710,7 @@ function stackOf(read: PrRead): StackJson | null {
   return null;
 }
 
-function prReadJson(read: PrRead, authors: Authors, overlaps: PrOverlapsView): PrJson & { stack: StackJson | null; dependsOn: PrKey | null; agentNotes: object; landableBelow: PrKey[] } {
+function prReadJson(read: PrRead, authors: Authors, overlaps: PrOverlapsView): PrJson & { stack: StackJson | null; dependsOn: PrKey | null; agentNotes: object; seen_through: string; landableBelow: PrKey[] } {
   const summary = read.tiles.flatMap((view) => view.prs).find((pr) => pr.key === read.key) ?? null;
   const json = prJson({
     summary,
@@ -748,6 +727,8 @@ function prReadJson(read: PrRead, authors: Authors, overlaps: PrOverlapsView): P
     stack: stackOf(read),
     dependsOn: dependsOnKey(read.detail.pr, read.tiles),
     agentNotes: notesJson(read.detail.notes),
+    // mark_read's token: nothing new since this read.
+    seen_through: read.detail.seenThrough,
     // Its tile waits on someone else's block on a stack layer: these layers below can land alone.
     landableBelow: [...new Set(read.tiles.flatMap((view) => view.landableBelow))],
   };
@@ -773,14 +754,11 @@ async function prContextJson(ctx: ReadContext, reads: PrRead[], failures: PrFail
 }
 
 /**
- * Outside the fence: the seen_through mark_read needs, only in full text
- * answers, the ones that list the PR's activity (DESIGN.md "Agents mark read").
+ * Outside the fence: the seen_through mark_read needs, in every answer
+ * (DESIGN.md "Agents mark read"): "nothing new since this read".
  */
-function seenThroughLines(read: PrRead, detail: Detail): string[] {
-  if (detail !== 'full') {
-    return [];
-  }
-  return [`${read.key}: seen_through for mark_read: ${read.detail.seenThrough} (covers its "Unread since you looked" list).`];
+function seenThroughLine(read: PrRead): string {
+  return `${read.key}: seen_through for mark_read: ${read.detail.seenThrough} (nothing new since this read).`;
 }
 
 /**
@@ -823,12 +801,12 @@ export async function prContext(ctx: ReadContext, input: string | string[], deta
     footer.push(`Could not answer for ${failures.length} of ${inputs.length}:`, ...failures.map(failureLine), '');
   }
   if (single) {
-    footer.push(...overlapNotes(overlaps, first.key), prFreshnessLine(first.detail, ctx), tokenLine(first.detail.notes), ...seenThroughLines(first, detail));
+    footer.push(...overlapNotes(overlaps, first.key), prFreshnessLine(first.detail, ctx), tokenLine(first.detail.notes), seenThroughLine(first));
   } else {
     const notes = [...new Set(reads.flatMap((read) => overlapNotes(overlaps, read.key)))];
-    footer.push(...notes, ...reads.map((read) => `${read.key}: ${prFreshnessLine(read.detail, ctx)} ${tokenLine(read.detail.notes)}`), ...reads.flatMap((read) => seenThroughLines(read, detail)));
+    footer.push(...notes, ...reads.map((read) => `${read.key}: ${prFreshnessLine(read.detail, ctx)} ${tokenLine(read.detail.notes)}`), ...reads.map(seenThroughLine));
   }
-  const more = detail === 'brief' ? 'detail: "full" adds activity, facts, the whole topic and the seen_through mark_read needs. ' : '';
+  const more = detail === 'brief' ? 'detail: "full" adds activity, the unread list, facts and the whole topic. ' : '';
   footer.push(`Next: ${more}Stale? call refresh_from_github. Wrong topic? propose_topic_change.`);
   return { text: answer([...(await header(ctx)), ...teamNote(authors)], data, footer), found: true };
 }
