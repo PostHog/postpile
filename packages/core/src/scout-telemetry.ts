@@ -10,7 +10,7 @@ const HOUR_MS = 60 * 60 * 1000;
 /** A scouted PR whose leaving is not recorded yet, as the store lists it. */
 export interface ScoutedLeaving {
   scouted: Pick<ScoutedPr, 'pulledAt' | 'seenUpdatedAt' | 'followedAt' | 'dismissedAt' | 'expiredAt' | 'expiryReason'>;
-  /** PostPile tracks the PR by itself: a notification thread, found by the sync, or in a topic. */
+  /** PostPile tracks the PR, or a layer of its stack, by itself: a notification thread, found by the sync, or in a topic. */
   tracked: boolean;
   /** The PR's stored update time; null without a stored header. */
   prUpdatedAt: IsoTime | null;
@@ -19,7 +19,7 @@ export interface ScoutedLeaving {
 /**
  * How a scouted PR left the Scouted section and when, or null while it is
  * still there. Follow, dismiss and expiry are stored with their time; the
- * earliest one wins should a row hold two (a Follow from the detail pane
+ * earliest by time wins should a row hold two (a Follow from the detail pane
  * after an expiry). A PR that became tracked by itself left `now`.
  */
 export function scoutClosedOutcome(leaving: ScoutedLeaving, now: IsoTime): { outcome: ScoutClosedOutcome; at: IsoTime } | null {

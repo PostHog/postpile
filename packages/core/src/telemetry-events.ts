@@ -278,7 +278,7 @@ export const TELEMETRY_EVENTS = {
       duration_ms: durationMs,
     })
     .strict(),
-  // Once per scouted PR, when it leaves the Scouted section for any reason. was_opened: seen at least once (opened in
+  // A scouted PR's first exit from the Scouted section, whatever the reason; best effort, at most once. was_opened: seen at least once (opened in
   // the app or mark_read over MCP); was_seen: seen through its latest activity; hours_in_section: pull to leaving, rounded.
   scout_pr_closed: z.object({ outcome: scoutClosedOutcome, was_seen: z.boolean(), was_opened: z.boolean(), hours_in_section: count }).strict(),
   scout_followed: z.object({ from: z.enum(['tile', 'detail']) }).strict(),

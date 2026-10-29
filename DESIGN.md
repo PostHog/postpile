@@ -1264,10 +1264,11 @@ contract surfaces.
   snapshots. Kept apart from `pr_found`, which every sync replaces.
 - Migration 045 adds `pending_write.follow` (`{prKey, subjectId}`) for a
   Follow waiting for the lock.
-- Migration 046 adds `pr_scouted.left_section_at`: when the PR left the
-  Scouted section, set once by telemetry's `scout_pr_closed` sweep
-  ("Usage analytics" › Scouts). Rows already followed, dismissed or
-  expired are backfilled, so an upgrade reports no old history.
+- Migration 046 adds `pr_scouted.closure_reported_at`: telemetry's
+  marker that `scout_pr_closed` was sent for the PR's first exit
+  ("Usage analytics" › Scouts). Every row that exists at migration time
+  is marked reported, whatever its state: scouts only ran on dev
+  databases before, so no historical exit is ever sent.
 
 **The sync step** (`ScoutRun`, after the inbox digest, its own sync phase
 `scouts`):
@@ -8722,21 +8723,30 @@ topic names are never event props.
      per scout and repo), judged, pulled, pending, expired, judge_calls,
      capped (judge calls ran out with work left), listing_capped (a repo hit
      the page cap), rate_limited, quota_low (nothing ran), duration_ms.
-   - `scout_pr_closed`: once per scouted PR when it leaves the Scouted
-     section. outcome `followed` / `dismissed` / `expired_merged` /
-     `expired_closed` / `expired_inactive` / `reached_inbox` (a notification
-     thread, a found row or a topic made it tracked by itself); was_opened
-     (seen at least once, in the app or by `mark_read`), was_seen (seen
-     through its latest activity), hours_in_section (pull to leaving,
-     rounded). One sweep sends it (`ScoutedClosures`): it reads the rows
-     whose `pr_scouted.left_section_at` (migration 046) is still empty,
-     decides the outcome from the row (`scoutClosedOutcome`, the earliest
-     stored transition, else tracked), and sets the column in the same step,
-     so each PR reports once, across restarts too. It runs after every
-     sync, a dismiss, a Follow GitHub took and a send from the lock; a late
-     Follow from the lock reports with the next of those. Followed,
+   - `scout_pr_closed`: each scouted PR's first exit from the Scouted
+     section only. outcome `followed` / `dismissed` / `expired_merged` /
+     `expired_closed` / `expired_inactive` / `reached_inbox` (it, or a
+     layer of its stack, got a notification thread, a found row or a topic:
+     the section's own rule, `ScoutSectionTracking`, shared with the
+     sidebar counts); was_opened (seen at least once, in the app or by
+     `mark_read`), was_seen (seen through its latest activity),
+     hours_in_section (pull to leaving, rounded). One sweep sends it
+     (`ScoutedClosures`): it reads the rows whose
+     `pr_scouted.closure_reported_at` (migration 046, an analytics marker,
+     not lifecycle state) is still empty, decides the outcome from the row
+     (`scoutClosedOutcome`: the earliest of follow, dismiss and expiry by
+     time, else tracked), marks the row, then captures. It runs right after
+     the sync's inbox fetch, before scout expiry, so a PR that reached the
+     inbox is reported as that and not relabelled expired; and after every
+     sync, a dismiss, a Follow GitHub took and a send from the lock (a late
+     Follow from the lock reports with the next of those). Followed,
      dismissed and expired PRs use their stored time for the hours; a PR
-     that reached the inbox counts up to the sweep that saw it.
+     that reached the inbox counts up to the sweep that saw it. Best
+     effort: the row is marked before the capture, so a crash in between
+     loses that one event, and an exit and return entirely between two
+     sweeps is never seen. A PR that leaves, comes back (its thread gone)
+     and leaves again reports nothing more, and a scout pulling an expired
+     PR again is no new lifetime (`pr_scouted` keeps its first row).
    - `scout_followed` (from `tile` / `detail`), `scout_dismissed`
      (`with_reason`); `scout_follow_failed` (stage `lookup`, `subscribe`
      or `timeout`, from the undo queue and the lock's queue alike) and

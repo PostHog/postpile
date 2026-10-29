@@ -530,6 +530,7 @@ export class Engine implements EngineService {
     if (scoutRunDeps !== null) {
       runDeps.scouts = new ScoutRun(scoutRunDeps);
     }
+    runDeps.scoutClosures = this.scoutedClosures;
     this.clickedReadRetry = new ClickedReadRetry(store, deps.reader, deps.writes, (key) => this.refreshForRetry(key), this.heldThreads);
     deps.markReadQueue.retryWith(this.clickedReadRetry);
     deps.markReadQueue.checkMutesWith((key) => muteHoldsNow(store, key, now().toISOString()));
@@ -873,15 +874,20 @@ export class Engine implements EngineService {
     if (!viewer?.databaseId) {
       return;
     }
-    this.telemetry.setViewerIdentity(viewer.databaseId);
-    this.telemetry.identifyPerson({
-      appVersion: this.deps.appVersion ?? 'unknown',
-      osVersion: release(),
-      arch: arch(),
-      isPosthogMember: isPostHogMember(viewer),
-      agentAvailable: this.toolHealth.agentOffReason() === null,
-      activeScouts: this.scoutsHistory?.active().scouts.length ?? 0,
-    });
+    // Reads scouts.md, which can fail on disk; analytics must never fail a sync that completed.
+    try {
+      this.telemetry.setViewerIdentity(viewer.databaseId);
+      this.telemetry.identifyPerson({
+        appVersion: this.deps.appVersion ?? 'unknown',
+        osVersion: release(),
+        arch: arch(),
+        isPosthogMember: isPostHogMember(viewer),
+        agentAvailable: this.toolHealth.agentOffReason() === null,
+        activeScouts: this.scoutsHistory?.active().scouts.length ?? 0,
+      });
+    } catch (error) {
+      (this.deps.syncLog ?? console.log)(`telemetry: person properties not sent: ${errorText(error)}`);
+    }
   }
 
   private blockedSyncReport(reason: string): SyncReport {

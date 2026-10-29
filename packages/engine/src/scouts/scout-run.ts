@@ -126,6 +126,8 @@ interface RepoListing {
   scouts: string[];
   /** The floor it lists down to: the run's, or a resumed listing's original one when that is older. */
   floor: IsoTime;
+  /** A pass stopped at the page budget, whatever `end` keeps for the resume point (for telemetry's listing_capped). */
+  pageCapped: boolean;
 }
 
 /**
@@ -331,7 +333,7 @@ export class ScoutRun {
     const resume = stored !== null && (stored.scouts ?? []).join(' ') === scouts.join(' ') ? stored : null;
     if (resume === null) {
       const end = await this.pass(repo, null, floor, budget, prs, errors);
-      return { prs, complete: end.kind === 'done', end, startedAt: runStart, scouts, floor };
+      return { prs, complete: end.kind === 'done', end, startedAt: runStart, scouts, floor, pageCapped: end.kind === 'capped' };
     }
     // The window the stopped listing began with: a first scan resumed a day later still covers its whole first day.
     const lowest = resume.floor !== undefined && resume.floor < floor ? resume.floor : floor;
@@ -339,10 +341,10 @@ export class ScoutRun {
     const top = await this.pass(repo, null, sinceStop > floor ? sinceStop : floor, budget, prs, errors);
     if (top.kind !== 'done') {
       // Keeps the stored point: a failed read never moves it.
-      return { prs, complete: false, end: { kind: 'failed' }, startedAt: resume.startedAt, scouts, floor: lowest };
+      return { prs, complete: false, end: { kind: 'failed' }, startedAt: resume.startedAt, scouts, floor: lowest, pageCapped: top.kind === 'capped' };
     }
     const lower = await this.pass(repo, resume.after, lowest, budget, prs, errors);
-    return { prs, complete: lower.kind === 'done', end: lower, startedAt: resume.startedAt, scouts, floor: lowest };
+    return { prs, complete: lower.kind === 'done', end: lower, startedAt: resume.startedAt, scouts, floor: lowest, pageCapped: lower.kind === 'capped' };
   }
 
   /** Scout reads may go on: GitHub has not rate-limited one this run, and the quota allows background work. */
@@ -798,7 +800,7 @@ export class ScoutRun {
       const end = await this.pass(repo, null, floor, { pages: SCOUT_LIST_MAX_PAGES }, prs, errors);
       listedWhole &&= end.kind === 'done';
       prs.forEach((pr) => titles.set(pr.key, pr.title));
-      const listing: RepoListing = { prs, complete: end.kind === 'done', end, startedAt: floor, scouts: [fresh.id], floor };
+      const listing: RepoListing = { prs, complete: end.kind === 'done', end, startedAt: floor, scouts: [fresh.id], floor, pageCapped: end.kind === 'capped' };
       const work: ScoutRepoWork = { rows: [], pulls: [] };
       plans.push({ scout: fresh, repo, listing, work, triaged: this.triage(fresh, null, [...prs.values()], facts, work), scheduled: [] });
     }
@@ -887,7 +889,7 @@ export class ScoutRun {
         const listing = await this.list(repo, oldest, runStart, onRepo.map((scout) => scout.id).sort(), input.errors);
         listings.set(repo, listing);
         report.listed += listing.prs.size;
-        report.listingCapped ||= listing.end.kind === 'capped';
+        report.listingCapped ||= listing.pageCapped;
       }
       const lastScoutOn = new Map<string, string>();
       for (const scout of active.scouts) {

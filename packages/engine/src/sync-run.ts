@@ -358,6 +358,8 @@ export class SyncRun {
       report.prsFound = fetched.prsFound;
       report.newEvents = fetched.newEventIds.length;
       errors.push(...fetched.errors);
+      // Before the scout step's expiry: a scouted PR that just reached the inbox is reported as that, never as expired.
+      this.deps.scoutClosures?.report();
       // A reply the sync stored first pings through the next poll cycle, once its thread is unread.
       if (!firstLook) {
         this.deps.pingDecider?.keepSyncedNews(fetched.fetchedPrKeys, fetched.newEventIds);
