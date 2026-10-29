@@ -15,6 +15,7 @@ function item(prKey: string, overrides: Partial<ScoutJudgeItem> = {}): ScoutJudg
     files: [{ path: 'billing/main.ts', changeType: 'ADDED' }],
     signals: [{ path: 'billing/main.ts', changeType: 'ADDED', hint: '+*/' }],
     baseFolders: ['src', 'docs'],
+    stackedOn: null,
     ...overrides,
   };
 }
@@ -59,6 +60,15 @@ describe('judgeScouts', () => {
     expect(prompt).toContain('docs/old.md (deleted, +0/−40)');
     expect(prompt).toContain('src/app.ts (modified)\n');
     expect(prompt).toContain('... and 23 more files');
+  });
+
+  it('says inside the fence when a PR is stacked on another branch, and nothing for a PR on the default branch', async () => {
+    const runner = new FakeRunner().answer('scout_judge', { judgements: [] });
+    await new RunnerAgentService(runner).judgeScouts(input([item('acme/app#1', { stackedOn: { base: 'alice/billing-layer-1', defaultBranch: 'main' } }), item('acme/app#2')]));
+
+    const prompt = runner.promptsFor('scout_judge')[0]!;
+    expect(prompt).toMatch(/<github_data>\nacme\/app#1 [^\n]*\nTitle: [^\n]*\nStacked on alice\/billing-layer-1, not main\n[\s\S]*?<\/github_data>/);
+    expect(prompt.match(/Stacked on alice/g)).toHaveLength(1);
   });
 
   it('keeps PRs left out, answered twice, unexpected or without a reason as missing', async () => {

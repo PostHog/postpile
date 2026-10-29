@@ -139,6 +139,7 @@ describe('scout files', () => {
       headOid: 'h1',
       baseOid: 'b1',
       foldersOid: 'b1',
+      stackedOn: null,
       files: [
         { path: 'a.ts', changeType: 'MODIFIED' },
         { path: 'new/b.ts', changeType: 'ADDED' },
@@ -157,6 +158,34 @@ describe('scout files', () => {
     expect(read.get('acme/app#1')?.foldersOid).toBe('before1');
     expect(read.get('acme/app#2')?.foldersOid).toBe('b1');
     expect(JSON.stringify(fetch.requests[0]!.body)).toContain('mergeCommit { parents(first: 1) { nodes { oid } } }');
+  });
+
+  it('takes the folders before a stacked PR from the default branch head, since its base holds the lower layers\' folders', async () => {
+    const defaultBranch = { defaultBranchRef: { name: 'main', target: { oid: 'main-head' } } };
+    const stacked = { ...filesPage('h1', [{ path: 'products/ledger/api.ts', changeType: 'ADDED' }], null), baseRefName: 'alice/ledger-layer-1', repository: defaultBranch, mergeCommit: null };
+    const onMain = { ...filesPage('h2', [], null), baseRefName: 'main', repository: defaultBranch, mergeCommit: null };
+    const fetch = new FakeFetch([{ body: { data: { p0: { pullRequest: stacked }, p1: { pullRequest: onMain } } } }]);
+    const read = await new GitHubClient(fakeTokens, fetch.fn).scoutFiles([
+      { repo: 'acme/app', number: 1 },
+      { repo: 'acme/app', number: 2 },
+    ]);
+
+    expect(read.get('acme/app#1')).toMatchObject({ baseOid: 'b1', foldersOid: 'main-head', stackedOn: { base: 'alice/ledger-layer-1', defaultBranch: 'main' } });
+    expect(read.get('acme/app#2')).toMatchObject({ foldersOid: 'b1', stackedOn: null });
+    expect(JSON.stringify(fetch.requests[0]!.body)).toContain('baseRefName repository { defaultBranchRef { name target { oid } } }');
+  });
+
+  it('keeps a merged stacked PR on its merge commit\'s first parent', async () => {
+    const merged = {
+      ...filesPage('h1', [], null),
+      baseRefName: 'alice/ledger-layer-1',
+      repository: { defaultBranchRef: { name: 'main', target: { oid: 'main-head' } } },
+      mergeCommit: { parents: { nodes: [{ oid: 'before1' }] } },
+    };
+    const fetch = new FakeFetch([{ body: { data: { p0: { pullRequest: merged } } } }]);
+    const read = await new GitHubClient(fakeTokens, fetch.fn).scoutFiles([{ repo: 'acme/app', number: 1 }]);
+
+    expect(read.get('acme/app#1')).toMatchObject({ foldersOid: 'before1', stackedOn: { base: 'alice/ledger-layer-1', defaultBranch: 'main' } });
   });
 
   it('asks for the next pages of several long lists in one query', async () => {

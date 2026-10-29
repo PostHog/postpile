@@ -38,7 +38,7 @@ async function pulled(options: { numbers?: number[]; writesEnabled?: boolean } =
   const numbers = options.numbers ?? [1];
   h.reader.scoutListings.set('acme/app', numbers.map((number) => candidate(number)));
   for (const number of numbers) {
-    h.reader.scoutFileLists.set(`acme/app#${number}`, { headOid: `h${number}`, baseOid: 'base1', foldersOid: 'base1', files: [{ path: 'billing/main.ts', changeType: 'ADDED' }] });
+    h.reader.scoutFileLists.set(`acme/app#${number}`, { headOid: `h${number}`, baseOid: 'base1', foldersOid: 'base1', stackedOn: null, files: [{ path: 'billing/main.ts', changeType: 'ADDED' }] });
     h.reader.addStackPr(makePr({ number, headOid: `h${number}`, updatedAt: candidate(number).updatedAt }));
   }
   h.runner.answer('scout_judge', { judgements: numbers.map((number) => ({ prKey: `acme/app#${number}`, verdict: 'pull', reason: `adds billing/ (#${number})` })) });
@@ -104,7 +104,7 @@ describe('scout_run_completed', () => {
     writeFileSync(file, LOOKOUT);
     const h = makeHarness({ scoutsFile: file });
     h.reader.scoutListings.set('acme/app', [candidate(1)]);
-    h.reader.scoutFileLists.set('acme/app#1', { headOid: 'h1', baseOid: 'base1', foldersOid: 'base1', files: [{ path: 'billing/main.ts', changeType: 'ADDED' }] });
+    h.reader.scoutFileLists.set('acme/app#1', { headOid: 'h1', baseOid: 'base1', foldersOid: 'base1', stackedOn: null, files: [{ path: 'billing/main.ts', changeType: 'ADDED' }] });
 
     await h.engine.sync({ maxAgentCalls: 0 });
 

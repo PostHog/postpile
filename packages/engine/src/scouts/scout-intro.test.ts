@@ -40,7 +40,7 @@ function onGitHub(h: Harness, count: number): void {
   const listing = Array.from({ length: count }, (_, index) => candidate(index + 1));
   h.reader.scoutListings.set('acme/app', listing);
   for (const pr of listing) {
-    h.reader.scoutFileLists.set(pr.key, { headOid: pr.headOid, baseOid: 'base1', foldersOid: 'base1', files: [{ path: `svc${pr.key.split('#')[1]}/main.ts`, changeType: 'ADDED' }] });
+    h.reader.scoutFileLists.set(pr.key, { headOid: pr.headOid, baseOid: 'base1', foldersOid: 'base1', stackedOn: null, files: [{ path: `svc${pr.key.split('#')[1]}/main.ts`, changeType: 'ADDED' }] });
   }
   h.reader.scoutTrees.set('base1', ['src']);
 }

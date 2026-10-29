@@ -30,6 +30,7 @@ import {
   type ScoutFile,
   type ScoutJudgement,
   type ScoutPrefilterReason,
+  type ScoutStackedOn,
   type ScoutsVersion,
   type Viewer,
 } from '@postpile/core';
@@ -537,7 +538,7 @@ export class ScoutRun {
     const parents = scoutFolderParents(scout);
     const wantsTree = parents.length > 0;
     if (wantsTree) {
-      // The folders before the PR: its base while open, the commit before its merge once merged.
+      // The folders before the PR: its base while open (the default branch's head for a stacked PR), the commit before its merge once merged.
       const oids = [...files.values()].filter((read) => read.files !== null).map((read) => read.foldersOid);
       await this.baseFolders(repo, oids.flatMap((oid) => parents.map((parent) => ({ oid, parent }))));
     }
@@ -563,7 +564,7 @@ export class ScoutRun {
       } else if (step === 'no_signal') {
         work.rows.push(this.judged(base, 'skipped', 'no path signal', inputHash, false));
       } else {
-        toJudge.push({ candidate, inputHash, existing: before, item: this.judgeItem(candidate, read.files, signals, folders) });
+        toJudge.push({ candidate, inputHash, existing: before, item: this.judgeItem(candidate, read.files, signals, folders, read.stackedOn) });
       }
     }
     return toJudge;
@@ -602,7 +603,7 @@ export class ScoutRun {
     }
   }
 
-  private judgeItem(candidate: ScoutCandidate, files: ScoutFile[], signals: ReturnType<typeof scoutSignals>, folders: string[]): ScoutJudgeItem {
+  private judgeItem(candidate: ScoutCandidate, files: ScoutFile[], signals: ReturnType<typeof scoutSignals>, folders: string[], stackedOn: ScoutStackedOn | null): ScoutJudgeItem {
     return {
       prKey: candidate.key,
       title: candidate.title,
@@ -612,6 +613,7 @@ export class ScoutRun {
       files,
       signals,
       baseFolders: folders,
+      stackedOn,
     };
   }
 

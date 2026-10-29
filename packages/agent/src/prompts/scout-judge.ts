@@ -27,6 +27,7 @@ function itemSection(item: ScoutJudgeItem): string {
   const data = [
     `${item.prKey} (${state}, by @${item.author})`,
     `Title: ${item.title}`,
+    ...(item.stackedOn === null ? [] : [`Stacked on ${item.stackedOn.base}, not ${item.stackedOn.defaultBranch}`]),
     `Description (start): ${item.bodyHead === '' ? '(none)' : item.bodyHead}`,
     `Files matching the scout's path hints (${item.signals.length}):\n${signals}`,
     `Changed files (${item.files.length}):\n${shown.join('\n')}${more}`,
@@ -57,7 +58,9 @@ Pull a PR only when it clearly matches what the scout asks for, judged from its 
 and changed files. When in doubt, skip: a pulled PR asks for the developer's time. Path hints are
 a first cut the developer wrote; a match is a reason to look, not a reason to pull. "+*/" means a new
 top-level folder, and "+products/*/" a new folder directly inside products/: an added file in a
-folder that is not among the base branch's folders listed for that PR. Each changed file shows its
+folder that is not among the base branch's folders listed for that PR. A PR "Stacked on" another
+branch is one layer of a stack: its folders are those of the default branch, so a folder a lower
+layer adds still counts as new. Each changed file shows its
 change and its lines added and removed, so lines added to an existing file read apart from a removal.
 
 ${sections}
