@@ -64,6 +64,12 @@ describe('parseScouts', () => {
     expect(paths.map((path) => path.newFolderIn)).toEqual([null]);
   });
 
+  it('refuses a hint with more than 4 globstars', () => {
+    expect(parseScouts('## A\nrepos: acme/app\npaths: a/**/b/**/c/**/d/**/e\n\nx\n').errors).toEqual([]);
+    const { errors } = parseScouts(`## A\nrepos: acme/app\npaths: ${'**/'.repeat(10_000)}x.ts\n\nx\n`);
+    expect(errors[0]).toContain('more than 4 "**"');
+  });
+
   it('refuses unsupported syntax in a new-folder hint too', () => {
     const { scouts, errors } = parseScouts('## Lookout\nrepos: acme/app\npaths: +src/[ab]/*/\n\nNew folders.\n');
     expect(scouts).toEqual([]);
