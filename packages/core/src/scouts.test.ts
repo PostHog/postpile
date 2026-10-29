@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { parseScouts, type ScoutConfig } from './scouts-config.ts';
 import {
+  scheduleScoutWork,
+  scoutedWantsGlance,
   isScoutedActive,
   isScoutedUnseen,
   scoutBodyHead,
@@ -243,3 +245,32 @@ describe('isScoutedActive and isScoutedUnseen', () => {
     expect(isScoutedUnseen({ seenUpdatedAt: '2026-10-29T10:00:00.000Z' }, '2026-10-29T11:00:00.000Z')).toBe(true);
   });
 });
+
+describe('scheduleScoutWork', () => {
+  const item = (id: string, pending: boolean, observedUpdatedAt = '2026-10-29T10:00:00.000Z') => ({ id, pending, observedUpdatedAt });
+
+  it('takes pending retries first, oldest observed first, then new candidates', () => {
+    const queue = [item('new1', false), item('old', true, '2026-10-20T00:00:00.000Z'), item('older', true, '2026-10-10T00:00:00.000Z'), item('new2', false)];
+    expect([...scheduleScoutWork([queue], 3)].map((entry) => entry.id)).toEqual(['older', 'old', 'new1']);
+  });
+
+  it('shares the capacity round-robin across scouts and repos', () => {
+    const lookout = Array.from({ length: 50 }, (_, index) => item(`l${index}`, false));
+    const billing = [item('b0', true), item('b1', false)];
+    const docs = [item('d0', false)];
+    expect([...scheduleScoutWork([lookout, billing, docs], 5)].map((entry) => entry.id)).toEqual(['l0', 'b0', 'd0', 'l1', 'b1']);
+  });
+
+  it('takes nothing without capacity, and everything when it fits', () => {
+    expect(scheduleScoutWork([[item('a', false)]], 0).size).toBe(0);
+    expect(scheduleScoutWork([[item('a', false)], [item('b', true)]], 10).size).toBe(2);
+  });
+});
+
+describe('scoutedWantsGlance', () => {
+  it('wants a glance while on the Scouted section, merged or not', () => {
+    expect(scoutedWantsGlance({ followedAt: null, dismissedAt: null, expiredAt: null })).toBe(true);
+    expect(scoutedWantsGlance({ followedAt: null, dismissedAt: null, expiredAt: '2026-10-29T00:00:00.000Z' })).toBe(false);
+  });
+});
+

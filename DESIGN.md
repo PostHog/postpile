@@ -1264,7 +1264,11 @@ contract surfaces.
    last scout's candidates on the repo, so a crash before that lists them
    again): the next run lists the updates since that
    run started, then goes on below the stop down to the floor, instead of
-   reading the same top pages again. The quota is asked before every read;
+   reading the same top pages again. The resume point keeps the floor it
+   began with and the scouts it listed for, so a first scan that needs
+   several runs keeps its window instead of shrinking to the newer runs'
+   window. A changed set of scouts on the repo lists from the top again: the
+   point only vouches for the scouts it was made for. The quota is asked before every read;
    once it says no, the rest stays pending.
 2. Pre-filter, shared by all scouts (`scoutPrefilter`): open drafts (judged
    once they turn ready), dependency and merge-queue bots only (dependabot,
@@ -1288,7 +1292,13 @@ contract surfaces.
    agent job `scouts` (`agentJobs` without it runs no scout work), and at
    most 5 calls per sync (`SCOUT_JUDGE_CALLS_PER_RUN`): the step runs while
    the sync holds its lock and the poll waits, so the rest stays pending for
-   the next sync. Each
+   the next sync. Scheduling (`scheduleScoutWork`): when there is more than
+   the calls left can judge, each scout on each repo is one queue, its
+   pending retries first (oldest observed first), then its new candidates.
+   The run takes one item per queue in turn until the calls times the batch
+   size are used, so no scout, repo or wave of new PRs starves the rest.
+   Files are read only for what was taken; the rest waits without a read.
+   Each
    entry is validated on its own: malformed, left out, answered twice, or
    unknown keys stay pending, never skipped. The prompt lists at most 20
    matching paths per PR, with how many more.
@@ -1299,7 +1309,8 @@ contract surfaces.
    what is done (only PRs the refresh checked against GitHub, so a failed
    refresh never ends one on a stale snapshot), drops old skipped
    judgements, then glances the active
-   scouted PRs that need one through an explicit, topic-less glance path
+   scouted PRs that need one (`scoutedWantsGlance`: open, merged or closed,
+   with one fresh glance after a merge) through an explicit, topic-less glance path
    (`GlanceInputs.scoutTargets`, `GlanceBatchWriter.runScouted`): no tile of
    the board's holds them. The scout's reason reaches the glance prompt
    fenced: it is model output from GitHub text. A failed scout glance's
@@ -1329,9 +1340,11 @@ close, or three days without activity. Opening it does not keep it.
 file order (`GET /api/scouts`, `ScoutListItem`), with a grey count of PRs
 not seen in PostPile since their last activity, never coral and never in
 unread. The counts come from one query over `pr_scouted` and the PR headers
-(`countsByScout`), never from a Board, so a busy install reads no cold
-snapshot for the sidebar; a stack counts each layer under the scout that
-pulled it. A row opens `scout:<id>` like a topic: tiles only, no driver,
+(`listUntracked`) plus the stacks over every header, never from a Board, so
+a busy install reads no cold snapshot for the sidebar; a stack counts each
+layer under the scout that pulled it, and none of it once a layer is
+tracked (followed, or in the inbox): the stack then shows whole in its
+normal place. A row opens `scout:<id>` like a topic: tiles only, no driver,
 dossier, sets or moves. The tile shows the scout's name in the "for whom"
 spot and its reason (`TileView.scout`).
 
@@ -1359,7 +1372,10 @@ spot and its reason (`TileView.scout`).
 GitHub inbox." inside the fence and answers the PR on its own (no topic
 block); JSON carries `scouted`. `whats_on_me` lists scouted tiles last, in a
 group of their own, never as a move (left out with `whose_move: "you"`).
-`search_prs` finds scouted PRs and marks them. `mark_read` on a scouted PR
+`search_prs` finds scouted PRs and marks them: it matches the scouted PRs'
+headers first (the scout's name stands in for the topic) and reads one
+Board for the matches only, at most `SEARCH_COLD_MAX`, never one per scout
+on every keystroke. `mark_read` on a scouted PR
 marks it seen in PostPile only, with the usual `seen_through` guards, and
 says so ("seen in PostPile only, nothing on GitHub"). For a scouted PR the
 token also covers its stored update time, so a title or description edit

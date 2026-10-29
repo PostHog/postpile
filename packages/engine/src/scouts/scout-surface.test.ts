@@ -72,6 +72,17 @@ describe('the Scouted section', () => {
     expect((await h.engine.listScouts())[0]?.unseen).toBe(0);
   });
 
+  it('finds scouted PRs in a search that asks for scouts, under the scout, by title or scout name', async () => {
+    const h = await pulled({ numbers: [1, 2] });
+
+    expect((await h.engine.search('PR 2')).topics).toEqual([]);
+    const byTitle = await h.engine.search('PR 2', { allRepos: true, withScouts: true });
+    expect(byTitle.topics.map((topic) => topic.topicId)).toEqual(['scout:lookout']);
+    expect(byTitle.topics[0]?.tileIds).toEqual(['pr:acme/app#2']);
+    const byScout = await h.engine.search('lookout', { allRepos: true, withScouts: true });
+    expect(byScout.topics[0]?.tileIds).toEqual(expect.arrayContaining(['pr:acme/app#1', 'pr:acme/app#2']));
+  });
+
   it('says in the PR pane who scouted it and why', async () => {
     const h = await pulled();
     const pr = await h.engine.getPr('acme/app#1');
@@ -131,6 +142,21 @@ describe('the Scouted section', () => {
     expect(h.writer.calls).toContain('followPr PR_1');
     expect(h.store.pendingWrites.list()).toEqual([]);
     expect(h.store.scoutedPrs.get('acme/app#1')?.followedAt).not.toBeNull();
+  });
+
+  it('keeps the lock as it was at the click when writes unlock during the PR lookup', async () => {
+    const h = await pulled({ writesEnabled: false });
+    const lookup = h.reader.scoutPrsByNumber.bind(h.reader);
+    vi.spyOn(h.reader, 'scoutPrsByNumber').mockImplementation(async (refs) => {
+      await h.engine.setGitHubWrites(true);
+      return lookup(refs);
+    });
+    await h.engine.followScouted('acme/app#1', 'tile');
+    h.timers.advance(UNDO_WINDOW_MS);
+    await h.engine.flushPendingWrites();
+
+    expect(h.writer.calls.filter((call) => call.startsWith('followPr'))).toEqual([]);
+    expect(h.store.pendingWrites.list()).toMatchObject([{ kind: 'follow', follow: { prKey: 'acme/app#1' } }]);
   });
 
   it('keeps a failed Follow pending as failed, never followed', async () => {
@@ -202,6 +228,25 @@ describe('the Scouted section', () => {
     expect(tiles.map((view) => view.tile.members.map((member) => member.prKey))).toEqual([[bottom.key, top.key]]);
     // The owning scout speaks for the stack, not the scout of its bottom layer.
     expect(tiles[0]?.scout).toMatchObject({ scoutId: 'lookout', scoutName: 'Lookout', reason: 'new folder' });
+  });
+
+  it('stops counting a scouted stack once one of its layers is followed', async () => {
+    const h = makeHarness();
+    const bottom = makePr({ number: 5, headRef: 'billing-1', updatedAt: NOW.toISOString() });
+    const top = makePr({ number: 6, baseRef: 'billing-1', headRef: 'billing-2', updatedAt: NOW.toISOString() });
+    h.store.prs.upsert(bottom, NOW.toISOString());
+    h.store.prs.upsert(top, NOW.toISOString());
+    const row = { scoutId: 'lookout', scoutName: 'Lookout', configVersion: 1, reason: 'new folder', pulledAt: NOW.toISOString(), seenUpdatedAt: null, followedAt: null, dismissedAt: null, dismissReason: null, expiredAt: null, expiryReason: null };
+    h.store.scoutedPrs.insert({ ...row, prKey: bottom.key });
+    h.store.scoutedPrs.insert({ ...row, prKey: top.key });
+    expect((await h.engine.listScouts())[0]).toMatchObject({ tiles: 2, unseen: 2 });
+
+    h.store.scoutedPrs.markFollowed(bottom.key, NOW.toISOString());
+    h.store.foundPrs.put({ prKey: bottom.key, via: 'followed', reason: 'followed from scout "Lookout"', foundAt: NOW.toISOString() });
+
+    // The stack shows whole in Unsorted now; its other layer leaves the Scouted count with it.
+    expect(await h.engine.listScouts()).toEqual([]);
+    expect((await h.engine.getTopic('scout:lookout'))?.tiles ?? []).toEqual([]);
   });
 
   it('leaves a scouted stack layer to the normal topic when another layer is tracked', async () => {

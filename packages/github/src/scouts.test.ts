@@ -73,6 +73,15 @@ describe('scout listing', () => {
     await expect(new GitHubClient(fakeTokens, fetch.fn).listScoutPrs('acme/secret', null)).rejects.toThrow('Could not resolve');
   });
 
+  it('keeps the lookups of the batches that answered when one fails', async () => {
+    const refs = Array.from({ length: 13 }, (_, index) => ({ repo: 'acme/app', number: index + 1 }));
+    const first = Object.fromEntries(refs.slice(0, 12).map((ref, index) => [`p${index}`, { pullRequest: listed(ref.number) }]));
+    const fetch = new FakeFetch([{ body: { data: first } }, { status: 502, body: { message: 'bad gateway' } }]);
+    const found = await new GitHubClient(fakeTokens, fetch.fn).scoutPrsByNumber(refs);
+    expect(found.size).toBe(12);
+    expect(found.has('acme/app#13')).toBe(false);
+  });
+
   it('looks PRs up by number, keyed as asked', async () => {
     const fetch = new FakeFetch([{ body: { data: { p0: { pullRequest: listed(5, { repository: { nameWithOwner: 'Acme/App' } }) }, p1: { pullRequest: null } } } }]);
     const found = await new GitHubClient(fakeTokens, fetch.fn).scoutPrsByNumber([
@@ -144,6 +153,15 @@ describe('scout files', () => {
     expect((await new GitHubClient(fakeTokens, withNull.fn).scoutFiles([{ repo: 'acme/app', number: 1 }])).get('acme/app#1')?.files).toBeNull();
     const withErrors = new FakeFetch([{ body: { data: { p0: { pullRequest: filesPage('h1', [{ path: 'a.ts', changeType: 'MODIFIED' }], null) } }, errors: [{ message: 'Something went wrong' }] } }]);
     expect((await new GitHubClient(fakeTokens, withErrors.fn).scoutFiles([{ repo: 'acme/app', number: 1 }])).get('acme/app#1')?.files).toBeNull();
+  });
+
+  it('keeps the other batches when one first-page query fails', async () => {
+    const refs = Array.from({ length: 13 }, (_, index) => ({ repo: 'acme/app', number: index + 1 }));
+    const first = Object.fromEntries(refs.slice(0, 12).map((ref, index) => [`p${index}`, { pullRequest: filesPage(`h${ref.number}`, [{ path: `f${ref.number}.ts`, changeType: 'ADDED' }], null) }]));
+    const fetch = new FakeFetch([{ body: { data: first } }, { status: 502, body: { message: 'bad gateway' } }]);
+    const read = await new GitHubClient(fakeTokens, fetch.fn).scoutFiles(refs);
+    expect(read.get('acme/app#1')?.files).toEqual([{ path: 'f1.ts', changeType: 'ADDED' }]);
+    expect(read.get('acme/app#13')?.files).toBeNull();
   });
 
   it('gives no list when a later page fails', async () => {

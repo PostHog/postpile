@@ -69,29 +69,27 @@ export class ScoutedPrRepo {
   }
 
   /**
-   * The Scouted section's counts per scout, from headers only (no snapshot
-   * read): its active PRs that PostPile does not track otherwise (no
-   * notification thread, not found by the sync, in no topic, not a stack
-   * layer a tracked PR pulled in), and how many
-   * of them are unseen (never seen, or GitHub activity after the update
-   * they were seen through). A stack counts each of its layers, under the
-   * scout that pulled that layer (the tiles show the whole stack with the
-   * scout that pulled a layer first).
+   * The Scouted section's rows, from headers only (no snapshot read): active
+   * PRs PostPile does not track otherwise (no notification thread, not
+   * found by the sync, in no topic, not a stack layer a tracked PR pulled
+   * in), each with whether it is unseen (never seen, or GitHub activity
+   * after the update it was seen through). The caller drops layers of
+   * stacks a tracked PR shows (`ReadModels.listScouts`).
    */
-  countsByScout(): Map<string, { prs: number; unseen: number }> {
-    const rows = all<{ scout_id: string; prs: number; unseen: number }>(
+  listUntracked(): { prKey: PrKey; scoutId: string; unseen: boolean }[] {
+    const rows = all<{ pr_key: string; scout_id: string; unseen: number }>(
       this.db,
-      `SELECT s.scout_id AS scout_id, COUNT(*) AS prs,
-              SUM(CASE WHEN s.seen_updated_at IS NULL OR s.seen_updated_at < p.updated_at THEN 1 ELSE 0 END) AS unseen
+      `SELECT s.pr_key AS pr_key, s.scout_id AS scout_id,
+              CASE WHEN s.seen_updated_at IS NULL OR s.seen_updated_at < p.updated_at THEN 1 ELSE 0 END AS unseen
        FROM pr_scouted s JOIN pr p ON p.key = s.pr_key
        WHERE s.followed_at IS NULL AND s.dismissed_at IS NULL AND s.expired_at IS NULL
          AND NOT EXISTS (SELECT 1 FROM notification_thread t WHERE t.pr_key = s.pr_key)
          AND NOT EXISTS (SELECT 1 FROM pr_found f WHERE f.pr_key = s.pr_key)
          AND NOT EXISTS (SELECT 1 FROM topic_membership m WHERE m.pr_key = s.pr_key)
          AND NOT EXISTS (SELECT 1 FROM pr_pull_in l WHERE l.pr_key = s.pr_key)
-       GROUP BY s.scout_id`,
+       ORDER BY s.pr_key`,
     );
-    return new Map(rows.map((row) => [row.scout_id, { prs: row.prs, unseen: row.unseen }]));
+    return rows.map((row) => ({ prKey: row.pr_key, scoutId: row.scout_id, unseen: row.unseen === 1 }));
   }
 
   /** First scout wins: a PR another scout already pulled keeps its row. True when this one was stored. */

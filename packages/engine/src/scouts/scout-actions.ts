@@ -97,6 +97,9 @@ export class ScoutActions {
   }
 
   async follow(prKey: PrKey, origin: 'tile' | 'detail'): Promise<ActionResult> {
+    // The lock as it was at the click, before the lookup below: an unlock while it runs must not send this Follow by itself.
+    const lockedAtClick = !this.writes.enabled();
+    const clickedAt = this.now().toISOString();
     const row = this.store.scoutedPrs.get(prKey);
     if (!row) {
       return failed('Not a PR a scout pulled in');
@@ -116,7 +119,7 @@ export class ScoutActions {
     if (subjectId === null) {
       return failed('GitHub has no such PR the token can see');
     }
-    const follow: QueuedFollow = { prKey, subjectId, origin, batch: randomUUID(), clickedAt: this.now().toISOString(), lockedAtClick: !this.writes.enabled() };
+    const follow: QueuedFollow = { prKey, subjectId, origin, batch: randomUUID(), clickedAt, lockedAtClick };
     const batch = this.queue.enqueue(follow);
     this.writes.log.record({ action: 'follow', origin, outcome: 'queued', prKey, batch: follow.batch, detail: follow.lockedAtClick ? 'turns pending when the window ends: GitHub writes are locked' : '' });
     const message = follow.lockedAtClick ? 'Following is pending until you unlock GitHub writes' : 'Following on GitHub in a few seconds';

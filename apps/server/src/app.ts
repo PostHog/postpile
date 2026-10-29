@@ -553,12 +553,12 @@ export function createApp(
   });
   // Scouted PRs (DESIGN.md "Scouts"). Follow subscribes on GitHub after the undo window, or waits in the lock.
   app.post('/api/prs/:owner/:repo/:number/scout/follow', async (c) => {
-    const body = z.object({ from: z.enum(['tile', 'detail']).default('tile') }).parse(await optionalJson(c));
+    const body = z.object({ from: z.enum(['tile', 'detail']).default('tile') }).default({ from: 'tile' }).parse(await optionalJson(c));
     return c.json(await engine.followScouted(prKeyFromParams(c.req.param()), body.from));
   });
   // Dismiss is local: off the Scouted section, the reason kept for tuning the scout.
   app.post('/api/prs/:owner/:repo/:number/scout/dismiss', async (c) => {
-    const body = z.object({ reason: z.string().max(500).nullable().default(null) }).parse(await optionalJson(c));
+    const body = z.object({ reason: z.string().max(500).nullable().default(null) }).default({ reason: null }).parse(await optionalJson(c));
     return c.json(await engine.dismissScouted(prKeyFromParams(c.req.param()), body.reason));
   });
   // Opened in the app: seen in PostPile only, never a GitHub read.
