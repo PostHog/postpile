@@ -64,7 +64,7 @@ describe('MCP: scouted PRs', () => {
     expect(text.indexOf(line)).toBeGreaterThan(text.indexOf('<postpile-data'));
     expect(text).not.toContain('Topic: Lookout');
     const json = (await prContext(ctx, 'acme/app#40', 'brief', 'json')).structured as { prs: { scouted: unknown; untrusted: { scouted: unknown } }[] };
-    expect(json.prs[0]?.scouted).toEqual({ scoutId: 'lookout', inInbox: false, onScoutedSection: true, followed: false });
+    expect(json.prs[0]?.scouted).toEqual({ scoutId: 'lookout', inInbox: false, tracked: false, onScoutedSection: true, followed: false });
     expect(json.prs[0]?.untrusted.scouted).toEqual({ scoutName: 'Lookout', reason: 'adds a new top-level folder billing/' });
   });
 
@@ -75,9 +75,12 @@ describe('MCP: scouted PRs', () => {
     expect(answer.text).toContain('(acme/app#40) · scouted by Lookout · unseen');
     expect(answer.text).toContain('why: adds a new top-level folder billing/');
     expect((await whatsOnMe(ctx, { ...LIST, whoseMove: 'you' })).text).not.toContain('Scouted');
-    const json = (await whatsOnMe(ctx, LIST, 'json')).structured as { rows: unknown[]; scouted: { prs: string[]; unseen: boolean }[] };
+    const json = (await whatsOnMe(ctx, LIST, 'json')).structured as { rows: unknown[]; scouted: { prs: string[]; unseen: boolean }[]; scoutedPage: { total: number } };
     expect(json.rows).toEqual([]);
     expect(json.scouted).toMatchObject([{ prs: ['acme/app#40'], unseen: true }]);
+    expect(json.scoutedPage).toMatchObject({ total: 1 });
+    // Paged like the list above: offset 1 is past the one scouted tile.
+    expect(((await whatsOnMe(ctx, { ...LIST, offset: 1 }, 'json')).structured as { scouted: unknown[] }).scouted).toEqual([]);
   });
 
   it('finds scouted PRs in search_prs, marked as such', async () => {
@@ -85,4 +88,12 @@ describe('MCP: scouted PRs', () => {
     expect(text).toContain("acme/app#40");
     expect(text).toContain("scouted by Lookout, not in the user's inbox");
   });
+
+  it('tells PostPile tracking it apart from the GitHub inbox once followed', async () => {
+    app.scoutedPrs.markFollowed('acme/app#40', UPDATED);
+    app.foundPrs.put({ prKey: 'acme/app#40', via: 'followed', reason: 'followed from scout "Lookout"', foundAt: UPDATED });
+    const json = (await prContext(ctx, 'acme/app#40', 'brief', 'json')).structured as { prs: { scouted: unknown }[] };
+    expect(json.prs[0]?.scouted).toEqual({ scoutId: 'lookout', inInbox: false, tracked: true, onScoutedSection: false, followed: true });
+  });
 });
+

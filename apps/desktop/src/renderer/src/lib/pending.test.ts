@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { PendingWriteView } from '@postpile/core';
 import { pendingHeadline, pendingList, queueText } from './pending.ts';
 
-function write(id: number, error: string | null = null): PendingWriteView {
-  return { id, kind: 'mark_read', createdAt: '2026-09-28T10:00:00Z', origin: 'tile', title: `PR ${id}`, prKeys: [`o/r#${id}`], tileId: null, threadCount: 1, error };
+function write(id: number, error: string | null = null, kind: PendingWriteView['kind'] = 'mark_read'): PendingWriteView {
+  return { id, kind, createdAt: '2026-09-28T10:00:00Z', origin: 'tile', title: `PR ${id}`, prKeys: [`o/r#${id}`], tileId: null, threadCount: 1, error };
 }
 
 describe('pending writes in the lock popover', () => {
@@ -17,6 +17,13 @@ describe('pending writes in the lock popover', () => {
   it('says how many and how many failed', () => {
     expect(pendingHeadline([write(1)])).toBe('1 pending mark-read');
     expect(pendingHeadline([write(1), write(2, 'boom')])).toBe('2 pending mark-reads (1 failed)');
+  });
+
+  it('names follows and mutes, and says writes when the kinds differ', () => {
+    expect(pendingHeadline([write(1, null, 'follow')])).toBe('1 pending follow');
+    expect(pendingHeadline([write(1, null, 'unsubscribe'), write(2, null, 'unsubscribe')])).toBe('2 pending mutes');
+    expect(pendingHeadline([write(1), write(2, null, 'follow')])).toBe('2 pending writes');
+    expect(pendingHeadline([write(1, null, 'catch_up'), write(2)])).toBe('2 pending mark-reads');
   });
 });
 

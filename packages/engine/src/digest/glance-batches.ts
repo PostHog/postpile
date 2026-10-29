@@ -168,7 +168,9 @@ export class GlanceBatchWriter {
     const { store, viewer, contexts } = this.deps;
     const board = Board.load(store, this.deps.now().toISOString());
     const inputs = new GlanceInputs(store, board, viewer, contexts);
-    const inScope = inputs.targets().filter((target) => scope === null || isInScope(target, scope));
+    // A catch-up or retry of Unsorted's PRs also covers scouted PRs, which are topic-less too (a failed scout glance's Retry).
+    const scouted = scope !== null && scope.topicId === null ? inputs.scoutTargets(scope.prKeys ?? null) : [];
+    const inScope = [...inputs.targets(), ...scouted].filter((target) => scope === null || isInScope(target, scope));
     const targets = this.withoutSkipped(inScope, dossiers.skippedByBudget);
     const byKey = new Map<PrKey, GlanceTarget>();
 

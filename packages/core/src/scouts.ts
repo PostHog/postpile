@@ -422,10 +422,12 @@ export interface ScoutedPrView {
   unseen: boolean;
   /** Tracked normally now: in the GitHub inbox, found by the sync, or followed. */
   tracked: boolean;
+  /** It has a notification thread: GitHub's inbox holds it, not only PostPile's tracking. */
+  inInbox: boolean;
   follow: ScoutFollowState | null;
 }
 
-export function scoutedPrView(row: ScoutedPr, prUpdatedAt: IsoTime, tracked: boolean, follow: ScoutFollowState | null): ScoutedPrView {
+export function scoutedPrView(row: ScoutedPr, prUpdatedAt: IsoTime, place: Pick<ScoutedPrView, 'tracked' | 'inInbox'>, follow: ScoutFollowState | null): ScoutedPrView {
   return {
     scoutId: row.scoutId,
     scoutName: row.scoutName,
@@ -438,7 +440,8 @@ export function scoutedPrView(row: ScoutedPr, prUpdatedAt: IsoTime, tracked: boo
     expiredAt: row.expiredAt,
     expiryReason: row.expiryReason,
     unseen: isScoutedUnseen(row, prUpdatedAt),
-    tracked,
+    tracked: place.tracked,
+    inInbox: place.inInbox,
     follow,
   };
 }
@@ -450,13 +453,16 @@ export function cleanDismissReason(reason: string | null | undefined): string | 
 }
 
 /** One line on a scouted PR for the MCP and the pane: "Scouted by Lookout: adds billing/. Not in the user's GitHub inbox." */
-export function scoutedLine(view: Pick<ScoutedPrView, 'scoutName' | 'reason' | 'tracked' | 'active' | 'followedAt' | 'dismissedAt' | 'expiredAt'>): string {
+export function scoutedLine(view: Pick<ScoutedPrView, 'scoutName' | 'reason' | 'tracked' | 'inInbox' | 'active' | 'followedAt' | 'dismissedAt' | 'expiredAt'>): string {
   const first = `Scouted by ${view.scoutName}: ${view.reason}.`;
+  if (view.inInbox) {
+    return `${first} It reached the user's GitHub inbox since.`;
+  }
   if (view.followedAt !== null) {
-    return `${first} Followed on GitHub since.`;
+    return `${first} Followed on GitHub since; not in the user's GitHub inbox yet.`;
   }
   if (view.tracked) {
-    return `${first} It reached the user's inbox since.`;
+    return `${first} PostPile tracks it now; not in the user's GitHub inbox.`;
   }
   if (view.dismissedAt !== null) {
     return `${first} Dismissed by the user.`;

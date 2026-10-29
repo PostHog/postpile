@@ -8,10 +8,23 @@ export function pendingList(pending: PendingWriteView[], max: number = PENDING_L
   return { shown: pending.slice(0, max), more: Math.max(pending.length - max, 0) };
 }
 
-/** "1 pending mark-read", "3 pending mark-reads (1 failed)". */
+/** What one pending write is, in the headline's words: a cleanup is a mark-read too. */
+const KIND_NOUNS: Record<PendingWriteView['kind'], [string, string]> = {
+  mark_read: ['mark-read', 'mark-reads'],
+  mark_all_read_before: ['mark-read', 'mark-reads'],
+  catch_up: ['mark-read', 'mark-reads'],
+  unsubscribe: ['mute', 'mutes'],
+  subscribe: ['unmute', 'unmutes'],
+  follow: ['follow', 'follows'],
+};
+
+/** "1 pending mark-read", "3 pending mark-reads (1 failed)", "1 pending follow"; "4 pending writes" when the kinds differ. */
 export function pendingHeadline(pending: PendingWriteView[]): string {
   const failed = pending.filter((write) => write.error !== null).length;
-  const noun = pending.length === 1 ? 'mark-read' : 'mark-reads';
+  const nouns = new Set(pending.map((write) => KIND_NOUNS[write.kind][0]));
+  const first = pending[0];
+  const [one, many] = nouns.size <= 1 && first ? KIND_NOUNS[first.kind] : ['write', 'writes'];
+  const noun = pending.length === 1 ? one : many;
   return `${pending.length} pending ${noun}${failed > 0 ? ` (${failed} failed)` : ''}`;
 }
 

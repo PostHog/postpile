@@ -1255,42 +1255,59 @@ contract surfaces.
 1. Listing, in two passes. Each repo is listed once for every scout on it:
    GraphQL `repository.pullRequests(states: [OPEN, MERGED], orderBy:
    UPDATED_AT DESC)`, 50 per page, metadata only (node id, number, update
-   time, state, draft, author, head and base oid, title, body cut to 600
-   characters client side), at most 10 pages per run. OPEN and MERGED, so a
-   PR opened and merged between two syncs is still seen.
+   time, state, draft, author, assignees, head and base oid, title, body cut
+   to 600 characters client side), at most 10 pages per run. OPEN and
+   MERGED, so a PR opened and merged between two syncs is still seen. A
+   page with field errors or a null node is refused, never counted as
+   covered. A capped listing stores where it stopped (meta
+   `scout_listing_resume:<repo>`): the next run lists the updates since that
+   run started, then goes on below the stop down to the floor, instead of
+   reading the same top pages again. The quota is asked before every read;
+   once it says no, the rest stays pending.
 2. Pre-filter, shared by all scouts (`scoutPrefilter`): open drafts (judged
    once they turn ready), dependency and merge-queue bots only (dependabot,
    renovate, trunk-io, mergify and the like; agent accounts that open PRs
-   for people stay in), the viewer, their teammates, and PRs already
-   tracked (a notification thread, `pr_found`, or followed).
-3. Files: only for candidates that are new to the scout, pending, or whose
-   head moved since it judged them. The whole list, paged to the end at one
-   head; a moved head or a failed page leaves it pending, never "no
-   signal".
+   for people stay in), the viewer's and their teammates' PRs by the
+   PR-ownership rules (`prOwners`: an agent PR is its assignees'), and PRs
+   already tracked (a notification thread, `pr_found`, or followed).
+3. Files: only for candidates that are new to the scout, pending, whose
+   head moved since it judged them, or judged under an older scouts.md. The
+   whole list, paged to the end at one head (the next pages of all long
+   lists go out together in aliased queries), and read once per run for
+   every scout on the repo; a moved head or a failed page leaves it
+   pending, never "no signal".
 4. Re-judge rule (`scoutJudgeStep`, `scoutInputHash`): the hash covers the
    scout's own definition (prompt, repos, paths), the title, the body's
    first 600 characters and the matched (path, change type) pairs, or the
    whole file list for a scout without `paths:`. With `paths:` and no
    match, the PR is skipped by rule, no model call.
 5. Judge: `scout_judge` (Sonnet, no tools, PR text fenced), up to 12 PRs per
-   call, under the sync's existing agent-call cap with its own kind. The
-   answer is validated per PR: left out, answered twice, or unknown keys
-   stay pending, never skipped.
+   call, under the sync's existing agent-call cap with its own kind and the
+   agent job `scouts` (`agentJobs` without it runs no scout work). Each
+   entry is validated on its own: malformed, left out, answered twice, or
+   unknown keys stay pending, never skipped. The prompt lists at most 20
+   matching paths per PR, with how many more.
 6. Pulled PRs are fetched in full and stored like stack layers
    (`GitHubSync.fetchAndStoreScouted`): no thread, no topic, their events
    never count as new.
 7. Every sync refreshes active scouted PRs whose update time moved, expires
-   what is done, drops old skipped judgements, then glances the active
+   what is done (only PRs the refresh checked against GitHub, so a failed
+   refresh never ends one on a stale snapshot), drops old skipped
+   judgements, then glances the active
    scouted PRs that need one through an explicit, topic-less glance path
    (`GlanceInputs.scoutTargets`, `GlanceBatchWriter.runScouted`): no tile of
-   the board's holds them.
+   the board's holds them. The scout's reason reaches the glance prompt
+   fenced: it is model output from GitHub text. A failed scout glance's
+   Retry runs through the Unsorted catch-up, which covers scouted targets.
 
 **Display, not tracking.** A scouted PR is displayable and glanceable but
 not tracked: no topic assignment, urgency, asks, unread, whose-move counts,
 Dock badge, Mac notifications or read writes. On the Board, each scout is a
 pseudo-topic `scout:<id>` like Unsorted (`Board.tilesForTopic`), with its
-PRs as found PRs of `via: 'scouted'`; it is never part of `allTiles()`, so
-nothing that counts reads it. A scouted PR that reaches the inbox by itself
+PRs as found PRs of `via: 'scouted'`; it is never part of `allTiles()` or
+`findTile`, so nothing that counts reads it and no tile action (mark read,
+snooze, feedback) takes a scout tile. The owning scout's name and reason
+label a stack that holds layers other scouts pulled. A scouted PR that reaches the inbox by itself
 becomes a normal tile; its `pr_scouted` row stays as history ("Scouted by
 Lookout: … It reached the user's inbox since").
 
@@ -1336,7 +1353,12 @@ block); JSON carries `scouted`. `whats_on_me` lists scouted tiles last, in a
 group of their own, never as a move (left out with `whose_move: "you"`).
 `search_prs` finds scouted PRs and marks them. `mark_read` on a scouted PR
 marks it seen in PostPile only, with the usual `seen_through` guards, and
-says so ("seen in PostPile only, nothing on GitHub").
+says so ("seen in PostPile only, nothing on GitHub"). For a scouted PR the
+token also covers its stored update time, so a title or description edit
+synced after the read refuses an old token. JSON tells `inInbox` (a
+notification thread) apart from `tracked` (a followed PR is tracked before
+GitHub notifies about it); the scouted group in `whats_on_me` pages with the
+same `offset` and `limit` (`scoutedPage`).
 
 **Accepted trade-offs:**
 

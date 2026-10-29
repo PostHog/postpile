@@ -165,9 +165,12 @@ export class GlanceInputs {
    * like Unsorted. Read from the store when the hot board left them out:
    * scouted PRs are no tile of the board's. A scouted PR that reached the
    * inbox by itself is tracked and gets its glance with its tile instead.
+   * `keys` narrows it to those PRs, so a read about a few PRs never loads
+   * every cold scouted snapshot.
    */
-  scoutTargets(): GlanceTarget[] {
-    const active = this.store.scoutedPrs.listActive();
+  scoutTargets(keys: PrKey[] | null = null): GlanceTarget[] {
+    const wanted = keys === null ? null : new Set(keys);
+    const active = this.store.scoutedPrs.listActive().filter((row) => wanted === null || wanted.has(row.prKey));
     const coldKeys = active.map((row) => row.prKey).filter((key) => !this.board.prs.has(key));
     const coldPrs = this.store.prs.getMany(coldKeys);
     const coldEvents = this.store.events.listForPrs(coldKeys);

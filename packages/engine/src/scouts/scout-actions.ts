@@ -87,12 +87,13 @@ export class ScoutActions {
     return this.settledFollows;
   }
 
-  /** Where a Follow of this PR stands while it has not reached GitHub; null when none waits. */
-  followState(prKey: PrKey): ScoutFollowState | null {
-    if (this.queue.unfinished().some((follow) => follow.prKey === prKey)) {
-      return 'queued';
+  /** Follows that have not reached GitHub yet, by PR: in their undo window (or being sent), else parked in the lock. */
+  followStates(): Map<PrKey, ScoutFollowState> {
+    const states = new Map<PrKey, ScoutFollowState>(this.pendingWrites.followStates());
+    for (const follow of this.queue.unfinished()) {
+      states.set(follow.prKey, 'queued');
     }
-    return this.pendingWrites.followState(prKey);
+    return states;
   }
 
   async follow(prKey: PrKey, origin: 'tile' | 'detail'): Promise<ActionResult> {
@@ -103,7 +104,7 @@ export class ScoutActions {
     if (row.followedAt !== null) {
       return ok('Already followed');
     }
-    if (this.followState(prKey) !== null) {
+    if (this.followStates().has(prKey)) {
       return ok('Follow already on its way');
     }
     let subjectId: string | null = null;

@@ -171,13 +171,15 @@ export class PendingWrites {
     this.writes.log.record({ action: 'follow', origin: context.origin, outcome: 'pending', prKey: follow.prKey, batch: context.batch, detail });
   }
 
-  /** Where a parked Follow of this PR stands: pending, or failed (sent and not taken); null when none waits. */
-  followState(prKey: PrKey): 'pending' | 'failed' | null {
-    const write = this.list().find((candidate) => candidate.kind === 'follow' && candidate.follow?.prKey === prKey);
-    if (!write) {
-      return null;
+  /** Where each parked Follow stands, by PR: pending, or failed (sent and not taken). One read of the queue for a whole request. */
+  followStates(): Map<PrKey, 'pending' | 'failed'> {
+    const states = new Map<PrKey, 'pending' | 'failed'>();
+    for (const write of this.list()) {
+      if (write.kind === 'follow' && write.follow !== null) {
+        states.set(write.follow.prKey, write.error !== null && write.error !== PENDING_WRITES_OFF ? 'failed' : 'pending');
+      }
     }
-    return write.error !== null && write.error !== PENDING_WRITES_OFF ? 'failed' : 'pending';
+    return states;
   }
 
   list(): PendingWrite[] {

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { UNDO_WINDOW_MS, type ScoutCandidate } from '@postpile/core';
 import { makePr, makeThreadFor } from '@postpile/core/fixtures';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { makeHarness, NOW, type Harness } from '../testing/fakes.ts';
 
 const LOOKOUT = '## Lookout\nrepos: acme/app\n\nNew top-level folders.\n';
@@ -198,6 +198,8 @@ describe('the Scouted section', () => {
     ]);
     const tiles = (await h.engine.getTopic('scout:lookout'))?.tiles ?? [];
     expect(tiles.map((view) => view.tile.members.map((member) => member.prKey))).toEqual([[bottom.key, top.key]]);
+    // The owning scout speaks for the stack, not the scout of its bottom layer.
+    expect(tiles[0]?.scout).toMatchObject({ scoutId: 'lookout', scoutName: 'Lookout', reason: 'new folder' });
   });
 
   it('leaves a scouted stack layer to the normal topic when another layer is tracked', async () => {
@@ -212,6 +214,39 @@ describe('the Scouted section', () => {
     expect((await h.engine.listScouts())[0]?.tiles).toBe(0);
     const unsorted = (await h.engine.getTopic('unsorted'))?.tiles ?? [];
     expect(unsorted.flatMap((view) => view.tile.members.map((member) => member.prKey))).toEqual([bottom.key, top.key]);
+  });
+
+  it('refuses tile actions on a scout tile: nothing there is the user\'s to mark read', async () => {
+    const h = await pulled();
+    const result = await h.engine.markRead('pr:acme/app#1');
+    expect(result.ok).toBe(false);
+    expect(h.store.userPrStates.get('acme/app#1')?.handledAt ?? null).toBeNull();
+  });
+
+  it("refuses an agent's old seen_through once the PR's description changed since", async () => {
+    const h = await pulled();
+    const seenThrough = (await h.engine.getPr('acme/app#1'))!.seenThrough;
+    const edited = makePr({ number: 1, headOid: 'h1', body: 'edited', updatedAt: new Date(NOW.getTime() + 60_000).toISOString() });
+    h.store.prs.upsert(edited, NOW.toISOString());
+
+    const result = await h.engine.markReadForAgent({ prs: [{ prKey: 'acme/app#1', seenThrough }] }, { client: 'claude-code' });
+    expect(result.refused).toHaveLength(1);
+    expect(result.seenLocally ?? []).toEqual([]);
+  });
+
+  it('retries a failed scout glance through the catch-up, like any glance', async () => {
+    const file = join(mkdtempSync(join(tmpdir(), 'pp-scout-retry-')), 'scouts.md');
+    writeFileSync(file, LOOKOUT);
+    const h = makeHarness({ scoutsFile: file, catchUpCallsPerDay: 300 });
+    h.reader.scoutListings.set('acme/app', [candidate(1)]);
+    h.reader.scoutFileLists.set('acme/app#1', { headOid: 'h1', baseOid: 'base1', files: [{ path: 'billing/main.ts', changeType: 'ADDED' }] });
+    h.reader.addStackPr(makePr({ number: 1, headOid: 'h1', updatedAt: candidate(1).updatedAt }));
+    h.runner.answer('scout_judge', { judgements: [{ prKey: 'acme/app#1', verdict: 'pull', reason: 'adds billing/' }] });
+    await h.engine.sync({});
+    h.store.db.prepare('DELETE FROM pr_glance WHERE pr_key = ?').run('acme/app#1');
+
+    expect((await h.engine.retryGlance('acme/app#1')).ok).toBe(true);
+    await vi.waitFor(() => expect(h.store.glances.get('acme/app#1')).not.toBeNull());
   });
 });
 

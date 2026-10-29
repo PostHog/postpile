@@ -25,6 +25,7 @@ const scouted = (overrides: Partial<ScoutedPrView> = {}): ScoutedPrView => ({
   expiryReason: null,
   unseen: false,
   tracked: false,
+  inInbox: false,
   follow: null,
   ...overrides,
 });
@@ -86,7 +87,8 @@ describe('scoutSeenTarget', () => {
 describe('scoutedStateText', () => {
   it('says where a scouted PR stands, followed first', () => {
     expect(scoutedStateText(scouted({ followedAt: '2026-10-02T10:00:00Z', tracked: true }))).toBe('You follow it on GitHub.');
-    expect(scoutedStateText(scouted({ tracked: true }))).toBe('It reached your GitHub inbox since.');
+    expect(scoutedStateText(scouted({ tracked: true, inInbox: true }))).toBe('It reached your GitHub inbox since.');
+    expect(scoutedStateText(scouted({ tracked: true }))).toBe('PostPile tracks it now.');
     expect(scoutedStateText(scouted({ dismissedAt: '2026-10-02T10:00:00Z', dismissReason: 'known' }))).toBe('Dismissed: known');
     expect(scoutedStateText(scouted({ dismissedAt: '2026-10-02T10:00:00Z' }))).toBe('Dismissed.');
     expect(scoutedStateText(scouted({ expiredAt: '2026-10-02T10:00:00Z', expiryReason: 'merged' }))).toBe('Off the Scouted section: it merged.');

@@ -18,7 +18,7 @@ import { WritesLock } from './WritesLock.tsx';
 
 /** What the three provenance counts mean; "notified" is GitHub telling you, never a Mac notification. */
 const PROVENANCE_TITLE =
-  'This topic\'s PRs by how they reached you. notified: GitHub sent you a notification (not a Mac ping). found: PostPile found it from your activity. pulled in: added to complete a stack or set.';
+  'This topic\'s PRs by how they reached you. notified: GitHub sent you a notification (not a Mac ping). found: PostPile found it from your activity. scouted: one of your scouts pulled it in from outside your inbox. pulled in: added to complete a stack or set.';
 
 /** Numbers in the footer are ink and semibold; the words around them stay muted. */
 function Num(props: { children: ReactNode }) {
@@ -66,6 +66,12 @@ export function StatusFooter(props: { topics: TopicListItem[]; detail: TopicDeta
           <>
             {' · '}
             <Num>{counts.found}</Num> found
+          </>
+        )}
+        {counts.scouted > 0 && (
+          <>
+            {' · '}
+            <Num>{counts.scouted}</Num> scouted
           </>
         )}
         {' · '}

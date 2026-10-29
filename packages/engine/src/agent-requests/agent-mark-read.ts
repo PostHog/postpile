@@ -37,6 +37,8 @@ export interface AgentMarkReadDeps {
 export class AgentMarkRead {
   /** For the app's toasts, each kept until its undo window ends. */
   readonly notices: AgentReadNotices;
+  /** Scouted PRs marked seen locally: the live status counts them, so the renderer's Scouted counts follow. */
+  private seenLocally = 0;
 
   constructor(private readonly deps: AgentMarkReadDeps) {
     this.notices = new AgentReadNotices((undoToken) => deps.readMarker.canUndo(undoToken), deps.now);
@@ -105,8 +107,14 @@ export class AgentMarkRead {
     });
     if (check.kind === 'mark') {
       store.scoutedPrs.markSeen(pr.prKey, snapshot.updatedAt);
+      this.seenLocally += 1;
     }
     return check;
+  }
+
+  /** Grows with every scouted PR an agent marked seen. */
+  changes(): number {
+    return this.notices.changes() + this.seenLocally;
   }
 
   handle(request: AgentMarkReadRequest, client: string): AgentMarkReadResult {

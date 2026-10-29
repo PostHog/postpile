@@ -450,11 +450,6 @@ export class Board {
     });
   }
 
-  /** Every scout's tiles on this board, for finding a scout tile by id. */
-  allScoutTiles(): Tile[] {
-    return [...this.scoutIds().keys()].flatMap((scoutId) => this.tilesForTopic(scoutTopicId(scoutId)));
-  }
-
   tilesForTopic(topicId: string): Tile[] {
     const cached = this.tileCache.get(topicId);
     if (cached) {
@@ -489,7 +484,8 @@ export class Board {
 
   /** A stack shows in one topic only, so a tile id is found once. */
   findTile(tileId: string): Tile | null {
-    return this.allTiles().find((tile) => tile.id === tileId) ?? this.allScoutTiles().find((tile) => tile.id === tileId) ?? null;
+    // Never a scout's tile: tile actions (mark read, snooze, feedback) would treat its PRs as tracked; Follow and Dismiss go by PR.
+    return this.allTiles().find((tile) => tile.id === tileId) ?? null;
   }
 
   stateOf(tile: Tile): TileState {

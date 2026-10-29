@@ -99,7 +99,7 @@ export interface PrJson {
    * "Scouts"); the reason is under untrusted. Null for every other PR, and
    * when the snapshot was not read.
    */
-  scouted: { scoutId: string; inInbox: boolean; onScoutedSection: boolean; followed: boolean } | null;
+  scouted: { scoutId: string; inInbox: boolean; tracked: boolean; onScoutedSection: boolean; followed: boolean } | null;
   untrusted: {
     title: string;
     /** Why the scout pulled it in, and the scout's name; null unless scouted. */
@@ -259,7 +259,14 @@ export function prJson(input: PrJsonInput): PrJson {
     ownership: open && detail?.ownership ? ownershipJson(detail.ownership) : null,
     effort: open && detail ? effortJson(detail) : null,
     scouted: detail?.scouted
-      ? { scoutId: detail.scouted.scoutId, inInbox: detail.scouted.tracked, onScoutedSection: detail.scouted.active && !detail.scouted.tracked, followed: detail.scouted.followedAt !== null }
+      ? {
+          scoutId: detail.scouted.scoutId,
+          // A notification thread, not PostPile's own tracking: a followed PR is tracked before GitHub notifies about it.
+          inInbox: detail.scouted.inInbox,
+          tracked: detail.scouted.tracked,
+          onScoutedSection: detail.scouted.active && !detail.scouted.tracked,
+          followed: detail.scouted.followedAt !== null,
+        }
       : null,
     untrusted: {
       title: base.title,

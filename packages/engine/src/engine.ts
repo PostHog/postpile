@@ -447,7 +447,7 @@ export class Engine implements EngineService {
         catchUp: (topicId, prKey) => this.catchUps.stateOf(topicId, prKey),
         catchUpCap: () => ({ off: this.catchUpCap.perDay === 0, spent: this.catchUpCap.remaining() === 0 }),
       },
-      { configured: () => scoutsHistory?.active().scouts ?? [], followState: (key) => this.scoutActions.followState(key) },
+      { configured: () => scoutsHistory?.active().scouts ?? [], followStates: () => this.scoutActions.followStates() },
     );
     const log = deps.writes.log;
     const readMarker = new ReadMarker(store, deps.markReadQueue, log, now);
@@ -1145,7 +1145,7 @@ export class Engine implements EngineService {
     const poll = this.livePoller?.currentStatus() ?? OFF_POLL_STATUS;
     return {
       ...poll,
-      changeCount: poll.changeCount + this.writeRefreshesDone + this.deps.markReadQueue.mirrored() + this.syncsDone + this.clickedReadRetry.decided() + this.cleanup.changeCount() + this.prNotes.changes() + this.agentMarkRead.notices.changes() + this.scoutActions.changes(),
+      changeCount: poll.changeCount + this.writeRefreshesDone + this.deps.markReadQueue.mirrored() + this.syncsDone + this.clickedReadRetry.decided() + this.cleanup.changeCount() + this.prNotes.changes() + this.agentMarkRead.changes() + this.scoutActions.changes(),
       syncRunning: this.syncing !== null,
       nextAutoSyncAt: this.autoSync?.nextSyncAt() ?? null,
       nextAutoSyncIsBacklog: this.autoSync?.nextSyncIsBacklog() ?? false,

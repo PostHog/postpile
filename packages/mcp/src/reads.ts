@@ -128,9 +128,6 @@ const ALL_REPOS = { allRepos: true };
 /** search_prs also finds PRs scouts pulled in, marked as such (DESIGN.md "Scouts"). */
 const ALL_REPOS_WITH_SCOUTS = { allRepos: true, withScouts: true };
 
-/** Scouted tiles whats_on_me lists at most, after everything that waits on the user. */
-const SCOUTED_SHOWN = 20;
-
 const SCOUTED_TITLE = "Scouted (not in the user's GitHub inbox; nothing is asked of them)";
 
 const REPO_PATTERN = /^[\w.-]+\/[\w.-]+$/;
@@ -1220,8 +1217,17 @@ function scoutedText(row: ScoutedRow): string {
   why: ${row.view.scout?.reason ?? ''}`;
 }
 
+/**
+ * The scouted tiles of this page: the same `offset` and `limit` as the
+ * list above, applied to the scouted group on its own, so paging reaches
+ * every scouted tile too.
+ */
+function scoutedPage(rows: ScoutedRow[], options: ListOptions): ScoutedRow[] {
+  return rows.slice(options.offset, options.offset + options.limit);
+}
+
 function scoutedJson(rows: ScoutedRow[]): object[] {
-  return rows.slice(0, SCOUTED_SHOWN).map((row) => ({
+  return rows.map((row) => ({
     scout: { id: row.scoutId },
     tile: tileJson(row.view),
     prs: row.view.prs.map((pr) => pr.key),
@@ -1258,7 +1264,8 @@ function queueJson(
       prs: row.view.prs.map((pr) => summaryJson(authors, pr, details.get(pr.key) ?? null, [row.view], row.topic, overlaps)),
     })),
     // Outside the user's GitHub inbox: never an ask, never on the user's move.
-    scouted: scoutedJson(scouted),
+    scouted: scoutedJson(scoutedPage(scouted, options)),
+    scoutedPage: pageJson(scouted.length, options, scoutedPage(scouted, options).length),
   };
 }
 
@@ -1310,7 +1317,9 @@ export async function whatsOnMe(ctx: ReadContext, options: QueueOptions, format:
     const meta = await readMeta(ctx, authors);
     return jsonAnswer([...(await header(ctx)), ...teamNote(authors)], queueJson(rows, page, details, authors, options, meta, overlaps, ctx.now(), scouted), rows.length > 0);
   }
-  const scoutedData = scouted.length === 0 ? [] : ['', `${SCOUTED_TITLE} (${scouted.length} in total):`, ...scouted.slice(0, SCOUTED_SHOWN).map(scoutedText)];
+  const scoutedShown = scoutedPage(scouted, options);
+  const scoutedMore = options.offset + scoutedShown.length < scouted.length ? [`${scouted.length - options.offset - scoutedShown.length} more scouted: offset: ${options.offset + options.limit}`] : [];
+  const scoutedData = scouted.length === 0 ? [] : ['', `${SCOUTED_TITLE} (${scouted.length} in total):`, ...scoutedShown.map(scoutedText), ...scoutedMore];
   if (rows.length === 0 && scouted.length === 0) {
     const text = [...(await header(ctx)), ...teamNote(authors), '', `Nothing waits on the user right now (filters: ${filterWords(options)}).`].join('\n');
     return { text, found: false };

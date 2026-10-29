@@ -112,6 +112,8 @@ export interface PrCounts {
   pinged: number;
   /** Not in the inbox, found by the sync (own open PRs, review requests, recent merges). */
   found: number;
+  /** Pulled in by a scout from outside the inbox (DESIGN.md "Scouts"): never counted as found. */
+  scouted: number;
   pulledIn: number;
 }
 
@@ -119,17 +121,21 @@ export interface PrCounts {
 export function countPrs(views: TileView[]): PrCounts {
   const pinged = new Set<string>();
   const found = new Set<string>();
+  const scouted = new Set<string>();
   const all = new Set<string>();
   for (const view of views) {
     for (const pr of view.prs) {
       all.add(pr.key);
       if (pr.provenance.kind === 'pinged') {
         pinged.add(pr.key);
+      } else if (pr.provenance.kind === 'found' && pr.provenance.via === 'scouted') {
+        scouted.add(pr.key);
       } else if (pr.provenance.kind === 'found') {
         found.add(pr.key);
       }
     }
   }
   const foundOnly = [...found].filter((key) => !pinged.has(key)).length;
-  return { pinged: pinged.size, found: foundOnly, pulledIn: all.size - pinged.size - foundOnly };
+  const scoutedOnly = [...scouted].filter((key) => !pinged.has(key) && !found.has(key)).length;
+  return { pinged: pinged.size, found: foundOnly, scouted: scoutedOnly, pulledIn: all.size - pinged.size - foundOnly - scoutedOnly };
 }

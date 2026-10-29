@@ -77,12 +77,15 @@ const EXPIRY_WORDS = {
  * followed, in the inbox now, dismissed (with its reason), off the section,
  * a waiting Follow, or still only here.
  */
-export function scoutedStateText(view: Pick<ScoutedPrView, 'followedAt' | 'tracked' | 'dismissedAt' | 'dismissReason' | 'expiredAt' | 'expiryReason' | 'follow'>): string {
+export function scoutedStateText(view: Pick<ScoutedPrView, 'followedAt' | 'tracked' | 'inInbox' | 'dismissedAt' | 'dismissReason' | 'expiredAt' | 'expiryReason' | 'follow'>): string {
+  if (view.inInbox) {
+    return 'It reached your GitHub inbox since.';
+  }
   if (view.followedAt !== null) {
     return 'You follow it on GitHub.';
   }
   if (view.tracked) {
-    return 'It reached your GitHub inbox since.';
+    return 'PostPile tracks it now.';
   }
   if (view.dismissedAt !== null) {
     return view.dismissReason ? `Dismissed: ${view.dismissReason}` : 'Dismissed.';

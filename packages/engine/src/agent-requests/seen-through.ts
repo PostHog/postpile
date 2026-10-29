@@ -1,9 +1,20 @@
 import { seenThroughToken, type PrKey } from '@postpile/core';
 import type { Store } from '@postpile/store';
 
-/** The PR's unseen events logged at or before `seq`, as the store has them now. */
+/**
+ * The PR's unseen events logged at or before `seq`, as the store has them
+ * now. For a PR a scout pulled in, its stored updatedAt too: marking it seen
+ * covers the snapshot as of that update, and a title or description edit
+ * synced after the read moves updatedAt without logging an event, so an
+ * old token must not cover it (DESIGN.md "Scouts").
+ */
 export function unseenIdsThrough(store: Store, key: PrKey, seq: number): string[] {
-  return store.eventLog.unseenIdsThrough(key, seq);
+  const ids = store.eventLog.unseenIdsThrough(key, seq);
+  if (store.scoutedPrs.get(key) === null) {
+    return ids;
+  }
+  const updatedAt = store.prs.get(key)?.updatedAt ?? '';
+  return [...ids, `updated:${updatedAt}`];
 }
 
 /**
