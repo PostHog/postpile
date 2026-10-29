@@ -140,6 +140,7 @@ describe('PrRepo', () => {
       assignees: ['alice'],
       reviewerUsers: ['bob'],
       reviewerTeams: ['acme/team-devex'],
+      codeOwnerReviewers: ['acme/team-devex'],
       state: 'MERGED',
       isDraft: true,
       headOid: 'abc123',
@@ -170,9 +171,20 @@ describe('PrRepo', () => {
       assignees: ['alice'],
       reviewerUsers: ['bob'],
       reviewerTeams: ['acme/team-devex'],
+      codeOwnerReviewers: ['acme/team-devex'],
       lastEventAt: at(4),
     });
     expect(headers[0]?.lastEventAt).toBeNull();
+  });
+
+  it('keeps code owner requests missing apart from none', () => {
+    store.prs.upsert(makePr({ number: 1, reviewerUsers: ['alice'], codeOwnerReviewers: [] }), at(1));
+    store.prs.upsert(makePr({ number: 2, reviewerUsers: ['alice'], codeOwnerReviewers: ['alice'] }), at(1));
+    store.prs.upsert(makePr({ number: 3, reviewerUsers: ['alice'] }), at(1));
+    const prs = store.prs.getMany(['acme/app#1', 'acme/app#2', 'acme/app#3']);
+    expect(prs.get('acme/app#1')?.codeOwnerReviewers).toEqual([]);
+    expect(prs.get('acme/app#2')?.codeOwnerReviewers).toEqual(['alice']);
+    expect(prs.get('acme/app#3')).not.toHaveProperty('codeOwnerReviewers');
   });
 
   it('reads the layer below an open PR body declares into its header, from the body as it is now', () => {

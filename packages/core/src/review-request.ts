@@ -287,6 +287,55 @@ export function reviewRequest(pr: Pr, viewer: Viewer): ReviewRequest {
 }
 
 /**
+ * Who chose the viewer for their pending review request (2026-10-29,
+ * DESIGN.md "Picked, pulled in or routed"). A person choosing you is a
+ * direct ask; tooling routing a request to you is not.
+ * picked: a personal request the PR's owner (`prOwners`: the human author,
+ * or the assignee of a bot's PR) made by hand, not as code owner.
+ * pulled_in: a personal request a person other than the owner made.
+ * routed: everything else: a team request, a request a bot or automation
+ * made (an agent that opens PRs picks their reviewers too), a CODEOWNERS
+ * request, one the viewer made themselves, and anything not known (no
+ * request event, or a PR stored before `codeOwnerReviewers`).
+ */
+export type ReviewAsk = 'picked' | 'pulled_in' | 'routed';
+
+/** The newest review request event naming the viewer in person, or null. */
+function newestPersonalRequest(pr: Pr, viewer: Viewer): TimelineItem | null {
+  const personal = requestsOfViewer(pr, viewer).filter((item) => item.subject !== null && sameLogin(item.subject, viewer.login));
+  return personal[personal.length - 1] ?? null;
+}
+
+/** The viewer's pending request, as `ReviewAsk` says; null without a pending request for them or their teams. */
+export function reviewAsk(pr: Pr, viewer: Viewer): ReviewAsk | null {
+  const request = reviewRequest(pr, viewer);
+  if (request === null) {
+    return null;
+  }
+  if (request !== 'you') {
+    return 'routed';
+  }
+  const codeOwners = pr.codeOwnerReviewers;
+  if (codeOwners === undefined || codeOwners.some((name) => sameLogin(name, viewer.login))) {
+    return 'routed';
+  }
+  const actor = newestPersonalRequest(pr, viewer)?.actor;
+  if (actor === undefined || isBot(actor) || sameLogin(actor, viewer.login)) {
+    return 'routed';
+  }
+  return isPrOwner(pr, actor) ? 'picked' : 'pulled_in';
+}
+
+/** Who made the viewer's pending personal request when a person chose them (`reviewAsk` picked or pulled in), else null. */
+export function reviewChooser(pr: Pr, viewer: Viewer): string | null {
+  const ask = reviewAsk(pr, viewer);
+  if (ask !== 'picked' && ask !== 'pulled_in') {
+    return null;
+  }
+  return newestPersonalRequest(pr, viewer)?.actor ?? null;
+}
+
+/**
  * Which of the viewer's teams the pending team request is for ("acme/team-devex"),
  * the one `reviewRequest` answered for: a home team unless only the routing
  * request is owed more. Null without a pending request for their teams.

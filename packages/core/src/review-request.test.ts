@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { at, makePr, makeReview, makeUserState, viewer } from './fixtures.ts';
-import { isApprovedByViewer, isPersonalRequest, newestVerdictBy, ownTeamRequests, viewerApproval, reviewPending, reviewRequest, teamRequestTakenBy, teamSlug, viewerReviewStand } from './review-request.ts';
+import { at, makePr, makeReview, makeTimelineItem, makeUserState, viewer } from './fixtures.ts';
+import { isApprovedByViewer, isPersonalRequest, newestVerdictBy, ownTeamRequests, viewerApproval, reviewAsk, reviewChooser, reviewPending, reviewRequest, teamRequestTakenBy, teamSlug, viewerReviewStand } from './review-request.ts';
 import type { Viewer } from './types.ts';
 
 const me = viewer.login;
@@ -154,5 +154,57 @@ describe('viewerReviewStand', () => {
   it('lets a dismissal end the change request', () => {
     const reviews = [makeReview({ author: me, state: 'CHANGES_REQUESTED', submittedAt: at(10) }), makeReview({ author: me, state: 'DISMISSED', submittedAt: at(20) })];
     expect(viewerReviewStand(makePr({ reviews }), viewer)).toBeNull();
+  });
+});
+
+describe('reviewAsk', () => {
+  const asked = (actor: string, minute = 1, id = 't1') => makeTimelineItem({ id, actor, subject: me, at: at(minute) });
+  const personal = (actor: string) => makePr({ author: 'alice', reviewerUsers: [me], codeOwnerReviewers: [], timeline: [asked(actor)] });
+
+  it('is picked when the human author chose the viewer by hand', () => {
+    expect(reviewAsk(personal('alice'), viewer)).toBe('picked');
+    expect(reviewChooser(personal('alice'), viewer)).toBe('alice');
+  });
+
+  it('is pulled in when another person chose the viewer', () => {
+    expect(reviewAsk(personal('ben'), viewer)).toBe('pulled_in');
+    expect(reviewChooser(personal('ben'), viewer)).toBe('ben');
+  });
+
+  it('counts the assignee of a bot PR as its owner, and the agent that opened it as routing', () => {
+    const botPr = makePr({ author: 'posthog[bot]', assignees: ['alice'], reviewerUsers: [me], codeOwnerReviewers: [], timeline: [asked('posthog[bot]')] });
+    expect(reviewAsk(botPr, viewer)).toBe('routed');
+    expect(reviewAsk({ ...botPr, timeline: [asked('alice')] }, viewer)).toBe('picked');
+    expect(reviewAsk({ ...botPr, timeline: [asked('ben')] }, viewer)).toBe('pulled_in');
+  });
+
+  it('is routed when a bot, CODEOWNERS or the viewer made the request', () => {
+    expect(reviewAsk(personal('github-actions[bot]'), viewer)).toBe('routed');
+    expect(reviewAsk(personal(''), viewer)).toBe('routed');
+    expect(reviewAsk({ ...personal('alice'), codeOwnerReviewers: [me] }, viewer)).toBe('routed');
+    expect(reviewAsk(personal(me), viewer)).toBe('routed');
+    expect(reviewChooser(personal('github-actions[bot]'), viewer)).toBeNull();
+  });
+
+  it('is routed when it is not known: no request event, or no code owner data', () => {
+    expect(reviewAsk({ ...personal('alice'), timeline: [] }, viewer)).toBe('routed');
+    const { codeOwnerReviewers: _codeOwners, ...older } = personal('alice');
+    expect(reviewAsk(older, viewer)).toBe('routed');
+  });
+
+  it('reads the newest request for the viewer, not one for their team or someone else', () => {
+    const timeline = [
+      asked('ben', 1, 't1'),
+      asked('github-actions[bot]', 2, 't2'),
+      makeTimelineItem({ id: 't3', actor: 'carol', subject: 'acme/team-platform', at: at(3) }),
+      makeTimelineItem({ id: 't4', actor: 'carol', subject: 'dan', at: at(4) }),
+    ];
+    expect(reviewAsk({ ...personal('alice'), timeline }, viewer)).toBe('routed');
+    expect(reviewAsk({ ...personal('alice'), timeline: [timeline[1]!, { ...timeline[0]!, at: at(5) }] }, viewer)).toBe('pulled_in');
+  });
+
+  it('is routed for a team request and null without any request', () => {
+    expect(reviewAsk(makePr({ author: 'alice', reviewerTeams: team, codeOwnerReviewers: [], timeline: [makeTimelineItem({ actor: 'alice', subject: team[0]! })] }), viewer)).toBe('routed');
+    expect(reviewAsk(makePr({ author: 'alice', codeOwnerReviewers: [] }), viewer)).toBeNull();
   });
 });

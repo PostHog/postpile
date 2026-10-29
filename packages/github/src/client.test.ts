@@ -83,6 +83,8 @@ describe('fetchPrs', () => {
     // Bot reviewers are dropped; teams are "org/slug".
     expect(pr.reviewerUsers).toEqual(['viewer']);
     expect(pr.reviewerTeams).toEqual(['acme/infra']);
+    // Only the requests GitHub marks asCodeOwner.
+    expect(pr.codeOwnerReviewers).toEqual(['acme/infra']);
     expect(pr.reviews).toEqual([
       { id: 'R1', author: 'bob', state: 'APPROVED', body: 'LGTM', submittedAt: '2026-09-19T10:00:00.000Z', commitOid: 'c1', url: 'https://github.com/acme/app/pull/42#pullrequestreview-1' },
       // Bot logins get the REST-style suffix so isBot() catches them.

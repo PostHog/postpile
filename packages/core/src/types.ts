@@ -166,6 +166,13 @@ export interface Pr {
   reviewerUsers: string[];
   /** Still-pending review requests: "org/team-slug". */
   reviewerTeams: string[];
+  /**
+   * The pending requests CODEOWNERS made (GitHub's `asCodeOwner`): logins
+   * and "org/team-slug" from `reviewerUsers` and `reviewerTeams`. GitHub
+   * only says so while a request is pending. Missing on PRs stored before
+   * it was fetched: not known, which `reviewAsk` reads as routed.
+   */
+  codeOwnerReviewers?: string[];
   reviews: Review[];
   commits: Commit[];
   /**

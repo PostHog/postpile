@@ -292,13 +292,18 @@ function toTimelineItem(raw: RawTimelineItem): TimelineItem | null {
   };
 }
 
-function pendingReviewers(raw: RawPullRequest): { users: string[]; teams: string[] } {
+/** The pending review requests: users, teams, and which of them CODEOWNERS made (`Pr.codeOwnerReviewers`). */
+function pendingReviewers(raw: RawPullRequest): { users: string[]; teams: string[]; codeOwners: string[] } {
   const users: string[] = [];
   const teams: string[] = [];
+  const codeOwners: string[] = [];
   for (const node of raw.reviewRequests.nodes) {
     const name = reviewerName(node.requestedReviewer);
     if (!name) {
       continue;
+    }
+    if (node.asCodeOwner === true) {
+      codeOwners.push(name);
     }
     if (node.requestedReviewer?.__typename === 'Team') {
       teams.push(name);
@@ -306,7 +311,7 @@ function pendingReviewers(raw: RawPullRequest): { users: string[]; teams: string
       users.push(name);
     }
   }
-  return { users, teams };
+  return { users, teams, codeOwners };
 }
 
 /** More of a list on GitHub than the query took. A missing count (old fixtures) is no evidence. */
@@ -414,6 +419,7 @@ export function toPr(ref: PrRef, raw: RawPullRequest): FullPr {
     reviewDecision: toReviewDecision(raw.reviewDecision),
     reviewerUsers: reviewers.users,
     reviewerTeams: reviewers.teams,
+    codeOwnerReviewers: reviewers.codeOwners,
     reviews: raw.reviews.nodes.map(toReview),
     commits: raw.commits.nodes.map(toCommit),
     comments: allComments(raw, threads),

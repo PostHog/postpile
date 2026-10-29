@@ -26,8 +26,8 @@
           { "path": "depot.json", "additions": 10, "deletions": 0 }
         ] },
         "reviewRequests": { "nodes": [
-          { "requestedReviewer": { "__typename": "User", "login": "viewer" } },
-          { "requestedReviewer": { "__typename": "Team", "slug": "infra", "organization": { "login": "acme" } } },
+          { "asCodeOwner": false, "requestedReviewer": { "__typename": "User", "login": "viewer" } },
+          { "asCodeOwner": true, "requestedReviewer": { "__typename": "Team", "slug": "infra", "organization": { "login": "acme" } } },
           { "requestedReviewer": { "__typename": "Bot", "login": "copilot" } }
         ] },
         "reviews": { "nodes": [

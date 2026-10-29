@@ -104,7 +104,7 @@ fragment prData on PullRequest {
   mergedBy { ...actor }
   labels(first: 20) { nodes { name } }
   files(first: 100) { nodes { path additions deletions } }
-  reviewRequests(first: 30) { nodes { requestedReviewer { ...reviewer } } }
+  reviewRequests(first: 30) { nodes { asCodeOwner requestedReviewer { ...reviewer } } }
   reviews(last: ${QUERY_CAPS.reviews}) { totalCount ${OLDER_PAGE_INFO} nodes { ${REVIEW_NODE} } }
   comments(last: ${QUERY_CAPS.comments}) { totalCount ${OLDER_PAGE_INFO} nodes { ${COMMENT_NODE} } }
   reviewThreads(last: ${QUERY_CAPS.reviewThreads}) { totalCount ${OLDER_PAGE_INFO} nodes { ${THREAD_NODE} } }

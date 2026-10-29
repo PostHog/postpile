@@ -189,6 +189,15 @@ function humanRequester(author: string): string {
   return author === LOGINS.bot || author === LOGINS.agent || author === LOGINS.ghost ? LOGINS.other : author;
 }
 
+/** `Pr.codeOwnerReviewers` as the recipe says: missing when unknown, else the viewer's pending request when it was made as code owner. */
+function codeOwnersOf(spec: PrSpec, history: PrHistory): Pick<FullPr, 'codeOwnerReviewers'> {
+  if (spec.codeOwners === 'unknown') {
+    return {};
+  }
+  const viewerPending = history.reviewerUsers.includes(LOGINS.viewer);
+  return { codeOwnerReviewers: spec.codeOwners === 'viewer' && viewerPending ? [LOGINS.viewer] : [] };
+}
+
 /** The viewer owns the PR the recipe describes: wrote it, or it is a bot's PR assigned to them (DESIGN "PR ownership"). */
 function viewerOwns(spec: PrSpec): boolean {
   const botAuthor = spec.author === 'bot' || spec.author === 'app' || spec.author === 'agent';
@@ -530,6 +539,7 @@ function compilePr(spec: PrSpec, place: PrPlace): CompiledPr {
     reviewDecision: history.reviewDecision(),
     reviewerUsers: [...history.reviewerUsers],
     reviewerTeams: [...history.reviewerTeams],
+    ...codeOwnersOf(spec, history),
     reviews: history.reviews,
     commits: history.commits,
     comments: history.comments,

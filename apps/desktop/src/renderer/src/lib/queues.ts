@@ -164,16 +164,23 @@ function holdsAgentDecline(view: TileView): boolean {
   return view.prs.some((pr) => pr.status.agentDecline !== null);
 }
 
+/** The tile's move is a review a person chose the viewer for (core's `WhoseTurn.reviewAsk`: picked or pulled in). */
+function chosenReview(view: TileView): boolean {
+  return view.turn.kind === 'you' && view.turn.reviewAsk !== undefined;
+}
+
 /**
- * Inside To review: reviews for you (personal requests and team requests on
- * a teammate's PR, both "For you") before routed team requests, and inside
- * each of those a tile with a stamphog decline first (2026-10-27). Inside
- * Changes you requested: tiles on your move (the author addressed the
- * changes) before tiles waiting on the author. 0 elsewhere.
+ * Inside To review: reviews a person chose you for (picked or pulled in,
+ * 2026-10-29), then the other reviews for you (personal requests and team
+ * requests on a teammate's PR, both "For you"), then routed team requests,
+ * and inside each of those a tile with a stamphog decline first
+ * (2026-10-27). Inside Changes you requested: tiles on your move (the
+ * author addressed the changes) before tiles waiting on the author. 0
+ * elsewhere.
  */
 function reviewRank(view: TileView): number {
   if (view.tier === 'to_review') {
-    const level = view.forWhom.kind === 'you' ? 0 : 2;
+    const level = chosenReview(view) ? 0 : view.forWhom.kind === 'you' ? 2 : 4;
     return holdsAgentDecline(view) ? level : level + 1;
   }
   if (view.tier === 'changes_requested') {
@@ -183,8 +190,9 @@ function reviewRank(view: TileView): number {
 }
 
 /**
- * Tiles by queue, most urgent tier first; inside To review, reviews for you
- * first, a stamphog decline first at each level; inside Changes you requested, your move first; else the order
+ * Tiles by queue, most urgent tier first; inside To review, reviews a
+ * person chose you for, then other reviews for you, then routed ones, a
+ * stamphog decline first at each level; inside Changes you requested, your move first; else the order
  * inside a tier stays.
  */
 export function tilesInTierOrder(views: TileView[]): TileView[] {

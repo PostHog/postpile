@@ -53,6 +53,18 @@ describe('POSTPILE_FAKE_EXTRA=board', () => {
     expect(plain.some((item) => item.topic.id === BOARD_TOPIC.releaseNotes)).toBe(false);
   });
 
+  it('says who picked you or pulled you in to review, and keeps routed requests as before', async () => {
+    const engine = engineWith('board');
+    const tiles = (await engine.getTopic(BOARD_TOPIC.reviewAsks))?.tiles ?? [];
+    const footer = (number: number) => tiles.find((view) => view.prs.some((pr) => pr.key.endsWith(`#${number}`)))?.turn;
+    expect(footer(2022)).toMatchObject({ kind: 'you', move: 'review', what: 'alice picked you to review', reviewAsk: 'picked' });
+    expect(footer(2023)).toMatchObject({ kind: 'you', move: 'review', what: 'ben pulled you in to review', reviewAsk: 'pulled_in' });
+    expect(footer(2024)).toMatchObject({ kind: 'you', move: 'review', what: 'Review, alice asked' });
+    expect(footer(2024)?.reviewAsk).toBeUndefined();
+    expect(footer(2025)).toMatchObject({ kind: 'you', move: 'review', what: 'Review' });
+    expect((await topicItem(engine, BOARD_TOPIC.reviewAsks)).section).toBe('to_review');
+  });
+
   it('shows an approved own PR as a merge move that is not urgent (BOARD-07, BOARD-22 C)', async () => {
     const engine = engineWith('board');
     const item = await topicItem(engine, BOARD_TOPIC.releaseNotes);

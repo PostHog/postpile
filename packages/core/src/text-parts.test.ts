@@ -25,6 +25,7 @@ function headerOf(pr: Pr): HeaderPart {
     headOid: pr.headOid,
     reviewerUsers: pr.reviewerUsers,
     reviewerTeams: pr.reviewerTeams,
+    codeOwnerReviewers: pr.codeOwnerReviewers ?? null,
     previousBaseRefs: pr.previousBaseRefs ?? [],
     isCrossRepository: pr.isCrossRepository ?? false,
     createdAt: pr.createdAt,
@@ -62,6 +63,13 @@ describe('splitText and joinText', () => {
         }
       }
     }
+  });
+
+  it('keeps codeOwnerReviewers missing apart from an empty list', () => {
+    const known = makePr({ reviewerUsers: ['alice'], codeOwnerReviewers: [] });
+    const { codeOwnerReviewers: _codeOwners, ...older } = known;
+    expect(roundTrip(known).codeOwnerReviewers).toEqual([]);
+    expect(roundTrip(older)).not.toHaveProperty('codeOwnerReviewers');
   });
 
   it('keeps capHits missing apart from an empty list, and truncated missing apart from false', () => {
