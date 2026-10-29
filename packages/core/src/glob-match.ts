@@ -79,8 +79,8 @@ export function globPathMatches(pattern: string, path: string): boolean {
       const rest = names.length - n;
       result = dirOnly ? rest >= 1 : exactEnd ? rest === 0 : true;
     } else if (globs[g] === '**' && g === globs.length - 1) {
-      // Last: everything below, one segment at least.
-      result = n < names.length;
+      // Last: everything below, one segment at least; "**/" only inside a folder there, so two.
+      result = names.length - n >= (dirOnly ? 2 : 1);
     } else if (globs[g] === '**') {
       // Zero folders here, or take one and stay on the `**`.
       result = from(g + 1, n) || (n < names.length && from(g, n + 1));

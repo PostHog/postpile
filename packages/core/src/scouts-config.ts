@@ -112,15 +112,11 @@ export function parsePathHint(entry: string): ScoutPathHint | string {
   if (pattern === '') {
     return `empty path entry "${entry}"`;
   }
-  const folder = newFolderIn(pattern, addedOnly);
-  if (folder !== null) {
-    return { pattern, addedOnly, newFolderIn: folder };
-  }
-  // The regex only tells a pattern GitHub skips; matching never uses it (`scoutHintMatches`).
+  // The regex only tells a pattern GitHub skips; matching never uses it (`scoutHintMatches`). New-folder hints too.
   if (codeownersPatternRegex(pattern) === null) {
     return `path "${pattern}" uses "!", "[ ]" or "\\", which paths do not support`;
   }
-  return { pattern, addedOnly, newFolderIn: null };
+  return { pattern, addedOnly, newFolderIn: newFolderIn(pattern, addedOnly) };
 }
 
 /** Comma-separated; whitespace too for repos, which never hold spaces. */

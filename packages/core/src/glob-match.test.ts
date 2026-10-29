@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { codeownersPatternRegex } from './codeowners.ts';
 import { globPathMatches, segmentMatches } from './glob-match.ts';
 
-const PATTERNS = ['*.md', 'docs/', 'docs/*', 'docs/**', '/docs', 'docs', 'services/*/api/**', '**/api', 'a/**/b', 'src/?.ts', '*', '**', 'README.md', '/build/', 'apps/*/src/*.ts'];
-const PATHS = ['README.md', 'docs/a.md', 'docs/build/b.md', 'docs', 'src/docs/x.ts', 'services/billing/api/routes.ts', 'services/billing/web/x.ts', 'api', 'pkg/api', 'pkg/api/x', 'a/b', 'a/x/y/b', 'a/b/c', 'src/a.ts', 'src/ab.ts', 'build/out.js', 'x/build/out.js', 'apps/web/src/main.ts', 'apps/web/src/deep/main.ts'];
+const PATTERNS = ['src/**/', '**/', '*.md', 'docs/', 'docs/*', 'docs/**', '/docs', 'docs', 'services/*/api/**', '**/api', 'a/**/b', 'src/?.ts', '*', '**', 'README.md', '/build/', 'apps/*/src/*.ts'];
+const PATHS = ['src/main.ts', 'src/a/main.ts', 'README.md', 'docs/a.md', 'docs/build/b.md', 'docs', 'src/docs/x.ts', 'services/billing/api/routes.ts', 'services/billing/web/x.ts', 'api', 'pkg/api', 'pkg/api/x', 'a/b', 'a/x/y/b', 'a/b/c', 'src/a.ts', 'src/ab.ts', 'build/out.js', 'x/build/out.js', 'apps/web/src/main.ts', 'apps/web/src/deep/main.ts'];
 
 describe('globPathMatches', () => {
   it('agrees with the CODEOWNERS regex on every pattern and path', () => {

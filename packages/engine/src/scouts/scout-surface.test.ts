@@ -167,6 +167,24 @@ describe('the Scouted section', () => {
     expect(h.store.scoutedPrs.get('acme/app#1')?.followedAt).toBeNull();
   });
 
+  it('counts a subscription GitHub takes after the deadline as followed, and clears its parked write', async () => {
+    const h = await pulled();
+    let answer: () => void = () => {};
+    const subscribe = vi.spyOn(h.writer, 'followPr').mockImplementationOnce(() => new Promise<void>((resolve) => (answer = resolve)));
+    await h.engine.followScouted('acme/app#1', 'tile');
+    const flushed = h.engine.flushPendingWrites();
+    await vi.waitFor(() => expect(subscribe).toHaveBeenCalled());
+    h.timers.advance(FOLLOW_LOOKUP_MS);
+    await flushed;
+    expect(h.store.pendingWrites.list()).toHaveLength(1);
+
+    answer();
+
+    await vi.waitFor(() => expect(h.store.scoutedPrs.get('acme/app#1')?.followedAt).not.toBeNull());
+    expect(h.store.pendingWrites.list()).toEqual([]);
+    expect(h.store.actionLog.listRecent(5).map((entry) => [entry.action, entry.outcome])).toContainEqual(['follow', 'github']);
+  });
+
   it('says in the PR pane who scouted it and why', async () => {
     const h = await pulled();
     const pr = await h.engine.getPr('acme/app#1');

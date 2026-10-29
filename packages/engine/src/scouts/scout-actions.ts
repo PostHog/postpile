@@ -93,11 +93,17 @@ export class ScoutActions {
       return;
     }
     let result;
+    const sending = this.writes.followPr(follow.subjectId, { origin: 'queue', prKey: follow.prKey, batch: follow.batch });
     try {
       // A stalled subscription parks like a failed one, to send again from the lock (subscribing twice is harmless).
-      result = await this.withDeadline(this.writes.followPr(follow.subjectId, { origin: 'queue', prKey: follow.prKey, batch: follow.batch }));
+      result = await this.withDeadline(sending);
     } catch (error) {
       this.pendingWrites.parkFollow(pending, { ...follow, error: errorText(error) });
+      // Past the deadline GitHub may still take it: then it is followed, and the parked write goes.
+      sending.then(
+        (late) => this.followedLate(follow, late),
+        () => {},
+      );
       return;
     }
     if (result === 'off') {
@@ -105,6 +111,20 @@ export class ScoutActions {
       return;
     }
     recordFollowed(this.store, follow.prKey, this.now().toISOString());
+  }
+
+  /** A subscription GitHub took after the deadline: followed after all, and its parked write cleared. Never throws (the store may be closed by then). */
+  private followedLate(follow: QueuedFollow, result: Awaited<ReturnType<GitHubWrites['followPr']>>): void {
+    if (result === 'off') {
+      return;
+    }
+    try {
+      this.pendingWrites.clearFollow(follow.prKey, follow.batch);
+      recordFollowed(this.store, follow.prKey, this.now().toISOString());
+      this.settledFollows += 1;
+    } catch {
+      // Quit meanwhile: the parked write sends again from the lock next start, subscribing twice is harmless.
+    }
   }
 
   /** Grows each time a Follow leaves its undo window. */

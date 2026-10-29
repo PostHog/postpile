@@ -73,7 +73,8 @@ type RawFilesBatch = Record<string, { pullRequest: RawFilesPage | null } | null>
 
 type RawNumberBatch = Record<string, { pullRequest: RawListedPr | null } | null>;
 
-type RawTreeBatch = Record<string, { entries: { name: string; type: string }[] } | null>;
+/** `{}` for an object that is no tree (a file or symlink at that path): the Tree-only fragment selects nothing. */
+type RawTreeBatch = Record<string, { entries?: { name: string; type: string }[] } | null>;
 
 function ownerAndName(repo: string): [string, string] {
   const [owner = '', name = ''] = repo.split('/');
@@ -406,8 +407,9 @@ export async function scoutFolders(http: GitHubHttp, repo: string, reads: ScoutF
       continue;
     }
     batch.forEach((read, index) => {
-      const tree = response.data?.repository?.[`t${index}`] ?? null;
-      const names = tree === null ? [] : tree.entries.filter((entry) => entry.type === 'tree').map((entry) => entry.name);
+      // Missing, or a file or symlink where the folder would be: no folders there, so everything in it is new.
+      const entries = response.data?.repository?.[`t${index}`]?.entries ?? [];
+      const names = entries.filter((entry) => entry.type === 'tree').map((entry) => entry.name);
       result.set(scoutFolderKey(read), names.map((entry) => (read.parent === '' ? entry : `${read.parent}/${entry}`)));
     });
   }
