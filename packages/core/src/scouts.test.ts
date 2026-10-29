@@ -14,6 +14,7 @@ import {
   scoutPrefilter,
   scoutPullStep,
   scoutRetentionCutoff,
+  scoutFolderParents,
   scoutSignals,
   type ScoutCandidate,
   type ScoutFile,
@@ -73,6 +74,13 @@ describe('scoutPrefilter', () => {
     expect(scoutPrefilter(candidate({ author: 'codegen-agent[bot]' }), facts)).toBeNull();
   });
 
+  it('leaves out upgrade and dependency bots by name, but not an org bot that opens PRs for people', () => {
+    expect(scoutPrefilter(candidate({ author: 'acme-js-upgrader[bot]' }), facts)).toBe('dependency_bot');
+    expect(scoutPrefilter(candidate({ author: 'dependabot-preview[bot]' }), facts)).toBe('dependency_bot');
+    expect(scoutPrefilter(candidate({ author: 'acme-renovate' }), facts)).toBe('dependency_bot');
+    expect(scoutPrefilter(candidate({ author: 'acme[bot]' }), facts)).toBeNull();
+  });
+
   it('counts an agent PR as its assignees\' work, like every ownership rule', () => {
     expect(scoutPrefilter(candidate({ author: 'codegen-agent[bot]', assignees: ['bob'] }), facts)).toBe('your_team');
     expect(scoutPrefilter(candidate({ author: 'codegen-agent[bot]', assignees: ['alice'] }), facts)).toBe('you');
@@ -117,6 +125,20 @@ describe('scoutSignals', () => {
     const lookout = scout('+*/');
     const signals = scoutSignals(lookout, files(['billing/main.ts', 'ADDED'], ['src/new.ts', 'ADDED'], ['README.md', 'ADDED'], ['tools/x.ts', 'MODIFIED']), base);
     expect(signals).toEqual([{ path: 'billing/main.ts', changeType: 'ADDED', hint: '+*/' }]);
+  });
+
+  it('finds a new folder directly inside a folder against the base tree there', () => {
+    const lookout = scout('+products/*/');
+    const products = new Set([...base, 'products', 'products/billing']);
+    const signals = scoutSignals(
+      lookout,
+      files(['products/ledger/main.ts', 'ADDED'], ['products/billing/deep/new.ts', 'ADDED'], ['products/README.md', 'ADDED'], ['products/ledger/old.ts', 'MODIFIED'], ['other/products/x/y.ts', 'ADDED']),
+      products,
+    );
+    // Only the file in a folder products/ did not have; a new file deeper in an existing folder is no new folder.
+    expect(signals).toEqual([{ path: 'products/ledger/main.ts', changeType: 'ADDED', hint: '+products/*/' }]);
+    expect(scoutFolderParents(lookout)).toEqual(['products']);
+    expect(scoutFolderParents(scout('+*/, +products/*/, +services/*/api/**'))).toEqual(['', 'products']);
   });
 
   it('takes each file once, by the first hint that matches', () => {
