@@ -1,4 +1,4 @@
-import { effectiveLoudness, emptyAgentCallStats, isMemoryNoise, isMemoryTrigger, PUSH_KINDS, GLANCE_BATCH_SIZE, type AgentCallStats, type PrKey, type Viewer } from '@postpile/core';
+import { effectiveLoudness, emptyAgentCallStats, scoutedWantsGlance, isMemoryNoise, isMemoryTrigger, PUSH_KINDS, GLANCE_BATCH_SIZE, type AgentCallStats, type PrKey, type Viewer } from '@postpile/core';
 import { AgentBudget } from '../budget.ts';
 import { Board } from '../board.ts';
 import type { DigestDeps } from '../digest/deps.ts';
@@ -106,12 +106,14 @@ export class TopicCatchUp {
   /**
    * Glances the run may write, for its cap. Unsorted's run also glances the
    * scouted PRs (topic-less too), so they count there: a retry of one in a
-   * later batch must not hit the cap before its turn.
+   * later batch must not hit the cap before its turn. Counted from their
+   * `pr_scouted` rows, never their snapshots: every active one, an upper
+   * bound (the writer finds which need a glance), read on every poll.
    */
-  private glanceTargetsIn(topicId: string | null, viewer: Viewer): number {
+  private glanceTargetsIn(topicId: string | null): number {
     const board = Board.load(this.deps.store, this.deps.now().toISOString());
     const inTopic = [...glanceTargetKeys(board)].filter((key) => (board.memberships.get(key)?.topicId ?? null) === topicId).length;
-    const scouted = topicId === null ? new GlanceInputs(this.deps.store, board, viewer, this.deps.contexts).scoutTargets().length : 0;
+    const scouted = topicId === null ? this.deps.store.scoutedPrs.listActive().filter(scoutedWantsGlance).length : 0;
     return inTopic + scouted;
   }
 
@@ -151,7 +153,7 @@ export class TopicCatchUp {
   private async runJobs(topicId: string | null, viewer: Viewer, startedAt: string, stats: AgentCallStats, errors: string[]): Promise<void> {
     const label = topicId ?? 'unsorted';
     await this.deps.callLog.withRun(`catchup:${label}:${startedAt}`, stats, async () => {
-      const budget = new AgentBudget(catchUpCallsPerRun(this.glanceTargetsIn(topicId, viewer)), stats, this.cap);
+      const budget = new AgentBudget(catchUpCallsPerRun(this.glanceTargetsIn(topicId)), stats, this.cap);
       const deps = this.digestDeps(viewer, budget, errors);
       const scope = { topicId };
       // Budget is taken in this order, like a sync: dossier, events, glances as the dossier lands, reconcile.

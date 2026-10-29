@@ -2,6 +2,7 @@ import { prPaneView, type FullPr } from '@postpile/core';
 import { at, makeComment, makeThreadFor, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { Board } from './board.ts';
+import { readHotSet, threadsByPrKey } from './hot-set.ts';
 import { makeHarness, type Harness } from './testing/fakes.ts';
 import { reviewRequestedPr } from './testing/prs.ts';
 import { readThreadsOnGitHub, topicWithPrs } from './testing/topics.ts';
@@ -127,6 +128,26 @@ describe('the hot board', () => {
     await syncedAndRead(h, 'charts', [asked]);
 
     expect(Board.load(h.store, LATER.toISOString()).prs.has(asked.key)).toBe(true);
+  });
+
+  it('leaves PRs only a scout holds out of the inbox count that decides busy mode, but keeps a scouted layer of a tracked stack', async () => {
+    const h = makeHarness({ now: () => LATER });
+    await syncedAndRead(h, 'depot', [old, open, stackedBelow, recent]);
+    const before = readHotSet(h.store, LATER.toISOString(), threadsByPrKey(h.store.notifications.list())).selection;
+    const row = { scoutId: 'lookout', scoutName: 'Lookout', reason: 'new folder', configVersion: 1, pulledAt: RECENT, seenUpdatedAt: null, followedAt: null, dismissedAt: null, dismissReason: null, expiredAt: null, expiryReason: null };
+    const scoutOnly = reviewRequestedPr(30, { headRef: 'scout-only', updatedAt: RECENT });
+    const onTrackedStack = reviewRequestedPr(31, { baseRef: open.headRef, headRef: 'scout-layer', updatedAt: RECENT });
+    for (const pr of [scoutOnly, onTrackedStack]) {
+      h.store.prs.upsert(pr, RECENT);
+      h.store.scoutedPrs.insert({ ...row, prKey: pr.key });
+    }
+
+    const after = readHotSet(h.store, LATER.toISOString(), threadsByPrKey(h.store.notifications.list())).selection;
+
+    expect(after.keys.has(scoutOnly.key)).toBe(false);
+    expect(after.keys.has(onTrackedStack.key)).toBe(true);
+    // Only the layer that rides along with the tracked stack counts toward the cap.
+    expect(after.inboxPrs).toBe(before.inboxPrs + 1);
   });
 
   it('counts the kept PRs per tier for the busy inbox card', async () => {
