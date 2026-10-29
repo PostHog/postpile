@@ -81,5 +81,6 @@ export function ScoutIntro(props: { setupBlocks: boolean; requested: boolean; on
   if (state === undefined || !(open || opens)) {
     return null;
   }
-  return <ScoutIntroCard state={state} hidden={waits && !props.requested} onClose={close} />;
+  // Read once by the card when it mounts: an opening the Scouted section asked for is manual.
+  return <ScoutIntroCard state={state} hidden={waits && !props.requested} trigger={props.requested ? 'manual' : 'auto'} onClose={close} />;
 }

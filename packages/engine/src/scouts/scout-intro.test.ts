@@ -88,6 +88,9 @@ describe('the Scouts intro card', () => {
     expect(h.runner.promptsFor('scout_judge')).toHaveLength(5);
     // Scheduled like a sync: only what the 5 calls can judge gets its files read.
     expect(result.trial?.problem).toBe('more PRs than one check judges');
+    expect(h.telemetry.events.filter((entry) => entry.event === 'scout_checked').map((entry) => entry.props)).toEqual([
+      { fit: 'fits', cant_see: false, dry_run_pulls: 6, dry_run_complete: false },
+    ]);
     const filesRead = h.reader.scoutCalls.filter((call) => call.startsWith('files ')).flatMap((call) => call.slice('files '.length).split(','));
     expect(filesRead).toHaveLength(60);
     // Nothing saved: no judgement, pull, cursor, resume point, snapshot or version (only the calls' accounting rows).
@@ -153,6 +156,22 @@ describe('the Scouts intro card', () => {
     expect(result.ok).toBe(true);
     expect(result.trial).toMatchObject({ problem: 'no agent calls left today for a dry run', candidates: 0, complete: false });
     expect(h.reader.scoutCalls).toEqual([]);
+    expect(h.telemetry.events.filter((entry) => entry.event === 'scout_checked').map((entry) => entry.props)).toEqual([
+      { fit: 'fits', cant_see: false, dry_run_skipped_reason: 'no_calls_left' },
+    ]);
+  });
+
+  it('reports a check without a scouts file as one with no dry run, and a refused check not at all', async () => {
+    const h = makeHarness({ catchUpCallsPerDay: 50 });
+    h.store.meta.set('viewer', JSON.stringify({ login: 'alice', teams: [] }));
+    h.runner.answer('scout_check', { fit: 'partly', note: 'ok', cantSee: { part: 'other teams', why: 'teams are not in PR data' }, name: 'Lookout', paths: [], pathsCoverAll: false });
+
+    await h.engine.checkScout({ prompt: PROMPT, repos: ['acme/app'] });
+    await h.engine.checkScout({ prompt: '', repos: ['acme/app'] });
+
+    expect(h.telemetry.events.filter((entry) => entry.event === 'scout_checked').map((entry) => entry.props)).toEqual([
+      { fit: 'partly', cant_see: true, dry_run_skipped_reason: 'no_scouts_file' },
+    ]);
   });
 
   it('refuses a check whose prompt would not turn on as written, before any call or read', async () => {

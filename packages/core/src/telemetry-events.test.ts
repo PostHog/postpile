@@ -106,6 +106,55 @@ describe('TELEMETRY_EVENTS', () => {
     expect(RENDERER_TELEMETRY_EVENTS).not.toContain('update_check_finished');
   });
 
+  it('counts scouted tiles apart on tile_opened, absent on older events', () => {
+    const valid = { tile_kind: 'single', for_whom: 'none', has_glance: true, verdict: null };
+    expect(TELEMETRY_EVENTS.tile_opened.safeParse({ ...valid, scouted: true }).success).toBe(true);
+    expect(TELEMETRY_EVENTS.tile_opened.safeParse(valid).success).toBe(true);
+    expect(TELEMETRY_EVENTS.tile_opened.safeParse({ ...valid, scouted: 'lookout' }).success).toBe(false);
+  });
+
+  it('takes the scout events as counts, booleans and enums only', () => {
+    const run = {
+      scouts: 2,
+      listed: 120,
+      candidates: 30,
+      judged: 12,
+      pulled: 2,
+      pending: 4,
+      expired: 1,
+      judge_calls: 1,
+      capped: false,
+      listing_capped: false,
+      rate_limited: false,
+      quota_low: false,
+      duration_ms: 5400,
+    };
+    expect(TELEMETRY_EVENTS.scout_run_completed.safeParse(run).success).toBe(true);
+    expect(TELEMETRY_EVENTS.scout_run_completed.safeParse({ ...run, scout: 'lookout' }).success).toBe(false);
+    expect(TELEMETRY_EVENTS.scout_pr_closed.safeParse({ outcome: 'reached_inbox', was_seen: false, was_opened: true, hours_in_section: 5 }).success).toBe(true);
+    expect(TELEMETRY_EVENTS.scout_pr_closed.safeParse({ outcome: 'expired', was_seen: false, was_opened: true, hours_in_section: 5 }).success).toBe(false);
+    expect(TELEMETRY_EVENTS.scout_pr_closed.safeParse({ outcome: 'followed', was_seen: false, was_opened: true, hours_in_section: 1.5 }).success).toBe(false);
+    expect(TELEMETRY_EVENTS.scout_checked.safeParse({ fit: 'fits', cant_see: false, dry_run_pulls: 3, dry_run_complete: true }).success).toBe(true);
+    expect(TELEMETRY_EVENTS.scout_checked.safeParse({ fit: 'partly', cant_see: true, dry_run_skipped_reason: 'no_calls_left' }).success).toBe(true);
+    expect(TELEMETRY_EVENTS.scout_checked.safeParse({ fit: 'partly', cant_see: true, prompt: 'billing' }).success).toBe(false);
+    expect(TELEMETRY_EVENTS.scout_follow_failed.safeParse({ stage: 'timeout' }).success).toBe(true);
+    expect(TELEMETRY_EVENTS.scout_follow_failed.safeParse({ stage: 'acme/app#1' }).success).toBe(false);
+    expect(TELEMETRY_EVENTS.scout_follow_late_success.safeParse({}).success).toBe(true);
+    expect(TELEMETRY_EVENTS.scout_seen.safeParse({ via: 'mcp' }).success).toBe(true);
+  });
+
+  it('lets the renderer send the intro card funnel, validated by the catalogue', () => {
+    expect(RENDERER_TELEMETRY_EVENTS).toContain('scout_intro_shown');
+    expect(RENDERER_TELEMETRY_EVENTS).toContain('scout_intro_closed');
+    expect(TELEMETRY_EVENTS.scout_intro_shown.safeParse({ trigger: 'manual' }).success).toBe(true);
+    expect(TELEMETRY_EVENTS.scout_intro_shown.safeParse({ trigger: 'sidebar' }).success).toBe(false);
+    expect(TELEMETRY_EVENTS.scout_intro_closed.safeParse({ stage: 'check', action: 'escape' }).success).toBe(true);
+    expect(TELEMETRY_EVENTS.scout_intro_closed.safeParse({ stage: 'check', action: 'turn_on' }).success).toBe(false);
+    // The engine has the facts for the rest: the check's verdict, the run, follows and closures.
+    expect(RENDERER_TELEMETRY_EVENTS).not.toContain('scout_checked');
+    expect(RENDERER_TELEMETRY_EVENTS).not.toContain('scout_pr_closed');
+  });
+
   it('lists every catalogue key in TELEMETRY_EVENT_NAMES', () => {
     expect(TELEMETRY_EVENT_NAMES).toEqual(Object.keys(TELEMETRY_EVENTS));
   });

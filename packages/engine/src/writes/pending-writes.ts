@@ -24,6 +24,7 @@ import type { Store } from '@postpile/store';
 import { putBackLocalChange, readLocally } from '../actions/local-change.ts';
 import { followWithDeadline, recordLateFollow } from '../scouts/follow-deadline.ts';
 import { recordFollowed } from '../scouts/followed.ts';
+import { NoopTelemetry, type Telemetry } from '../telemetry/telemetry.ts';
 import { errorText } from '../errors.ts';
 import type { MarkReadQueue, ParkedBatch } from '../mark-read-queue.ts';
 import { notTakenDetail, type GitHubWrites } from './github-writes.ts';
@@ -84,6 +85,8 @@ export class PendingWrites {
     private readonly now: () => Date,
     /** The Follow deadline's clock (`followWithDeadline`); tests pass fake timers. */
     private readonly timers: Timers = systemTimers,
+    /** For a Follow that failed or went through late (scout_follow_failed, scout_follow_late_success). */
+    private readonly telemetry: Telemetry = new NoopTelemetry(),
   ) {}
 
   /** Follows GitHub took after the deadline, reconciled here: the live status counts them, so the renderer refetches. */
@@ -440,7 +443,7 @@ export class PendingWrites {
     let outcome: ThreadOutcome;
     try {
       // The same deadline as from the undo queue: a stalled Follow never holds sendAll or discard; a late OK still counts.
-      const result = await followWithDeadline(this.writes, this.timers, follow.subjectId, { origin: 'footer', prKey: follow.prKey, batch: write.batch }, () => {
+      const result = await followWithDeadline(this.writes, this.timers, this.telemetry, follow.subjectId, { origin: 'footer', prKey: follow.prKey, batch: write.batch }, () => {
         recordLateFollow(this.store, this, follow.prKey, write.batch, this.now().toISOString());
         this.lateFollows += 1;
       });

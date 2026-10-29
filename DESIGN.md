@@ -1264,6 +1264,10 @@ contract surfaces.
   snapshots. Kept apart from `pr_found`, which every sync replaces.
 - Migration 045 adds `pending_write.follow` (`{prKey, subjectId}`) for a
   Follow waiting for the lock.
+- Migration 046 adds `pr_scouted.left_section_at`: when the PR left the
+  Scouted section, set once by telemetry's `scout_pr_closed` sweep
+  ("Usage analytics" › Scouts). Rows already followed, dismissed or
+  expired are backfilled, so an upgrade reports no old history.
 
 **The sync step** (`ScoutRun`, after the inbox digest, its own sync phase
 `scouts`):
@@ -1504,7 +1508,7 @@ drafts the first one, checks it and turns it on.
   refused when the file or the new scout would not parse back exactly as
   asked. The next full sync runs it. Toast: "Scout on: <name>. Finds show
   under Scouted after the next sync." Telemetry `scout_turned_on` (repo and
-  path counts).
+  path counts); the whole funnel is under "Usage analytics" › Scouts.
 
 **Accepted trade-offs:**
 
@@ -8539,7 +8543,8 @@ known (first run, setup) a random install id lives in the data folder
 is fetched, so PostHog treats both as the same person. The login, name and
 email are never sent. Person properties (`$set`, refreshed after every sync):
 `app_version`, `os_version`, `arch`, `is_posthog_member` (the viewer's teams
-include a `PostHog/...` team), `agent_available` (`claude` found). Super
+include a `PostHog/...` team), `agent_available` (`claude` found),
+`active_scouts` (scouts in force from scouts.md, a count, since 0.29.0). Super
 properties on every event: `app_version`, `profile`, `$process_person_profile`.
 
 **The leak guard**: every prop is checked in the `Telemetry` class itself
@@ -8604,7 +8609,8 @@ topic names are never event props.
 2. *Retention*: `app_active` (once per calendar day), `window_focused`
    (throttled to once per 30 minutes).
 3. *Core actions*: `tile_opened` (`for_whom` gained `routing` on
-   2026-09-30), `pr_approved` (from `detail`, `tile`, `agent_tile` or
+   2026-09-30; `scouted` since 0.29.0: a scout's tile, counted apart),
+   `pr_approved` (from `detail`, `tile`, `agent_tile` or
    `agent_topic`; `was_agent_approved` true for the agent ones; since
    2026-10-06 `with_note` and `note`: `none`, `agent`, `agent_edited` or
    `own`, from the composer, never the text), `comment_review_sent` (note:
@@ -8638,9 +8644,7 @@ topic names are never event props.
    recheck dialog, sent with the correction as `fromRecheck`),
    `memory_corrected`, `proposal_resolved`
    (kind `topic_merge` / `rename` / `topic_split` / `topic_move` / `rule` / `instructions`;
-   source `consolidation` / `agent` on topic proposals), `instructions_edited`,
-   `scout_followed` (from `tile` / `detail`) and `scout_dismissed`
-   (`with_reason`) on scouted PRs (2026-10-29, "Scouts").
+   source `consolidation` / `agent` on topic proposals), `instructions_edited`.
 5. *Health*: `sync_completed` (duration_ms, prs_fetched, new_events,
    agent_calls, agent_failures, cost_usd rounded to cents, stopped_at_cap,
    trigger `start`/`manual`/`auto`, auto = the hourly background sync,
@@ -8709,6 +8713,43 @@ topic names are never event props.
    (tile count of its topic). One `topic_shape` per topic: `tiles`, `prs`,
    `single_tiles`, `stack_tiles`, `set_tiles`. Answers "how many tiles hold x
    PRs, and are they stacked"; never a repo, title, login or PR number.
+8. *Scouts* (0.29.0, "Scouts"): how much scouts pull in and what happens to
+   each pull. Never a scout's name, id or prompt, a repo, a path hint, a PR
+   number, title or login.
+   - `scout_run_completed`: one per full sync with a scout in force, sent
+     right after `sync_completed` (`SyncRun.reportScoutRun`, from
+     `ScoutRunReport`): scouts, listed, candidates (past the pre-filter,
+     per scout and repo), judged, pulled, pending, expired, judge_calls,
+     capped (judge calls ran out with work left), listing_capped (a repo hit
+     the page cap), rate_limited, quota_low (nothing ran), duration_ms.
+   - `scout_pr_closed`: once per scouted PR when it leaves the Scouted
+     section. outcome `followed` / `dismissed` / `expired_merged` /
+     `expired_closed` / `expired_inactive` / `reached_inbox` (a notification
+     thread, a found row or a topic made it tracked by itself); was_opened
+     (seen at least once, in the app or by `mark_read`), was_seen (seen
+     through its latest activity), hours_in_section (pull to leaving,
+     rounded). One sweep sends it (`ScoutedClosures`): it reads the rows
+     whose `pr_scouted.left_section_at` (migration 046) is still empty,
+     decides the outcome from the row (`scoutClosedOutcome`, the earliest
+     stored transition, else tracked), and sets the column in the same step,
+     so each PR reports once, across restarts too. It runs after every
+     sync, a dismiss, a Follow GitHub took and a send from the lock; a late
+     Follow from the lock reports with the next of those. Followed,
+     dismissed and expired PRs use their stored time for the hours; a PR
+     that reached the inbox counts up to the sweep that saw it.
+   - `scout_followed` (from `tile` / `detail`), `scout_dismissed`
+     (`with_reason`); `scout_follow_failed` (stage `lookup`, `subscribe`
+     or `timeout`, from the undo queue and the lock's queue alike) and
+     `scout_follow_late_success` (GitHub took a Follow after its deadline).
+   - `scout_seen` (via `open` or `mcp`): the seen boundary moved; opening
+     an unchanged PR again sends nothing.
+   - The intro card funnel: `scout_intro_shown` (trigger `auto` /
+     `manual`) and `scout_intro_closed` (stage `card` / `check`, action
+     `not_now` / `escape`) from the renderer; `scout_checked` (fit
+     `fits` / `partly` / `no`, cant_see, and dry_run_pulls with
+     dry_run_complete, or dry_run_skipped_reason `no_scouts_file` /
+     `no_calls_left`) and `scout_turned_on` (repos, paths: counts) from the
+     engine.
 
 **Verification**: a throwaway script or CLI run with `POSTPILE_TELEMETRY=1`
 and a scratch data dir sends one `telemetry_test` event (distinct id

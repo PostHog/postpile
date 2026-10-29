@@ -16,6 +16,7 @@ import type { Store } from '@postpile/store';
 import type { ReadMarker } from '../actions/read-marker.ts';
 import { Board } from '../board.ts';
 import { unseenIdsThrough } from './seen-through.ts';
+import type { Telemetry } from '../telemetry/telemetry.ts';
 import type { ActionLog } from '../writes/action-log.ts';
 
 export interface AgentMarkReadDeps {
@@ -23,6 +24,8 @@ export interface AgentMarkReadDeps {
   readMarker: ReadMarker;
   log: ActionLog;
   now: () => Date;
+  /** scout_seen (via mcp) for a scouted PR marked seen. */
+  telemetry: Telemetry;
 }
 
 /**
@@ -105,9 +108,9 @@ export class AgentMarkRead {
       alreadyQueued: false,
       changesAnything: isScoutedUnseen(row, snapshot.updatedAt),
     });
-    if (check.kind === 'mark') {
-      store.scoutedPrs.markSeen(pr.prKey, snapshot.updatedAt);
+    if (check.kind === 'mark' && store.scoutedPrs.markSeen(pr.prKey, snapshot.updatedAt)) {
       this.seenLocally += 1;
+      this.deps.telemetry.capture('scout_seen', { via: 'mcp' });
     }
     return check;
   }

@@ -91,6 +91,32 @@ export class ScoutedPrRepo {
     return rows.map((row) => ({ prKey: row.pr_key, scoutId: row.scout_id, unseen: row.unseen === 1 }));
   }
 
+  /**
+   * Rows whose leaving the Scouted section is not recorded yet
+   * (`left_section_at`), each with whether PostPile tracks the PR by itself
+   * (a notification thread, found by the sync, or in a topic) and the PR's
+   * stored update time. What telemetry's scout_pr_closed sweep reads.
+   */
+  listNotLeft(): { scouted: ScoutedPr; tracked: boolean; prUpdatedAt: IsoTime | null }[] {
+    const rows = all<ScoutedPrRow & { tracked: number; pr_updated_at: string | null }>(
+      this.db,
+      `SELECT s.*, p.updated_at AS pr_updated_at,
+              CASE WHEN EXISTS (SELECT 1 FROM notification_thread t WHERE t.pr_key = s.pr_key)
+                     OR EXISTS (SELECT 1 FROM pr_found f WHERE f.pr_key = s.pr_key)
+                     OR EXISTS (SELECT 1 FROM topic_membership m WHERE m.pr_key = s.pr_key)
+                   THEN 1 ELSE 0 END AS tracked
+       FROM pr_scouted s LEFT JOIN pr p ON p.key = s.pr_key
+       WHERE s.left_section_at IS NULL
+       ORDER BY s.pulled_at, s.pr_key`,
+    );
+    return rows.map((row) => ({ scouted: toScouted(row), tracked: row.tracked === 1, prUpdatedAt: row.pr_updated_at }));
+  }
+
+  /** Records that the PR left the Scouted section. True only the first time, so its telemetry is sent once. */
+  markLeftSection(prKey: PrKey, at: IsoTime): boolean {
+    return run(this.db, 'UPDATE pr_scouted SET left_section_at = ? WHERE pr_key = ? AND left_section_at IS NULL', at, prKey) > 0;
+  }
+
   /** First scout wins: a PR another scout already pulled keeps its row. True when this one was stored. */
   insert(scouted: ScoutedPr): boolean {
     const changed = run(

@@ -90,12 +90,28 @@ export interface ScoutRunInput {
   glance: () => Promise<void>;
 }
 
+/** What one run did, for the sync log and telemetry's scout_run_completed. Counts and flags only. */
 export interface ScoutRunReport {
+  /** Scouts in force this run. */
+  scouts: number;
   listed: number;
+  /** Candidates that passed the pre-filter, summed over each scout and repo. */
+  candidates: number;
   judged: number;
   pulled: number;
   pending: number;
   expired: number;
+  /** scout_judge calls made. */
+  judgeCalls: number;
+  /** Judge calls ran out (per run, or the sync's agent-call cap) with work left for the next sync. */
+  capped: boolean;
+  /** A repo's listing stopped at its page cap. */
+  listingCapped: boolean;
+  /** GitHub rate-limited a scout read: the rest waits for the next sync. */
+  rateLimited: boolean;
+  /** The GitHub quota was low at the start: nothing ran. */
+  quotaLow: boolean;
+  durationMs: number;
 }
 
 /** One repo's listing for this run, shared by every scout on it. */
@@ -207,6 +223,10 @@ export class ScoutRun {
   private rateLimited = false;
   /** scout_judge calls this run may still make (SCOUT_JUDGE_CALLS_PER_RUN). */
   private judgeCallsLeft = SCOUT_JUDGE_CALLS_PER_RUN;
+  /** Candidates that passed the pre-filter this run, for the run report. */
+  private passedPrefilter = 0;
+  /** This run's schedule or judge left work for lack of calls, for the run report. */
+  private ranOutOfCalls = false;
 
   constructor(private readonly deps: ScoutRunDeps) {}
 
@@ -488,6 +508,7 @@ export class ScoutRun {
         }
         continue;
       }
+      this.passedPrefilter += 1;
       if (scouted.get(candidate.key)?.scoutId === scout.id) {
         continue;
       }
@@ -566,6 +587,9 @@ export class ScoutRun {
         input.budget.take('scout_judge');
       }
     }
+    if (left && input.agentOff === null) {
+      this.ranOutOfCalls = true;
+    }
     for (const plan of plans) {
       plan.scheduled = plan.triaged.filter((entry) => taken.has(entry));
       for (const entry of plan.triaged.filter((candidate) => !taken.has(candidate))) {
@@ -600,10 +624,12 @@ export class ScoutRun {
         continue;
       }
       if (this.judgeCallsLeft <= 0) {
+        this.ranOutOfCalls = true;
         pendAll('waits for the next sync (scout calls per sync used up)', false);
         continue;
       }
       if (!input.budget.take('scout_judge')) {
+        this.ranOutOfCalls = true;
         pendAll('stopped at the agent-call cap', false);
         continue;
       }
@@ -757,6 +783,8 @@ export class ScoutRun {
     this.runFiles = new Map();
     this.judgeCallsLeft = SCOUT_TRIAL_JUDGE_CALLS;
     this.rateLimited = false;
+    this.passedPrefilter = 0;
+    this.ranOutOfCalls = false;
     const errors: string[] = [];
     const fresh: ScoutConfig = { ...scout, id: '__trial__' };
     const floor = new Date(this.deps.now().getTime() - days * 24 * 60 * 60 * 1000).toISOString();
@@ -812,9 +840,23 @@ export class ScoutRun {
 
   async run(input: ScoutRunInput): Promise<ScoutRunReport> {
     const { store, history } = this.deps;
-    const report: ScoutRunReport = { listed: 0, judged: 0, pulled: 0, pending: 0, expired: 0 };
     const runStart = this.deps.now().toISOString();
     const active = history.active();
+    const report: ScoutRunReport = {
+      scouts: active.scouts.length,
+      listed: 0,
+      candidates: 0,
+      judged: 0,
+      pulled: 0,
+      pending: 0,
+      expired: 0,
+      judgeCalls: 0,
+      capped: false,
+      listingCapped: false,
+      rateLimited: false,
+      quotaLow: false,
+      durationMs: 0,
+    };
     if (active.errors.length > 0) {
       const using = active.version === null ? 'no scouts run' : `scouts from version ${active.version.version} run`;
       input.errors.push(`scouts.md: ${active.errors[0]}${active.errors.length > 1 ? ` (+${active.errors.length - 1} more)` : ''}; ${using} until it is fixed`);
@@ -823,9 +865,11 @@ export class ScoutRun {
     this.runFiles = new Map();
     this.judgeCallsLeft = SCOUT_JUDGE_CALLS_PER_RUN;
     this.rateLimited = false;
+    this.passedPrefilter = 0;
+    this.ranOutOfCalls = false;
     if (!this.canRead()) {
       this.deps.log('scouts: GitHub quota low, skipped this sync');
-      return report;
+      return { ...report, quotaLow: true };
     }
     const pulled: PrKey[] = [];
     if (active.scouts.length > 0) {
@@ -843,6 +887,7 @@ export class ScoutRun {
         const listing = await this.list(repo, oldest, runStart, onRepo.map((scout) => scout.id).sort(), input.errors);
         listings.set(repo, listing);
         report.listed += listing.prs.size;
+        report.listingCapped ||= listing.end.kind === 'capped';
       }
       const lastScoutOn = new Map<string, string>();
       for (const scout of active.scouts) {
@@ -880,6 +925,11 @@ export class ScoutRun {
     if (input.agentOff === null && store.scoutedPrs.listActive().length > 0) {
       await input.glance();
     }
+    report.candidates = this.passedPrefilter;
+    report.judgeCalls = SCOUT_JUDGE_CALLS_PER_RUN - this.judgeCallsLeft;
+    report.capped = this.ranOutOfCalls;
+    report.rateLimited = this.rateLimited;
+    report.durationMs = Math.max(0, this.deps.now().getTime() - Date.parse(runStart));
     if (active.scouts.length > 0 || report.expired > 0) {
       this.deps.log(
         `scouts: ${active.scouts.length} scouts, ${report.listed} PRs listed, ${report.judged} judged, ${report.pulled} pulled in, ${report.pending} pending, ${report.expired} expired`,

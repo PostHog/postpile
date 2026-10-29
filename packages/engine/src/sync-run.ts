@@ -33,6 +33,8 @@ import { advanceSeenFromGitHub } from './memory/seen-from-github.ts';
 import { PhaseClock } from './phase-clock.ts';
 import type { RunDeps } from './run-deps.ts';
 import { runTelemetry } from './run-deps.ts';
+import type { ScoutRunReport } from './scouts/scout-run.ts';
+import type { Telemetry } from './telemetry/telemetry.ts';
 import { hasCompletedFirstSync, markFirstSyncCompleted } from './telemetry/first-sync.ts';
 import { heapUse } from './telemetry/heap.ts';
 import { loadViewer } from './viewer-meta.ts';
@@ -132,6 +134,8 @@ export class SyncRun {
   private waitingForAnswer = false;
   /** The first sync in this process is "start" (the app's own auto-sync); every later one is "manual" ("Sync now"). */
   private syncedOnceInProcess = false;
+  /** The scout step's report in the running sync, for scout_run_completed; null when it did not run. */
+  private scoutReport: ScoutRunReport | null = null;
 
   constructor(
     private readonly deps: RunDeps,
@@ -324,6 +328,7 @@ export class SyncRun {
     let held = false;
     const tally: DigestTally = { dossiersUpdated: 0, facts: emptyFactCounts() };
     const report = emptyReport(startedAt, tally, errors);
+    this.scoutReport = null;
     report.agentCallStats = callLog.begin(`sync:${startedAt}`);
     this.catchUpGate.noteStart(startedAt);
     this.log(`sync: started (max agent calls ${options.maxAgentCalls ?? 'unlimited'})`);
@@ -404,7 +409,7 @@ export class SyncRun {
       return;
     }
     try {
-      await run.phases.time('scouts', () =>
+      this.scoutReport = await run.phases.time('scouts', () =>
         scouts.run({
           viewer,
           budget: run.budget,
@@ -470,6 +475,29 @@ export class SyncRun {
     return report;
   }
 
+  /** scout_run_completed next to sync_completed, for a sync whose scout step ran with at least one scout in force. */
+  private reportScoutRun(telemetry: Telemetry): void {
+    const scouts = this.scoutReport;
+    if (scouts === null || scouts.scouts === 0) {
+      return;
+    }
+    telemetry.capture('scout_run_completed', {
+      scouts: scouts.scouts,
+      listed: scouts.listed,
+      candidates: scouts.candidates,
+      judged: scouts.judged,
+      pulled: scouts.pulled,
+      pending: scouts.pending,
+      expired: scouts.expired,
+      judge_calls: scouts.judgeCalls,
+      capped: scouts.capped,
+      listing_capped: scouts.listingCapped,
+      rate_limited: scouts.rateLimited,
+      quota_low: scouts.quotaLow,
+      duration_ms: scouts.durationMs,
+    });
+  }
+
   /**
    * sync_completed for a sync that ran to the end, sync_failed for one that
    * threw halfway (it used to count as completed, so failed syncs never
@@ -508,6 +536,7 @@ export class SyncRun {
         // The process's V8 heap at the end of the sync: how close it runs to the limit.
         ...heapUse(),
       });
+      this.reportScoutRun(telemetry);
       if (!hasCompletedFirstSync(this.deps.store)) {
         markFirstSyncCompleted(this.deps.store);
         telemetry.capture('first_sync_completed', {

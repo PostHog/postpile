@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ScoutCheckResult, ScoutIntroState } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
+import { sendTelemetry } from '../api/telemetry.ts';
 import { useAgentOffReason } from '../api/tools.ts';
 import { checkBlockedReason, checkingText, draftFailedToLoad, initialRepos, promptPlaceholder, textAfterDraft, turnOnBlockedReason } from '../lib/scout-intro.ts';
 import { holdMenuOpen } from '../lib/open-menus.ts';
@@ -60,9 +61,10 @@ function IntroFineprint() {
  * runs the agent's check and a dry run that saves nothing; "Turn on scout"
  * appends the scout to scouts.md. "Not now" stops it opening by itself;
  * Esc only closes it for this session. `hidden` keeps it mounted behind
- * another first-run overlay.
+ * another first-run overlay. `trigger` says how this opening came about,
+ * for telemetry's intro funnel (scout_intro_shown, scout_intro_closed).
  */
-export function ScoutIntroCard(props: { state: ScoutIntroState; hidden: boolean; onClose: () => void }) {
+export function ScoutIntroCard(props: { state: ScoutIntroState; hidden: boolean; trigger: 'auto' | 'manual'; onClose: () => void }) {
   const actions = useActions();
   const agentOff = useAgentOffReason();
   const { onClose, hidden } = props;
@@ -80,6 +82,8 @@ export function ScoutIntroCard(props: { state: ScoutIntroState; hidden: boolean;
   const typed = useRef(false);
   // One draft per opening: StrictMode runs the effect twice, and each run would be an agent call.
   const draftAsked = useRef(false);
+  // One scout_intro_shown per opening, for the same reason.
+  const shownSent = useRef(false);
   // False once this card is gone: a Turn on or Not now that settles after Esc and a reopen must not close the new card.
   const mounted = useRef(true);
 
@@ -109,6 +113,16 @@ export function ScoutIntroCard(props: { state: ScoutIntroState; hidden: boolean;
   }
 
   useEffect(() => {
+    if (shownSent.current) {
+      return;
+    }
+    shownSent.current = true;
+    sendTelemetry('scout_intro_shown', { trigger: props.trigger });
+    // Once per opening: the trigger is how this opening came about.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
     if (draftAsked.current) {
       return;
     }
@@ -132,12 +146,13 @@ export function ScoutIntroCard(props: { state: ScoutIntroState; hidden: boolean;
     }
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
+        sendTelemetry('scout_intro_closed', { stage: showResult ? 'check' : 'card', action: 'escape' });
         onClose();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose, hidden]);
+  }, [onClose, hidden, showResult]);
 
   async function check() {
     setChecking(true);
@@ -164,6 +179,7 @@ export function ScoutIntroCard(props: { state: ScoutIntroState; hidden: boolean;
   // Closes only once the answer is saved; a failed save shows its toast and keeps the card and the button.
   async function notNow() {
     if ((await actions.dismissScoutIntro()) && mounted.current) {
+      sendTelemetry('scout_intro_closed', { stage: showResult ? 'check' : 'card', action: 'not_now' });
       onClose();
     }
   }

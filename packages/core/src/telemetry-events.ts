@@ -90,6 +90,26 @@ const mcpTool = z.enum(['pr_context', 'topic', 'search_prs', 'whats_on_me', 'ref
 const mcpConnectFrom = z.enum(['footer', 'setup']);
 const replyTarget = z.enum(['thread', 'comment']);
 
+// -----------------------------------------------------------------------
+// 8. Scouts (DESIGN.md "Scouts"): never a scout's name, id, prompt, repo, path hint, PR number or title
+// -----------------------------------------------------------------------
+
+// How a scouted PR left the Scouted section; expired_* carry the expiry reason, reached_inbox: it got a notification thread or became tracked by itself.
+const scoutClosedOutcome = z.enum(['followed', 'dismissed', 'expired_merged', 'expired_closed', 'expired_inactive', 'reached_inbox']);
+// The intro card opened by itself (auto) or from the Scouted section's "Set up a scout" (manual).
+const scoutIntroTrigger = z.enum(['auto', 'manual']);
+// Which screen of the card was showing (the prompt, or the check's result) and how it closed. Turn on is scout_turned_on.
+const scoutIntroStage = z.enum(['card', 'check']);
+const scoutIntroAction = z.enum(['not_now', 'escape']);
+// The check's fit verdict (core's ScoutFitVerdict).
+const scoutFit = z.enum(['fits', 'partly', 'no']);
+// Why a check ran no dry run: no scouts file to run it against, or no agent calls left today.
+const scoutDryRunSkipped = z.enum(['no_scouts_file', 'no_calls_left']);
+// Where a Follow failed: the PR's node id lookup, the subscription itself, or either one past its deadline.
+const scoutFollowFailStage = z.enum(['lookup', 'subscribe', 'timeout']);
+// A scouted PR read as seen: opened in the app, or mark_read from an outside agent.
+const scoutSeenVia = z.enum(['open', 'mcp']);
+
 /** No props: an empty object, so every event has a stable shape to validate against. */
 const NO_PROPS = z.object({}).strict();
 
@@ -110,7 +130,8 @@ export const TELEMETRY_EVENTS = {
   window_focused: NO_PROPS,
 
   // 3. Core actions
-  tile_opened: z.object({ tile_kind: tileKind, for_whom: forWhom, has_glance: z.boolean(), verdict }).strict(),
+  // scouted: a tile of a scout's pseudo-topic (DESIGN.md "Scouts"), counted apart from inbox tiles (0.29.0; absent before).
+  tile_opened: z.object({ tile_kind: tileKind, for_whom: forWhom, has_glance: z.boolean(), verdict, scouted: z.boolean().optional() }).strict(),
   // with_note: the approval carried a note (only the detail pane's "+ note" has one). note: where it came from;
   // absent when the request did not say (2026-10-06; both absent before).
   pr_approved: z.object({ from: approveFrom, was_agent_approved: z.boolean(), with_note: z.boolean().optional(), note: reviewNote.optional() }).strict(),
@@ -164,9 +185,6 @@ export const TELEMETRY_EVENTS = {
   memory_corrected: NO_PROPS,
   // source only for topic proposals (topic_merge, rename, topic_split, topic_move).
   proposal_resolved: z.object({ kind: proposalKind, accepted: z.boolean(), source: proposalSource.optional() }).strict(),
-  scout_followed: z.object({ from: z.enum(['tile', 'detail']) }).strict(),
-  scout_dismissed: z.object({ with_reason: z.boolean() }).strict(),
-  scout_turned_on: z.object({ repos: count, paths: count }).strict(),
   instructions_edited: NO_PROPS,
 
   // 5. Health
@@ -237,6 +255,55 @@ export const TELEMETRY_EVENTS = {
   // "Not now" on the footer's offer.
   mcp_connect_dismissed: NO_PROPS,
 
+  // 8. Scouts
+  // One per full sync with at least one active scout. scouts: active scouts; listed: PRs the listings returned;
+  // candidates: what passed the pre-filter; judged / pulled / pending / expired: as the sync log says;
+  // judge_calls: scout_judge calls made. capped: judge calls ran out (per sync or the agent-call cap) with work left;
+  // listing_capped: a repo's listing hit its page cap; rate_limited: GitHub rate-limited a scout read;
+  // quota_low: the GitHub quota was low, so nothing ran.
+  scout_run_completed: z
+    .object({
+      scouts: count,
+      listed: count,
+      candidates: count,
+      judged: count,
+      pulled: count,
+      pending: count,
+      expired: count,
+      judge_calls: count,
+      capped: z.boolean(),
+      listing_capped: z.boolean(),
+      rate_limited: z.boolean(),
+      quota_low: z.boolean(),
+      duration_ms: durationMs,
+    })
+    .strict(),
+  // Once per scouted PR, when it leaves the Scouted section for any reason. was_opened: seen at least once (opened in
+  // the app or mark_read over MCP); was_seen: seen through its latest activity; hours_in_section: pull to leaving, rounded.
+  scout_pr_closed: z.object({ outcome: scoutClosedOutcome, was_seen: z.boolean(), was_opened: z.boolean(), hours_in_section: count }).strict(),
+  scout_followed: z.object({ from: z.enum(['tile', 'detail']) }).strict(),
+  scout_dismissed: z.object({ with_reason: z.boolean() }).strict(),
+  // A Follow that did not reach GitHub, from the undo queue or the lock's queue.
+  scout_follow_failed: z.object({ stage: scoutFollowFailStage }).strict(),
+  // GitHub took a Follow after its deadline had already parked it as failed.
+  scout_follow_late_success: NO_PROPS,
+  // A scouted PR read as seen through newer activity than before (a repeat open of an unchanged PR sends nothing).
+  scout_seen: z.object({ via: scoutSeenVia }).strict(),
+  // The intro card funnel: shown, checked, then closed or turned on.
+  scout_intro_shown: z.object({ trigger: scoutIntroTrigger }).strict(),
+  scout_intro_closed: z.object({ stage: scoutIntroStage, action: scoutIntroAction }).strict(),
+  // "Check scout" ran. dry_run_pulls and dry_run_complete when a dry run ran; dry_run_skipped_reason when none did.
+  scout_checked: z
+    .object({
+      fit: scoutFit,
+      cant_see: z.boolean(),
+      dry_run_pulls: count.optional(),
+      dry_run_complete: z.boolean().optional(),
+      dry_run_skipped_reason: scoutDryRunSkipped.optional(),
+    })
+    .strict(),
+  scout_turned_on: z.object({ repos: count, paths: count }).strict(),
+
   // Manual verification only (see NEXT.md "Verify once for real"). Never
   // sent from normal app code, not part of the analytics surface above.
   telemetry_test: NO_PROPS,
@@ -245,6 +312,9 @@ export const TELEMETRY_EVENTS = {
 export type TelemetryEventName = keyof typeof TELEMETRY_EVENTS;
 
 export type TelemetryEventProps<K extends TelemetryEventName> = z.infer<(typeof TELEMETRY_EVENTS)[K]>;
+
+/** How a scouted PR left the Scouted section, as scout_pr_closed reports it. */
+export type ScoutClosedOutcome = z.infer<typeof scoutClosedOutcome>;
 
 /** What started a self-update check, as update_check_finished reports it. */
 export type UpdateCheckTrigger = z.infer<typeof updateCheckTrigger>;
@@ -277,6 +347,8 @@ export const RENDERER_TELEMETRY_EVENTS = [
   'update_bar_later_clicked',
   'update_restart_clicked',
   'glance_retry_clicked',
+  'scout_intro_shown',
+  'scout_intro_closed',
 ] as const satisfies readonly TelemetryEventName[];
 
 export type RendererTelemetryEvent = (typeof RENDERER_TELEMETRY_EVENTS)[number];

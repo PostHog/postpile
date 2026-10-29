@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { PrSummary, TileView } from '@postpile/core';
+import { TELEMETRY_EVENTS, type PrSummary, type TileScout, type TileView } from '@postpile/core';
 import { at, NO_OPENED_READ, NO_PR_FACTS, withOffers } from '@postpile/core/fixtures';
 import { tileOpenedProps } from './tile-telemetry.ts';
 
@@ -70,6 +70,7 @@ describe('tileOpenedProps', () => {
       for_whom: 'you',
       has_glance: true,
       verdict: 'looks_safe',
+      scouted: false,
     });
   });
 
@@ -78,6 +79,14 @@ describe('tileOpenedProps', () => {
     expect(tileOpenedProps(view([summary()], { kind: 'routing', team: 'acme/approvers' })).for_whom).toBe('routing');
     expect(tileOpenedProps(view([summary()], { kind: 'own' })).for_whom).toBe('your_pr');
     expect(tileOpenedProps(view([summary()], { kind: 'none' })).for_whom).toBe('none');
+  });
+
+  it("counts a scout's tile apart, without its name or reason", () => {
+    const scout: TileScout = { scoutId: 'lookout', scoutName: 'Lookout', reason: 'adds billing/', unseen: true, prKeys: ['acme/app#1'], follow: null };
+    const props = tileOpenedProps({ ...view([summary()], { kind: 'none' }), scout });
+    expect(props.scouted).toBe(true);
+    expect(TELEMETRY_EVENTS.tile_opened.safeParse(props).success).toBe(true);
+    expect(JSON.stringify(props)).not.toContain('Lookout');
   });
 
   it('has_glance is false and verdict is null before a glance exists', () => {

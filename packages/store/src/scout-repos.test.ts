@@ -158,6 +158,21 @@ describe('ScoutedPrRepo', () => {
     expect([...store.scoutedPrs.getMany(['acme/app#1', 'acme/app#9']).keys()]).toEqual(['acme/app#1']);
   });
 
+  it('lists rows not recorded as left, with tracked and the PR update time, and records leaving once', () => {
+    store.prs.upsert(makePr({ number: 1, updatedAt: '2026-10-29T10:00:00.000Z' }), '2026-10-29T10:00:00.000Z');
+    store.scoutedPrs.insert(scouted({ prKey: 'acme/app#1' }));
+    store.scoutedPrs.insert(scouted({ prKey: 'acme/app#2' }));
+    store.foundPrs.put({ prKey: 'acme/app#2', via: 'review_requested', reason: 'review requested from you', foundAt: '2026-10-29T11:00:00.000Z' });
+
+    expect(store.scoutedPrs.listNotLeft().map((row) => [row.scouted.prKey, row.tracked, row.prUpdatedAt])).toEqual([
+      ['acme/app#1', false, '2026-10-29T10:00:00.000Z'],
+      ['acme/app#2', true, null],
+    ]);
+    expect(store.scoutedPrs.markLeftSection('acme/app#2', '2026-10-29T12:00:00.000Z')).toBe(true);
+    expect(store.scoutedPrs.markLeftSection('acme/app#2', '2026-10-29T13:00:00.000Z')).toBe(false);
+    expect(store.scoutedPrs.listNotLeft().map((row) => row.scouted.prKey)).toEqual(['acme/app#1']);
+  });
+
   it('lists active, untracked scouted PRs with their unseen state from headers', () => {
     const header = (number: number, updatedAt: string) => makePr({ number, updatedAt });
     store.prs.upsert(header(1, '2026-10-29T10:00:00.000Z'), '2026-10-29T10:00:00.000Z');

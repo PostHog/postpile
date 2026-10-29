@@ -4,10 +4,12 @@ import type { GitHubReader } from '@postpile/github';
 import type { Store } from '@postpile/store';
 import { failed, ok } from '../actions/results.ts';
 import { errorText } from '../errors.ts';
+import type { Telemetry } from '../telemetry/telemetry.ts';
 import type { GitHubWrites } from '../writes/github-writes.ts';
 import type { PendingWrites } from '../writes/pending-writes.ts';
-import { followWithDeadline, recordLateFollow, withDeadline } from './follow-deadline.ts';
+import { FollowDeadlineError, followWithDeadline, recordLateFollow, withDeadline } from './follow-deadline.ts';
 import { recordFollowed } from './followed.ts';
+import type { ScoutedClosures } from './scouted-closures.ts';
 
 /** Undo tokens of a Follow carry this, so Engine.undo knows where to send them. */
 const FOLLOW_TOKEN_PREFIX = 'follow:';
@@ -54,6 +56,9 @@ export class ScoutActions {
     private readonly pendingWrites: PendingWrites,
     private readonly timers: Timers,
     private readonly now: () => Date,
+    private readonly telemetry: Telemetry,
+    /** Sends scout_pr_closed for a PR that just left the Scouted section (followed or dismissed). */
+    private readonly closures: ScoutedClosures,
   ) {
     this.queue = new DeferredQueue((follow) => this.send(follow), timers, UNDO_WINDOW_MS, (error, batch) => {
       this.pendingWrites.parkFollow({ prKey: batch.payload.prKey, subjectId: batch.payload.subjectId }, { ...batch.payload, error: errorText(error) });
@@ -79,8 +84,9 @@ export class ScoutActions {
     try {
       // A stalled subscription parks like a failed one, to send again from the lock (subscribing twice is harmless);
       // when GitHub takes it after all, it is followed and the parked write goes.
-      result = await followWithDeadline(this.writes, this.timers, follow.subjectId, { origin: 'queue', prKey: follow.prKey, batch: follow.batch }, () => {
+      result = await followWithDeadline(this.writes, this.timers, this.telemetry, follow.subjectId, { origin: 'queue', prKey: follow.prKey, batch: follow.batch }, () => {
         recordLateFollow(this.store, this.pendingWrites, follow.prKey, follow.batch, this.now().toISOString());
+        this.closures.report();
         this.settledFollows += 1;
       });
     } catch (error) {
@@ -92,6 +98,7 @@ export class ScoutActions {
       return;
     }
     recordFollowed(this.store, follow.prKey, this.now().toISOString());
+    this.closures.report();
   }
 
   /** Grows each time a Follow leaves its undo window. */
@@ -142,6 +149,7 @@ export class ScoutActions {
     try {
       subjectId = await withDeadline(this.timers, this.reader.scoutPrNodeId(parsePrKey(prKey)));
     } catch (error) {
+      this.telemetry.capture('scout_follow_failed', { stage: error instanceof FollowDeadlineError ? 'timeout' : 'lookup' });
       // Nothing queued, nothing sent; a quit's flush stops waiting here too.
       this.writes.log.record({ action: 'follow', origin, outcome: 'failed', prKey, detail: `PR lookup failed, nothing queued: ${errorText(error)}` });
       return failed(`Could not follow: GitHub did not answer (${errorText(error)}). Click Follow again to retry.`);
@@ -149,6 +157,7 @@ export class ScoutActions {
       this.lookingUp.delete(prKey);
     }
     if (subjectId === null) {
+      this.telemetry.capture('scout_follow_failed', { stage: 'lookup' });
       return failed('GitHub has no such PR the token can see');
     }
     const follow: QueuedFollow = { prKey, subjectId, origin, batch: randomUUID(), clickedAt, lockedAtClick };
@@ -179,6 +188,7 @@ export class ScoutActions {
       return failed('Not on the Scouted section');
     }
     this.store.scoutedPrs.dismiss(prKey, this.now().toISOString(), cleanDismissReason(reason));
+    this.closures.report();
     return ok('Dismissed');
   }
 
@@ -188,7 +198,10 @@ export class ScoutActions {
     if (!pr || !this.store.scoutedPrs.get(prKey)) {
       return failed('Not a PR a scout pulled in');
     }
-    this.store.scoutedPrs.markSeen(prKey, pr.updatedAt);
+    // Only when it moved: opening a PR again with nothing new is no new "seen".
+    if (this.store.scoutedPrs.markSeen(prKey, pr.updatedAt)) {
+      this.telemetry.capture('scout_seen', { via: 'open' });
+    }
     return ok('Seen');
   }
 
