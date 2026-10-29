@@ -1,5 +1,5 @@
 import type { MouseEvent } from 'react';
-import type { ForWhom, PrSet, TilePerson, TileView, TopicListItem } from '@postpile/core';
+import { tileWaitDays, type ForWhom, type PrSet, type TilePerson, type TileView, type TopicListItem } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { useNextAutoSyncAt } from '../api/live.ts';
 import { glanceStateText } from '../lib/glance.ts';
@@ -325,7 +325,7 @@ export function Tile(props: TileProps) {
         {/* Zero basis: whose turn and the agent's Approve shrink (the turn line to its dot) before they push the joined buttons, which wrap below when they alone do not fit. */}
         <div className="@container flex min-w-0 flex-1 basis-0">
           <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1.5">
-            <TurnLine turn={view.turn} greyed={done} besideButton={approve !== null} />
+            <TurnLine turn={view.turn} greyed={done} besideButton={approve !== null} waitDays={tileWaitDays(view.turn, state.kind, now)} />
             <AgentApproveButton offer={approve} label={approve ? tileApproveLabel(approve, tile.kind) : ''} busyKey={`approveTile:${tile.id}`} from="agent_tile" />
           </div>
         </div>

@@ -1,7 +1,7 @@
 // Small builders that keep sample-data.ts readable. Everything here fills in
 // the fields a fake does not care about with plain defaults.
 import { prKey } from '@postpile/core';
-import type { FullComment, EventKind, Glance, GlanceBasis, KeyFile, Loudness, FullPr, PrEvent, PrKey, Provenance, PrState, FullReview, ReviewDecision, ReviewState, FullReviewThread, Tile, TileKind, TileMember, TileStack, Topic, TopicKind, UserRole, Verdict } from '@postpile/core';
+import type { FullComment, EventKind, Glance, GlanceBasis, KeyFile, Loudness, FullPr, PrEvent, PrKey, Provenance, PrState, FullReview, ReviewDecision, ReviewState, FullReviewThread, Tile, TileKind, TileMember, TileStack, TimelineItem, Topic, TopicKind, UserRole, Verdict } from '@postpile/core';
 
 export const SAMPLE_REPO = 'acme/app';
 export const SAMPLE_VIEWER = 'you';
@@ -82,6 +82,12 @@ export interface SamplePrInput {
   reviews?: [author: string, state: ReviewState, body?: string, commitOid?: string, hoursAgo?: number][];
   reviewerUsers?: string[];
   reviewerTeams?: string[];
+  /**
+   * When the author asked the pending reviewers: adds one review_requested
+   * timeline item (id `request-<number>`) for the first of them, so whose
+   * turn knows since when a review waits. Without it the timeline has none.
+   */
+  requestedHoursAgo?: number;
   body?: string;
   /** Issue comments, so memory sources in fake mode have who and what to show. */
   comments?: SampleCommentInput[];
@@ -110,6 +116,19 @@ function reviewBodyComments(reviews: FullReview[], url: string): FullComment[] {
   return reviews
     .filter((review) => review.body.trim() !== '')
     .map((review) => ({ id: review.id, author: review.author, body: review.body, createdAt: review.submittedAt, kind: 'review' as const, url: review.url ?? `${url}#${review.id}`, path: null, threadId: null }));
+}
+
+/** The review request (`requestedHoursAgo`) and the merge queue entry (`queued`), oldest first. */
+function sampleTimeline(clock: SampleClock, input: SamplePrInput): TimelineItem[] {
+  const items: TimelineItem[] = [];
+  const subject = input.reviewerUsers?.[0] ?? input.reviewerTeams?.[0];
+  if (input.requestedHoursAgo !== undefined && subject !== undefined) {
+    items.push({ id: `request-${input.number}`, kind: 'review_requested', actor: input.author, at: clock.hoursAgo(input.requestedHoursAgo), subject });
+  }
+  if (input.queued) {
+    items.push({ id: `queue-${input.number}`, kind: 'added_to_merge_queue', actor: 'mergify[bot]', at: clock.hoursAgo(1), subject: null });
+  }
+  return items;
 }
 
 export function samplePr(clock: SampleClock, input: SamplePrInput): FullPr {
@@ -190,9 +209,7 @@ export function samplePr(clock: SampleClock, input: SamplePrInput): FullPr {
     })),
     comments,
     threads,
-    timeline: input.queued
-      ? [{ id: `queue-${input.number}`, kind: 'added_to_merge_queue' as const, actor: 'mergify[bot]', at: clock.hoursAgo(1), subject: null }]
-      : [],
+    timeline: sampleTimeline(clock, input),
     headOid,
     createdAt: clock.hoursAgo(input.openedHoursAgo),
     updatedAt: clock.hoursAgo(input.mergedHoursAgo ?? 0),

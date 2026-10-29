@@ -147,6 +147,17 @@ export interface SpokeOptions {
   reviewsOnly?: boolean;
 }
 
+/** Every time `login` spoke on the PR, in no order (see `lastSpokeAt`). */
+function spokeTimes(pr: Pr, login: string, options: SpokeOptions): IsoTime[] {
+  const reviews = pr.reviews
+    .filter((review) => sameLogin(review.author, login) && review.state !== 'PENDING' && !isCarrierReview(review, pr))
+    .map((review) => review.submittedAt);
+  const comments = options.reviewsOnly
+    ? []
+    : pr.comments.filter((comment) => sameLogin(comment.author, login) && !talksToBot(comment, pr)).map((comment) => comment.createdAt);
+  return [...comments, ...reviews];
+}
+
 /**
  * When `login` last spoke on the PR: their newest comment or submitted
  * review (a pending review is their unsent draft and says nothing). Talk
@@ -157,19 +168,24 @@ export interface SpokeOptions {
  * asks it). Null when they never spoke.
  */
 export function lastSpokeAt(pr: Pr, login: string, options: SpokeOptions = {}): IsoTime | null {
-  const reviews = pr.reviews
-    .filter((review) => sameLogin(review.author, login) && review.state !== 'PENDING' && !isCarrierReview(review, pr))
-    .map((review) => review.submittedAt);
-  const comments = options.reviewsOnly
-    ? []
-    : pr.comments.filter((comment) => sameLogin(comment.author, login) && !talksToBot(comment, pr)).map((comment) => comment.createdAt);
   let newest: IsoTime | null = null;
-  for (const time of [...comments, ...reviews]) {
+  for (const time of spokeTimes(pr, login, options)) {
     if (newest === null || time > newest) {
       newest = time;
     }
   }
   return newest;
+}
+
+/** When `login` first spoke on the PR after `at` (same speaking as `lastSpokeAt`), or null. */
+export function firstSpokeAfter(pr: Pr, login: string, at: IsoTime, options: SpokeOptions = {}): IsoTime | null {
+  let oldest: IsoTime | null = null;
+  for (const time of spokeTimes(pr, login, options)) {
+    if (time > at && (oldest === null || time < oldest)) {
+      oldest = time;
+    }
+  }
+  return oldest;
 }
 
 /** `login` spoke on the PR after `at` (`lastSpokeAt`). */

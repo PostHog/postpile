@@ -726,7 +726,8 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
     }),
     samplePr(clock, {
       number: 1955, title: 'Pin the Playwright browser version', author: 'nell', state: 'OPEN',
-      size: [12, 4, 2], openedHoursAgo: 26, reviewerUsers: [SAMPLE_VIEWER],
+      // Asked over a week ago and never picked up: the footer and the topic row show how many working days it waited.
+      size: [12, 4, 2], openedHoursAgo: 200, reviewerUsers: [SAMPLE_VIEWER], requestedHoursAgo: 200,
     }),
     // Agent PRs: a coding agent's GitHub App opens them on someone's behalf
     // and assigns that person, who owns the PR. #1970 is the viewer's own
@@ -939,7 +940,7 @@ function buildEvents(clock: SampleClock): PrEvent[] {
     ]),
     ...sampleEvents(clock, 1955, [
       // Loud, but the PR is only found (no notification): the tile stays calm, whose turn says your move.
-      { kind: 'review_requested', actor: 'nell', text: 'requested a review from you', hoursAgo: 26, rule: 'loud' },
+      { kind: 'review_requested', actor: 'nell', text: 'requested a review from you', hoursAgo: 200, rule: 'loud', sourceId: 'request-1955' },
     ]),
   ];
 }
