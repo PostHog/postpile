@@ -9,6 +9,7 @@ import {
   prWantsGlance,
   prWhoseTurn,
   scoutedProvenance,
+  scoutedWantsGlance,
   TILE_STATE_ORDER,
   withoutStaleClaims,
   type DossierVersion,
@@ -173,14 +174,13 @@ export class GlanceInputs {
     const active = this.store.scoutedPrs.listActive().filter((row) => wanted === null || wanted.has(row.prKey));
     const coldKeys = active.map((row) => row.prKey).filter((key) => !this.board.prs.has(key));
     const coldPrs = this.store.prs.getMany(coldKeys);
-    const coldEvents = this.store.events.listForPrs(coldKeys);
     return active.flatMap((row): GlanceTarget[] => {
       const pr = this.board.prs.get(row.prKey) ?? coldPrs.get(row.prKey);
       if (!pr || this.board.threads.has(row.prKey) || this.board.found.has(row.prKey)) {
         return [];
       }
-      const events = this.board.events.get(row.prKey) ?? coldEvents.get(row.prKey) ?? [];
-      if (!prWantsGlance(pr, events, null)) {
+      // Scout-specific: on the section it is there to be looked at, merged or not (`scoutedWantsGlance`).
+      if (!scoutedWantsGlance(row)) {
         return [];
       }
       return [{ topicId: null, item: { pr, provenance: scoutedProvenance(row) } }];

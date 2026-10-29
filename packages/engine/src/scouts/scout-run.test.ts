@@ -164,6 +164,8 @@ describe('the scout step of a full sync', () => {
     const report = await h.engine.sync({ maxAgentCalls: 0 });
 
     expect(h.store.scoutJudgements.get('lookout', 'acme/app#1')).toMatchObject({ status: 'pending', lastError: 'stopped at the agent-call cap', attempts: 0 });
+    // Nothing read from GitHub for work no call could judge.
+    expect(h.reader.scoutCalls.filter((call) => call.startsWith('files'))).toEqual([]);
     expect(report.agentCallStats.byKind.scout_judge?.skippedByBudget).toBe(1);
     expect(h.store.scoutCursors.get('lookout', 'acme/app')).not.toBeNull();
   });
@@ -199,6 +201,15 @@ describe('the scout step of a full sync', () => {
 
     expect(h.store.scoutedPrs.listAll()).toMatchObject([{ prKey: 'acme/app#1', scoutId: 'lookout' }]);
     expect(h.store.scoutJudgements.get('billing', 'acme/app#1')).toMatchObject({ verdict: 'pulled', reason: 'billing service' });
+  });
+
+  it('glances a scouted PR that is already merged, and again after its merge', async () => {
+    const h = setup();
+    onGitHub(h, candidate(1, { state: 'MERGED', mergedAt: hoursAgo(1) }), [{ path: 'billing/main.ts', changeType: 'ADDED' }]);
+    h.reader.addStackPr(makePr({ number: 1, state: 'MERGED', mergedAt: hoursAgo(1), headOid: 'h1', updatedAt: hoursAgo(1) }));
+    pulls(h, [1, 'pull', 'new folder billing/']);
+    await h.engine.sync({});
+    expect(h.store.glances.get('acme/app#1')).not.toBeNull();
   });
 
   it('expires a scouted PR three days without activity', async () => {
@@ -302,6 +313,23 @@ describe('the scout step of a full sync', () => {
     expect(JSON.parse(h.store.meta.get('scout_listing_resume:acme/app')!)).toMatchObject({ scouts: ['billing', 'lookout'] });
   });
 
+  it("keeps a first scan's window when it resumes the next day", async () => {
+    let now = NOW;
+    const h = setup(LOOKOUT, () => now);
+    h.reader.scoutPageSize = 1;
+    // 12 PRs over the first day's 24 hours; the scan stops after 10 pages.
+    h.reader.scoutListings.set('acme/app', Array.from({ length: 12 }, (_, index) => candidate(index + 1, { updatedAt: hoursAgo(1 + index * 2) })));
+    await h.engine.sync({ maxAgentCalls: 0 });
+    expect(JSON.parse(h.store.meta.get('scout_listing_resume:acme/app')!)).toMatchObject({ floor: hoursAgo(24) });
+
+    now = new Date(NOW.getTime() + 24 * 60 * 60 * 1000);
+    await h.engine.sync({ maxAgentCalls: 0 });
+
+    // #12 was updated 23 h before the first run: inside that run's window, though older than "24 h before" the second.
+    expect(h.store.scoutJudgements.get('lookout', 'acme/app#12')).not.toBeNull();
+    expect(h.store.scoutCursors.get('lookout', 'acme/app')?.coveredThrough).toBe(now.toISOString());
+  });
+
   it('never expires a scouted PR on a snapshot the refresh could not check', async () => {
     let now = NOW;
     const h = setup(LOOKOUT, () => now);
@@ -321,12 +349,24 @@ describe('the scout step of a full sync', () => {
     for (let number = 1; number <= 70; number++) {
       onGitHub(h, candidate(number), [{ path: `svc${number}/main.ts`, changeType: 'ADDED' }]);
     }
+    const skipAll = { judgements: Array.from({ length: 70 }, (_, index) => ({ prKey: `acme/app#${index + 1}`, verdict: 'skip', reason: 'not it' })) };
     for (let call = 0; call < 5; call++) {
-      h.runner.answer('scout_judge', { judgements: [] });
+      h.runner.answer('scout_judge', skipAll);
     }
     await h.engine.sync({});
     expect(h.runner.promptsFor('scout_judge')).toHaveLength(5);
-    expect(h.store.scoutJudgements.listPending('lookout').filter((row) => row.lastError === 'waits for the next sync (scout calls per sync used up)')).toHaveLength(10);
+    const waiting = h.store.scoutJudgements.listPending('lookout').filter((row) => row.lastError === 'waits for the next sync (more candidates than scout calls)');
+    expect(waiting).toHaveLength(10);
+    // Their files are not read: only the 60 the calls can judge.
+    const read = h.reader.scoutCalls.filter((call) => call.startsWith('files')).flatMap((call) => call.slice('files '.length).split(','));
+    expect(read).toHaveLength(60);
+    expect(read).not.toContain(waiting[0]!.prKey);
+
+    // The next sync takes the waiting retries first.
+    h.runner.answer('scout_judge', skipAll);
+    await h.engine.sync({});
+    const nextPrompt = h.runner.promptsFor('scout_judge')[5]!;
+    expect(waiting.every((row) => nextPrompt.includes(`=== ${row.prKey}\n`))).toBe(true);
   });
 
   it('runs no scout work when the sync asks for other agent jobs only', async () => {

@@ -171,13 +171,23 @@ export async function listScoutPrs(http: GitHubHttp, repo: string, after: string
   return { prs, nextCursor: connection.pageInfo.hasNextPage ? connection.pageInfo.endCursor : null };
 }
 
-/** Metadata per PR known by number; one GitHub no longer has or the token cannot see is left out. */
+/**
+ * Metadata per PR known by number; one GitHub no longer has or the token
+ * cannot see is left out. A failed query costs only its own batch: those
+ * PRs are left out too (their pending rows wait for the next run), the
+ * other batches' answers stand.
+ */
 export async function scoutPrsByNumber(http: GitHubHttp, refs: PrRef[]): Promise<Map<PrKey, ScoutCandidate>> {
   const result = new Map<PrKey, ScoutCandidate>();
   for (const batch of chunk(refs, SCOUT_FILES_BATCH_SIZE)) {
-    const response = await http.graphql<RawNumberBatch>(buildScoutNumberQuery(batch));
+    let response;
+    try {
+      response = await http.graphql<RawNumberBatch>(buildScoutNumberQuery(batch));
+    } catch {
+      continue;
+    }
     if (!response.data) {
-      throw graphqlFailure('scout PR lookup', response.errors);
+      continue;
     }
     batch.forEach((ref, index) => {
       const raw = response.data?.[batchAlias(index)]?.pullRequest;

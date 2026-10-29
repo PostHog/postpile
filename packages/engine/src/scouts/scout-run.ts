@@ -11,6 +11,8 @@ import {
   scoutPullStep,
   scoutRetentionCutoff,
   scoutSignals,
+  scheduleScoutWork,
+  type ScoutWorkItem,
   type IsoTime,
   type PrKey,
   type PrRef,
@@ -98,6 +100,8 @@ interface RepoListing {
   startedAt: IsoTime;
   /** The scouts this listing was made for, sorted. */
   scouts: string[];
+  /** The floor it lists down to: the run's, or a resumed listing's original one when that is older. */
+  floor: IsoTime;
 }
 
 /**
@@ -115,6 +119,8 @@ interface ListingResume {
    * above it, so a changed set lists from the top again.
    */
   scouts: string[];
+  /** The floor the listing began with: a resumed first scan keeps its window instead of a new run's "24 hours back". */
+  floor: IsoTime;
 }
 
 /** How one paging pass ended: down to its floor, at the page budget, or on a failed read. */
@@ -128,6 +134,22 @@ function resumeKey(repo: string): string {
 interface ScoutRepoWork {
   rows: ScoutJudgement[];
   pulls: ScoutedPr[];
+}
+
+/** A candidate that needs its files read and a model call, before the run's schedule. */
+interface Triaged extends ScoutWorkItem {
+  candidate: ScoutCandidate;
+  before: ScoutJudgement | null;
+}
+
+/** One scout on one repo in this run: its listing, the triaged work and what the schedule took. */
+interface ScoutPlan {
+  scout: ScoutConfig;
+  repo: string;
+  listing: RepoListing;
+  work: ScoutRepoWork;
+  triaged: Triaged[];
+  scheduled: Triaged[];
 }
 
 /** A candidate read whole and ready to ask the model about. */
@@ -249,7 +271,7 @@ export class ScoutRun {
     if (listing.end.kind === 'done') {
       this.deps.store.meta.delete(resumeKey(repo));
     } else if (listing.end.kind === 'capped') {
-      this.deps.store.meta.set(resumeKey(repo), JSON.stringify({ after: listing.end.after, startedAt: listing.startedAt, scouts: listing.scouts } satisfies ListingResume));
+      this.deps.store.meta.set(resumeKey(repo), JSON.stringify({ after: listing.end.after, startedAt: listing.startedAt, scouts: listing.scouts, floor: listing.floor } satisfies ListingResume));
       this.deps.log(`scouts: ${repo} has more than ${SCOUT_LIST_MAX_PAGES} pages of updates to list; the next sync goes on where this one stopped`);
     }
   }
@@ -269,16 +291,18 @@ export class ScoutRun {
     const resume = stored !== null && (stored.scouts ?? []).join(' ') === scouts.join(' ') ? stored : null;
     if (resume === null) {
       const end = await this.pass(repo, null, floor, budget, prs, errors);
-      return { prs, complete: end.kind === 'done', end, startedAt: runStart, scouts };
+      return { prs, complete: end.kind === 'done', end, startedAt: runStart, scouts, floor };
     }
+    // The window the stopped listing began with: a first scan resumed a day later still covers its whole first day.
+    const lowest = resume.floor !== undefined && resume.floor < floor ? resume.floor : floor;
     const sinceStop = scoutListingFloor(resume.startedAt, runStart);
     const top = await this.pass(repo, null, sinceStop > floor ? sinceStop : floor, budget, prs, errors);
     if (top.kind !== 'done') {
       // Keeps the stored point: a failed read never moves it.
-      return { prs, complete: false, end: { kind: 'failed' }, startedAt: resume.startedAt, scouts };
+      return { prs, complete: false, end: { kind: 'failed' }, startedAt: resume.startedAt, scouts, floor: lowest };
     }
-    const lower = await this.pass(repo, resume.after, floor, budget, prs, errors);
-    return { prs, complete: lower.kind === 'done', end: lower, startedAt: resume.startedAt, scouts };
+    const lower = await this.pass(repo, resume.after, lowest, budget, prs, errors);
+    return { prs, complete: lower.kind === 'done', end: lower, startedAt: resume.startedAt, scouts, floor: lowest };
   }
 
   /** Root folders of the bases that need them, from the cache or one read. A failed read leaves them unknown. */
@@ -328,8 +352,13 @@ export class ScoutRun {
     return result;
   }
 
-  /** The scout's candidates on this repo: the listed ones in its own window, plus its pending ones whatever the cursor says. */
-  private async candidatesFor(scout: ScoutConfig, repo: string, listing: RepoListing, floor: IsoTime): Promise<ScoutCandidate[]> {
+  /**
+   * The scout's candidates on this repo: the listed ones in its own window
+   * (or the resumed listing's older one), plus its pending ones whatever
+   * the cursor says.
+   */
+  private async candidatesFor(scout: ScoutConfig, repo: string, listing: RepoListing, scoutFloor: IsoTime): Promise<ScoutCandidate[]> {
+    const floor = listing.floor < scoutFloor ? listing.floor : scoutFloor;
     const candidates = new Map<PrKey, ScoutCandidate>();
     for (const pr of listing.prs.values()) {
       if (pr.updatedAt >= floor) {
@@ -361,30 +390,24 @@ export class ScoutRun {
   }
 
   /**
-   * One scout on one repo up to the model call: rules, files, signals and
-   * the re-judge decision. Rows that need no model call are in `work`;
-   * the rest come back to be judged.
+   * One scout on one repo, before any GitHub read: the rules, a PR this
+   * scout pulled already, and an unchanged judgement (same head and
+   * scouts.md) settle what they can into `work`. What is left needs its
+   * files read and a model call: it goes to the run's schedule.
    */
-  private async prepare(
-    scout: ScoutConfig,
-    version: ScoutsVersion | null,
-    repo: string,
-    candidates: ScoutCandidate[],
-    facts: { viewer: Viewer; tracked: ReadonlySet<PrKey> },
-    work: ScoutRepoWork,
-  ): Promise<JudgeItem[]> {
+  private triage(scout: ScoutConfig, version: ScoutsVersion | null, candidates: ScoutCandidate[], facts: { viewer: Viewer; tracked: ReadonlySet<PrKey> }, work: ScoutRepoWork): Triaged[] {
     const { store } = this.deps;
     const existing = store.scoutJudgements.getMany(scout.id, candidates.map((candidate) => candidate.key));
     const scouted = store.scoutedPrs.getMany(candidates.map((candidate) => candidate.key));
-    const needFiles: ScoutCandidate[] = [];
+    const left: Triaged[] = [];
     for (const candidate of candidates) {
       const before = existing.get(candidate.key) ?? null;
       const base = this.judgementRow(scout.id, version, candidate, before);
-      const left = scoutPrefilter(candidate, facts);
-      if (left !== null) {
+      const out = scoutPrefilter(candidate, facts);
+      if (out !== null) {
         // Only a pending row needs closing; a PR never judged leaves no trace.
         if (before?.status === 'pending') {
-          work.rows.push(this.judged(base, 'skipped', `left out: ${PREFILTER_WORDS[left]}`, null, false));
+          work.rows.push(this.judged(base, 'skipped', `left out: ${PREFILTER_WORDS[out]}`, null, false));
         }
         continue;
       }
@@ -397,16 +420,25 @@ export class ScoutRun {
         work.rows.push({ ...before, observedUpdatedAt: candidate.updatedAt });
         continue;
       }
-      needFiles.push(candidate);
+      const pending = before?.status === 'pending';
+      left.push({ candidate, before, pending, observedUpdatedAt: pending ? before.observedUpdatedAt : candidate.updatedAt });
     }
-    const files = await this.files(needFiles);
+    return left;
+  }
+
+  /**
+   * The scheduled work of one scout on one repo: files, signals and the
+   * re-judge decision. Rows that need no model call are in `work`; the rest
+   * come back to be judged.
+   */
+  private async prepare(scout: ScoutConfig, version: ScoutsVersion | null, repo: string, needFiles: Triaged[], work: ScoutRepoWork): Promise<JudgeItem[]> {
+    const files = await this.files(needFiles.map((entry) => entry.candidate));
     const wantsTree = scout.paths.some((hint) => hint.newTopLevelFolder);
     if (wantsTree) {
       await this.baseFolders(repo, [...files.values()].filter((read) => read.files !== null).map((read) => read.baseOid));
     }
     const toJudge: JudgeItem[] = [];
-    for (const candidate of needFiles) {
-      const before = existing.get(candidate.key) ?? null;
+    for (const { candidate, before } of needFiles) {
       const base = this.judgementRow(scout.id, version, candidate, before);
       const read = files.get(candidate.key);
       if (!read || read.files === null || read.headOid !== candidate.headOid) {
@@ -430,6 +462,35 @@ export class ScoutRun {
       }
     }
     return toJudge;
+  }
+
+  /**
+   * The run's schedule (`scheduleScoutWork`): as many of the triaged
+   * candidates as the calls left can judge, round-robin over the scouts'
+   * queues, pending retries first. The rest is stored pending without a
+   * file read, for the next run.
+   */
+  private schedule(plans: ScoutPlan[], input: Pick<ScoutRunInput, 'agentOff' | 'budget'>, version: ScoutsVersion | null): void {
+    const byCap = input.budget.remaining() < this.judgeCallsLeft;
+    const calls = input.agentOff !== null ? 0 : Math.min(this.judgeCallsLeft, input.budget.remaining());
+    const taken = scheduleScoutWork(plans.map((plan) => plan.triaged), calls * SCOUT_JUDGE_BATCH);
+    const left = plans.some((plan) => plan.triaged.some((entry) => !taken.has(entry)));
+    let why = 'waits for the next sync (more candidates than scout calls)';
+    if (input.agentOff !== null) {
+      why = 'agent is off';
+    } else if (byCap) {
+      why = 'stopped at the agent-call cap';
+      // Counted as skipped by the budget, so the next sync comes early for the backlog (`syncLeftBacklog`).
+      if (left && input.budget.remaining() === 0) {
+        input.budget.take('scout_judge');
+      }
+    }
+    for (const plan of plans) {
+      plan.scheduled = plan.triaged.filter((entry) => taken.has(entry));
+      for (const entry of plan.triaged.filter((candidate) => !taken.has(candidate))) {
+        plan.work.rows.push(this.pending(this.judgementRow(plan.scout.id, version, entry.candidate, entry.before), why));
+      }
+    }
   }
 
   private judgeItem(candidate: ScoutCandidate, files: ScoutFile[], signals: ReturnType<typeof scoutSignals>, folders: string[]): ScoutJudgeItem {
@@ -637,18 +698,23 @@ export class ScoutRun {
       for (const scout of active.scouts) {
         scout.repos.forEach((repo) => lastScoutOn.set(repo, scout.id));
       }
-      // File order: an earlier scout wins a PR two would pull.
+      const plans: ScoutPlan[] = [];
       for (const scout of active.scouts) {
         for (const repo of scout.repos) {
           const listing = listings.get(repo)!;
           const work: ScoutRepoWork = { rows: [], pulls: [] };
           const candidates = await this.candidatesFor(scout, repo, listing, floors.get(`${scout.id} ${repo}`)!);
-          const items = await this.prepare(scout, active.version, repo, candidates, facts, work);
-          await this.judge(scout, active.version, items, input, work);
-          pulled.push(...this.commit(scout, repo, work, listing, lastScoutOn.get(repo) === scout.id, runStart));
-          report.judged += work.rows.filter((row) => row.status === 'judged' && row.judgedAt !== null && row.judgedAt >= runStart).length;
-          report.pending += work.rows.filter((row) => row.status === 'pending').length;
+          plans.push({ scout, repo, listing, work, triaged: this.triage(scout, active.version, candidates, facts, work), scheduled: [] });
         }
+      }
+      this.schedule(plans, input, active.version);
+      // File order: an earlier scout wins a PR two would pull.
+      for (const { scout, repo, listing, work, scheduled } of plans) {
+        const items = await this.prepare(scout, active.version, repo, scheduled, work);
+        await this.judge(scout, active.version, items, input, work);
+        pulled.push(...this.commit(scout, repo, work, listing, lastScoutOn.get(repo) === scout.id, runStart));
+        report.judged += work.rows.filter((row) => row.status === 'judged' && row.judgedAt !== null && row.judgedAt >= runStart).length;
+        report.pending += work.rows.filter((row) => row.status === 'pending').length;
       }
       report.pulled = pulled.length;
     }

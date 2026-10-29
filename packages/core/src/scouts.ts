@@ -472,3 +472,49 @@ export function scoutedLine(view: Pick<ScoutedPrView, 'scoutName' | 'reason' | '
   }
   return `${first} Not in the user's GitHub inbox.`;
 }
+
+/** One piece of scout work that needs a file read and a model call: a scout's candidate on one repo. */
+export interface ScoutWorkItem {
+  /** A retry of a pending judgement, as opposed to a new or moved candidate. */
+  pending: boolean;
+  /** When the PR was observed: pending retries go oldest first. */
+  observedUpdatedAt: IsoTime;
+}
+
+/**
+ * Which work one run takes on, when there is more than it can judge
+ * (DESIGN.md "Scouts" › Scheduling). Each queue is one scout on one repo,
+ * in scouts.md order: its pending retries first, oldest observed first,
+ * then its new candidates in the order given. The run takes one item from
+ * each queue in turn, round-robin, until `capacity` (the calls left times
+ * the batch size) is used, so no scout, repo or wave of new PRs starves the
+ * rest. Everything not taken waits for the next run without a file read.
+ */
+export function scheduleScoutWork<T extends ScoutWorkItem>(queues: T[][], capacity: number): Set<T> {
+  const ordered = queues.map((queue) => [
+    ...queue.filter((item) => item.pending).sort((a, b) => a.observedUpdatedAt.localeCompare(b.observedUpdatedAt)),
+    ...queue.filter((item) => !item.pending),
+  ]);
+  const taken = new Set<T>();
+  let round = 0;
+  while (taken.size < capacity && ordered.some((queue) => queue.length > round)) {
+    for (const queue of ordered) {
+      const item = queue[round];
+      if (item !== undefined && taken.size < capacity) {
+        taken.add(item);
+      }
+    }
+    round += 1;
+  }
+  return taken;
+}
+
+/**
+ * A scouted PR wants a glance while it is on the Scouted section, open,
+ * merged or closed: it is there to be looked at. A merge changes its glance
+ * input, so it gets one fresh glance after the merge. Inbox PRs keep
+ * `prWantsGlance`.
+ */
+export function scoutedWantsGlance(scouted: Pick<ScoutedPr, 'followedAt' | 'dismissedAt' | 'expiredAt'>): boolean {
+  return isScoutedActive(scouted);
+}
