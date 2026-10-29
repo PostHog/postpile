@@ -1503,7 +1503,12 @@ export class FakeEngine implements EngineService {
       .map((tile) => {
         const view = this.tileView(tile, tileRepoLabels(tile.members.map((member) => member.prKey), baseRepo, orgs));
         const scout = this.scouts.tileScout(tile);
-        return scout ? { ...view, scout } : view;
+        if (!scout) {
+          return view;
+        }
+        // Like the engine: an unseen find never sits collapsed in Dealt with.
+        const group = scout.unseen && view.group === 'dealt_with' ? 'open' : view.group;
+        return { ...view, scout, group };
       })
       .sort(compareTileViews);
     return {

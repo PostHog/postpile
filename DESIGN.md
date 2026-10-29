@@ -1370,7 +1370,9 @@ layer under the scout that pulled it, and none of it once a layer is
 tracked (followed, or in the inbox): the stack then shows whole in its
 normal place. A row opens `scout:<id>` like a topic: tiles only, no driver,
 dossier, sets or moves. The tile shows the scout's name in the "for whom"
-spot and its reason (`TileView.scout`).
+spot and its reason (`TileView.scout`). An unseen find never sits in the
+collapsed Dealt with group, merged or closed: it shows under Open until
+it is opened.
 
 **Actions:**
 
