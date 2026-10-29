@@ -6,7 +6,7 @@ import {
   parsePrKey,
   scoutFromCard,
   scoutIntroAutoShows,
-  scoutLostWants,
+  scoutWantsAfter,
   scoutNameWithId,
   SCOUT_REFINE_MIN_LABELS,
   SCOUT_TRIAL_DAYS,
@@ -300,7 +300,7 @@ export class ScoutIntro {
   }
 
   private async refineInRun(request: ScoutRefineRequest, stats: AgentCallStats): Promise<ScoutRefineResult> {
-    const refused = (message: string): ScoutRefineResult => ({ ok: false, message, refined: null, trial: null, lostWants: [] });
+    const refused = (message: string): ScoutRefineResult => ({ ok: false, message, refined: null, trial: null, lostWants: [], uncheckedWants: [] });
     const session = this.session;
     const repos = this.cleanRepos(request.repos);
     if (session === null || session.id !== request.session || repos === null || repos.join(' ') !== session.repos.join(' ')) {
@@ -346,8 +346,11 @@ export class ScoutIntro {
     if (run !== null) {
       session.rounds.set(versionKey(refined.prompt, refined.paths), { pulled: run.pulled, prs: run.prs });
     }
-    const lost = run === null ? [] : scoutLostWants(labels, before.pulled, run.pulled);
-    const lostWants = lost.map((prKey) => ({ prKey, title: before.prs.get(prKey)?.title ?? prKey, reason: run?.prs.get(prKey)?.reason ?? 'not judged this time' }));
+    // Lost only when the re-run judged it and skipped it; a want it never judged is unknown this round, not lost.
+    const wants = scoutWantsAfter(labels, before.pulled, { pulled: run?.pulled ?? new Set(), judged: new Set(run?.prs.keys() ?? []) });
+    const titleOf = (prKey: PrKey) => [...session.rounds.values()].find((round) => round.prs.has(prKey))?.prs.get(prKey)?.title ?? prKey;
+    const lostWants = wants.lost.map((prKey) => ({ prKey, title: titleOf(prKey), reason: run?.prs.get(prKey)?.reason ?? '' }));
+    const uncheckedWants = wants.unchecked.map((prKey) => ({ prKey, title: titleOf(prKey), reason: 'not judged this round' }));
     this.deps.telemetry.capture('scout_tightened', {
       round: session.refines,
       wants: examples.filter((example) => example.label === 'want').length,
@@ -356,7 +359,7 @@ export class ScoutIntro {
       pulls_after: trial.pulled,
       lost_wants: lostWants.length,
     });
-    return { ok: true, message: null, refined, trial, lostWants };
+    return { ok: true, message: null, refined, trial, lostWants, uncheckedWants };
   }
 
   /** The tightened version's dry run on the session's kept reads; null when the day has no calls left for it. */

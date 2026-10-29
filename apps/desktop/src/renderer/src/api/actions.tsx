@@ -823,7 +823,7 @@ export function ActionsProvider(props: { children: ReactNode }) {
     try {
       return await withBusy('scout:refine', () => request<ScoutRefineResult>('POST', '/api/scouts/intro/refine', body));
     } catch (error) {
-      return { ok: false, message: `Could not tighten the scout: ${errorText(error)}`, refined: null, trial: null, lostWants: [] };
+      return { ok: false, message: `Could not tighten the scout: ${errorText(error)}`, refined: null, trial: null, lostWants: [], uncheckedWants: [] };
     }
   }
 

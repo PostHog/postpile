@@ -1528,7 +1528,10 @@ drafts the first one, checks it and turns it on.
     (the same one again takes the label off), and an optional one-line
     "why" once labeled. A near miss marked Want means "should have
     pulled". Labels are card state keyed by PR key (`lib/scout-tighten.ts`),
-    never stored; they carry over between versions and checks.
+    never stored; they carry over between versions and checks. Clicking the
+    active button again clears a label on any shown example. A refine takes
+    at most 50 (`SCOUT_REFINE_MAX_LABELS`, the route's limit): the newest,
+    every Want before any Noise, so a long session drops old Noise first.
   - "Tighten" runs once 3 examples are labeled
     (`SCOUT_REFINE_MIN_LABELS`): one `scout_refine` call (Sonnet, no
     tools, an action call like `scout_check`, under the same daily
@@ -1541,7 +1544,9 @@ drafts the first one, checks it and turns it on.
     match a hint and fit the prompt; a why outranks a guess; hints follow
     the scouts.md syntax.
   - The answer is checked field by field (`scoutRefineOutput`,
-    `mapScoutRefine`): an empty prompt keeps the current one; each hint
+    `mapScoutRefine`): an empty prompt keeps the current one; a `paths`
+    the answer left out or did not give as a list keeps the current hints
+    (only an explicit `[]` turns the filter off); each hint
     must pass `isScoutPathHint` or it is dropped and counted ("1 suggested
     path hint could not go into scouts.md"), never written; when every
     suggested hint fails, the current hints stay, since an empty list
@@ -1550,7 +1555,9 @@ drafts the first one, checks it and turns it on.
   - The re-run uses the check's own `ScoutRun` (`retrial`): its listing,
     file lists and base folders, the same window and the same 5 judge
     calls at most, and no GitHub read at all, so a tightening costs one
-    refine call and judge calls. The engine keeps one session per card
+    refine call and judge calls. Replays on one session run one after
+    another (they share the runner's counters and its cached-only switch,
+    so an overlap could let one read GitHub). The engine keeps one session per card
     (`ScoutTrial.session`; a new check, Turn on or Not now ends it), with
     each version's pulls by prompt and hints, so Undo can go back and
     tighten again from an older version. A new folder hint whose base tree
@@ -1560,10 +1567,15 @@ drafts the first one, checks it and turns it on.
   - The card shows the new count against the old ("Tightened: 14 → 4
     PRs"), the 1–2 sentence summary, the changed words of the prompt and
     the hints added and removed (the hints show here, nowhere else), and
-    "Lost 1 PR you wanted: …" for a Want the version before pulled and
-    this one does not (`scoutLostWants`). "Undo this tightening" goes back
-    one version (a history stack in the card). Turn on writes the version
-    the card shows.
+    "Lost 1 PR you wanted: …" for a Want the version before pulled and the
+    re-run judged and skipped (`scoutWantsAfter`). A Want the re-run never
+    judged (the call cap, a failed call, folders the first run did not
+    read) is listed apart as "Not checked this round", never as lost.
+    "Undo this tightening" goes back one version (a history stack in the
+    card). A Tighten reply applies only while the version it was asked
+    from is still on screen: a new check, Drop that part, Edit prompt or
+    Undo meanwhile makes it stale, and it is ignored. Turn on writes the
+    version the card shows.
 - *Turn on scout:* the scout is appended to scouts.md through
   `ScoutsHistory.appendScout` and recorded as a version of origin `intro`;
   refused when the file or the new scout would not parse back exactly as

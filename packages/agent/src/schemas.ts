@@ -390,10 +390,12 @@ export const scoutCheckOutput = z.object({
 /**
  * "Tighten" on the intro card: a revised prompt, revised path hints and what
  * changed. Each field falls back on its own, so a malformed one costs that
- * field only; the hints are checked one by one in core (`mapScoutRefine`).
+ * field only; the hints are checked one by one in core (`mapScoutRefine`),
+ * and a missing or malformed list keeps the current hints.
  */
 export const scoutRefineOutput = z.object({
   prompt: z.string().catch(''),
-  paths: z.array(z.unknown()).catch([]),
+  // Left out or not a list: undefined, so the current hints stay. Only an explicit [] removes them.
+  paths: z.array(z.unknown()).optional().catch(undefined),
   summary: z.string().catch(''),
 });

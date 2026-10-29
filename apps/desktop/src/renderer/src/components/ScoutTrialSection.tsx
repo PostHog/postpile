@@ -14,6 +14,7 @@ import {
   tightenedHeading,
   tightenHint,
   toggleLabel,
+  uncheckedWantsText,
   type PromptPart,
   type ScoutLabels,
   type ScoutVersion,
@@ -126,6 +127,7 @@ function TightenedBox(props: { previous: ScoutVersion; current: ScoutVersion; re
   const tightening = current.tightening!;
   const change = pathsChange(previous.paths, current.paths);
   const lost = lostWantsText(tightening.lostWants, props.repos);
+  const unchecked = uncheckedWantsText(tightening.uncheckedWants, props.repos);
   const prompt = promptChange(previous.prompt, current.prompt);
   return (
     <div className="flex flex-col gap-2.5 rounded-[10px] bg-subtle px-3 py-2.5 inset-ring inset-ring-edge-hairline">
@@ -144,6 +146,7 @@ function TightenedBox(props: { previous: ScoutVersion; current: ScoutVersion; re
           <strong className="font-semibold">{lost}.</strong> The tighter version no longer pulls it; undo to go back one step.
         </div>
       )}
+      {unchecked && <span className="text-[11.5px] leading-normal text-hint">{unchecked}. This dry run could not judge it again, so it may still be found.</span>}
       <span>
         <Button size="sm" disabled={props.busy} onClick={props.onUndo}>
           Undo this tightening

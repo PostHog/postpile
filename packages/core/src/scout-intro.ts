@@ -15,6 +15,8 @@ export const SCOUT_TRIAL_EXAMPLES = 8;
 export const SCOUT_TRIAL_NEAR_MISSES = 3;
 /** Labeled examples "Tighten" needs before it runs. */
 export const SCOUT_REFINE_MIN_LABELS = 3;
+/** Labels one refine takes at most (the route's limit): the card sends the newest, Wants first. */
+export const SCOUT_REFINE_MAX_LABELS = 50;
 /** Longest "why" note on a label. */
 export const SCOUT_LABEL_WHY_MAX = 200;
 /** Path hints a tightened scout may keep. */
@@ -332,7 +334,8 @@ export interface ScoutRefineRequest {
 /** scout_refine's answer after zod, before it is checked: each field on its own, the hints as given. */
 export interface ScoutRefineAnswer {
   prompt: string;
-  paths: unknown[];
+  /** Undefined when the answer had no list here (left out or malformed): the current hints stay. */
+  paths: unknown[] | undefined;
   summary: string;
 }
 
@@ -353,8 +356,10 @@ export interface ScoutRefineResult {
   refined: ScoutRefined | null;
   /** The dry run again on the same PRs; null when it could not run. */
   trial: ScoutTrial | null;
-  /** Wanted PRs the version before pulled and this one does not. */
+  /** Wanted PRs the version before pulled and the re-run judged and skipped. */
   lostWants: ScoutTrialExample[];
+  /** Wanted PRs the re-run did not judge (call cap, a failed call, folders the first run never read): not checked this round. */
+  uncheckedWants: ScoutTrialExample[];
 }
 
 /**
@@ -374,22 +379,37 @@ export function cleanScoutLabels(labels: ScoutExampleLabel[]): ScoutExampleLabel
 
 /**
  * scout_refine's answer onto the current version. The prompt falls back to
- * the current one when the answer has none. Each hint must pass
- * `isScoutPathHint` or it is dropped and counted, never written; when the
- * answer had hints and none passes, the current hints stay (an empty list
- * would turn the path filter off, the opposite of tightening). An empty
- * list on purpose turns it off.
+ * the current one when the answer has none. Hints the answer left out or
+ * did not give as a list keep the current ones; only an explicit empty
+ * list turns the path filter off. Each hint must pass `isScoutPathHint`
+ * or it is dropped and counted, never written; when the answer had hints
+ * and none passes, the current hints stay (an empty list would turn the
+ * path filter off, the opposite of tightening).
  */
 export function mapScoutRefine(answer: ScoutRefineAnswer, current: { prompt: string; paths: string[] }): ScoutRefined {
   const prompt = answer.prompt.trim() === '' ? current.prompt : clipText(answer.prompt.trim(), SCOUT_PROMPT_MAX);
+  const summary = clipText(answer.summary.replace(/\s+/g, ' ').trim(), NOTE_MAX);
+  if (answer.paths === undefined) {
+    return { prompt, paths: current.paths, summary, droppedHints: 0 };
+  }
   const given = answer.paths.map((entry) => (typeof entry === 'string' ? entry.trim() : ''));
   const valid = [...new Set(given.filter(isScoutPathHint))].slice(0, SCOUT_REFINE_PATHS);
   const droppedHints = given.filter((entry) => !isScoutPathHint(entry)).length;
   const paths = given.length > 0 && valid.length === 0 ? current.paths : valid;
-  return { prompt, paths, summary: clipText(answer.summary.replace(/\s+/g, ' ').trim(), NOTE_MAX), droppedHints };
+  return { prompt, paths, summary, droppedHints };
 }
 
-/** Wanted PRs the version before pulled that the new one does not: what the card warns about, with Undo. */
-export function scoutLostWants(labels: ScoutExampleLabel[], pulledBefore: ReadonlySet<PrKey>, pulledAfter: ReadonlySet<PrKey>): PrKey[] {
-  return labels.filter((entry) => entry.label === 'want' && pulledBefore.has(entry.prKey) && !pulledAfter.has(entry.prKey)).map((entry) => entry.prKey);
+/**
+ * The Wants after a re-run, for the card's warning. Lost: the version
+ * before pulled it and the re-run judged it and skipped it (a "no path
+ * signal" skip counts). Unchecked: the re-run never judged it (the call
+ * cap, a failed call, folders the first run did not read), so nothing is
+ * known about it this round.
+ */
+export function scoutWantsAfter(labels: ScoutExampleLabel[], pulledBefore: ReadonlySet<PrKey>, after: { pulled: ReadonlySet<PrKey>; judged: ReadonlySet<PrKey> }): { lost: PrKey[]; unchecked: PrKey[] } {
+  const wants = labels.filter((entry) => entry.label === 'want').map((entry) => entry.prKey);
+  return {
+    lost: wants.filter((key) => pulledBefore.has(key) && after.judged.has(key) && !after.pulled.has(key)),
+    unchecked: wants.filter((key) => !after.judged.has(key)),
+  };
 }

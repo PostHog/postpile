@@ -2,21 +2,26 @@
 // the Want / Noise labels on the dry run's examples, the versions the card
 // went through for Undo, and the words around them. Card state only:
 // nothing here is stored.
-import { SCOUT_REFINE_MIN_LABELS, type PrKey, type ScoutExampleLabel, type ScoutLabel, type ScoutTrial, type ScoutTrialExample } from '@postpile/core';
+import { SCOUT_REFINE_MAX_LABELS, SCOUT_REFINE_MIN_LABELS, type PrKey, type ScoutExampleLabel, type ScoutLabel, type ScoutTrial, type ScoutTrialExample } from '@postpile/core';
 import { exampleRef } from './scout-intro.ts';
 import { plural } from './plural.ts';
 
 /** The card's labels by PR key. They carry over from one version to the next, so a PR keeps its label wherever it shows. */
 export type ScoutLabels = Readonly<Record<PrKey, { label: ScoutLabel; why: string }>>;
 
-/** Want or Noise on an example; the same button again takes the label off, note and all. */
+/**
+ * Want or Noise on an example; the same button again takes the label off,
+ * note and all. A label set or changed moves to the end: the labels are
+ * kept oldest first, so the newest are the ones a refine takes.
+ */
 export function toggleLabel(labels: ScoutLabels, prKey: PrKey, label: ScoutLabel): ScoutLabels {
   const next = { ...labels };
-  if (labels[prKey]?.label === label) {
-    delete next[prKey];
+  const before = labels[prKey];
+  delete next[prKey];
+  if (before?.label === label) {
     return next;
   }
-  next[prKey] = { label, why: labels[prKey]?.why ?? '' };
+  next[prKey] = { label, why: before?.why ?? '' };
   return next;
 }
 
@@ -33,9 +38,19 @@ export function labelCount(labels: ScoutLabels): number {
   return Object.keys(labels).length;
 }
 
-/** Every label, shown or not: a Want the new version no longer pulls must still reach the refine. */
+/**
+ * The labels a refine takes, shown or not (a Want the new version no
+ * longer pulls must still reach it): at most SCOUT_REFINE_MAX_LABELS, the
+ * newest first, every Want before any Noise, so a long session drops old
+ * Noise first and never a Want while Noise is kept.
+ */
 export function labelsForRequest(labels: ScoutLabels): ScoutExampleLabel[] {
-  return Object.entries(labels).map(([prKey, entry]) => ({ prKey, label: entry.label, why: entry.why.trim() }));
+  const newestFirst = Object.entries(labels)
+    .reverse()
+    .map(([prKey, entry]) => ({ prKey, label: entry.label, why: entry.why.trim() }));
+  const wants = newestFirst.filter((entry) => entry.label === 'want');
+  const noise = newestFirst.filter((entry) => entry.label === 'noise');
+  return [...wants, ...noise].slice(0, SCOUT_REFINE_MAX_LABELS);
 }
 
 /** One version of the scout on the card: what Turn on would write and what its dry run found. */
@@ -44,7 +59,7 @@ export interface ScoutVersion {
   paths: string[];
   trial: ScoutTrial | null;
   /** The tightening that made this version; null for the checked one. */
-  tightening: { summary: string; droppedHints: number; lostWants: ScoutTrialExample[] } | null;
+  tightening: { summary: string; droppedHints: number; lostWants: ScoutTrialExample[]; uncheckedWants: ScoutTrialExample[] } | null;
 }
 
 /** The card's versions after a check: just the checked one. */
@@ -111,6 +126,14 @@ export function lostWantsText(lost: ScoutTrialExample[], repos: string[]): strin
   }
   const names = lost.map((example) => `${exampleRef(example.prKey, repos)} ${example.title}`).join('; ');
   return `Lost ${plural(lost.length, 'PR')} you wanted: ${names}`;
+}
+
+/** "Not checked this round: #2701 Add a ledger service"; null when every want was judged again. */
+export function uncheckedWantsText(unchecked: ScoutTrialExample[], repos: string[]): string | null {
+  if (unchecked.length === 0) {
+    return null;
+  }
+  return `Not checked this round: ${unchecked.map((example) => `${exampleRef(example.prKey, repos)} ${example.title}`).join('; ')}`;
 }
 
 /** The path hints before and after, each once, in the new order with the removed ones after. */

@@ -85,6 +85,9 @@ export function ScoutIntroCard(props: { state: ScoutIntroState; hidden: boolean;
   // Want / Noise by PR key; they carry over between versions and checks. Never stored.
   const [labels, setLabels] = useState<ScoutLabels>({});
   const [tightenError, setTightenError] = useState<string | null>(null);
+  // Bumped whenever the version on screen stops being the one a Tighten was asked from (a new check, Drop that part,
+  // Edit prompt, Undo, an applied tightening): a reply that comes back after that is stale and ignored.
+  const versionToken = useRef(0);
   // Set by the first keystroke: a draft that lands later never overwrites it. A ref, so the draft's promise reads it now.
   const typed = useRef(false);
   // One draft per opening: StrictMode runs the effect twice, and each run would be an agent call.
@@ -162,6 +165,7 @@ export function ScoutIntroCard(props: { state: ScoutIntroState; hidden: boolean;
   }, [onClose, hidden, showResult]);
 
   async function check() {
+    versionToken.current += 1;
     setChecking(true);
     setRefusal(null);
     const checked = await actions.checkScout({ prompt: prompt.trim(), repos });
@@ -185,8 +189,10 @@ export function ScoutIntroCard(props: { state: ScoutIntroState; hidden: boolean;
       return;
     }
     setTightenError(null);
+    const token = versionToken.current;
     const answer = await actions.refineScout({ session, name: name.trim(), prompt: current.prompt, repos, paths: current.paths, labels: labelsForRequest(labels) });
-    if (!mounted.current) {
+    // Another check, an edit or an Undo came in meanwhile: this reply is about a version no longer on screen.
+    if (!mounted.current || versionToken.current !== token) {
       return;
     }
     if (!answer.ok || answer.refined === null) {
@@ -194,9 +200,16 @@ export function ScoutIntroCard(props: { state: ScoutIntroState; hidden: boolean;
       return;
     }
     const refined = answer.refined;
-    const tightening = { summary: refined.summary, droppedHints: refined.droppedHints, lostWants: answer.lostWants };
+    const tightening = { summary: refined.summary, droppedHints: refined.droppedHints, lostWants: answer.lostWants, uncheckedWants: answer.uncheckedWants };
+    versionToken.current += 1;
     setVersions((now) => (now === null ? now : pushVersion(now, { prompt: refined.prompt, paths: refined.paths, trial: answer.trial, tightening })));
     setPrompt(refined.prompt);
+  }
+
+  // Back to the prompt to edit it: a Tighten still running must not overwrite what is typed there.
+  function editPrompt() {
+    versionToken.current += 1;
+    setShowResult(false);
   }
 
   // "Undo this tightening": back one version, its prompt in the textarea too.
@@ -204,6 +217,7 @@ export function ScoutIntroCard(props: { state: ScoutIntroState; hidden: boolean;
     if (versions === null || versions.length < 2) {
       return;
     }
+    versionToken.current += 1;
     const back = undoVersion(versions);
     setVersions(back);
     setPrompt(currentVersion(back).prompt);
@@ -213,6 +227,7 @@ export function ScoutIntroCard(props: { state: ScoutIntroState; hidden: boolean;
 
   // The check ran on the old prompt: its counts, examples and Turn on no longer hold, so back to Check on the new one.
   function dropPart(rewrite: string) {
+    versionToken.current += 1;
     setPrompt(rewrite);
     setResult(null);
     setVersions(null);
@@ -271,7 +286,7 @@ export function ScoutIntroCard(props: { state: ScoutIntroState; hidden: boolean;
               tightenError={tightenError}
             />
             <div className="flex items-center gap-2.5">
-              <button type="button" onClick={() => setShowResult(false)} className="px-1 py-2 text-[13px] text-accent hover:text-ink">
+              <button type="button" onClick={editPrompt} className="px-1 py-2 text-[13px] text-accent hover:text-ink">
                 ← Edit prompt
               </button>
               <span className="flex-1" />

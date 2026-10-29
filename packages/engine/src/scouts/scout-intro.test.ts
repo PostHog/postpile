@@ -284,15 +284,83 @@ describe('the Scouts intro card', () => {
     h.runner.answer('scout_refine', { prompt: `${PROMPT} Skip renames.`, paths: ['+*/'], summary: 'Added a skip rule.' });
     answerJudge(h, () => true);
 
-    const result = await h.engine.refineScout({ session: first.trial!.session!, name: 'Lookout', prompt: PROMPT, repos: ['acme/app'], paths: ['+*/'], labels: LABELS });
+    const labels = [...LABELS, { prKey: 'acme/app#51', label: 'want' as const, why: '' }];
+    const result = await h.engine.refineScout({ session: first.trial!.session!, name: 'Lookout', prompt: PROMPT, repos: ['acme/app'], paths: ['+*/'], labels });
 
     expect(result.ok).toBe(true);
     expect(h.runner.promptsFor('scout_judge')).toHaveLength(6);
+    // The one call judged #1 to #12: #51 was not judged this round, so it is unchecked, never lost.
+    expect(result.lostWants).toEqual([]);
+    expect(result.uncheckedWants).toEqual([{ prKey: 'acme/app#51', title: 'Add service 51', reason: 'not judged this round' }]);
     expect(result.trial).toMatchObject({ judged: 12, complete: false, problem: 'more PRs than one check judges' });
     // The day is spent now: the next tightening is refused before any call.
     const again = await h.engine.refineScout({ session: first.trial!.session!, name: 'Lookout', prompt: `${PROMPT} Skip renames.`, repos: ['acme/app'], paths: ['+*/'], labels: LABELS });
     expect(again).toMatchObject({ ok: false, message: expect.stringContaining('used up') });
     expect(h.runner.promptsFor('scout_refine')).toHaveLength(1);
+  });
+
+  it('runs overlapping tightenings of one check one after another, still without a GitHub read', async () => {
+    const { h } = setup();
+    onGitHub(h, 3);
+    h.reader.scoutTrees.set('base1:svc1', ['old']);
+    // acme/web's folders inside svc1/ are not answered during the check, so its PRs stay unjudged there.
+    const web = [1, 2, 3].map((number) => ({ ...candidate(number), key: `acme/web#${number}`, headOid: `w${number}`, baseOid: 'base2' }));
+    h.reader.scoutListings.set('acme/web', web);
+    for (const pr of web) {
+      h.reader.scoutFileLists.set(pr.key, { headOid: pr.headOid, baseOid: 'base2', foldersOid: 'base2', stackedOn: null, files: [{ path: 'svc1/new/main.ts', changeType: 'ADDED' }] });
+    }
+    h.reader.scoutTrees.set('base2', ['src']);
+    const PATHS = ['+*/', '+svc1/*/'];
+    h.runner.answer('scout_check', { fit: 'fits', note: 'ok', cantSee: null, name: 'Lookout', paths: PATHS, pathsCoverAll: true });
+    h.runner.answer('scout_judge', { judgements: [1, 2, 3].map((number) => ({ prKey: `acme/app#${number}`, verdict: 'pull', reason: 'adds a service' })) });
+    const first = await h.engine.checkScout({ prompt: PROMPT, repos: ['acme/app', 'acme/web'] });
+    // GitHub would answer now: a replay allowed to read would read it.
+    h.reader.scoutTrees.set('base2:svc1', ['old']);
+    const readsAfterCheck = [...h.reader.scoutCalls];
+    h.runner.answer('scout_refine', { prompt: `${PROMPT} Skip renames.`, paths: ['+*/'], summary: 'Dropped the svc1 hint.' });
+    h.runner.answer('scout_refine', { prompt: `${PROMPT} Skip docs.`, paths: PATHS, summary: 'Added a skip rule.' });
+    for (let call = 0; call < 4; call++) {
+      h.runner.answer('scout_judge', { judgements: [] });
+    }
+    // Every judge call waits until the test lets its tightening go on.
+    const held: { prompt: string; go: () => void }[] = [];
+    const run = h.runner.run.bind(h.runner);
+    vi.spyOn(h.runner, 'run').mockImplementation(async (request) => {
+      if (request.purpose === 'scout_judge') {
+        await new Promise<void>((go) => held.push({ prompt: request.prompt, go }));
+      }
+      return run(request);
+    });
+    const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+    const releaseUntil = async (marker: string, done: () => boolean) => {
+      for (let step = 0; step < 50 && !done(); step++) {
+        for (const entry of held.filter((call) => call.prompt.includes(marker))) {
+          held.splice(held.indexOf(entry), 1);
+          entry.go();
+        }
+        await tick();
+      }
+    };
+    const labels = [
+      { prKey: 'acme/app#1', label: 'want' as const, why: '' },
+      { prKey: 'acme/app#2', label: 'noise' as const, why: '' },
+      { prKey: 'acme/app#3', label: 'noise' as const, why: '' },
+    ];
+    const request = { session: first.trial!.session!, name: 'Lookout', prompt: PROMPT, repos: ['acme/app', 'acme/web'], paths: PATHS, labels };
+    let firstDone = false;
+    let secondDone = false;
+
+    const one = h.engine.refineScout(request).finally(() => (firstDone = true));
+    await tick();
+    const two = h.engine.refineScout(request).finally(() => (secondDone = true));
+    await tick();
+    // The first tightening ends while the second, run alongside, would still be waiting on its first judge call.
+    await releaseUntil('Skip renames', () => firstDone);
+    await releaseUntil('Skip docs', () => secondDone);
+    const results = await Promise.all([one, two]);
+
+    expect(results.map((result) => result.message)).toEqual([null, null]);
+    expect(h.reader.scoutCalls).toEqual(readsAfterCheck);
   });
 
   it('tightens again from an undone version, which the session still knows', async () => {
@@ -307,7 +375,7 @@ describe('the Scouts intro card', () => {
     // Undo is card state: the card sends the first version again.
     const result = await h.engine.refineScout({ session: first.trial!.session!, name: 'Lookout', prompt: PROMPT, repos: ['acme/app'], paths: ['+*/'], labels: LABELS });
 
-    expect(result).toMatchObject({ ok: true, lostWants: [] });
+    expect(result).toMatchObject({ ok: true, lostWants: [], uncheckedWants: [] });
     expect(h.telemetry.events.filter((entry) => entry.event === 'scout_tightened').map((entry) => entry.props)).toMatchObject([{ round: 1, lost_wants: 1 }, { round: 2, lost_wants: 0, pulls_before: 6 }]);
   });
 

@@ -12,6 +12,7 @@ import {
   rendererExceptionProps,
   SCOUT_NAME_MAX,
   SCOUT_PROMPT_MAX,
+  SCOUT_REFINE_MAX_LABELS,
   TELEMETRY_EVENTS,
   type AppConfig,
   type TelemetryEventName,
@@ -317,7 +318,7 @@ export function createApp(
         prompt: z.string().min(1).max(SCOUT_PROMPT_MAX),
         repos: z.array(z.string().min(3).max(200)).min(1).max(5),
         paths: z.array(z.string().min(1).max(200)).max(10),
-        labels: z.array(z.object({ prKey: z.string().min(3).max(300), label: z.enum(['want', 'noise']), why: z.string().max(1000).default('') })).max(50),
+        labels: z.array(z.object({ prKey: z.string().min(3).max(300), label: z.enum(['want', 'noise']), why: z.string().max(1000).default('') })).max(SCOUT_REFINE_MAX_LABELS),
       })
       .parse(await c.req.json());
     return c.json(await engine.refineScout(body));

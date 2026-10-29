@@ -585,7 +585,7 @@ export class RunnerAgentService implements AgentService {
 
   async refineScout(input: ScoutRefineInput): Promise<ScoutRefined> {
     const { value } = await this.ask('scout_refine', scoutRefinePrompt(input), scoutRefineOutput);
-    return mapScoutRefine(value, { prompt: input.prompt, paths: input.paths });
+    return mapScoutRefine({ prompt: value.prompt, paths: value.paths, summary: value.summary }, { prompt: input.prompt, paths: input.paths });
   }
 
   async consolidate(input: ConsolidationInput): Promise<ConsolidationResult> {

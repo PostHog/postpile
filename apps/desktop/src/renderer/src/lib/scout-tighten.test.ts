@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ScoutTrial } from '@postpile/core';
+import { SCOUT_REFINE_MAX_LABELS, type ScoutTrial } from '@postpile/core';
 import {
   checkedVersions,
   currentVersion,
@@ -15,6 +15,7 @@ import {
   tightenedHeading,
   tightenHint,
   toggleLabel,
+  uncheckedWantsText,
   undoVersion,
   type ScoutLabels,
 } from './scout-tighten.ts';
@@ -30,6 +31,30 @@ describe('labels', () => {
     expect(labels['acme/app#1']).toEqual({ label: 'noise', why: 'new service' });
     labels = toggleLabel(labels, 'acme/app#1', 'noise');
     expect(labels).toEqual({});
+  });
+
+  it('clears a label from the active button on any shown example, and moves a changed label to the newest', () => {
+    let labels: ScoutLabels = {};
+    labels = toggleLabel(labels, 'acme/app#1', 'want');
+    labels = toggleLabel(labels, 'acme/app#2', 'noise');
+    labels = toggleLabel(labels, 'acme/app#1', 'noise');
+    expect(Object.keys(labels)).toEqual(['acme/app#2', 'acme/app#1']);
+    labels = toggleLabel(labels, 'acme/app#2', 'noise');
+    expect(labels).toEqual({ 'acme/app#1': { label: 'noise', why: '' } });
+  });
+
+  it(`sends at most ${SCOUT_REFINE_MAX_LABELS} labels, the newest, every Want before any Noise`, () => {
+    let labels: ScoutLabels = {};
+    labels = toggleLabel(labels, 'acme/app#1', 'want');
+    for (let number = 2; number <= 70; number++) {
+      labels = toggleLabel(labels, `acme/app#${number}`, 'noise');
+    }
+    labels = toggleLabel(labels, 'acme/app#71', 'want');
+    const sent = labelsForRequest(labels);
+    expect(sent).toHaveLength(SCOUT_REFINE_MAX_LABELS);
+    // Both Wants, the oldest one too, then the newest Noise.
+    expect(sent.slice(0, 3).map((entry) => entry.prKey)).toEqual(['acme/app#71', 'acme/app#1', 'acme/app#70']);
+    expect(sent.at(-1)!.prKey).toBe('acme/app#23');
   });
 
   it('takes a note only on a labeled example', () => {
@@ -64,7 +89,7 @@ describe('tightenBlockedReason', () => {
 describe('versions and Undo', () => {
   it('pushes a tightened version and undoes one step back, never past the checked one', () => {
     const checked = checkedVersions('Pull new services.', [], TRIAL);
-    const tightened = pushVersion(checked, { prompt: 'Pull new services. Skip tests.', paths: ['+*/'], trial: { ...TRIAL, pulled: 4 }, tightening: { summary: 'Added a skip rule.', droppedHints: 0, lostWants: [] } });
+    const tightened = pushVersion(checked, { prompt: 'Pull new services. Skip tests.', paths: ['+*/'], trial: { ...TRIAL, pulled: 4 }, tightening: { summary: 'Added a skip rule.', droppedHints: 0, lostWants: [], uncheckedWants: [] } });
 
     expect(currentVersion(tightened).prompt).toBe('Pull new services. Skip tests.');
     expect(previousVersion(tightened)?.prompt).toBe('Pull new services.');
@@ -83,6 +108,11 @@ describe('words', () => {
   it('names the wanted PRs that were lost', () => {
     expect(lostWantsText([], ['acme/app'])).toBeNull();
     expect(lostWantsText([{ prKey: 'acme/app#2688', title: 'Billing facade', reason: 'no path signal' }], ['acme/app'])).toBe('Lost 1 PR you wanted: #2688 Billing facade');
+  });
+
+  it('names the wanted PRs the re-run did not judge apart from the lost ones', () => {
+    expect(uncheckedWantsText([], ['acme/app'])).toBeNull();
+    expect(uncheckedWantsText([{ prKey: 'acme/app#2701', title: 'Ledger service', reason: 'not judged this round' }], ['acme/app'])).toBe('Not checked this round: #2701 Ledger service');
   });
 
   it('lists the path hints kept, added and removed', () => {

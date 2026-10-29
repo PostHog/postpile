@@ -89,9 +89,18 @@ describe('refineScout', () => {
   };
 
   it('reads each field on its own: a malformed one falls back, the others stay', () => {
-    expect(scoutRefineOutput.parse({})).toEqual({ prompt: '', paths: [], summary: '' });
+    expect(scoutRefineOutput.parse({})).toEqual({ prompt: '', paths: undefined, summary: '' });
     expect(scoutRefineOutput.parse({ prompt: 42, paths: ['+*/'], summary: 'Narrowed.' })).toEqual({ prompt: '', paths: ['+*/'], summary: 'Narrowed.' });
-    expect(scoutRefineOutput.parse({ prompt: 'Skip tests.', paths: 'services/**', summary: null })).toEqual({ prompt: 'Skip tests.', paths: [], summary: '' });
+    // A malformed list is no list: absent, never an empty one that would turn the path filter off.
+    expect(scoutRefineOutput.parse({ prompt: 'Skip tests.', paths: 'services/**', summary: null })).toEqual({ prompt: 'Skip tests.', paths: undefined, summary: '' });
+    expect(scoutRefineOutput.parse({ paths: [] }).paths).toEqual([]);
+  });
+
+  it('keeps the current hints when the answer leaves them out or gives no list', async () => {
+    const runner = new FakeRunner().answer('scout_refine', { prompt: 'Skip tests.', summary: 'Added a skip rule.' }).answer('scout_refine', { prompt: 'Skip tests.', paths: 'none', summary: 'x' });
+    const service = new RunnerAgentService(runner);
+    expect((await service.refineScout(input)).paths).toEqual(input.paths);
+    expect((await service.refineScout(input)).paths).toEqual(input.paths);
   });
 
   it('fences the PRs and the judge reasons, keeps the labels and notes outside, and drops hints scouts.md cannot hold', async () => {

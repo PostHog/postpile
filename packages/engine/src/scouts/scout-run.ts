@@ -261,6 +261,8 @@ export class ScoutRun {
   private cachedOnly = false;
   /** The last trial's listings and window, for `retrial`. File lists stay in `runFiles`, base folders in `trees`. */
   private trialListings: { days: number; listings: Map<string, RepoListing> } | null = null;
+  /** The replay running or last run: the next `retrial` starts after it. */
+  private replays: Promise<unknown> = Promise.resolve();
 
   constructor(private readonly deps: ScoutRunDeps) {}
 
@@ -863,9 +865,16 @@ export class ScoutRun {
    * listing, file lists and base folders. No GitHub read at all, so it costs
    * judge calls only; a PR the first trial never read (a new folder hint's
    * tree, say) stays unjudged and the trial says so. Null without a trial
-   * on these repos to replay.
+   * on these repos to replay. Replays on one runner run one after another.
    */
-  async retrial(scout: ScoutConfig, input: Omit<ScoutRunInput, 'glance' | 'errors'>): Promise<ScoutTrialRun | null> {
+  retrial(scout: ScoutConfig, input: Omit<ScoutRunInput, 'glance' | 'errors'>): Promise<ScoutTrialRun | null> {
+    // One replay at a time: they share this runner's counters and its cached-only switch, so an overlapping one waits its turn.
+    const turn = this.replays.then(() => this.replay(scout, input));
+    this.replays = turn.catch(() => null);
+    return turn;
+  }
+
+  private async replay(scout: ScoutConfig, input: Omit<ScoutRunInput, 'glance' | 'errors'>): Promise<ScoutTrialRun | null> {
     const kept = this.trialListings;
     if (kept === null || [...kept.listings.keys()].join(' ') !== scout.repos.join(' ')) {
       return null;

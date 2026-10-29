@@ -9,7 +9,7 @@ import {
   mainRepoOf,
   mapScoutCheck,
   parsePrKey,
-  scoutLostWants,
+  scoutWantsAfter,
   SCOUT_REFINE_MIN_LABELS,
   SCOUT_TRIAL_DAYS,
   type ActionResult,
@@ -156,24 +156,26 @@ export class FakeScoutIntro {
     const repo = request.repos[0];
     const labels = cleanScoutLabels(request.labels);
     if (request.session !== FAKE_SESSION || repo === undefined) {
-      return { ok: false, message: 'This dry run is no longer kept. Check the scout again, then tighten.', refined: null, trial: null, lostWants: [] };
+      return { ok: false, message: 'This dry run is no longer kept. Check the scout again, then tighten.', refined: null, trial: null, lostWants: [], uncheckedWants: [] };
     }
     if (labels.length < SCOUT_REFINE_MIN_LABELS) {
-      return { ok: false, message: `Label at least ${SCOUT_REFINE_MIN_LABELS} examples Want or Noise first.`, refined: null, trial: null, lostWants: [] };
+      return { ok: false, message: `Label at least ${SCOUT_REFINE_MIN_LABELS} examples Want or Noise first.`, refined: null, trial: null, lostWants: [], uncheckedWants: [] };
     }
     await delay(this.delayMs * 3);
     const prompt = request.prompt.trim();
     const alreadyTight = prompt.endsWith(REFINED_PROMPT_TAIL.trim());
     const before = new Set(examplesOf(repo, alreadyTight ? SECOND_PULLS : FIRST_PULLS).map((example) => example.prKey));
     const after = examplesOf(repo, SECOND_PULLS);
-    const lost = new Set(scoutLostWants(labels, before, new Set(after.map((example) => example.prKey))));
+    // The sample's second dry run judges every PR the first one did, so no want goes unchecked.
+    const judged = new Set([...examplesOf(repo, FIRST_PULLS), ...examplesOf(repo, FIRST_NEAR_MISSES)].map((example) => example.prKey));
+    const lost = new Set(scoutWantsAfter(labels, before, { pulled: new Set(after.map((example) => example.prKey)), judged }).lost);
     const lostWants = examplesOf(repo, FIRST_PULLS)
       .filter((example) => lost.has(example.prKey))
       .map((example) => ({ ...example, reason: 'no path signal: no hint matches its files any more' }));
     const refined = alreadyTight
       ? { prompt, paths: REFINED_PATHS, summary: 'Your labels give no new pattern, so the prompt and path hints stay as they are.', droppedHints: 0 }
       : { prompt: `${prompt}${REFINED_PROMPT_TAIL}`, paths: REFINED_PATHS, summary: REFINED_SUMMARY, droppedHints: 0 };
-    return { ok: true, message: null, refined, trial: cannedTrial(repo, SECOND_PULLS, SECOND_NEAR_MISSES), lostWants };
+    return { ok: true, message: null, refined, trial: cannedTrial(repo, SECOND_PULLS, SECOND_NEAR_MISSES), lostWants, uncheckedWants: [] };
   }
 
   /** Adds the scout to the Scouted section with nothing pulled in yet; same words as the engine. */

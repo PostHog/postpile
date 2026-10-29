@@ -5,7 +5,7 @@ import {
   isScoutPathHint,
   mapScoutCheck,
   mapScoutRefine,
-  scoutLostWants,
+  scoutWantsAfter,
   SCOUT_LABEL_WHY_MAX,
   SCOUT_REFINE_PATHS,
   promptWithoutPart, scoutFromCard, scoutIntroAutoShows, scoutNameWithId, SCOUT_NAME_MAX, scoutSection, trialRateWords } from './scout-intro.ts';
@@ -161,6 +161,10 @@ describe('mapScoutRefine', () => {
     expect(refined.droppedHints).toBe(5);
   });
 
+  it('keeps the current hints when the answer has no list of them; only an explicit empty list turns the filter off', () => {
+    expect(mapScoutRefine({ prompt: PROMPT, paths: undefined, summary: '' }, current)).toMatchObject({ paths: current.paths, droppedHints: 0 });
+  });
+
   it('keeps the current hints when every suggested one is invalid, and turns the filter off only on an empty list', () => {
     expect(mapScoutRefine({ prompt: PROMPT, paths: ['not a hint'], summary: '' }, current).paths).toEqual(current.paths);
     expect(mapScoutRefine({ prompt: PROMPT, paths: [], summary: '' }, current).paths).toEqual([]);
@@ -191,15 +195,19 @@ describe('cleanScoutLabels', () => {
   });
 });
 
-describe('scoutLostWants', () => {
-  it('names wanted PRs the version before pulled and the new one does not', () => {
-    const labels = [
-      { prKey: 'acme/app#1', label: 'want' as const, why: '' },
-      { prKey: 'acme/app#2', label: 'want' as const, why: '' },
-      { prKey: 'acme/app#3', label: 'noise' as const, why: '' },
-      { prKey: 'acme/app#4', label: 'want' as const, why: 'should have pulled' },
-    ];
-    // #2 is still pulled, #3 is noise, #4 was a near miss (never pulled): only #1 is lost.
-    expect(scoutLostWants(labels, new Set(['acme/app#1', 'acme/app#2', 'acme/app#3']), new Set(['acme/app#2']))).toEqual(['acme/app#1']);
+describe('scoutWantsAfter', () => {
+  const labels = [
+    { prKey: 'acme/app#1', label: 'want' as const, why: '' },
+    { prKey: 'acme/app#2', label: 'want' as const, why: '' },
+    { prKey: 'acme/app#3', label: 'noise' as const, why: '' },
+    { prKey: 'acme/app#4', label: 'want' as const, why: 'should have pulled' },
+    { prKey: 'acme/app#5', label: 'want' as const, why: '' },
+  ];
+
+  it('calls a want lost only when the re-run judged it and skipped it; one it never judged is unchecked', () => {
+    const before = new Set(['acme/app#1', 'acme/app#2', 'acme/app#3', 'acme/app#5']);
+    // #1 judged and skipped: lost. #2 still pulled. #3 is noise. #4 a near miss, judged, still skipped: not lost. #5 never judged: unchecked.
+    const after = { pulled: new Set(['acme/app#2']), judged: new Set(['acme/app#1', 'acme/app#2', 'acme/app#3', 'acme/app#4']) };
+    expect(scoutWantsAfter(labels, before, after)).toEqual({ lost: ['acme/app#1'], unchecked: ['acme/app#5'] });
   });
 });
