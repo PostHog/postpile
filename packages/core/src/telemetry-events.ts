@@ -164,6 +164,8 @@ export const TELEMETRY_EVENTS = {
   memory_corrected: NO_PROPS,
   // source only for topic proposals (topic_merge, rename, topic_split, topic_move).
   proposal_resolved: z.object({ kind: proposalKind, accepted: z.boolean(), source: proposalSource.optional() }).strict(),
+  scout_followed: z.object({ from: z.enum(['tile', 'detail']) }).strict(),
+  scout_dismissed: z.object({ with_reason: z.boolean() }).strict(),
   instructions_edited: NO_PROPS,
 
   // 5. Health

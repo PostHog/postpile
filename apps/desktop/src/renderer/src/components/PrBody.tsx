@@ -21,6 +21,8 @@ import { BranchArrowIcon, PrStateIcon } from './icons.tsx';
 import { OpenOnGitHub } from './OpenOnGitHub.tsx';
 import { PaneHousekeeping } from './PaneHousekeeping.tsx';
 import { ReviewRow } from './ReviewRow.tsx';
+import { ScoutActions } from './ScoutActions.tsx';
+import { ScoutedLine } from './ScoutedLine.tsx';
 import { StackMark, StateWordLabel } from './pills.tsx';
 import { PrDescription } from './PrDescription.tsx';
 import { PrFacts } from './PrFacts.tsx';
@@ -168,6 +170,11 @@ export function PrBody(props: PrBodyProps) {
   const row = props.view.prs.find((candidate) => candidate.key === pr.key);
   // The PR's owner: its author, or the person a bot opened it for.
   const askPerson = row?.facts.owners[0] ?? pr.author;
+  // On a scout's tile the pane offers Follow and Dismiss instead of the review row and housekeeping:
+  // nothing is asked of the user, there is no thread to mark read and no tile to snooze (DESIGN.md "Scouts").
+  const scout = props.view.scout ?? null;
+  const scouted = props.detail.scouted ?? null;
+  const scoutOffers = scout !== null && scouted !== null && scouted.active && !scouted.tracked;
   return (
     <ComposeProvider value={compose}>
       <div className="relative flex min-h-0 flex-1 flex-col">
@@ -202,12 +209,14 @@ export function PrBody(props: PrBodyProps) {
               </span>
             )}
             <AgentNoteLines notes={props.detail.notes} />
+            {scouted && <ScoutedLine scouted={scouted} />}
           </div>
           <NewSinceBox detail={props.detail} />
           <GlanceCard detail={props.detail} summary={props.summary} view={props.view} />
           <div ref={reviewRow} className="flex flex-col gap-2.5">
-            {(offers.approve || offers.ask) && <ReviewRow detail={props.detail} offers={offers} askPerson={askPerson} />}
-            <PaneHousekeeping view={props.view} prKey={pr.key} offers={offers} />
+            {scoutOffers && scouted && <ScoutActions followPrKey={pr.key} dismissPrKeys={[pr.key]} follow={scouted.follow} from="detail" size="md" />}
+            {!scout && (offers.approve || offers.ask) && <ReviewRow detail={props.detail} offers={offers} askPerson={askPerson} />}
+            {!scout && <PaneHousekeeping view={props.view} prKey={pr.key} offers={offers} />}
           </div>
           <PrDescription body={pr.body} />
           <PrFacts pr={pr} agentApprovers={props.detail.agentApprovers} agentDecline={props.detail.agentDecline} />

@@ -102,6 +102,8 @@ Run it on a Mac only, because the macOS system font is part of the look, so ther
 
 Instructions for every prompt go in `~/.config/postpile/instructions.md` (honours `XDG_CONFIG_HOME`, or set `POSTPILE_INSTRUCTIONS`). The app also changes this file, but only through proposals you accept.
 
+Scouts go in `~/.config/postpile/scouts.md` (or set `POSTPILE_SCOUTS`): one `## Name` section per scout with `repos:`, optional `paths:` and `id:` lines, then the prompt. No file means no scouts. A file that does not parse keeps the last version that did, and the sync report names the line.
+
 `~/.config/postpile/config.json` (dev: `~/.config/postpile-dev/config.json`) holds settings that must also work for a Finder launch:
 
 - `toolPath`: folders to look for `gh` and `claude` in, before anything else, e.g. `{ "toolPath": ["~/.local/share/mise/shims"] }`. Read once at app launch. The app no longer runs your login shell, so tools that only your shell setup puts on PATH need this.

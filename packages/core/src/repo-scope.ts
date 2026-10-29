@@ -25,6 +25,8 @@ export interface RepoSettings {
  */
 export interface ListScope {
   allRepos?: boolean;
+  /** Search also covers the scouts' tiles (DESIGN.md "Scouts"): the MCP's search_prs. The app's search bar leaves them out. */
+  withScouts?: boolean;
 }
 
 /** The settings a read filters by: the chosen scope, or all repos. */

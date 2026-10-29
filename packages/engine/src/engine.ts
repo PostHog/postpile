@@ -2,6 +2,7 @@ import { tmpdir } from 'node:os';
 import type { AgentService } from '@postpile/agent';
 import type {
   PrOverlapsView,
+  ScoutListItem,
   ListScope,
   ActionLogEntry,
   ActionResult,
@@ -169,6 +170,7 @@ import { McpConnection } from './mcp-connection.ts';
 import { InstructionsHistory } from './instructions/history.ts';
 import { ScoutsHistory } from './scouts/history.ts';
 import { ScoutRun } from './scouts/scout-run.ts';
+import { ScoutActions } from './scouts/scout-actions.ts';
 import type { RunDeps } from './run-deps.ts';
 import { InstructionsProposer } from './instructions/proposer.ts';
 import { LivePoller } from './live/live-poller.ts';
@@ -315,6 +317,8 @@ function topicProposalTelemetryKind(kind: TopicProposalKind | undefined): 'topic
 /** EngineService over the store, GitHub and the agent. Each concern lives in its own small class. */
 export class Engine implements EngineService {
   private readonly reads: ReadModels;
+  /** Follow, Dismiss and seen on scouted PRs (DESIGN.md "Scouts"). */
+  private readonly scoutActions: ScoutActions;
   private readonly tiles: TileActions;
   private readonly openedReads: OpenedReads;
   private readonly prActions: PrActions;
@@ -430,11 +434,21 @@ export class Engine implements EngineService {
       onBlocked: (blocked) => this.telemetry.capture('storage_job_blocked', { name: blocked.name, blocked_units: blocked.blockedUnits ?? 0 }),
     });
     const contexts = new PromptContextSource(store, history, () => this.workContext.promptText());
-    this.reads = new ReadModels(store, deps.agent, contexts, now, deps.pendingWrites, {
-      agentOff: () => agentOff() !== null,
-      catchUp: (topicId, prKey) => this.catchUps.stateOf(topicId, prKey),
-      catchUpCap: () => ({ off: this.catchUpCap.perDay === 0, spent: this.catchUpCap.remaining() === 0 }),
-    });
+    const scoutsHistory = deps.scoutsFile ? new ScoutsHistory(store, deps.scoutsFile, now, deps.storeReadOnly === true) : null;
+    this.scoutActions = new ScoutActions(store, deps.reader, deps.writes, deps.pendingWrites, timers, now);
+    this.reads = new ReadModels(
+      store,
+      deps.agent,
+      contexts,
+      now,
+      deps.pendingWrites,
+      {
+        agentOff: () => agentOff() !== null,
+        catchUp: (topicId, prKey) => this.catchUps.stateOf(topicId, prKey),
+        catchUpCap: () => ({ off: this.catchUpCap.perDay === 0, spent: this.catchUpCap.remaining() === 0 }),
+      },
+      { configured: () => scoutsHistory?.active().scouts ?? [], followStates: () => this.scoutActions.followStates() },
+    );
     const log = deps.writes.log;
     const readMarker = new ReadMarker(store, deps.markReadQueue, log, now);
     this.tiles = new TileActions(store, readMarker, now);
@@ -484,13 +498,13 @@ export class Engine implements EngineService {
       (thread) => deps.writes.ownBulkReadAt(thread),
     );
     this.github = github;
-    if (deps.scoutsFile) {
+    if (scoutsHistory !== null) {
       runDeps.scouts = new ScoutRun({
         store,
         reader: deps.reader,
         agent: deps.agent,
         contexts,
-        history: new ScoutsHistory(store, deps.scoutsFile, now, deps.storeReadOnly === true),
+        history: scoutsHistory,
         storePrs: (refs, errors) => github.fetchAndStoreScouted(refs, errors),
         now,
         log: deps.syncLog ?? ((line) => console.log(line)),
@@ -1131,7 +1145,7 @@ export class Engine implements EngineService {
     const poll = this.livePoller?.currentStatus() ?? OFF_POLL_STATUS;
     return {
       ...poll,
-      changeCount: poll.changeCount + this.writeRefreshesDone + this.deps.markReadQueue.mirrored() + this.syncsDone + this.clickedReadRetry.decided() + this.cleanup.changeCount() + this.prNotes.changes() + this.agentMarkRead.notices.changes(),
+      changeCount: poll.changeCount + this.writeRefreshesDone + this.deps.markReadQueue.mirrored() + this.syncsDone + this.clickedReadRetry.decided() + this.cleanup.changeCount() + this.prNotes.changes() + this.agentMarkRead.changes() + this.scoutActions.changes() + this.deps.pendingWrites.changes(),
       syncRunning: this.syncing !== null,
       nextAutoSyncAt: this.autoSync?.nextSyncAt() ?? null,
       nextAutoSyncIsBacklog: this.autoSync?.nextSyncIsBacklog() ?? false,
@@ -1481,6 +1495,9 @@ export class Engine implements EngineService {
   }
 
   async undo(undoToken: string | null): Promise<ActionResult> {
+    if (undoToken !== null && this.scoutActions.isUndo(undoToken)) {
+      return this.scoutActions.undo(undoToken);
+    }
     if (undoToken !== null && this.workContext.isUndo(undoToken)) {
       return this.workContext.undo(undoToken);
     }
@@ -1837,8 +1854,37 @@ export class Engine implements EngineService {
     return result;
   }
 
-  flushPendingWrites(): Promise<void> {
-    return this.deps.markReadQueue.flush();
+  async flushPendingWrites(): Promise<void> {
+    await this.scoutActions.flush();
+    await this.deps.markReadQueue.flush();
+  }
+
+  /** The sidebar's Scouted section (DESIGN.md "Scouts"): one row per scout. */
+  async listScouts(): Promise<ScoutListItem[]> {
+    return this.reads.listScouts();
+  }
+
+  /** Follow on a scouted PR: subscribes on GitHub after the undo window, or waits in the lock. */
+  async followScouted(prKey: PrKey, from: 'tile' | 'detail'): Promise<ActionResult> {
+    const result = await this.scoutActions.follow(prKey, from);
+    if (result.ok) {
+      this.telemetry.capture('scout_followed', { from });
+    }
+    return result;
+  }
+
+  /** Dismiss a scouted PR off the Scouted section, with an optional reason. Local only. */
+  async dismissScouted(prKey: PrKey, reason: string | null): Promise<ActionResult> {
+    const result = this.scoutActions.dismiss(prKey, reason);
+    if (result.ok) {
+      this.telemetry.capture('scout_dismissed', { with_reason: reason !== null && reason.trim() !== '' });
+    }
+    return result;
+  }
+
+  /** A scouted PR was opened: seen in PostPile through its current update. Never a GitHub read. */
+  async markScoutedSeen(prKey: PrKey): Promise<ActionResult> {
+    return this.scoutActions.markSeen(prKey);
   }
 
   /** Resolves once every refresh after a write has ended (an approve answers before its refresh does). */

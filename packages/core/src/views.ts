@@ -29,6 +29,7 @@ import type { AgentDeclineView } from './agent-decline.ts';
 import type { BotFinding } from './bot-findings.ts';
 import type { DossierView, FactChangeCounts, FactView, MemoryTarget } from './memory-views.ts';
 import type { PrNotesView } from './pr-notes.ts';
+import type { ScoutedPrView, ScoutListItem, TileScout } from './scouts.ts';
 import type { UnreadEvent } from './unread-since.ts';
 import type { PrPaneView } from './pr-pane.ts';
 import type { PrStatus } from './pr-status.ts';
@@ -336,6 +337,8 @@ export interface TileView {
   repoLabel: string | null;
   /** The tile's most recently opened PR (`newestPrOf`): the tile order inside a group and tier (`compareTileViews`). Null without PRs. */
   newestPr: NewestPr | null;
+  /** Only on a scout's tile (DESIGN.md "Scouts"): the scout and its reason, shown in the "for whom" spot instead of the chip. */
+  scout?: TileScout;
 }
 
 /** A PR by when it was opened, for the tile order. */
@@ -458,6 +461,8 @@ export interface TopicDetail {
    * not count: it touches no memory.
    */
   memoryUpdating: boolean;
+  /** Only on a scout's pseudo-topic ("scout:<id>"): its row of the Scouted section. */
+  scout?: ScoutListItem;
 }
 
 export interface EventView {
@@ -468,6 +473,8 @@ export interface EventView {
 }
 
 export interface PrDetail {
+  /** A scout pulled the PR in (DESIGN.md "Scouts"): by whom, why, and where it stands. Missing for every other PR. */
+  scouted?: ScoutedPrView;
   /**
    * The PR as the pane reads it (`prPaneView`): header, description, files,
    * reviews without text, a checks summary. No comments, threads, commits

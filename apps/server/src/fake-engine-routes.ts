@@ -11,6 +11,7 @@ export const SHARED_ENGINE_METHODS = [
   'getPr',
   'getTopic',
   'listTopics',
+  'listScouts',
   'search',
   'getViewer',
   'getTeamMembers',

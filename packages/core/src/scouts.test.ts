@@ -31,6 +31,7 @@ function scout(paths: string): ScoutConfig {
 function candidate(overrides: Partial<ScoutCandidate> = {}): ScoutCandidate {
   return {
     key: 'acme/app#10',
+    nodeId: 'PR_10',
     title: 'Add a billing service',
     body: 'Adds the service.',
     author: 'carol',

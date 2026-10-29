@@ -297,6 +297,8 @@ export function createApp(
   app.get('/api/topics/finished', async (c) => c.json(await engine.listFinishedTopics()));
   // The busy inbox card: the board cap cut the hot set (DESIGN.md "Big inboxes: what PostPile loads and works on").
   app.get('/api/busy-inbox', async (c) => c.json(await engine.busyInbox()));
+  // The sidebar's Scouted section (DESIGN.md "Scouts"): one row per scout; a row opens getTopic("scout:<id>").
+  app.get('/api/scouts', async (c) => c.json(await engine.listScouts()));
   app.get('/api/viewer', async (c) => c.json(await engine.getViewer()));
   // Home or routing only per team (DESIGN.md "Team roles"). A flip is local and sticks; it may read the team's members from GitHub.
   app.get('/api/team-roles', async (c) => c.json(await engine.getTeamRoles()));
@@ -530,6 +532,18 @@ export function createApp(
     const body = z.object({ team: z.string().min(1).max(200) }).parse(await c.req.json());
     return c.json(await engine.removeTeamRequest(prKeyFromParams(c.req.param()), body.team));
   });
+  // Scouted PRs (DESIGN.md "Scouts"). Follow subscribes on GitHub after the undo window, or waits in the lock.
+  app.post('/api/prs/:owner/:repo/:number/scout/follow', async (c) => {
+    const body = z.object({ from: z.enum(['tile', 'detail']).default('tile') }).default({ from: 'tile' }).parse(await optionalJson(c));
+    return c.json(await engine.followScouted(prKeyFromParams(c.req.param()), body.from));
+  });
+  // Dismiss is local: off the Scouted section, the reason kept for tuning the scout.
+  app.post('/api/prs/:owner/:repo/:number/scout/dismiss', async (c) => {
+    const body = z.object({ reason: z.string().max(500).nullable().default(null) }).default({ reason: null }).parse(await optionalJson(c));
+    return c.json(await engine.dismissScouted(prKeyFromParams(c.req.param()), body.reason));
+  });
+  // Opened in the app: seen in PostPile only, never a GitHub read.
+  app.post('/api/prs/:owner/:repo/:number/scout/seen', async (c) => c.json(await engine.markScoutedSeen(prKeyFromParams(c.req.param()))));
   // Opened in the detail pane: marks the GitHub thread read only when nothing is asked of the user and writes are unlocked.
   app.post('/api/prs/:owner/:repo/:number/opened', async (c) => {
     return c.json(await engine.markOpenedRead(prKeyFromParams(c.req.param())));

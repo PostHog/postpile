@@ -4,6 +4,12 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 ## 0.29.0 (unreleased)
 
+### Added
+
+- Scouts pull in pull requests from outside your GitHub inbox that you asked to see, so a change you care about gets your eyes before it merges. Write a scout in `~/.config/postpile/scouts.md`: a name, the repos to watch, optional paths (`+` for added files only, `+*/` for a new top-level folder), and what to look for in your own words. Each sync lists the repos' recently updated pull requests, leaves out drafts, dependency bots, your own and your team's, and asks Claude which match. They show under Scouted at the bottom of the sidebar, one row per scout with a grey count of what you haven't opened, each with the scout's reason and an agent glance. They never count as unread, as your move or in the Dock badge.
+- Follow on a scouted pull request subscribes you to it on GitHub, after the usual undo window and through the GitHub writes lock, so it reaches your inbox from then on; PostPile tracks it right away. Dismiss takes it off the list, with an optional reason. Opening one marks it seen in PostPile only.
+- The MCP answers know about scouted pull requests: `pr_context` says which scout pulled it in and why, `whats_on_me` lists them in their own group after what waits on you, `search_prs` finds and marks them, and `mark_read` marks them seen in PostPile only.
+
 ### Changed
 
 - `mark_read`'s `seen_through` comes with every `pr_context` answer, brief ones included; full answers fold bot and CI noise in the unread list. Before, only full answers had it, and a full read of a few busy PRs got too big for an agent to take in. The token now means "nothing new since your read": `mark_read` still refuses a PR with new activity, or one whose unread events changed since (an Undo), and a question or mention for you still waits under Needs reply until you reply.

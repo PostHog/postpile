@@ -175,6 +175,18 @@ export class GitHubWrites {
     return this.send('unsubscribe', { ...context, threadId }, () => this.writeSwitch.writer().unsubscribeThread(threadId));
   }
 
+  /** Scouts' Follow: subscribes the viewer to the PR itself (its node id), not to a thread. */
+  followPr(subjectId: string, context: WriteContext): Promise<WriteResult> {
+    const detail = `subscribe to PR ${subjectId}`;
+    return this.send('follow', { detail, ...context }, () => this.writeSwitch.writer().followPr(subjectId), (reason) => `${detail}: ${reason}`);
+  }
+
+  /** Undo of a Follow that already reached GitHub. */
+  unfollowPr(subjectId: string, context: WriteContext): Promise<WriteResult> {
+    const detail = `unsubscribe from PR ${subjectId}`;
+    return this.send('undo_follow', { detail, ...context }, () => this.writeSwitch.writer().unfollowPr(subjectId), (reason) => `${detail}: ${reason}`);
+  }
+
   /** Unmute: the viewer's subscription to the thread again. */
   subscribeThread(threadId: string, context: WriteContext): Promise<WriteResult> {
     return this.send('subscribe', { ...context, threadId }, () => this.writeSwitch.writer().subscribeThread(threadId));

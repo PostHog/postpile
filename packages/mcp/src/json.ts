@@ -94,8 +94,16 @@ export interface PrJson {
   ownership: OwnershipJson[] | null;
   /** The review's rough size; null on a closed or merged PR or an unread snapshot. */
   effort: EffortJson | null;
+  /**
+   * A scout pulled the PR in from outside the user's GitHub inbox (DESIGN.md
+   * "Scouts"); the reason is under untrusted. Null for every other PR, and
+   * when the snapshot was not read.
+   */
+  scouted: { scoutId: string; inInbox: boolean; tracked: boolean; onScoutedSection: boolean; followed: boolean } | null;
   untrusted: {
     title: string;
+    /** Why the scout pulled it in, and the scout's name; null unless scouted. */
+    scouted: { scoutName: string; reason: string } | null;
     /** "Your move: Review", the same sentence as the text answers. Null with whoseMove. */
     whoseMove: string | null;
     unreadReason: string | null;
@@ -250,8 +258,20 @@ export function prJson(input: PrJsonInput): PrJson {
     diffCapped: input.overlaps.capped.includes(base.key),
     ownership: open && detail?.ownership ? ownershipJson(detail.ownership) : null,
     effort: open && detail ? effortJson(detail) : null,
+    scouted: detail?.scouted
+      ? {
+          scoutId: detail.scouted.scoutId,
+          // A notification thread, not PostPile's own tracking: a followed PR is tracked before GitHub notifies about it.
+          inInbox: detail.scouted.inInbox,
+          tracked: detail.scouted.tracked,
+          // Where the board places it: a scouted layer of a stack with a tracked layer shows in that topic instead.
+          onScoutedSection: detail.scouted.onSection,
+          followed: detail.scouted.followedAt !== null,
+        }
+      : null,
     untrusted: {
       title: base.title,
+      scouted: detail?.scouted ? { scoutName: detail.scouted.scoutName, reason: detail.scouted.reason } : null,
       whoseMove: summary ? turnText(summary.turn) : null,
       unreadReason: input.unread ? unreadReasonText(input.unread) : null,
       topicName: input.topic?.name ?? null,

@@ -295,7 +295,7 @@ export class FakeReader implements GitHubReader {
   failingScoutRepos = new Set<string>();
   /** File lists per PR key for scoutFiles; null stands for a list that could not be read whole. */
   scoutFileLists = new Map<PrKey, ScoutFilesRead>();
-  /** Root directories per commit oid for topLevelFolders. */
+  /** Folder names per "<oid>" (the root) or "<oid>:<parent>", for scoutFolders. */
   scoutTrees = new Map<string, string[]>();
   /** Every scout read, for asserting on GitHub traffic. */
   scoutCalls: string[] = [];
@@ -319,6 +319,18 @@ export class FakeReader implements GitHubReader {
     this.scoutCalls.push(`numbers ${refs.map(prKey).join(',')}`);
     const all = [...this.scoutListings.values()].flat();
     return new Map(refs.flatMap((ref) => all.filter((pr) => pr.key === prKey(ref)).map((pr): [PrKey, ScoutCandidate] => [pr.key, pr])));
+  }
+
+  /** Set to make scoutPrNodeId throw, like GitHub out of reach. */
+  failNodeIdLookup: Error | null = null;
+
+  async scoutPrNodeId(ref: PrRef): Promise<string | null> {
+    this.scoutCalls.push(`node ${prKey(ref)}`);
+    if (this.failNodeIdLookup) {
+      throw this.failNodeIdLookup;
+    }
+    const all = [...this.scoutListings.values()].flat();
+    return all.find((pr) => pr.key === prKey(ref))?.nodeId ?? null;
   }
 
   async scoutFiles(refs: PrRef[]): Promise<Map<PrKey, ScoutFilesRead>> {
@@ -446,6 +458,20 @@ export class FakeWriter implements GitHubWriter {
       throw new Error('boom: subscribe');
     }
     this.calls.push(`subscribeThread ${threadId}`);
+  }
+
+  /** followPr throws while set. */
+  failFollow = false;
+
+  async followPr(subjectId: string): Promise<void> {
+    if (this.failFollow) {
+      throw new Error('boom: follow');
+    }
+    this.calls.push(`followPr ${subjectId}`);
+  }
+
+  async unfollowPr(subjectId: string): Promise<void> {
+    this.calls.push(`unfollowPr ${subjectId}`);
   }
 }
 
@@ -608,7 +634,7 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
   const writes = new GitHubWrites(writeSwitch, new ActionLog(store, now));
   const runner = new FakeRunner();
   const timers = new FakeTimers();
-  const pendingWrites = new PendingWrites(store, writes, now);
+  const pendingWrites = new PendingWrites(store, writes, now, timers);
   const markReadQueue = new MarkReadQueue(
     writes,
     reader,

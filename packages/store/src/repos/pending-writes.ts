@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { ActionOrigin, PendingCatchUp, PendingThread, PendingWrite, PendingWriteKind, PrKey } from '@postpile/core';
+import type { ActionOrigin, PendingCatchUp, PendingFollow, PendingThread, PendingWrite, PendingWriteKind, PrKey } from '@postpile/core';
 import { all, insertReturningId, run } from '../sql.ts';
 
 interface PendingWriteRow {
@@ -16,6 +16,7 @@ interface PendingWriteRow {
   error: string | null;
   tried_at: string | null;
   catch_up: string | null;
+  follow: string | null;
 }
 
 function toPendingWrite(row: PendingWriteRow): PendingWrite {
@@ -33,11 +34,12 @@ function toPendingWrite(row: PendingWriteRow): PendingWrite {
     error: row.error,
     triedAt: row.tried_at,
     catchUp: row.catch_up === null ? null : (JSON.parse(row.catch_up) as PendingCatchUp),
+    follow: row.follow === null ? null : (JSON.parse(row.follow) as PendingFollow),
   };
 }
 
-/** `catchUp` only for a catch_up write. */
-export type NewPendingWrite = Omit<PendingWrite, 'id' | 'error' | 'triedAt' | 'catchUp'> & { catchUp?: PendingCatchUp | null };
+/** `catchUp` only for a catch_up write, `follow` only for a follow. */
+export type NewPendingWrite = Omit<PendingWrite, 'id' | 'error' | 'triedAt' | 'catchUp' | 'follow'> & { catchUp?: PendingCatchUp | null; follow?: PendingFollow | null };
 
 /** Mark-reads waiting for the writes lock, one row per click (or per cleanup). */
 export class PendingWriteRepo {
@@ -46,8 +48,8 @@ export class PendingWriteRepo {
   add(write: NewPendingWrite): number {
     return insertReturningId(
       this.db,
-      `INSERT INTO pending_write (kind, read_before, created_at, origin, tile_id, batch, pr_keys, handle_keys, threads, catch_up)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO pending_write (kind, read_before, created_at, origin, tile_id, batch, pr_keys, handle_keys, threads, catch_up, follow)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       write.kind,
       write.readBefore,
       write.createdAt,
@@ -58,6 +60,7 @@ export class PendingWriteRepo {
       JSON.stringify(write.handleKeys),
       JSON.stringify(write.threads),
       write.catchUp ? JSON.stringify(write.catchUp) : null,
+      write.follow ? JSON.stringify(write.follow) : null,
     );
   }
 

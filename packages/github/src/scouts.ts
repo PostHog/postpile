@@ -38,9 +38,10 @@ export interface ScoutFilesRead {
   files: ScoutFile[] | null;
 }
 
-const LIST_FIELDS = 'number updatedAt assignees(first: 10) { nodes { login } } state isDraft mergedAt headRefOid baseRefOid title body author { __typename login } repository { nameWithOwner }';
+const LIST_FIELDS = 'id number updatedAt assignees(first: 10) { nodes { login } } state isDraft mergedAt headRefOid baseRefOid title body author { __typename login } repository { nameWithOwner }';
 
 interface RawListedPr {
+  id: string;
   number: number;
   updatedAt: string;
   state: PrState;
@@ -84,6 +85,7 @@ function ownerAndName(repo: string): [string, string] {
 export function toScoutCandidate(raw: RawListedPr): ScoutCandidate {
   return {
     key: prKey({ repo: raw.repository.nameWithOwner, number: raw.number }),
+    nodeId: raw.id,
     title: raw.title,
     body: raw.body ?? '',
     author: actorLogin(raw.author),
@@ -263,6 +265,29 @@ export async function scoutPrsByNumber(http: GitHubHttp, refs: PrRef[]): Promise
     });
   }
   return result;
+}
+
+/**
+ * One PR's node id, for Follow. Null only when GitHub answers that it has
+ * no such PR the token can see (NOT_FOUND). A failed request, bad auth or a
+ * rate limit throws, so Follow can say what went wrong instead of "no such
+ * PR".
+ */
+export async function scoutPrNodeId(http: GitHubHttp, ref: PrRef): Promise<string | null> {
+  const [owner, name] = ownerAndName(ref.repo);
+  const query = `query { repository(owner: ${JSON.stringify(owner)}, name: ${JSON.stringify(name)}) { pullRequest(number: ${ref.number}) { id } } }`;
+  const response = await http.graphql<{ repository: { pullRequest: { id: string } | null } | null }>(query);
+  const id = response.data?.repository?.pullRequest?.id ?? null;
+  if (id !== null) {
+    return id;
+  }
+  if (response.errors.length > 0 && response.errors.every((error) => error.type === 'NOT_FOUND')) {
+    return null;
+  }
+  if (response.errors.length > 0 || !response.data) {
+    throw graphqlFailure(`lookup of ${prKey(ref)}`, response.errors);
+  }
+  return null;
 }
 
 /** One PR's file list while it is being paged. */

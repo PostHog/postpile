@@ -31,4 +31,12 @@ export interface GitHubWriter {
   unsubscribeThread(threadId: string): Promise<void>;
   /** Subscribes the viewer to the notification thread again (PUT its subscription, not ignored). */
   subscribeThread(threadId: string): Promise<void>;
+  /**
+   * Scouts' Follow: subscribes the viewer to a PR they get no notifications
+   * for (GraphQL updateSubscription with state SUBSCRIBED; `subjectId` is
+   * the PR's node id). Future notifications only, never read state.
+   */
+  followPr(subjectId: string): Promise<void>;
+  /** Undo of a Follow: the PR's subscription back to UNSUBSCRIBED. */
+  unfollowPr(subjectId: string): Promise<void>;
 }

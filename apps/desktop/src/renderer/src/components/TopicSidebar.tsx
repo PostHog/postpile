@@ -40,6 +40,7 @@ import { YourMoveChip } from './YourMoveChip.tsx';
 import { BusyInboxCard } from './BusyInboxCard.tsx';
 import { InboxCleanupLine } from './InboxCleanupLine.tsx';
 import { InterruptionsMenu } from './InterruptionsMenu.tsx';
+import { ScoutedSection } from './ScoutedSection.tsx';
 
 /**
  * The "what's going on" snippet under the name: the dossier summary, else its
@@ -734,6 +735,8 @@ export function TopicSidebar(props: TopicSidebarProps) {
           onSelect={props.onSelect}
         />
       )}
+      {/* Scouts pull in PRs from outside the inbox: last, under the Archive, and like it out of the search and queue filters. */}
+      {!narrowed && <ScoutedSection activeTopicId={props.activeTopicId} onSelect={props.onSelect} />}
       {/*
         The list fades out at the bottom instead of stopping at a hard edge. Sticky, so it stays at
         the bottom while the list scrolls; at the end of the list it slides under the footer, where

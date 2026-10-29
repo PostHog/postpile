@@ -54,6 +54,7 @@ function foundCode(via: FoundVia, authored: boolean): WhyCode {
     case 'involved_merged':
       return authored ? 'AU' : 'CM';
     case 'scouted':
+    case 'followed':
       return 'FW';
   }
 }

@@ -5,6 +5,10 @@ import {
   deriveTileState,
   newTopic,
   prKeyFromTileId,
+  scoutIdOfTopic,
+  scoutedFound,
+  scoutStackOwner,
+  scoutTopicId,
   setIdFromTileId,
   whoseTurn,
   withGroups,
@@ -16,6 +20,7 @@ import {
   type PrKey,
   type PullIn,
   type FoundPr,
+  type ScoutedPr,
   type Snooze,
   type Stack,
   type Tile,
@@ -35,6 +40,10 @@ export { UNSORTED_TOPIC_ID };
 
 function unsortedTopic(): Topic {
   return { ...newTopic(UNSORTED_TOPIC_ID, 'Unsorted', ''), summary: 'Waiting for the agent. Each sync places these in a topic.' };
+}
+
+function scoutTopic(topicId: string, name: string): Topic {
+  return { ...newTopic(topicId, name, ''), summary: 'PRs this scout pulled in from outside your GitHub inbox.' };
 }
 
 function notYoursKeys(store: Store, keys: PrKey[]): Set<PrKey> {
@@ -91,6 +100,12 @@ export class Board {
   private keysByTopic: Map<string, PrKey[]> | null = null;
   /** Why each pulled-in layer is here, by PR; built on first use. */
   private pullInReasonsByKey: Map<PrKey, string> | null = null;
+  /**
+   * The scout each stack outside the inbox shows with (DESIGN.md "Scouts"),
+   * by stack id: only stacks no normal topic or Unsorted holds. Kept apart
+   * from `stackTopicIds`, so nothing that reads a PR's topic sees a scout.
+   */
+  private readonly scoutStackIds: Map<string, string>;
 
   private constructor(
     private readonly store: Store,
@@ -111,11 +126,18 @@ export class Board {
     allStacks: Stack[],
     /** Every stored PR's key, on this board or not. */
     private readonly stored: ReadonlySet<PrKey>,
+    /**
+     * PRs scouts pulled in that are still on the Scouted section (not
+     * followed, dismissed or expired), by PR. Display only: they never make
+     * a PR tracked (DESIGN.md "Scouts").
+     */
+    readonly scouted: Map<PrKey, ScoutedPr>,
   ) {
     this.allStacks = allStacks;
     this.stacks = allStacks.filter((stack) => prs.has(stack.prKeys[0]!));
     this.stackOf = stackByPrKey(allStacks);
     this.stackTopicIds = this.placeStacks();
+    this.scoutStackIds = this.placeScoutStacks();
   }
 
   private isTracked(key: PrKey): boolean {
@@ -135,6 +157,57 @@ export class Board {
         result.set(stack.id, topicId);
       } else if (stack.prKeys.some((key) => this.isTracked(key))) {
         result.set(stack.id, UNSORTED_TOPIC_ID);
+      }
+    }
+    return result;
+  }
+
+  /** A scouted PR on the Scouted section: active, and not tracked normally (that tile wins). */
+  private isScoutedOnly(key: PrKey): boolean {
+    return this.scouted.has(key) && !this.isTracked(key) && !this.memberships.has(key);
+  }
+
+  /**
+   * Stacks with no place in a normal topic but a scouted layer: shown whole
+   * with the scout that pulled any of its layers first (`scoutStackOwner`).
+   * A stack with a tracked layer shows in its normal topic, where the
+   * scouted layers ride along as context.
+   */
+  private placeScoutStacks(): Map<string, string> {
+    const result = new Map<string, string>();
+    const onlyScouted = new Map([...this.scouted].filter(([key]) => this.isScoutedOnly(key)));
+    for (const stack of this.allStacks) {
+      if (this.stackTopicIds.has(stack.id)) {
+        continue;
+      }
+      const owner = scoutStackOwner(stack.prKeys, onlyScouted);
+      if (owner !== null) {
+        result.set(stack.id, scoutTopicId(owner));
+      }
+    }
+    return result;
+  }
+
+  /** The scout's pseudo-topic a scouted-only PR shows in ("scout:<id>"), its stack's owner first; null for any other PR. */
+  scoutTopicIdOf(key: PrKey): string | null {
+    const stack = this.stackOf.get(key);
+    const stackScout = stack ? this.scoutStackIds.get(stack.id) : undefined;
+    if (stackScout !== undefined) {
+      return stackScout;
+    }
+    if (stack && this.stackTopicIds.has(stack.id)) {
+      return null;
+    }
+    const row = this.scouted.get(key);
+    return row && this.isScoutedOnly(key) ? scoutTopicId(row.scoutId) : null;
+  }
+
+  /** The scouts with a tile on this board, by id, each with the newest name its PRs were pulled under. */
+  scoutIds(): Map<string, string> {
+    const result = new Map<string, string>();
+    for (const row of this.scouted.values()) {
+      if (this.prs.has(row.prKey) && this.scoutTopicIdOf(row.prKey) === scoutTopicId(row.scoutId)) {
+        result.set(row.scoutId, row.scoutName);
       }
     }
     return result;
@@ -196,6 +269,7 @@ export class Board {
       notYoursKeys(store, keys),
       shape.stacks,
       new Set(shape.headers.map((pr) => pr.key)),
+      new Map(store.scoutedPrs.listActive().map((row) => [row.prKey, row])),
     );
   }
 
@@ -255,6 +329,12 @@ export class Board {
     if (topicId === UNSORTED_TOPIC_ID) {
       return hot;
     }
+    const scoutId = scoutIdOfTopic(topicId);
+    if (scoutId !== null) {
+      // A busy inbox leaves tier "others" off the hot board, which is where most scouted PRs rank.
+      const scoutedKeys = store.scoutedPrs.listActive().filter((row) => row.scoutId === scoutId).map((row) => row.prKey);
+      return scoutedKeys.every((key) => hot.prs.has(key)) ? hot : Board.forPrs(store, now, scoutedKeys);
+    }
     const memberKeys = store.memberships.listForTopic(topicId).map((membership) => membership.prKey);
     return memberKeys.every((key) => hot.prs.has(key)) ? hot : Board.forPrs(store, now, memberKeys);
   }
@@ -278,7 +358,8 @@ export class Board {
     }
     const setId = setIdFromTileId(tileId);
     const key = prKeyFromTileId(tileId);
-    const topicId = setId !== null ? (store.sets.get(setId)?.topicId ?? null) : key !== null ? hot.topicIdOf(key) : null;
+    const scouted = key !== null ? store.scoutedPrs.get(key) : null;
+    const topicId = setId !== null ? (store.sets.get(setId)?.topicId ?? null) : key !== null ? (hot.topicIdOf(key) ?? (scouted ? scoutTopicId(scouted.scoutId) : null)) : null;
     return topicId === null ? hot : Board.forTopic(store, now, topicId);
   }
 
@@ -329,6 +410,11 @@ export class Board {
     if (topicId === UNSORTED_TOPIC_ID) {
       return unsortedTopic();
     }
+    const scoutId = scoutIdOfTopic(topicId);
+    if (scoutId !== null) {
+      const name = this.scoutIds().get(scoutId) ?? [...this.scouted.values()].find((row) => row.scoutId === scoutId)?.scoutName ?? scoutId;
+      return scoutTopic(topicId, name);
+    }
     return this.store.topics.get(topicId);
   }
 
@@ -337,10 +423,50 @@ export class Board {
     return this.pullInReasonsByKey;
   }
 
+  /**
+   * A scout's tiles (DESIGN.md "Scouts"): its scouted-only PRs, as found PRs
+   * of `via: 'scouted'` so a tile holds them, with their stacks whole. Never
+   * part of `allTiles`: no counts, unread, whose move or asks read them.
+   */
+  private scoutTiles(topicId: string): Tile[] {
+    const memberKeys = [...this.scouted.keys()].filter((key) => this.prs.has(key) && this.scoutTopicIdOf(key) === topicId);
+    const found = new Map(this.found);
+    for (const key of memberKeys) {
+      const pulled = scoutedFound(this.scouted.get(key)!);
+      found.set(key, pulled);
+      // Every layer of its stack is the scout's too: a context or dismissed layer must not read unread as pulled in,
+      // which opening the tile (a seen mark in PostPile) could never clear.
+      for (const layer of this.stackOf.get(key)?.prKeys ?? []) {
+        if (!found.has(layer)) {
+          found.set(layer, { ...pulled, prKey: layer });
+        }
+      }
+    }
+    // Stacks of other scouts stay with them; a stack placed nowhere else shows here whole.
+    const stackTopicIds = new Map([...this.stackTopicIds, ...this.scoutStackIds]);
+    return buildTopicTiles({
+      topicId,
+      memberKeys,
+      prs: this.prs,
+      threads: this.threads,
+      stacks: this.stacks,
+      stackTopicIds,
+      sets: [],
+      events: this.events,
+      pullInReasons: this.pullInReasons(),
+      found,
+    });
+  }
+
   tilesForTopic(topicId: string): Tile[] {
     const cached = this.tileCache.get(topicId);
     if (cached) {
       return cached;
+    }
+    if (scoutIdOfTopic(topicId) !== null) {
+      const tiles = this.scoutTiles(topicId);
+      this.tileCache.set(topicId, tiles);
+      return tiles;
     }
     // A set loads whole or not at all (`withGroups`): one whose PRs are not on this board is left out.
     const sets = topicId === UNSORTED_TOPIC_ID ? [] : this.store.sets.listActiveForTopic(topicId).filter((set) => set.members.some((member) => this.prs.has(member.prKey)));
@@ -366,6 +492,7 @@ export class Board {
 
   /** A stack shows in one topic only, so a tile id is found once. */
   findTile(tileId: string): Tile | null {
+    // Never a scout's tile: tile actions (mark read, snooze, feedback) would treat its PRs as tracked; Follow and Dismiss go by PR.
     return this.allTiles().find((tile) => tile.id === tileId) ?? null;
   }
 

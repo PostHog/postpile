@@ -23,6 +23,11 @@ export class FoundPrRepo {
     return new Map(rows.map((row) => [row.pr_key, toFound(row)]));
   }
 
+  /** One more found PR (a scouted PR the user just followed), until the next sync's list replaces it with its own. */
+  put(entry: FoundPr): void {
+    run(this.db, 'INSERT OR REPLACE INTO pr_found (pr_key, via, reason, found_at) VALUES (?, ?, ?, ?)', entry.prKey, entry.via, entry.reason, entry.foundAt);
+  }
+
   /** The new list from a sync replaces the old one: a PR no longer found drops out. */
   replaceAll(found: FoundPr[]): void {
     inTransaction(this.db, () => {

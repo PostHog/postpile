@@ -19,7 +19,7 @@ import { buildCodeOwnersQuery, CODE_OWNERS_BATCH_SIZE, codeOwnersFiles, type Cod
 import { buildFoundQuery, foundRefs, type FoundRef, type RawFoundResponse } from './found.ts';
 import { getThread, listNotifications, listThreadsSince } from './notifications.ts';
 import { activityPrs, buildActivityQuery, probeNotifications, readRepoFile, type RawActivityResponse } from './setup-reads.ts';
-import { listScoutPrs, scoutFiles, scoutPrsByNumber, scoutFolders, type ScoutFilesRead, type ScoutFolderRead, type ScoutListPage } from './scouts.ts';
+import { listScoutPrs, scoutFiles, scoutPrNodeId, scoutPrsByNumber, scoutFolders, type ScoutFilesRead, type ScoutFolderRead, type ScoutListPage } from './scouts.ts';
 import { listTeamMembers } from './teams.ts';
 import {
   REVIEWED_PRS_QUERY,
@@ -274,6 +274,10 @@ export class GitHubClient implements GitHubReader {
 
   scoutPrsByNumber(refs: PrRef[]): Promise<Map<PrKey, ScoutCandidate>> {
     return scoutPrsByNumber(this.http, refs);
+  }
+
+  scoutPrNodeId(ref: PrRef): Promise<string | null> {
+    return scoutPrNodeId(this.http, ref);
   }
 
   scoutFiles(refs: PrRef[]): Promise<Map<PrKey, ScoutFilesRead>> {

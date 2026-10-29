@@ -68,6 +68,29 @@ export class ScoutedPrRepo {
     return new Set(all<{ pr_key: string }>(this.db, 'SELECT pr_key FROM pr_scouted WHERE followed_at IS NOT NULL').map((row) => row.pr_key));
   }
 
+  /**
+   * The Scouted section's rows, from headers only (no snapshot read): active
+   * PRs PostPile does not track otherwise (no notification thread, not
+   * found by the sync, in no topic, not a stack layer a tracked PR pulled
+   * in), each with whether it is unseen (never seen, or GitHub activity
+   * after the update it was seen through). The caller drops layers of
+   * stacks a tracked PR shows (`ReadModels.listScouts`).
+   */
+  listUntracked(): { prKey: PrKey; scoutId: string; unseen: boolean }[] {
+    const rows = all<{ pr_key: string; scout_id: string; unseen: number }>(
+      this.db,
+      `SELECT s.pr_key AS pr_key, s.scout_id AS scout_id,
+              CASE WHEN s.seen_updated_at IS NULL OR s.seen_updated_at < p.updated_at THEN 1 ELSE 0 END AS unseen
+       FROM pr_scouted s JOIN pr p ON p.key = s.pr_key
+       WHERE s.followed_at IS NULL AND s.dismissed_at IS NULL AND s.expired_at IS NULL
+         AND NOT EXISTS (SELECT 1 FROM notification_thread t WHERE t.pr_key = s.pr_key)
+         AND NOT EXISTS (SELECT 1 FROM pr_found f WHERE f.pr_key = s.pr_key)
+         AND NOT EXISTS (SELECT 1 FROM topic_membership m WHERE m.pr_key = s.pr_key)
+       ORDER BY s.pr_key`,
+    );
+    return rows.map((row) => ({ prKey: row.pr_key, scoutId: row.scout_id, unseen: row.unseen === 1 }));
+  }
+
   /** First scout wins: a PR another scout already pulled keeps its row. True when this one was stored. */
   insert(scouted: ScoutedPr): boolean {
     const changed = run(

@@ -69,6 +69,12 @@ export interface AgentMarkReadResult {
   writesLocked: boolean;
   /** When the undo window ends; null when nothing was marked. */
   undoUntil: IsoTime | null;
+  /**
+   * PRs a scout pulled in from outside the inbox (DESIGN.md "Scouts"):
+   * marked seen in PostPile only, nothing on GitHub (they have no
+   * notification thread). Missing when there were none.
+   */
+  seenLocally?: PrKey[];
 }
 
 /** How long the app keeps an agent mark-read for its toast, and how many: a window shown again after a while still hears of it. */
@@ -178,6 +184,9 @@ export function agentMarkReadLogDetail(client: string, result: AgentMarkReadResu
   }
   if (result.skipped.length > 0) {
     parts.push(`skipped ${keyList(result.skipped)}`);
+  }
+  if (result.seenLocally && result.seenLocally.length > 0) {
+    parts.push(`seen in PostPile only, nothing on GitHub: ${result.seenLocally.join(', ')}`);
   }
   if (result.writesLocked) {
     parts.push('GitHub writes locked: pending after the undo window');

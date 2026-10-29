@@ -40,6 +40,7 @@ import type {
   LivePollStatus,
   McpConnectionView,
   SyncPhase,
+  ScoutListItem,
   SyncPhaseTimings,
   SyncProgress,
   RecordedSyncProgress,
@@ -106,6 +107,7 @@ import type {
   BusyInboxView,
 } from '@postpile/core';
 import {
+  scoutIdOfTopic,
   agentMarkReadCheck,
   unreadSinceLooked,
   parseSeenThrough,
@@ -254,6 +256,7 @@ import { fakeQuota, type FakeQuotaLevel } from './fake-quota.ts';
 import { FakeTools, type FakeToolProblem } from './fake-tools.ts';
 import { FakeWorkContext } from './fake-work-context.ts';
 import { FakeTileFeedback } from './fake-tile-feedback.ts';
+import { FakeScouts, sampleScouts } from './fake-scouts.ts';
 import { FakeLivePoll } from './fake-live.ts';
 import { FakeMemory } from './fake-memory.ts';
 import { sampleRecheckAnswer } from './fake-recheck.ts';
@@ -496,6 +499,8 @@ export class FakeEngine implements EngineService {
   private readonly feedback: Feedback[];
   private readonly batches: MarkReadBatch[] = [];
   private readonly writes: FakeWrites;
+  /** The Scouted section's sample: scouted PRs outside the main sample, Follow, Dismiss and seen. */
+  private readonly scouts: FakeScouts;
   /** Sample decisions plus the fake poll's own, oldest sample first. */
   private readonly pingDecisions: PingDecision[];
   private readonly memoryUndos = new Map<string, { until: number; undo: () => void }>();
@@ -593,7 +598,9 @@ export class FakeEngine implements EngineService {
       readHere: (scope, clickedAt) => this.readSample(scope, { kind: 'pending_completion', clickedAt }),
       title: (prKeys, threadId) => this.pendingTitle(prKeys, threadId),
       startCatchUp: (picks) => this.cleanup.startFromPending(picks, this.cleanupThreads()),
+      followed: (prKey) => this.scouts.followed(prKey),
     }, options.writesLocked !== true, options.faults);
+    this.scouts = new FakeScouts(sampleScouts(this.now()), this.data, this.writes, this.now);
     this.script = new FakeScript(
       {
         data: this.data,
@@ -744,8 +751,14 @@ export class FakeEngine implements EngineService {
     return { login: this.data.viewer, teams: this.data.viewerTeams, homeTeams: this.data.viewerHomeTeams, teamMembers: this.data.viewerTeamMembers };
   }
 
+  /** The main sample's PRs and the ones only a scout holds, like the engine's prs table. */
   private prsByKey(): Map<PrKey, FullPr> {
-    return new Map(this.data.prs.map((pr) => [pr.key, pr]));
+    const scouted = this.scouts.prKeys().flatMap((key) => this.scouts.pr(key) ?? []);
+    return new Map([...scouted, ...this.data.prs].map((pr) => [pr.key, pr]));
+  }
+
+  private glanceOf(prKey: PrKey): Glance | null {
+    return this.data.glances.find((glance) => glance.prKey === prKey) ?? this.scouts.glance(prKey) ?? null;
   }
 
   private userStatesByKey(): Map<PrKey, UserPrState> {
@@ -858,7 +871,7 @@ export class FakeEngine implements EngineService {
           userState: userStates.get(pr.key) ?? null,
           events: events.get(pr.key) ?? [],
           reason: member.provenance.kind === 'pinged' ? member.provenance.reason : null,
-          glance: this.data.glances.find((candidate) => candidate.prKey === pr.key) ?? null,
+          glance: this.glanceOf(pr.key),
           glanceStale: this.isGlanceStale(pr.key),
           glanceGap: this.glanceGapOf(pr.key),
           glanceState: this.glanceStateOfPr(pr.key),
@@ -1142,8 +1155,9 @@ export class FakeEngine implements EngineService {
 
   private topicPrs(tiles: Tile[]): { pr: FullPr; member: TileMember }[] {
     const found = new Map<PrKey, { pr: FullPr; member: TileMember }>();
+    const prs = this.prsByKey();
     for (const member of tiles.flatMap((tile) => tile.members)) {
-      const pr = this.data.prs.find((candidate) => candidate.key === member.prKey);
+      const pr = prs.get(member.prKey);
       if (pr && !found.has(pr.key)) {
         found.set(pr.key, { pr, member });
       }
@@ -1400,8 +1414,9 @@ export class FakeEngine implements EngineService {
     return this.teamRoles.view();
   }
 
+  /** Like the engine's prs table: the sample's PRs and the ones only a scout holds, so mark_read resolves a bare number. */
   async storedPrKeys(): Promise<PrKey[]> {
-    return this.data.prs.map((pr) => pr.key).sort();
+    return [...this.prsByKey().keys()].sort();
   }
 
   /** Like the engine: open PRs' diffs only, stack mates left out. The default sample has no diffs; POSTPILE_FAKE_EXTRA=mcp adds some. */
@@ -1425,6 +1440,10 @@ export class FakeEngine implements EngineService {
 
   async getTopic(topicId: string): Promise<TopicDetail | null> {
     this.writes.settle();
+    const scoutId = scoutIdOfTopic(topicId);
+    if (scoutId !== null) {
+      return this.scoutTopic(scoutId);
+    }
     const topic = this.data.topics.find((candidate) => candidate.id === topicId);
     if (!topic || this.beforeFirstSync()) {
       return null;
@@ -1464,6 +1483,57 @@ export class FakeEngine implements EngineService {
     };
   }
 
+  /**
+   * A scout's pseudo-topic, like the engine's ReadModels.scoutTopic: its
+   * tiles (each with the scout part) and nothing a topic carries beyond
+   * them, since nothing here is the user's work until they follow it.
+   */
+  private scoutTopic(scoutId: string): TopicDetail | null {
+    this.scouts.settle();
+    const topic = this.scouts.topic(scoutId);
+    const listed = this.scouts.list().find((row) => row.id === scoutId);
+    if (!topic || !listed || this.beforeFirstSync()) {
+      return null;
+    }
+    const topicTiles = this.scouts.tilesOf(scoutId);
+    const keys = topicTiles.flatMap((tile) => tile.members.map((member) => member.prKey));
+    const baseRepo = labelBaseRepo(keys, this.repoSettings);
+    const orgs = viewerOrgs(this.data.viewerTeams);
+    const tiles = topicTiles
+      .map((tile) => {
+        const view = this.tileView(tile, tileRepoLabels(tile.members.map((member) => member.prKey), baseRepo, orgs));
+        const scout = this.scouts.tileScout(tile);
+        if (!scout) {
+          return view;
+        }
+        // Like the engine: an unseen find never sits collapsed in Dealt with.
+        const group = scout.unseen && view.group === 'dealt_with' ? 'open' : view.group;
+        return { ...view, scout, group };
+      })
+      .sort(compareTileViews);
+    return {
+      topic,
+      driver: null,
+      placement: null,
+      repoLine: null,
+      tiles,
+      yourMoves: [],
+      groupYourMoves: yourMovesByGroup([]),
+      sets: [],
+      setChanges: [],
+      pendingProposals: [],
+      decidedProposals: [],
+      dossier: null,
+      agent: topicAgentOffers([]),
+      archive: null,
+      openInDealtWith: [],
+      prRollup: topicPrRollup(topicTiles, this.topicPrs(topicTiles).map(({ pr }) => pr)),
+      section: 'other_topics',
+      memoryUpdating: false,
+      scout: listed,
+    };
+  }
+
   /** Like the engine's, simpler: samples keep no join times or events, so "ready" means every tile is done, no tracked PR is open (pulled-in layers aside, like the gate) and it would go in a day. */
   private archiveBox(topic: Topic, tiles: TileView[]): TopicArchiveBox | null {
     if (topic.status === 'retired') {
@@ -1480,18 +1550,23 @@ export class FakeEngine implements EngineService {
 
   /** Same matcher as the engine, over the sample topics the sidebar lists. */
   async search(query: string, scope?: ListScope): Promise<SearchResult> {
-    const topics: SearchableTopic[] = this.listedTopics(scope).map((topic) => ({
-      topicId: topic.id,
-      name: topic.name,
-      area: topic.area,
-      tiles: this.tilesOfTopic(topic.id).map((tile) => ({
+    const prs = this.prsByKey();
+    const searchable = (tiles: Tile[]) =>
+      tiles.map((tile) => ({
         tileId: tile.id,
         prs: tile.members.flatMap((member) => {
-          const pr = this.data.prs.find((candidate) => candidate.key === member.prKey);
+          const pr = prs.get(member.prKey);
           return pr ? [{ key: pr.key, title: pr.title, author: pr.author, headRef: pr.headRef }] : [];
         }),
-      })),
-    }));
+      }));
+    const topics: SearchableTopic[] = this.listedTopics(scope).map((topic) => ({ topicId: topic.id, name: topic.name, area: topic.area, tiles: searchable(this.tilesOfTopic(topic.id)) }));
+    // Like the engine: the scouts' tiles too when asked (MCP search_prs), each under its scout's name.
+    if (scope?.withScouts) {
+      this.scouts.settle();
+      for (const scout of this.scouts.list()) {
+        topics.push({ topicId: scout.topicId, name: scout.name, area: null, tiles: searchable(this.scouts.tilesOf(scout.id)) });
+      }
+    }
     return searchTopics(topics, query);
   }
 
@@ -1550,6 +1625,7 @@ export class FakeEngine implements EngineService {
 
   async githubWrites(): Promise<GitHubWritesStatus> {
     this.writes.settle();
+    this.scouts.settle();
     return this.writes.status();
   }
 
@@ -1576,12 +1652,18 @@ export class FakeEngine implements EngineService {
       .map(eventView);
   }
 
-  /** Like the engine's unseenIdsThrough: the sample's events in the order they were added stand in for the event log. */
+  /**
+   * Like the engine's unseenIdsThrough: the sample's events in the order
+   * they were added stand in for the event log; a PR only a scout holds adds
+   * its update time, like the engine.
+   */
   private unseenIdsThrough(prKey: PrKey, seq: number): string[] {
-    return this.eventsOf(prKey)
+    const ids = this.eventsOf(prKey)
       .slice(0, seq)
       .filter((event) => event.seenAt === null)
       .map((event) => event.id);
+    const scouted = this.scouts.pr(prKey);
+    return scouted ? [...ids, `updated:${scouted.updatedAt}`] : ids;
   }
 
   /** Like the engine's seenThroughNow, over the sample. */
@@ -1590,11 +1672,21 @@ export class FakeEngine implements EngineService {
     return seenThroughToken(seq, this.unseenIdsThrough(prKey, seq));
   }
 
+  private unsortedTopicIdOf(prKey: PrKey): string | null {
+    const tile = this.data.tiles.find((candidate) => candidate.topicId === UNSORTED_TOPIC_ID && candidate.members.some((member) => member.prKey === prKey));
+    return tile ? UNSORTED_TOPIC_ID : null;
+  }
+
   async getPr(prKey: PrKey): Promise<PrDetail | null> {
-    const pr = this.data.prs.find((candidate) => candidate.key === prKey);
+    this.scouts.settle();
+    const pr = this.data.prs.find((candidate) => candidate.key === prKey) ?? this.scouts.pr(prKey);
     if (!pr) {
       return null;
     }
+    // Tracked: in a tile of the main sample (the inbox, found by the sync, or followed), as the engine's pr_found or thread.
+    const tracked = this.data.tiles.some((tile) => tile.members.some((member) => member.prKey === prKey && isTracked(member.provenance)));
+    const scoutedView = this.scouts.view(prKey, pr.updatedAt, tracked);
+    const scouted = scoutedView ? { scouted: scoutedView } : {};
     const events = this.eventViewsOf(prKey);
     const news = whatsNew(pr, this.eventsOf(prKey), this.viewer());
     return {
@@ -1603,7 +1695,7 @@ export class FakeEngine implements EngineService {
       fetchedAt: this.fetchedAtOf(prKey),
       activity: activityList(events, this.viewer(), news?.anchor.at ?? null, pr, this.prThreads().get(prKey) ?? null),
       whatsNew: news,
-      glance: this.data.glances.find((glance) => glance.prKey === prKey) ?? null,
+      glance: this.glanceOf(prKey),
       glanceStale: this.isGlanceStale(prKey),
       glanceBehindDossier: false,
       glanceGap: this.glanceGapOf(prKey),
@@ -1616,8 +1708,9 @@ export class FakeEngine implements EngineService {
       agentApprovers: agentOnlyApprovers(standingApprovals(pr)),
       agentDecline: agentDeclineView(pr),
       botFindings: botFindings(pr),
-      topicId: this.data.membership.get(prKey) ?? null,
-      tileIds: this.data.tiles.filter((tile) => tile.members.some((member) => member.prKey === prKey)).map((tile) => tile.id),
+      // Unsorted keeps no membership (like the engine's), so its tile says where the PR is; a scouted PR shows in its scout's pseudo-topic.
+      topicId: this.data.membership.get(prKey) ?? this.unsortedTopicIdOf(prKey) ?? this.scouts.topicIdOf(prKey),
+      tileIds: [...this.data.tiles.filter((tile) => tile.members.some((member) => member.prKey === prKey)).map((tile) => tile.id), ...this.scouts.tileIdsOf(prKey)],
       facts: this.memory.prFacts(prKey),
       waitingThreads: waitingThreads(pr, this.viewer()),
       notes: this.prNotes.viewFor(prKey),
@@ -1626,6 +1719,7 @@ export class FakeEngine implements EngineService {
       unread: unreadSinceLooked(this.eventsOf(prKey), pr),
       ownership: this.ownershipOf(pr),
       openThreads: viewerOpenThreads(pr, this.data.viewer),
+      ...scouted,
     };
   }
 
@@ -1953,7 +2047,31 @@ export class FakeEngine implements EngineService {
     return plan.change.eventIds.length > 0 || plan.change.handledKeys.length > 0;
   }
 
+  async listScouts(): Promise<ScoutListItem[]> {
+    if (this.beforeFirstSync()) {
+      return [];
+    }
+    this.scouts.settle();
+    return this.scouts.list();
+  }
+
+  async followScouted(prKey: PrKey, from: 'tile' | 'detail'): Promise<ActionResult> {
+    this.scouts.settle();
+    return this.scouts.follow(prKey, from);
+  }
+
+  async dismissScouted(prKey: PrKey, reason: string | null): Promise<ActionResult> {
+    return this.scouts.dismiss(prKey, reason);
+  }
+
+  async markScoutedSeen(prKey: PrKey): Promise<ActionResult> {
+    return this.scouts.markSeen(prKey);
+  }
+
   async undo(undoToken: string | null): Promise<ActionResult> {
+    if (undoToken !== null && this.scouts.isUndo(undoToken)) {
+      return this.scouts.undo(undoToken);
+    }
     const memoryUndo = undoToken ? this.memoryUndos.get(undoToken) : undefined;
     if (undoToken && memoryUndo) {
       this.memoryUndos.delete(undoToken);
@@ -2269,7 +2387,8 @@ export class FakeEngine implements EngineService {
    */
   async topicChat(topicId: string, message: string): Promise<ChatReply> {
     this.refuseWithoutAgent();
-    const isUnsorted = topicId === UNSORTED_TOPIC_ID;
+    // Like the engine: Unsorted and a scout's section are topic-less, so a point there goes nowhere topic-wise.
+    const isUnsorted = topicId === UNSORTED_TOPIC_ID || scoutIdOfTopic(topicId) !== null;
     if (!isUnsorted && !this.data.topics.some((topic) => topic.id === topicId)) {
       throw new Error(`no topic ${topicId}`);
     }
@@ -2358,11 +2477,33 @@ export class FakeEngine implements EngineService {
     let tileId: string | null = null;
     const waiting = this.writes.waitingPrKeys();
     for (const pr of prs) {
+      const seenThrough = parseSeenThrough(pr.seenThrough);
+      const seq = seenThrough?.seq ?? 0;
+      // Like the engine's AgentMarkRead: a PR only a scout holds is marked seen here, nothing on GitHub.
+      if (this.scouts.pr(pr.prKey)) {
+        const scoutEvents = this.eventsOf(pr.prKey);
+        const scoutCheck = agentMarkReadCheck({
+          stored: true,
+          tracked: true,
+          seenThrough,
+          unreadHashNow: unreadIdsHash(this.unseenIdsThrough(pr.prKey, seq)),
+          newestSeq: scoutEvents.length,
+          newer: scoutEvents.slice(seq),
+          snapshotBehind: false,
+          alreadyQueued: false,
+          changesAnything: this.scouts.isUnseenKey(pr.prKey),
+        });
+        if (scoutCheck.kind === 'mark') {
+          this.scouts.markSeen(pr.prKey);
+          result.seenLocally = [...(result.seenLocally ?? []), pr.prKey];
+        } else {
+          result[scoutCheck.kind].push({ prKey: pr.prKey, reason: scoutCheck.reason });
+        }
+        continue;
+      }
       const stored = this.data.prs.some((candidate) => candidate.key === pr.prKey);
       const events = this.eventsOf(pr.prKey);
       const tracking = this.trackingTile(pr.prKey);
-      const seenThrough = parseSeenThrough(pr.seenThrough);
-      const seq = seenThrough?.seq ?? 0;
       const check = agentMarkReadCheck({
         stored,
         tracked: tracking !== null,
@@ -2391,7 +2532,8 @@ export class FakeEngine implements EngineService {
       result.undoUntil = new Date((batch?.queuedAt ?? this.now().getTime()) + UNDO_WINDOW_MS).toISOString();
       this.agentReads.add(options.client, result, marked.token, result.undoUntil);
     }
-    this.writes.record({ action: 'agent_mark_read', origin: 'agent', outcome: result.marked.length > 0 ? 'queued' : 'skipped', detail: agentMarkReadLogDetail(options.client, result) });
+    const outcome = result.marked.length > 0 ? 'queued' : (result.seenLocally?.length ?? 0) > 0 ? 'local' : 'skipped';
+    this.writes.record({ action: 'agent_mark_read', origin: 'agent', outcome, detail: agentMarkReadLogDetail(options.client, result) });
     return result;
   }
 

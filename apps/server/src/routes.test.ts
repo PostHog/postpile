@@ -139,8 +139,9 @@ describe('server routes over the fake engine', () => {
     const app = appWithFake();
     const repos = (await (await app.request('/api/repos')).json()) as RepoOverview;
     expect(repos.scope).toBeNull();
+    // acme/app's 16 include Unsorted, which holds the PR followed from a scout (fake/fake-scouts.ts).
     expect(repos.repos.map((entry) => [entry.repo, entry.topics])).toEqual([
-      ['acme/app', 15],
+      ['acme/app', 16],
       ['acme/python-sdk', 2],
       ['acme/desktop', 1],
       ['acme/infra', 1],
@@ -410,6 +411,15 @@ describe('server routes over the fake engine', () => {
     expect((await app.request('/api/sync', { method: 'POST' })).status).toBe(200);
     expect((await post(app, '/api/sync', { maxPrs: 5, maxAgentCalls: 0 })).status).toBe(200);
     expect((await post(app, '/api/sync', { maxPrs: 0 })).status).toBe(400);
+  });
+
+  it('follows and dismisses a scouted PR with no request body at all', async () => {
+    const app = appWithFake();
+    const follow = (await (await app.request('/api/prs/acme/app/2701/scout/follow', { method: 'POST' })).json()) as ActionResult;
+    expect(follow).toMatchObject({ ok: true });
+    const dismiss = await app.request('/api/prs/acme/app/2711/scout/dismiss', { method: 'POST' });
+    expect(dismiss.status).toBe(200);
+    expect(((await dismiss.json()) as ActionResult).ok).toBe(true);
   });
 
   it('marks a tile read and undoes it', async () => {

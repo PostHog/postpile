@@ -1,5 +1,6 @@
 import type {
   PrOverlapsView,
+  ScoutListItem,
   ActionLogEntry,
   ActionResult,
   AgentActionFrom,
@@ -279,8 +280,29 @@ export interface EngineService {
    * of a new home team (a GitHub read). Local, never a GitHub write.
    */
   setTeamRole(team: string, role: TeamRole): Promise<TeamRolesView>;
-  /** Carries the topic dossier and what changed since the user last marked the topic seen. */
+  /**
+   * Carries the topic dossier and what changed since the user last marked
+   * the topic seen. A scout's pseudo-topic ("scout:<id>") gives its tiles
+   * only, with `scout` set (DESIGN.md "Scouts").
+   */
   getTopic(topicId: string): Promise<TopicDetail | null>;
+  /**
+   * The sidebar's Scouted section (DESIGN.md "Scouts"): one row per scout
+   * in scouts.md order, with its tiles and how many are unseen in
+   * PostPile. Never part of unread, whose move, the Dock badge or the asks.
+   */
+  listScouts(): Promise<ScoutListItem[]>;
+  /**
+   * Follow on a scouted PR: subscribes the viewer to it on GitHub after the
+   * undo window (undo token in the result), or waits in the writes lock as
+   * a pending write. Counts as followed only once GitHub took it; from then
+   * on PostPile tracks the PR like a found one.
+   */
+  followScouted(prKey: PrKey, from: 'tile' | 'detail'): Promise<ActionResult>;
+  /** Takes a scouted PR off the Scouted section for good; the optional reason is kept for tuning the scout. Local only. */
+  dismissScouted(prKey: PrKey, reason: string | null): Promise<ActionResult>;
+  /** The user opened a scouted PR: seen in PostPile through its current update. Never a GitHub read, never `handled_at`. */
+  markScoutedSeen(prKey: PrKey): Promise<ActionResult>;
   /** The title bar's repo menu: repos with topic and PR counts, the chosen repo and the quiet repos. */
   listRepos(): Promise<RepoOverview>;
   /**

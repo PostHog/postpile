@@ -10,6 +10,7 @@ export const queryKeys = {
   syncProgress: ['sync-progress'] as const,
   topics: ['topics'] as const,
   finishedTopics: ['finished-topics'] as const,
+  scouts: ['scouts'] as const,
   viewer: ['viewer'] as const,
   teamRoles: ['team-roles'] as const,
   repos: ['repos'] as const,

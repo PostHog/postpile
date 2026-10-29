@@ -131,4 +131,24 @@ export class GitHubWriteClient implements GitHubWriter {
   async subscribeThread(threadId: string): Promise<void> {
     await this.http.requestOk('PUT', `notifications/threads/${encodeURIComponent(threadId)}/subscription`, { body: { ignored: false } });
   }
+
+  /**
+   * https://docs.github.com/en/graphql/reference/mutations#updatesubscription
+   * The PR itself, not a notification thread: Follow on a scouted PR
+   * (SUBSCRIBED) and its undo (UNSUBSCRIBED). Future notifications only.
+   */
+  private async setPrSubscription(subjectId: string, state: 'SUBSCRIBED' | 'UNSUBSCRIBED'): Promise<void> {
+    const mutation = `mutation($subjectId: ID!, $state: SubscriptionState!) {
+  updateSubscription(input: { subscribableId: $subjectId, state: $state }) { subscribable { viewerSubscription } }
+}`;
+    await this.mutate('subscription', mutation, { subjectId, state });
+  }
+
+  async followPr(subjectId: string): Promise<void> {
+    await this.setPrSubscription(subjectId, 'SUBSCRIBED');
+  }
+
+  async unfollowPr(subjectId: string): Promise<void> {
+    await this.setPrSubscription(subjectId, 'UNSUBSCRIBED');
+  }
 }

@@ -18,7 +18,8 @@ import { Button, buttonClasses, JoinedButtons } from './Button.tsx';
 import { Crossfade } from './Crossfade.tsx';
 import { Fold } from './Fold.tsx';
 import { ExternalIcon, KindIcon } from './icons.tsx';
-import { ForWhomChip, PendingWritePill, RepoLabel, VerdictPill } from './pills.tsx';
+import { ForWhomChip, PendingWritePill, RepoLabel, ScoutChip, ScoutFollowPill, VerdictPill } from './pills.tsx';
+import { ScoutTileFooter } from './ScoutTileFooter.tsx';
 import { PrRow } from './PrRow.tsx';
 import { SnoozeMenu } from './SnoozeMenu.tsx';
 import { TileMenu } from './TileMenu.tsx';
@@ -26,6 +27,7 @@ import { TurnLine } from './TurnLine.tsx';
 import { UnreadStrip, UnseenMergeStrip } from './UnreadStrip.tsx';
 import { markReadNote } from '../lib/guard.ts';
 import { filesTabUrl } from '../lib/key-files.ts';
+import { followStateText } from '../lib/scouts.ts';
 
 interface TileProps {
   view: TileView;
@@ -207,6 +209,10 @@ export function Tile(props: TileProps) {
   const markLabel = view.offers.markLabel;
   const github = view.offers.github;
   const approve = view.agent.approve;
+  // A scout's tile (DESIGN.md "Scouts"): the scout in the "for whom" spot, its reason as the reason line, its own footer.
+  const scout = view.scout ?? null;
+  const followText = scout ? followStateText(scout.follow) : null;
+  const reasonLine = scout ? scout.reason : forYou;
 
   function selectLead() {
     if (lead) {
@@ -244,7 +250,7 @@ export function Tile(props: TileProps) {
           className="absolute top-1/2 -right-[6.5px] z-10 -mt-[5.5px] size-[11px] rotate-45 rounded-tr-[2px] border-t border-r border-accent bg-surface"
         />
       )}
-      {BANDS[view.forWhom.kind] && (
+      {!scout && BANDS[view.forWhom.kind] && (
         // The "for whom" band down the left edge, in the chip's color; grey on
         // done tiles, striped on drafts. A 3px strip cannot follow the tile's
         // 12px corner by itself, so it sits in a full-size layer clipped to the
@@ -268,7 +274,7 @@ export function Tile(props: TileProps) {
       <div className="flex min-h-0 flex-1 flex-col gap-2 pt-3 pr-3.5 pb-[13px] pl-[15px]">
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-[7px]">
-            <ForWhomChip forWhom={view.forWhom} code={view.why} greyed={done} />
+            {scout ? <ScoutChip name={scout.scoutName} greyed={done} /> : <ForWhomChip forWhom={view.forWhom} code={view.why} greyed={done} />}
             <KindLabel view={view} selected={props.selected} />
             {draft && (
               <span
@@ -290,6 +296,11 @@ export function Tile(props: TileProps) {
             {state.kind === 'snoozed' && state.muted && (
               <span className="text-[10.5px] font-medium text-muted" title="Muted: back when someone mentions you, asks you, replies to you or requests your review">
                 Muted
+              </span>
+            )}
+            {scout?.unseen && (
+              <span className="shrink-0 text-[10.5px] text-hint" title="Not opened in PostPile since its last activity. Grey on purpose: nothing here is unread on GitHub.">
+                not seen yet
               </span>
             )}
             {view.repoLabel && <RepoLabel label={view.repoLabel} />}
@@ -317,10 +328,18 @@ export function Tile(props: TileProps) {
               <PendingWritePill pending={view.pendingWrite} />
             </div>
           )}
-          {forYou && <p className={`line-clamp-3 [overflow-wrap:anywhere] text-[12.5px] leading-normal text-pretty ${done ? 'text-faint' : 'text-ink-2'}`}>{forYou}</p>}
+          {followText && (
+            <div className="flex">
+              <ScoutFollowPill text={followText} failed={scout?.follow === 'failed'} />
+            </div>
+          )}
+          {reasonLine && <p className={`line-clamp-3 [overflow-wrap:anywhere] text-[12.5px] leading-normal text-pretty ${done ? 'text-faint' : 'text-ink-2'}`}>{reasonLine}</p>}
         </div>
         <PrRows {...props} done={done} />
       </div>
+      {scout ? (
+        <ScoutTileFooter view={view} selectedPrKey={props.selected ? props.selectedPrKey : null} done={done} />
+      ) : (
       <div className={`mt-auto flex min-h-[46px] flex-wrap items-center gap-x-2 gap-y-1.5 rounded-b-tile py-1.5 pr-3.5 pl-[15px] ${footer}`}>
         {/* Zero basis: whose turn and the agent's Approve shrink (the turn line to its dot) before they push the joined buttons, which wrap below when they alone do not fit. */}
         <div className="@container flex min-w-0 flex-1 basis-0">
@@ -373,6 +392,7 @@ export function Tile(props: TileProps) {
         </JoinedButtons>
         </Crossfade>
       </div>
+      )}
     </article>
   );
 }

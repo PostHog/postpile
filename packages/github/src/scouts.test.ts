@@ -5,6 +5,7 @@ import { buildScoutListQuery, buildTreeQuery, ScoutReadsLimited } from './scouts
 
 function listed(number: number, overrides: Record<string, unknown> = {}) {
   return {
+    id: `PR_${number}`,
     number,
     updatedAt: '2026-10-29T10:00:00Z',
     state: 'OPEN',
@@ -43,6 +44,7 @@ describe('scout listing', () => {
     expect(page.prs).toEqual([
       {
         key: 'acme/app#1',
+        nodeId: 'PR_1',
         title: 'PR 1',
         body: '',
         author: 'codegen-agent[bot]',
@@ -87,6 +89,17 @@ describe('scout listing', () => {
       { repo: 'acme/app', number: 6 },
     ]);
     expect([...found.keys()]).toEqual(['acme/app#5']);
+  });
+});
+
+describe('scout PR node id', () => {
+  it('answers the id, null for a PR GitHub says is not there, and throws on any other failure', async () => {
+    const client = (body: unknown, status = 200) => new GitHubClient(fakeTokens, new FakeFetch([{ status, body }]).fn);
+    expect(await client({ data: { repository: { pullRequest: { id: 'PR_1' } } } }).scoutPrNodeId({ repo: 'acme/app', number: 1 })).toBe('PR_1');
+    const missing = { data: { repository: { pullRequest: null } }, errors: [{ type: 'NOT_FOUND', message: 'Could not resolve to a PullRequest' }] };
+    expect(await client(missing).scoutPrNodeId({ repo: 'acme/app', number: 1 })).toBeNull();
+    await expect(client({ data: null, errors: [{ type: 'RATE_LIMITED', message: 'API rate limit exceeded' }] }).scoutPrNodeId({ repo: 'acme/app', number: 1 })).rejects.toThrow('rate limit');
+    await expect(client({ message: 'Bad credentials' }, 401).scoutPrNodeId({ repo: 'acme/app', number: 1 })).rejects.toThrow();
   });
 });
 

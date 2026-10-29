@@ -195,6 +195,9 @@ export interface GitHubReader {
   /** Scouts: the same metadata for PRs known by number, keyed as asked. A PR GitHub does not answer for is left out. */
   scoutPrsByNumber(refs: PrRef[]): Promise<Map<PrKey, ScoutCandidate>>;
 
+  /** Scouts: one PR's node id for Follow. Null when GitHub has no such PR the token can see; throws on a failed request, auth or rate limit. */
+  scoutPrNodeId(ref: PrRef): Promise<string | null>;
+
   /**
    * Scouts: each PR's whole changed-file list with change types, paged to
    * the end at one head. `files` is null when the list could not be read

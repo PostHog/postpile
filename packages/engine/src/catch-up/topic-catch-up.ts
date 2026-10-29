@@ -1,4 +1,4 @@
-import { effectiveLoudness, emptyAgentCallStats, isMemoryNoise, isMemoryTrigger, PUSH_KINDS, GLANCE_BATCH_SIZE, type AgentCallStats, type PrKey, type Viewer } from '@postpile/core';
+import { effectiveLoudness, emptyAgentCallStats, scoutedWantsGlance, isMemoryNoise, isMemoryTrigger, PUSH_KINDS, GLANCE_BATCH_SIZE, type AgentCallStats, type PrKey, type Viewer } from '@postpile/core';
 import { AgentBudget } from '../budget.ts';
 import { Board } from '../board.ts';
 import type { DigestDeps } from '../digest/deps.ts';
@@ -103,9 +103,18 @@ export class TopicCatchUp {
     private readonly log: (line: string) => void,
   ) {}
 
+  /**
+   * Glances the run may write, for its cap. Unsorted's run also glances the
+   * scouted PRs (topic-less too), so they count there: a retry of one in a
+   * later batch must not hit the cap before its turn. Counted from their
+   * `pr_scouted` rows, never their snapshots: every active one, an upper
+   * bound (the writer finds which need a glance), read on every poll.
+   */
   private glanceTargetsIn(topicId: string | null): number {
     const board = Board.load(this.deps.store, this.deps.now().toISOString());
-    return [...glanceTargetKeys(board)].filter((key) => (board.memberships.get(key)?.topicId ?? null) === topicId).length;
+    const inTopic = [...glanceTargetKeys(board)].filter((key) => (board.memberships.get(key)?.topicId ?? null) === topicId).length;
+    const scouted = topicId === null ? this.deps.store.scoutedPrs.listActive().filter(scoutedWantsGlance).length : 0;
+    return inTopic + scouted;
   }
 
   /** catch_up_ran for every run that got past the agent check. Never throws: telemetry never breaks a run. */
@@ -176,7 +185,8 @@ export class TopicCatchUp {
     }
     const board = Board.load(this.deps.store, this.deps.now().toISOString());
     const inputs = new GlanceInputs(this.deps.store, board, viewer, this.deps.contexts);
-    const target = inputs.targets().find((candidate) => candidate.item.pr.key === prKey);
+    // A scouted PR is no tile of the board's: its glance target comes from the scouted rows, like the catch-up's.
+    const target = inputs.targets().find((candidate) => candidate.item.pr.key === prKey) ?? inputs.scoutTargets([prKey])[0];
     if (!target) {
       return false;
     }
