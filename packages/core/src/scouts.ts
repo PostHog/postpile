@@ -8,7 +8,7 @@ import { isTeammate } from './review-request.ts';
 import { sameLogin } from './mentions.ts';
 import { shortHash } from './pr-notes.ts';
 import type { ScoutConfig } from './scouts-config.ts';
-import type { FoundPr, IsoTime, PrKey, PrState, Provenance, Viewer } from './types.ts';
+import type { FoundPr, IsoTime, PrEvent, PrKey, PrState, Provenance, Viewer } from './types.ts';
 
 /** GitHub's PatchStatus for a changed file. */
 export type ScoutChangeType = 'ADDED' | 'MODIFIED' | 'DELETED' | 'RENAMED' | 'COPIED' | 'CHANGED';
@@ -431,10 +431,12 @@ export interface ScoutedPrView {
   tracked: boolean;
   /** It has a notification thread: GitHub's inbox holds it, not only PostPile's tracking. */
   inInbox: boolean;
+  /** It shows on the Scouted section now, as the board places it: a layer of a stack placed in a normal topic does not. */
+  onSection: boolean;
   follow: ScoutFollowState | null;
 }
 
-export function scoutedPrView(row: ScoutedPr, prUpdatedAt: IsoTime, place: Pick<ScoutedPrView, 'tracked' | 'inInbox'>, follow: ScoutFollowState | null): ScoutedPrView {
+export function scoutedPrView(row: ScoutedPr, prUpdatedAt: IsoTime, place: Pick<ScoutedPrView, 'tracked' | 'inInbox' | 'onSection'>, follow: ScoutFollowState | null): ScoutedPrView {
   return {
     scoutId: row.scoutId,
     scoutName: row.scoutName,
@@ -449,6 +451,7 @@ export function scoutedPrView(row: ScoutedPr, prUpdatedAt: IsoTime, place: Pick<
     unseen: isScoutedUnseen(row, prUpdatedAt),
     tracked: place.tracked,
     inInbox: place.inInbox,
+    onSection: place.onSection,
     follow,
   };
 }
@@ -496,10 +499,16 @@ export interface ScoutWorkItem {
 /** Why a pending row's last try stopped before the model call: its reads failed, not the judge. */
 export const SCOUT_FILES_NOT_READ = 'file list not read whole';
 export const SCOUT_TREE_NOT_READ = 'base tree not read';
+export const SCOUT_LOOKUP_FAILED = 'lookup by number not answered';
+const SCOUT_READ_FAILURES = new Set([SCOUT_FILES_NOT_READ, SCOUT_TREE_NOT_READ, SCOUT_LOOKUP_FAILED]);
 
-/** A pending row whose last try failed in the reads, so the next run puts it behind other work. */
+/**
+ * A pending row whose last try failed in the reads (file list, base tree,
+ * or the lookup by number), so the next run puts it behind other work. The
+ * reason is the one stored retry state: a deferral keeps it.
+ */
 export function scoutRetryStalled(row: Pick<ScoutJudgement, 'status' | 'lastError'>): boolean {
-  return row.status === 'pending' && (row.lastError === SCOUT_FILES_NOT_READ || row.lastError === SCOUT_TREE_NOT_READ);
+  return row.status === 'pending' && row.lastError !== null && SCOUT_READ_FAILURES.has(row.lastError);
 }
 
 /**
@@ -542,4 +551,17 @@ export function scheduleScoutWork<T extends ScoutWorkItem>(queues: T[][], capaci
  */
 export function scoutedWantsGlance(scouted: Pick<ScoutedPr, 'followedAt' | 'dismissedAt' | 'expiredAt'>): boolean {
   return isScoutedActive(scouted);
+}
+
+/**
+ * A scouted PR's events as PostPile reads them: those at or before the
+ * scout's seen boundary (`seen_updated_at`, set by opening it or an agent's
+ * mark_read) count as seen, so the PR pane, unread and pr_context agree
+ * with mark_read. GitHub's own read state is never touched.
+ */
+export function withScoutSeen(events: PrEvent[], seenUpdatedAt: IsoTime | null): PrEvent[] {
+  if (seenUpdatedAt === null) {
+    return events;
+  }
+  return events.map((event) => (event.seenAt === null && event.at <= seenUpdatedAt ? { ...event, seenAt: seenUpdatedAt } : event));
 }

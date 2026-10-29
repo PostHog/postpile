@@ -3,7 +3,7 @@
 // pre-filter, paged to the end; and the top-level folders of a base commit.
 // Read-only like every reader call.
 import { prKey, type PrKey, type PrRef, type PrState, type ScoutCandidate, type ScoutChangeType, type ScoutFile } from '@postpile/core';
-import { graphqlFailure, type GitHubHttp } from './http.ts';
+import { GitHubError, graphqlFailure, type GitHubHttp, type GraphQLResult } from './http.ts';
 import { actorLogin, isoTime, isoTimeOrNull } from './normalize.ts';
 import { batchAlias } from './queries.ts';
 import type { RawActor } from './raw.ts';
@@ -186,21 +186,62 @@ export async function listScoutPrs(http: GitHubHttp, repo: string, after: string
 }
 
 /**
+ * GitHub asked scout reads to slow down (a secondary limit, 429, or a
+ * GraphQL RATE_LIMITED): the read stopped there, and the caller stops every
+ * scout read for the rest of the run. `partial` holds what the read had
+ * finished before, in the shape it would have returned.
+ */
+export class ScoutReadsLimited<T> extends GitHubError {
+  constructor(
+    cause: GitHubError,
+    readonly partial: T,
+  ) {
+    super(cause.message, cause.status, { rateLimited: true, retryAfterSeconds: cause.retryAfterSeconds });
+    this.name = 'ScoutReadsLimited';
+  }
+}
+
+function isRateLimit(error: unknown): error is GitHubError {
+  return error instanceof GitHubError && error.rateLimited;
+}
+
+/**
+ * One batch query of a scout read. A rate limit throws, so the read stops;
+ * any other failure answers null and costs only this batch.
+ */
+async function scoutBatch<T>(http: GitHubHttp, query: string): Promise<GraphQLResult<T> | null> {
+  let response;
+  try {
+    response = await http.graphql<T>(query);
+  } catch (error) {
+    if (isRateLimit(error)) {
+      throw error;
+    }
+    return null;
+  }
+  const limited = response.errors.find((error) => error.type === 'RATE_LIMITED');
+  if (limited) {
+    throw new GitHubError(`GitHub scout read failed: ${limited.message}`, 200, { rateLimited: true, retryAfterSeconds: null });
+  }
+  return response;
+}
+
+/**
  * Metadata per PR known by number; one GitHub no longer has or the token
  * cannot see is left out. A failed query costs only its own batch: those
  * PRs are left out too (their pending rows wait for the next run), the
- * other batches' answers stand.
+ * other batches' answers stand. A rate limit stops it (`ScoutReadsLimited`).
  */
 export async function scoutPrsByNumber(http: GitHubHttp, refs: PrRef[]): Promise<Map<PrKey, ScoutCandidate>> {
   const result = new Map<PrKey, ScoutCandidate>();
   for (const batch of chunk(refs, SCOUT_FILES_BATCH_SIZE)) {
     let response;
     try {
-      response = await http.graphql<RawNumberBatch>(buildScoutNumberQuery(batch));
-    } catch {
-      continue;
+      response = await scoutBatch<RawNumberBatch>(http, buildScoutNumberQuery(batch));
+    } catch (error) {
+      throw new ScoutReadsLimited(error as GitHubError, result);
     }
-    if (!response.data) {
+    if (!response?.data) {
       continue;
     }
     batch.forEach((ref, index) => {
@@ -253,10 +294,8 @@ interface FilesProgress {
 
 /** The next page of each PR in the batch, in one aliased query. Every page must answer at the head the first one saw. */
 async function nextFilePages(http: GitHubHttp, batch: FilesProgress[]): Promise<void> {
-  let response;
-  try {
-    response = await http.graphql<RawFilesBatch>(buildScoutFilesQuery(batch.map((entry) => ({ ref: entry.ref, after: entry.after }))));
-  } catch {
+  const response = await scoutBatch<RawFilesBatch>(http, buildScoutFilesQuery(batch.map((entry) => ({ ref: entry.ref, after: entry.after }))));
+  if (response === null) {
     batch.forEach((entry) => (entry.broken = true));
     return;
   }
@@ -276,25 +315,15 @@ async function nextFilePages(http: GitHubHttp, batch: FilesProgress[]): Promise<
   });
 }
 
-/**
- * The whole file list per PR: the first pages aliased, then the next pages
- * of every longer list together, SCOUT_FILES_BATCH_SIZE PRs per query,
- * until each is whole. A moved head (a push while paging) or a failed page
- * makes that PR's list unknown, never a shorter one: a signal on page two
- * must not read as "no signal". A failed query costs only its own batch:
- * those PRs come back with no list. A PR GitHub does not answer for is
- * left out.
- */
-export async function scoutFiles(http: GitHubHttp, refs: PrRef[]): Promise<Map<PrKey, ScoutFilesRead>> {
-  const progress: FilesProgress[] = [];
+function filesReads(progress: FilesProgress[]): Map<PrKey, ScoutFilesRead> {
+  return new Map(progress.map((entry) => [prKey(entry.ref), { headOid: entry.headOid, baseOid: entry.baseOid, foldersOid: entry.foldersOid, files: entry.broken ? null : entry.files }]));
+}
+
+/** The first pages, then the next pages of every longer list, into `progress`. */
+async function readFilePages(http: GitHubHttp, refs: PrRef[], progress: FilesProgress[]): Promise<void> {
   for (const batch of chunk(refs, SCOUT_FILES_BATCH_SIZE)) {
-    let response;
-    try {
-      response = await http.graphql<RawFilesBatch>(buildScoutFilesQuery(batch.map((ref) => ({ ref, after: null }))));
-    } catch {
-      response = { data: null, errors: [] };
-    }
-    if (!response.data) {
+    const response = await scoutBatch<RawFilesBatch>(http, buildScoutFilesQuery(batch.map((ref) => ({ ref, after: null }))));
+    if (!response?.data) {
       // This batch only: its PRs come back without a list (pending for the caller); the other batches' reads stand.
       batch.forEach((ref) => progress.push({ ref, headOid: '', baseOid: '', foldersOid: '', files: [], after: null, pages: 1, broken: true }));
       continue;
@@ -319,24 +348,49 @@ export async function scoutFiles(http: GitHubHttp, refs: PrRef[]): Promise<Map<P
     }
     open = open.filter((entry) => !entry.broken && entry.after !== null);
   }
-  return new Map(progress.map((entry) => [prKey(entry.ref), { headOid: entry.headOid, baseOid: entry.baseOid, foldersOid: entry.foldersOid, files: entry.broken ? null : entry.files }]));
+}
+
+/**
+ * The whole file list per PR: the first pages aliased, then the next pages
+ * of every longer list together, SCOUT_FILES_BATCH_SIZE PRs per query,
+ * until each is whole. A moved head (a push while paging) or a failed page
+ * makes that PR's list unknown, never a shorter one: a signal on page two
+ * must not read as "no signal". A failed query costs only its own batch:
+ * those PRs come back with no list. A PR GitHub does not answer for is
+ * left out. A rate limit stops it (`ScoutReadsLimited`, with the lists
+ * finished by then).
+ */
+export async function scoutFiles(http: GitHubHttp, refs: PrRef[]): Promise<Map<PrKey, ScoutFilesRead>> {
+  const progress: FilesProgress[] = [];
+  try {
+    await readFilePages(http, refs, progress);
+  } catch (error) {
+    if (!isRateLimit(error)) {
+      throw error;
+    }
+    // Lists still paging when GitHub said stop are not whole.
+    progress.filter((entry) => entry.after !== null).forEach((entry) => (entry.broken = true));
+    throw new ScoutReadsLimited(error, filesReads(progress));
+  }
+  return filesReads(progress);
 }
 
 /**
  * Directory names at the root of each commit's tree. A commit GitHub does
  * not answer for is left out, and so is a failed batch: the other batches'
- * reads stand, like file lists and number lookups.
+ * reads stand, like file lists and number lookups. A rate limit stops it
+ * (`ScoutReadsLimited`).
  */
 export async function topLevelFolders(http: GitHubHttp, repo: string, commitOids: string[]): Promise<Map<string, string[]>> {
   const result = new Map<string, string[]>();
   for (const batch of chunk(commitOids, SCOUT_FILES_BATCH_SIZE)) {
     let response;
     try {
-      response = await http.graphql<{ repository: RawTreeBatch | null }>(buildTreeQuery(repo, batch));
-    } catch {
-      continue;
+      response = await scoutBatch<{ repository: RawTreeBatch | null }>(http, buildTreeQuery(repo, batch));
+    } catch (error) {
+      throw new ScoutReadsLimited(error as GitHubError, result);
     }
-    if (!response.data) {
+    if (!response?.data) {
       continue;
     }
     batch.forEach((oid, index) => {

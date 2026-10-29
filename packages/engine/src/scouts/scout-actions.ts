@@ -41,6 +41,8 @@ export class ScoutActions {
   private settledFollows = 0;
   /** PRs whose Follow is looking up the node id: reserved, so an overlapping Follow is refused. */
   private readonly lookingUp = new Set<PrKey>();
+  /** Follows still running (looking up the PR): flush waits for them. */
+  private readonly inFlight = new Set<Promise<ActionResult>>();
 
   constructor(
     private readonly store: Store,
@@ -98,7 +100,21 @@ export class ScoutActions {
     return states;
   }
 
+  /**
+   * Follow on a scouted PR. Tracked while it runs (its node id lookup can
+   * take a while), so a quit's flush waits for it to queue before draining.
+   */
   async follow(prKey: PrKey, origin: 'tile' | 'detail'): Promise<ActionResult> {
+    const running = this.followNow(prKey, origin);
+    this.inFlight.add(running);
+    try {
+      return await running;
+    } finally {
+      this.inFlight.delete(running);
+    }
+  }
+
+  private async followNow(prKey: PrKey, origin: 'tile' | 'detail'): Promise<ActionResult> {
     // The lock as it was at the click, before the lookup below: an unlock while it runs must not send this Follow by itself.
     const lockedAtClick = !this.writes.enabled();
     const clickedAt = this.now().toISOString();
@@ -166,8 +182,13 @@ export class ScoutActions {
     return ok('Seen');
   }
 
-  /** On quit: Follows still in their window go out now (or into the lock), like the mark-read queue's flush. */
-  flush(): Promise<void> {
+  /**
+   * On quit: Follows still looking up their PR finish queuing first, then
+   * those in their window go out now (or into the lock), like the mark-read
+   * queue's flush. Nothing queues after the store closed.
+   */
+  async flush(): Promise<void> {
+    await Promise.allSettled(this.inFlight);
     return this.queue.flush();
   }
 }

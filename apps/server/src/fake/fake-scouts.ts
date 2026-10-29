@@ -418,7 +418,7 @@ export class FakeScouts {
   /** What the PR pane says about a PR a scout pulled in; undefined for every other PR. */
   view(key: PrKey, prUpdatedAt: string, tracked: boolean): ScoutedPrView | undefined {
     const row = this.rows.get(key);
-    return row ? scoutedPrView(row, prUpdatedAt, { tracked, inInbox: tracked && row.followedAt === null }, this.followState(key)) : undefined;
+    return row ? scoutedPrView(row, prUpdatedAt, { tracked, inInbox: tracked && row.followedAt === null, onSection: this.topicIdOf(key) !== null }, this.followState(key)) : undefined;
   }
 
   /** Follow: GitHub after the undo window, or the lock's pending writes while locked. Same checks and words as the engine. */

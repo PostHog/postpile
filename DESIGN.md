@@ -1304,9 +1304,13 @@ contract surfaces.
    The run takes one item per queue in turn until the calls times the batch
    size are used, so no scout, repo or wave of new PRs starves the rest.
    Files are read only for what was taken; the rest waits without a read.
-   A retry whose file list or base tree failed to read last time
-   (`scoutRetryStalled`) goes behind the new candidates, so PRs GitHub
-   keeps failing to read only take slots nothing else needs. Tree reads
+   A retry whose file list, base tree or lookup by number failed last time
+   (`scoutRetryStalled`, the one stored retry state: its `last_error`, kept
+   when the schedule defers it) goes behind the new candidates, so PRs
+   GitHub keeps failing to read only take slots nothing else needs. A rate
+   limit (a secondary limit, 429, GraphQL RATE_LIMITED) stops every scout
+   read for the rest of the run (`ScoutReadsLimited`, keeping what was
+   read); the rest waits as ordinary pending work. Tree reads
    fail per batch, like file lists and number lookups. Pending PRs the
    listing no longer reaches are looked up by number only as far as the
    run can judge them, picked by the same schedule, in one read for every
@@ -1383,13 +1387,16 @@ spot and its reason (`TileView.scout`).
   overlapping Follow is refused instead of queuing a second subscription.
   It tells GitHub's "no such PR" (NOT_FOUND) from a request that failed
   (unreachable, auth, rate limit), which shows its error and asks to click
-  Follow again.
+  Follow again. A quit's flush waits for Follows still looking up their PR
+  before it drains the queue.
   Queued, pending, failed, discarded and undone follows stay apart in the
   action log (`follow`, `undo_follow`).
 - Dismiss takes the PR off the section for good, with an optional short
   reason kept for tuning the scout later. Local only.
 - Opening a scouted PR marks it seen in PostPile through its current update
-  (`seen_updated_at`); it reads unseen again once the PR moves. Never a
+  (`seen_updated_at`); it reads unseen again once the PR moves. The PR
+  pane and pr_context read its events at or before that boundary as seen
+  (`withScoutSeen`), so they agree with mark_read. Never a
   GitHub read and never `handled_at`, which would leak into the inbox rules
   once the PR reaches the inbox.
 
@@ -1406,7 +1413,9 @@ marks it seen in PostPile only, with the usual `seen_through` guards, and
 says so ("seen in PostPile only, nothing on GitHub"). For a scouted PR the
 token also covers its stored update time, so a title or description edit
 synced after the read refuses an old token. JSON tells `inInbox` (a
-notification thread) apart from `tracked` (a followed PR is tracked before
+notification thread) apart from `tracked`, and `onScoutedSection` is where
+the board places it (a scouted layer of a stack with a tracked layer is
+not on the section) (a followed PR is tracked before
 GitHub notifies about it); the scouted group in `whats_on_me` pages with the
 same `offset` and `limit` (`scoutedPage`).
 

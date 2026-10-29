@@ -26,6 +26,7 @@ const scouted = (overrides: Partial<ScoutedPrView> = {}): ScoutedPrView => ({
   unseen: false,
   tracked: false,
   inInbox: false,
+  onSection: true,
   follow: null,
   ...overrides,
 });
