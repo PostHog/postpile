@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { appendScout, isScoutPathHint, mapScoutCheck, promptWithoutPart, scoutFromCard, scoutIntroAutoShows, scoutSection, trialRateWords } from './scout-intro.ts';
+import { appendScout, isScoutPathHint, mapScoutCheck, promptWithoutPart, scoutFromCard, scoutIntroAutoShows, scoutNameWithId, scoutSection, trialRateWords } from './scout-intro.ts';
 import { parseScouts } from './scouts-config.ts';
 
 const PROMPT = 'PRs that add a new top-level folder or service, or models used across services. Skip fixes inside one service.';
@@ -46,6 +46,15 @@ describe('mapScoutCheck', () => {
 
   it('reads an unknown verdict as partly and an empty name as a plain default', () => {
     expect(mapScoutCheck({ ...answer, fit: 'great', name: '' }, PROMPT)).toMatchObject({ fit: { verdict: 'partly' }, name: 'My scout' });
+  });
+});
+
+describe('scoutNameWithId', () => {
+  it('keeps a name that slugs, falls back for one that does not, and steps past ids in use', () => {
+    expect(scoutNameWithId('Lookout', ['acme/app'], new Set())).toBe('Lookout');
+    expect(scoutNameWithId('结构哨兵', ['acme/app'], new Set())).toBe('Scout app');
+    expect(scoutNameWithId('Lookout', ['acme/app'], new Set(['lookout', 'lookout-2']))).toBe('Lookout 3');
+    expect(scoutNameWithId('结构哨兵', ['acme/app'], new Set(['scout-app']))).toBe('Scout app 2');
   });
 });
 

@@ -168,6 +168,16 @@ describe('the Scouts intro card', () => {
     expect(h.reader.scoutCalls).toEqual([]);
   });
 
+  it('starts the name field with a name that turns on: a fallback for one with no id, a step past one in use', async () => {
+    const { h } = setup({ scouts: '## Scout app\nrepos: acme/app\n\nx\n' });
+    h.runner.answer('scout_check', { fit: 'fits', note: 'ok', cantSee: null, name: '结构哨兵', paths: [], pathsCoverAll: false });
+
+    const result = await h.engine.checkScout({ prompt: PROMPT, repos: ['acme/app'] });
+
+    expect(result.name).toBe('Scout app 2');
+    expect((await h.engine.turnOnScout({ name: result.name, prompt: PROMPT, repos: ['acme/app'], paths: [] })).ok).toBe(true);
+  });
+
   it('refuses a name another scout has', async () => {
     const { h } = setup({ scouts: '## Lookout\nrepos: acme/app\n\nx\n' });
     expect((await h.engine.turnOnScout({ name: 'Lookout', prompt: PROMPT, repos: ['acme/app'], paths: [] })).ok).toBe(false);

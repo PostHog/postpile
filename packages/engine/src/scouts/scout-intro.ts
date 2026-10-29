@@ -4,6 +4,7 @@ import {
   parsePrKey,
   scoutFromCard,
   scoutIntroAutoShows,
+  scoutNameWithId,
   SCOUT_TRIAL_DAYS,
   SCOUT_TRIAL_JUDGE_CALLS,
   type ActionResult,
@@ -166,8 +167,11 @@ export class ScoutIntro {
     } catch (error) {
       return refused(`The check failed: ${errorText(error)}`);
     }
-    const trial = await this.trial({ name: checked.name, prompt, repos, paths: checked.paths }, viewer, stats);
-    return { ok: true, message: null, ...checked, trial };
+    // The name field's start must turn on as is: an id it can slug, not one another scout has.
+    const takenIds = new Set(this.deps.history?.active().scouts.map((scout) => scout.id) ?? []);
+    const name = scoutNameWithId(checked.name, repos, takenIds);
+    const trial = await this.trial({ name, prompt, repos, paths: checked.paths }, viewer, stats);
+    return { ok: true, message: null, ...checked, name, trial };
   }
 
   /**

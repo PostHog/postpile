@@ -1730,6 +1730,17 @@ the app meanwhile.
 
 ## Later
 
+- **Scouts follow-ups** (review of the Scouts stack, deferred until it lands):
+  - Budget deferral and backlog sync timing: when the schedule defers work
+    while one call is still left, and that call then spends the cap, no
+    budget skip is recorded, so `syncLeftBacklog` waits an hour instead of
+    two minutes. Record capped work after the granted calls are spent.
+  - Per-alias file-page errors: a GraphQL field error on one PR marks the
+    whole twelve-PR batch's file lists broken (`readFilePages`,
+    `nextFilePages`), so healthy PRs read again each sync. Use each error's
+    `path` to drop only the affected alias; keep batch-wide rejection for
+    errors without a path.
+
 - Normalize the PR snapshot (started after 0.19.0; first this, then the
   `utilityProcess` move below). The short fields live in the PR header
   (`pr`, migration 028), the rest of each PR is one JSON blob in

@@ -1446,11 +1446,14 @@ drafts the first one, checks it and turns it on.
 - *Check scout:* one `scout_check` call, mapped onto the prompt like the
   setup fit check (`mapScoutCheck`): a fit verdict and note, at most one
   part a scout can't see (quoted from the prompt), a suggested name and up
-  to 6 path hints. "Drop that part" cuts that quote out of the user's
+  to 6 path hints. The name is one that turns on (`scoutNameWithId`): one
+  that slugs to no id falls back to "Scout <repo>", one whose id is taken
+  gets " 2", " 3". "Drop that part" cuts that quote out of the user's
   prompt where it appears word for word and tidies the punctuation
   (`promptWithoutPart`); no model rewrite of the whole prompt is taken, so
   nothing else in it can change. When the quote is not there word for
-  word, the card offers only "Keep it anyway". Paths are a hard filter (a
+  word, the card offers only "Keep it anyway". Dropping a part clears the
+  check (its counts, examples and Turn on) and asks to check the new prompt. Paths are a hard filter (a
   scout with paths never judges a PR that touches none), so the check
   must cover every kind of PR the prompt asks for or return none, and say
   so (`pathsCoverAll`). Unless it says they cover it all, and every hint

@@ -179,6 +179,21 @@ export function mapScoutCheck(answer: ScoutCheckAnswer, prompt: string): Pick<Sc
   return { fit: { verdict, note: clipText(answer.note, NOTE_MAX) }, cantSee, name, paths };
 }
 
+/**
+ * A name the card can turn on as is: its slug is the scout's id, so a name
+ * with no letters or digits it can slug (all CJK, say) falls back to
+ * "Scout <repo>", and a name whose id another scout has gets " 2", " 3".
+ */
+export function scoutNameWithId(name: string, repos: string[], takenIds: ReadonlySet<string>): string {
+  const repoName = repos[0]?.split('/')[1] ?? '';
+  const base = scoutSlug(name) !== '' ? name : `Scout ${repoName}`.trim();
+  let candidate = base;
+  for (let n = 2; takenIds.has(scoutSlug(candidate)); n++) {
+    candidate = `${base} ${n}`;
+  }
+  return candidate;
+}
+
 /** "about 2–3 a day", "about 1 a day", "fewer than 1 a day", "none": how many pulls a day the dry run suggests. */
 export function trialRateWords(pulled: number, days: number): string {
   if (pulled === 0) {

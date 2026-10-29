@@ -130,6 +130,14 @@ export function ScoutIntroCard(props: { state: ScoutIntroState; hidden: boolean;
     setShowResult(true);
   }
 
+  // The check ran on the old prompt: its counts, examples and Turn on no longer hold, so back to Check on the new one.
+  function dropPart(rewrite: string) {
+    setPrompt(rewrite);
+    setResult(null);
+    setShowResult(false);
+    setRefusal('Dropped that part. Check the scout again to see what it finds now.');
+  }
+
   // Closes only once the answer is saved; a failed save shows its toast and keeps the card and the button.
   async function notNow() {
     if ((await actions.dismissScoutIntro()) && mounted.current) {
@@ -165,7 +173,7 @@ export function ScoutIntroCard(props: { state: ScoutIntroState; hidden: boolean;
       >
         {showResult && result ? (
           <>
-            <ScoutCheckScreen result={result} repos={repos} name={name} onName={setName} onDropPart={setPrompt} />
+            <ScoutCheckScreen result={result} repos={repos} name={name} onName={setName} onDropPart={dropPart} />
             <div className="flex items-center gap-2.5">
               <button type="button" onClick={() => setShowResult(false)} className="px-1 py-2 text-[13px] text-accent hover:text-ink">
                 ← Edit prompt
