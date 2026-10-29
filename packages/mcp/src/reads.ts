@@ -15,6 +15,7 @@ import {
   reviewerStates,
   type ActivityLine,
   type ActivityList,
+  isPersonText,
   type AuthorPlace,
   type AuthorScope,
   SYNC_PROGRESS_STALE_MS,
@@ -446,6 +447,29 @@ export function shownActivity(activity: ActivityList): ActivityLine[] {
   });
 }
 
+/**
+ * An unread line's people's text in full, indented under it: a comment's or
+ * review's whole body, and every reply a bot-thread line folds. Printed
+ * whole, never cut: seen_through lets mark_read clear all of it. A line
+ * without a body (an approval without text) says all there is in its summary.
+ */
+export function unreadTextLines(line: ActivityLine): string[] {
+  const texts = line.body === null ? [] : [line.body];
+  if (line.fold === 'bot_thread') {
+    texts.push(...line.folded.map((reply) => `${reply.actor}: ${reply.body}`));
+  }
+  return texts.flatMap((text) => text.split('\n').map((row) => `      ${row}`));
+}
+
+/**
+ * Unread people's text a full answer can only count, never print: a
+ * comment or review the agent muted, folded with the noise. The answer
+ * then gives no seen_through.
+ */
+export function unreadTextLeftOut(activity: ActivityList): boolean {
+  return [...activity.freshNoise, ...activity.noise].some((event) => event.unseen && isPersonText(event));
+}
+
 function fullPrLines(detail: PrDetail, tiles: TileView[], authors: Authors): string[] {
   const lines = [...prHeadLines(detail, tiles, authors), ...reviewSizeLines(detail, true)];
   lines.push('', ...(detail.glance ? glanceLines(detail.glance, detail.glanceStale) : [`No agent glance yet (${detail.glanceState}).`]));
@@ -457,9 +481,12 @@ function fullPrLines(detail: PrDetail, tiles: TileView[], authors: Authors): str
   const { activity } = detail;
   const shown = shownActivity(activity);
   if (shown.length > 0) {
-    lines.push('', 'Activity (newest first; * = new since you looked):');
+    lines.push('', 'Activity (newest first; * = new since you looked; unread text in full below its line):');
     for (const line of shown) {
       lines.push(`  ${line.isNew ? '*' : ' '} ${day(line.at)}  ${withActor(line.actor, line.summary)}`);
+      if (isUnreadLine(line)) {
+        lines.push(...unreadTextLines(line));
+      }
     }
   }
   const noise = activity.noise.length + activity.freshNoise.length;
@@ -749,6 +776,9 @@ async function prContextJson(ctx: ReadContext, reads: PrRead[], failures: PrFail
 function seenThroughLines(read: PrRead, detail: Detail): string[] {
   if (detail !== 'full') {
     return [];
+  }
+  if (unreadTextLeftOut(read.detail.activity)) {
+    return [`${read.key}: can't be marked read from this answer: it only counts some unread comments (muted by PostPile's agent), so mark_read gets no seen_through for it.`];
   }
   return [`${read.key}: seen_through for mark_read: ${read.detail.seenThrough} (the newest activity this answer covers).`];
 }

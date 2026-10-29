@@ -9233,8 +9233,15 @@ that flow, without a separate ask.
   #199). The full answer lists every unread activity line (new since the
   user looked, or holding an unseen event) uncapped; the 12-line cap only
   cuts read history (`shownActivity`). Before, a PR with more than 12
-  unread lines got a watermark over lines the answer left out. Bot and CI
-  noise stays folded into its count line, as in the pane. `getPr` reads
+  unread lines got a watermark over lines the answer left out. Under each
+  unread line, inside the fence, the people's text in full: a comment's or
+  review's whole body and every reply a bot-thread line folds, never cut
+  (`unreadTextLines`); a one-line summary of 100 characters is not "read".
+  Read history stays summarised. Bot and CI noise stays folded into its
+  count line, as in the pane; an unread person's comment folded there
+  (muted by the events agent) has no body in the answer, so such a PR
+  gets no `seen_through`, only a line saying it can't be marked read from
+  this answer (`unreadTextLeftOut`). `getPr` reads
   the watermark before the Board: a sync committing in between only adds
   events the answer shows beyond it, so mark_read refuses rather than
   marks unseen activity. A cached Board is only reused while the database

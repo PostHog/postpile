@@ -131,7 +131,7 @@ describe('activityList items', () => {
     const bot = ev({ kind: 'bot_comment', actor: 'greptile[bot]', isBot: true, summary: 'greptile commented', url: 'https://github.com/acme/app/pull/1#c', at: at(1) }, 'quiet');
     const list = activityList([bot], who);
     expect(list.noise).toEqual([
-      { id: bot.event.id, kind: 'bot_comment', actor: 'greptile[bot]', summary: 'greptile commented', at: at(1), display: 'quiet', unseen: true, reason: 'comment', url: 'https://github.com/acme/app/pull/1#c' },
+      { id: bot.event.id, kind: 'bot_comment', actor: 'greptile[bot]', isBot: true, summary: 'greptile commented', at: at(1), display: 'quiet', unseen: true, reason: 'comment', url: 'https://github.com/acme/app/pull/1#c' },
     ]);
   });
 

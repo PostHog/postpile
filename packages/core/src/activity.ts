@@ -50,6 +50,8 @@ export interface ActivityEvent {
   id: string;
   kind: EventKind;
   actor: string;
+  /** A bot or app wrote it. */
+  isBot: boolean;
   summary: string;
   at: IsoTime;
   display: EventDisplayState;
@@ -165,6 +167,11 @@ const HUMAN_TALK: EventKind[] = [
   'review_commented',
 ];
 
+/** A person's own words: a comment, reply, mention or review, as opposed to bots, pushes and state changes. */
+export function isPersonText(event: Pick<ActivityEvent, 'kind' | 'isBot'>): boolean {
+  return !event.isBot && HUMAN_TALK.includes(event.kind);
+}
+
 const LIFECYCLE: EventKind[] = ['ready_for_review', 'converted_to_draft', 'merged', 'merged_without_review', 'closed', 'reopened'];
 
 const REVIEW_REQUESTS: EventKind[] = ['review_requested', 'review_request_removed'];
@@ -262,6 +269,7 @@ export function activityEvent(view: EventView): ActivityEvent {
     id: event.id,
     kind: event.kind,
     actor: event.actor,
+    isBot: event.isBot,
     summary: event.summary,
     at: event.at,
     display: view.display,
