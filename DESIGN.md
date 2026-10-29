@@ -9317,6 +9317,12 @@ that flow, without a separate ask.
   description and the answer say so.
 - **MCP annotations:** `destructiveHint: true`, since once sent GitHub
   can't mark unread; idempotent, since a second call skips what is read.
+- **Mac notifications follow.** A ping about a PR the agent marked read
+  leaves Notification Center like one marked in the app. The request
+  reaches the engine through the request folder, not the API, so the
+  main process's board watcher also reads again when the newest agent
+  notice id moves. Only the topics of the named PRs get their tiles built
+  for the check, not every active topic.
 - **Action log:** each thread's `mark_read` rows carry origin `agent`, so
   the notifications view reads "from an outside agent". The client name
   goes on one `agent_mark_read` row per call (no thread or PR, like

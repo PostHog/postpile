@@ -79,7 +79,9 @@ export class AgentMarkRead {
     const { store } = this.deps;
     const prs = [...new Map(request.prs.map((pr): [PrKey, AgentMarkReadPr] => [pr.prKey, pr])).values()];
     const board = Board.forPrs(store, this.deps.now().toISOString(), prs.map((pr) => pr.prKey));
-    const tiles = board.allTiles();
+    // Only the topics these PRs show in: building every topic's tiles would repeat that work on each agent call.
+    const topicIds = new Set(prs.map((pr) => board.topicIdOf(pr.prKey)).filter((topicId): topicId is string => topicId !== null));
+    const tiles = [...topicIds].flatMap((topicId) => board.tilesForTopic(topicId));
     const result: AgentMarkReadResult = { marked: [], refused: [], skipped: [], writesLocked: false, undoUntil: null };
     let tileId: string | null = null;
     const waiting = this.deps.readMarker.waitingPrKeys();
