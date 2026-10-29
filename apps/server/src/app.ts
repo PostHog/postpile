@@ -83,7 +83,7 @@ const syncBody = z
   .object({
     maxPrs: z.number().int().positive().optional(),
     maxAgentCalls: z.number().int().min(0).optional(),
-    agentJobs: z.array(z.enum(['topics', 'dossiers', 'sets', 'glances', 'events'])).optional(),
+    agentJobs: z.array(z.enum(['topics', 'dossiers', 'sets', 'glances', 'events', 'scouts'])).optional(),
   })
   .default({});
 
