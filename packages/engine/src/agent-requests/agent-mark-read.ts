@@ -54,6 +54,14 @@ export class AgentMarkRead {
     return plan.change.eventIds.length > 0 || plan.change.handledKeys.length > 0;
   }
 
+  /** GitHub updated the PR's notification thread after PostPile last fetched the PR. */
+  private snapshotBehind(key: PrKey): boolean {
+    const { store } = this.deps;
+    const thread = store.notifications.getByPrKeys([key]).get(key);
+    const fetchedAt = store.prs.fetchedAt(key);
+    return thread !== undefined && fetchedAt !== null && Date.parse(thread.updatedAt) > Date.parse(fetchedAt);
+  }
+
   /** The tiles holding the PR, and whether any of them tracks it (not only a pulled-in stack layer). */
   private tracking(tiles: Tile[], key: PrKey): { tracked: boolean; tileId: string | null } {
     for (const tile of tiles) {
@@ -72,6 +80,7 @@ export class AgentMarkRead {
     const tiles = board.allTiles();
     const result: AgentMarkReadResult = { marked: [], refused: [], skipped: [], writesLocked: false, undoUntil: null };
     let tileId: string | null = null;
+    const waiting = this.deps.readMarker.waitingPrKeys();
     for (const pr of prs) {
       const stored = store.prs.get(pr.prKey) !== null;
       const tracking = this.tracking(tiles, pr.prKey);
@@ -81,6 +90,8 @@ export class AgentMarkRead {
         seenThrough: pr.seenThrough,
         newestSeq: stored ? store.eventLog.maxSeqForPr(pr.prKey) : 0,
         newer: stored ? store.eventLog.listSince([pr.prKey], pr.seenThrough).map((entry) => entry.event) : [],
+        snapshotBehind: stored && this.snapshotBehind(pr.prKey),
+        alreadyQueued: waiting.has(pr.prKey),
         changesAnything: stored && this.changesAnything(pr.prKey),
       });
       if (check.kind === 'refused') {

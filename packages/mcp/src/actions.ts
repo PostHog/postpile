@@ -483,7 +483,7 @@ export async function markRead(ctx: ActionContext, args: MarkReadArgs): Promise<
     return asked.answer;
   }
   if (asked.kind === 'running') {
-    return toolError([`PostPile took the request but did not answer within ${WAIT_SECONDS} s. Check pr_context in a minute; calling again is safe, a PR already marked read is skipped.`]);
+    return toolError([`PostPile took the request but did not answer within ${WAIT_SECONDS} s. Check pr_context in a minute; calling again is safe, a PR already marked or queued to mark read is skipped.`]);
   }
   const { result } = asked;
   if (result.kind !== 'mark_read') {

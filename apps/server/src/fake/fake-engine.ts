@@ -2333,6 +2333,7 @@ export class FakeEngine implements EngineService {
     const prs = [...new Map(request.prs.map((pr): [PrKey, AgentMarkReadPr] => [pr.prKey, pr])).values()];
     const result: AgentMarkReadResult = { marked: [], refused: [], skipped: [], writesLocked: false, undoUntil: null };
     let tileId: string | null = null;
+    const waiting = this.writes.waitingPrKeys();
     for (const pr of prs) {
       const stored = this.data.prs.some((candidate) => candidate.key === pr.prKey);
       const events = this.eventsOf(pr.prKey);
@@ -2343,6 +2344,9 @@ export class FakeEngine implements EngineService {
         seenThrough: pr.seenThrough,
         newestSeq: events.length,
         newer: events.slice(pr.seenThrough),
+        // The sample has no fetch lag: its PRs, events and threads change together, so its snapshot is never behind.
+        snapshotBehind: false,
+        alreadyQueued: waiting.has(pr.prKey),
         changesAnything: stored && (this.prThreads().get(pr.prKey)?.unread === true || this.readChangesAnything(pr.prKey)),
       });
       if (check.kind === 'refused') {

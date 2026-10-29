@@ -95,6 +95,14 @@ export interface AgentMarkReadInput {
   newestSeq: number;
   /** The PR's events logged after seenThrough, oldest first. */
   newer: Pick<PrEvent, 'actor' | 'at'>[];
+  /**
+   * GitHub updated the PR's notification thread after PostPile last fetched
+   * the PR (thread `updatedAt` after the snapshot's `fetchedAt`): there is
+   * activity no answer could have shown yet, so no seen_through covers it.
+   */
+  snapshotBehind: boolean;
+  /** A mark-read of the PR already waits: in the undo window, or as a pending write while GitHub writes are locked. */
+  alreadyQueued: boolean;
   /** A read changes something: an unread GitHub thread, an unseen event, or the PR is not handled yet. */
   changesAnything: boolean;
 }
@@ -137,6 +145,12 @@ export function agentMarkReadCheck(input: AgentMarkReadInput): AgentMarkReadChec
   }
   if (input.newer.length > 0) {
     return { kind: 'refused', reason: newActivityReason(input.newer) };
+  }
+  if (input.snapshotBehind) {
+    return { kind: 'refused', reason: 'PostPile has newer activity than it fetched; call refresh_from_github, then read it again' };
+  }
+  if (input.alreadyQueued) {
+    return { kind: 'skipped', reason: 'already queued to mark read' };
   }
   if (!input.tracked) {
     return { kind: 'skipped', reason: 'a stack layer PostPile only shows for context: it has no notification of its own to mark read' };

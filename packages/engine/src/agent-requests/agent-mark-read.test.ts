@@ -166,10 +166,37 @@ describe('markReadForAgent', () => {
     const h = await synced();
     const seen = await seenThrough(h, pr.key);
     await h.engine.markReadForAgent({ prs: [{ prKey: pr.key, seenThrough: seen }] }, CLIENT);
+    h.timers.advance(UNDO_WINDOW_MS);
+    await settle();
 
     const again = await h.engine.markReadForAgent({ prs: [{ prKey: pr.key, seenThrough: seen }] }, CLIENT);
 
     expect(again).toMatchObject({ marked: [], skipped: [{ prKey: pr.key, reason: 'already read' }] });
+  });
+
+  it('skips a PR whose mark-read waits in the undo window: a retry adds no second batch', async () => {
+    const h = await synced();
+    const seen = await seenThrough(h, pr.key);
+    await h.engine.markReadForAgent({ prs: [{ prKey: pr.key, seenThrough: seen }] }, CLIENT);
+
+    const retry = await h.engine.markReadForAgent({ prs: [{ prKey: pr.key, seenThrough: seen }] }, CLIENT);
+
+    expect(retry).toMatchObject({ marked: [], skipped: [{ prKey: pr.key, reason: 'already queued to mark read' }] });
+    expect((await h.engine.livePollStatus()).agentReads).toHaveLength(1);
+  });
+
+  it('refuses a PR whose notification moved after PostPile fetched it', async () => {
+    const h = await synced();
+    const seen = await seenThrough(h, pr.key);
+    // The inbox saw newer activity, but the PR fetch that would store it failed.
+    const thread = h.store.notifications.getByPrKey(pr.key);
+    const fetchedAt = h.store.prs.fetchedAt(pr.key) ?? '';
+    h.store.notifications.upsertMany([{ ...thread!, updatedAt: new Date(Date.parse(fetchedAt) + 60_000).toISOString() }]);
+
+    const result = await h.engine.markReadForAgent({ prs: [{ prKey: pr.key, seenThrough: seen }] }, CLIENT);
+
+    expect(result.marked).toEqual([]);
+    expect(result.refused).toEqual([{ prKey: pr.key, reason: 'PostPile has newer activity than it fetched; call refresh_from_github, then read it again' }]);
   });
 
   it('skips a stack layer only pulled in for context', async () => {
@@ -198,6 +225,22 @@ describe('markReadForAgent', () => {
     await settle();
     expect(h.writer.calls).toEqual([]);
     expect((await h.engine.actionLog(10)).some((row) => row.action === 'mark_read' && row.outcome === 'pending')).toBe(true);
+  });
+
+  it('while locked, two calls for the same PR give one pending write', async () => {
+    const h = await synced();
+    await h.engine.setGitHubWrites(false);
+    const seen = await seenThrough(h, pr.key);
+
+    await h.engine.markReadForAgent({ prs: [{ prKey: pr.key, seenThrough: seen }] }, CLIENT);
+    const duringWindow = await h.engine.markReadForAgent({ prs: [{ prKey: pr.key, seenThrough: seen }] }, CLIENT);
+    h.timers.advance(UNDO_WINDOW_MS);
+    await settle();
+    const whilePending = await h.engine.markReadForAgent({ prs: [{ prKey: pr.key, seenThrough: seen }] }, CLIENT);
+
+    expect(duringWindow.skipped).toEqual([{ prKey: pr.key, reason: 'already queued to mark read' }]);
+    expect(whilePending.skipped).toEqual([{ prKey: pr.key, reason: 'already queued to mark read' }]);
+    expect(h.store.pendingWrites.list().filter((write) => write.kind === 'mark_read')).toHaveLength(1);
   });
 });
 

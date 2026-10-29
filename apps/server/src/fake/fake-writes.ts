@@ -419,6 +419,14 @@ export class FakeWrites {
     }
   }
 
+  /** PRs whose mark-read already waits: a batch in its undo window, or a pending mark-read while locked (like ReadMarker.waitingPrKeys). */
+  waitingPrKeys(): Set<PrKey> {
+    this.settle();
+    const queued = this.batches.filter((batch) => batch.subscription === null).flatMap((batch) => batch.prKeys);
+    const pending = this.pending.flatMap((write) => (write.batch && write.batch.subscription === null ? write.batch.prKeys : []));
+    return new Set([...queued, ...pending]);
+  }
+
   flush(): void {
     for (const batch of this.batches.splice(0)) {
       this.send(batch, 'quit');

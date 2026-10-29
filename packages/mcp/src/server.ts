@@ -123,7 +123,7 @@ const UNDO_SECONDS = UNDO_WINDOW_MS / 1000;
 
 const MARK_READ_DESCRIPTION = `Mark PRs read in PostPile for the user, through the running app: the same undo window, GitHub writes lock and pending writes as the app's Mark read button. The user sees it in the app with Undo; once it reaches GitHub (after about ${UNDO_SECONDS} s) it can't be undone, since GitHub can't mark unread.
 Only PRs you read with pr_context(detail: "full") and went through with the user (summarised, reviewed or discussed). Pass each PR's seen_through from that read: a PR with activity PostPile stored after it is refused ("new activity since you read it: 2 events, newest from alice"); read it again first. Other PRs in the call still go through. Up to ${AGENT_MARK_READ_MAX_PRS} PRs, named one by one.
-Marking read answers nothing: a personal ask (mention, question, reply) stays under Needs reply until the user replies. A team mention clears on read, as with the button. Already read PRs and stack layers PostPile only shows for context are skipped.
+Marking read answers nothing: a personal ask (mention, question, reply) stays under Needs reply until the user replies. A team mention clears on read, as with the button. PRs already read or already queued to mark read, and stack layers PostPile only shows for context, are skipped, so calling again is safe.
 Tell the user which PRs you marked, and which were refused and why.
 Use when: you read a PR in full and went through it with the user; call it as part of that flow, without waiting to be asked.
 Not for: PRs you only listed, skimmed or searched past (whats_on_me or search_prs rows), whole topics, or hiding a PR the user has not seen.
@@ -134,7 +134,7 @@ const markReadOutput = {
   status: z.enum(['done']),
   marked: z.array(z.string()).describe('Marked read, one batch with one Undo in the app'),
   refused: z.array(z.object({ pr: z.string(), reason: z.string() })).describe('Left unread: new activity since your read, a seen_through that does not fit, or a PR PostPile does not track'),
-  skipped: z.array(z.object({ pr: z.string(), reason: z.string() })).describe('Nothing to do: already read, or a stack layer shown only for context'),
+  skipped: z.array(z.object({ pr: z.string(), reason: z.string() })).describe('Nothing to do: already read, already queued to mark read, or a stack layer shown only for context'),
   writes_locked: z.boolean().describe("GitHub writes are locked: it waits in PostPile's pending writes until the user sends it"),
   undo_until: z.string().nullable().describe('When the undo window ends; null when nothing was marked'),
 };

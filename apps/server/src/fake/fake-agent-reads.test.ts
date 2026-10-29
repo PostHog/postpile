@@ -5,7 +5,7 @@ const CLIENT = { client: 'claude-code' };
 const PR = 'acme/app#1902';
 
 describe('FakeEngine.markReadForAgent', () => {
-  it('marks a sample PR read with a toast notice and undo, and skips it once it is read', async () => {
+  it('marks a sample PR read with a toast notice and undo, and skips a retry while it waits', async () => {
     const engine = new FakeEngine();
     const seenThrough = (await engine.getPr(PR))?.seenThrough ?? -1;
     expect(seenThrough).toBeGreaterThan(0);
@@ -16,7 +16,7 @@ describe('FakeEngine.markReadForAgent', () => {
     const notice = (await engine.livePollStatus()).agentReads[0];
     expect(notice).toMatchObject({ id: 1, client: 'claude-code', prKeys: [PR] });
     expect((await engine.actionLog(10)).some((row) => row.action === 'agent_mark_read' && row.detail.startsWith('claude-code: marked read'))).toBe(true);
-    expect(await engine.markReadForAgent({ prs: [{ prKey: PR, seenThrough }] }, CLIENT)).toMatchObject({ marked: [], skipped: [{ prKey: PR, reason: 'already read' }] });
+    expect(await engine.markReadForAgent({ prs: [{ prKey: PR, seenThrough }] }, CLIENT)).toMatchObject({ marked: [], skipped: [{ prKey: PR, reason: 'already queued to mark read' }] });
 
     expect((await engine.undo(notice?.undoToken ?? null)).ok).toBe(true);
   });

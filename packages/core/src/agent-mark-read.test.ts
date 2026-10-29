@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { agentMarkReadCheck, newActivityReason, type AgentMarkReadInput } from './agent-mark-read.ts';
 import { parseAgentRequest } from './agent-requests.ts';
 
-const BASE: AgentMarkReadInput = { stored: true, tracked: true, seenThrough: 40, newestSeq: 40, newer: [], changesAnything: true };
+const BASE: AgentMarkReadInput = { stored: true, tracked: true, seenThrough: 40, newestSeq: 40, newer: [], snapshotBehind: false, alreadyQueued: false, changesAnything: true };
 
 describe('agentMarkReadCheck', () => {
   it('marks a tracked PR with nothing logged after seen_through', () => {
@@ -32,6 +32,17 @@ describe('agentMarkReadCheck', () => {
   it('skips a pulled-in stack layer and a PR already read', () => {
     expect(agentMarkReadCheck({ ...BASE, tracked: false })).toMatchObject({ kind: 'skipped', reason: expect.stringContaining('stack layer') });
     expect(agentMarkReadCheck({ ...BASE, changesAnything: false })).toEqual({ kind: 'skipped', reason: 'already read' });
+  });
+
+  it('refuses a PR whose notification moved past the stored snapshot', () => {
+    expect(agentMarkReadCheck({ ...BASE, snapshotBehind: true })).toEqual({
+      kind: 'refused',
+      reason: 'PostPile has newer activity than it fetched; call refresh_from_github, then read it again',
+    });
+  });
+
+  it('skips a PR whose mark-read already waits, so a retry adds no second batch', () => {
+    expect(agentMarkReadCheck({ ...BASE, alreadyQueued: true })).toEqual({ kind: 'skipped', reason: 'already queued to mark read' });
   });
 
   it('words one event in the singular', () => {

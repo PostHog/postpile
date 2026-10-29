@@ -9256,9 +9256,19 @@ that flow, without a separate ask.
   tracked). No topic-wide or "everything" form. A PR named twice keeps its
   last `seen_through`.
 - **Skipped, not refused:** a PR already read (no unread thread, no unseen
-  event, already handled), and a stack layer that is only pulled in for
-  context (no tile tracks it): it has no notification of its own. Refused:
-  an unknown PR, a `seen_through` that does not fit, new activity.
+  event, already handled), a PR whose mark-read already waits (a batch in
+  its undo window, or a pending write while locked:
+  `ReadMarker.waitingPrKeys`), and a stack layer that is only pulled in for
+  context (no tile tracks it): it has no notification of its own. So a
+  retry, also while writes are locked, never adds a second batch or
+  pending write. Refused: an unknown PR, a `seen_through` that does not
+  fit, new activity, and a PR whose notification thread GitHub updated
+  after PostPile last fetched the PR (thread `updatedAt` after the
+  snapshot's `fetchedAt`): the inbox saw activity a failed PR fetch never
+  stored, so no answer showed it and the event log has no trace of it
+  ("PostPile has newer activity than it fetched; call
+  refresh_from_github, then read it again"). The sample data has no fetch
+  lag, so the fake engine never refuses for that.
 - **Rules stay in charge.** Marking read never answers anything: a
   personal ask (mention, question, reply) stays the user's move under
   Needs reply until they reply, as with the button. A team mention clears
