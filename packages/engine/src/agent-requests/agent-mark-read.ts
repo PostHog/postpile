@@ -14,6 +14,7 @@ import {
 import type { Store } from '@postpile/store';
 import type { ReadMarker } from '../actions/read-marker.ts';
 import { Board } from '../board.ts';
+import { unseenIdsThrough } from './seen-through.ts';
 import type { ActionLog } from '../writes/action-log.ts';
 
 export interface AgentMarkReadDeps {
@@ -26,7 +27,8 @@ export interface AgentMarkReadDeps {
 /**
  * mark_read from an outside agent (DESIGN.md "Agents mark read"). Each PR
  * is checked against what the app stores now (`agentMarkReadCheck`): a PR
- * with events logged after the agent's seen_through is refused, the others
+ * with events logged after the agent's seen_through, or whose unseen events
+ * changed under it, is refused (nothing new since the read); the others
  * go through the ReadMarker like the pane's Mark read, as one batch with one
  * undo token. So the same undo window, writes lock and pending writes apply;
  * nothing here writes GitHub.
@@ -96,7 +98,7 @@ export class AgentMarkRead {
         tracked: tracking.tracked,
         seenThrough,
         // The unseen events the token's list stood for, as the store has them now.
-        unreadHashNow: unreadIdsHash(logged.filter((entry) => entry.seq <= seq && entry.event.seenAt === null).map((entry) => entry.event.id)),
+        unreadHashNow: unreadIdsHash(stored ? unseenIdsThrough(store, pr.prKey, seq) : []),
         newestSeq: stored ? store.eventLog.maxSeqForPr(pr.prKey) : 0,
         newer: logged.filter((entry) => entry.seq > seq).map((entry) => entry.event),
         snapshotBehind: stored && this.snapshotBehind(pr.prKey),

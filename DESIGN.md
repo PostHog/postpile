@@ -9213,55 +9213,58 @@ to go back to the app or github.com to clear it. `mark_read` saves that
 trip: the agent marks the PRs it went through with the user, as part of
 that flow, without a separate ask.
 
-- **Only what the agent saw.** `pr_context` with `detail: "full"` (the
-  text answer that lists the activity) prints a `seen_through` token per
-  PR, outside the fence: `"<seq>-<hash>"`, e.g. `"4127-0k3j2h1g9f8"`
-  (`seenThroughToken`, `PrDetail.seenThrough`). The seq is the PR's newest
-  event-log position (`EventLogRepo.maxSeqForPr`, 0 when none), the hash a
-  short hash of the sorted event ids in the "Unread since you looked" list
-  printed with it (`unreadIdsHash`). The app refuses the PR when the
-  unseen events logged at or before that seq now hash differently ("the
-  unread list changed since you read it; read it again"): an Undo (the
-  pane's or the toast's) brings events back unseen without moving the
-  event log, so a seq alone let an old token through (PostHog Review on
-  #199, round 7). A string token, not two numbers, so agents pass it back
-  as printed. Skips (already queued, already read, untracked) come before
-  that check: they mark nothing, and a retry after a mark changed the
-  list itself.
-  `mark_read` needs one per PR, and it is only printed with the "Unread
-  since you looked" section below. The app refuses a PR with events logged
-  after it ("new activity since you read it: 2 events; read it again with
-  pr_context", no names: an author name is free GitHub text and the
-  reason sits outside the untrusted fence) and one whose `seen_through` is
-  ahead of the log. Other PRs of the call still go through. The event log
-  seq, not an event time: it grows with every event PostPile first
-  stores, so an event that arrives late with an older timestamp (an older
-  page, a review submitted later) still counts as new, and a comment edit
-  is a new event id. Any event counts, bots included: re-reading is
-  cheap, and a mark-read on GitHub covers the whole thread. Brief and JSON
-  answers carry no `seen_through`, since they list no activity; the brief
-  footer points at `detail: "full"`. `topic` lists no PR activity, so it
-  has none either.
-- **"Unread since you looked": the list `seen_through` vouches for**
-  (PostHog Review on #199, round 5). The full answer has its own section,
-  inside the fence, built straight from the store's seen state
-  (`unreadSinceLooked` over the PR's events, `PrDetail.unread`): every
-  event whose `seenAt` is null, which is exactly what `planRead` marks
-  seen (`unseenUpTo`). Oldest first; a person's comment, reply or review
-  with its whole body under its line, never cut; bot and CI events,
-  pushes, review requests and state changes one line each. Nothing is
-  folded, muted or capped, however long the section gets. The activity
-  section above stays as the pane draws it (capped, folded, summarised),
-  purely for reading. Rounds 1 to 4 patched the activity view instead (an
-  uncapped unread part, bodies under unread lines, folded replies, muted
-  comments), but its flags (`isNew`, `unseen`, folds, mutes) exist for
-  presentation, and each round found another case they hid. A list from
-  the seen state has no such cases. `getPr` reads the watermark before the
-  Board: a sync committing in between only adds events the section shows
-  beyond it, so mark_read refuses rather than marks unseen activity. A
-  cached Board is only reused while the database is unchanged since it
-  was read, so it holds every event up to the watermark too. Brief and
-  JSON answers have neither the section nor `seen_through`.
+- **Nothing new since the agent's read** (rule since 0.28.7). Every
+  `pr_context` answer, brief and full, text and JSON, hands out a
+  `seen_through` token per PR: outside the fence in text, a per-PR
+  `seen_through` field in JSON. It is `"<seq>-<hash>"`, e.g.
+  `"4127-0k3j2h1g9f8"` (`seenThroughToken`, `PrDetail.seenThrough`,
+  engine `seenThroughNow`), both parts taken from the store at the read,
+  the seq first: the PR's newest event-log position
+  (`EventLogRepo.maxSeqForPr`, 0 when none), then a short hash of the
+  PR's unseen event ids logged at or before it (`unseenIdsThrough`,
+  `unreadIdsHash`). `mark_read` recomputes both and refuses:
+  - events logged after the seq ("new activity since you read it: 2
+    events; read it again with pr_context", no names: an author name is
+    free GitHub text and the reason sits outside the untrusted fence). The
+    event log seq, not an event time, so an event that arrives late with
+    an older timestamp still counts as new, and a comment edit is a new
+    event id. Any event counts, bots included;
+  - unseen events up to the seq that hash differently ("the unread list
+    changed since you read it; read it again"): an Undo (the pane's or the
+    toast's) brings events back unseen without moving the event log, so a
+    seq alone let an old token through (PostHog Review on #199);
+  - a thread GitHub updated after the snapshot was fetched (below);
+  - a seq ahead of the log, or something that is no token.
+  Skips (already queued, already read, untracked) come before the hash
+  check: they mark nothing, and a retry after a mark changed the unseen
+  set itself. Other PRs of the call still go through.
+- **Why not "the agent was shown every event"** (2026-10-29, owner).
+  0.28.6 tied the token to an unfolded "Unread since you looked" list in
+  full answers only, so an agent had to be shown every unseen event,
+  bots and CI one by one, before it could mark a PR read. In real use
+  that made the token too expensive: `pr_context(detail: "full")` for 9
+  PRs came to 175k characters and 1,683 lines, over Claude Code's tool
+  output limit, mostly from one PR's 259 unread events. And printing an
+  event never proved the agent read it. What the token can really
+  guarantee is that nothing new arrived since the read, which needs no
+  list: the app computes both parts from the store. The hard backstop is
+  elsewhere: marking read answers nothing, so a personal ask stays under
+  Needs reply until the user replies. The tool description and the server
+  instructions say to mark a PR only after going through it with the
+  user, and never PRs only seen as rows of `whats_on_me` or `search_prs`.
+- **"Unread since you looked" stays in full answers, as a reading aid**
+  (`unreadSinceLooked` over the store's seen state, the same rule
+  `planRead` uses, `PrDetail.unread`; text in `unread-text.ts`). Oldest
+  first; a person's comment, reply or review one row each with its whole
+  body, never cut; bots and CI fold into one row per actor and kind with a
+  count and a time range ("github-actions[bot]: 180 deploy events,
+  2026-10-27 10:02 – 2026-10-29 14:40"), pushes into one row per pusher,
+  and other events without text (review requests, state changes) one row
+  each unless one actor repeats one kind more than 3 times
+  (`unreadRows`, `UNREAD_REPEAT_FOLD`). A bot's comment body is never
+  printed. Brief and JSON answers have no list. `getPr` takes the token
+  before the Board: a sync committing in between only adds events the
+  answer may show beyond it, which makes `mark_read` refuse.
 - **The same path as the button.** A new agent-request kind `mark_read`
   through the outbox; the app answers through `AgentMarkRead` (engine),
   which hands the PRs it accepts to the `ReadMarker` as one batch with one

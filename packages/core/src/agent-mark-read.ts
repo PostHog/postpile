@@ -2,25 +2,22 @@ import { shortHash } from './pr-notes.ts';
 import type { IsoTime, PrEvent, PrKey } from './types.ts';
 
 // mark_read from an outside agent (DESIGN.md "Agents mark read"): the agent
-// marks PRs read that it read in full with pr_context, through the running
-// app, with the same queue, undo and writes lock as the pane's Mark read.
-// The guard: a PR with activity PostPile stored after the agent's read is
-// refused, so an agent never marks read what it did not see.
+// marks PRs read that it read with pr_context and went through with the
+// user, through the running app, with the same queue, undo and writes lock
+// as the pane's Mark read. The guard: nothing new since the agent's read. A
+// PR with activity PostPile stored after it, or whose unseen events changed
+// under it, is refused. Personal asks stay under Needs reply regardless.
 
 /** mark_read takes at most this many PRs per call. */
 export const AGENT_MARK_READ_MAX_PRS = 20;
 
-/**
- * One PR to mark read. `seenThrough` is the token pr_context printed with
- * its "Unread since you looked" list (`PrDetail.seenThrough`,
- * `seenThroughToken`).
- */
+/** One PR to mark read. `seenThrough` is the token pr_context printed with its read of the PR (`PrDetail.seenThrough`). */
 export interface AgentMarkReadPr {
   prKey: PrKey;
   seenThrough: string;
 }
 
-/** What a seen_through token holds: the PR's newest event-log seq, and a hash of the unread list it was printed with. */
+/** What a seen_through token holds: the PR's newest event-log seq, and a hash of its unseen event ids up to that seq. */
 export interface SeenThrough {
   seq: number;
   unreadHash: string;
@@ -32,10 +29,11 @@ export function unreadIdsHash(ids: string[]): string {
 }
 
 /**
- * The seen_through token: "<seq>-<hash>", e.g. "4127-0k3j2h1g9f8x". The seq
- * catches events logged after the read; the hash of the listed unread ids
- * catches the seen state changing under it (an Undo that brings events
- * back unseen, which never moves the event log).
+ * The seen_through token: "<seq>-<hash>", e.g. "4127-0k3j2h1g9f8x", both
+ * taken from the store at the read. The seq catches events logged after
+ * it; the hash of the unseen ids up to the seq catches the seen state
+ * changing under it (an Undo that brings events back unseen, which never
+ * moves the event log).
  */
 export function seenThroughToken(seq: number, unreadIds: string[]): string {
   return `${seq}-${unreadIdsHash(unreadIds)}`;
@@ -193,7 +191,7 @@ export function agentMarkReadCheck(input: AgentMarkReadInput): AgentMarkReadChec
     return { kind: 'refused', reason: 'PostPile does not track this PR' };
   }
   if (input.seenThrough === null || input.seenThrough.seq > input.newestSeq) {
-    return { kind: 'refused', reason: 'this seen_through is not one pr_context printed for this PR; read it with pr_context(detail: "full") and pass its seen_through' };
+    return { kind: 'refused', reason: 'this seen_through is not one pr_context printed for this PR; read it with pr_context and pass its seen_through' };
   }
   if (input.newer.length > 0) {
     return { kind: 'refused', reason: newActivityReason(input.newer) };

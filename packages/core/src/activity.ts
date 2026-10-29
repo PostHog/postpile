@@ -243,6 +243,11 @@ function groupBursts(events: EventView[]): EventView[][] {
   return groups;
 }
 
+/** A person's comment, reply, mention or review, as opposed to bots, pushes and state changes. */
+export function isPersonTalk(event: Pick<PrEvent, 'kind' | 'isBot'>): boolean {
+  return !event.isBot && HUMAN_TALK.includes(event.kind);
+}
+
 /** The full body behind a human comment or review event; bots keep the one-line summary. */
 function fullBody(view: EventView, pr: FullPr | null): string | null {
   return personTextBody(view.event, pr);
@@ -250,7 +255,7 @@ function fullBody(view: EventView, pr: FullPr | null): string | null {
 
 /** The whole text of a person's comment, reply or review event; null for bots, other kinds, and a review without text. */
 export function personTextBody(event: Pick<PrEvent, 'kind' | 'isBot' | 'sourceId'>, pr: FullPr | null): string | null {
-  if (!pr || event.isBot || !HUMAN_TALK.includes(event.kind)) {
+  if (!pr || !isPersonTalk(event)) {
     return null;
   }
   const comment = pr.comments.find((c) => c.id === event.sourceId);
