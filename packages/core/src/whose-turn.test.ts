@@ -28,7 +28,8 @@ function single(pr: Pr, events: PrEvent[] = [], userStates: UserPrState[] = []):
 describe('whoseTurn: your move', () => {
   it('asks for a review requested of you, naming who asked', () => {
     const pr = makePr({ author: 'rowan', reviewerUsers: [me], timeline: [makeTimelineItem({ actor: 'rowan', subject: me })] });
-    expect(single(pr)).toEqual({ kind: 'you', move: 'review', who: null, what: 'Review, rowan asked', prKey: pr.key });
+    const request = pr.timeline[0]!;
+    expect(single(pr)).toEqual({ kind: 'you', move: 'review', who: null, what: 'Review, rowan asked', prKey: pr.key, since: request.at });
     expect(single({ ...pr, timeline: [] }).what).toBe('Review');
   });
 

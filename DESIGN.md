@@ -4217,6 +4217,49 @@ reader let go took 28 ms; dropping the table did not wait on the reader.
 Without the commit allowance the normal copy's slices ran 47 ms at the
 median. The WAL stays at its peak size afterwards and is reused.
 
+## Waiting on you for days (2026-10-29)
+
+An ask that sat on the viewer for days should be visible at a glance, without
+adding noise. Responsiveness is the point: "Review, nell asked" reads the same
+after an hour and after a week, and the week-old one is the one people notice.
+So a your-move turn says how long it has waited, quietly.
+
+- **Since when** (`WhoseTurn.since` on `you` turns, `whose-turn.ts`): the time
+  of the event that made it the viewer's move, read from the same events the
+  rule already reads, no second definition:
+  - `reply`: the unanswered ask (`unansweredAsk`, `askAfterMerge`).
+  - `re_review`: the author's first push or reply after the viewer's last word
+    (`ChangesAnswer.at`), or the newest review request of the viewer when they
+    were asked again while their change request stands.
+  - `review`: the newest review request in the timeline naming the viewer or
+    one of their teams (`requestsOfViewer`), so a re-request starts the wait
+    again. Absent when the timeline holds none.
+  - `address_changes` on the viewer's own PR: the oldest last word among the
+    threads waiting on them, else the standing change request (that
+    reviewer's newest verdict).
+  It resets on its own: once the viewer acts the move goes away, and the next
+  move has its own event.
+- **Never shown**: on the `merge` move (merging an approved PR or re-submitting
+  it to the queue is never urgent, see `isMergeApprovedMove`), on drafts, on
+  snoozed or done tiles, and on a stack layer's blocked move (no `since` there
+  yet). Merge and draft turns carry no `since` at all.
+- **Counting** (`workingDaysBetween` in `waiting-days.ts`): working days,
+  Monday to Friday, by UTC calendar date: every weekday after the day of
+  `since`, up to and including today. Friday to Monday is 1, Monday to
+  Thursday is 3. UTC keeps it pure and the same on every machine; it can be off
+  by one around midnight for someone far from UTC, which a "6d" survives.
+- **Threshold**: from 3 working days (`WAIT_MARKER_MIN_DAYS`). Below that the
+  move is fresh enough that a number would only be noise.
+- **Where**: the tile footer, a muted " · 6d" after the move text
+  (`tileWaitDays`; it drops out with the move text on a narrow footer), and
+  the sidebar row, a small muted "6d" after the your-move chip: the oldest
+  wait among the topic's live moves (`topicWaitDays` over
+  `TopicListItem.yourMoves`, whose `TopicMove.since` carries it). The tooltip
+  says "Waiting on you for 6 working days".
+- **Grey only** (`text-hint`): never coral (new since you looked), honey or
+  red. It changes no order (the stable order rules stay), no loudness, no
+  urgency and no pings.
+
 ## Colour per meaning (2026-10-01)
 
 The same colour meant several things: amber was the agent's Look closer and
@@ -4413,7 +4456,8 @@ authors.
 the kind of move for the sidebar row's chip: `reply` (rule 2, drafts too),
 `re_review` (addressed your changes, or asked again while your changes
 request stands, push or not), `review` (review request, personal or team), `address_changes` (threads or a change request on your own PR or
-draft), `merge`. No CI move: `fix_ci` ("Fix failing CI") was dropped
+draft), `merge`. Since 2026-10-29 a `you` turn also carries `since`, when
+the move became the viewer's (see "Waiting on you for days"). No CI move: `fix_ci` ("Fix failing CI") was dropped
 2026-09-29 ("CI is not a signal"). Rules per pinged PR, first match wins:
 
 1. merged or closed: none, except a person's unanswered personal ask after

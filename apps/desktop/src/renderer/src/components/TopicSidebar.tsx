@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import type { TopicListItem, TopicPerson, TopicSection, ViewerView } from '@postpile/core';
+import { topicWaitDays, type TopicListItem, type TopicMove, type TopicPerson, type TopicSection, type ViewerView } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { useTools } from '../api/tools.ts';
 import { useFinishedTopics } from '../api/topics.ts';
@@ -30,6 +30,7 @@ import {
 } from '../lib/sidebar.ts';
 import { ageLabel, whenLabel } from '../lib/time.ts';
 import { useNow } from '../lib/use-now.ts';
+import { waitTitle } from '../lib/your-move.ts';
 import { teamPill } from '../lib/faces.ts';
 import { UnreadDot } from './pills.tsx';
 import { Avatar } from './Avatar.tsx';
@@ -162,6 +163,24 @@ function UnseenMergeChip(props: { count: number }) {
   );
 }
 
+/**
+ * "6d" in small muted words after the your-move chip: the oldest move in the
+ * topic has waited that many working days on the user (core `topicWaitDays`,
+ * DESIGN "Waiting on you for days"). Grey only: it never adds urgency.
+ */
+function WaitMark(props: { moves: TopicMove[] }) {
+  const now = useNow(10 * 60_000);
+  const days = topicWaitDays(props.moves, now);
+  if (days === null) {
+    return null;
+  }
+  return (
+    <span title={waitTitle(days)} className="shrink-0 font-mono text-[10px] whitespace-nowrap text-hint tabular-nums">
+      {days}d
+    </span>
+  );
+}
+
 /** "not sorted yet" in small muted words: the topic has no dossier yet, so nothing tells whose it is (Other topics only). */
 function NotSortedMark() {
   return (
@@ -258,6 +277,7 @@ function TopicItem(props: { item: TopicListItem; active: boolean; searching: boo
             {topicSnippet(item)}
           </span>
           <YourMoveChip moves={item.yourMoves} />
+          <WaitMark moves={item.yourMoves} />
           {item.unseenMergeTiles > 0 && <UnseenMergeChip count={item.unseenMergeTiles} />}
           {props.notSorted && <NotSortedMark />}
           <PrStateMark item={item} />

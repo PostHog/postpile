@@ -2,6 +2,12 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## 0.28.6 (unreleased)
+
+### Added
+
+- A move that has waited on you for 3 working days or more shows how long, in grey: " · 6d" after the move on the tile footer, and "6d" on the topic's sidebar row for its oldest wait. Merge moves, drafts and snoozed tiles never show it, and it changes no order and sends no pings.
+
 ## 0.28.5 (2026-10-27)
 
 ### Fixed

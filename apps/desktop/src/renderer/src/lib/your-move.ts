@@ -26,3 +26,8 @@ export function yourMoveChip(moves: TopicMove[]): YourMoveChip | null {
   const label = more > 0 ? `${MOVE_LABELS[first.move]} +${more}` : MOVE_LABELS[first.move];
   return { label, title: moves.map((move) => move.text).join(' · ') };
 }
+
+/** The "waiting on you" marker's tooltip: "Waiting on you for 6 working days". */
+export function waitTitle(days: number): string {
+  return `Waiting on you for ${days} working ${days === 1 ? 'day' : 'days'}`;
+}

@@ -5,7 +5,7 @@
 // DESIGN.md "Whose turn" has the rule.
 import { isBot } from './bots.ts';
 import { PUSH_KINDS } from './kinds.ts';
-import { lastSpokeAt, spokeAfter } from './last-touch.ts';
+import { firstSpokeAfter, lastSpokeAt } from './last-touch.ts';
 import { sameLogin } from './mentions.ts';
 import { isPrOwner, prOwners } from './pr-owners.ts';
 import { changesRequestedByAll, newestVerdictBy } from './review-request.ts';
@@ -18,6 +18,8 @@ export interface ChangesAnswer {
   replied: boolean;
   /** The viewer's last word on the PR: their changes request, or a later comment or review that is not bot talk. */
   since: IsoTime;
+  /** The author's first push or reply after `since`: when the re-review became the viewer's move. */
+  at: IsoTime;
 }
 
 /** The loudness reason for the author's push or reply; pings read it for the headline. */
@@ -41,11 +43,26 @@ function isPusher(login: string, reviewer: string): boolean {
   return !isBot(login) && !sameLogin(login, reviewer);
 }
 
+/** The first commit or force push after `since` by someone other than `reviewer` (and not a bot), or null. */
+function firstPushAfter(pr: Pr, reviewer: string, since: IsoTime): IsoTime | null {
+  const commits = pr.commits.filter((c) => c.committedAt > since && isPusher(c.author, reviewer)).map((c) => c.committedAt);
+  const forcePushes = pr.timeline.filter((item) => item.kind === 'head_ref_force_pushed' && item.at > since && isPusher(item.actor, reviewer)).map((item) => item.at);
+  return oldestOf([...commits, ...forcePushes]);
+}
+
 /** Someone other than `reviewer` (and not a bot) pushed commits or force-pushed after `since`. */
 function pushedAfter(pr: Pr, reviewer: string, since: IsoTime): boolean {
-  const commit = pr.commits.some((c) => c.committedAt > since && isPusher(c.author, reviewer));
-  const forcePush = pr.timeline.some((item) => item.kind === 'head_ref_force_pushed' && item.at > since && isPusher(item.actor, reviewer));
-  return commit || forcePush;
+  return firstPushAfter(pr, reviewer, since) !== null;
+}
+
+function oldestOf(times: (IsoTime | null)[]): IsoTime | null {
+  let oldest: IsoTime | null = null;
+  for (const time of times) {
+    if (time !== null && (oldest === null || time < oldest)) {
+      oldest = time;
+    }
+  }
+  return oldest;
 }
 
 /**
@@ -65,12 +82,13 @@ export function changesAnswered(pr: Pr, viewer: Viewer): ChangesAnswer | null {
   }
   // The verdict is a submitted review, so the viewer's last word is never older than it.
   const since = lastSpokeAt(pr, viewer.login) ?? verdict.submittedAt;
-  const pushed = pushedAfter(pr, viewer.login, since);
-  const replied = prOwners(pr).some((owner) => spokeAfter(pr, owner, since));
-  if (!pushed && !replied) {
+  const pushAt = firstPushAfter(pr, viewer.login, since);
+  const replyAt = oldestOf(prOwners(pr).map((owner) => firstSpokeAfter(pr, owner, since)));
+  const at = oldestOf([pushAt, replyAt]);
+  if (at === null) {
     return null;
   }
-  return { pushed, replied, since };
+  return { pushed: pushAt !== null, replied: replyAt !== null, since, at };
 }
 
 /**

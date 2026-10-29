@@ -6,7 +6,7 @@
 import { ASK_TIERS, type PrTier } from './pr-tier.ts';
 import { tileGroup, type TileGroup } from './tile-groups.ts';
 import type { PrSummary, TileView } from './views.ts';
-import type { PrKey, PrState, TileStateKind } from './types.ts';
+import type { IsoTime, PrKey, PrState, TileStateKind } from './types.ts';
 import { YOUR_MOVE_ORDER, type WhoseTurn, type YourMove } from './whose-turn.ts';
 
 /** The viewer's move on one tile, for the sidebar row's chip: its kind and the tile footer's words. */
@@ -14,11 +14,16 @@ export interface TopicMove {
   move: YourMove;
   /** The tile's `turn.what`, "Review, rowan asked". */
   text: string;
+  /** The turn's `since`, for the row's "waiting on you" marker (`topicWaitDays`). Absent when the turn has none. */
+  since?: IsoTime;
 }
 
 /** The tile's move when whose turn says it is the viewer's, else null. */
 export function topicMove(turn: WhoseTurn): TopicMove | null {
-  return turn.kind === 'you' ? { move: turn.move, text: turn.what } : null;
+  if (turn.kind !== 'you') {
+    return null;
+  }
+  return turn.since === undefined ? { move: turn.move, text: turn.what } : { move: turn.move, text: turn.what, since: turn.since };
 }
 
 /** One tile of the topic, as far as urgency cares. */

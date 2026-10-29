@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { tileWaitDays, topicWaitDays, WAIT_MARKER_MIN_DAYS } from '@postpile/core';
 import { FakeEngine } from './fake-engine.ts';
 
 describe('FakeEngine', () => {
@@ -102,7 +103,8 @@ describe('FakeEngine tile faces', () => {
   it('names the most urgent move first', async () => {
     const topics = await new FakeEngine().listTopics();
     const devEnv = topics.find((entry) => entry.topic.id === 'topic-dev-env');
-    expect(devEnv?.yourMoves).toEqual([
+    // `since` follows the real clock; the move and words are what this test is about.
+    expect(devEnv?.yourMoves.map(({ move, text }) => ({ move, text }))).toEqual([
       { move: 're_review', text: 'pim addressed your changes: re-review' },
       { move: 'review', text: "Review for team-platform: sol's PR" },
       // A bot opened #1972 for rowan: the team request names its owner, not the bot.
@@ -618,6 +620,15 @@ describe('FakeEngine found PRs', () => {
     expect(review).toMatchObject({ state: { kind: 'open' }, why: 'RV', turn: { kind: 'you' } });
     expect(review?.prs[0]?.provenance).toEqual({ kind: 'found', via: 'review_requested', reason: 'review requested from you' });
     expect(byKey.get('acme/app#1950')?.why).toBe('AU');
+  });
+
+  it('shows how long the Playwright review has waited on you', async () => {
+    const engine = new FakeEngine();
+    const detail = await engine.getTopic('topic-ci-tests');
+    const review = detail!.tiles.find((view) => view.prs[0]!.key === 'acme/app#1955')!;
+    expect(tileWaitDays(review.turn, review.state.kind, new Date())).toBeGreaterThanOrEqual(WAIT_MARKER_MIN_DAYS);
+    const row = (await engine.listTopics()).find((entry) => entry.topic.id === 'topic-ci-tests');
+    expect(topicWaitDays(row!.yourMoves, new Date())).toBeGreaterThanOrEqual(WAIT_MARKER_MIN_DAYS);
   });
 });
 

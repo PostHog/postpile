@@ -17,6 +17,7 @@ import {
   changesRequestedBy,
   isApprovedByViewer,
   isPersonalRequest,
+  newestVerdictBy,
   requestedTeam,
   requestsOfViewer,
   reviewRequest,
@@ -26,7 +27,7 @@ import {
   viewerRequestedChanges,
   type ReviewRequest,
 } from './review-request.ts';
-import type { EventKind, Pr, PrEvent, PrKey, ReviewThread, Tile, UserPrState, Viewer } from './types.ts';
+import type { EventKind, IsoTime, Pr, PrEvent, PrKey, ReviewThread, Tile, UserPrState, Viewer } from './types.ts';
 
 export type WhoseTurnKind = 'you' | 'them' | 'none';
 
@@ -67,8 +68,14 @@ interface TurnFields {
   lead?: string;
 }
 
-/** A `you` turn always says what kind of move it is. */
-export type WhoseTurn = (TurnFields & { kind: 'you'; move: YourMove }) | (TurnFields & { kind: 'them' | 'none' });
+/**
+ * A `you` turn always says what kind of move it is. `since`: when the event
+ * that made it the viewer's move happened (the unanswered ask, the request,
+ * the change request, the author's answer), for the "waiting on you" marker
+ * (DESIGN.md "Waiting on you for days"). Absent on merge moves and drafts,
+ * which never show one, and where no such event is known.
+ */
+export type WhoseTurn = (TurnFields & { kind: 'you'; move: YourMove; since?: IsoTime }) | (TurnFields & { kind: 'them' | 'none' });
 
 export interface WhoseTurnInput {
   tile: Tile;
@@ -115,6 +122,14 @@ interface PrContext {
 
 function you(ctx: PrContext, move: YourMove, what: string): WhoseTurn {
   return { kind: 'you', move, who: null, what: `${what}${ctx.where}`, prKey: ctx.pr.key };
+}
+
+/** A `you` turn with the time it became the viewer's move; `since` null leaves it out. */
+function youSince(ctx: PrContext, move: YourMove, what: string, since: IsoTime | null): WhoseTurn {
+  if (since === null) {
+    return you(ctx, move, what);
+  }
+  return { kind: 'you', move, who: null, what: `${what}${ctx.where}`, prKey: ctx.pr.key, since };
 }
 
 function them(ctx: PrContext, who: string, what: string): WhoseTurn {
@@ -286,6 +301,21 @@ function requester(ctx: PrContext): string | null {
   return requests[requests.length - 1]?.actor ?? null;
 }
 
+/**
+ * When the review was asked of the viewer or their team: the newest such
+ * request in the timeline (`requestsOfViewer`), so a re-request starts the
+ * wait again. Null when the timeline holds none.
+ */
+function requestedAt(ctx: PrContext): IsoTime | null {
+  const requests = requestsOfViewer(ctx.pr, ctx.viewer);
+  return requests[requests.length - 1]?.at ?? null;
+}
+
+/** The newest verdict of `login`, as the time of their change request; null without one. */
+function changesAt(pr: Pr, login: string): IsoTime | null {
+  return newestVerdictBy(pr.reviews, login)?.submittedAt ?? null;
+}
+
 /** The slug of the team the pending request is for ("team-devex"), home or routing. */
 function ownTeamSlug(ctx: PrContext): string {
   const team = requestedTeam(ctx.pr, ctx.viewer) ?? 'your team';
@@ -332,10 +362,13 @@ export function threadsWaitingOn(pr: Pr, viewerLogin: string): ReviewThread[] {
   });
 }
 
-function threadsWaitingOnViewer(ctx: PrContext): { count: number; from: string | null } {
-  const lastAuthors = threadsWaitingOn(ctx.pr, ctx.viewer.login).map((thread) => thread.comments[thread.comments.length - 1]!.author);
+function threadsWaitingOnViewer(ctx: PrContext): { count: number; from: string | null; since: IsoTime | null } {
+  const lastComments = threadsWaitingOn(ctx.pr, ctx.viewer.login).map((thread) => thread.comments[thread.comments.length - 1]!);
+  const lastAuthors = lastComments.map((comment) => comment.author);
   const everyone = new Set(lastAuthors.map((login) => login.toLowerCase()));
-  return { count: lastAuthors.length, from: everyone.size === 1 ? lastAuthors[0]! : null };
+  // The oldest waiting last word: since then at least one thread waits on the viewer.
+  const since = lastComments.map((comment) => comment.createdAt).sort()[0] ?? null;
+  return { count: lastAuthors.length, from: everyone.size === 1 ? lastAuthors[0]! : null, since };
 }
 
 /** Unresolved threads the viewer started, waiting for the author. */
@@ -370,7 +403,7 @@ function ownPrTurn(ctx: PrContext): WhoseTurn {
   const { pr } = ctx;
   const threads = threadsWaitingOnViewer(ctx);
   if (threads.count > 0) {
-    return you(ctx, 'address_changes', `Answer ${plural(threads.count, 'thread')}${threads.from ? ` from ${threads.from}` : ''}`);
+    return youSince(ctx, 'address_changes', `Answer ${plural(threads.count, 'thread')}${threads.from ? ` from ${threads.from}` : ''}`, threads.since);
   }
   const changes = standingChanges(pr);
   if (changes?.kind === 're_review') {
@@ -378,7 +411,7 @@ function ownPrTurn(ctx: PrContext): WhoseTurn {
     return them(ctx, changes.by, RE_REVIEW);
   }
   if (changes) {
-    return you(ctx, 'address_changes', `Address ${changes.by}'s changes`);
+    return youSince(ctx, 'address_changes', `Address ${changes.by}'s changes`, changesAt(pr, changes.by));
   }
   // Users before teams; the viewer's own team can sit here too (CODEOWNERS).
   const reviewers = [...pr.reviewerUsers, ...pr.reviewerTeams];
@@ -415,16 +448,16 @@ function othersPrTurn(ctx: PrContext): WhoseTurn {
     // re-requested, the viewer only commented since): a re-review, like the
     // PR's tier, Changes you requested (2026-09-30).
     if (viewerRequestedChanges(pr, ctx.viewer)) {
-      return you(ctx, 're_review', reviewText(ctx, ask, 'Re-review'));
+      return youSince(ctx, 're_review', reviewText(ctx, ask, 'Re-review'), requestedAt(ctx));
     }
-    return you(ctx, 'review', reviewText(ctx, ask, 'Review'));
+    return youSince(ctx, 'review', reviewText(ctx, ask, 'Review'), requestedAt(ctx));
   }
   if (reviewed !== null && ask === 'you' && viewerRequestedChanges(pr, ctx.viewer)) {
     // Asked again without a push: GitHub drops a reviewer from the requested
     // list once they review, so a pending personal request after the
     // viewer's review is the author's re-request. An explicit re-request
     // means "look again", push or not (2026-09-30).
-    return you(ctx, 're_review', reviewText(ctx, ask, 'Re-review'));
+    return youSince(ctx, 're_review', reviewText(ctx, ask, 'Re-review'), requestedAt(ctx));
   }
   if (reviewed?.state === 'APPROVED') {
     return authorToMerge(ctx);
@@ -485,7 +518,7 @@ function mergedTurn(ctx: PrContext): WhoseTurn {
   if (ask === null) {
     return NO_TURN;
   }
-  return you(ctx, 'reply', askText(ctx, ask, false));
+  return youSince(ctx, 'reply', askText(ctx, ask, false), ask.at);
 }
 
 function prTurn(ctx: PrContext): WhoseTurn {
@@ -500,13 +533,13 @@ function prTurn(ctx: PrContext): WhoseTurn {
   // request says more. An ask from anyone else still goes first.
   const answer = changesAnswered(ctx.pr, ctx.viewer);
   if (answer && (ask === null || isPrOwner(ctx.pr, ask.actor))) {
-    return you(ctx, 're_review', changesAnsweredText(prOwner(ctx.pr), answer));
+    return youSince(ctx, 're_review', changesAnsweredText(prOwner(ctx.pr), answer), answer.at);
   }
   if (ask) {
     const reviewToo = isPrOwner(ctx.pr, ctx.viewer.login)
       ? false
       : isPersonalRequest(reviewRequest(ctx.pr, ctx.viewer)) && viewerHeadReview(ctx.pr, ctx.viewer) === null && !isApprovedByViewer(ctx.pr, ctx.userState, ctx.viewer.login);
-    return you(ctx, 'reply', askText(ctx, ask, reviewToo));
+    return youSince(ctx, 'reply', askText(ctx, ask, reviewToo), ask.at);
   }
   const queue = queueTurn(ctx);
   if (queue) {

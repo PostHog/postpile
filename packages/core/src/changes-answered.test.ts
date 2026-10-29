@@ -71,8 +71,9 @@ describe('addressed your changes: the #4521 timeline', () => {
   const pr = prWith();
 
   it('hands the move back to the viewer', () => {
-    expect(changesAnswered(pr, viewer)).toEqual({ pushed: true, replied: true, since: changesRequested.submittedAt });
-    expect(turn(pr)).toEqual({ kind: 'you', move: 're_review', who: null, what: 'bob addressed your changes: re-review', prKey: pr.key });
+    // The first answer is bob's push at 12:18: the re-review is the viewer's move from then.
+    expect(changesAnswered(pr, viewer)).toEqual({ pushed: true, replied: true, since: changesRequested.submittedAt, at: '2026-09-25T12:18:00.000Z' });
+    expect(turn(pr)).toEqual({ kind: 'you', move: 're_review', who: null, what: 'bob addressed your changes: re-review', prKey: pr.key, since: '2026-09-25T12:18:00.000Z' });
   });
 
   it('files the PR under Changes you requested, even when the author is a teammate', () => {
@@ -202,7 +203,7 @@ describe('addressed your changes: a bot owner', () => {
   it('counts the bot’s own comment as its reply, with or without the body', () => {
     const board = boardShape(botPr);
     expect(board.comments[0]?.body).toBeNull();
-    const answer = { pushed: false, replied: true, since: '2026-09-01T09:10:00.000Z' };
+    const answer = { pushed: false, replied: true, since: '2026-09-01T09:10:00.000Z', at: '2026-09-01T09:20:00.000Z' };
     expect(changesAnswered(botPr, viewer)).toEqual(answer);
     expect(changesAnswered(board, viewer)).toEqual(answer);
     expect(forWhom('CM', botPr, viewer)).toEqual({ kind: 'you' });

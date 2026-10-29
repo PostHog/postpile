@@ -55,6 +55,7 @@ export * from './topic-sections.ts';
 export * from './open-in-dealt-with.ts';
 export * from './topic-pr-state.ts';
 export * from './topic-urgency.ts';
+export * from './waiting-days.ts';
 export * from './topics.ts';
 export * from './topic-status.ts';
 export * from './topic-proposals.ts';

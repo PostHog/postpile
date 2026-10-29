@@ -67,14 +67,14 @@ describe("an author's bot talk is no answer to your changes request", () => {
     const pr = makePr({ author: 'bob', headOid: 'c0', commits, reviews: [request, bot.carrier], comments: [...bot.comments, command], threads: [bot.thread] });
     expect(changesAnswered(pr, viewer)).toBeNull();
     const reply = makeComment({ id: 'reply', author: 'bob', body: 'Added the test.', createdAt: at(30) });
-    expect(changesAnswered({ ...pr, comments: [...pr.comments, reply] }, viewer)).toEqual({ pushed: false, replied: true, since: at(10) });
+    expect(changesAnswered({ ...pr, comments: [...pr.comments, reply] }, viewer)).toEqual({ pushed: false, replied: true, since: at(10), at: at(30) });
   });
 
   it('your own "@codex review" after the push keeps the push an answer', () => {
     const pushed = [...commits, makeCommit({ oid: 'c1', author: 'bob', committedAt: at(20) })];
     const command = makeComment({ id: 'cmd', author: me, body: '@codex review', createdAt: at(30) });
     const pr = makePr({ author: 'bob', headOid: 'c1', commits: pushed, reviews: [request], comments: [command] });
-    expect(changesAnswered(pr, viewer)).toEqual({ pushed: true, replied: false, since: at(10) });
+    expect(changesAnswered(pr, viewer)).toEqual({ pushed: true, replied: false, since: at(10), at: at(20) });
   });
 });
 

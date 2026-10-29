@@ -1820,6 +1820,12 @@ the app meanwhile.
 
 ## Decided
 
+- **A move that waited on you for days says so, quietly** (2026-10-29,
+  owner). From 3 working days (Mon-Fri, UTC dates) the tile footer adds a
+  grey " · 6d" after the move and the sidebar row a grey "6d" for its
+  oldest move. Never on merge moves, drafts, snoozed or done tiles; no
+  reorder, no loudness, no pings. Why: responsiveness, an ask that sat for
+  days should be visible without adding noise.
 - **Finished sets close after 2 days, sets cap at 12 members**
   (2026-10-27, owner). A set whose members all merged or closed takes
   nothing new two days after the last one; its tile stays as it was. A
