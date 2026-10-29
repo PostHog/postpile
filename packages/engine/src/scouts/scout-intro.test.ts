@@ -86,6 +86,10 @@ describe('the Scouts intro card', () => {
       { prKey: 'acme/app#11', title: 'Add service 11', reason: 'adds svc11/' },
     ]);
     expect(h.runner.promptsFor('scout_judge')).toHaveLength(5);
+    // Scheduled like a sync: only what the 5 calls can judge gets its files read.
+    expect(result.trial?.problem).toBe('more PRs than one check judges');
+    const filesRead = h.reader.scoutCalls.filter((call) => call.startsWith('files ')).flatMap((call) => call.slice('files '.length).split(','));
+    expect(filesRead).toHaveLength(60);
     // Nothing saved: no judgement, pull, cursor, resume point, snapshot or version (only the calls' accounting rows).
     const count = (table: string) => (h.store.db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n;
     expect(['scout_judgement', 'pr_scouted', 'scout_cursor', 'scouts_version', 'pr'].map(count)).toEqual([0, 0, 0, 0, 0]);

@@ -1409,8 +1409,10 @@ drafts the first one, checks it and turns it on.
   The path hints are never shown; they go into the scout, edited in
   scouts.md. Then a dry run (`ScoutRun.trial`) over the last 2 days of the
   chosen repos with the sync's own listing, rules, file reads and judge, on
-  a runner of its own, at most 5 judge calls under the same allowance. It
-  writes nothing: no judgement, pull, cursor, resume point or snapshot.
+  a runner of its own, at most 5 judge calls under the same allowance,
+  scheduled like a sync (`scheduleScoutWork`): only what those calls can
+  judge gets its files read, and a check that leaves some unjudged says
+  "more PRs than one check judges". It writes nothing: no judgement, pull, cursor, resume point or snapshot.
   The card shows pulls per day (`trialRateWords`) and two examples.
 - *Turn on scout:* the scout is appended to scouts.md through
   `ScoutsHistory.appendScout` and recorded as a version of origin `intro`;
