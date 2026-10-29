@@ -1744,6 +1744,14 @@ the app meanwhile.
     but judge calls go per repo, so small repos can spend the calls while
     a big repo's file lists were all read for nothing. Schedule by per-repo
     batch cost and bound file reads by the calls left.
+  - Bounded scout glance planning: `scoutTargets` loads every active
+    scouted PR's cold snapshot before the glance writer checks its budget.
+    Page the targets and load a bounded batch at a time.
+  - Scout mark_read snapshot reuse: `AgentMarkRead.scoutedSeen` reads the
+    snapshot before checking eligibility. Check that first and reuse the
+    board's snapshot.
+  - Both are fine at today's load (scouted PRs expire after 3 days and
+    arrive a few a day), so not thousands active.
 
 - Normalize the PR snapshot (started after 0.19.0; first this, then the
   `utilityProcess` move below). The short fields live in the PR header
