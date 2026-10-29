@@ -33,8 +33,10 @@ import type {
   ThreadsSinceResult,
   FoundRef,
   ScoutFilesRead,
+  ScoutFolderRead,
   ScoutListPage,
 } from '@postpile/github';
+import { scoutFolderKey } from '@postpile/github';
 import type { UserConfigFile } from '../user-config.ts';
 import type { CommandResult, CommandRunner } from '../setup/setup-checks.ts';
 import type { Telemetry, TelemetryPersonInfo } from '../telemetry/telemetry.ts';
@@ -339,11 +341,12 @@ export class FakeReader implements GitHubReader {
     }));
   }
 
-  async topLevelFolders(repo: string, commitOids: string[]): Promise<Map<string, string[]>> {
-    this.scoutCalls.push(`tree ${repo} ${commitOids.join(',')}`);
-    return new Map(commitOids.flatMap((oid) => {
-      const folders = this.scoutTrees.get(oid);
-      return folders ? [[oid, folders] as [string, string[]]] : [];
+  /** scoutTrees: folder names by "<oid>" for the root, "<oid>:<parent>" for a folder; a key left out is a read GitHub did not answer. */
+  async scoutFolders(repo: string, reads: ScoutFolderRead[]): Promise<Map<string, string[]>> {
+    this.scoutCalls.push(`tree ${repo} ${reads.map(scoutFolderKey).join(',')}`);
+    return new Map(reads.flatMap((read) => {
+      const names = this.scoutTrees.get(read.parent === '' ? read.oid : scoutFolderKey(read));
+      return names ? [[scoutFolderKey(read), names.map((name) => (read.parent === '' ? name : `${read.parent}/${name}`))] as [string, string[]]] : [];
     }));
   }
 

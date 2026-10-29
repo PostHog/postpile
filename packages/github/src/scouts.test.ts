@@ -123,7 +123,7 @@ describe('scout reads under a rate limit', () => {
     expect((lookupError as ScoutReadsLimited<Map<string, unknown>>).partial.size).toBe(12);
 
     const trees = new FakeFetch([secondary]);
-    await expect(new GitHubClient(fakeTokens, trees.fn).topLevelFolders('acme/app', ['c1'])).rejects.toBeInstanceOf(ScoutReadsLimited);
+    await expect(new GitHubClient(fakeTokens, trees.fn).scoutFolders('acme/app', [{ oid: 'c1', parent: '' }])).rejects.toBeInstanceOf(ScoutReadsLimited);
   });
 });
 
@@ -222,31 +222,43 @@ describe('scout files', () => {
   });
 });
 
-describe('top-level folders', () => {
-  it('keeps directories only, per commit', async () => {
-    expect(buildTreeQuery('acme/app', ['c1'])).toContain('t0: object(oid: "c1") { ... on Commit { tree { entries { name type } } } }');
+describe('base folders', () => {
+  it('keeps directories only, as repo paths, per commit and folder; a folder the commit lacks has none', async () => {
+    expect(buildTreeQuery('acme/app', [{ oid: 'c1', parent: 'products' }])).toContain('t0: object(expression: "c1:products") { ... on Tree { entries { name type } } }');
     const fetch = new FakeFetch([
       {
         body: {
           data: {
             repository: {
-              t0: { tree: { entries: [{ name: 'src', type: 'tree' }, { name: 'README.md', type: 'blob' }] } },
-              t1: null,
+              t0: { entries: [{ name: 'src', type: 'tree' }, { name: 'README.md', type: 'blob' }] },
+              t1: { entries: [{ name: 'billing', type: 'tree' }] },
+              t2: null,
             },
           },
         },
       },
     ]);
-    const folders = await new GitHubClient(fakeTokens, fetch.fn).topLevelFolders('acme/app', ['c1', 'c2']);
-    expect(folders).toEqual(new Map([['c1', ['src']]]));
+    const reads = [
+      { oid: 'c1', parent: '' },
+      { oid: 'c1', parent: 'products' },
+      { oid: 'c1', parent: 'missing' },
+    ];
+    const folders = await new GitHubClient(fakeTokens, fetch.fn).scoutFolders('acme/app', reads);
+    expect(folders).toEqual(
+      new Map([
+        ['c1:', ['src']],
+        ['c1:products', ['products/billing']],
+        ['c1:missing', []],
+      ]),
+    );
   });
 
   it('keeps the trees of the batches that answered when one fails', async () => {
-    const oids = Array.from({ length: 13 }, (_, index) => `c${index}`);
-    const first = Object.fromEntries(oids.slice(0, 12).map((_, index) => [`t${index}`, { tree: { entries: [{ name: 'src', type: 'tree' }] } }]));
+    const reads = Array.from({ length: 13 }, (_, index) => ({ oid: `c${index}`, parent: '' }));
+    const first = Object.fromEntries(reads.slice(0, 12).map((_, index) => [`t${index}`, { entries: [{ name: 'src', type: 'tree' }] }]));
     const fetch = new FakeFetch([{ body: { data: { repository: first } } }, { status: 502, body: { message: 'bad gateway' } }]);
-    const folders = await new GitHubClient(fakeTokens, fetch.fn).topLevelFolders('acme/app', oids);
+    const folders = await new GitHubClient(fakeTokens, fetch.fn).scoutFolders('acme/app', reads);
     expect(folders.size).toBe(12);
-    expect(folders.has('c12')).toBe(false);
+    expect(folders.has('c12:')).toBe(false);
   });
 });

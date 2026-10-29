@@ -15,6 +15,15 @@ describe('globPathMatches', () => {
     }
   });
 
+  it('stays fast with many globstars against a deep path', () => {
+    const hint = `${'**/'.repeat(30)}x.ts`;
+    const path = `${'d/'.repeat(100)}y.ts`;
+    const started = performance.now();
+    expect(globPathMatches(hint, path)).toBe(false);
+    expect(globPathMatches(hint, `${'d/'.repeat(100)}x.ts`)).toBe(true);
+    expect(performance.now() - started).toBeLessThan(50);
+  });
+
   it('stays fast on a hint built to backtrack', () => {
     const hint = `${'a*'.repeat(20)}b`;
     const path = `${'a'.repeat(80)}c`;
@@ -32,5 +41,8 @@ describe('segmentMatches', () => {
     expect(segmentMatches('a*b*c', 'axxbyyc')).toBe(true);
     expect(segmentMatches('a*b*c', 'axxbyy')).toBe(false);
     expect(segmentMatches('**', '')).toBe(true);
+    // A "*" stays a wildcard, even against a literal "*".
+    expect(segmentMatches('*.ts', '*abc.ts')).toBe(true);
+    expect(segmentMatches('a*', '*')).toBe(false);
   });
 });

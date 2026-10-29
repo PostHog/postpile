@@ -22,4 +22,4 @@ export { GitHubClient } from './client.ts';
 export { DIFF_MAX_PAGES, type PrDiffRead } from './pr-diff.ts';
 export { GitHubWriteClient } from './write-client.ts';
 export { activityPrs, buildActivityQuery, ACTIVITY_SEARCH_SIZES } from './setup-reads.ts';
-export { SCOUT_FILES_MAX_PAGES, SCOUT_LIST_PAGE_SIZE, ScoutReadsLimited, type ScoutFilesRead, type ScoutListPage } from './scouts.ts';
+export { SCOUT_FILES_MAX_PAGES, SCOUT_LIST_PAGE_SIZE, ScoutReadsLimited, scoutFolderKey, type ScoutFilesRead, type ScoutFolderRead, type ScoutListPage } from './scouts.ts';
