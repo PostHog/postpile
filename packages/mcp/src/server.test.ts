@@ -683,19 +683,20 @@ describe('PostPile MCP server', () => {
     });
   });
 
-  it('marks a PR read with the seen_through of a full pr_context read, and refuses a stale one', async () => {
+  it('marks a PR read with the seen_through of a brief pr_context read, and refuses a stale one', async () => {
     const engine = new FakeEngine();
     const client = await connected(engine, { requests: new InMemoryAgentRequests(engine) });
 
+    // The brief answer carries the token: nothing new since this read.
     const brief = await callText(client, 'pr_context', { pr: 'acme/app#1902' });
-    expect(brief).not.toContain('seen_through for mark_read');
-    expect(brief).toContain('the seen_through mark_read needs');
-    const full = await callText(client, 'pr_context', { pr: 'acme/app#1902', detail: 'full' });
-    const seen = /acme\/app#1902: seen_through for mark_read: (\S+) /.exec(full)?.[1] ?? '';
+    const seen = /acme\/app#1902: seen_through for mark_read: (\S+) /.exec(brief)?.[1] ?? '';
     expect(parseSeenThrough(seen)?.seq).toBeGreaterThan(0);
-    // Outside the fence: PostPile wrote it, not GitHub. The list it vouches for sits inside.
-    expect(fencedPart(full)).not.toContain('seen_through');
-    expect(fencedPart(full)).toMatch(/Unread since you looked \(\d+, oldest first, every one; mark_read marks exactly these read\):/);
+    // Outside the fence: PostPile wrote it, not GitHub. Only the full answer lists the unread events.
+    expect(fencedPart(brief)).not.toContain('seen_through');
+    expect(fencedPart(brief)).not.toContain('Unread since you looked');
+    const full = await callText(client, 'pr_context', { pr: 'acme/app#1902', detail: 'full' });
+    expect(full).toContain(`acme/app#1902: seen_through for mark_read: ${seen} `);
+    expect(fencedPart(full)).toMatch(/Unread since you looked \(\d+ events, oldest first; people's text in full, bots, CI and pushes counted\):/);
 
     const stale = await client.callTool({ name: 'mark_read', arguments: { prs: [{ pr: 'acme/app#1902', seen_through: seenThroughToken((parseSeenThrough(seen)?.seq ?? 1) - 1, []) }] } });
     const staleText = (stale.content as { text: string }[])[0]?.text ?? '';
@@ -725,7 +726,7 @@ describe('PostPile MCP server', () => {
     expect(unknown.isError).toBe(true);
   });
 
-  it('prints the unread list whole: every event one line, people\'s text in full under it', async () => {
+  it("prints the full answer's unread list with people's text whole and bots counted", async () => {
     class OneUnread extends FakeEngine {
       override async getPr(key: string) {
         const detail = await super.getPr(key);
@@ -733,17 +734,19 @@ describe('PostPile MCP server', () => {
           return null;
         }
         const unread = [
-          { id: 'e1', kind: 'comment' as const, actor: 'alice', isBot: false, at: '2026-10-29T10:00:00Z', summary: 'alice commented', body: 'First paragraph.\n\nSecond paragraph.' },
-          { id: 'e2', kind: 'bot_comment' as const, actor: 'greptile-apps[bot]', isBot: true, at: '2026-10-29T10:05:00Z', summary: 'greptile commented', body: null },
+          { id: 'e1', kind: 'comment' as const, actor: 'alice', isBot: false, personTalk: true, at: '2026-10-29T10:00:00Z', summary: 'alice commented', body: 'First paragraph.\n\nSecond paragraph.' },
+          { id: 'e2', kind: 'bot_comment' as const, actor: 'greptile-apps[bot]', isBot: true, personTalk: false, at: '2026-10-29T10:05:00Z', summary: 'greptile commented', body: null },
+          { id: 'e3', kind: 'bot_comment' as const, actor: 'greptile-apps[bot]', isBot: true, personTalk: false, at: '2026-10-29T10:09:00Z', summary: 'greptile commented', body: null },
         ];
         return { ...detail, unread };
       }
     }
     const client = await connected(new OneUnread());
     const data = fencedPart(await callText(client, 'pr_context', { pr: 'acme/app#1902', detail: 'full' }));
-    expect(data).toContain('Unread since you looked (2, oldest first, every one; mark_read marks exactly these read):');
+    expect(data).toContain("Unread since you looked (3 events, oldest first; people's text in full, bots, CI and pushes counted):");
     expect(data).toMatch(/alice commented\n {6}First paragraph\.\n {6}\n {6}Second paragraph\./);
-    expect(data).toMatch(/greptile commented \(bot\)/);
+    expect(data).toContain('  greptile-apps[bot]: 2 bot comment events, 2026-10-29 10:05 – 2026-10-29 10:09');
+    expect(data).not.toContain('greptile commented');
   });
 
   it('answers when unread comments have more lines than a call can take as arguments', async () => {
@@ -754,13 +757,13 @@ describe('PostPile MCP server', () => {
         if (!detail) {
           return null;
         }
-        const unread = Array.from({ length: 5 }, (_, index) => ({ id: `e${index}`, kind: 'comment' as const, actor: 'alice', isBot: false, at: '2026-10-29T10:00:00Z', summary: 'alice commented', body }));
+        const unread = Array.from({ length: 5 }, (_, index) => ({ id: `e${index}`, kind: 'comment' as const, actor: 'alice', isBot: false, personTalk: true, at: '2026-10-29T10:00:00Z', summary: 'alice commented', body }));
         return { ...detail, unread };
       }
     }
     const client = await connected(new HugeUnread());
     const data = fencedPart(await callText(client, 'pr_context', { pr: 'acme/app#1902', detail: 'full' }));
-    expect(data).toContain('Unread since you looked (5, oldest first, every one; mark_read marks exactly these read):');
+    expect(data).toContain("Unread since you looked (5 events, oldest first; people's text in full, bots, CI and pushes counted):");
     expect(data.split('\n').length).toBeGreaterThan(160_000);
   });
 
@@ -794,5 +797,61 @@ describe('PostPile MCP server', () => {
     // The made-up tokens leave every PR alone; what matters is that each reached the app under its stored key.
     const left = answer.structuredContent as { refused: { pr: string }[]; skipped: { pr: string }[] };
     expect([...left.refused, ...left.skipped].map((entry) => entry.pr).sort()).toEqual(['acme/app#1902', 'acme/app#1911', 'acme/app#1930']);
+  });
+
+  it('carries seen_through per PR in the JSON answer, and mark_read takes it', async () => {
+    const engine = new FakeEngine();
+    const client = await connected(engine, { requests: new InMemoryAgentRequests(engine) });
+
+    const json = await client.callTool({ name: 'pr_context', arguments: { pr: ['acme/app#1902', 'acme/app#1911'], format: 'json' } });
+    const prs = (json.structuredContent as { prs: { key: string; seen_through: string }[] }).prs;
+    expect(prs.map((pr) => pr.key)).toEqual(['acme/app#1902', 'acme/app#1911']);
+    expect(prs.every((pr) => parseSeenThrough(pr.seen_through) !== null)).toBe(true);
+
+    const first = prs[0]!;
+    const marked = await client.callTool({ name: 'mark_read', arguments: { prs: [{ pr: first.key, seen_through: first.seen_through }] } });
+    expect(marked.structuredContent).toMatchObject({ marked: [first.key], refused: [] });
+  });
+
+  it('keeps answers small for a PR with 250 unread bot events: brief has no list, full folds them', async () => {
+    class Noisy extends FakeEngine {
+      override async getPr(key: string) {
+        const detail = await super.getPr(key);
+        if (!detail) {
+          return null;
+        }
+        const bots = Array.from({ length: 250 }, (_, index) => ({
+          id: `b${index}`,
+          kind: 'deploy' as const,
+          actor: 'github-actions[bot]',
+          isBot: true,
+          personTalk: false,
+          at: new Date(Date.parse('2026-10-27T10:00:00Z') + index * 60_000).toISOString(),
+          summary: 'github-actions deployed',
+          body: null,
+        }));
+        const people = Array.from({ length: 3 }, (_, index) => ({
+          id: `p${index}`,
+          kind: 'comment' as const,
+          actor: 'alice',
+          isBot: false,
+          personTalk: true,
+          at: `2026-10-29T1${index}:00:00Z`,
+          summary: 'alice commented',
+          body: `note ${index}`,
+        }));
+        return { ...detail, unread: [...bots, ...people] };
+      }
+    }
+    const client = await connected(new Noisy());
+
+    const brief = await callText(client, 'pr_context', { pr: 'acme/app#1902' });
+    expect(brief).toMatch(/seen_through for mark_read: \S+ /);
+    expect(brief).not.toContain('github-actions');
+    const full = fencedPart(await callText(client, 'pr_context', { pr: 'acme/app#1902', detail: 'full' }));
+    const start = full.indexOf('Unread since you looked');
+    const section = full.slice(start, full.indexOf('\n\n', start));
+    expect(section).toContain('github-actions[bot]: 250 deploy events, 2026-10-27 10:00 – 2026-10-27 14:09');
+    expect(section.split('\n').length).toBeLessThan(15);
   });
 });

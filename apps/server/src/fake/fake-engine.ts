@@ -1576,6 +1576,20 @@ export class FakeEngine implements EngineService {
       .map(eventView);
   }
 
+  /** Like the engine's unseenIdsThrough: the sample's events in the order they were added stand in for the event log. */
+  private unseenIdsThrough(prKey: PrKey, seq: number): string[] {
+    return this.eventsOf(prKey)
+      .slice(0, seq)
+      .filter((event) => event.seenAt === null)
+      .map((event) => event.id);
+  }
+
+  /** Like the engine's seenThroughNow, over the sample. */
+  private seenThroughOf(prKey: PrKey): string {
+    const seq = this.eventsOf(prKey).length;
+    return seenThroughToken(seq, this.unseenIdsThrough(prKey, seq));
+  }
+
   async getPr(prKey: PrKey): Promise<PrDetail | null> {
     const pr = this.data.prs.find((candidate) => candidate.key === prKey);
     if (!pr) {
@@ -1608,10 +1622,7 @@ export class FakeEngine implements EngineService {
       waitingThreads: waitingThreads(pr, this.viewer()),
       notes: this.prNotes.viewFor(prKey),
       // The sample has no event log: a PR's events in the order they were added stand in for it.
-      seenThrough: seenThroughToken(
-        this.eventsOf(prKey).length,
-        unreadSinceLooked(this.eventsOf(prKey), pr).map((event) => event.id),
-      ),
+      seenThrough: this.seenThroughOf(prKey),
       unread: unreadSinceLooked(this.eventsOf(prKey), pr),
       ownership: this.ownershipOf(pr),
       openThreads: viewerOpenThreads(pr, this.data.viewer),
@@ -2356,7 +2367,7 @@ export class FakeEngine implements EngineService {
         stored,
         tracked: tracking !== null,
         seenThrough,
-        unreadHashNow: unreadIdsHash(events.slice(0, seq).filter((event) => event.seenAt === null).map((event) => event.id)),
+        unreadHashNow: unreadIdsHash(this.unseenIdsThrough(pr.prKey, seq)),
         newestSeq: events.length,
         newer: events.slice(seq),
         // The sample has no fetch lag: its PRs, events and threads change together, so its snapshot is never behind.

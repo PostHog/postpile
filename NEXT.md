@@ -1837,6 +1837,13 @@ the app meanwhile.
 
 ## Decided
 
+- **seen_through means "nothing new since your read"** (2026-10-29, owner;
+  DESIGN.md "Agents mark read"): every pr_context answer, brief and JSON
+  included, hands out the token, computed from the store, not from a
+  printed list. The 0.28.6 coupling to an unfolded unread list in full
+  answers was dropped: 175k characters for 9 PRs, and printing never
+  proved reading. Full answers keep the list as a reading aid, with bots,
+  CI and pushes folded by actor and kind. Needs reply is the backstop.
 - **A move that waited on you for days says so, quietly** (2026-10-29,
   owner). From 3 working days (Mon-Fri, UTC dates) the tile footer adds a
   grey " · 6d" after the move and the sidebar row a grey "6d" for its

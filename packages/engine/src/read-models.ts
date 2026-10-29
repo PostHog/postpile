@@ -1,6 +1,5 @@
 import {
   unreadSinceLooked,
-  seenThroughToken,
   isLiveProposal,
   archiveEndsAt,
   lastJoinAt,
@@ -111,6 +110,7 @@ import {
 } from '@postpile/core';
 import type { AgentService } from '@postpile/agent';
 import type { Store } from '@postpile/store';
+import { seenThroughNow } from './agent-requests/seen-through.ts';
 import { Board, UNSORTED_TOPIC_ID } from './board.ts';
 import { loadCodeOwnersRules } from './code-owners.ts';
 import { RetireGate } from './consolidation/retire-gate.ts';
@@ -692,10 +692,9 @@ export class ReadModels {
 
   /** A cold PR is read with its topic for this request (`Board.forPr`). */
   getPr(key: PrKey): PrDetail | null {
-    // mark_read's watermark, read before the Board: a sync that commits in between only adds events the answer shows
-    // beyond it, which makes mark_read refuse, never mark unseen activity. A cached Board is only reused while the
-    // database is unchanged since it was read, so it holds every event at or below the watermark too.
-    const seenThroughSeq = this.store.eventLog.maxSeqForPr(key);
+    // mark_read's token, read before the Board: a sync that commits in between only adds events the answer may show
+    // beyond it, which makes mark_read refuse, never pass over activity that came after the read.
+    const seenThrough = seenThroughNow(this.store, key);
     const board = Board.forPr(this.store, this.now().toISOString(), key);
     const pr = board.prs.get(key);
     if (!pr) {
@@ -742,7 +741,7 @@ export class ReadModels {
       facts: this.memory.prFacts(key),
       waitingThreads: waitingThreads(pr, viewer),
       notes: this.notes.viewFor(pr),
-      seenThrough: seenThroughToken(seenThroughSeq, unread.map((event) => event.id)),
+      seenThrough,
       unread,
       ownership: this.ownership(pr, viewer),
       openThreads: viewer ? viewerOpenThreads(pr, viewer.login) : 0,
