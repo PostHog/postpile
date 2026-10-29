@@ -1,7 +1,8 @@
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { ScoutCandidate, ScoutFile } from '@postpile/core';
+import { scoutRetryStalled, type ScoutCandidate, type ScoutFile } from '@postpile/core';
+import { GitHubError, ScoutReadsLimited } from '@postpile/github';
 import { makePr, makeThreadFor, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it, vi } from 'vitest';
 import { makeHarness, NOW, type Harness } from '../testing/fakes.ts';
@@ -455,6 +456,43 @@ describe('the scout step of a full sync', () => {
     await h.engine.sync({});
     // Five calls of twelve: 60 looked up, the other 10 wait unread.
     expect(lookups).toHaveLength(60);
+  });
+
+  it('stops every scout read for the sync once GitHub rate-limits one, keeping what was read and leaving the rest pending', async () => {
+    const h = setup();
+    onGitHub(h, candidate(1), [{ path: 'billing/main.ts', changeType: 'ADDED' }]);
+    onGitHub(h, candidate(2), [{ path: 'payments/main.ts', changeType: 'ADDED' }]);
+    const limit = new GitHubError('GitHub POST graphql failed with 403: You have exceeded a secondary rate limit', 403, { rateLimited: true, retryAfterSeconds: 60 });
+    vi.spyOn(h.reader, 'scoutFiles').mockRejectedValueOnce(new ScoutReadsLimited(limit, new Map([['acme/app#1', h.reader.scoutFileLists.get('acme/app#1')!]])));
+
+    await h.engine.sync({});
+
+    // No base tree, lookup or judge call after the limit.
+    expect(h.reader.scoutCalls.filter((call) => !call.startsWith('list'))).toEqual([]);
+    expect(h.runner.promptsFor('scout_judge')).toEqual([]);
+    const rows = h.store.scoutJudgements.listPending('lookout');
+    expect(rows.map((row) => row.prKey).sort()).toEqual(['acme/app#1', 'acme/app#2']);
+    // Cut off, not failed: ordinary pending work next time, not stalled.
+    expect(rows.every((row) => !scoutRetryStalled(row))).toBe(true);
+  });
+
+  it('keeps a stalled reason when it defers a retry, and counts an unanswered lookup as stalled', async () => {
+    let now = NOW;
+    const h = setup(LOOKOUT, () => now);
+    for (let number = 1; number <= 3; number++) {
+      onGitHub(h, candidate(number), []);
+      h.reader.scoutFileLists.set(`acme/app#${number}`, { headOid: `h${number}`, baseOid: 'base1', foldersOid: 'base1', files: null });
+    }
+    await h.engine.sync({});
+    // Agent off: nothing is scheduled, and the deferral keeps the read failure.
+    await h.engine.sync({ maxAgentCalls: 0 });
+    expect(h.store.scoutJudgements.listPending('lookout').every(scoutRetryStalled)).toBe(true);
+
+    // The listing no longer reaches them and GitHub answers no lookup: stalled too, not untouched.
+    now = new Date(NOW.getTime() + 24 * 60 * 60 * 1000);
+    h.reader.scoutListings.set('acme/app', []);
+    await h.engine.sync({});
+    expect(h.store.scoutJudgements.listPending('lookout').map((row) => row.lastError)).toEqual(['lookup by number not answered', 'lookup by number not answered', 'lookup by number not answered']);
   });
 
   it('runs no scout work when the sync asks for other agent jobs only', async () => {

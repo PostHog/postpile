@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { FakeFetch, fakeTokens } from './fake-fetch.ts';
 import { GitHubClient } from './client.ts';
-import { buildScoutListQuery, buildTreeQuery } from './scouts.ts';
+import { buildScoutListQuery, buildTreeQuery, ScoutReadsLimited } from './scouts.ts';
 
 function listed(number: number, overrides: Record<string, unknown> = {}) {
   return {
@@ -100,6 +100,30 @@ describe('scout PR node id', () => {
     expect(await client(missing).scoutPrNodeId({ repo: 'acme/app', number: 1 })).toBeNull();
     await expect(client({ data: null, errors: [{ type: 'RATE_LIMITED', message: 'API rate limit exceeded' }] }).scoutPrNodeId({ repo: 'acme/app', number: 1 })).rejects.toThrow('rate limit');
     await expect(client({ message: 'Bad credentials' }, 401).scoutPrNodeId({ repo: 'acme/app', number: 1 })).rejects.toThrow();
+  });
+});
+
+describe('scout reads under a rate limit', () => {
+  const refs = Array.from({ length: 13 }, (_, index) => ({ repo: 'acme/app', number: index + 1 }));
+  const secondary = { status: 403, headers: { 'retry-after': '60' }, body: { message: 'You have exceeded a secondary rate limit' } };
+
+  it('stops file lists at a secondary limit and hands back the lists finished before it', async () => {
+    const first = Object.fromEntries(refs.slice(0, 12).map((ref, index) => [`p${index}`, { pullRequest: filesPage(`h${ref.number}`, [{ path: `f${ref.number}.ts`, changeType: 'ADDED' }], null) }]));
+    const fetch = new FakeFetch([{ body: { data: first } }, secondary]);
+    const error = await new GitHubClient(fakeTokens, fetch.fn).scoutFiles(refs).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(ScoutReadsLimited);
+    expect((error as ScoutReadsLimited<Map<string, unknown>>).partial.size).toBe(12);
+    expect((error as ScoutReadsLimited<unknown>).retryAfterSeconds).toBe(60);
+  });
+
+  it('stops number lookups and tree reads too, GraphQL RATE_LIMITED included', async () => {
+    const first = Object.fromEntries(refs.slice(0, 12).map((ref, index) => [`p${index}`, { pullRequest: listed(ref.number) }]));
+    const lookups = new FakeFetch([{ body: { data: first } }, { body: { data: null, errors: [{ type: 'RATE_LIMITED', message: 'API rate limit exceeded' }] } }]);
+    const lookupError = await new GitHubClient(fakeTokens, lookups.fn).scoutPrsByNumber(refs).catch((caught: unknown) => caught);
+    expect((lookupError as ScoutReadsLimited<Map<string, unknown>>).partial.size).toBe(12);
+
+    const trees = new FakeFetch([secondary]);
+    await expect(new GitHubClient(fakeTokens, trees.fn).topLevelFolders('acme/app', ['c1'])).rejects.toBeInstanceOf(ScoutReadsLimited);
   });
 });
 
