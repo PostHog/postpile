@@ -221,7 +221,7 @@ export function AgentPane(props: AgentPaneProps) {
               <Button
                 size="sm"
                 disabled={point.topicId === null || actions.isBusy(`tailoring:${point.topicId}`)}
-                title={point.topicId === null ? 'Unsorted is not a topic yet, so there is no topic to keep it on' : 'Adds it to what this topic keeps in mind'}
+                title={point.topicId === null ? 'Unsorted and scouts are not topics, so there is no topic to keep it on' : 'Adds it to what this topic keeps in mind'}
                 onClick={() => void keepForTopic()}
               >
                 Keep for this topic

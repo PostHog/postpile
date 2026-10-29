@@ -1,5 +1,5 @@
 import type { AgentService } from '@postpile/agent';
-import { appendTailoring, mergedTailoringLines, removeTailoringLine, tailoringLines, type ActionResult, type ChatMessage, type ChatReply } from '@postpile/core';
+import { appendTailoring, mergedTailoringLines, removeTailoringLine, scoutIdOfTopic, tailoringLines, type ActionResult, type ChatMessage, type ChatReply } from '@postpile/core';
 import type { Store } from '@postpile/store';
 import { Board, UNSORTED_TOPIC_ID } from '../board.ts';
 import type { PromptContextSource } from '../prompt-context.ts';
@@ -80,8 +80,9 @@ export class ChatActions {
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     const chatId = topicChatId(topicId);
     const history = this.store.chat.listForTile(chatId);
-    const isUnsorted = topicId === UNSORTED_TOPIC_ID;
-    const answer = await this.agent.chat({ topic, prs, history, message, context: this.contexts.forTopic(isUnsorted ? null : topicId) });
+    // Unsorted and a scout's section are no stored topic: no dossier for the prompt, no tailoring to keep a point on.
+    const topicLess = topicId === UNSORTED_TOPIC_ID || scoutIdOfTopic(topicId) !== null;
+    const answer = await this.agent.chat({ topic, prs, history, message, context: this.contexts.forTopic(topicLess ? null : topicId) });
     // Stamped when stored, not when sent: a dossier saved while the agent answered must not end up newer
     // than the turn, or the next dossier update (which reads turns since the last version) never sees it.
     const storedAt = this.now().toISOString();
@@ -92,8 +93,8 @@ export class ChatActions {
     if (!answer.lasting) {
       return { message: reply, lastingPoint: null };
     }
-    // Unsorted is not a stored topic: the point can still go to all topics, not to this one.
-    return { message: reply, lastingPoint: { topicId: isUnsorted ? null : topicId, text: answer.lasting.text, sourceChatMessageId: userMessage.id } };
+    // Not a stored topic: the point can still go to all topics, or just this once, not to this one.
+    return { message: reply, lastingPoint: { topicId: topicLess ? null : topicId, text: answer.lasting.text, sourceChatMessageId: userMessage.id } };
   }
 
   /** keep=true appends the text to the topic's tailoring; false only logs it for this once. */

@@ -185,7 +185,8 @@ export class TopicCatchUp {
     }
     const board = Board.load(this.deps.store, this.deps.now().toISOString());
     const inputs = new GlanceInputs(this.deps.store, board, viewer, this.deps.contexts);
-    const target = inputs.targets().find((candidate) => candidate.item.pr.key === prKey);
+    // A scouted PR is no tile of the board's: its glance target comes from the scouted rows, like the catch-up's.
+    const target = inputs.targets().find((candidate) => candidate.item.pr.key === prKey) ?? inputs.scoutTargets([prKey])[0];
     if (!target) {
       return false;
     }

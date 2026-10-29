@@ -35,6 +35,9 @@ interface QueuedFollow {
  * `handled_at`: a scouted PR has no thread, and a handled mark would leak
  * into the inbox rules once the PR reaches the inbox.
  */
+/** How long Follow waits for the PR's node id; a quit's flush waits at most this long for a Follow still looking. */
+export const FOLLOW_LOOKUP_MS = 10_000;
+
 export class ScoutActions {
   private readonly queue: DeferredQueue<QueuedFollow>;
   /** Follows that left their window (followed, or parked in the lock): the live status counts them, so the renderer refetches. */
@@ -49,7 +52,7 @@ export class ScoutActions {
     private readonly reader: GitHubReader,
     private readonly writes: GitHubWrites,
     private readonly pendingWrites: PendingWrites,
-    timers: Timers,
+    private readonly timers: Timers,
     private readonly now: () => Date,
   ) {
     this.queue = new DeferredQueue((follow) => this.send(follow), timers, UNDO_WINDOW_MS, (error, batch) => {
@@ -100,6 +103,23 @@ export class ScoutActions {
     return states;
   }
 
+  /** The PR's node id, or a rejection once FOLLOW_LOOKUP_MS passed without an answer. */
+  private lookUpNodeId(prKey: PrKey): Promise<string | null> {
+    return new Promise((resolve, reject) => {
+      const deadline = this.timers.setTimeout(() => reject(new Error(`no answer within ${FOLLOW_LOOKUP_MS / 1000} s`)), FOLLOW_LOOKUP_MS);
+      this.reader.scoutPrNodeId(parsePrKey(prKey)).then(
+        (id) => {
+          this.timers.clearTimeout(deadline);
+          resolve(id);
+        },
+        (error: unknown) => {
+          this.timers.clearTimeout(deadline);
+          reject(error);
+        },
+      );
+    });
+  }
+
   /**
    * Follow on a scouted PR. Tracked while it runs (its node id lookup can
    * take a while), so a quit's flush waits for it to queue before draining.
@@ -132,8 +152,10 @@ export class ScoutActions {
     this.lookingUp.add(prKey);
     let subjectId: string | null = null;
     try {
-      subjectId = await this.reader.scoutPrNodeId(parsePrKey(prKey));
+      subjectId = await this.lookUpNodeId(prKey);
     } catch (error) {
+      // Nothing queued, nothing sent; a quit's flush stops waiting here too.
+      this.writes.log.record({ action: 'follow', origin, outcome: 'failed', prKey, detail: `PR lookup failed, nothing queued: ${errorText(error)}` });
       return failed(`Could not follow: GitHub did not answer (${errorText(error)}). Click Follow again to retry.`);
     } finally {
       this.lookingUp.delete(prKey);
@@ -183,9 +205,10 @@ export class ScoutActions {
   }
 
   /**
-   * On quit: Follows still looking up their PR finish queuing first, then
-   * those in their window go out now (or into the lock), like the mark-read
-   * queue's flush. Nothing queues after the store closed.
+   * On quit: Follows still looking up their PR finish queuing first (at
+   * most FOLLOW_LOOKUP_MS, after which one still waiting is dropped with a
+   * log line, nothing queued), then those in their window go out now (or
+   * into the lock), like the mark-read queue's flush.
    */
   async flush(): Promise<void> {
     await Promise.allSettled(this.inFlight);

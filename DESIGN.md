@@ -1389,8 +1389,11 @@ it is opened.
   overlapping Follow is refused instead of queuing a second subscription.
   It tells GitHub's "no such PR" (NOT_FOUND) from a request that failed
   (unreachable, auth, rate limit), which shows its error and asks to click
-  Follow again. A quit's flush waits for Follows still looking up their PR
-  before it drains the queue.
+  Follow again. The lookup has a 10 s deadline (`FOLLOW_LOOKUP_MS`): past
+  it the Follow fails with nothing queued and an action-log line. A quit's
+  flush waits for Follows still looking up their PR, so at most that long,
+  before it drains the queue. A chat on a scout is topic-less like
+  Unsorted's: its lasting point can't be kept for a topic.
   Queued, pending, failed, discarded and undone follows stay apart in the
   action log (`follow`, `undo_follow`).
 - Dismiss takes the PR off the section for good, with an optional short
