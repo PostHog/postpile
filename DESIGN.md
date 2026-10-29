@@ -1210,7 +1210,9 @@ contract surfaces.
 - Paths are CODEOWNERS-style globs (`codeownersPatternRegex`). A `+` in
   front counts only an added file (ADDED, or RENAMED to the path). `+*/`
   means a new top-level folder: an added file whose first folder is not a
-  directory of the PR's own base commit (`baseRefOid`, cached per commit).
+  directory of the tree before the PR (`ScoutFilesRead.foldersOid`, cached
+  per commit): the base commit while open, the merge commit's first parent
+  once merged, since by then the base branch holds the PR's own folder.
 - Identity: `id:`, else the slug of the name. Duplicate ids are a parse
   error. A rename without `id:` is a new scout with fresh cursors and
   history (accepted, documented).
@@ -1302,6 +1304,10 @@ contract surfaces.
    The run takes one item per queue in turn until the calls times the batch
    size are used, so no scout, repo or wave of new PRs starves the rest.
    Files are read only for what was taken; the rest waits without a read.
+   A retry whose file list or base tree failed to read last time
+   (`scoutRetryStalled`) goes behind the new candidates, so PRs GitHub
+   keeps failing to read only take slots nothing else needs. Tree reads
+   fail per batch, like file lists and number lookups.
    Each
    entry is validated on its own: malformed, left out, answered twice, or
    unknown keys stay pending, never skipped. The prompt lists at most 20
@@ -1318,7 +1324,8 @@ contract surfaces.
    (`GlanceInputs.scoutTargets`, `GlanceBatchWriter.runScouted`): no tile of
    the board's holds them. The scout's reason reaches the glance prompt
    fenced: it is model output from GitHub text. A failed scout glance's
-   Retry runs through the Unsorted catch-up, which covers scouted targets.
+   Retry runs through the Unsorted catch-up, which covers scouted targets
+   and counts them when it sizes its per-run cap.
 
 **Display, not tracking.** A scouted PR is displayable and glanceable but
 not tracked: no topic assignment, urgency, asks, unread, whose-move counts,
@@ -1334,7 +1341,9 @@ Lookout: … It reached the user's inbox since").
 **Stacks:** normal-topic placement wins: a stack with a tracked layer
 shows in its topic, scouted layers riding along. A stack outside the inbox
 shows whole with the scout that pulled any of its layers first
-(`scoutStackOwner`).
+(`scoutStackOwner`). Every layer of a scout stack is a found PR of
+`via: 'scouted'`, context and dismissed layers too, so none reads unread
+as pulled in: opening the tile (seen in PostPile) is all it takes.
 
 **Expiry** (`scoutedExpiry`): not followed, and three days after the merge
 (a fast merge still shows as merged for a while), three days after a
@@ -1362,7 +1371,12 @@ spot and its reason (`TileView.scout`).
   parks too, marked failed, to send again from the lock. `followed_at` is
   set only once GitHub took it, and the PR then gets a `pr_found` row with
   `via: 'followed'` (kept by every sync), so PostPile tracks it right away,
-  Unsorted until topic assignment, before any notification arrives.
+  Unsorted until topic assignment, before any notification arrives. The
+  node id lookup (`scoutPrNodeId`) reserves the PR while it runs, so an
+  overlapping Follow is refused instead of queuing a second subscription.
+  It tells GitHub's "no such PR" (NOT_FOUND) from a request that failed
+  (unreachable, auth, rate limit), which shows its error and asks to click
+  Follow again.
   Queued, pending, failed, discarded and undone follows stay apart in the
   action log (`follow`, `undo_follow`).
 - Dismiss takes the PR off the section for good, with an optional short
@@ -1374,7 +1388,8 @@ spot and its reason (`TileView.scout`).
 
 **MCP:** `pr_context` says "Scouted by <scout>: <reason>. Not in the user's
 GitHub inbox." inside the fence and answers the PR on its own (no topic
-block); JSON carries `scouted`. `whats_on_me` lists scouted tiles last, in a
+block); JSON carries `scouted`, and no PR's JSON names a `scout:<id>`
+pseudo-topic as its `topic` (the topic tool cannot open one). `whats_on_me` lists scouted tiles last, in a
 group of their own, never as a move (left out with `whose_move: "you"`).
 `search_prs` finds scouted PRs and marks them: it matches the scouted PRs'
 headers first (the scout's name stands in for the topic) and reads one

@@ -14,6 +14,9 @@ import {
   SCOUT_TRIAL_EXAMPLES,
   SCOUT_TRIAL_JUDGE_CALLS,
   scheduleScoutWork,
+  scoutRetryStalled,
+  SCOUT_FILES_NOT_READ,
+  SCOUT_TREE_NOT_READ,
   type ScoutWorkItem,
   type IsoTime,
   type ScoutTrial,
@@ -426,7 +429,7 @@ export class ScoutRun {
         continue;
       }
       const pending = before?.status === 'pending';
-      left.push({ candidate, before, pending, observedUpdatedAt: pending ? before.observedUpdatedAt : candidate.updatedAt });
+      left.push({ candidate, before, pending, stalled: before !== null && scoutRetryStalled(before), observedUpdatedAt: pending ? before.observedUpdatedAt : candidate.updatedAt });
     }
     return left;
   }
@@ -440,19 +443,20 @@ export class ScoutRun {
     const files = await this.files(needFiles.map((entry) => entry.candidate));
     const wantsTree = scout.paths.some((hint) => hint.newTopLevelFolder);
     if (wantsTree) {
-      await this.baseFolders(repo, [...files.values()].filter((read) => read.files !== null).map((read) => read.baseOid));
+      // The folders before the PR: its base while open, the commit before its merge once merged.
+      await this.baseFolders(repo, [...files.values()].filter((read) => read.files !== null).map((read) => read.foldersOid));
     }
     const toJudge: JudgeItem[] = [];
     for (const { candidate, before } of needFiles) {
       const base = this.judgementRow(scout.id, version, candidate, before);
       const read = files.get(candidate.key);
       if (!read || read.files === null || read.headOid !== candidate.headOid) {
-        work.rows.push(this.pending(base, 'file list not read whole'));
+        work.rows.push(this.pending(base, SCOUT_FILES_NOT_READ));
         continue;
       }
-      const folders = this.trees.get(`${repo}@${read.baseOid}`);
+      const folders = this.trees.get(`${repo}@${read.foldersOid}`);
       if (wantsTree && folders === undefined) {
-        work.rows.push(this.pending(base, 'base tree not read'));
+        work.rows.push(this.pending(base, SCOUT_TREE_NOT_READ));
         continue;
       }
       const signals = scoutSignals(scout, read.files, new Set(folders ?? []));

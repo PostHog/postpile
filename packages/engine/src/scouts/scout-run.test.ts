@@ -45,7 +45,7 @@ function candidate(number: number, overrides: Partial<ScoutCandidate> = {}): Sco
 function onGitHub(h: Harness, pr: ScoutCandidate, files: ScoutFile[]): void {
   const listing = h.reader.scoutListings.get('acme/app') ?? [];
   h.reader.scoutListings.set('acme/app', [...listing.filter((other) => other.key !== pr.key), pr].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
-  h.reader.scoutFileLists.set(pr.key, { headOid: pr.headOid, baseOid: pr.baseOid, files });
+  h.reader.scoutFileLists.set(pr.key, { headOid: pr.headOid, baseOid: pr.baseOid, foldersOid: pr.baseOid, files });
   const number = Number(pr.key.split('#')[1]);
   h.reader.addStackPr(makePr({ number, title: pr.title, author: pr.author, headOid: pr.headOid, updatedAt: pr.updatedAt }));
 }
@@ -196,7 +196,7 @@ describe('the scout step of a full sync', () => {
   it('keeps a candidate pending while its file list is not whole', async () => {
     const h = setup();
     onGitHub(h, candidate(1), []);
-    h.reader.scoutFileLists.set('acme/app#1', { headOid: 'h1', baseOid: 'base1', files: null });
+    h.reader.scoutFileLists.set('acme/app#1', { headOid: 'h1', baseOid: 'base1', foldersOid: 'base1', files: null });
 
     await h.engine.sync({});
 
@@ -390,6 +390,40 @@ describe('the scout step of a full sync', () => {
     await h.engine.sync({});
     const nextPrompt = h.runner.promptsFor('scout_judge')[5]!;
     expect(waiting.every((row) => nextPrompt.includes(`=== ${row.prKey}\n`))).toBe(true);
+  });
+
+  it('puts retries whose file lists keep failing behind new work, so they never hold every slot', async () => {
+    let now = NOW;
+    const h = setup(LOOKOUT, () => now);
+    for (let number = 1; number <= 60; number++) {
+      onGitHub(h, candidate(number), []);
+      h.reader.scoutFileLists.set(`acme/app#${number}`, { headOid: `h${number}`, baseOid: 'base1', foldersOid: 'base1', files: null });
+    }
+    await h.engine.sync({});
+    expect(h.store.scoutJudgements.listPending('lookout').filter((row) => row.lastError === 'file list not read whole')).toHaveLength(60);
+
+    now = new Date(NOW.getTime() + 60 * 60 * 1000);
+    onGitHub(h, candidate(61, { updatedAt: hoursAgo(0.5, now) }), [{ path: 'billing/main.ts', changeType: 'ADDED' }]);
+    pulls(h, [61, 'pull', 'adds billing/']);
+    await h.engine.sync({});
+
+    expect(h.store.scoutJudgements.get('lookout', 'acme/app#61')).toMatchObject({ status: 'judged', verdict: 'pulled' });
+  });
+
+  it('finds a new top-level folder on a PR merged before the scout saw it, against the tree before the merge', async () => {
+    const h = setup();
+    const merged = candidate(1, { state: 'MERGED', mergedAt: hoursAgo(2), baseOid: 'base-after' });
+    onGitHub(h, merged, [{ path: 'billing/main.ts', changeType: 'ADDED' }]);
+    h.reader.scoutFileLists.set('acme/app#1', { headOid: 'h1', baseOid: 'base-after', foldersOid: 'before-merge', files: [{ path: 'billing/main.ts', changeType: 'ADDED' }] });
+    // The base branch holds billing/ once merged; the commit before the merge does not.
+    h.reader.scoutTrees.set('base-after', ['src', 'docs', 'billing']);
+    h.reader.scoutTrees.set('before-merge', ['src', 'docs']);
+    pulls(h, [1, 'pull', 'adds billing/']);
+
+    await h.engine.sync({});
+
+    expect(h.runner.promptsFor('scout_judge')).toHaveLength(1);
+    expect(h.store.scoutJudgements.get('lookout', 'acme/app#1')).toMatchObject({ verdict: 'pulled' });
   });
 
   it('runs no scout work when the sync asks for other agent jobs only', async () => {

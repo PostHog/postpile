@@ -28,6 +28,12 @@ export interface ScoutListPage {
 export interface ScoutFilesRead {
   headOid: string;
   baseOid: string;
+  /**
+   * The commit whose root folders were there before the PR: its base while
+   * open, the merge commit's first parent once merged (by then the base
+   * branch may hold the PR's own new folder).
+   */
+  foldersOid: string;
   /** Null when the list could not be read whole: the head moved while paging, or GitHub stopped answering. Never a partial list. */
   files: ScoutFile[] | null;
 }
@@ -59,6 +65,7 @@ interface RawListResponse {
 interface RawFilesPage {
   headRefOid: string;
   baseRefOid: string;
+  mergeCommit?: { parents: { nodes: ({ oid: string } | null)[] } } | null;
   files: { pageInfo: { hasNextPage: boolean; endCursor: string | null }; nodes: ({ path: string; changeType: ScoutChangeType } | null)[] } | null;
 }
 
@@ -116,7 +123,14 @@ export function buildScoutNumberQuery(refs: PrRef[]): string {
 
 function filesSelection(after: string | null): string {
   const cursor = after === null ? '' : `, after: ${JSON.stringify(after)}`;
-  return `headRefOid baseRefOid files(first: ${SCOUT_FILES_PAGE_SIZE}${cursor}) { pageInfo { hasNextPage endCursor } nodes { path changeType } }`;
+  // The merge commit only on the first page: the folders before the PR are read once.
+  const merge = after === null ? ' mergeCommit { parents(first: 1) { nodes { oid } } }' : '';
+  return `headRefOid baseRefOid${merge} files(first: ${SCOUT_FILES_PAGE_SIZE}${cursor}) { pageInfo { hasNextPage endCursor } nodes { path changeType } }`;
+}
+
+/** The commit before the PR: the merge commit's first parent once merged, else the base. */
+function foldersOidOf(page: RawFilesPage): string {
+  return page.mergeCommit?.parents.nodes[0]?.oid ?? page.baseRefOid;
 }
 
 /** One file page per PR, aliased: the first page (`after` null) or the next one of a longer list. */
@@ -200,11 +214,35 @@ export async function scoutPrsByNumber(http: GitHubHttp, refs: PrRef[]): Promise
   return result;
 }
 
+/**
+ * One PR's node id, for Follow. Null only when GitHub answers that it has
+ * no such PR the token can see (NOT_FOUND). A failed request, bad auth or a
+ * rate limit throws, so Follow can say what went wrong instead of "no such
+ * PR".
+ */
+export async function scoutPrNodeId(http: GitHubHttp, ref: PrRef): Promise<string | null> {
+  const [owner, name] = ownerAndName(ref.repo);
+  const query = `query { repository(owner: ${JSON.stringify(owner)}, name: ${JSON.stringify(name)}) { pullRequest(number: ${ref.number}) { id } } }`;
+  const response = await http.graphql<{ repository: { pullRequest: { id: string } | null } | null }>(query);
+  const id = response.data?.repository?.pullRequest?.id ?? null;
+  if (id !== null) {
+    return id;
+  }
+  if (response.errors.length > 0 && response.errors.every((error) => error.type === 'NOT_FOUND')) {
+    return null;
+  }
+  if (response.errors.length > 0 || !response.data) {
+    throw graphqlFailure(`lookup of ${prKey(ref)}`, response.errors);
+  }
+  return null;
+}
+
 /** One PR's file list while it is being paged. */
 interface FilesProgress {
   ref: PrRef;
   headOid: string;
   baseOid: string;
+  foldersOid: string;
   files: ScoutFile[];
   /** GitHub's cursor for the next page; null once the list is whole. */
   after: string | null;
@@ -258,7 +296,7 @@ export async function scoutFiles(http: GitHubHttp, refs: PrRef[]): Promise<Map<P
     }
     if (!response.data) {
       // This batch only: its PRs come back without a list (pending for the caller); the other batches' reads stand.
-      batch.forEach((ref) => progress.push({ ref, headOid: '', baseOid: '', files: [], after: null, pages: 1, broken: true }));
+      batch.forEach((ref) => progress.push({ ref, headOid: '', baseOid: '', foldersOid: '', files: [], after: null, pages: 1, broken: true }));
       continue;
     }
     const errored = response.errors.length > 0;
@@ -271,7 +309,7 @@ export async function scoutFiles(http: GitHubHttp, refs: PrRef[]): Promise<Map<P
       const after = first.files?.pageInfo.hasNextPage ? first.files.pageInfo.endCursor : null;
       // Field errors or a null node: the list is not whole, whatever the rest of the page says.
       const broken = errored || first.files === null || files === null;
-      progress.push({ ref, headOid: first.headRefOid, baseOid: first.baseRefOid, files: files ?? [], after, pages: 1, broken });
+      progress.push({ ref, headOid: first.headRefOid, baseOid: first.baseRefOid, foldersOid: foldersOidOf(first), files: files ?? [], after, pages: 1, broken });
     });
   }
   let open = progress.filter((entry) => !entry.broken && entry.after !== null);
@@ -281,16 +319,25 @@ export async function scoutFiles(http: GitHubHttp, refs: PrRef[]): Promise<Map<P
     }
     open = open.filter((entry) => !entry.broken && entry.after !== null);
   }
-  return new Map(progress.map((entry) => [prKey(entry.ref), { headOid: entry.headOid, baseOid: entry.baseOid, files: entry.broken ? null : entry.files }]));
+  return new Map(progress.map((entry) => [prKey(entry.ref), { headOid: entry.headOid, baseOid: entry.baseOid, foldersOid: entry.foldersOid, files: entry.broken ? null : entry.files }]));
 }
 
-/** Directory names at the root of each commit's tree. A commit GitHub does not answer for is left out. */
+/**
+ * Directory names at the root of each commit's tree. A commit GitHub does
+ * not answer for is left out, and so is a failed batch: the other batches'
+ * reads stand, like file lists and number lookups.
+ */
 export async function topLevelFolders(http: GitHubHttp, repo: string, commitOids: string[]): Promise<Map<string, string[]>> {
   const result = new Map<string, string[]>();
   for (const batch of chunk(commitOids, SCOUT_FILES_BATCH_SIZE)) {
-    const response = await http.graphql<{ repository: RawTreeBatch | null }>(buildTreeQuery(repo, batch));
+    let response;
+    try {
+      response = await http.graphql<{ repository: RawTreeBatch | null }>(buildTreeQuery(repo, batch));
+    } catch {
+      continue;
+    }
     if (!response.data) {
-      throw graphqlFailure('scout tree query', response.errors);
+      continue;
     }
     batch.forEach((oid, index) => {
       const tree = response.data?.repository?.[`t${index}`]?.tree;

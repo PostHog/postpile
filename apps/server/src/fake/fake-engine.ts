@@ -1423,8 +1423,9 @@ export class FakeEngine implements EngineService {
     return this.teamRoles.view();
   }
 
+  /** Like the engine's prs table: the sample's PRs and the ones only a scout holds, so mark_read resolves a bare number. */
   async storedPrKeys(): Promise<PrKey[]> {
-    return this.data.prs.map((pr) => pr.key).sort();
+    return [...this.prsByKey().keys()].sort();
   }
 
   /** Like the engine: open PRs' diffs only, stack mates left out. The default sample has no diffs; POSTPILE_FAKE_EXTRA=mcp adds some. */
@@ -1553,18 +1554,23 @@ export class FakeEngine implements EngineService {
 
   /** Same matcher as the engine, over the sample topics the sidebar lists. */
   async search(query: string, scope?: ListScope): Promise<SearchResult> {
-    const topics: SearchableTopic[] = this.listedTopics(scope).map((topic) => ({
-      topicId: topic.id,
-      name: topic.name,
-      area: topic.area,
-      tiles: this.tilesOfTopic(topic.id).map((tile) => ({
+    const prs = this.prsByKey();
+    const searchable = (tiles: Tile[]) =>
+      tiles.map((tile) => ({
         tileId: tile.id,
         prs: tile.members.flatMap((member) => {
-          const pr = this.data.prs.find((candidate) => candidate.key === member.prKey);
+          const pr = prs.get(member.prKey);
           return pr ? [{ key: pr.key, title: pr.title, author: pr.author, headRef: pr.headRef }] : [];
         }),
-      })),
-    }));
+      }));
+    const topics: SearchableTopic[] = this.listedTopics(scope).map((topic) => ({ topicId: topic.id, name: topic.name, area: topic.area, tiles: searchable(this.tilesOfTopic(topic.id)) }));
+    // Like the engine: the scouts' tiles too when asked (MCP search_prs), each under its scout's name.
+    if (scope?.withScouts) {
+      this.scouts.settle();
+      for (const scout of this.scouts.list()) {
+        topics.push({ topicId: scout.topicId, name: scout.name, area: null, tiles: searchable(this.scouts.tilesOf(scout.id)) });
+      }
+    }
     return searchTopics(topics, query);
   }
 

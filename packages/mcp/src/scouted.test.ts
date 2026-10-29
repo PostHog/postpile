@@ -87,6 +87,9 @@ describe('MCP: scouted PRs', () => {
     const text = (await searchPrs(ctx, 'billing', { limit: 25, offset: 0, state: 'any', repo: null, whoseMove: 'any' })).text;
     expect(text).toContain("acme/app#40");
     expect(text).toContain("scouted by Lookout, not in the user's inbox");
+    // No scout:<id> as a topic reference: the topic tool cannot open one, and pr_context leaves it out too.
+    const json = (await searchPrs(ctx, 'billing', { limit: 25, offset: 0, state: 'any', repo: null, whoseMove: 'any' }, 'json')).structured as { prs: { key: string; topic: unknown }[] };
+    expect(json.prs.find((pr) => pr.key === 'acme/app#40')?.topic).toBeNull();
   });
 
   it('tells PostPile tracking it apart from the GitHub inbox once followed', async () => {

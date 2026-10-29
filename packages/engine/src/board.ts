@@ -432,7 +432,15 @@ export class Board {
     const memberKeys = [...this.scouted.keys()].filter((key) => this.prs.has(key) && this.scoutTopicIdOf(key) === topicId);
     const found = new Map(this.found);
     for (const key of memberKeys) {
-      found.set(key, scoutedFound(this.scouted.get(key)!));
+      const pulled = scoutedFound(this.scouted.get(key)!);
+      found.set(key, pulled);
+      // Every layer of its stack is the scout's too: a context or dismissed layer must not read unread as pulled in,
+      // which opening the tile (a seen mark in PostPile) could never clear.
+      for (const layer of this.stackOf.get(key)?.prKeys ?? []) {
+        if (!found.has(layer)) {
+          found.set(layer, { ...pulled, prKey: layer });
+        }
+      }
     }
     // Stacks of other scouts stay with them; a stack placed nowhere else shows here whole.
     const stackTopicIds = new Map([...this.stackTopicIds, ...this.scoutStackIds]);

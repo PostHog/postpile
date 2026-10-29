@@ -319,6 +319,18 @@ export class FakeReader implements GitHubReader {
     return new Map(refs.flatMap((ref) => all.filter((pr) => pr.key === prKey(ref)).map((pr): [PrKey, ScoutCandidate] => [pr.key, pr])));
   }
 
+  /** Set to make scoutPrNodeId throw, like GitHub out of reach. */
+  failNodeIdLookup: Error | null = null;
+
+  async scoutPrNodeId(ref: PrRef): Promise<string | null> {
+    this.scoutCalls.push(`node ${prKey(ref)}`);
+    if (this.failNodeIdLookup) {
+      throw this.failNodeIdLookup;
+    }
+    const all = [...this.scoutListings.values()].flat();
+    return all.find((pr) => pr.key === prKey(ref))?.nodeId ?? null;
+  }
+
   async scoutFiles(refs: PrRef[]): Promise<Map<PrKey, ScoutFilesRead>> {
     this.scoutCalls.push(`files ${refs.map(prKey).join(',')}`);
     return new Map(refs.flatMap((ref) => {

@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { UNDO_WINDOW_MS, type ScoutCandidate } from '@postpile/core';
-import { makePr, makeThreadFor } from '@postpile/core/fixtures';
+import { makeEvent, makePr, makeThreadFor } from '@postpile/core/fixtures';
 import { describe, expect, it, vi } from 'vitest';
 import { makeHarness, NOW, type Harness } from '../testing/fakes.ts';
 
@@ -34,7 +34,7 @@ async function pulled(options: { writesEnabled?: boolean; numbers?: number[] } =
   const numbers = options.numbers ?? [1];
   h.reader.scoutListings.set('acme/app', numbers.map((number) => candidate(number)));
   for (const number of numbers) {
-    h.reader.scoutFileLists.set(`acme/app#${number}`, { headOid: `h${number}`, baseOid: 'base1', files: [{ path: 'billing/main.ts', changeType: 'ADDED' }] });
+    h.reader.scoutFileLists.set(`acme/app#${number}`, { headOid: `h${number}`, baseOid: 'base1', foldersOid: 'base1', files: [{ path: 'billing/main.ts', changeType: 'ADDED' }] });
     h.reader.addStackPr(makePr({ number, headOid: `h${number}`, updatedAt: candidate(number).updatedAt }));
   }
   h.runner.answer('scout_judge', { judgements: numbers.map((number) => ({ prKey: `acme/app#${number}`, verdict: 'pull', reason: `adds billing/ (#${number})` })) });
@@ -146,10 +146,10 @@ describe('the Scouted section', () => {
 
   it('keeps the lock as it was at the click when writes unlock during the PR lookup', async () => {
     const h = await pulled({ writesEnabled: false });
-    const lookup = h.reader.scoutPrsByNumber.bind(h.reader);
-    vi.spyOn(h.reader, 'scoutPrsByNumber').mockImplementation(async (refs) => {
+    const lookup = h.reader.scoutPrNodeId.bind(h.reader);
+    vi.spyOn(h.reader, 'scoutPrNodeId').mockImplementation(async (ref) => {
       await h.engine.setGitHubWrites(true);
-      return lookup(refs);
+      return lookup(ref);
     });
     await h.engine.followScouted('acme/app#1', 'tile');
     h.timers.advance(UNDO_WINDOW_MS);
@@ -157,6 +157,39 @@ describe('the Scouted section', () => {
 
     expect(h.writer.calls.filter((call) => call.startsWith('followPr'))).toEqual([]);
     expect(h.store.pendingWrites.list()).toMatchObject([{ kind: 'follow', follow: { prKey: 'acme/app#1' } }]);
+  });
+
+  it('refuses a second Follow while the first one still looks the PR up', async () => {
+    const h = await pulled();
+    const lookup = h.reader.scoutPrNodeId.bind(h.reader);
+    let release: () => void = () => {};
+    vi.spyOn(h.reader, 'scoutPrNodeId').mockImplementationOnce(async (ref) => {
+      await new Promise<void>((resolve) => (release = resolve));
+      return lookup(ref);
+    });
+
+    const first = h.engine.followScouted('acme/app#1', 'tile');
+    const second = await h.engine.followScouted('acme/app#1', 'detail');
+    release();
+
+    expect(second).toMatchObject({ ok: true, message: 'Follow already on its way', undoToken: null });
+    expect((await first).undoToken).not.toBeNull();
+    h.timers.advance(UNDO_WINDOW_MS);
+    await h.engine.flushPendingWrites();
+    expect(h.writer.calls.filter((call) => call.startsWith('followPr'))).toEqual(['followPr PR_1']);
+  });
+
+  it('says GitHub did not answer, not "no such PR", when the Follow lookup fails', async () => {
+    const h = await pulled();
+    h.reader.failNodeIdLookup = new Error('GitHub API rate limit exceeded');
+
+    const result = await h.engine.followScouted('acme/app#1', 'tile');
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain('rate limit exceeded');
+    expect(result.message).toContain('retry');
+    h.reader.failNodeIdLookup = null;
+    expect((await h.engine.followScouted('acme/app#1', 'tile')).ok).toBe(true);
   });
 
   it('keeps a failed Follow pending as failed, never followed', async () => {
@@ -230,6 +263,25 @@ describe('the Scouted section', () => {
     expect(tiles[0]?.scout).toMatchObject({ scoutId: 'lookout', scoutName: 'Lookout', reason: 'new folder' });
   });
 
+  it('never makes a scout stack unread through a context layer, so opening it is enough', async () => {
+    const h = makeHarness();
+    const bottom = makePr({ number: 5, headRef: 'billing-1', updatedAt: NOW.toISOString() });
+    const top = makePr({ number: 6, baseRef: 'billing-1', headRef: 'billing-2', updatedAt: NOW.toISOString() });
+    h.store.prs.upsert(bottom, NOW.toISOString());
+    h.store.prs.upsert(top, NOW.toISOString());
+    const row = { configVersion: 1, seenUpdatedAt: null, followedAt: null, dismissedAt: null, dismissReason: null, expiredAt: null, expiryReason: null };
+    h.store.scoutedPrs.insert({ ...row, prKey: top.key, scoutId: 'lookout', scoutName: 'Lookout', reason: 'new folder', pulledAt: '2026-09-02T10:00:00.000Z' });
+    // The bottom layer is context only, with a loud reply nobody saw.
+    h.store.events.upsertDerived(bottom.key, [makeEvent({ id: `${bottom.key}:reply:r1`, prKey: bottom.key, kind: 'reply_to_user', ruleLoudness: 'loud', at: NOW.toISOString() })]);
+
+    const tile = (await h.engine.getTopic('scout:lookout'))?.tiles[0];
+    expect(tile?.tile.members.map((member) => member.provenance.kind)).toEqual(['found', 'found']);
+    expect(tile?.state.kind).not.toBe('unread');
+
+    await h.engine.markScoutedSeen(top.key);
+    expect((await h.engine.getTopic('scout:lookout'))?.tiles[0]?.scout?.unseen).toBe(false);
+  });
+
   it('stops counting a scouted stack once one of its layers is followed', async () => {
     const h = makeHarness();
     const bottom = makePr({ number: 5, headRef: 'billing-1', updatedAt: NOW.toISOString() });
@@ -287,7 +339,7 @@ describe('the Scouted section', () => {
     writeFileSync(file, LOOKOUT);
     const h = makeHarness({ scoutsFile: file, catchUpCallsPerDay: 300 });
     h.reader.scoutListings.set('acme/app', [candidate(1)]);
-    h.reader.scoutFileLists.set('acme/app#1', { headOid: 'h1', baseOid: 'base1', files: [{ path: 'billing/main.ts', changeType: 'ADDED' }] });
+    h.reader.scoutFileLists.set('acme/app#1', { headOid: 'h1', baseOid: 'base1', foldersOid: 'base1', files: [{ path: 'billing/main.ts', changeType: 'ADDED' }] });
     h.reader.addStackPr(makePr({ number: 1, headOid: 'h1', updatedAt: candidate(1).updatedAt }));
     h.runner.answer('scout_judge', { judgements: [{ prKey: 'acme/app#1', verdict: 'pull', reason: 'adds billing/' }] });
     await h.engine.sync({});
@@ -295,6 +347,21 @@ describe('the Scouted section', () => {
 
     expect((await h.engine.retryGlance('acme/app#1')).ok).toBe(true);
     await vi.waitFor(() => expect(h.store.glances.get('acme/app#1')).not.toBeNull());
+  });
+
+  it('sizes the Unsorted catch-up for the scouted glances it also writes', async () => {
+    const h = makeHarness({ catchUpCallsPerDay: 300 });
+    h.store.meta.set('viewer', JSON.stringify({ login: 'alice', teams: [] }));
+    const row = { scoutId: 'lookout', scoutName: 'Lookout', reason: 'new folder', configVersion: 1, pulledAt: NOW.toISOString(), seenUpdatedAt: null, followedAt: null, dismissedAt: null, dismissReason: null, expiredAt: null, expiryReason: null };
+    // More than three glance batches, nothing else in Unsorted: the old cap (3 calls) ran out before the last batch.
+    for (let number = 1; number <= 60; number++) {
+      const pr = makePr({ number, headRef: `feature-${number}`, updatedAt: NOW.toISOString() });
+      h.store.prs.upsert(pr, NOW.toISOString());
+      h.store.scoutedPrs.insert({ ...row, prKey: pr.key });
+    }
+
+    expect((await h.engine.retryGlance('acme/app#60')).ok).toBe(true);
+    await vi.waitFor(() => expect(Array.from({ length: 60 }, (_, index) => h.store.glances.get(`acme/app#${index + 1}`)).every((glance) => glance !== null)).toBe(true));
   });
 });
 

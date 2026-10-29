@@ -103,9 +103,16 @@ export class TopicCatchUp {
     private readonly log: (line: string) => void,
   ) {}
 
-  private glanceTargetsIn(topicId: string | null): number {
+  /**
+   * Glances the run may write, for its cap. Unsorted's run also glances the
+   * scouted PRs (topic-less too), so they count there: a retry of one in a
+   * later batch must not hit the cap before its turn.
+   */
+  private glanceTargetsIn(topicId: string | null, viewer: Viewer): number {
     const board = Board.load(this.deps.store, this.deps.now().toISOString());
-    return [...glanceTargetKeys(board)].filter((key) => (board.memberships.get(key)?.topicId ?? null) === topicId).length;
+    const inTopic = [...glanceTargetKeys(board)].filter((key) => (board.memberships.get(key)?.topicId ?? null) === topicId).length;
+    const scouted = topicId === null ? new GlanceInputs(this.deps.store, board, viewer, this.deps.contexts).scoutTargets().length : 0;
+    return inTopic + scouted;
   }
 
   /** catch_up_ran for every run that got past the agent check. Never throws: telemetry never breaks a run. */
@@ -144,7 +151,7 @@ export class TopicCatchUp {
   private async runJobs(topicId: string | null, viewer: Viewer, startedAt: string, stats: AgentCallStats, errors: string[]): Promise<void> {
     const label = topicId ?? 'unsorted';
     await this.deps.callLog.withRun(`catchup:${label}:${startedAt}`, stats, async () => {
-      const budget = new AgentBudget(catchUpCallsPerRun(this.glanceTargetsIn(topicId)), stats, this.cap);
+      const budget = new AgentBudget(catchUpCallsPerRun(this.glanceTargetsIn(topicId, viewer)), stats, this.cap);
       const deps = this.digestDeps(viewer, budget, errors);
       const scope = { topicId };
       // Budget is taken in this order, like a sync: dossier, events, glances as the dossier lands, reconcile.
