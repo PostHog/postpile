@@ -2,9 +2,8 @@ import {
   emptyAgentCallStats,
   mainRepoOf,
   parsePrKey,
-  parseScouts,
+  scoutFromCard,
   scoutIntroAutoShows,
-  scoutSection,
   SCOUT_TRIAL_DAYS,
   SCOUT_TRIAL_JUDGE_CALLS,
   type ActionResult,
@@ -153,6 +152,11 @@ export class ScoutIntro {
     if (viewer === null) {
       return refused('PostPile has not read GitHub yet; check again after the first sync.');
     }
+    // The same read-back as Turn on, before any call or read: a prompt that would not turn on is not checked either.
+    const asWritten = scoutFromCard({ name: 'My scout', prompt, repos, paths: [] });
+    if ('error' in asWritten) {
+      return refused(`This scout could not be turned on as written: ${asWritten.error}`);
+    }
     if (!this.deps.allowance.take()) {
       return refused("Today's agent calls are used up; check again tomorrow, or turn it on unchecked from scouts.md.");
     }
@@ -168,14 +172,16 @@ export class ScoutIntro {
 
   /**
    * The dry run, or null without a scouts file or for a scout that would
-   * not parse. A ScoutRun of its own per check: its per-run state (calls
-   * left, files read) is never shared with a sync or another check.
+   * not turn on as written (`scoutFromCard`, Turn on's own check). A
+   * ScoutRun of its own per check: its per-run state (calls left, files
+   * read) is never shared with a sync or another check.
    */
   private async trial(scout: ScoutTurnOnRequest, viewer: NonNullable<ReturnType<typeof loadViewer>>, stats: AgentCallStats): Promise<ScoutCheckResult['trial']> {
-    const config = parseScouts(scoutSection(scout)).scouts[0];
-    if (!this.deps.scoutRunDeps || !config) {
+    const asWritten = scoutFromCard(scout);
+    if (!this.deps.scoutRunDeps || 'error' in asWritten) {
       return null;
     }
+    const config = asWritten.config;
     const budget = new AgentBudget(SCOUT_TRIAL_JUDGE_CALLS, stats, this.deps.allowance);
     return new ScoutRun(this.deps.scoutRunDeps).trial(config, SCOUT_TRIAL_DAYS, { viewer, budget, agentOff: this.deps.agentOff(), quotaAllows: this.deps.quotaAllows });
   }

@@ -13,7 +13,7 @@ function outsideFence(prompt: string): string {
 describe('scout intro schemas', () => {
   it('reads a draft and a check with defaults for left-out fields', () => {
     expect(scoutDraftOutput.parse({})).toEqual({ prompt: '' });
-    expect(scoutCheckOutput.parse({ fit: 'fits' })).toEqual({ fit: 'fits', note: '', cantSee: null, name: '', paths: [] });
+    expect(scoutCheckOutput.parse({ fit: 'fits' })).toEqual({ fit: 'fits', note: '', cantSee: null, name: '', paths: [], pathsCoverAll: false });
     expect(() => scoutCheckOutput.parse({ cantSee: { why: 'no part' } })).toThrow();
   });
 });
@@ -38,7 +38,7 @@ describe('draftScout', () => {
 describe('checkScout', () => {
   it('maps the answer onto the prompt: a part it does not quote is dropped', async () => {
     const runner = new FakeRunner()
-      .answer('scout_check', { fit: 'fits', note: 'Folders show in paths.', cantSee: { part: 'models used across services', why: 'In the code.' }, name: 'Lookout', paths: ['+*/'] })
+      .answer('scout_check', { fit: 'fits', note: 'Folders show in paths.', cantSee: { part: 'models used across services', why: 'In the code.' }, name: 'Lookout', paths: ['+*/'], pathsCoverAll: true })
       .answer('scout_check', { fit: 'fits', note: 'ok', cantSee: { part: 'billing tables', why: 'x' }, name: 'Lookout', paths: [] });
     const service = new RunnerAgentService(runner);
     const input = { prompt: PROMPT, repos: ['acme/app'], viewer, context: emptyContext };
@@ -46,5 +46,7 @@ describe('checkScout', () => {
     expect(await service.checkScout(input)).toMatchObject({ fit: { verdict: 'fits' }, cantSee: { part: 'models used across services' }, name: 'Lookout', paths: ['+*/'] });
     expect((await service.checkScout(input)).cantSee).toBeNull();
     expect(runner.promptsFor('scout_check')[0]).toContain(PROMPT);
+    // Paths are a hard filter: the prompt asks for all branches covered, or none.
+    expect(runner.promptsFor('scout_check')[0]).toContain('must cover EVERY kind of PR the prompt asks for');
   });
 });

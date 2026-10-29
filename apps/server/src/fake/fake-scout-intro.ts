@@ -32,7 +32,9 @@ const CHECK_ANSWER: ScoutCheckAnswer = {
     why: 'That usually hides inside the code, and scouts never read diffs. It only catches the ones that say so in the title or description.',
   },
   name: 'Lookout · structure',
+  // "+*/" covers only the new folders, not facades or API shape: a partial list would narrow the scout, so none.
   paths: ['+*/'],
+  pathsCoverAll: false,
 };
 
 function delay(ms: number): Promise<void> {

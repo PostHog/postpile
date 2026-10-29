@@ -2,7 +2,7 @@
 // by itself, what the check of a drafted scout found, and how a scout the
 // user turns on is written into scouts.md. Rules only, no IO.
 import { clipText } from './dossier.ts';
-import { parsePathHint, parseScouts, scoutSlug } from './scouts-config.ts';
+import { parsePathHint, parseScouts, scoutSlug, type ScoutConfig } from './scouts-config.ts';
 import type { IsoTime, PrKey } from './types.ts';
 
 /** The dry run of "Check scout" looks this far back. */
@@ -109,6 +109,8 @@ export interface ScoutCheckAnswer {
   cantSee: { part: string; why: string } | null;
   name: string;
   paths: string[];
+  /** The check's own word that the paths cover every kind of PR the prompt asks for. */
+  pathsCoverAll: boolean;
 }
 
 /** Folds whitespace for comparing a quote with the prompt. */
@@ -157,8 +159,11 @@ export function promptWithoutPart(prompt: string, part: string): string | null {
  * The check answer onto the user's prompt, like the setup fit check: a
  * "can't see" part stays only when it quotes the prompt, and dropping it
  * cuts exactly that part (`promptWithoutPart`), never a model rewrite;
- * path hints only when `isScoutPathHint`, at most SCOUT_CHECK_PATHS. An
- * unknown verdict reads as partly, the cautious middle.
+ * path hints only when the check says they cover the whole prompt
+ * (`pathsCoverAll`) and each `isScoutPathHint`, at most SCOUT_CHECK_PATHS:
+ * paths are a hard filter, so a partial list would narrow the scout, while
+ * no list only costs judge calls. When unsure, none. An unknown verdict
+ * reads as partly, the cautious middle.
  */
 export function mapScoutCheck(answer: ScoutCheckAnswer, prompt: string): Pick<ScoutCheckResult, 'fit' | 'cantSee' | 'name' | 'paths'> {
   const verdicts: ScoutFitVerdict[] = ['fits', 'partly', 'no'];
@@ -166,10 +171,10 @@ export function mapScoutCheck(answer: ScoutCheckAnswer, prompt: string): Pick<Sc
   const raw = answer.cantSee;
   const quotes = raw !== null && raw.part.trim() !== '' && folded(prompt).includes(folded(raw.part));
   const cantSee = raw !== null && quotes ? { part: raw.part.trim(), why: clipText(raw.why, NOTE_MAX), rewrite: promptWithoutPart(prompt.trim(), raw.part) } : null;
-  const paths = answer.paths
-    .map((entry) => entry.trim())
-    .filter(isScoutPathHint)
-    .slice(0, SCOUT_CHECK_PATHS);
+  const hints = answer.paths.map((entry) => entry.trim());
+  // One hint dropped as unusable leaves the rest partial: all of them go, like a check that is unsure.
+  const usable = answer.pathsCoverAll && hints.length <= SCOUT_CHECK_PATHS && hints.every(isScoutPathHint);
+  const paths = usable ? hints : [];
   const name = clipText(answer.name.replace(/\s+/g, ' ').trim(), NAME_MAX) || 'My scout';
   return { fit: { verdict, note: clipText(answer.note, NOTE_MAX) }, cantSee, name, paths };
 }
@@ -240,4 +245,18 @@ export function appendScout(text: string, scout: ScoutTurnOnRequest): { text: st
     return { error: 'the prompt would not read back as written; remove lines starting with "##" or "repos:"' };
   }
   return { text: next };
+}
+
+/**
+ * The scout as the card would turn it on, through the same check as
+ * activation (`appendScout`'s write and read-back): the check's dry run
+ * runs on exactly this, so a prompt line such as "repos: …" can never widen
+ * what the dry run reads.
+ */
+export function scoutFromCard(scout: ScoutTurnOnRequest): { config: ScoutConfig } | { error: string } {
+  const result = appendScout('', scout);
+  if ('error' in result) {
+    return result;
+  }
+  return { config: parseScouts(result.text).scouts[0]! };
 }

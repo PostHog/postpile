@@ -58,8 +58,13 @@ Answer:
 - cantSee: the one part of the prompt a scout can't see (it would need the code or the discussion), or
   null. part: quoted exactly from the prompt, word for word, so it can be cut out. why: one sentence.
 - name: a short name for the scout, two to four words, e.g. "Lookout · structure".
-- paths: up to 6 path hints that would mark a matching PR, as gitignore-style globs over repo paths
-  ("services/*/api/**", "docs/architecture.md"). Put "+" in front to count only added files, and
-  use "+*/" for "adds a new top-level folder". Empty when paths would not help.
-${jsonOnly('{"fit": "fits", "note": "...", "cantSee": {"part": "...", "why": "..."}, "name": "...", "paths": ["+*/"]}')}`;
+- paths: up to 6 path hints, as gitignore-style globs over repo paths ("services/*/api/**",
+  "docs/architecture.md"). Put "+" in front to count only added files, and use "+*/" for "adds a new
+  top-level folder". Paths are a hard filter: a scout with paths never judges a PR that touches none
+  of them. So the hints together must cover EVERY kind of PR the prompt asks for. If one part of the
+  prompt can't be pinned to paths ("changes to the public API shape" spread over many files), return
+  [] instead: a missing hint only costs a model call, a partial list silently narrows the scout.
+- pathsCoverAll: true only when the paths cover every kind of PR the prompt asks for; false when
+  unsure. With false, no paths are used.
+${jsonOnly('{"fit": "fits", "note": "...", "cantSee": {"part": "...", "why": "..."}, "name": "...", "paths": ["+*/"], "pathsCoverAll": true}')}`;
 }

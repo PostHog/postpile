@@ -384,4 +384,5 @@ export const scoutCheckOutput = z.object({
   cantSee: z.object({ part: text, why: text.default('') }).nullable().default(null),
   name: text.default(''),
   paths: z.array(text).default([]),
+  pathsCoverAll: z.boolean().default(false),
 });

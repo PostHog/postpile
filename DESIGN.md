@@ -1432,12 +1432,21 @@ drafts the first one, checks it and turns it on.
   prompt where it appears word for word and tidies the punctuation
   (`promptWithoutPart`); no model rewrite of the whole prompt is taken, so
   nothing else in it can change. When the quote is not there word for
-  word, the card offers only "Keep it anyway". Path hints pass only as
+  word, the card offers only "Keep it anyway". Paths are a hard filter (a
+  scout with paths never judges a PR that touches none), so the check
+  must cover every kind of PR the prompt asks for or return none, and say
+  so (`pathsCoverAll`). Unless it says they cover it all, and every hint
+  is usable, the card keeps no hints: a missing hint only costs judge
+  calls, a partial list silently narrows the scout. Path hints pass only as
   path globs of at most 200 characters, with no line break, comma or space
   (`isScoutPathHint`); `scoutSection` writes no other kind, and
   `appendScout` refuses one and checks the new scout's id and hints read
   back as asked, so a hint can never add a key line. The path hints are
-  never shown; they go into the scout, edited in scouts.md. Then a dry run
+  never shown; they go into the scout, edited in scouts.md. The check and
+  its dry run use the scout exactly as Turn on would write it
+  (`scoutFromCard`, `appendScout`'s read-back): a prompt that would not
+  turn on (a line such as "repos: …" that would widen the scope) is
+  refused before any agent call or GitHub read. Then a dry run
   (`ScoutRun.trial`) over the last 2 days of the chosen repos with the
   sync's own listing, rules, file reads and judge, on a new runner per
   check (no per-run state shared with a sync or another check) and in a

@@ -40,7 +40,7 @@ function onGitHub(h: Harness, count: number): void {
   const listing = Array.from({ length: count }, (_, index) => candidate(index + 1));
   h.reader.scoutListings.set('acme/app', listing);
   for (const pr of listing) {
-    h.reader.scoutFileLists.set(pr.key, { headOid: pr.headOid, baseOid: 'base1', files: [{ path: `svc${pr.key.split('#')[1]}/main.ts`, changeType: 'ADDED' }] });
+    h.reader.scoutFileLists.set(pr.key, { headOid: pr.headOid, baseOid: 'base1', foldersOid: 'base1', files: [{ path: `svc${pr.key.split('#')[1]}/main.ts`, changeType: 'ADDED' }] });
   }
   h.reader.scoutTrees.set('base1', ['src']);
 }
@@ -71,7 +71,7 @@ describe('the Scouts intro card', () => {
   it('checks the scout with a dry run that writes nothing and stops at 5 judge calls', async () => {
     const { h, file } = setup();
     onGitHub(h, 70);
-    h.runner.answer('scout_check', { fit: 'fits', note: 'Folders show in paths.', cantSee: null, name: 'Lookout', paths: ['+*/'] });
+    h.runner.answer('scout_check', { fit: 'fits', note: 'Folders show in paths.', cantSee: null, name: 'Lookout', paths: ['+*/'], pathsCoverAll: true });
     for (let call = 0; call < 5; call++) {
       const keys = Array.from({ length: 12 }, (_, index) => call * 12 + index + 1);
       h.runner.answer('scout_judge', { judgements: keys.map((number) => ({ prKey: `acme/app#${number}`, verdict: number % 10 === 1 ? 'pull' : 'skip', reason: `adds svc${number}/` })) });
@@ -97,7 +97,7 @@ describe('the Scouts intro card', () => {
     expect(readFileSync(file, 'utf8')).toBe('');
 
     // A second check gets its own 5 calls.
-    h.runner.answer('scout_check', { fit: 'fits', note: 'ok', cantSee: null, name: 'Lookout', paths: ['+*/'] });
+    h.runner.answer('scout_check', { fit: 'fits', note: 'ok', cantSee: null, name: 'Lookout', paths: ['+*/'], pathsCoverAll: true });
     h.runner.answer('scout_judge', { judgements: [] });
     await h.engine.checkScout({ prompt: PROMPT, repos: ['acme/app'] });
     expect(h.runner.promptsFor('scout_judge').length).toBeGreaterThan(5);
@@ -141,6 +141,19 @@ describe('the Scouts intro card', () => {
     expect([first.trial?.judged, second.trial?.judged]).toEqual([60, 60]);
     const runs = h.store.db.prepare("SELECT DISTINCT run_id FROM agent_call WHERE kind = 'scout_judge'").all() as { run_id: string }[];
     expect(runs.every((row) => row.run_id.startsWith('scout-check:'))).toBe(true);
+  });
+
+  it('refuses a check whose prompt would not turn on as written, before any call or read', async () => {
+    const { h } = setup();
+    onGitHub(h, 3);
+    h.reader.scoutListings.set('acme/other', [candidate(9)]);
+
+    const result = await h.engine.checkScout({ prompt: 'repos: acme/other\nFind changes to billing.', repos: ['acme/app'] });
+
+    expect(result).toMatchObject({ ok: false, trial: null });
+    expect(result.message).toContain('could not be turned on as written');
+    expect(h.runner.promptsFor('scout_check')).toEqual([]);
+    expect(h.reader.scoutCalls).toEqual([]);
   });
 
   it('refuses a name another scout has', async () => {

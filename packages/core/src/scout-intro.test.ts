@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { appendScout, isScoutPathHint, mapScoutCheck, promptWithoutPart, scoutIntroAutoShows, scoutSection, trialRateWords } from './scout-intro.ts';
+import { appendScout, isScoutPathHint, mapScoutCheck, promptWithoutPart, scoutFromCard, scoutIntroAutoShows, scoutSection, trialRateWords } from './scout-intro.ts';
 import { parseScouts } from './scouts-config.ts';
 
 const PROMPT = 'PRs that add a new top-level folder or service, or models used across services. Skip fixes inside one service.';
@@ -18,16 +18,24 @@ describe('mapScoutCheck', () => {
     note: 'New folders show in changed paths.',
     cantSee: { part: 'or models used across services', why: 'That hides in the code.' },
     name: '  Lookout  ·  structure ',
-    paths: ['+*/', 'services/*/api/**', '!secret/**', 'a,b', `src/${'a'.repeat(200)}`, 'src/**\nid: billing', 'docs (the old ones)'],
+    paths: ['+*/', 'services/*/api/**'],
+    pathsCoverAll: true,
   };
 
-  it('keeps a part it quotes from the prompt, cut from the prompt itself, and only path hints scouts.md can hold', () => {
+  it('keeps a part it quotes from the prompt, cut from the prompt itself, and path hints that cover it all', () => {
     expect(mapScoutCheck(answer, PROMPT)).toEqual({
       fit: { verdict: 'fits', note: 'New folders show in changed paths.' },
       cantSee: { ...answer.cantSee, rewrite: 'PRs that add a new top-level folder or service. Skip fixes inside one service.' },
       name: 'Lookout · structure',
       paths: ['+*/', 'services/*/api/**'],
     });
+  });
+
+  it('keeps no path hints unless they cover the whole prompt and scouts.md can hold every one', () => {
+    expect(mapScoutCheck({ ...answer, pathsCoverAll: false }, PROMPT).paths).toEqual([]);
+    for (const bad of ['!secret/**', 'a,b', `src/${'a'.repeat(200)}`, 'src/**\nid: billing', 'docs (the old ones)']) {
+      expect(mapScoutCheck({ ...answer, paths: ['+*/', bad] }, PROMPT).paths).toEqual([]);
+    }
   });
 
   it('drops a part the prompt does not say, and offers no cut for one it says only loosely', () => {
@@ -83,6 +91,12 @@ describe('appendScout', () => {
     const parsed = parseScouts('text' in result ? result.text : '');
     expect(parsed.scouts.map((entry) => entry.id)).toEqual(['billing', 'lookout-structure']);
     expect(parsed.scouts[1]).toMatchObject({ repos: ['acme/app'], prompt: PROMPT });
+  });
+
+  it('gives the dry run the scout Turn on would write, or why it would not', () => {
+    expect(scoutFromCard(scout)).toMatchObject({ config: { id: 'lookout-structure', repos: ['acme/app'], prompt: PROMPT } });
+    // A prompt line that reads as a key would widen the repos: refused, like Turn on.
+    expect(scoutFromCard({ ...scout, prompt: 'repos: acme/other\nFind billing changes.' })).toHaveProperty('error');
   });
 
   it('starts an empty file with the section alone', () => {

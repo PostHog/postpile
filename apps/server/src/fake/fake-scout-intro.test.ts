@@ -22,7 +22,7 @@ describe('FakeEngine scouts intro', () => {
     const fake = engine();
     expect(await fake.draftScout()).toEqual({ text: FAKE_SCOUT_DRAFT, why: 'drafted' });
     const checked = await fake.checkScout({ prompt: FAKE_SCOUT_DRAFT, repos: ['acme/app'] });
-    expect(checked).toMatchObject({ ok: true, fit: { verdict: 'fits' }, name: 'Lookout · structure', paths: ['+*/'] });
+    expect(checked).toMatchObject({ ok: true, fit: { verdict: 'fits' }, name: 'Lookout · structure', paths: [] });
     expect(checked.trial).toMatchObject({ days: 2, pulled: 5, complete: true });
     expect(checked.trial?.examples.map((example) => example.prKey)).toEqual(['acme/app#2701', 'acme/app#2688']);
     const rewrite = checked.cantSee?.rewrite ?? '';
