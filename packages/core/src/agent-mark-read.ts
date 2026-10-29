@@ -55,6 +55,35 @@ export interface AgentReadNotice {
   undoUntil: IsoTime;
 }
 
+/**
+ * The agent mark-reads still inside their undo window, oldest first, for the
+ * app's toasts. Every one is kept until its window ends, so two calls that
+ * land between two polls of the renderer both get their Undo.
+ */
+export class AgentReadNotices {
+  private count = 0;
+  private notices: AgentReadNotice[] = [];
+
+  /** `undoable` says whether a notice's batch can still be undone (the engine asks its queue). */
+  constructor(private readonly undoable: (notice: AgentReadNotice) => boolean) {}
+
+  add(client: string, result: AgentMarkReadResult, undoToken: string, undoUntil: IsoTime): void {
+    this.count += 1;
+    this.notices.push({ id: this.count, client, prKeys: result.marked, writesLocked: result.writesLocked, undoToken, undoUntil });
+  }
+
+  /** The ones that can still be undone; the others are dropped. */
+  live(): AgentReadNotice[] {
+    this.notices = this.notices.filter((notice) => this.undoable(notice));
+    return [...this.notices];
+  }
+
+  /** Grows with every call that marked something, so the renderer refetches. */
+  changes(): number {
+    return this.count;
+  }
+}
+
 /** What the app knows about one PR of the request when it handles it. */
 export interface AgentMarkReadInput {
   /** PostPile stores the PR. */

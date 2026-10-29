@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { UNDO_WINDOW_MS, type AgentRequestResult, type FullPr } from '@postpile/core';
-import { at, makeComment, makePr, makeThreadFor } from '@postpile/core/fixtures';
+import { at, makeComment, makeEvent, makePr, makeThreadFor } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness, type Harness } from '../testing/fakes.ts';
 import { reviewRequestedPr } from '../testing/prs.ts';
@@ -44,7 +44,7 @@ describe('markReadForAgent', () => {
     const result = await h.engine.markReadForAgent({ prs: [{ prKey: pr.key, seenThrough: seen }] }, CLIENT);
 
     expect(result).toMatchObject({ marked: [pr.key], refused: [], skipped: [], writesLocked: false, undoUntil: expect.any(String) });
-    const notice = (await h.engine.livePollStatus()).agentRead;
+    const notice = (await h.engine.livePollStatus()).agentReads[0];
     expect(notice).toMatchObject({ id: 1, client: 'claude-code', prKeys: [pr.key], writesLocked: false });
     expect(h.writer.calls).toEqual([]);
     const log = await h.engine.actionLog(5);
@@ -56,10 +56,31 @@ describe('markReadForAgent', () => {
     expect(h.writer.calls).toEqual([`markThreadRead thread-${pr.ref.number}`]);
   });
 
+  it('keeps every notice until its undo window ends, so two calls between polls both get a toast', async () => {
+    const h = makeHarness();
+    const other = followedPr(12);
+    topicWithPrs(h, 'cache', [pr, other]);
+    await h.engine.sync({ maxAgentCalls: 0 });
+
+    await h.engine.markReadForAgent({ prs: [{ prKey: pr.key, seenThrough: await seenThrough(h, pr.key) }] }, CLIENT);
+    await h.engine.markReadForAgent({ prs: [{ prKey: other.key, seenThrough: await seenThrough(h, other.key) }] }, { client: 'codex-mcp-client' });
+
+    const notices = (await h.engine.livePollStatus()).agentReads;
+    expect(notices.map((notice) => [notice.id, notice.client, notice.prKeys])).toEqual([
+      [1, 'claude-code', [pr.key]],
+      [2, 'codex-mcp-client', [other.key]],
+    ]);
+    expect(new Set(notices.map((notice) => notice.undoToken)).size).toBe(2);
+
+    h.timers.advance(UNDO_WINDOW_MS);
+    await settle();
+    expect((await h.engine.livePollStatus()).agentReads).toEqual([]);
+  });
+
   it('can be undone from the toast inside the window, and nothing reaches GitHub', async () => {
     const h = await synced();
     await h.engine.markReadForAgent({ prs: [{ prKey: pr.key, seenThrough: await seenThrough(h, pr.key) }] }, CLIENT);
-    const token = (await h.engine.livePollStatus()).agentRead?.undoToken ?? null;
+    const token = (await h.engine.livePollStatus()).agentReads[0]?.undoToken ?? null;
 
     expect((await h.engine.undo(token)).ok).toBe(true);
     h.timers.advance(UNDO_WINDOW_MS);
@@ -97,6 +118,29 @@ describe('markReadForAgent', () => {
     expect(result.refused).toEqual([{ prKey: pr.key, reason: 'new activity since you read it: 1 event, newest from bob; read it again with pr_context' }]);
   });
 
+  it('reads seen_through before the activity, so a sync landing in between makes mark_read refuse', async () => {
+    const h = await synced();
+    const log = h.store.eventLog;
+    const watermark = log.maxSeqForPr.bind(log);
+    // Another connection commits carol's comment right after the watermark was read.
+    log.maxSeqForPr = (key) => {
+      const seq = watermark(key);
+      const late = makeEvent({ id: `${pr.key}:comment:late`, prKey: pr.key, kind: 'comment', actor: 'carol', sourceId: 'late', summary: 'carol commented', at: at(9) });
+      h.store.events.upsertDerived(pr.key, [...h.store.events.listForPr(pr.key), late]);
+      log.append([{ id: late.id, prKey: pr.key }], at(9));
+      log.maxSeqForPr = watermark;
+      return seq;
+    };
+
+    const detail = await h.engine.getPr(pr.key);
+    const shown = [...(detail?.activity.fresh ?? []), ...(detail?.activity.earlier ?? [])];
+    expect(shown.some((line) => line.actor === 'carol')).toBe(true);
+
+    const result = await h.engine.markReadForAgent({ prs: [{ prKey: pr.key, seenThrough: detail?.seenThrough ?? 0 }] }, CLIENT);
+    expect(result.marked).toEqual([]);
+    expect(result.refused[0]?.reason).toContain('newest from carol');
+  });
+
   it('refuses a seen_through ahead of what PostPile stores, and a PR it does not track', async () => {
     const h = await synced();
     const seen = await seenThrough(h, pr.key);
@@ -114,7 +158,7 @@ describe('markReadForAgent', () => {
     expect(result.marked).toEqual([]);
     expect(result.refused.map((entry) => entry.prKey)).toEqual([pr.key, 'acme/app#999']);
     expect(result.refused[0]?.reason).toContain('is not one pr_context printed');
-    expect((await h.engine.livePollStatus()).agentRead).toBeNull();
+    expect((await h.engine.livePollStatus()).agentReads).toEqual([]);
     expect((await h.engine.actionLog(1))[0]).toMatchObject({ action: 'agent_mark_read', outcome: 'skipped' });
   });
 
@@ -186,6 +230,6 @@ describe('mark_read through the request folder', () => {
     const prs = Array.from({ length: 21 }, (_, index) => ({ prKey: `acme/app#${index + 1}`, seenThrough: 0 }));
     const result = await answer(h, { prs });
     expect(result).toMatchObject({ ok: false, error: expect.stringContaining('one to 20 PRs') });
-    expect((await h.engine.livePollStatus()).agentRead).toBeNull();
+    expect((await h.engine.livePollStatus()).agentReads).toEqual([]);
   });
 });

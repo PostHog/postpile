@@ -13,6 +13,8 @@ import {
   proposalOutcome,
   proposalOutcomeAt,
   reviewerStates,
+  type ActivityLine,
+  type ActivityList,
   type AuthorPlace,
   type AuthorScope,
   SYNC_PROGRESS_STALE_MS,
@@ -419,6 +421,31 @@ function briefPrLines(detail: PrDetail, tiles: TileView[], authors: Authors): st
   return lines;
 }
 
+/** A line the user has not seen yet: new since they looked, or holding an unseen event. */
+function isUnreadLine(line: ActivityLine): boolean {
+  return line.isNew || line.unseen;
+}
+
+/**
+ * The activity lines a full answer lists, newest first. Every unread line
+ * shows, uncapped: seen_through covers all of it, and mark_read may only
+ * mark what the answer showed. The cap only cuts already-read history.
+ */
+export function shownActivity(activity: ActivityList): ActivityLine[] {
+  const lines = [...activity.fresh, ...activity.earlier];
+  let room = Math.max(0, activity.cap - lines.filter(isUnreadLine).length);
+  return lines.filter((line) => {
+    if (isUnreadLine(line)) {
+      return true;
+    }
+    if (room > 0) {
+      room -= 1;
+      return true;
+    }
+    return false;
+  });
+}
+
 function fullPrLines(detail: PrDetail, tiles: TileView[], authors: Authors): string[] {
   const lines = [...prHeadLines(detail, tiles, authors), ...reviewSizeLines(detail, true)];
   lines.push('', ...(detail.glance ? glanceLines(detail.glance, detail.glanceStale) : [`No agent glance yet (${detail.glanceState}).`]));
@@ -428,7 +455,7 @@ function fullPrLines(detail: PrDetail, tiles: TileView[], authors: Authors): str
   }
   // The detail pane's list: push bursts collapsed, bot and CI noise folded into one line.
   const { activity } = detail;
-  const shown = [...activity.fresh, ...activity.earlier].slice(0, activity.cap);
+  const shown = shownActivity(activity);
   if (shown.length > 0) {
     lines.push('', 'Activity (newest first; * = new since you looked):');
     for (const line of shown) {

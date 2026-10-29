@@ -108,6 +108,7 @@ import type {
 import {
   agentMarkReadCheck,
   agentMarkReadLogDetail,
+  AgentReadNotices,
   appendTailoring,
   CLEARED_BY_USER,
   busyInboxView,
@@ -235,7 +236,6 @@ import {
   withViewerReaction,
 } from '@postpile/core';
 import { AgentRefresher, approveNoteBody, AutoSyncSchedule, LivePoller, MemoryPingHold, muteMessage, NEW_COMMITS_SINCE_LOOKED, nextApproveOpener, NoteCoverReader, PingDelivery, readMessage, topicChatId, unmuteMessage, UNSORTED_TOPIC_ID, type AutoSyncOptions, type EngineService, type GitHubQuota, type LivePollOptions, type PollCycle } from '@postpile/engine';
-import { FakeAgentReads } from './fake-agent-reads.ts';
 import { FakeCatchUp } from './fake-catch-up.ts';
 import { FakeInstructions } from './fake-instructions.ts';
 import { FakeLessons } from './fake-lessons.ts';
@@ -470,7 +470,7 @@ export class FakeEngine implements EngineService {
   private readonly mcp: FakeMcp;
   private readonly topicChanges: FakeTopicChanges;
   private readonly prNotes: FakePrNotes;
-  private readonly agentReads = new FakeAgentReads();
+  private readonly agentReads: AgentReadNotices;
   private readonly agentRefresher: AgentRefresher;
   private readonly checkDelayMs: number;
   private lastSync: SyncReport | null = null;
@@ -562,6 +562,7 @@ export class FakeEngine implements EngineService {
       read: (cover, notedKey) => noteCover.read(cover, notedKey),
       waitMs: FAKE_COVER_WAIT_MS,
     });
+    this.agentReads = new AgentReadNotices((notice) => notice.undoUntil > this.now().toISOString());
     this.prNotes = new FakePrNotes(this.data, this.now, (key) => this.fetchedAtOf(key), coverReader);
     this.prNotes.seed();
     this.agentRefresher = new AgentRefresher({
@@ -2358,7 +2359,7 @@ export class FakeEngine implements EngineService {
       const batch = this.batches.find((candidate) => candidate.token === marked.token);
       result.writesLocked = !marked.writesOn && marked.threadIds.length > 0;
       result.undoUntil = new Date((batch?.queuedAt ?? this.now().getTime()) + UNDO_WINDOW_MS).toISOString();
-      this.agentReads.marked(options.client, result, marked.token);
+      this.agentReads.add(options.client, result, marked.token, result.undoUntil);
     }
     this.writes.record({ action: 'agent_mark_read', origin: 'agent', outcome: result.marked.length > 0 ? 'queued' : 'skipped', detail: agentMarkReadLogDetail(options.client, result) });
     return result;
@@ -2732,7 +2733,7 @@ export class FakeEngine implements EngineService {
       nextAutoSyncIsBacklog: this.autoSync?.nextSyncIsBacklog() ?? false,
       catchUpChanges: this.catchUp.changes(),
       githubQuota: this.quota.view(poll.everySeconds),
-      agentRead: this.agentReads.notice(),
+      agentReads: this.agentReads.live(),
     };
   }
 

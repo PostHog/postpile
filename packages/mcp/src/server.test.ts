@@ -60,7 +60,7 @@ describe('PostPile MCP server', () => {
     expect(annotations.refresh_from_github).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true });
     expect(annotations.propose_topic_change).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false });
     expect(annotations.note_pr).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true });
-    expect(annotations.mark_read).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true });
+    expect(annotations.mark_read).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true });
     for (const tool of tools) {
       expect(tool.description?.length ?? 0).toBeLessThan(CLAUDE_CODE_CUT);
       expect(tool.description).toContain('Use when:');
@@ -703,7 +703,7 @@ describe('PostPile MCP server', () => {
     expect(markedText).toContain("can't be undone: GitHub can't mark unread");
     expect(markedText).toContain('a personal ask stays under Needs reply until the user replies');
     expect(marked.structuredContent).toMatchObject({ status: 'done', marked: ['acme/app#1902'], refused: [], skipped: [], writes_locked: false, undo_until: expect.any(String) });
-    expect((await engine.livePollStatus()).agentRead).toMatchObject({ client: 'test', prKeys: ['acme/app#1902'] });
+    expect((await engine.livePollStatus()).agentReads).toMatchObject([{ client: 'test', prKeys: ['acme/app#1902'] }]);
   });
 
   it('refuses a mark_read call without seen_through or over the cap, before asking the app', async () => {

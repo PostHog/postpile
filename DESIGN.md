@@ -9229,6 +9229,17 @@ that flow, without a separate ask.
   answers carry no `seen_through`, since they list no activity; the brief
   footer points at `detail: "full"`. `topic` lists no PR activity, so it
   has none either.
+- **`seen_through` covers only what the answer showed** (PostHog Review on
+  #199). The full answer lists every unread activity line (new since the
+  user looked, or holding an unseen event) uncapped; the 12-line cap only
+  cuts read history (`shownActivity`). Before, a PR with more than 12
+  unread lines got a watermark over lines the answer left out. Bot and CI
+  noise stays folded into its count line, as in the pane. `getPr` reads
+  the watermark before the Board: a sync committing in between only adds
+  events the answer shows beyond it, so mark_read refuses rather than
+  marks unseen activity. A cached Board is only reused while the database
+  is unchanged since it was read, so it holds everything up to the
+  watermark too.
 - **The same path as the button.** A new agent-request kind `mark_read`
   through the outbox; the app answers through `AgentMarkRead` (engine),
   which hands the PRs it accepts to the `ReadMarker` as one batch with one
@@ -9252,13 +9263,18 @@ that flow, without a separate ask.
   personal ask (mention, question, reply) stays the user's move under
   Needs reply until they reply, as with the button. A team mention clears
   on read, as with the button. The tool description says both.
-- **Undo and the toast.** The engine keeps the newest call as an
-  `AgentReadNotice` (client, PRs, locked, undo token and end) in the live
-  status (`agentRead`), next to `keptUnread`; the renderer shows a toast
-  "Claude Code marked #1902 and #1911 read" with Undo while the window
-  runs, and counts it like a clicked mark-read. Once the queue has sent it
+- **Undo and the toast.** The engine keeps an `AgentReadNotice` (client,
+  PRs, locked, undo token and end) per call while its batch can still be
+  undone (`AgentReadNotices`), and the live status lists them
+  (`agentReads`), so two calls between two polls both reach the user. The
+  renderer shows the new ones in one toast, "Claude Code marked #1902 and
+  #1911 read", whose Undo takes back every batch in it and disappears when
+  the first window ends (`Notice.undoUntil`), and counts them like clicked
+  mark-reads. Once the queue has sent it
   to GitHub it can't be undone, because GitHub can't mark unread; the tool
   description and the answer say so.
+- **MCP annotations:** `destructiveHint: true`, since once sent GitHub
+  can't mark unread; idempotent, since a second call skips what is read.
 - **Action log:** each thread's `mark_read` rows carry origin `agent`, so
   the notifications view reads "from an outside agent". The client name
   goes on one `agent_mark_read` row per call (no thread or PR, like

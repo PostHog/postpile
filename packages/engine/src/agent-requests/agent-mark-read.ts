@@ -1,11 +1,11 @@
 import {
   agentMarkReadCheck,
   agentMarkReadLogDetail,
+  AgentReadNotices,
   planRead,
   type AgentMarkReadPr,
   type AgentMarkReadRequest,
   type AgentMarkReadResult,
-  type AgentReadNotice,
   type PrKey,
   type Tile,
 } from '@postpile/core';
@@ -30,19 +30,11 @@ export interface AgentMarkReadDeps {
  * nothing here writes GitHub.
  */
 export class AgentMarkRead {
-  private noticeCount = 0;
-  private latest: AgentReadNotice | null = null;
+  /** For the app's toasts, each kept until its undo window ends. */
+  readonly notices: AgentReadNotices;
 
-  constructor(private readonly deps: AgentMarkReadDeps) {}
-
-  /** The newest agent mark-read for the toast; null before the first. */
-  notice(): AgentReadNotice | null {
-    return this.latest;
-  }
-
-  /** Grows with every call that marked something, so the renderer refetches. */
-  changes(): number {
-    return this.noticeCount;
+  constructor(private readonly deps: AgentMarkReadDeps) {
+    this.notices = new AgentReadNotices((notice) => deps.readMarker.canUndo(notice.undoToken));
   }
 
   /** Whether marking the PR read changes anything: an unread thread, an unseen event, not handled yet. */
@@ -105,8 +97,7 @@ export class AgentMarkRead {
       const batch = this.deps.readMarker.markRead(scope, { kind: 'button' }, { origin: 'agent', tileId: result.marked.length === 1 ? tileId : null });
       result.writesLocked = !batch.writesOn && batch.threadIds.length > 0;
       result.undoUntil = new Date(batch.dueAt).toISOString();
-      this.noticeCount += 1;
-      this.latest = { id: this.noticeCount, client, prKeys: result.marked, writesLocked: result.writesLocked, undoToken: batch.token, undoUntil: result.undoUntil };
+      this.notices.add(client, result, batch.token, result.undoUntil);
     }
     this.deps.log.record({ action: 'agent_mark_read', origin: 'agent', outcome: result.marked.length > 0 ? 'queued' : 'skipped', detail: agentMarkReadLogDetail(client, result) });
     return result;

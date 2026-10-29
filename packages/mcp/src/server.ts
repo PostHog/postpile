@@ -139,8 +139,8 @@ const markReadOutput = {
   undo_until: z.string().nullable().describe('When the undo window ends; null when nothing was marked'),
 };
 
-/** Changes the app's read state and, after the undo window, GitHub's; a second call skips what is already read. */
-const MARK_READ = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true } as const;
+/** Changes the app's read state and, after the undo window, GitHub's, which can't be undone (GitHub can't mark unread). A second call skips what is already read. */
+const MARK_READ = { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true } as const;
 
 const MARK_READ_ERROR = `prs must be a list of 1 to ${AGENT_MARK_READ_MAX_PRS} entries, each { pr, seen_through }, e.g. prs: [{pr: "acme/app#1902", seen_through: 4127}]`;
 

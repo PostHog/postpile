@@ -13,7 +13,7 @@ describe('FakeEngine.markReadForAgent', () => {
     const result = await engine.markReadForAgent({ prs: [{ prKey: PR, seenThrough }] }, CLIENT);
 
     expect(result).toMatchObject({ marked: [PR], refused: [], skipped: [], undoUntil: expect.any(String) });
-    const notice = (await engine.livePollStatus()).agentRead;
+    const notice = (await engine.livePollStatus()).agentReads[0];
     expect(notice).toMatchObject({ id: 1, client: 'claude-code', prKeys: [PR] });
     expect((await engine.actionLog(10)).some((row) => row.action === 'agent_mark_read' && row.detail.startsWith('claude-code: marked read'))).toBe(true);
     expect(await engine.markReadForAgent({ prs: [{ prKey: PR, seenThrough }] }, CLIENT)).toMatchObject({ marked: [], skipped: [{ prKey: PR, reason: 'already read' }] });
@@ -38,6 +38,6 @@ describe('FakeEngine.markReadForAgent', () => {
     expect(result.marked).toEqual([]);
     expect(result.refused[0]?.reason).toMatch(/^new activity since you read it: 1 event, newest from /);
     expect(result.refused[1]).toEqual({ prKey: 'acme/app#9999', reason: 'PostPile does not track this PR' });
-    expect((await engine.livePollStatus()).agentRead).toBeNull();
+    expect((await engine.livePollStatus()).agentReads).toEqual([]);
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TileAfterRead, WhoseTurn } from '@postpile/core';
-import { agentReadText, isMarkReadUndoToken, markReadNotice, moveWords, snoozeMessage } from './mark-read.ts';
+import { agentReadsToast, agentReadText, isMarkReadUndoToken, markReadNotice, moveWords, snoozeMessage } from './mark-read.ts';
 
 const NONE: WhoseTurn = { kind: 'none', who: null, what: '', prKey: null };
 const REREVIEW: WhoseTurn = { kind: 'you', move: 're_review', who: null, what: 'pim addressed your changes: re-review', prKey: 'acme/app#1960' };
@@ -81,5 +81,20 @@ describe('agentReadText', () => {
 
   it('says a locked mark-read waits for GitHub writes', () => {
     expect(agentReadText({ client: '', prKeys: ['acme/app#1902'], writesLocked: true })).toBe('an outside agent marked #1902 read: pending until you unlock GitHub writes, stays unread here until then');
+  });
+});
+
+describe('agentReadsToast', () => {
+  const NOW = Date.parse('2026-10-29T12:00:00Z');
+  const notice = (id: number, prKey: string, undoUntil: string) => ({ id, client: 'claude-code', prKeys: [prKey], writesLocked: false, undoToken: `t${id}`, undoUntil });
+
+  it('puts every new notice into one toast with an undo per batch, gone when the first window ends', () => {
+    const toast = agentReadsToast([notice(1, 'acme/app#1', '2026-10-29T12:00:03Z'), notice(2, 'acme/app#2', '2026-10-29T12:00:05Z'), notice(3, 'acme/app#3', '2026-10-29T12:00:06Z')], 1, NOW);
+    expect(toast).toEqual({ message: 'Claude Code marked #2 read; Claude Code marked #3 read', undoTokens: ['t2', 't3'], undoUntil: Date.parse('2026-10-29T12:00:05Z') });
+  });
+
+  it('shows nothing when no new notice can still be undone', () => {
+    expect(agentReadsToast([notice(2, 'acme/app#2', '2026-10-29T11:59:59Z')], 1, NOW)).toBeNull();
+    expect(agentReadsToast([notice(1, 'acme/app#1', '2026-10-29T12:00:05Z')], 1, NOW)).toBeNull();
   });
 });

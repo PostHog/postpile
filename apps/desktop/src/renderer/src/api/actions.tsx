@@ -6,6 +6,7 @@ import { useQueryClient, type QueryKey } from '@tanstack/react-query';
 import type {
   ActionResult,
   AgentActionFrom,
+  AgentReadNotice,
   AppConfig,
   BatchApproveResult,
   ChatReply,
@@ -62,7 +63,7 @@ import { backlogSyncMinutes, capNote, type NextSync } from '../lib/agent-stats.t
 import { writeBlockedReason, type GithubWrite } from '../lib/guard.ts';
 import { isTransientWriteFailure, writeFailureText, type PaneWrite } from '../lib/write-failure.ts';
 import { approvedMessage, batchMarkReadMessage } from '../lib/agent-actions.ts';
-import { agentReadText, isMarkReadUndoToken, markReadNotice, snoozeMessage } from '../lib/mark-read.ts';
+import { agentReadsToast, isMarkReadUndoToken, markReadNotice, snoozeMessage } from '../lib/mark-read.ts';
 import { approvedDetail, markedReadPr, markedReadTile, mutedTile, snoozedTile, withApprovedPrs, withTile, withTiles } from '../lib/optimistic.ts';
 import { newerReport } from '../lib/sync-report.ts';
 import { teamRoleNotice } from '../lib/team-roles.ts';
@@ -87,6 +88,8 @@ export const CLEANUP_BUSY = {
 } as const;
 // Room for the engine to send or park a batch after its window ends.
 const UNDO_SETTLE_MS = 400;
+/** A stable empty list while the live status has none. */
+const NO_AGENT_READS: AgentReadNotice[] = [];
 
 export type NoticeTone = 'ok' | 'error' | 'blocked';
 
@@ -95,6 +98,10 @@ export interface Notice {
   tone: NoticeTone;
   message: string;
   undoToken: string | null;
+  /** More batches the same Undo takes back (agent mark-reads that arrived together). */
+  moreUndoTokens?: string[];
+  /** When Undo stops working (epoch ms): the toast drops it then. Absent: it lasts as long as the toast. */
+  undoUntil?: number;
   /** The toast offers "Snooze" for this tile: a mark-read left it your move. */
   snoozeTileId: string | null;
   /** The toast offers "Show": the notifications view, where each thread's last action is listed (the inbox cleanup's done toast). */
@@ -379,9 +386,10 @@ export function ActionsProvider(props: { children: ReactNode }) {
   const backgroundSync = live?.syncRunning ?? false;
   const liveLoaded = live !== undefined;
   const keptUnread = live?.keptUnread ?? null;
-  const agentRead = live?.agentRead ?? null;
-  // The newest agent mark-read notice this window has seen; undefined until the live status first loads.
-  const seenAgentRead = useRef<number | null | undefined>(undefined);
+  const agentReads = live?.agentReads ?? NO_AGENT_READS;
+  const newestAgentRead = agentReads.at(-1)?.id ?? 0;
+  // The highest agent mark-read notice id this window has seen; undefined until the live status first loads.
+  const seenAgentRead = useRef<number | undefined>(undefined);
   // The newest kept-unread notice this window has seen; undefined until the live status first loads.
   const seenKeptUnread = useRef<number | null | undefined>(undefined);
   const cleanup = useInboxCleanup().data;
@@ -395,6 +403,19 @@ export function ActionsProvider(props: { children: ReactNode }) {
       return;
     }
     const timer = setTimeout(() => setNotice(null), notice.tone === 'ok' ? NOTICE_MS : PROBLEM_NOTICE_MS);
+    return () => clearTimeout(timer);
+  }, [notice]);
+
+  // A toast whose undo window ends before it fades loses its Undo then: after that the engine has sent it to GitHub.
+  useEffect(() => {
+    if (!notice || notice.undoUntil === undefined || notice.undoToken === null) {
+      return;
+    }
+    const id = notice.id;
+    const timer = setTimeout(
+      () => setNotice((current) => (current?.id === id ? { ...current, undoToken: null, moreUndoTokens: [] } : current)),
+      Math.max(notice.undoUntil - Date.now(), 0),
+    );
     return () => clearTimeout(timer);
   }, [notice]);
 
@@ -417,18 +438,16 @@ export function ActionsProvider(props: { children: ReactNode }) {
     if (!liveLoaded) {
       return;
     }
-    if (seenAgentRead.current !== undefined && agentRead !== null && agentRead.id !== seenAgentRead.current) {
-      const until = Date.parse(agentRead.undoUntil);
-      const open = until > Date.now();
-      show('ok', agentReadText(agentRead), open ? agentRead.undoToken : null);
-      if (open) {
-        setPendingUndos((current) => [...current, { token: agentRead.undoToken, until }]);
-      }
+    const toast = seenAgentRead.current === undefined ? null : agentReadsToast(agentReads, seenAgentRead.current, Date.now());
+    if (toast) {
+      const [first, ...more] = toast.undoTokens;
+      setNotice({ id: Date.now(), tone: 'ok', message: toast.message, undoToken: first ?? null, moreUndoTokens: more, undoUntil: toast.undoUntil, snoozeTileId: null });
+      setPendingUndos((current) => [...current, ...toast.undoTokens.map((token) => ({ token, until: toast.undoUntil }))]);
       void refreshAll();
     }
-    seenAgentRead.current = agentRead?.id ?? null;
-    // oxlint-disable-next-line react-hooks/exhaustive-deps -- show and refreshAll are new every render; only a new notice matters
-  }, [liveLoaded, agentRead?.id]);
+    seenAgentRead.current = Math.max(seenAgentRead.current ?? 0, newestAgentRead);
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- refreshAll is new every render; only a new notice matters
+  }, [liveLoaded, newestAgentRead]);
 
   // An inbox cleanup ran to its end in the background: the done toast, with "Show". One that ended before this window opened is not shown.
   useEffect(() => {

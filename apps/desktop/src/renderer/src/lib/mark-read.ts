@@ -85,3 +85,28 @@ export function agentReadText(notice: Pick<AgentReadNotice, 'client' | 'prKeys' 
   const base = `${clientDisplayName(notice.client)} marked ${prs} read`;
   return notice.writesLocked ? `${base}: pending until you unlock GitHub writes, stays unread here until then` : base;
 }
+
+export interface AgentReadsToast {
+  message: string;
+  /** One per batch: the toast's Undo takes them all back. */
+  undoTokens: string[];
+  /** When the first of their undo windows ends: the Undo goes then. */
+  undoUntil: number;
+}
+
+/**
+ * One toast for the agent mark-reads that arrived since the last look and
+ * can still be undone, oldest first; null when there are none. Two calls
+ * between two polls share the toast, and its Undo takes back both batches.
+ */
+export function agentReadsToast(notices: AgentReadNotice[], seenId: number, now: number): AgentReadsToast | null {
+  const fresh = notices.filter((notice) => notice.id > seenId && Date.parse(notice.undoUntil) > now);
+  if (fresh.length === 0) {
+    return null;
+  }
+  return {
+    message: fresh.map(agentReadText).join('; '),
+    undoTokens: fresh.map((notice) => notice.undoToken),
+    undoUntil: Math.min(...fresh.map((notice) => Date.parse(notice.undoUntil))),
+  };
+}
