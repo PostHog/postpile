@@ -76,7 +76,7 @@ export function globPathMatches(pattern: string, path: string): boolean {
   for (let g = globs.length - 1; g >= 0; g--) {
     const glob = globs[g]!;
     const after = row;
-    row = new Array<boolean>(width).fill(false);
+    row = Array.from({ length: width }, () => false);
     for (let n = names.length; n >= 0; n--) {
       if (glob === '**' && g === globs.length - 1) {
         // Last: everything below, one segment at least; "**/" only inside a folder there, so two.
