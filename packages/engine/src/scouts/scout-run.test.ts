@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ScoutCandidate, ScoutFile } from '@postpile/core';
 import { makePr, makeThreadFor, viewer } from '@postpile/core/fixtures';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { makeHarness, NOW, type Harness } from '../testing/fakes.ts';
 
 const LOOKOUT = `## Lookout
@@ -424,6 +424,37 @@ describe('the scout step of a full sync', () => {
 
     expect(h.runner.promptsFor('scout_judge')).toHaveLength(1);
     expect(h.store.scoutJudgements.get('lookout', 'acme/app#1')).toMatchObject({ verdict: 'pulled' });
+  });
+
+  it('looks pending PRs up by number only as far as this run can judge them, and not at all without calls', async () => {
+    let now = NOW;
+    const h = setup(LOOKOUT, () => now);
+    for (let number = 1; number <= 70; number++) {
+      onGitHub(h, candidate(number), [{ path: `svc${number}/main.ts`, changeType: 'ADDED' }]);
+    }
+    await h.engine.sync({ maxAgentCalls: 0 });
+    expect(h.store.scoutJudgements.listPending('lookout')).toHaveLength(70);
+
+    // A day later the listing no longer reaches them: they need a lookup by number.
+    now = new Date(NOW.getTime() + 24 * 60 * 60 * 1000);
+    const listed = h.reader.scoutListings.get('acme/app')!;
+    h.reader.scoutListings.set('acme/app', []);
+    h.reader.scoutCalls.length = 0;
+    await h.engine.sync({ maxAgentCalls: 0 });
+    expect(h.reader.scoutCalls.filter((call) => call.startsWith('numbers'))).toEqual([]);
+
+    const lookups: string[] = [];
+    vi.spyOn(h.reader, 'scoutPrsByNumber').mockImplementation(async (refs) => {
+      const wanted = new Set(refs.map((ref) => `${ref.repo}#${ref.number}`));
+      lookups.push(...wanted);
+      return new Map(listed.filter((pr) => wanted.has(pr.key)).map((pr) => [pr.key, pr]));
+    });
+    for (let call = 0; call < 5; call++) {
+      h.runner.answer('scout_judge', { judgements: [] });
+    }
+    await h.engine.sync({});
+    // Five calls of twelve: 60 looked up, the other 10 wait unread.
+    expect(lookups).toHaveLength(60);
   });
 
   it('runs no scout work when the sync asks for other agent jobs only', async () => {
