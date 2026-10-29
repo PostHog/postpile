@@ -1406,7 +1406,9 @@ it is opened.
   it the Follow fails with nothing queued and an action-log line. The
   subscription has the same deadline: past it the Follow parks in the lock
   as failed, to send again; when GitHub answers OK after all, the PR counts
-  as followed and the parked write is cleared. A quit's flush waits for Follows still looking
+  as followed and the parked write is cleared. Sending from the lock uses
+  the same deadline and reconciliation (`followWithDeadline`), so a
+  stalled Follow never holds the lock's queue or Discard. A quit's flush waits for Follows still looking
   up their PR, so at most that long, before it drains the queue. A chat on a scout is topic-less like
   Unsorted's: its lasting point can't be kept for a topic.
   Queued, pending, failed, discarded and undone follows stay apart in the

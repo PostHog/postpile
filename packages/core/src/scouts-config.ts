@@ -46,11 +46,17 @@ function newFolderIn(pattern: string, addedOnly: boolean): string | null {
   if (!addedOnly || !pattern.endsWith('*/')) {
     return null;
   }
-  const folder = pattern.slice(0, -2).replace(/^\/+/, '').replace(/\/+$/, '');
-  if (folder === '' && pattern === '*/') {
+  // Plain string handling, no regex: a hint can come from the model, and "a////…/b/*/" must not backtrack.
+  const parent = pattern.slice(0, -2);
+  if (parent === '') {
     return '';
   }
-  if (folder === '' || !pattern.slice(0, -2).endsWith('/') || folder.includes('*') || folder.includes('?')) {
+  if (!parent.endsWith('/')) {
+    return null;
+  }
+  const folder = parent.startsWith('/') ? parent.slice(1, -1) : parent.slice(0, -1);
+  // An empty segment ("a//b") or a wildcard is no plain folder: the hint stays a plain glob.
+  if (folder === '' || folder.split('/').includes('') || folder.includes('*') || folder.includes('?')) {
     return null;
   }
   return folder;
