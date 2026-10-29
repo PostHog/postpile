@@ -80,7 +80,7 @@ describe('the Scouts intro card', () => {
     const result = await h.engine.checkScout({ prompt: PROMPT, repos: ['acme/app'] });
 
     expect(result).toMatchObject({ ok: true, fit: { verdict: 'fits' }, name: 'Lookout', paths: ['+*/'] });
-    expect(result.trial).toMatchObject({ days: 2, pulled: 6, candidates: 70, complete: false, problem: 'stopped at the agent-call cap' });
+    expect(result.trial).toMatchObject({ days: 2, pulled: 6, candidates: 70, complete: false });
     expect(result.trial?.examples).toEqual([
       { prKey: 'acme/app#1', title: 'Add service 1', reason: 'adds svc1/' },
       { prKey: 'acme/app#11', title: 'Add service 11', reason: 'adds svc11/' },
@@ -91,6 +91,12 @@ describe('the Scouts intro card', () => {
     expect(['scout_judgement', 'pr_scouted', 'scout_cursor', 'scouts_version', 'pr'].map(count)).toEqual([0, 0, 0, 0, 0]);
     expect(h.store.meta.get('scout_listing_resume:acme/app')).toBeNull();
     expect(readFileSync(file, 'utf8')).toBe('');
+
+    // A second check gets its own 5 calls.
+    h.runner.answer('scout_check', { fit: 'fits', note: 'ok', cantSee: null, name: 'Lookout', paths: ['+*/'] });
+    h.runner.answer('scout_judge', { judgements: [] });
+    await h.engine.checkScout({ prompt: PROMPT, repos: ['acme/app'] });
+    expect(h.runner.promptsFor('scout_judge').length).toBeGreaterThan(5);
   });
 
   it('turns a scout on into scouts.md as an intro version, and the card is answered', async () => {

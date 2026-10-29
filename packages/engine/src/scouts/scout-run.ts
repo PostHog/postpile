@@ -12,6 +12,7 @@ import {
   scoutRetentionCutoff,
   scoutSignals,
   SCOUT_TRIAL_EXAMPLES,
+  SCOUT_TRIAL_JUDGE_CALLS,
   type IsoTime,
   type ScoutTrial,
   type PrKey,
@@ -602,6 +603,7 @@ export class ScoutRun {
   async trial(scout: ScoutConfig, days: number, input: Omit<ScoutRunInput, 'glance' | 'errors'>): Promise<ScoutTrial> {
     this.quotaAllows = input.quotaAllows;
     this.runFiles = new Map();
+    this.judgeCallsLeft = SCOUT_TRIAL_JUDGE_CALLS;
     const errors: string[] = [];
     const fresh: ScoutConfig = { ...scout, id: '__trial__' };
     const floor = new Date(this.deps.now().getTime() - days * 24 * 60 * 60 * 1000).toISOString();
