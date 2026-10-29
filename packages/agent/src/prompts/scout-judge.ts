@@ -59,8 +59,10 @@ and changed files. When in doubt, skip: a pulled PR asks for the developer's tim
 a first cut the developer wrote; a match is a reason to look, not a reason to pull. "+*/" means a new
 top-level folder, and "+products/*/" a new folder directly inside products/: an added file in a
 folder that is not among the base branch's folders listed for that PR. A PR "Stacked on" another
-branch is one layer of a stack: its folders are those of the default branch, so a folder a lower
-layer adds still counts as new. Each changed file shows its
+branch is one layer of a stack that is still being built: its folders are those of the default
+branch, so a folder a lower layer adds still counts as new, and the layer belongs to the stack that
+introduces it. Never call such a PR work inside an existing product or folder because its base
+branch already has the folder: that folder is not on the default branch yet. Each changed file shows its
 change and its lines added and removed, so lines added to an existing file read apart from a removal.
 
 ${sections}
