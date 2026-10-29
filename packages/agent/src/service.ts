@@ -27,6 +27,7 @@ import type {
   ScoutCheckResult,
   ScoutFile,
   ScoutSignal,
+  ScoutStackedOn,
   PrSet,
   PrSetMember,
   Provenance,
@@ -478,6 +479,8 @@ export interface ScoutJudgeItem {
   signals: ScoutSignal[];
   /** The base's folders inside each parent a new-folder hint names, as repo paths ("src", "products/billing"), so a new folder can be judged. */
   baseFolders: string[];
+  /** Base and default branch names when the PR is a stack layer on another branch; null on the default branch. */
+  stackedOn: ScoutStackedOn | null;
 }
 
 /** One scout, a batch of PRs from its repos. Runs without tools. */

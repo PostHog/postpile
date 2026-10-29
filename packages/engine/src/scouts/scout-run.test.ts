@@ -46,7 +46,7 @@ function candidate(number: number, overrides: Partial<ScoutCandidate> = {}): Sco
 function onGitHub(h: Harness, pr: ScoutCandidate, files: ScoutFile[]): void {
   const listing = h.reader.scoutListings.get('acme/app') ?? [];
   h.reader.scoutListings.set('acme/app', [...listing.filter((other) => other.key !== pr.key), pr].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
-  h.reader.scoutFileLists.set(pr.key, { headOid: pr.headOid, baseOid: pr.baseOid, foldersOid: pr.baseOid, files });
+  h.reader.scoutFileLists.set(pr.key, { headOid: pr.headOid, baseOid: pr.baseOid, foldersOid: pr.baseOid, stackedOn: null, files });
   const number = Number(pr.key.split('#')[1]);
   h.reader.addStackPr(makePr({ number, title: pr.title, author: pr.author, headOid: pr.headOid, updatedAt: pr.updatedAt }));
 }
@@ -197,7 +197,7 @@ describe('the scout step of a full sync', () => {
   it('keeps a candidate pending while its file list is not whole', async () => {
     const h = setup();
     onGitHub(h, candidate(1), []);
-    h.reader.scoutFileLists.set('acme/app#1', { headOid: 'h1', baseOid: 'base1', foldersOid: 'base1', files: null });
+    h.reader.scoutFileLists.set('acme/app#1', { headOid: 'h1', baseOid: 'base1', foldersOid: 'base1', stackedOn: null, files: null });
 
     await h.engine.sync({});
 
@@ -398,7 +398,7 @@ describe('the scout step of a full sync', () => {
     const h = setup(LOOKOUT, () => now);
     for (let number = 1; number <= 60; number++) {
       onGitHub(h, candidate(number), []);
-      h.reader.scoutFileLists.set(`acme/app#${number}`, { headOid: `h${number}`, baseOid: 'base1', foldersOid: 'base1', files: null });
+      h.reader.scoutFileLists.set(`acme/app#${number}`, { headOid: `h${number}`, baseOid: 'base1', foldersOid: 'base1', stackedOn: null, files: null });
     }
     await h.engine.sync({});
     expect(h.store.scoutJudgements.listPending('lookout').filter((row) => row.lastError === 'file list not read whole')).toHaveLength(60);
@@ -415,7 +415,7 @@ describe('the scout step of a full sync', () => {
     const h = setup();
     const merged = candidate(1, { state: 'MERGED', mergedAt: hoursAgo(2), baseOid: 'base-after' });
     onGitHub(h, merged, [{ path: 'billing/main.ts', changeType: 'ADDED' }]);
-    h.reader.scoutFileLists.set('acme/app#1', { headOid: 'h1', baseOid: 'base-after', foldersOid: 'before-merge', files: [{ path: 'billing/main.ts', changeType: 'ADDED' }] });
+    h.reader.scoutFileLists.set('acme/app#1', { headOid: 'h1', baseOid: 'base-after', foldersOid: 'before-merge', stackedOn: null, files: [{ path: 'billing/main.ts', changeType: 'ADDED' }] });
     // The base branch holds billing/ once merged; the commit before the merge does not.
     h.reader.scoutTrees.set('base-after', ['src', 'docs', 'billing']);
     h.reader.scoutTrees.set('before-merge', ['src', 'docs']);
@@ -425,6 +425,46 @@ describe('the scout step of a full sync', () => {
 
     expect(h.runner.promptsFor('scout_judge')).toHaveLength(1);
     expect(h.store.scoutJudgements.get('lookout', 'acme/app#1')).toMatchObject({ verdict: 'pulled' });
+  });
+
+  it('finds a new product folder on a stacked layer against the default branch, not its base branch that already has it', async () => {
+    const h = setup(`## Products
+repos: acme/app
+paths: +products/*/
+
+New products.
+`);
+    const layer = candidate(2, { baseOid: 'layer1-head' });
+    onGitHub(h, layer, [{ path: 'products/ledger/api.ts', changeType: 'ADDED' }]);
+    const stackedOn = { base: 'alice/ledger-layer-1', defaultBranch: 'main' };
+    h.reader.scoutFileLists.set('acme/app#2', { headOid: 'h2', baseOid: 'layer1-head', foldersOid: 'main-head', stackedOn, files: [{ path: 'products/ledger/api.ts', changeType: 'ADDED' }] });
+    // Layer 1's branch holds products/ledger already; main does not.
+    h.reader.scoutTrees.set('layer1-head:products', ['billing', 'ledger']);
+    h.reader.scoutTrees.set('main-head:products', ['billing']);
+    pulls(h, [2, 'pull', 'adds products/ledger/']);
+
+    await h.engine.sync({});
+
+    const prompt = h.runner.promptsFor('scout_judge')[0]!;
+    expect(prompt).toContain('ADDED products/ledger/api.ts (hint +products/*/)');
+    expect(prompt).toContain('Stacked on alice/ledger-layer-1, not main');
+    expect(h.store.scoutJudgements.get('products', 'acme/app#2')).toMatchObject({ verdict: 'pulled' });
+  });
+
+  it('keeps reading the base tree for a PR on the default branch', async () => {
+    const h = setup(`## Products
+repos: acme/app
+paths: +products/*/
+
+New products.
+`);
+    onGitHub(h, candidate(3), [{ path: 'products/billing/api.ts', changeType: 'ADDED' }]);
+    h.reader.scoutTrees.set('base1:products', ['billing']);
+
+    await h.engine.sync({});
+
+    expect(h.runner.promptsFor('scout_judge')).toHaveLength(0);
+    expect(h.store.scoutJudgements.get('products', 'acme/app#3')).toMatchObject({ verdict: 'skipped', reason: 'no path signal' });
   });
 
   it('looks pending PRs up by number only as far as this run can judge them, and not at all without calls', async () => {
@@ -495,7 +535,7 @@ describe('the scout step of a full sync', () => {
     const h = setup(LOOKOUT, () => now);
     for (let number = 1; number <= 3; number++) {
       onGitHub(h, candidate(number), []);
-      h.reader.scoutFileLists.set(`acme/app#${number}`, { headOid: `h${number}`, baseOid: 'base1', foldersOid: 'base1', files: null });
+      h.reader.scoutFileLists.set(`acme/app#${number}`, { headOid: `h${number}`, baseOid: 'base1', foldersOid: 'base1', stackedOn: null, files: null });
     }
     await h.engine.sync({});
     // Agent off: nothing is scheduled, and the deferral keeps the read failure.

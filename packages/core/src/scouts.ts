@@ -40,6 +40,14 @@ export interface ScoutCandidate {
   mergedAt: IsoTime | null;
 }
 
+/** A PR whose base is another branch than the repo's default one: a layer of a stack. */
+export interface ScoutStackedOn {
+  /** The PR's base branch name. GitHub text. */
+  base: string;
+  /** The repo's default branch name. */
+  defaultBranch: string;
+}
+
 /** One file that matched a path hint: the concrete pair the input hash covers. */
 export interface ScoutSignal {
   path: string;

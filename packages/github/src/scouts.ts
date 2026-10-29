@@ -2,7 +2,7 @@
 // metadata first; then the full file list of the few that pass the
 // pre-filter, paged to the end; and the top-level folders of a base commit.
 // Read-only like every reader call.
-import { prKey, type PrKey, type PrRef, type PrState, type ScoutCandidate, type ScoutChangeType, type ScoutFile } from '@postpile/core';
+import { prKey, type PrKey, type PrRef, type PrState, type ScoutCandidate, type ScoutChangeType, type ScoutFile, type ScoutStackedOn } from '@postpile/core';
 import { GitHubError, graphqlFailure, type GitHubHttp, type GraphQLResult } from './http.ts';
 import { actorLogin, isoTime, isoTimeOrNull } from './normalize.ts';
 import { batchAlias } from './queries.ts';
@@ -29,11 +29,15 @@ export interface ScoutFilesRead {
   headOid: string;
   baseOid: string;
   /**
-   * The commit whose root folders were there before the PR: its base while
-   * open, the merge commit's first parent once merged (by then the base
-   * branch may hold the PR's own new folder).
+   * The commit whose folders were there before the PR: the merge commit's
+   * first parent once merged (by then the base branch may hold the PR's own
+   * new folder); while open, its base, or the default branch's head when it
+   * is stacked on another branch (that branch already holds the folders its
+   * lower layers add).
    */
   foldersOid: string;
+  /** Null when the PR's base is the default branch (or GitHub named no default branch). */
+  stackedOn: ScoutStackedOn | null;
   /** Null when the list could not be read whole: the head moved while paging, or GitHub stopped answering. Never a partial list. */
   files: ScoutFile[] | null;
 }
@@ -65,6 +69,9 @@ interface RawListResponse {
 interface RawFilesPage {
   headRefOid: string;
   baseRefOid: string;
+  /** First page only, like the merge commit. */
+  baseRefName?: string;
+  repository?: { defaultBranchRef: { name: string; target: { oid: string } | null } | null };
   mergeCommit?: { parents: { nodes: ({ oid: string } | null)[] } } | null;
   files: { pageInfo: { hasNextPage: boolean; endCursor: string | null }; nodes: ({ path: string; changeType: ScoutChangeType; additions: number; deletions: number } | null)[] } | null;
 }
@@ -124,14 +131,38 @@ export function buildScoutNumberQuery(refs: PrRef[]): string {
 
 function filesSelection(after: string | null): string {
   const cursor = after === null ? '' : `, after: ${JSON.stringify(after)}`;
-  // The merge commit only on the first page: the folders before the PR are read once.
-  const merge = after === null ? ' mergeCommit { parents(first: 1) { nodes { oid } } }' : '';
+  // The base branch, the default branch and the merge commit only on the first page: the folders before the PR are read once.
+  const merge = after === null ? ' baseRefName repository { defaultBranchRef { name target { oid } } } mergeCommit { parents(first: 1) { nodes { oid } } }' : '';
   return `headRefOid baseRefOid${merge} files(first: ${SCOUT_FILES_PAGE_SIZE}${cursor}) { pageInfo { hasNextPage endCursor } nodes { path changeType additions deletions } }`;
 }
 
-/** The commit before the PR: the merge commit's first parent once merged, else the base. */
+/** The base and default branch names when the PR's base is not the default branch; null otherwise. */
+function stackedOnOf(page: RawFilesPage): ScoutStackedOn | null {
+  const defaultBranch = page.repository?.defaultBranchRef?.name;
+  if (defaultBranch === undefined || page.baseRefName === undefined) {
+    return null;
+  }
+  if (page.baseRefName === defaultBranch) {
+    return null;
+  }
+  return { base: page.baseRefName, defaultBranch };
+}
+
+/**
+ * The commit before the PR: the merge commit's first parent once merged.
+ * While open: the default branch's head for a stacked PR, so a new folder
+ * its lower layers add still reads as new; else its base.
+ */
 function foldersOidOf(page: RawFilesPage): string {
-  return page.mergeCommit?.parents.nodes[0]?.oid ?? page.baseRefOid;
+  const mergeParent = page.mergeCommit?.parents.nodes[0]?.oid;
+  if (mergeParent !== undefined) {
+    return mergeParent;
+  }
+  const defaultHead = page.repository?.defaultBranchRef?.target?.oid;
+  if (stackedOnOf(page) !== null && defaultHead !== undefined) {
+    return defaultHead;
+  }
+  return page.baseRefOid;
 }
 
 /** One file page per PR, aliased: the first page (`after` null) or the next one of a longer list. */
@@ -296,6 +327,7 @@ interface FilesProgress {
   headOid: string;
   baseOid: string;
   foldersOid: string;
+  stackedOn: ScoutStackedOn | null;
   files: ScoutFile[];
   /** GitHub's cursor for the next page; null once the list is whole. */
   after: string | null;
@@ -328,7 +360,7 @@ async function nextFilePages(http: GitHubHttp, batch: FilesProgress[]): Promise<
 }
 
 function filesReads(progress: FilesProgress[]): Map<PrKey, ScoutFilesRead> {
-  return new Map(progress.map((entry) => [prKey(entry.ref), { headOid: entry.headOid, baseOid: entry.baseOid, foldersOid: entry.foldersOid, files: entry.broken ? null : entry.files }]));
+  return new Map(progress.map((entry) => [prKey(entry.ref), { headOid: entry.headOid, baseOid: entry.baseOid, foldersOid: entry.foldersOid, stackedOn: entry.stackedOn, files: entry.broken ? null : entry.files }]));
 }
 
 /** The first pages, then the next pages of every longer list, into `progress`. */
@@ -337,7 +369,7 @@ async function readFilePages(http: GitHubHttp, refs: PrRef[], progress: FilesPro
     const response = await scoutBatch<RawFilesBatch>(http, buildScoutFilesQuery(batch.map((ref) => ({ ref, after: null }))));
     if (!response?.data) {
       // This batch only: its PRs come back without a list (pending for the caller); the other batches' reads stand.
-      batch.forEach((ref) => progress.push({ ref, headOid: '', baseOid: '', foldersOid: '', files: [], after: null, pages: 1, broken: true }));
+      batch.forEach((ref) => progress.push({ ref, headOid: '', baseOid: '', foldersOid: '', stackedOn: null, files: [], after: null, pages: 1, broken: true }));
       continue;
     }
     const errored = response.errors.length > 0;
@@ -350,7 +382,7 @@ async function readFilePages(http: GitHubHttp, refs: PrRef[], progress: FilesPro
       const after = first.files?.pageInfo.hasNextPage ? first.files.pageInfo.endCursor : null;
       // Field errors or a null node: the list is not whole, whatever the rest of the page says.
       const broken = errored || first.files === null || files === null;
-      progress.push({ ref, headOid: first.headRefOid, baseOid: first.baseRefOid, foldersOid: foldersOidOf(first), files: files ?? [], after, pages: 1, broken });
+      progress.push({ ref, headOid: first.headRefOid, baseOid: first.baseRefOid, foldersOid: foldersOidOf(first), stackedOn: stackedOnOf(first), files: files ?? [], after, pages: 1, broken });
     });
   }
   let open = progress.filter((entry) => !entry.broken && entry.after !== null);

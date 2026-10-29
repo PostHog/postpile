@@ -1219,7 +1219,14 @@ contract surfaces.
   (`ScoutFilesRead.foldersOid`; folders read per commit and parent with
   `object(expression: "<oid>:<parent>")`, cached per run): the base commit
   while open, the merge commit's first parent once merged, since by then
-  the base branch holds the PR's own folder. Only a <folder> without
+  the base branch holds the PR's own folder. An open PR whose base branch
+  is not the repo's default branch (a stack layer) reads the default
+  branch's head instead (`baseRefName` and
+  `repository { defaultBranchRef { name target { oid } } }` on the first
+  file page): its base is the layer below, which already holds the new
+  product folder, so `+products/*/` and `+*/` never fired for layers 2 and
+  up and the judge read them as work inside an existing product (eval on
+  real stacks, 2026-10-29). Only a <folder> without
   wildcards reads this way; any other `+<glob>` is a plain glob over added
   files. Added after a replay of a busy repo showed `+products/*/` read
   as "anything added under products/" (2026-10-29).
@@ -1311,7 +1318,9 @@ contract surfaces.
    match, the PR is skipped by rule, no model call.
 5. Judge: `scout_judge` (Sonnet, no tools, PR text fenced; each changed
    file as `path (added, +12/−0)`, so lines added to a file read apart
-   from a removal), up to 12 PRs per
+   from a removal; a stack layer gets "Stacked on <base>, not <default>"
+   inside the fence, since the branch name is GitHub text, so the judge
+   knows it is part of a stack), up to 12 PRs per
    call, under the sync's existing agent-call cap with its own kind and the
    agent job `scouts` (`agentJobs` without it runs no scout work), and at
    most 5 calls per sync (`SCOUT_JUDGE_CALLS_PER_RUN`): the step runs while
