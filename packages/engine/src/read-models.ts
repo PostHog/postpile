@@ -1,5 +1,6 @@
 import {
   unreadSinceLooked,
+  seenThroughToken,
   isLiveProposal,
   archiveEndsAt,
   lastJoinAt,
@@ -694,7 +695,7 @@ export class ReadModels {
     // mark_read's watermark, read before the Board: a sync that commits in between only adds events the answer shows
     // beyond it, which makes mark_read refuse, never mark unseen activity. A cached Board is only reused while the
     // database is unchanged since it was read, so it holds every event at or below the watermark too.
-    const seenThrough = this.store.eventLog.maxSeqForPr(key);
+    const seenThroughSeq = this.store.eventLog.maxSeqForPr(key);
     const board = Board.forPr(this.store, this.now().toISOString(), key);
     const pr = board.prs.get(key);
     if (!pr) {
@@ -716,6 +717,7 @@ export class ReadModels {
     // The activity list shows a folded bot review's comments by their first line and checks bot text for mentions of
     // you, and a bot's change request says what it found: bodies the board leaves out, so it reads this one PR whole.
     const full = this.store.prs.getFull(key);
+    const unread = unreadSinceLooked(board.events.get(key) ?? [], full);
     return {
       pr: prPaneView(pr),
       status: prStatus(pr),
@@ -740,8 +742,8 @@ export class ReadModels {
       facts: this.memory.prFacts(key),
       waitingThreads: waitingThreads(pr, viewer),
       notes: this.notes.viewFor(pr),
-      seenThrough,
-      unread: unreadSinceLooked(board.events.get(key) ?? [], full),
+      seenThrough: seenThroughToken(seenThroughSeq, unread.map((event) => event.id)),
+      unread,
       ownership: this.ownership(pr, viewer),
       openThreads: viewer ? viewerOpenThreads(pr, viewer.login) : 0,
     };

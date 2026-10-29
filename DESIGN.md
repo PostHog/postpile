@@ -9214,9 +9214,20 @@ trip: the agent marks the PRs it went through with the user, as part of
 that flow, without a separate ask.
 
 - **Only what the agent saw.** `pr_context` with `detail: "full"` (the
-  text answer that lists the activity) prints a `seen_through` per PR,
-  outside the fence: the PR's newest event-log position
-  (`EventLogRepo.maxSeqForPr`, `PrDetail.seenThrough`, 0 when none).
+  text answer that lists the activity) prints a `seen_through` token per
+  PR, outside the fence: `"<seq>-<hash>"`, e.g. `"4127-0k3j2h1g9f8"`
+  (`seenThroughToken`, `PrDetail.seenThrough`). The seq is the PR's newest
+  event-log position (`EventLogRepo.maxSeqForPr`, 0 when none), the hash a
+  short hash of the sorted event ids in the "Unread since you looked" list
+  printed with it (`unreadIdsHash`). The app refuses the PR when the
+  unseen events logged at or before that seq now hash differently ("the
+  unread list changed since you read it; read it again"): an Undo (the
+  pane's or the toast's) brings events back unseen without moving the
+  event log, so a seq alone let an old token through (PostHog Review on
+  #199, round 7). A string token, not two numbers, so agents pass it back
+  as printed. Skips (already queued, already read, untracked) come before
+  that check: they mark nothing, and a retry after a mark changed the
+  list itself.
   `mark_read` needs one per PR, and it is only printed with the "Unread
   since you looked" section below. The app refuses a PR with events logged
   after it ("new activity since you read it: 2 events, newest from
@@ -9260,8 +9271,10 @@ that flow, without a separate ask.
   the batch becomes a pending write after the window. The answer says so
   (`writes_locked`).
 - **Scope:** PRs named one by one, 1 to 20 per call
-  (`AGENT_MARK_READ_MAX_PRS`), resolved with the reads' resolvers on the
-  MCP side (an unresolvable one fails the call before anything is asked)
+  (`AGENT_MARK_READ_MAX_PRS`), resolved on the MCP side against one read
+  of the stored keys (`storedPrKeys`, `resolvePrAmong`: a full reference
+  by its stored spelling, #123 when one stored PR has that number), not a
+  search per PR (an unresolvable one fails the call before anything is asked)
   and checked again in the app (`parseAgentRequest`, then stored and
   tracked). No topic-wide or "everything" form. A PR named twice keeps its
   last `seen_through`.
@@ -9286,9 +9299,13 @@ that flow, without a separate ask.
   Needs reply until they reply, as with the button. A team mention clears
   on read, as with the button. The tool description says both.
 - **Undo and the toast.** The engine keeps an `AgentReadNotice` (client,
-  PRs, locked, undo token and end) per call while its batch can still be
-  undone (`AgentReadNotices`), and the live status lists them
-  (`agentReads`), so two calls between two polls both reach the user. The
+  PRs, locked, undo token and end, when, whether it can still be undone)
+  per call for an hour, at most 20 (`AgentReadNotices`), and the live
+  status lists them (`agentReads`), so two calls between two polls both
+  reach the user, and a window that was minimised past the undo window
+  still says what was marked when it polls again, then without Undo. The
+  renderer notes the newest id on its first load, so nothing older
+  replays. The
   renderer shows the new ones in one toast, "Claude Code marked #1902 and
   #1911 read", whose Undo takes back every batch in it and disappears when
   the first window ends (`Notice.undoUntil`), and counts them like clicked

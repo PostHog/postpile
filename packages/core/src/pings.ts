@@ -154,7 +154,7 @@ export interface LivePollStatus {
   githubQuota: GitHubQuotaView | null;
   /** The newest clicked mark-read that stayed unread after its refresh, for the toast; null before the first. */
   keptUnread: KeptUnreadNotice | null;
-  /** Mark-reads outside agents asked for (mark_read) still inside their undo window, oldest first, for the toast with Undo. */
+  /** Mark-reads outside agents asked for (mark_read) in the last hour, oldest first, for the toast; Undo while each can still be undone. */
   agentReads: AgentReadNotice[];
 }
 

@@ -1,5 +1,6 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { parseSeenThrough, seenThroughToken } from '@postpile/core';
 import { FakeEngine } from '@postpile/server';
 import { describe, expect, it } from 'vitest';
 import { InMemoryAgentRequests } from './agent-requests.ts';
@@ -264,6 +265,7 @@ describe('PostPile MCP server', () => {
       getViewer: () => engine.getViewer(),
       getTeamMembers: () => engine.getTeamMembers(),
       prOverlaps: () => engine.prOverlaps(),
+      storedPrKeys: () => engine.storedPrKeys(),
       lastSyncReport: () => engine.lastSyncReport(),
       recordedSyncProgress: async () => null,
       recordedAppVersion: async () => null,
@@ -294,6 +296,7 @@ describe('PostPile MCP server', () => {
       getViewer: () => engine.getViewer(),
       getTeamMembers: () => engine.getTeamMembers(),
       prOverlaps: () => engine.prOverlaps(),
+      storedPrKeys: () => engine.storedPrKeys(),
       lastSyncReport: () => engine.lastSyncReport(),
       recordedSyncProgress: async () => null,
       recordedAppVersion: async () => null,
@@ -573,6 +576,7 @@ describe('PostPile MCP server', () => {
       recordedSyncProgress: async () => null,
       recordedAppVersion: async () => null,
       prOverlaps: () => engine.prOverlaps(),
+      storedPrKeys: () => engine.storedPrKeys(),
       listPrNotes: (keys) => engine.listPrNotes(keys),
     };
     const client = await connected(reader);
@@ -669,6 +673,7 @@ describe('PostPile MCP server', () => {
       recordedSyncProgress: async () => null,
       recordedAppVersion: async () => null,
       prOverlaps: () => engine.prOverlaps(),
+      storedPrKeys: () => engine.storedPrKeys(),
       listPrNotes: (keys) => engine.listPrNotes(keys),
     };
     const client = await connected(reader);
@@ -686,13 +691,13 @@ describe('PostPile MCP server', () => {
     expect(brief).not.toContain('seen_through for mark_read');
     expect(brief).toContain('the seen_through mark_read needs');
     const full = await callText(client, 'pr_context', { pr: 'acme/app#1902', detail: 'full' });
-    const seen = Number(/acme\/app#1902: seen_through for mark_read: (\d+)/.exec(full)?.[1]);
-    expect(seen).toBeGreaterThan(0);
+    const seen = /acme\/app#1902: seen_through for mark_read: (\S+) /.exec(full)?.[1] ?? '';
+    expect(parseSeenThrough(seen)?.seq).toBeGreaterThan(0);
     // Outside the fence: PostPile wrote it, not GitHub. The list it vouches for sits inside.
     expect(fencedPart(full)).not.toContain('seen_through');
     expect(fencedPart(full)).toMatch(/Unread since you looked \(\d+, oldest first, every one; mark_read marks exactly these read\):/);
 
-    const stale = await client.callTool({ name: 'mark_read', arguments: { prs: [{ pr: 'acme/app#1902', seen_through: seen - 1 }] } });
+    const stale = await client.callTool({ name: 'mark_read', arguments: { prs: [{ pr: 'acme/app#1902', seen_through: seenThroughToken((parseSeenThrough(seen)?.seq ?? 1) - 1, []) }] } });
     const staleText = (stale.content as { text: string }[])[0]?.text ?? '';
     expect(staleText).toContain('Nothing was marked read.');
     expect(fencedPart(staleText)).toMatch(/refused acme\/app#1902: new activity since you read it: 1 event, newest from /);
@@ -757,5 +762,37 @@ describe('PostPile MCP server', () => {
     const data = fencedPart(await callText(client, 'pr_context', { pr: 'acme/app#1902', detail: 'full' }));
     expect(data).toContain('Unread since you looked (5, oldest first, every one; mark_read marks exactly these read):');
     expect(data.split('\n').length).toBeGreaterThan(160_000);
+  });
+
+  it('resolves every mark_read reference against one read of the stored keys, no search per PR', async () => {
+    const calls = { search: 0, storedPrKeys: 0 };
+    class Counting extends FakeEngine {
+      override async search(...args: Parameters<FakeEngine['search']>) {
+        calls.search += 1;
+        return super.search(...args);
+      }
+      override async storedPrKeys() {
+        calls.storedPrKeys += 1;
+        return super.storedPrKeys();
+      }
+    }
+    const engine = new Counting();
+    const client = await connected(engine, { requests: new InMemoryAgentRequests(engine) });
+
+    const answer = await client.callTool({
+      name: 'mark_read',
+      arguments: {
+        prs: [
+          { pr: 'ACME/app#1902', seen_through: '0-0' },
+          { pr: '#1911', seen_through: '0-0' },
+          { pr: 'https://github.com/acme/app/pull/1930', seen_through: '0-0' },
+        ],
+      },
+    });
+
+    expect(calls).toEqual({ search: 0, storedPrKeys: 1 });
+    // The made-up tokens leave every PR alone; what matters is that each reached the app under its stored key.
+    const left = answer.structuredContent as { refused: { pr: string }[]; skipped: { pr: string }[] };
+    expect([...left.refused, ...left.skipped].map((entry) => entry.pr).sort()).toEqual(['acme/app#1902', 'acme/app#1911', 'acme/app#1930']);
   });
 });

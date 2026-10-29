@@ -139,7 +139,7 @@ const prNoteSchema = z.discriminatedUnion('action', [
 const markReadSchema = z
   .object({
     prs: z
-      .array(z.object({ prKey: prKeySchema, seenThrough: z.number().int().min(0) }).strict())
+      .array(z.object({ prKey: prKeySchema, seenThrough: z.string().min(1).max(40) }).strict())
       .min(1)
       .max(AGENT_MARK_READ_MAX_PRS),
   })

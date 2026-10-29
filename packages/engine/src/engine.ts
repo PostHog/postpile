@@ -1121,7 +1121,7 @@ export class Engine implements EngineService {
       catchUpChanges: this.catchUps.changes(),
       githubQuota: this.quota.view(poll.everySeconds),
       keptUnread: this.clickedReadRetry.notice(),
-      agentReads: this.agentMarkRead.notices.live(),
+      agentReads: this.agentMarkRead.notices.recent(),
     };
   }
 
@@ -1222,6 +1222,10 @@ export class Engine implements EngineService {
 
   async prOverlaps(): Promise<PrOverlapsView> {
     return readPrOverlaps(this.deps.store);
+  }
+
+  async storedPrKeys(): Promise<PrKey[]> {
+    return this.deps.store.prs.keys();
   }
 
   async getTeamMembers(): Promise<TeamMembersView> {

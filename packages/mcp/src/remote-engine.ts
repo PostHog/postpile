@@ -96,6 +96,10 @@ export class RemoteEngine implements SharedEngine {
     return this.call('prOverlaps', []);
   }
 
+  storedPrKeys(): Promise<PrKey[]> {
+    return this.call('storedPrKeys', []);
+  }
+
   lastSyncReport(): Promise<SyncReport | null> {
     return this.call('lastSyncReport', []);
   }

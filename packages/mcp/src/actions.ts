@@ -6,7 +6,7 @@
 import { AGENT_REQUEST_WAIT_MS, parsePrKey, UNDO_WINDOW_MS, type AgentMarkReadLeft, type AgentMarkReadPr, type AgentMarkReadResult, type AgentRefreshResult, type AgentRefreshTarget, type AgentRequestResult, type PrKey, type PrNoteKind, type PrNoteRequest, type PrNoteResult, type TopicChangeKind, type TopicChangeResult } from '@postpile/core';
 import type { AgentAsk, AgentRequests } from './agent-requests.ts';
 import { parsePrInput } from './pr-input.ts';
-import { notTracked, resolvePr, resolveTopic, toolError, type ReadContext, type ResolvedPr, type ToolAnswer } from './reads.ts';
+import { notTracked, resolvePr, resolvePrAmong, resolveTopic, toolError, type ReadContext, type ResolvedPr, type ToolAnswer } from './reads.ts';
 import { untilText } from './notes-text.ts';
 import { ago, answer, minute } from './text.ts';
 
@@ -414,16 +414,21 @@ export async function notePr(ctx: ActionContext, args: NotePrArgs): Promise<Tool
 // ---------------------------------------------------------------------------
 
 export interface MarkReadArgs {
-  prs: { pr: string; seen_through: number }[];
+  prs: { pr: string; seen_through: string }[];
 }
 
 const UNDO_SECONDS = UNDO_WINDOW_MS / 1000;
 
-/** Each PR resolved to its key, the first unresolvable one failing the call; a PR named twice keeps its last seen_through. */
+/**
+ * Each PR resolved to its key against one read of the stored keys, the
+ * first unresolvable one failing the call; a PR named twice keeps its last
+ * seen_through. One read for up to 20 references, not a search each.
+ */
 async function markReadPrs(ctx: ActionContext, args: MarkReadArgs): Promise<AgentMarkReadPr[] | ToolAnswer> {
-  const prs = new Map<PrKey, number>();
+  const stored = await ctx.reader.storedPrKeys();
+  const prs = new Map<PrKey, string>();
   for (const entry of args.prs) {
-    const resolved = await resolvePr(ctx.reader, entry.pr, 'prs[].pr');
+    const resolved = resolvePrAmong(stored, entry.pr, 'prs[].pr');
     if (!resolved.ok) {
       return resolved.error;
     }

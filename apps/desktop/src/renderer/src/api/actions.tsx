@@ -435,7 +435,8 @@ export function ActionsProvider(props: { children: ReactNode }) {
   }, [liveLoaded, keptUnread?.id]);
 
   // An outside agent marked PRs read through the MCP (mark_read): the toast says so and offers Undo while the window runs.
-  // One from before this window opened is not shown.
+  // One from before this window opened is not shown (the first load only notes the newest id); one that came while the
+  // window was minimised shows once polling resumes, without Undo when its window has ended.
   useEffect(() => {
     if (!liveLoaded) {
       return;
@@ -443,7 +444,7 @@ export function ActionsProvider(props: { children: ReactNode }) {
     const toast = seenAgentRead.current === undefined ? null : agentReadsToast(agentReads, seenAgentRead.current, Date.now());
     if (toast) {
       const [first, ...more] = toast.batches.map((batch) => batch.token);
-      setNotice({ id: Date.now(), tone: 'ok', message: toast.message, undoToken: first ?? null, moreUndoTokens: more, undoUntil: toast.undoUntil, snoozeTileId: null });
+      setNotice({ id: Date.now(), tone: 'ok', message: toast.message, undoToken: first ?? null, moreUndoTokens: more, undoUntil: toast.undoUntil ?? undefined, snoozeTileId: null });
       setPendingUndos((current) => [...current, ...toast.batches]);
       void refreshAll();
     }

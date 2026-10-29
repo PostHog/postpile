@@ -108,6 +108,9 @@ import type {
 import {
   agentMarkReadCheck,
   unreadSinceLooked,
+  parseSeenThrough,
+  seenThroughToken,
+  unreadIdsHash,
   agentMarkReadLogDetail,
   AgentReadNotices,
   appendTailoring,
@@ -563,7 +566,7 @@ export class FakeEngine implements EngineService {
       read: (cover, notedKey) => noteCover.read(cover, notedKey),
       waitMs: FAKE_COVER_WAIT_MS,
     });
-    this.agentReads = new AgentReadNotices((notice) => notice.undoUntil > this.now().toISOString());
+    this.agentReads = new AgentReadNotices((undoToken) => this.batches.some((batch) => batch.token === undoToken && this.now().getTime() - batch.queuedAt <= UNDO_WINDOW_MS), this.now);
     this.prNotes = new FakePrNotes(this.data, this.now, (key) => this.fetchedAtOf(key), coverReader);
     this.prNotes.seed();
     this.agentRefresher = new AgentRefresher({
@@ -1397,6 +1400,10 @@ export class FakeEngine implements EngineService {
     return this.teamRoles.view();
   }
 
+  async storedPrKeys(): Promise<PrKey[]> {
+    return this.data.prs.map((pr) => pr.key).sort();
+  }
+
   /** Like the engine: open PRs' diffs only, stack mates left out. The default sample has no diffs; POSTPILE_FAKE_EXTRA=mcp adds some. */
   async prOverlaps(): Promise<PrOverlapsView> {
     const open = new Set(this.data.prs.filter((pr) => pr.state === 'OPEN').map((pr) => pr.key));
@@ -1601,7 +1608,10 @@ export class FakeEngine implements EngineService {
       waitingThreads: waitingThreads(pr, this.viewer()),
       notes: this.prNotes.viewFor(prKey),
       // The sample has no event log: a PR's events in the order they were added stand in for it.
-      seenThrough: this.eventsOf(prKey).length,
+      seenThrough: seenThroughToken(
+        this.eventsOf(prKey).length,
+        unreadSinceLooked(this.eventsOf(prKey), pr).map((event) => event.id),
+      ),
       unread: unreadSinceLooked(this.eventsOf(prKey), pr),
       ownership: this.ownershipOf(pr),
       openThreads: viewerOpenThreads(pr, this.data.viewer),
@@ -2340,12 +2350,15 @@ export class FakeEngine implements EngineService {
       const stored = this.data.prs.some((candidate) => candidate.key === pr.prKey);
       const events = this.eventsOf(pr.prKey);
       const tracking = this.trackingTile(pr.prKey);
+      const seenThrough = parseSeenThrough(pr.seenThrough);
+      const seq = seenThrough?.seq ?? 0;
       const check = agentMarkReadCheck({
         stored,
         tracked: tracking !== null,
-        seenThrough: pr.seenThrough,
+        seenThrough,
+        unreadHashNow: unreadIdsHash(events.slice(0, seq).filter((event) => event.seenAt === null).map((event) => event.id)),
         newestSeq: events.length,
-        newer: events.slice(pr.seenThrough),
+        newer: events.slice(seq),
         // The sample has no fetch lag: its PRs, events and threads change together, so its snapshot is never behind.
         snapshotBehind: false,
         alreadyQueued: waiting.has(pr.prKey),
@@ -2739,7 +2752,7 @@ export class FakeEngine implements EngineService {
       nextAutoSyncIsBacklog: this.autoSync?.nextSyncIsBacklog() ?? false,
       catchUpChanges: this.catchUp.changes(),
       githubQuota: this.quota.view(poll.everySeconds),
-      agentReads: this.agentReads.live(),
+      agentReads: this.agentReads.recent(),
     };
   }
 

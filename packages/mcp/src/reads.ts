@@ -65,7 +65,7 @@ import {
 } from './text.ts';
 
 /** The read methods the tools use; the read-only engine and the sample-data engine both have them. */
-export type PostPileReader = Pick<EngineService, 'getPr' | 'getTopic' | 'listTopics' | 'search' | 'getViewer' | 'getTeamMembers' | 'prOverlaps' | 'lastSyncReport' | 'recordedSyncProgress' | 'recordedAppVersion' | 'listPrNotes'>;
+export type PostPileReader = Pick<EngineService, 'getPr' | 'getTopic' | 'listTopics' | 'search' | 'getViewer' | 'getTeamMembers' | 'prOverlaps' | 'storedPrKeys' | 'lastSyncReport' | 'recordedSyncProgress' | 'recordedAppVersion' | 'listPrNotes'>;
 
 /** What every read needs besides the reader. */
 export interface ReadContext {
@@ -237,6 +237,34 @@ export type ResolvedPr = { ok: true; key: PrKey } | { ok: false; error: ToolAnsw
 async function storedSpelling(reader: PostPileReader, key: PrKey): Promise<PrKey> {
   const stored = await keysWithNumber(reader, parsePrKey(key).number);
   return stored.find((candidate) => candidate.toLowerCase() === key.toLowerCase()) ?? key;
+}
+
+/**
+ * A PR reference resolved against a list of stored keys, without another
+ * read: a full reference by its stored spelling (case aside; one PostPile
+ * does not store comes back as typed), #123 when exactly one stored PR has
+ * that number. mark_read resolves all its references against one list.
+ */
+export function resolvePrAmong(keys: PrKey[], input: string, param = 'pr'): ResolvedPr {
+  const parsed = parsePrInput(input);
+  if (!parsed) {
+    return {
+      ok: false,
+      error: toolError([`Could not read "${echo(input)}" as a PR. Pass owner/repo#123, a PR URL, or #123 when the number is unique. Example: ${param}: "acme/app#1902"`]),
+    };
+  }
+  if (parsed.kind === 'key') {
+    const wanted = parsed.key.toLowerCase();
+    return { ok: true, key: keys.find((key) => key.toLowerCase() === wanted) ?? parsed.key };
+  }
+  const matches = keys.filter((key) => parsePrKey(key).number === parsed.number).sort();
+  if (matches.length === 1) {
+    return { ok: true, key: matches[0] as PrKey };
+  }
+  if (matches.length === 0) {
+    return { ok: false, error: toolError([`PostPile tracks no PR #${parsed.number}. ${NOT_TRACKED_HINT} Find one with search_prs, e.g. search_prs(query: "cache").`]) };
+  }
+  return { ok: false, error: toolError([`Several PRs are #${parsed.number}; pass the full reference, e.g. ${param}: "${matches[0]}". They are: ${matches.join(', ')}`]) };
 }
 
 /** A PR reference as the tools take it, to a key. The error says how to pass it instead. */

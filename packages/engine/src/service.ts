@@ -269,6 +269,8 @@ export interface EngineService {
    * Stack mates are left out. Local, no GitHub call.
    */
   prOverlaps(): Promise<PrOverlapsView>;
+  /** Every stored PR's key, in one read: mark_read resolves all its PR references against it. */
+  storedPrKeys(): Promise<PrKey[]>;
   /** Who is on each home team, from the team member cache (no GitHub call); MCP tags PR authors with it. */
   getTeamMembers(): Promise<TeamMembersView>;
   /**

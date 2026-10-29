@@ -86,7 +86,7 @@ describe('agentReadText', () => {
 
 describe('agentReadsToast', () => {
   const NOW = Date.parse('2026-10-29T12:00:00Z');
-  const notice = (id: number, prKey: string, undoUntil: string) => ({ id, client: 'claude-code', prKeys: [prKey], writesLocked: false, undoToken: `t${id}`, undoUntil });
+  const notice = (id: number, prKey: string, undoUntil: string, undoable = true) => ({ id, at: '2026-10-29T11:59:55Z', undoable, client: 'claude-code', prKeys: [prKey], writesLocked: false, undoToken: `t${id}`, undoUntil });
 
   it('puts every new notice into one toast with an undo per batch, gone when the first window ends', () => {
     const toast = agentReadsToast([notice(1, 'acme/app#1', '2026-10-29T12:00:03Z'), notice(2, 'acme/app#2', '2026-10-29T12:00:05Z'), notice(3, 'acme/app#3', '2026-10-29T12:00:06Z')], 1, NOW);
@@ -101,8 +101,15 @@ describe('agentReadsToast', () => {
     });
   });
 
-  it('shows nothing when no new notice can still be undone', () => {
-    expect(agentReadsToast([notice(2, 'acme/app#2', '2026-10-29T11:59:59Z')], 1, NOW)).toBeNull();
+  it('still says what was marked once the undo window ended (a window minimised meanwhile), without Undo', () => {
+    expect(agentReadsToast([notice(2, 'acme/app#2', '2026-10-29T11:59:59Z'), notice(3, 'acme/app#3', '2026-10-29T12:00:05Z', false)], 1, NOW)).toEqual({
+      message: 'Claude Code marked #2 read; Claude Code marked #3 read',
+      batches: [],
+      undoUntil: null,
+    });
+  });
+
+  it('shows nothing it showed before', () => {
     expect(agentReadsToast([notice(1, 'acme/app#1', '2026-10-29T12:00:05Z')], 1, NOW)).toBeNull();
   });
 });

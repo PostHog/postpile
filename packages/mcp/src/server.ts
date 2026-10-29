@@ -122,18 +122,18 @@ Example: note_pr(pr: "acme/app#1902", kind: "covered", covered_by: "acme/app#185
 const UNDO_SECONDS = UNDO_WINDOW_MS / 1000;
 
 const MARK_READ_DESCRIPTION = `Mark PRs read in PostPile for the user, through the running app: the same undo window, GitHub writes lock and pending writes as the app's Mark read button. The user sees it in the app with Undo; once it reaches GitHub (after about ${UNDO_SECONDS} s) it can't be undone, since GitHub can't mark unread.
-Only PRs you read with pr_context(detail: "full") and went through with the user (summarised, reviewed or discussed). Pass each PR's seen_through from that read: a PR with activity PostPile stored after it is refused ("new activity since you read it: 2 events, newest from alice"); read it again first. Other PRs in the call still go through. Up to ${AGENT_MARK_READ_MAX_PRS} PRs, named one by one.
+Only PRs you read with pr_context(detail: "full") and went through with the user (summarised, reviewed or discussed). Pass each PR's seen_through token from that read, as printed: a PR with activity PostPile stored after it is refused ("new activity since you read it: 2 events, newest from alice"), and so is one whose unread list changed since (e.g. the user undid a mark-read); read it again first. Other PRs in the call still go through. Up to ${AGENT_MARK_READ_MAX_PRS} PRs, named one by one.
 Marking read answers nothing: a personal ask (mention, question, reply) stays under Needs reply until the user replies. A team mention clears on read, as with the button. PRs already read or already queued to mark read, and stack layers PostPile only shows for context, are skipped, so calling again is safe.
 Tell the user which PRs you marked, and which were refused and why.
 Use when: you read a PR in full and went through it with the user; call it as part of that flow, without waiting to be asked.
 Not for: PRs you only listed, skimmed or searched past (whats_on_me or search_prs rows), whole topics, or hiding a PR the user has not seen.
-Example: mark_read(prs: [{pr: "acme/app#1902", seen_through: 4127}])`;
+Example: mark_read(prs: [{pr: "acme/app#1902", seen_through: "4127-0k3j2h1g9f8"}])`;
 
 
 const markReadOutput = {
   status: z.enum(['done']),
   marked: z.array(z.string()).describe('Marked read, one batch with one Undo in the app'),
-  refused: z.array(z.object({ pr: z.string(), reason: z.string() })).describe('Left unread: new activity since your read, a seen_through that does not fit, or a PR PostPile does not track'),
+  refused: z.array(z.object({ pr: z.string(), reason: z.string() })).describe('Left unread: new activity since your read, an unread list that changed since, a seen_through that does not fit, or a PR PostPile does not track'),
   skipped: z.array(z.object({ pr: z.string(), reason: z.string() })).describe('Nothing to do: already read, already queued to mark read, or a stack layer shown only for context'),
   writes_locked: z.boolean().describe("GitHub writes are locked: it waits in PostPile's pending writes until the user sends it"),
   undo_until: z.string().nullable().describe('When the undo window ends; null when nothing was marked'),
@@ -142,17 +142,17 @@ const markReadOutput = {
 /** Changes the app's read state and, after the undo window, GitHub's, which can't be undone (GitHub can't mark unread). A second call skips what is already read. */
 const MARK_READ = { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true } as const;
 
-const MARK_READ_ERROR = `prs must be a list of 1 to ${AGENT_MARK_READ_MAX_PRS} entries, each { pr, seen_through }, e.g. prs: [{pr: "acme/app#1902", seen_through: 4127}]`;
+const MARK_READ_ERROR = `prs must be a list of 1 to ${AGENT_MARK_READ_MAX_PRS} entries, each { pr, seen_through }, e.g. prs: [{pr: "acme/app#1902", seen_through: "4127-0k3j2h1g9f8"}]`;
 
 const markReadPrsSchema = z
   .array(
     z.object({
       pr: z.string({ error: MARK_READ_ERROR }).describe('owner/repo#123, a GitHub PR URL, or #123 when the number is unique'),
       seen_through: z
-        .number({ error: 'seen_through must be the whole number pr_context(detail: "full") printed for this PR' })
-        .int({ error: 'seen_through must be the whole number pr_context(detail: "full") printed for this PR' })
-        .min(0, { error: 'seen_through must be the whole number pr_context(detail: "full") printed for this PR' })
-        .describe('The seen_through pr_context(detail: "full") printed for this PR'),
+        .string({ error: 'seen_through must be the token pr_context(detail: "full") printed for this PR, e.g. "4127-0k3j2h1g9f8"' })
+        .min(1, { error: 'seen_through must be the token pr_context(detail: "full") printed for this PR, e.g. "4127-0k3j2h1g9f8"' })
+        .max(40, { error: 'seen_through must be the token pr_context(detail: "full") printed for this PR, e.g. "4127-0k3j2h1g9f8"' })
+        .describe('The seen_through token pr_context(detail: "full") printed for this PR, as is'),
     }),
     { error: MARK_READ_ERROR },
   )

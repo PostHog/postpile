@@ -190,7 +190,7 @@ export function anchorSummary(anchor: NoteAnchor): string {
  * states apart for the observation token and the idempotency key, and
  * keeps core free of node:crypto (the renderer type-checks this barrel).
  */
-function shortHash(text: string): string {
+export function shortHash(text: string): string {
   let h1 = 0xdeadbeef;
   let h2 = 0x41c6ce57;
   for (let i = 0; i < text.length; i++) {

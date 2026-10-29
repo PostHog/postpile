@@ -1,6 +1,8 @@
 import {
   agentMarkReadCheck,
   agentMarkReadLogDetail,
+  parseSeenThrough,
+  unreadIdsHash,
   AgentReadNotices,
   planRead,
   type AgentMarkReadPr,
@@ -34,7 +36,7 @@ export class AgentMarkRead {
   readonly notices: AgentReadNotices;
 
   constructor(private readonly deps: AgentMarkReadDeps) {
-    this.notices = new AgentReadNotices((notice) => deps.readMarker.canUndo(notice.undoToken));
+    this.notices = new AgentReadNotices((undoToken) => deps.readMarker.canUndo(undoToken), deps.now);
   }
 
   /** Whether marking the PR read changes anything: an unread thread, an unseen event, not handled yet. */
@@ -84,12 +86,17 @@ export class AgentMarkRead {
     for (const pr of prs) {
       const stored = store.prs.get(pr.prKey) !== null;
       const tracking = this.tracking(tiles, pr.prKey);
+      const seenThrough = parseSeenThrough(pr.seenThrough);
+      const logged = stored ? store.eventLog.listSince([pr.prKey], 0) : [];
+      const seq = seenThrough?.seq ?? 0;
       const check = agentMarkReadCheck({
         stored,
         tracked: tracking.tracked,
-        seenThrough: pr.seenThrough,
+        seenThrough,
+        // The unseen events the token's list stood for, as the store has them now.
+        unreadHashNow: unreadIdsHash(logged.filter((entry) => entry.seq <= seq && entry.event.seenAt === null).map((entry) => entry.event.id)),
         newestSeq: stored ? store.eventLog.maxSeqForPr(pr.prKey) : 0,
-        newer: stored ? store.eventLog.listSince([pr.prKey], pr.seenThrough).map((entry) => entry.event) : [],
+        newer: logged.filter((entry) => entry.seq > seq).map((entry) => entry.event),
         snapshotBehind: stored && this.snapshotBehind(pr.prKey),
         alreadyQueued: waiting.has(pr.prKey),
         changesAnything: stored && this.changesAnything(pr.prKey),

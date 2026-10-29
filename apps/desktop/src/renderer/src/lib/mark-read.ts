@@ -88,27 +88,31 @@ export function agentReadText(notice: Pick<AgentReadNotice, 'client' | 'prKeys' 
 
 export interface AgentReadsToast {
   message: string;
-  /** One per batch, with its own window end: the provider refetches after each, so a locked batch shows as pending once it parked. */
+  /** The batches that can still be undone, each with its own window end: the provider refetches after each, so a locked batch shows as pending once it parked. */
   batches: { token: string; until: number }[];
-  /** When the first of their undo windows ends: the toast's Undo, which takes them all back, goes then. */
-  undoUntil: number;
+  /** When the first of their undo windows ends: the toast's Undo, which takes them all back, goes then. Null when none can be undone. */
+  undoUntil: number | null;
 }
 
 /**
- * One toast for the agent mark-reads that arrived since the last look and
- * can still be undone, oldest first; null when there are none. Two calls
- * between two polls share the toast, and its Undo takes back both batches.
+ * One toast for the agent mark-reads newer than the last one this window
+ * showed, oldest first; null when there are none. Two calls between two
+ * polls share the toast, and its Undo takes back every batch that can
+ * still be undone. A window that was minimised past the undo window still
+ * says what was marked, without Undo.
  */
 export function agentReadsToast(notices: AgentReadNotice[], seenId: number, now: number): AgentReadsToast | null {
-  const fresh = notices.filter((notice) => notice.id > seenId && Date.parse(notice.undoUntil) > now);
+  const fresh = notices.filter((notice) => notice.id > seenId);
   if (fresh.length === 0) {
     return null;
   }
-  const batches = fresh.map((notice) => ({ token: notice.undoToken, until: Date.parse(notice.undoUntil) }));
+  const batches = fresh
+    .filter((notice) => notice.undoable && Date.parse(notice.undoUntil) > now)
+    .map((notice) => ({ token: notice.undoToken, until: Date.parse(notice.undoUntil) }));
   return {
     message: fresh.map(agentReadText).join('; '),
     batches,
-    undoUntil: Math.min(...batches.map((batch) => batch.until)),
+    undoUntil: batches.length === 0 ? null : Math.min(...batches.map((batch) => batch.until)),
   };
 }
 

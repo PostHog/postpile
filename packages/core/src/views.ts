@@ -539,11 +539,13 @@ export interface PrDetail {
   /** Agent notes on the PR and its observation token (DESIGN.md "Agent notes on PRs"). Advisory: no rule reads them. */
   notes: PrNotesView;
   /**
-   * The PR's newest event-log position (`EventLogRepo.maxSeqForPr`), 0
-   * when none: pr_context prints it as seen_through, and mark_read refuses
-   * the PR when events were logged after it (DESIGN.md "Agents mark read").
+   * mark_read's token for `unread` (`seenThroughToken`): the PR's newest
+   * event-log position (`EventLogRepo.maxSeqForPr`, 0 when none) and a
+   * hash of the listed unread ids. mark_read refuses the PR when events
+   * were logged after it, or when the unseen events up to it changed
+   * (DESIGN.md "Agents mark read").
    */
-  seenThrough: number;
+  seenThrough: string;
   /**
    * Every event a mark-read would mark seen (`unreadSinceLooked`, the
    * store's seen state), oldest first, people's text in full: pr_context's

@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { UNDO_WINDOW_MS, type AgentRequestResult, type FullPr } from '@postpile/core';
+import { parseSeenThrough, seenThroughToken, UNDO_WINDOW_MS, type AgentRequestResult, type FullPr } from '@postpile/core';
 import { at, makeComment, makeEvent, makePr, makeThread, makeThreadFor } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness, type Harness } from '../testing/fakes.ts';
@@ -26,8 +26,8 @@ async function synced(): Promise<Harness> {
   return h;
 }
 
-async function seenThrough(h: Harness, key: string): Promise<number> {
-  return (await h.engine.getPr(key))?.seenThrough ?? -1;
+async function seenThrough(h: Harness, key: string): Promise<string> {
+  return (await h.engine.getPr(key))?.seenThrough ?? '';
 }
 
 /** Lets the queued send (and its awaits) run after the fake timer fired. */
@@ -39,7 +39,7 @@ describe('markReadForAgent', () => {
   it('marks a PR read like the pane button: one batch, toast notice with undo, GitHub after the window', async () => {
     const h = await synced();
     const seen = await seenThrough(h, pr.key);
-    expect(seen).toBeGreaterThan(0);
+    expect(parseSeenThrough(seen)?.seq).toBeGreaterThan(0);
 
     const result = await h.engine.markReadForAgent({ prs: [{ prKey: pr.key, seenThrough: seen }] }, CLIENT);
 
@@ -56,7 +56,7 @@ describe('markReadForAgent', () => {
     expect(h.writer.calls).toEqual([`markThreadRead thread-${pr.ref.number}`]);
   });
 
-  it('keeps every notice until its undo window ends, so two calls between polls both get a toast', async () => {
+  it('keeps every notice, so two calls between polls both get a toast, and says when Undo is over', async () => {
     const h = makeHarness();
     const other = followedPr(12);
     topicWithPrs(h, 'cache', [pr, other]);
@@ -74,7 +74,10 @@ describe('markReadForAgent', () => {
 
     h.timers.advance(UNDO_WINDOW_MS);
     await settle();
-    expect((await h.engine.livePollStatus()).agentReads).toEqual([]);
+    expect((await h.engine.livePollStatus()).agentReads.map((notice) => [notice.id, notice.undoable])).toEqual([
+      [1, false],
+      [2, false],
+    ]);
   });
 
   it('can be undone from the toast inside the window, and nothing reaches GitHub', async () => {
@@ -136,9 +139,34 @@ describe('markReadForAgent', () => {
     const shown = [...(detail?.activity.fresh ?? []), ...(detail?.activity.earlier ?? [])];
     expect(shown.some((line) => line.actor === 'carol')).toBe(true);
 
-    const result = await h.engine.markReadForAgent({ prs: [{ prKey: pr.key, seenThrough: detail?.seenThrough ?? 0 }] }, CLIENT);
+    const result = await h.engine.markReadForAgent({ prs: [{ prKey: pr.key, seenThrough: detail?.seenThrough ?? '' }] }, CLIENT);
     expect(result.marked).toEqual([]);
     expect(result.refused[0]?.reason).toContain('newest from carol');
+  });
+
+  it('refuses an old token once an Undo brought events back unseen that the read did not list', async () => {
+    const h = await synced();
+    // The user marks the PR read in the pane, and the agent reads it then: nothing unread to list.
+    const tileId = (await h.engine.getPr(pr.key))?.tileIds[0] ?? '';
+    const clicked = await h.engine.markPrRead(tileId, pr.key);
+    const seen = await seenThrough(h, pr.key);
+    expect((await h.engine.getPr(pr.key))?.unread).toEqual([]);
+    // The user takes the click back inside the window: alice's comment is unseen again, the event log did not move.
+    expect((await h.engine.undo(clicked.undoToken)).ok).toBe(true);
+
+    const result = await h.engine.markReadForAgent({ prs: [{ prKey: pr.key, seenThrough: seen }] }, CLIENT);
+
+    expect(result.marked).toEqual([]);
+    expect(result.refused).toEqual([{ prKey: pr.key, reason: 'the unread list changed since you read it; read it again' }]);
+  });
+
+  it('keeps the toast notice after the undo window, without Undo, so a window shown later still hears of it', async () => {
+    const h = await synced();
+    await h.engine.markReadForAgent({ prs: [{ prKey: pr.key, seenThrough: await seenThrough(h, pr.key) }] }, CLIENT);
+    h.timers.advance(UNDO_WINDOW_MS);
+    await settle();
+
+    expect((await h.engine.livePollStatus()).agentReads).toMatchObject([{ id: 1, prKeys: [pr.key], undoable: false }]);
   });
 
   it('refuses a seen_through ahead of what PostPile stores, and a PR it does not track', async () => {
@@ -148,8 +176,8 @@ describe('markReadForAgent', () => {
     const result = await h.engine.markReadForAgent(
       {
         prs: [
-          { prKey: pr.key, seenThrough: seen + 100 },
-          { prKey: 'acme/app#999', seenThrough: 0 },
+          { prKey: pr.key, seenThrough: seenThroughToken((parseSeenThrough(seen)?.seq ?? 0) + 100, []) },
+          { prKey: 'acme/app#999', seenThrough: '0-0' },
         ],
       },
       CLIENT,
@@ -270,7 +298,7 @@ describe('mark_read through the request folder', () => {
 
   it('refuses more than 20 PRs in one call and marks none of them', async () => {
     const h = await synced();
-    const prs = Array.from({ length: 21 }, (_, index) => ({ prKey: `acme/app#${index + 1}`, seenThrough: 0 }));
+    const prs = Array.from({ length: 21 }, (_, index) => ({ prKey: `acme/app#${index + 1}`, seenThrough: '0-0' }));
     const result = await answer(h, { prs });
     expect(result).toMatchObject({ ok: false, error: expect.stringContaining('one to 20 PRs') });
     expect((await h.engine.livePollStatus()).agentReads).toEqual([]);
@@ -310,7 +338,7 @@ describe('Unread since you looked (PrDetail.unread)', () => {
     // Everything a mark-read with this seen_through would mark seen is in the list.
     const covered = h.store.eventLog
       .listSince([busy.key], 0)
-      .filter((entry) => entry.seq <= detail.seenThrough && entry.event.seenAt === null)
+      .filter((entry) => entry.seq <= (parseSeenThrough(detail.seenThrough)?.seq ?? -1) && entry.event.seenAt === null)
       .map((entry) => entry.event.id);
     expect(covered.length).toBeGreaterThan(12);
     expect(new Set(unread.map((event) => event.id))).toEqual(new Set(covered));
