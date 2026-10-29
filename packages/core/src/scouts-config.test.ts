@@ -56,6 +56,12 @@ describe('parseScouts', () => {
     ]);
   });
 
+  it('refuses unsupported syntax in a new-folder hint too', () => {
+    const { scouts, errors } = parseScouts('## Lookout\nrepos: acme/app\npaths: +src/[ab]/*/\n\nNew folders.\n');
+    expect(scouts).toEqual([]);
+    expect(errors[0]).toContain('which paths do not support');
+  });
+
   it('gives an empty list for an empty file', () => {
     expect(parseScouts('')).toEqual({ scouts: [], errors: [] });
     expect(parseScouts('# My scouts\n\nnone yet\n')).toEqual({ scouts: [], errors: [] });
