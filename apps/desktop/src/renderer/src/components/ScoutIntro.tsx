@@ -3,7 +3,31 @@ import { useInboxCleanup } from '../api/cleanup.ts';
 import { useInterruptions } from '../api/interruptions.ts';
 import { useScoutIntro } from '../api/scouts.ts';
 import { scoutIntroOpens, scoutIntroWaits } from '../lib/scout-intro.ts';
+import { Button } from './Button.tsx';
 import { ScoutIntroCard } from './ScoutIntroCard.tsx';
+
+/** "Set up a scout" while the card's state could not load: the error, Try again and Close. */
+function ScoutIntroLoadError(props: { error: unknown; retrying: boolean; onRetry: () => void; onClose: () => void }) {
+  const message = props.error instanceof Error ? props.error.message : String(props.error);
+  return (
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-ink/20 p-4">
+      <div role="alertdialog" aria-labelledby="scout-intro-error" className="flex w-[420px] max-w-full flex-col gap-3 rounded-[16px] bg-surface px-6 py-5 shadow-menu">
+        <h2 id="scout-intro-error" className="text-[15px] font-semibold text-ink">
+          Could not load the scout setup
+        </h2>
+        <p className="text-[12.5px] leading-[1.45] text-ink-2 [overflow-wrap:anywhere]">{message}</p>
+        <div className="flex justify-end gap-2.5">
+          <Button size="md" onClick={props.onClose}>
+            Close
+          </Button>
+          <Button variant="primary" size="md" disabled={props.retrying} onClick={props.onRetry}>
+            {props.retrying ? 'Trying…' : 'Try again'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /**
  * When the Scouts intro card shows. Mounted once in App. By itself while the
@@ -16,7 +40,8 @@ import { ScoutIntroCard } from './ScoutIntroCard.tsx';
  * itself again this session.
  */
 export function ScoutIntro(props: { setupBlocks: boolean; requested: boolean; onClose: () => void }) {
-  const state = useScoutIntro().data;
+  const intro = useScoutIntro();
+  const state = intro.data;
   const cleanup = useInboxCleanup().data;
   const interruptions = useInterruptions().data;
   const [closed, setClosed] = useState(false);
@@ -28,6 +53,17 @@ export function ScoutIntro(props: { setupBlocks: boolean; requested: boolean; on
       setOpen(true);
     }
   }, [opens]);
+  // "Set up a scout" after the state failed to load asks again; nothing else refetches it (no focus or reconnect refetch).
+  const { refetch } = intro;
+  const failed = state === undefined && intro.isError;
+  useEffect(() => {
+    if (props.requested && failed) {
+      void refetch();
+    }
+  }, [props.requested, failed, refetch]);
+  if (state === undefined && props.requested && intro.isError) {
+    return <ScoutIntroLoadError error={intro.error} retrying={intro.isFetching} onRetry={() => void refetch()} onClose={props.onClose} />;
+  }
   if (state === undefined || !(open || opens)) {
     return null;
   }
