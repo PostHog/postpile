@@ -233,14 +233,23 @@ async function nextFilePages(http: GitHubHttp, batch: FilesProgress[]): Promise<
  * of every longer list together, SCOUT_FILES_BATCH_SIZE PRs per query,
  * until each is whole. A moved head (a push while paging) or a failed page
  * makes that PR's list unknown, never a shorter one: a signal on page two
- * must not read as "no signal". A PR GitHub does not answer for is left out.
+ * must not read as "no signal". A failed query costs only its own batch:
+ * those PRs come back with no list. A PR GitHub does not answer for is
+ * left out.
  */
 export async function scoutFiles(http: GitHubHttp, refs: PrRef[]): Promise<Map<PrKey, ScoutFilesRead>> {
   const progress: FilesProgress[] = [];
   for (const batch of chunk(refs, SCOUT_FILES_BATCH_SIZE)) {
-    const response = await http.graphql<RawFilesBatch>(buildScoutFilesQuery(batch.map((ref) => ({ ref, after: null }))));
+    let response;
+    try {
+      response = await http.graphql<RawFilesBatch>(buildScoutFilesQuery(batch.map((ref) => ({ ref, after: null }))));
+    } catch {
+      response = { data: null, errors: [] };
+    }
     if (!response.data) {
-      throw graphqlFailure('scout files query', response.errors);
+      // This batch only: its PRs come back without a list (pending for the caller); the other batches' reads stand.
+      batch.forEach((ref) => progress.push({ ref, headOid: '', baseOid: '', files: [], after: null, pages: 1, broken: true }));
+      continue;
     }
     const errored = response.errors.length > 0;
     batch.forEach((ref, index) => {
