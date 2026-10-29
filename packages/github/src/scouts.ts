@@ -133,8 +133,13 @@ export function buildTreeQuery(repo: string, commitOids: string[]): string {
   return `query {\n  repository(owner: ${JSON.stringify(owner)}, name: ${JSON.stringify(name)}) {\n${lines.join('\n')}\n  }\n}`;
 }
 
-function filesOf(page: RawFilesPage): ScoutFile[] {
-  return (page.files?.nodes ?? []).flatMap((node) => (node ? [{ path: node.path, changeType: node.changeType }] : []));
+/** The page's files, or null when a node is null: GitHub left one out, so the page is not whole. */
+function filesOf(page: RawFilesPage): ScoutFile[] | null {
+  const nodes = page.files?.nodes ?? [];
+  if (nodes.some((node) => node === null)) {
+    return null;
+  }
+  return nodes.flatMap((node) => (node ? [{ path: node.path, changeType: node.changeType }] : []));
 }
 
 function chunk<T>(items: T[], size: number): T[][] {
@@ -205,13 +210,16 @@ async function nextFilePages(http: GitHubHttp, batch: FilesProgress[]): Promise<
     batch.forEach((entry) => (entry.broken = true));
     return;
   }
+  // Field errors may have nulled any part of the answer: none of its pages counts as whole.
+  const errored = response.errors.length > 0;
   batch.forEach((entry, index) => {
     const page = response.data?.[batchAlias(index)]?.pullRequest;
-    if (!page?.files || page.headRefOid !== entry.headOid || page.baseRefOid !== entry.baseOid) {
+    const files = page ? filesOf(page) : null;
+    if (errored || !page?.files || files === null || page.headRefOid !== entry.headOid || page.baseRefOid !== entry.baseOid) {
       entry.broken = true;
       return;
     }
-    entry.files.push(...filesOf(page));
+    entry.files.push(...files);
     entry.pages += 1;
     entry.after = page.files.pageInfo.hasNextPage ? page.files.pageInfo.endCursor : null;
     entry.broken = entry.after !== null && entry.pages >= SCOUT_FILES_MAX_PAGES;
@@ -232,13 +240,17 @@ export async function scoutFiles(http: GitHubHttp, refs: PrRef[]): Promise<Map<P
     if (!response.data) {
       throw graphqlFailure('scout files query', response.errors);
     }
+    const errored = response.errors.length > 0;
     batch.forEach((ref, index) => {
       const first = response.data?.[batchAlias(index)]?.pullRequest;
       if (!first) {
         return;
       }
+      const files = filesOf(first);
       const after = first.files?.pageInfo.hasNextPage ? first.files.pageInfo.endCursor : null;
-      progress.push({ ref, headOid: first.headRefOid, baseOid: first.baseRefOid, files: filesOf(first), after, pages: 1, broken: first.files === null });
+      // Field errors or a null node: the list is not whole, whatever the rest of the page says.
+      const broken = errored || first.files === null || files === null;
+      progress.push({ ref, headOid: first.headRefOid, baseOid: first.baseRefOid, files: files ?? [], after, pages: 1, broken });
     });
   }
   let open = progress.filter((entry) => !entry.broken && entry.after !== null);

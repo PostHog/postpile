@@ -40,6 +40,12 @@ import type { ScoutsHistory } from './history.ts';
 export const SCOUT_LIST_MAX_PAGES = 10;
 /** PRs per scout_judge call. */
 export const SCOUT_JUDGE_BATCH = 12;
+/**
+ * scout_judge calls one full sync makes at most, whatever its agent-call
+ * cap: the step runs while the sync holds its lock (the poll waits), so it
+ * stays short. The rest stays pending for the next sync.
+ */
+export const SCOUT_JUDGE_CALLS_PER_RUN = 5;
 
 const PREFILTER_WORDS: Record<ScoutPrefilterReason, string> = {
   draft: 'a draft',
@@ -87,6 +93,9 @@ interface RepoListing {
   prs: Map<PrKey, ScoutCandidate>;
   /** Down to the oldest floor of the scouts on the repo, without a cap, error or partial answer. */
   complete: boolean;
+  /** How the pass that reaches the floor ended, and when its listing started: the resume point to store once every scout on the repo stored its candidates. */
+  end: PassEnd;
+  startedAt: IsoTime;
 }
 
 /**
@@ -148,6 +157,8 @@ export class ScoutRun {
   private runFiles = new Map<string, ScoutFilesRead>();
   /** The running sync's quota check; reads stop once it says no and the rest stays pending. */
   private quotaAllows: () => boolean = () => true;
+  /** scout_judge calls this run may still make (SCOUT_JUDGE_CALLS_PER_RUN). */
+  private judgeCallsLeft = SCOUT_JUDGE_CALLS_PER_RUN;
 
   constructor(private readonly deps: ScoutRunDeps) {}
 
@@ -219,17 +230,20 @@ export class ScoutRun {
     return raw === null ? null : (JSON.parse(raw) as ListingResume);
   }
 
-  /** After the pass that reaches the floor: done clears the resume point, a cap moves it, a failed read keeps it. */
-  private settle(repo: string, end: PassEnd, startedAt: IsoTime): boolean {
-    if (end.kind === 'done') {
+  /**
+   * Stores where the listing goes on: done clears the resume point, a cap
+   * moves it, a failed read keeps it. Called inside the transaction that
+   * stores the last scout's candidates on the repo, so the point never
+   * moves past PRs that have no row yet (a crash in between lists them
+   * again).
+   */
+  private settle(repo: string, listing: RepoListing): void {
+    if (listing.end.kind === 'done') {
       this.deps.store.meta.delete(resumeKey(repo));
-      return true;
-    }
-    if (end.kind === 'capped') {
-      this.deps.store.meta.set(resumeKey(repo), JSON.stringify({ after: end.after, startedAt } satisfies ListingResume));
+    } else if (listing.end.kind === 'capped') {
+      this.deps.store.meta.set(resumeKey(repo), JSON.stringify({ after: listing.end.after, startedAt: listing.startedAt } satisfies ListingResume));
       this.deps.log(`scouts: ${repo} has more than ${SCOUT_LIST_MAX_PAGES} pages of updates to list; the next sync goes on where this one stopped`);
     }
-    return false;
   }
 
   /**
@@ -244,15 +258,16 @@ export class ScoutRun {
     const resume = this.readResume(repo);
     if (resume === null) {
       const end = await this.pass(repo, null, floor, budget, prs, errors);
-      return { prs, complete: this.settle(repo, end, runStart) };
+      return { prs, complete: end.kind === 'done', end, startedAt: runStart };
     }
     const sinceStop = scoutListingFloor(resume.startedAt, runStart);
     const top = await this.pass(repo, null, sinceStop > floor ? sinceStop : floor, budget, prs, errors);
     if (top.kind !== 'done') {
-      return { prs, complete: false };
+      // Keeps the stored point: a failed read never moves it.
+      return { prs, complete: false, end: { kind: 'failed' }, startedAt: resume.startedAt };
     }
     const lower = await this.pass(repo, resume.after, floor, budget, prs, errors);
-    return { prs, complete: this.settle(repo, lower, resume.startedAt) };
+    return { prs, complete: lower.kind === 'done', end: lower, startedAt: resume.startedAt };
   }
 
   /** Root folders of the bases that need them, from the cache or one read. A failed read leaves them unknown. */
@@ -429,10 +444,15 @@ export class ScoutRun {
         pendAll('agent is off', false);
         continue;
       }
+      if (this.judgeCallsLeft <= 0) {
+        pendAll('waits for the next sync (scout calls per sync used up)', false);
+        continue;
+      }
       if (!input.budget.take('scout_judge')) {
         pendAll('stopped at the agent-call cap', false);
         continue;
       }
+      this.judgeCallsLeft -= 1;
       let result;
       try {
         result = await agent.judgeScouts({ scout: { name: scout.name, prompt: scout.prompt }, items: batch.map((entry) => entry.item), viewer: input.viewer, context: contexts.forTopic(null) });
@@ -474,8 +494,12 @@ export class ScoutRun {
     }
   }
 
-  /** The judgements, the pulls and (when the listing covered the window) the cursor, in one transaction. */
-  private commit(scout: ScoutConfig, repo: string, work: ScoutRepoWork, listingComplete: boolean, runStart: IsoTime): string[] {
+  /**
+   * The judgements, the pulls, the cursor (when the listing covered the
+   * window) and, for the last scout on the repo, the listing's resume point,
+   * in one transaction.
+   */
+  private commit(scout: ScoutConfig, repo: string, work: ScoutRepoWork, listing: RepoListing, lastOnRepo: boolean, runStart: IsoTime): string[] {
     const { store } = this.deps;
     const pulled: string[] = [];
     store.transaction(() => {
@@ -487,8 +511,11 @@ export class ScoutRun {
           pulled.push(pull.prKey);
         }
       }
-      if (listingComplete) {
+      if (listing.complete) {
         store.scoutCursors.advance(scout.id, repo, runStart, this.deps.now().toISOString());
+      }
+      if (lastOnRepo) {
+        this.settle(repo, listing);
       }
     });
     return pulled;
@@ -573,6 +600,7 @@ export class ScoutRun {
     }
     this.quotaAllows = input.quotaAllows;
     this.runFiles = new Map();
+    this.judgeCallsLeft = SCOUT_JUDGE_CALLS_PER_RUN;
     if (!this.quotaAllows()) {
       this.deps.log('scouts: GitHub quota low, skipped this sync');
       return report;
@@ -596,6 +624,10 @@ export class ScoutRun {
         listings.set(repo, listing);
         report.listed += listing.prs.size;
       }
+      const lastScoutOn = new Map<string, string>();
+      for (const scout of active.scouts) {
+        scout.repos.forEach((repo) => lastScoutOn.set(repo, scout.id));
+      }
       // File order: an earlier scout wins a PR two would pull.
       for (const scout of active.scouts) {
         for (const repo of scout.repos) {
@@ -604,7 +636,7 @@ export class ScoutRun {
           const candidates = await this.candidatesFor(scout, repo, listing, floors.get(`${scout.id} ${repo}`)!);
           const items = await this.prepare(scout, active.version, repo, candidates, facts, work);
           await this.judge(scout, active.version, items, input, work);
-          pulled.push(...this.commit(scout, repo, work, listing.complete, runStart));
+          pulled.push(...this.commit(scout, repo, work, listing, lastScoutOn.get(repo) === scout.id, runStart));
           report.judged += work.rows.filter((row) => row.status === 'judged' && row.judgedAt !== null && row.judgedAt >= runStart).length;
           report.pending += work.rows.filter((row) => row.status === 'pending').length;
         }

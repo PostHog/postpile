@@ -111,4 +111,10 @@ describe('engine memory routes', () => {
     expect(ok.status).toBe(200);
     expect(bad.status).toBe(400);
   });
+
+  it('accepts the scouts job on sync', async () => {
+    const { request } = setup();
+    const ok = await request('/api/sync', { method: 'POST', body: JSON.stringify({ agentJobs: ['scouts', 'glances'] }) });
+    expect(ok.status).toBe(200);
+  });
 });

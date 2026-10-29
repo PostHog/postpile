@@ -264,6 +264,8 @@ describe('the scout step of a full sync', () => {
     await h.engine.sync({ maxAgentCalls: 0 });
     expect(h.store.scoutCursors.get('lookout', 'acme/app')).toBeNull();
     expect(h.store.meta.get('scout_listing_resume:acme/app')).not.toBeNull();
+    // Stored with the point: every PR above it has a row, so nothing is lost below a crash.
+    expect(h.store.scoutJudgements.listPending('lookout')).toHaveLength(10);
 
     now = new Date(NOW.getTime() + 60 * 60 * 1000);
     const calls = h.reader.scoutCalls.length;
@@ -289,6 +291,19 @@ describe('the scout step of a full sync', () => {
     await h.engine.sync({});
 
     expect(h.store.scoutedPrs.listActive().map((row) => row.prKey)).toEqual(['acme/app#1']);
+  });
+
+  it('makes at most 5 judge calls per sync, whatever its cap, and leaves the rest pending', async () => {
+    const h = setup();
+    for (let number = 1; number <= 70; number++) {
+      onGitHub(h, candidate(number), [{ path: `svc${number}/main.ts`, changeType: 'ADDED' }]);
+    }
+    for (let call = 0; call < 5; call++) {
+      h.runner.answer('scout_judge', { judgements: [] });
+    }
+    await h.engine.sync({});
+    expect(h.runner.promptsFor('scout_judge')).toHaveLength(5);
+    expect(h.store.scoutJudgements.listPending('lookout').filter((row) => row.lastError === 'waits for the next sync (scout calls per sync used up)')).toHaveLength(10);
   });
 
   it('runs no scout work when the sync asks for other agent jobs only', async () => {
