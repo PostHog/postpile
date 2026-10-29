@@ -782,7 +782,8 @@ export class ScoutRun {
       await this.judge(fresh, null, items, { ...input, errors, glance: async () => {} }, work);
       rows.push(...work.rows);
     }
-    const pulled = rows.filter((row) => row.verdict === 'pulled');
+    // What the scout would really show: a pull verdict on a PR another scout owns already pulls nothing (`scoutPullStep`).
+    const pulled = plans.flatMap((plan) => plan.work.pulls);
     const pending = rows.filter((row) => row.status === 'pending');
     const judged = rows.filter((row) => row.attempts > 0 || row.status === 'judged').length;
     let problem: string | null = errors[0] ?? null;
@@ -801,7 +802,7 @@ export class ScoutRun {
     return {
       days,
       pulled: pulled.length,
-      examples: pulled.slice(0, SCOUT_TRIAL_EXAMPLES).map((row) => ({ prKey: row.prKey, title: titles.get(row.prKey) ?? row.prKey, reason: row.reason ?? '' })),
+      examples: pulled.slice(0, SCOUT_TRIAL_EXAMPLES).map((pull) => ({ prKey: pull.prKey, title: titles.get(pull.prKey) ?? pull.prKey, reason: pull.reason })),
       candidates: rows.length,
       judged,
       complete: listedWhole && pending.length === 0,

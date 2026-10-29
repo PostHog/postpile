@@ -99,6 +99,11 @@ export function checkBlockedReason(input: { prompt: string; repos: string[]; age
  * and the user has not touched the box since the card opened (even typing
  * and clearing it again counts); null leaves the text as it is.
  */
+/** The draft call failed (not the agent off or the day's calls spent): the card says so and offers Retry. */
+export function draftFailedToLoad(draft: ScoutDraftResult): boolean {
+  return draft.why === 'failed';
+}
+
 export function textAfterDraft(draft: ScoutDraftResult, typed: boolean): string | null {
   if (draft.why !== 'drafted' || draft.text === null || draft.text.trim() === '' || typed) {
     return null;

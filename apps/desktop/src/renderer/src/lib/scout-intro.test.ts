@@ -6,6 +6,7 @@ import {
   addRepoBlockedReason,
   checkBlockedReason,
   checkedLead,
+  draftFailedToLoad,
   exampleRef,
   fitLook,
   initialRepos,
@@ -166,5 +167,14 @@ describe('scoutIntroLoadRetries', () => {
     expect(scoutIntroLoadRetries({ requested: true, failed: true, retried: true })).toBe(false);
     expect(scoutIntroLoadRetries({ requested: false, failed: true, retried: false })).toBe(false);
     expect(scoutIntroLoadRetries({ requested: true, failed: false, retried: false })).toBe(false);
+  });
+});
+
+describe('draftFailedToLoad', () => {
+  it('offers Retry only for a failed draft, not for the agent off or the day spent', () => {
+    expect(draftFailedToLoad({ text: null, why: 'failed' })).toBe(true);
+    expect(draftFailedToLoad({ text: null, why: 'agent_off' })).toBe(false);
+    expect(draftFailedToLoad({ text: null, why: 'capped' })).toBe(false);
+    expect(draftFailedToLoad({ text: 'x', why: 'drafted' })).toBe(false);
   });
 });

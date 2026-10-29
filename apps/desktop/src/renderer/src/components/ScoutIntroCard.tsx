@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import type { ScoutCheckResult, ScoutIntroState } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { useAgentOffReason } from '../api/tools.ts';
-import { checkBlockedReason, checkingText, initialRepos, promptPlaceholder, textAfterDraft, turnOnBlockedReason } from '../lib/scout-intro.ts';
+import { checkBlockedReason, checkingText, draftFailedToLoad, initialRepos, promptPlaceholder, textAfterDraft, turnOnBlockedReason } from '../lib/scout-intro.ts';
+import { holdMenuOpen } from '../lib/open-menus.ts';
 import { Button } from './Button.tsx';
 import { ScoutCheckScreen } from './ScoutCheckScreen.tsx';
 import { ScoutIntroArt } from './ScoutIntroArt.tsx';
@@ -68,6 +69,7 @@ export function ScoutIntroCard(props: { state: ScoutIntroState; hidden: boolean;
   const [prompt, setPrompt] = useState('');
   const [repos, setRepos] = useState<string[]>(() => initialRepos(props.state));
   const [drafting, setDrafting] = useState(true);
+  const [draftFailed, setDraftFailed] = useState(false);
   const [drafted, setDrafted] = useState(false);
   const [checking, setChecking] = useState(false);
   const [refusal, setRefusal] = useState<string | null>(null);
@@ -88,20 +90,41 @@ export function ScoutIntroCard(props: { state: ScoutIntroState; hidden: boolean;
     };
   }, []);
 
-  useEffect(() => {
-    if (draftAsked.current) {
-      return;
-    }
-    draftAsked.current = true;
+  // The draft, on open and from Retry after a failed one. A draft that lands after typing never replaces it.
+  function runDraft() {
+    setDrafting(true);
+    setDraftFailed(false);
     void actions.draftScout().then((draft) => {
+      if (!mounted.current) {
+        return;
+      }
       setDrafting(false);
+      setDraftFailed(draftFailedToLoad(draft));
       const text = textAfterDraft(draft, typed.current);
       if (text !== null) {
         setPrompt(text);
         setDrafted(true);
       }
     });
-  }, [actions]);
+  }
+
+  useEffect(() => {
+    if (draftAsked.current) {
+      return;
+    }
+    draftAsked.current = true;
+    runDraft();
+    // Once per opening: runDraft reads the latest actions when it runs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // While the card shows, the PR behind it must not be marked read: the card holds the open-read dwell like a menu.
+  useEffect(() => {
+    if (hidden) {
+      return;
+    }
+    return holdMenuOpen();
+  }, [hidden]);
 
   useEffect(() => {
     if (hidden) {
@@ -194,6 +217,14 @@ export function ScoutIntroCard(props: { state: ScoutIntroState; hidden: boolean;
                   What should it look out for?
                 </label>
                 {drafted && <span className="text-[11.5px] text-hint">Drafted from your instructions · edit freely</span>}
+                {draftFailed && (
+                  <span className="text-[11.5px] text-hint">
+                    Couldn't draft one.{' '}
+                    <button type="button" onClick={runDraft} className="text-accent hover:text-ink">
+                      Retry
+                    </button>
+                  </span>
+                )}
               </div>
               <textarea
                 id="scout-prompt"

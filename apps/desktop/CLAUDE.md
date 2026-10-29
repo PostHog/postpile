@@ -644,8 +644,10 @@ tints (`lib/why.ts`, `lib/events.ts`, `reviewWord` / `rowStateWord` in `lib/pr.t
   the inbox start dialog or the unanswered interruptions question; once
   open it stays mounted (hidden while such an overlay turns up) so typing
   survives. The draft runs once per opening (a ref guards StrictMode) and
-  never overwrites typing; draft and check write nothing and show failures
-  in the card, not a toast; Turn on and Not now go through `run` (toast,
+  never overwrites typing (a failed one says so in the card, with a Retry
+  that keeps typing); while it shows, the card holds the open-read dwell
+  like a menu (`holdMenuOpen`), so the PR behind it is never marked read;
+  draft and check write nothing and show failures in the card, not a toast; Turn on and Not now go through `run` (toast,
   refetch). Path hints from the check go along to Turn on but never show.
 - Why now: `UnreadStrip`, warm strip, actor avatar with an ink event
   badge (`Glyph`), a coral "NEW" pill (only while `TileView.newBadge`), age. On a revisit (`PrSummary.whatsNew`

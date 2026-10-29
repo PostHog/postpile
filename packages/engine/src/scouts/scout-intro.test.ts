@@ -190,6 +190,18 @@ describe('the Scouts intro card', () => {
     expect(readFileSync(file, 'utf8')).toContain('## Lookout');
   });
 
+  it('previews only finds the scout would show: a PR another scout owns does not count', async () => {
+    const { h } = setup();
+    onGitHub(h, 2);
+    h.store.scoutedPrs.insert({ prKey: 'acme/app#1', scoutId: 'billing', scoutName: 'Billing', configVersion: 1, reason: 'invoices', pulledAt: NOW.toISOString(), seenUpdatedAt: null, followedAt: null, dismissedAt: null, dismissReason: null, expiredAt: null, expiryReason: null });
+    h.runner.answer('scout_check', { fit: 'fits', note: 'ok', cantSee: null, name: 'Lookout', paths: [], pathsCoverAll: false });
+    h.runner.answer('scout_judge', { judgements: [1, 2].map((number) => ({ prKey: `acme/app#${number}`, verdict: 'pull', reason: `adds svc${number}/` })) });
+
+    const result = await h.engine.checkScout({ prompt: PROMPT, repos: ['acme/app'] });
+
+    expect(result.trial).toMatchObject({ pulled: 1, examples: [{ prKey: 'acme/app#2' }] });
+  });
+
   it('refuses a name another scout has', async () => {
     const { h } = setup({ scouts: '## Lookout\nrepos: acme/app\n\nx\n' });
     expect((await h.engine.turnOnScout({ name: 'Lookout', prompt: PROMPT, repos: ['acme/app'], paths: [] })).ok).toBe(false);
