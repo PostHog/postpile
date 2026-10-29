@@ -1,6 +1,6 @@
 {
   "name": "@postpile/store",
-  "version": "0.28.6",
+  "version": "0.29.0",
   "description": "PostPile SQLite store on node:sqlite: schema, migrations and repositories",
   "private": true,
   "license": "MIT",
