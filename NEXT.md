@@ -1750,7 +1750,13 @@ the app meanwhile.
   - Scout mark_read snapshot reuse: `AgentMarkRead.scoutedSeen` reads the
     snapshot before checking eligibility. Check that first and reuse the
     board's snapshot.
-  - Both are fine at today's load (scouted PRs expire after 3 days and
+  - Scout seen_through token from the header: `seenThroughNow` rebuilds a
+    cold scouted PR only for its `updatedAt`; read it with a keyed header
+    query.
+  - Pending Follow titles from headers: `PendingWrites.views()` reads a
+    whole snapshot per pending Follow for its title; batch the titles from
+    PR headers.
+  - All four are fine at today's load (scouted PRs expire after 3 days and
     arrive a few a day), so not thousands active.
 
 - Normalize the PR snapshot (started after 0.19.0; first this, then the
