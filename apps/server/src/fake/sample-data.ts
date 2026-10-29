@@ -510,7 +510,7 @@ See the [Depot cache docs](https://example.com/docs/cache) for the backend.`,
     }),
     samplePr(clock, {
       number: 1808, title: 'Drop the old billing re-exports', author: SAMPLE_VIEWER, state: 'OPEN',
-      // Approved by an agent only: the pill reads "approved by agent", whose turn stays "Merge".
+      // Approved by an agent only: the pill reads "Approved by <agent>", whose turn stays "Merge".
       size: [3, 40, 2], openedHoursAgo: 20, reviews: [['reviewbot[bot]', 'APPROVED', '', undefined, 18]],
     }),
     samplePr(clock, {
