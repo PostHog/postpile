@@ -279,6 +279,28 @@ describe('the scout step of a full sync', () => {
     expect(h.store.scoutJudgements.get('lookout', 'acme/app#12')).not.toBeNull();
   });
 
+  it('lists from the top again when a scout joined the repo after a capped listing', async () => {
+    let now = NOW;
+    const file = scoutsFile(LOOKOUT);
+    const h = makeHarness({ scoutsFile: file, now: () => now });
+    h.reader.scoutTrees.set('base1', ['src', 'docs']);
+    h.reader.scoutPageSize = 1;
+    h.reader.scoutListings.set('acme/app', Array.from({ length: 12 }, (_, index) => candidate(index + 1, { updatedAt: hoursAgo(1 + index / 60) })));
+    await h.engine.sync({ maxAgentCalls: 0 });
+    expect(JSON.parse(h.store.meta.get('scout_listing_resume:acme/app')!)).toMatchObject({ after: '10', scouts: ['lookout'] });
+
+    writeFileSync(file, `${LOOKOUT}\n## Billing\nrepos: acme/app\n\nAnything about billing.\n`);
+    now = new Date(NOW.getTime() + 60 * 60 * 1000);
+    const calls = h.reader.scoutCalls.length;
+    await h.engine.sync({ maxAgentCalls: 0 });
+
+    // Billing never saw the top pages: no jump to the stored point.
+    const listed = h.reader.scoutCalls.slice(calls).filter((call) => call.startsWith('list'));
+    expect(listed.slice(0, 3)).toEqual(['list acme/app -', 'list acme/app 1', 'list acme/app 2']);
+    expect(h.store.scoutJudgements.listPending('billing').map((row) => row.prKey)).toContain('acme/app#1');
+    expect(JSON.parse(h.store.meta.get('scout_listing_resume:acme/app')!)).toMatchObject({ scouts: ['billing', 'lookout'] });
+  });
+
   it('never expires a scouted PR on a snapshot the refresh could not check', async () => {
     let now = NOW;
     const h = setup(LOOKOUT, () => now);

@@ -96,6 +96,8 @@ interface RepoListing {
   /** How the pass that reaches the floor ended, and when its listing started: the resume point to store once every scout on the repo stored its candidates. */
   end: PassEnd;
   startedAt: IsoTime;
+  /** The scouts this listing was made for, sorted. */
+  scouts: string[];
 }
 
 /**
@@ -107,6 +109,12 @@ interface RepoListing {
 interface ListingResume {
   after: string;
   startedAt: IsoTime;
+  /**
+   * The scouts on the repo when the listing began, sorted. The point only
+   * vouches for their coverage: a scout added since never saw the pages
+   * above it, so a changed set lists from the top again.
+   */
+  scouts: string[];
 }
 
 /** How one paging pass ended: down to its floor, at the page budget, or on a failed read. */
@@ -241,7 +249,7 @@ export class ScoutRun {
     if (listing.end.kind === 'done') {
       this.deps.store.meta.delete(resumeKey(repo));
     } else if (listing.end.kind === 'capped') {
-      this.deps.store.meta.set(resumeKey(repo), JSON.stringify({ after: listing.end.after, startedAt: listing.startedAt } satisfies ListingResume));
+      this.deps.store.meta.set(resumeKey(repo), JSON.stringify({ after: listing.end.after, startedAt: listing.startedAt, scouts: listing.scouts } satisfies ListingResume));
       this.deps.log(`scouts: ${repo} has more than ${SCOUT_LIST_MAX_PAGES} pages of updates to list; the next sync goes on where this one stopped`);
     }
   }
@@ -250,24 +258,27 @@ export class ScoutRun {
    * The repo's listing down to `floor`, in at most SCOUT_LIST_MAX_PAGES
    * pages. After a capped run it first lists the updates since that run
    * started (PRs updated since moved to the top), then goes on below where
-   * it stopped. Complete only once a pass reached the floor.
+   * it stopped. Complete only once a pass reached the floor. A stored point
+   * made for another set of scouts is not used: a scout that joined since
+   * never saw the pages above it, so the listing starts over from the top.
    */
-  private async list(repo: string, floor: IsoTime, runStart: IsoTime, errors: string[]): Promise<RepoListing> {
+  private async list(repo: string, floor: IsoTime, runStart: IsoTime, scouts: string[], errors: string[]): Promise<RepoListing> {
     const prs = new Map<PrKey, ScoutCandidate>();
     const budget = { pages: SCOUT_LIST_MAX_PAGES };
-    const resume = this.readResume(repo);
+    const stored = this.readResume(repo);
+    const resume = stored !== null && (stored.scouts ?? []).join(' ') === scouts.join(' ') ? stored : null;
     if (resume === null) {
       const end = await this.pass(repo, null, floor, budget, prs, errors);
-      return { prs, complete: end.kind === 'done', end, startedAt: runStart };
+      return { prs, complete: end.kind === 'done', end, startedAt: runStart, scouts };
     }
     const sinceStop = scoutListingFloor(resume.startedAt, runStart);
     const top = await this.pass(repo, null, sinceStop > floor ? sinceStop : floor, budget, prs, errors);
     if (top.kind !== 'done') {
       // Keeps the stored point: a failed read never moves it.
-      return { prs, complete: false, end: { kind: 'failed' }, startedAt: resume.startedAt };
+      return { prs, complete: false, end: { kind: 'failed' }, startedAt: resume.startedAt, scouts };
     }
     const lower = await this.pass(repo, resume.after, floor, budget, prs, errors);
-    return { prs, complete: lower.kind === 'done', end: lower, startedAt: resume.startedAt };
+    return { prs, complete: lower.kind === 'done', end: lower, startedAt: resume.startedAt, scouts };
   }
 
   /** Root folders of the bases that need them, from the cache or one read. A failed read leaves them unknown. */
@@ -616,11 +627,9 @@ export class ScoutRun {
       }
       const listings = new Map<string, RepoListing>();
       for (const repo of new Set(active.scouts.flatMap((scout) => scout.repos))) {
-        const oldest = active.scouts
-          .filter((scout) => scout.repos.includes(repo))
-          .map((scout) => floors.get(`${scout.id} ${repo}`)!)
-          .sort()[0]!;
-        const listing = await this.list(repo, oldest, runStart, input.errors);
+        const onRepo = active.scouts.filter((scout) => scout.repos.includes(repo));
+        const oldest = onRepo.map((scout) => floors.get(`${scout.id} ${repo}`)!).sort()[0]!;
+        const listing = await this.list(repo, oldest, runStart, onRepo.map((scout) => scout.id).sort(), input.errors);
         listings.set(repo, listing);
         report.listed += listing.prs.size;
       }

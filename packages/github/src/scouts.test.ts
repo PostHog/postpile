@@ -144,6 +144,15 @@ describe('scout files', () => {
     expect((await new GitHubClient(fakeTokens, withErrors.fn).scoutFiles([{ repo: 'acme/app', number: 1 }])).get('acme/app#1')?.files).toBeNull();
   });
 
+  it('keeps the other batches when one first-page query fails', async () => {
+    const refs = Array.from({ length: 13 }, (_, index) => ({ repo: 'acme/app', number: index + 1 }));
+    const first = Object.fromEntries(refs.slice(0, 12).map((ref, index) => [`p${index}`, { pullRequest: filesPage(`h${ref.number}`, [{ path: `f${ref.number}.ts`, changeType: 'ADDED' }], null) }]));
+    const fetch = new FakeFetch([{ body: { data: first } }, { status: 502, body: { message: 'bad gateway' } }]);
+    const read = await new GitHubClient(fakeTokens, fetch.fn).scoutFiles(refs);
+    expect(read.get('acme/app#1')?.files).toEqual([{ path: 'f1.ts', changeType: 'ADDED' }]);
+    expect(read.get('acme/app#13')?.files).toBeNull();
+  });
+
   it('gives no list when a later page fails', async () => {
     const fetch = new FakeFetch([
       { body: { data: { p0: { pullRequest: filesPage('h1', [{ path: 'a.ts', changeType: 'MODIFIED' }], 'f1') } } } },
