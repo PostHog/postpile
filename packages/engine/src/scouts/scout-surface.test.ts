@@ -5,6 +5,7 @@ import { UNDO_WINDOW_MS, type ScoutCandidate } from '@postpile/core';
 import { makeEvent, makePr, makeThreadFor } from '@postpile/core/fixtures';
 import { describe, expect, it, vi } from 'vitest';
 import { makeHarness, NOW, type Harness } from '../testing/fakes.ts';
+import { FOLLOW_LOOKUP_MS } from './scout-actions.ts';
 
 const LOOKOUT = '## Lookout\nrepos: acme/app\n\nNew top-level folders.\n';
 
@@ -125,6 +126,31 @@ describe('the Scouted section', () => {
 
     await h.engine.markScoutedSeen(merged.key);
     expect((await h.engine.getTopic('scout:lookout'))?.tiles[0]?.group).toBe('dealt_with');
+  });
+
+  it('drops a Follow whose lookup never answers after the deadline, so a quit never hangs', async () => {
+    const h = await pulled();
+    vi.spyOn(h.reader, 'scoutPrNodeId').mockImplementationOnce(() => new Promise(() => {}));
+
+    const follow = h.engine.followScouted('acme/app#1', 'tile');
+    const flushed = h.engine.flushPendingWrites();
+    h.timers.advance(FOLLOW_LOOKUP_MS);
+    await flushed;
+
+    expect(await follow).toMatchObject({ ok: false, message: expect.stringContaining('no answer within 10 s') });
+    h.timers.advance(UNDO_WINDOW_MS);
+    expect(h.writer.calls).toEqual([]);
+    expect(h.store.pendingWrites.list()).toEqual([]);
+    expect(h.store.actionLog.listRecent(5).map((entry) => [entry.action, entry.outcome])).toContainEqual(['follow', 'failed']);
+  });
+
+  it('treats a lasting point from a scout chat like Unsorted: no topic to keep it on', async () => {
+    const h = await pulled();
+    h.runner.answer('chat', { reply: 'Noted.', lasting: { text: 'Skip codegen folders.' } });
+
+    const reply = await h.engine.topicChat('scout:lookout', 'codegen folders are noise');
+
+    expect(reply.lastingPoint).toMatchObject({ topicId: null, text: 'Skip codegen folders.' });
   });
 
   it('says in the PR pane who scouted it and why', async () => {
@@ -392,6 +418,21 @@ describe('the Scouted section', () => {
     h.store.db.prepare('DELETE FROM pr_glance WHERE pr_key = ?').run('acme/app#1');
 
     expect((await h.engine.retryGlance('acme/app#1')).ok).toBe(true);
+    await vi.waitFor(() => expect(h.store.glances.get('acme/app#1')).not.toBeNull());
+  });
+
+  it('rewrites a missing or stale scout glance when the PR is looked at', async () => {
+    const file = join(mkdtempSync(join(tmpdir(), 'pp-scout-look-')), 'scouts.md');
+    writeFileSync(file, LOOKOUT);
+    const h = makeHarness({ scoutsFile: file, catchUpCallsPerDay: 300 });
+    h.reader.scoutListings.set('acme/app', [candidate(1)]);
+    h.reader.scoutFileLists.set('acme/app#1', { headOid: 'h1', baseOid: 'base1', foldersOid: 'base1', files: [{ path: 'billing/main.ts', changeType: 'ADDED' }] });
+    h.reader.addStackPr(makePr({ number: 1, headOid: 'h1', updatedAt: candidate(1).updatedAt }));
+    h.runner.answer('scout_judge', { judgements: [{ prKey: 'acme/app#1', verdict: 'pull', reason: 'adds billing/' }] });
+    await h.engine.sync({});
+    h.store.db.prepare('DELETE FROM pr_glance WHERE pr_key = ?').run('acme/app#1');
+
+    expect((await h.engine.refreshGlanceOnLook('acme/app#1')).outcome).not.toBe('current');
     await vi.waitFor(() => expect(h.store.glances.get('acme/app#1')).not.toBeNull());
   });
 

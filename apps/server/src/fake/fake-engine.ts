@@ -2416,7 +2416,8 @@ export class FakeEngine implements EngineService {
    */
   async topicChat(topicId: string, message: string): Promise<ChatReply> {
     this.refuseWithoutAgent();
-    const isUnsorted = topicId === UNSORTED_TOPIC_ID;
+    // Like the engine: Unsorted and a scout's section are topic-less, so a point there goes nowhere topic-wise.
+    const isUnsorted = topicId === UNSORTED_TOPIC_ID || scoutIdOfTopic(topicId) !== null;
     if (!isUnsorted && !this.data.topics.some((topic) => topic.id === topicId)) {
       throw new Error(`no topic ${topicId}`);
     }
