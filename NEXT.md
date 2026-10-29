@@ -1855,6 +1855,11 @@ the app meanwhile.
   sync. Follow subscribes on GitHub (GraphQL `updateSubscription`) through
   the undo window and the writes lock; Dismiss takes an optional reason;
   opening marks seen in PostPile only. Checked by Codex before building.
+- **Scouts intro card** (2026-10-29, owner; mockup with the searchlight art,
+  option E): opens by itself while no scout exists until answered, drafts
+  the prompt, checks it (fit, a part it can't see, a dry run on the last 2
+  days that saves nothing), turns it on into scouts.md. Path hints stay out
+  of the card. "Set up a scout" in the Scouted section reopens it.
 
 - **seen_through means "nothing new since your read"** (2026-10-29, owner;
   DESIGN.md "Agents mark read"): every pr_context answer, brief and JSON

@@ -475,6 +475,54 @@
       opacity: 0;
     }
   }
+
+  /* The Scouts intro card's searchlight (ScoutIntroArt). Use with motion-safe:; under Reduce Motion the
+     beam rests and the found PR simply shows lit. scout-found pops the check screen's dot in once. */
+  --animate-scout-beam: scout-beam 4s ease-in-out infinite;
+  --animate-scout-lit: scout-lit 4s ease-in-out infinite;
+  --animate-scout-found: scout-found 0.5s ease-out backwards;
+
+  /* The beam sweeps across the dark around the list, from its lamp. */
+  @keyframes scout-beam {
+    0%,
+    100% {
+      rotate: -24deg;
+    }
+    50% {
+      rotate: 18deg;
+    }
+  }
+
+  /* The PR out there lights up honey while the beam passes it. */
+  @keyframes scout-lit {
+    0%,
+    38% {
+      opacity: 0;
+    }
+    48%,
+    62% {
+      opacity: 1;
+    }
+    72%,
+    100% {
+      opacity: 0;
+    }
+  }
+
+  /* The robot's found dot pops in. */
+  @keyframes scout-found {
+    0% {
+      scale: 0.6;
+      opacity: 0;
+    }
+    60% {
+      scale: 1.15;
+      opacity: 1;
+    }
+    100% {
+      scale: 1;
+    }
+  }
 }
 
 html,

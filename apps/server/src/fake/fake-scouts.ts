@@ -301,6 +301,13 @@ export class FakeScouts {
     this.writes.parkFollow({ prKey: key, title: pr?.title ?? key, origin: 'tile', batchId: 'fake-follow-seed' }, createdAt, error);
   }
 
+  /** A scout turned on from the intro card: last in file order, nothing pulled in until a sync would run it. */
+  addScout(name: string): FakeScout {
+    const scout = { id: `intro-${this.sample.scouts.length + 1}`, name };
+    this.sample.scouts.push(scout);
+    return scout;
+  }
+
   /** The PRs only a scout holds. */
   prKeys(): PrKey[] {
     return this.sample.prs.map((pr) => pr.key);

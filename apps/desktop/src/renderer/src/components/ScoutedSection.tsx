@@ -1,6 +1,7 @@
 import type { ScoutListItem } from '@postpile/core';
 import { useScouts } from '../api/scouts.ts';
 import { scoutCountTitle, scoutRowTitle } from '../lib/scouts.ts';
+import { ScoutIntroArt } from './ScoutIntroArt.tsx';
 
 /** The grey count of unseen tiles: the calm bubble's look, never coral and never bold, since nothing here is unread. Nothing at 0. */
 function UnseenCount(props: { item: ScoutListItem }) {
@@ -43,25 +44,33 @@ function ScoutRow(props: { item: ScoutListItem; active: boolean; onSelect: () =>
  * scout in scouts.md order, opening its pseudo-topic like a topic row. Not a
  * topic section: no dot colour of its own, no unread look, no your-move
  * chip, and left out of the search and the queue filters (the caller hides
- * it while they narrow). Nothing at all without scouts.
+ * it while they narrow). Shown without scouts too: its quiet "Set up a
+ * scout" opens the intro card.
  */
-export function ScoutedSection(props: { activeTopicId: string | null; onSelect: (topicId: string) => void }) {
+export function ScoutedSection(props: { activeTopicId: string | null; onSelect: (topicId: string) => void; onSetUpScout: () => void }) {
   const scouts = useScouts().data ?? [];
-  if (scouts.length === 0) {
-    return null;
-  }
   return (
     <div className="flex flex-col gap-px">
       <span
         title="PRs your scouts pulled in from outside your GitHub inbox. Never unread, never your move, not in any count."
         className="flex items-center pt-1.5 pr-2 pb-1 pl-3 text-[10px] leading-[normal] font-bold tracking-[0.07em] text-hint uppercase"
       >
-        <span aria-hidden="true" className="mr-[5px] size-[5px] rounded-[1.5px] bg-ghost" />
+        <span className="mr-[5px]">
+          <ScoutIntroArt size="sidebar" />
+        </span>
         Scouted
       </span>
       {scouts.map((item) => (
         <ScoutRow key={item.id} item={item} active={item.topicId === props.activeTopicId} onSelect={() => props.onSelect(item.topicId)} />
       ))}
+      <button
+        type="button"
+        onClick={props.onSetUpScout}
+        title="Describe what to look out for, check it on recent PRs, then turn it on"
+        className="rounded-row py-1.5 pr-2 pl-[22px] text-left text-[12px] leading-[normal] text-hint hover:bg-surface/55 hover:text-ink"
+      >
+        Set up a scout
+      </button>
     </div>
   );
 }

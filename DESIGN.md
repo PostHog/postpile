@@ -1368,6 +1368,41 @@ notification thread) apart from `tracked` (a followed PR is tracked before
 GitHub notifies about it); the scouted group in `whats_on_me` pages with the
 same `offset` and `limit` (`scoutedPage`).
 
+**The intro card** (2026-10-29, owner-approved mockup, searchlight art).
+An empty scouts.md says nothing about what a good scout is, so a card
+drafts the first one, checks it and turns it on.
+
+- *When it opens:* by itself on load while no scout exists and the user
+  never answered it (`scoutIntroAutoShows`), never over setup or the inbox
+  start dialog. "Not now", and turning a scout on, are kept in config.json
+  (`scoutsIntroDismissedAt`); it never opens by itself again. A quiet "Set
+  up a scout" entry in the Scouted section (shown even with no scouts)
+  opens it any time. Quitting with the card open shows it again next
+  start: it was never answered.
+- *The draft:* one `scout_draft` call (Sonnet, no tools) when the card
+  opens, from the user's instructions, the work context digest and their
+  active topic names (fenced: agent-written from GitHub text), under the
+  daily catch-up allowance like glance catch-ups. Agent off or the
+  allowance spent: the textarea starts empty with a short example
+  placeholder. The repo picker defaults to the main repo (setup's repo
+  scope, else the board's busiest repo); "+ repo" adds up to five.
+- *Check scout:* one `scout_check` call, mapped onto the prompt like the
+  setup fit check (`mapScoutCheck`): a fit verdict and note, at most one
+  part a scout can't see (quoted from the prompt, with a rewrite that
+  drops it: "Drop that part"), a suggested name and up to 6 path hints.
+  The path hints are never shown; they go into the scout, edited in
+  scouts.md. Then a dry run (`ScoutRun.trial`) over the last 2 days of the
+  chosen repos with the sync's own listing, rules, file reads and judge, on
+  a runner of its own, at most 5 judge calls under the same allowance. It
+  writes nothing: no judgement, pull, cursor, resume point or snapshot.
+  The card shows pulls per day (`trialRateWords`) and two examples.
+- *Turn on scout:* the scout is appended to scouts.md through
+  `ScoutsHistory.appendScout` and recorded as a version of origin `intro`;
+  refused when the file or the new scout would not parse back exactly as
+  asked. The next full sync runs it. Toast: "Scout on: <name>. Finds show
+  under Scouted after the next sync." Telemetry `scout_turned_on` (repo and
+  path counts).
+
 **Accepted trade-offs:**
 
 - Content changes inside the same files do not re-judge; a push that adds a

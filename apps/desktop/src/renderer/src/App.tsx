@@ -19,6 +19,7 @@ import { InboxStartDialog } from './components/InboxStartDialog.tsx';
 import { InboxPane } from './components/InboxPane.tsx';
 import { InstructionsPane } from './components/InstructionsPane.tsx';
 import { InterruptionsPrompt } from './components/InterruptionsPrompt.tsx';
+import { ScoutIntro } from './components/ScoutIntro.tsx';
 import { NotificationsPane } from './components/NotificationsPane.tsx';
 import { HandledQuietlyPane } from './components/HandledQuietlyPane.tsx';
 import { PaneDivider } from './components/PaneDivider.tsx';
@@ -126,6 +127,8 @@ export function App() {
     }
   }, [setupNeeded]);
   const showSetup = setupOpen || setupNeeded;
+  // The Scouted section's "Set up a scout" asked for the Scouts intro card; it also opens by itself (ScoutIntro).
+  const [scoutIntroRequested, setScoutIntroRequested] = useState(false);
   const openSetup = () => {
     setSetupRerun(true);
     setSetupStep('checks');
@@ -512,6 +515,7 @@ export function App() {
                 }
                 openTopicByUser(topicId);
               }}
+              onSetUpScout={() => setScoutIntroRequested(true)}
               inboxCount={inboxCount}
               inboxOpen={pane === 'inbox'}
               onOpenInbox={() => go({ ...shown, pane: 'inbox' })}
@@ -589,6 +593,8 @@ export function App() {
           <InboxStartDialog />
           {/* Installs that never picked an interruptions mode get asked once, never on top of setup. */}
           <InterruptionsPrompt blocked={showSetup || !setupLoaded} />
+          {/* The Scouts intro card: by itself once the other first-run overlays are done, or from "Set up a scout". */}
+          <ScoutIntro setupBlocks={showSetup || !setupLoaded} requested={scoutIntroRequested} onClose={() => setScoutIntroRequested(false)} />
           <TidyOverlay />
         </div>
       </OpenedReadContext>

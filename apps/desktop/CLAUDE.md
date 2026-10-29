@@ -631,7 +631,22 @@ tints (`lib/why.ts`, `lib/events.ts`, `reviewWord` / `rowStateWord` in `lib/pr.t
   Approve: nothing is asked of the user there. The sidebar's Scouted
   section (`ScoutedSection`, `api/scouts.ts`) sits last with a grey unseen
   count; opening a scouted PR marks it seen (`lib/use-scout-seen.ts`), not
-  read.
+  read. It shows with no scouts too: its header carries the still
+  searchlight (`ScoutIntroArt` `sidebar`) and its last row, "Set up a
+  scout", opens the intro card.
+- The Scouts intro card (DESIGN.md "Scouts" › The intro card): `ScoutIntro`
+  (mounted once in App) decides when, `ScoutIntroCard` holds the prompt,
+  repos and both screens, `ScoutRepoPicker` the "Watch" chips,
+  `ScoutCheckScreen` the result after "Check scout", `ScoutIntroArt` the
+  searchlight on the `scout-*` keyframes (only under `motion-safe:`; with
+  Reduce Motion the found PR shows lit). Rules in `lib/scout-intro.ts`. It
+  opens by itself while `useScoutIntro().autoShow`, never on top of setup,
+  the inbox start dialog or the unanswered interruptions question; once
+  open it stays mounted (hidden while such an overlay turns up) so typing
+  survives. The draft runs once per opening (a ref guards StrictMode) and
+  never overwrites typing; draft and check write nothing and show failures
+  in the card, not a toast; Turn on and Not now go through `run` (toast,
+  refetch). Path hints from the check go along to Turn on but never show.
 - Why now: `UnreadStrip`, warm strip, actor avatar with an ink event
   badge (`Glyph`), a coral "NEW" pill (only while `TileView.newBadge`), age. On a revisit (`PrSummary.whatsNew`
   of the strip's PR, `stripNews`) the text, avatar, badge, "+N" and age

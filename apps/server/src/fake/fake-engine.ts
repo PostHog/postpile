@@ -44,6 +44,8 @@ import type {
   ScoutIntroState,
   ScoutDraftResult,
   ScoutCheckResult,
+  ScoutCheckRequest,
+  ScoutTurnOnRequest,
   SyncPhaseTimings,
   SyncProgress,
   RecordedSyncProgress,
@@ -260,6 +262,7 @@ import { FakeTools, type FakeToolProblem } from './fake-tools.ts';
 import { FakeWorkContext } from './fake-work-context.ts';
 import { FakeTileFeedback } from './fake-tile-feedback.ts';
 import { FakeScouts, sampleScouts } from './fake-scouts.ts';
+import { FakeScoutIntro } from './fake-scout-intro.ts';
 import { FakeLivePoll } from './fake-live.ts';
 import { FakeMemory } from './fake-memory.ts';
 import { sampleRecheckAnswer } from './fake-recheck.ts';
@@ -504,6 +507,8 @@ export class FakeEngine implements EngineService {
   private readonly writes: FakeWrites;
   /** The Scouted section's sample: scouted PRs outside the main sample, Follow, Dismiss and seen. */
   private readonly scouts: FakeScouts;
+  /** The Scouts intro card: canned draft, check and Turn on. */
+  private readonly scoutIntro: FakeScoutIntro;
   /** Sample decisions plus the fake poll's own, oldest sample first. */
   private readonly pingDecisions: PingDecision[];
   private readonly memoryUndos = new Map<string, { until: number; undo: () => void }>();
@@ -604,6 +609,7 @@ export class FakeEngine implements EngineService {
       followed: (prKey) => this.scouts.followed(prKey),
     }, options.writesLocked !== true, options.faults);
     this.scouts = new FakeScouts(sampleScouts(this.now()), this.data, this.writes, this.now);
+    this.scoutIntro = new FakeScoutIntro(this.scouts, () => this.data.prs.map((pr) => pr.key), this.checkDelayMs);
     this.script = new FakeScript(
       {
         data: this.data,
@@ -2034,23 +2040,23 @@ export class FakeEngine implements EngineService {
   }
 
   async scoutIntroState(): Promise<ScoutIntroState> {
-    return { autoShow: false, mainRepo: null, repos: [], scouts: 0 };
+    return this.scoutIntro.state();
   }
 
   async draftScout(): Promise<ScoutDraftResult> {
-    return { text: null, why: 'agent_off' };
+    return this.scoutIntro.draft();
   }
 
-  async checkScout(): Promise<ScoutCheckResult> {
-    return { ok: false, message: 'Sample data has no scout check yet', fit: { verdict: 'partly', note: '' }, cantSee: null, name: '', paths: [], trial: null };
+  async checkScout(request: ScoutCheckRequest): Promise<ScoutCheckResult> {
+    return this.scoutIntro.check(request);
   }
 
-  async turnOnScout(): Promise<ActionResult> {
-    return { ok: false, message: 'Sample data has no scouts file', undoToken: null };
+  async turnOnScout(request: ScoutTurnOnRequest): Promise<ActionResult> {
+    return this.scoutIntro.turnOn(request);
   }
 
   async dismissScoutIntro(): Promise<ActionResult> {
-    return { ok: true, message: 'Not now', undoToken: null };
+    return this.scoutIntro.dismiss();
   }
 
   async listScouts(): Promise<ScoutListItem[]> {
