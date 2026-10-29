@@ -643,6 +643,26 @@ export class GitHubSync {
   }
 
   /**
+   * Scouts (DESIGN.md "Scouts"): fetches PRs a scout pulled in and stores
+   * them with their events, like stack layers: no thread and no topic, and
+   * their events never count as new for pings or the digest. A failed batch
+   * lands in `errors`; its PRs wait for the next sync. Returns the keys
+   * stored.
+   */
+  async fetchAndStoreScouted(refs: PrRef[], errors: string[]): Promise<PrKey[]> {
+    const viewer = loadViewer(this.store);
+    if (viewer === null || refs.length === 0) {
+      return [];
+    }
+    const fetchedAt = this.now().toISOString();
+    const prs = await this.fetchPartial(refs, errors, 'scouted PRs');
+    for (const pr of prs.values()) {
+      this.storePr(pr, viewer, fetchedAt);
+    }
+    return [...prs.keys()];
+  }
+
+  /**
    * One finder request per full sync (never in the poll): the viewer's own
    * open PRs, review requests for them and their teams, and PRs involving
    * them merged in the last FOUND_MERGED_DAYS. The list replaces the stored

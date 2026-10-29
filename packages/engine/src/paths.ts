@@ -5,6 +5,8 @@ import { dirname, join } from 'node:path';
 export interface AppPaths {
   /** General instructions, included in every prompt. Absent file means none. */
   instructionsFile: string;
+  /** The user's scouts (scouts.md, DESIGN.md "Scouts"). Missing (tests) or an absent file: no scouts. */
+  scoutsFile?: string;
   databaseFile: string;
   /** The user's settings (config.json). Missing: the engine uses none (tests). */
   configFile?: string;
@@ -98,6 +100,7 @@ export function defaultPaths(pathEnv: PathEnv = systemPathEnv()): AppPaths {
   const dataDir = pathEnv.env.POSTPILE_DATA_DIR || dirs.dataDir;
   return {
     instructionsFile: pathEnv.env.POSTPILE_INSTRUCTIONS || join(dirs.configDir, 'instructions.md'),
+    scoutsFile: pathEnv.env.POSTPILE_SCOUTS || join(dirs.configDir, 'scouts.md'),
     databaseFile: pathEnv.env.POSTPILE_DB || join(dataDir, DATABASE_FILE_NAME),
     configFile: join(dirs.configDir, USER_CONFIG_FILE_NAME),
     telemetryIdFile: join(dirs.configDir, TELEMETRY_ID_FILE_NAME),

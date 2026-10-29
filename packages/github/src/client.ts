@@ -7,6 +7,7 @@ import {
   type PrKey,
   type PrRef,
   type ReviewedPr,
+  type ScoutCandidate,
   type Viewer,
   type ViewerTeamSize,
 } from '@postpile/core';
@@ -18,6 +19,7 @@ import { buildCodeOwnersQuery, CODE_OWNERS_BATCH_SIZE, codeOwnersFiles, type Cod
 import { buildFoundQuery, foundRefs, type FoundRef, type RawFoundResponse } from './found.ts';
 import { getThread, listNotifications, listThreadsSince } from './notifications.ts';
 import { activityPrs, buildActivityQuery, probeNotifications, readRepoFile, type RawActivityResponse } from './setup-reads.ts';
+import { listScoutPrs, scoutFiles, scoutPrsByNumber, topLevelFolders, type ScoutFilesRead, type ScoutListPage } from './scouts.ts';
 import { listTeamMembers } from './teams.ts';
 import {
   REVIEWED_PRS_QUERY,
@@ -264,6 +266,22 @@ export class GitHubClient implements GitHubReader {
 
   probeNotifications(): Promise<string | null> {
     return probeNotifications(this.http);
+  }
+
+  listScoutPrs(repo: string, after: string | null): Promise<ScoutListPage> {
+    return listScoutPrs(this.http, repo, after);
+  }
+
+  scoutPrsByNumber(refs: PrRef[]): Promise<Map<PrKey, ScoutCandidate>> {
+    return scoutPrsByNumber(this.http, refs);
+  }
+
+  scoutFiles(refs: PrRef[]): Promise<Map<PrKey, ScoutFilesRead>> {
+    return scoutFiles(this.http, refs);
+  }
+
+  topLevelFolders(repo: string, commitOids: string[]): Promise<Map<string, string[]>> {
+    return topLevelFolders(this.http, repo, commitOids);
   }
 
   /** A repo the token cannot see nulls its alias next to an error; the others still count. */

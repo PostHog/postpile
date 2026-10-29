@@ -23,6 +23,7 @@ const PHASE_WORDS: Record<SyncPhase, string> = {
   sets: 'sets',
   glances: 'glances',
   events: 'events',
+  scouts: 'scouts',
 };
 
 /**

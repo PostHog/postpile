@@ -53,6 +53,8 @@ function foundCode(via: FoundVia, authored: boolean): WhyCode {
       return 'RT';
     case 'involved_merged':
       return authored ? 'AU' : 'CM';
+    case 'scouted':
+      return 'FW';
   }
 }
 

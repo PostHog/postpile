@@ -167,6 +167,9 @@ import { GitHubSync, NO_FOCUS, type PollFocus } from './github-sync.ts';
 import type { MarkReadQueue } from './mark-read-queue.ts';
 import { McpConnection } from './mcp-connection.ts';
 import { InstructionsHistory } from './instructions/history.ts';
+import { ScoutsHistory } from './scouts/history.ts';
+import { ScoutRun } from './scouts/scout-run.ts';
+import type { RunDeps } from './run-deps.ts';
 import { InstructionsProposer } from './instructions/proposer.ts';
 import { LivePoller } from './live/live-poller.ts';
 import { PingDelivery, StorePingHold } from './live/ping-delivery.ts';
@@ -217,6 +220,8 @@ export interface EngineDeps {
   /** Mark-reads parked while writes were locked. The queue must park into the same one. */
   pendingWrites: PendingWrites;
   instructionsFile: string;
+  /** The user's scouts.md (DESIGN.md "Scouts"). Null or missing: no scouts, e.g. in tests. */
+  scoutsFile?: string | null;
   /**
    * The store was opened read-only (createEngine without the lock, as the
    * MCP process does). Reads then never record anything, not even an
@@ -452,7 +457,7 @@ export class Engine implements EngineService {
       capPerDay: deps.pingDecisionsPerDay ?? PING_DECISIONS_PER_DAY,
       agentOff,
     });
-    const runDeps = {
+    const runDeps: RunDeps = {
       store,
       agent: deps.agent,
       contexts,
@@ -479,6 +484,18 @@ export class Engine implements EngineService {
       (thread) => deps.writes.ownBulkReadAt(thread),
     );
     this.github = github;
+    if (deps.scoutsFile) {
+      runDeps.scouts = new ScoutRun({
+        store,
+        reader: deps.reader,
+        agent: deps.agent,
+        contexts,
+        history: new ScoutsHistory(store, deps.scoutsFile, now, deps.storeReadOnly === true),
+        storePrs: (refs, errors) => github.fetchAndStoreScouted(refs, errors),
+        now,
+        log: deps.syncLog ?? ((line) => console.log(line)),
+      });
+    }
     this.clickedReadRetry = new ClickedReadRetry(store, deps.reader, deps.writes, (key) => this.refreshForRetry(key), this.heldThreads);
     deps.markReadQueue.retryWith(this.clickedReadRetry);
     deps.markReadQueue.checkMutesWith((key) => muteHoldsNow(store, key, now().toISOString()));

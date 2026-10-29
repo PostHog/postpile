@@ -426,9 +426,11 @@ export type PingReason = NotificationReason;
  * viewer, whoever opened it (a bot's is theirs, see `prOwners`);
  * review_requested: a review is asked of the viewer; team_review_requested:
  * of one of their teams; involved_merged: involves the viewer and merged in
- * the last days.
+ * the last days; scouted: a scout pulled it in from outside the inbox
+ * (DESIGN.md "Scouts"). Never stored in pr_found: only the scout's glance
+ * and its tile carry it, so it never makes a PR tracked.
  */
-export type FoundVia = 'own_open' | 'assigned' | 'review_requested' | 'team_review_requested' | 'involved_merged';
+export type FoundVia = 'own_open' | 'assigned' | 'review_requested' | 'team_review_requested' | 'involved_merged' | 'scouted';
 
 /**
  * Why a PR is inside a tile.

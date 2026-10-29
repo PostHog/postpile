@@ -8,6 +8,7 @@ import {
   prKey,
   prWantsGlance,
   prWhoseTurn,
+  scoutedProvenance,
   TILE_STATE_ORDER,
   withoutStaleClaims,
   type DossierVersion,
@@ -156,6 +157,31 @@ export class GlanceInputs {
       topicId: this.board.memberships.get(key)?.topicId ?? null,
       item,
     }));
+  }
+
+  /**
+   * Scouted PRs that should have a glance (DESIGN.md "Scouts"): active ones
+   * (not followed, dismissed or expired) that `prWantsGlance`, topic-less
+   * like Unsorted. Read from the store when the hot board left them out:
+   * scouted PRs are no tile of the board's. A scouted PR that reached the
+   * inbox by itself is tracked and gets its glance with its tile instead.
+   */
+  scoutTargets(): GlanceTarget[] {
+    const active = this.store.scoutedPrs.listActive();
+    const coldKeys = active.map((row) => row.prKey).filter((key) => !this.board.prs.has(key));
+    const coldPrs = this.store.prs.getMany(coldKeys);
+    const coldEvents = this.store.events.listForPrs(coldKeys);
+    return active.flatMap((row): GlanceTarget[] => {
+      const pr = this.board.prs.get(row.prKey) ?? coldPrs.get(row.prKey);
+      if (!pr || this.board.threads.has(row.prKey) || this.board.found.has(row.prKey)) {
+        return [];
+      }
+      const events = this.board.events.get(row.prKey) ?? coldEvents.get(row.prKey) ?? [];
+      if (!prWantsGlance(pr, events, null)) {
+        return [];
+      }
+      return [{ topicId: null, item: { pr, provenance: scoutedProvenance(row) } }];
+    });
   }
 
   dossierVersion(topicId: string | null): number | null {

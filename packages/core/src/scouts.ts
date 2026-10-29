@@ -6,7 +6,7 @@
 import { sameLogin } from './mentions.ts';
 import { shortHash } from './pr-notes.ts';
 import type { ScoutConfig } from './scouts-config.ts';
-import type { IsoTime, PrKey, PrState, Viewer } from './types.ts';
+import type { IsoTime, PrKey, PrState, Provenance, Viewer } from './types.ts';
 
 /** GitHub's PatchStatus for a changed file. */
 export type ScoutChangeType = 'ADDED' | 'MODIFIED' | 'DELETED' | 'RENAMED' | 'COPIED' | 'CHANGED';
@@ -322,4 +322,13 @@ export function scoutPullStep(existing: Pick<ScoutedPr, 'scoutId'> | null, scout
 /** Unseen in PostPile: never opened, or GitHub activity after the update it was seen through. */
 export function isScoutedUnseen(scouted: Pick<ScoutedPr, 'seenUpdatedAt'>, prUpdatedAt: IsoTime): boolean {
   return scouted.seenUpdatedAt === null || scouted.seenUpdatedAt < prUpdatedAt;
+}
+
+/**
+ * How a scouted PR reached the user, for its glance and its tile: found
+ * outside the inbox, by a scout. `via: 'scouted'` is never stored in
+ * pr_found, so it never makes the PR tracked.
+ */
+export function scoutedProvenance(scouted: Pick<ScoutedPr, 'scoutName' | 'reason'>): Provenance {
+  return { kind: 'found', via: 'scouted', reason: `scout "${scouted.scoutName}" pulled it in: ${scouted.reason}` };
 }

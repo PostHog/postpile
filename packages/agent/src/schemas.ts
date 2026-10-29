@@ -356,3 +356,14 @@ export const consolidationOutput = z.object({
     .default([]),
   finished: z.array(z.object({ topicId: text, reason: text.min(1) })).default([]),
 });
+
+/** Scouts: pull or skip per PR. A misspelled verdict fails its entry, which then stays pending. */
+export const scoutJudgeOutput = z.object({
+  judgements: z.array(
+    z.object({
+      prKey: text,
+      verdict: z.enum(['pull', 'skip']),
+      reason: text.default(''),
+    }),
+  ),
+});

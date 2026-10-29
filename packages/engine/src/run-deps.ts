@@ -6,6 +6,7 @@ import type { PingDecider } from './live/ping-decider.ts';
 import type { RaisedPings } from './live/raised-pings.ts';
 import type { FactWriter } from './memory/fact-writer.ts';
 import type { PromptContextSource } from './prompt-context.ts';
+import type { ScoutRun } from './scouts/scout-run.ts';
 import { NoopTelemetry, type Telemetry } from './telemetry/telemetry.ts';
 
 /** What a sync run and a consolidation run both need. */
@@ -28,6 +29,8 @@ export interface RunDeps {
   pingDecider?: PingDecider;
   /** One call per topic: dossier and first glance batch together (POSTPILE_TOPIC_DIGEST=1). Missing: off. */
   topicDigest?: boolean;
+  /** The scout step of a full sync (DESIGN.md "Scouts"). Missing: no scouts.md wired, e.g. in tests. */
+  scouts?: ScoutRun;
 }
 
 /** RunDeps.telemetry defaults to a no-op, so SyncRun and ConsolidationRun never have to branch on whether it is set. */

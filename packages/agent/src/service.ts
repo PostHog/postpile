@@ -23,6 +23,9 @@ import type {
   Pr,
   PrEvent,
   PrKey,
+  PrState,
+  ScoutFile,
+  ScoutSignal,
   PrSet,
   PrSetMember,
   Provenance,
@@ -460,6 +463,44 @@ export interface GlanceBatchResult {
   model: string;
 }
 
+/** One PR a scout asks about (DESIGN.md "Scouts"). Title, body and paths are GitHub text. */
+export interface ScoutJudgeItem {
+  prKey: PrKey;
+  title: string;
+  /** The start of the description (`scoutBodyHead`). */
+  bodyHead: string;
+  author: string;
+  state: PrState;
+  /** The changed files with change types; the prompt lists the first SCOUT_JUDGE_FILES. */
+  files: ScoutFile[];
+  /** Files that matched the scout's path hints, with the hint. */
+  signals: ScoutSignal[];
+  /** Directories at the root of the PR's base, so "a new top-level folder" can be judged. */
+  baseFolders: string[];
+}
+
+/** One scout, a batch of PRs from its repos. Runs without tools. */
+export interface ScoutJudgeInput {
+  scout: { name: string; prompt: string };
+  items: ScoutJudgeItem[];
+  viewer: Viewer;
+  context: PromptContext;
+}
+
+export interface ScoutJudgeAnswer {
+  prKey: PrKey;
+  verdict: 'pull' | 'skip';
+  /** One short line: why it matches the prompt, or why not. Shown on the tile. */
+  reason: string;
+}
+
+export interface ScoutJudgeResult {
+  answers: ScoutJudgeAnswer[];
+  /** Asked but not answered validly (left out, or the whole answer unusable). They stay pending. */
+  missing: PrKey[];
+  model: string;
+}
+
 /** Second opinion on new loud events, one call per topic instead of one per PR. */
 export interface EventBatchInput {
   topic: Topic | null;
@@ -742,4 +783,10 @@ export interface AgentService {
   refineSetup(input: SetupRefineInput): Promise<SetupDraftResult>;
   /** Setup: notes on lines PostPile cannot act on, under the wrong heading, or too vague. Lines the text lacks are dropped. */
   checkSetupFit(input: SetupFitInput): Promise<SetupFitNote[]>;
+  /**
+   * Scouts: pull or skip per PR against one scout's prompt. Answers for PRs
+   * not asked or asked twice are dropped; PRs without a valid answer are
+   * `missing` and stay pending, never skipped.
+   */
+  judgeScouts(input: ScoutJudgeInput): Promise<ScoutJudgeResult>;
 }
