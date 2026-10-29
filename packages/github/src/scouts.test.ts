@@ -233,6 +233,7 @@ describe('base folders', () => {
               t0: { entries: [{ name: 'src', type: 'tree' }, { name: 'README.md', type: 'blob' }] },
               t1: { entries: [{ name: 'billing', type: 'tree' }] },
               t2: null,
+              t3: {},
             },
           },
         },
@@ -242,6 +243,7 @@ describe('base folders', () => {
       { oid: 'c1', parent: '' },
       { oid: 'c1', parent: 'products' },
       { oid: 'c1', parent: 'missing' },
+      { oid: 'c1', parent: 'README.md' },
     ];
     const folders = await new GitHubClient(fakeTokens, fetch.fn).scoutFolders('acme/app', reads);
     expect(folders).toEqual(
@@ -249,6 +251,8 @@ describe('base folders', () => {
         ['c1:', ['src']],
         ['c1:products', ['products/billing']],
         ['c1:missing', []],
+        // A file where the folder would be: no folders, and the other reads stand.
+        ['c1:README.md', []],
       ]),
     );
   });
