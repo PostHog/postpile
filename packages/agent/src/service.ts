@@ -475,7 +475,7 @@ export interface ScoutJudgeItem {
   files: ScoutFile[];
   /** Files that matched the scout's path hints, with the hint. */
   signals: ScoutSignal[];
-  /** Directories at the root of the PR's base, so "a new top-level folder" can be judged. */
+  /** The base's folders inside each parent a new-folder hint names, as repo paths ("src", "products/billing"), so a new folder can be judged. */
   baseFolders: string[];
 }
 

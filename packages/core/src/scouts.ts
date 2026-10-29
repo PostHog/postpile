@@ -16,6 +16,9 @@ export type ScoutChangeType = 'ADDED' | 'MODIFIED' | 'DELETED' | 'RENAMED' | 'CO
 export interface ScoutFile {
   path: string;
   changeType: ScoutChangeType;
+  /** Lines added and removed, from GitHub's file list; left out where a read did not give them. */
+  additions?: number;
+  deletions?: number;
 }
 
 /** A PR from a scout's repo listing, with its whole file list once that is read. */

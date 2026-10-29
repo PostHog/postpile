@@ -44,6 +44,23 @@ describe('judgeScouts', () => {
     expect(runner.requests[0]!.model).toBe('claude-sonnet-5-5');
   });
 
+  it('shows each changed file with its change and lines added and removed, bounded as before', async () => {
+    const runner = new FakeRunner().answer('scout_judge', { judgements: [] });
+    const files = [
+      { path: 'billing/main.ts', changeType: 'ADDED' as const, additions: 12, deletions: 0 },
+      { path: 'docs/old.md', changeType: 'DELETED' as const, additions: 0, deletions: 40 },
+      { path: 'src/app.ts', changeType: 'MODIFIED' as const },
+      ...Array.from({ length: 60 }, (_, index) => ({ path: `src/f${index}.ts`, changeType: 'MODIFIED' as const, additions: 1, deletions: 1 })),
+    ];
+    await new RunnerAgentService(runner).judgeScouts(input([item('acme/app#1', { files })]));
+
+    const prompt = runner.promptsFor('scout_judge')[0]!;
+    expect(prompt).toContain('billing/main.ts (added, +12/−0)');
+    expect(prompt).toContain('docs/old.md (deleted, +0/−40)');
+    expect(prompt).toContain('src/app.ts (modified)\n');
+    expect(prompt).toContain('... and 23 more files');
+  });
+
   it('keeps PRs left out, answered twice, unexpected or without a reason as missing', async () => {
     const runner = new FakeRunner().answer('scout_judge', {
       judgements: [

@@ -65,14 +65,14 @@ interface RawFilesPage {
   headRefOid: string;
   baseRefOid: string;
   mergeCommit?: { parents: { nodes: ({ oid: string } | null)[] } } | null;
-  files: { pageInfo: { hasNextPage: boolean; endCursor: string | null }; nodes: ({ path: string; changeType: ScoutChangeType } | null)[] } | null;
+  files: { pageInfo: { hasNextPage: boolean; endCursor: string | null }; nodes: ({ path: string; changeType: ScoutChangeType; additions: number; deletions: number } | null)[] } | null;
 }
 
 type RawFilesBatch = Record<string, { pullRequest: RawFilesPage | null } | null>;
 
 type RawNumberBatch = Record<string, { pullRequest: RawListedPr | null } | null>;
 
-type RawTreeBatch = Record<string, { tree: { entries: { name: string; type: string }[] } } | null>;
+type RawTreeBatch = Record<string, { entries: { name: string; type: string }[] } | null>;
 
 function ownerAndName(repo: string): [string, string] {
   const [owner = '', name = ''] = repo.split('/');
@@ -123,7 +123,7 @@ function filesSelection(after: string | null): string {
   const cursor = after === null ? '' : `, after: ${JSON.stringify(after)}`;
   // The merge commit only on the first page: the folders before the PR are read once.
   const merge = after === null ? ' mergeCommit { parents(first: 1) { nodes { oid } } }' : '';
-  return `headRefOid baseRefOid${merge} files(first: ${SCOUT_FILES_PAGE_SIZE}${cursor}) { pageInfo { hasNextPage endCursor } nodes { path changeType } }`;
+  return `headRefOid baseRefOid${merge} files(first: ${SCOUT_FILES_PAGE_SIZE}${cursor}) { pageInfo { hasNextPage endCursor } nodes { path changeType additions deletions } }`;
 }
 
 /** The commit before the PR: the merge commit's first parent once merged, else the base. */
@@ -140,10 +140,21 @@ export function buildScoutFilesQuery(pages: { ref: PrRef; after: string | null }
   return `query {\n${lines.join('\n')}\n}`;
 }
 
-/** The root tree of each commit, aliased t0, t1, ... */
-export function buildTreeQuery(repo: string, commitOids: string[]): string {
+/** One folder of one commit whose subfolders a scout needs: "" for the repo root. */
+export interface ScoutFolderRead {
+  oid: string;
+  parent: string;
+}
+
+/** The key `scoutFolders` answers under: "<oid>:<parent>". */
+export function scoutFolderKey(read: ScoutFolderRead): string {
+  return `${read.oid}:${read.parent}`;
+}
+
+/** Each folder's tree at its commit (`<oid>:<parent>`, "<oid>:" for the root), aliased t0, t1, ... */
+export function buildTreeQuery(repo: string, reads: ScoutFolderRead[]): string {
   const [owner, name] = ownerAndName(repo);
-  const lines = commitOids.map((oid, index) => `    t${index}: object(oid: ${JSON.stringify(oid)}) { ... on Commit { tree { entries { name type } } } }`);
+  const lines = reads.map((read, index) => `    t${index}: object(expression: ${JSON.stringify(scoutFolderKey(read))}) { ... on Tree { entries { name type } } }`);
   return `query {\n  repository(owner: ${JSON.stringify(owner)}, name: ${JSON.stringify(name)}) {\n${lines.join('\n')}\n  }\n}`;
 }
 
@@ -153,7 +164,7 @@ function filesOf(page: RawFilesPage): ScoutFile[] | null {
   if (nodes.some((node) => node === null)) {
     return null;
   }
-  return nodes.flatMap((node) => (node ? [{ path: node.path, changeType: node.changeType }] : []));
+  return nodes.flatMap((node) => (node ? [{ path: node.path, changeType: node.changeType, additions: node.additions, deletions: node.deletions }] : []));
 }
 
 function chunk<T>(items: T[], size: number): T[][] {
@@ -351,31 +362,28 @@ export async function scoutFiles(http: GitHubHttp, refs: PrRef[]): Promise<Map<P
 }
 
 /**
- * Directory names at the root of each commit's tree. A commit GitHub does
- * not answer for is left out, and so is a failed batch: the other batches'
- * reads stand, like file lists and number lookups. A rate limit stops it
- * (`ScoutReadsLimited`).
+ * The folders inside each asked folder at its commit, as repo paths
+ * ("src", "products/billing"), keyed by `scoutFolderKey`. A folder the
+ * commit does not have answers no folders: everything in it is new. A
+ * failed batch is left out, the other batches' reads stand, like file
+ * lists and number lookups. A rate limit stops it (`ScoutReadsLimited`).
  */
-export async function topLevelFolders(http: GitHubHttp, repo: string, commitOids: string[]): Promise<Map<string, string[]>> {
+export async function scoutFolders(http: GitHubHttp, repo: string, reads: ScoutFolderRead[]): Promise<Map<string, string[]>> {
   const result = new Map<string, string[]>();
-  for (const batch of chunk(commitOids, SCOUT_FILES_BATCH_SIZE)) {
+  for (const batch of chunk(reads, SCOUT_FILES_BATCH_SIZE)) {
     let response;
     try {
       response = await scoutBatch<{ repository: RawTreeBatch | null }>(http, buildTreeQuery(repo, batch));
     } catch (error) {
       throw new ScoutReadsLimited(error as GitHubError, result);
     }
-    if (!response?.data) {
+    if (!response?.data?.repository || response.errors.length > 0) {
       continue;
     }
-    batch.forEach((oid, index) => {
-      const tree = response.data?.repository?.[`t${index}`]?.tree;
-      if (tree) {
-        result.set(
-          oid,
-          tree.entries.filter((entry) => entry.type === 'tree').map((entry) => entry.name),
-        );
-      }
+    batch.forEach((read, index) => {
+      const tree = response.data?.repository?.[`t${index}`] ?? null;
+      const names = tree === null ? [] : tree.entries.filter((entry) => entry.type === 'tree').map((entry) => entry.name);
+      result.set(scoutFolderKey(read), names.map((entry) => (read.parent === '' ? entry : `${read.parent}/${entry}`)));
     });
   }
   return result;
