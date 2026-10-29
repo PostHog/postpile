@@ -205,7 +205,10 @@ never stored.
   Ids and updatedAt only, at most 200; stored in `pr_found` (migration 014,
   replaced on every sync); PRs not stored yet or with a newer updatedAt go
   through the batched PR fetch, unchanged ones are skipped. No teammates'-PR
-  fetch.
+  fetch. Two more `via` values since 2026-10-29 (see "Scouts"): `scouted`,
+  only on a scout's tile and glance and never stored, so it never makes a
+  PR tracked; and `followed`, a scouted PR the user followed, stored with
+  every sync's list.
 - `pulled_in`: a stack layer the sync fetched by branch to complete a pinged
   or found PR's stack, reason "stack layer below/above #N" (see "Stack
   completion")
@@ -1174,6 +1177,191 @@ readable while the request is pending).
    `reviewRequests` and keeps the names it marks in `Pr.codeOwnerReviewers`
    (store column `pr.code_owner_reviewers`, migration 042, NULL for PRs
    stored before it, read back as not known).
+
+## Scouts (2026-10-29)
+
+PostPile only knew PRs that reach the user's GitHub inbox, plus the few the
+full sync finds (`pr_found`). A fast-merging PR that changes something the
+user cares about can land before anyone thinks to ask them. A scout pulls in
+PRs from outside the inbox that match a prompt the user writes, so they can
+weigh in first. Expected volume: a handful a day. Decided with the owner:
+a Scouted section at the bottom of the sidebar with one row per scout,
+glances right away, and a `scouts.md` file. Reviewed by Codex (GPT-6.1)
+before building; its changes are folded in below.
+
+**Config: `scouts.md`** (`~/.config/postpile/scouts.md`, `POSTPILE_SCOUTS`),
+next to instructions.md, the user's own file:
+
+```
+## Lookout · structure
+id: lookout-structure
+repos: acme/app
+paths: +*/ (new top-level folder), +services/*/api/**, docs/architecture.md
+
+Pull in PRs that change how the app is shaped: new services, API facades,
+contract surfaces.
+```
+
+- One `## Name` section per scout; text before the first heading is free.
+  Key lines right after the heading: `repos:` (required, `owner/name`,
+  comma or space separated), `paths:` (optional, comma separated, a note in
+  brackets after an entry is ignored), `id:` (optional). The first other
+  line starts the prompt.
+- Paths are CODEOWNERS-style globs (`codeownersPatternRegex`). A `+` in
+  front counts only an added file (ADDED, or RENAMED to the path). `+*/`
+  means a new top-level folder: an added file whose first folder is not a
+  directory of the PR's own base commit (`baseRefOid`, cached per commit).
+- Identity: `id:`, else the slug of the name. Duplicate ids are a parse
+  error. A rename without `id:` is a new scout with fresh cursors and
+  history (accepted, documented).
+- Parsed in core (`parseScouts`), pure. Any error makes the file invalid:
+  the last version that parsed stays in force and the sync report says
+  which line is wrong (`ScoutsHistory.active`).
+- History: `scouts_version` (migration 043) mirrors `instructions_version`
+  (integer version, text, summary, origin, created_at). Every text found on
+  disk is stored, broken ones too, so nothing the user wrote is lost. Agent
+  proposals for `scouts.md` (from dismiss reasons) are later; the proposal
+  source columns come with them.
+
+**Storage** (migration 044):
+
+- `scout_cursor (scout_id, repo, covered_through, updated_at)`: completed
+  coverage. A run freezes its start time; the cursor moves to it only when
+  the scout's whole window was listed (no page cap, error or partial
+  answer) and every candidate is stored as judged or pending, in the same
+  transaction as those rows. It never moves back. The next run lists down
+  to the cursor minus 5 minutes, inclusive; the first run looks back 24 h.
+- `scout_judgement (scout_id, pr_key, status, verdict, reason, input_hash,
+  config_version, head_oid, observed_updated_at, attempts, last_error,
+  judged_at)`: one row per scout and PR. `status` pending or judged (a
+  CHECK ties verdict to judged). Pending work (files not read whole, base
+  tree unknown, the call cap, a failed call, a PR left out of the answer)
+  is retried every run whatever the cursor says, looked up by number when
+  the listing no longer reaches it. Skipped rows go 30 days after their
+  observed update; pulled ones stay.
+- `pr_scouted (pr_key, scout_id, scout_name, config_version, reason,
+  pulled_at, seen_updated_at, followed_at, dismissed_at, dismiss_reason,
+  expired_at, expiry_reason)`: what the Scouted section shows. One row per
+  PR: the first scout to pull it wins (scouts run in file order); a later
+  scout only records its own judgement. Followed, dismissed and expired
+  rows stay as history, with the scout's name and config version as
+  snapshots. Kept apart from `pr_found`, which every sync replaces.
+- Migration 045 adds `pending_write.follow` (`{prKey, subjectId}`) for a
+  Follow waiting for the lock.
+
+**The sync step** (`ScoutRun`, after the inbox digest, its own sync phase
+`scouts`):
+
+1. Listing, in two passes. Each repo is listed once for every scout on it:
+   GraphQL `repository.pullRequests(states: [OPEN, MERGED], orderBy:
+   UPDATED_AT DESC)`, 50 per page, metadata only (node id, number, update
+   time, state, draft, author, head and base oid, title, body cut to 600
+   characters client side), at most 10 pages per run. OPEN and MERGED, so a
+   PR opened and merged between two syncs is still seen.
+2. Pre-filter, shared by all scouts (`scoutPrefilter`): open drafts (judged
+   once they turn ready), dependency and merge-queue bots only (dependabot,
+   renovate, trunk-io, mergify and the like; agent accounts that open PRs
+   for people stay in), the viewer, their teammates, and PRs already
+   tracked (a notification thread, `pr_found`, or followed).
+3. Files: only for candidates that are new to the scout, pending, or whose
+   head moved since it judged them. The whole list, paged to the end at one
+   head; a moved head or a failed page leaves it pending, never "no
+   signal".
+4. Re-judge rule (`scoutJudgeStep`, `scoutInputHash`): the hash covers the
+   scout's own definition (prompt, repos, paths), the title, the body's
+   first 600 characters and the matched (path, change type) pairs, or the
+   whole file list for a scout without `paths:`. With `paths:` and no
+   match, the PR is skipped by rule, no model call.
+5. Judge: `scout_judge` (Sonnet, no tools, PR text fenced), up to 12 PRs per
+   call, under the sync's existing agent-call cap with its own kind. The
+   answer is validated per PR: left out, answered twice, or unknown keys
+   stay pending, never skipped.
+6. Pulled PRs are fetched in full and stored like stack layers
+   (`GitHubSync.fetchAndStoreScouted`): no thread, no topic, their events
+   never count as new.
+7. Every sync refreshes active scouted PRs whose update time moved, expires
+   what is done, drops old skipped judgements, then glances the active
+   scouted PRs that need one through an explicit, topic-less glance path
+   (`GlanceInputs.scoutTargets`, `GlanceBatchWriter.runScouted`): no tile of
+   the board's holds them.
+
+**Display, not tracking.** A scouted PR is displayable and glanceable but
+not tracked: no topic assignment, urgency, asks, unread, whose-move counts,
+Dock badge, Mac notifications or read writes. On the Board, each scout is a
+pseudo-topic `scout:<id>` like Unsorted (`Board.tilesForTopic`), with its
+PRs as found PRs of `via: 'scouted'`; it is never part of `allTiles()`, so
+nothing that counts reads it. A scouted PR that reaches the inbox by itself
+becomes a normal tile; its `pr_scouted` row stays as history ("Scouted by
+Lookout: … It reached the user's inbox since").
+
+**Stacks:** normal-topic placement wins: a stack with a tracked layer
+shows in its topic, scouted layers riding along. A stack outside the inbox
+shows whole with the scout that pulled any of its layers first
+(`scoutStackOwner`).
+
+**Expiry** (`scoutedExpiry`): not followed, and three days after the merge
+(a fast merge still shows as merged for a while), three days after a
+close, or three days without activity. Opening it does not keep it.
+
+**The Scouted section.** At the bottom of the sidebar, one row per scout in
+file order (`GET /api/scouts`, `ScoutListItem`), with a grey count of tiles
+not seen in PostPile since their last activity, never coral and never in
+unread. A row opens `scout:<id>` like a topic: tiles only, no driver,
+dossier, sets or moves. The tile shows the scout's name in the "for whom"
+spot and its reason (`TileView.scout`).
+
+**Actions:**
+
+- Follow subscribes the viewer to the PR on GitHub: GraphQL
+  `updateSubscription(subscribableId: <PR node id>, state: SUBSCRIBED)`,
+  not a thread subscription (there is no thread yet). It goes through the
+  6 s undo window (`ScoutActions`, Undo token `follow:`), then the writes
+  lock: locked, it parks as a pending write of kind `follow`; a failed send
+  parks too, marked failed, to send again from the lock. `followed_at` is
+  set only once GitHub took it, and the PR then gets a `pr_found` row with
+  `via: 'followed'` (kept by every sync), so PostPile tracks it right away,
+  Unsorted until topic assignment, before any notification arrives.
+  Queued, pending, failed, discarded and undone follows stay apart in the
+  action log (`follow`, `undo_follow`).
+- Dismiss takes the PR off the section for good, with an optional short
+  reason kept for tuning the scout later. Local only.
+- Opening a scouted PR marks it seen in PostPile through its current update
+  (`seen_updated_at`); it reads unseen again once the PR moves. Never a
+  GitHub read and never `handled_at`, which would leak into the inbox rules
+  once the PR reaches the inbox.
+
+**MCP:** `pr_context` says "Scouted by <scout>: <reason>. Not in the user's
+GitHub inbox." inside the fence and answers the PR on its own (no topic
+block); JSON carries `scouted`. `whats_on_me` lists scouted tiles last, in a
+group of their own, never as a move (left out with `whose_move: "you"`).
+`search_prs` finds scouted PRs and marks them. `mark_read` on a scouted PR
+marks it seen in PostPile only, with the usual `seen_through` guards, and
+says so ("seen in PostPile only, nothing on GitHub").
+
+**Accepted trade-offs:**
+
+- Content changes inside the same files do not re-judge; a push that adds a
+  matching file or a force-push that changes the file set does.
+- A title or description edit without a push does not re-judge either: files
+  are read only when the head moved, which keeps the listing cheap on busy
+  repos.
+- A skipped PR active again after 30 days may be judged once more.
+- Scouts run with the full sync (hourly by default), so a PR opened and
+  merged inside one window first shows as merged. A shorter scout cadence
+  is the direct fix, left for later.
+- Listing a repo has no time filter: a run reads at most 10 pages, and a
+  busier window leaves the cursor in place for the next run.
+
+**Codex's review, taken:** keep `pr_scouted` separate from `pr_found`;
+expiry fields and name snapshots; scout ids with explicit duplicate and
+rename rules; `scouts_version` mirroring instructions; pending work kept
+apart from judgements and retried past the cursor; validated batch
+answers; cursor as completed coverage with a run-start boundary; files
+paged to completeness; the base tree per PR; two-pass listing shared per
+repo; OPEN and MERGED; the three-way filter split (tracked, already judged,
+pulled by another scout); bots limited to dependency and merge-queue ones;
+display and tracking split, with an explicit glance path; stack placement;
+Follow through the lock with a node id; local seen apart from handling.
 
 ## CI is not tracked
 
@@ -8282,7 +8470,9 @@ topic names are never event props.
    recheck dialog, sent with the correction as `fromRecheck`),
    `memory_corrected`, `proposal_resolved`
    (kind `topic_merge` / `rename` / `topic_split` / `topic_move` / `rule` / `instructions`;
-   source `consolidation` / `agent` on topic proposals), `instructions_edited`.
+   source `consolidation` / `agent` on topic proposals), `instructions_edited`,
+   `scout_followed` (from `tile` / `detail`) and `scout_dismissed`
+   (`with_reason`) on scouted PRs (2026-10-29, "Scouts").
 5. *Health*: `sync_completed` (duration_ms, prs_fetched, new_events,
    agent_calls, agent_failures, cost_usd rounded to cents, stopped_at_cap,
    trigger `start`/`manual`/`auto`, auto = the hourly background sync,

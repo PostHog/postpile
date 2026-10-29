@@ -32,9 +32,10 @@ export interface ScoutFilesRead {
   files: ScoutFile[] | null;
 }
 
-const LIST_FIELDS = 'number updatedAt state isDraft mergedAt headRefOid baseRefOid title body author { __typename login } repository { nameWithOwner }';
+const LIST_FIELDS = 'id number updatedAt state isDraft mergedAt headRefOid baseRefOid title body author { __typename login } repository { nameWithOwner }';
 
 interface RawListedPr {
+  id: string;
   number: number;
   updatedAt: string;
   state: PrState;
@@ -75,6 +76,7 @@ function ownerAndName(repo: string): [string, string] {
 export function toScoutCandidate(raw: RawListedPr): ScoutCandidate {
   return {
     key: prKey({ repo: raw.repository.nameWithOwner, number: raw.number }),
+    nodeId: raw.id,
     title: raw.title,
     body: raw.body ?? '',
     author: actorLogin(raw.author),

@@ -13,6 +13,7 @@ import {
   proposalOutcome,
   proposalOutcomeAt,
   reviewerStates,
+  scoutedLine,
   type AuthorPlace,
   type AuthorScope,
   SYNC_PROGRESS_STALE_MS,
@@ -66,7 +67,10 @@ import {
 } from './text.ts';
 
 /** The read methods the tools use; the read-only engine and the sample-data engine both have them. */
-export type PostPileReader = Pick<EngineService, 'getPr' | 'getTopic' | 'listTopics' | 'search' | 'getViewer' | 'getTeamMembers' | 'prOverlaps' | 'storedPrKeys' | 'lastSyncReport' | 'recordedSyncProgress' | 'recordedAppVersion' | 'listPrNotes'>;
+export type PostPileReader = Pick<
+  EngineService,
+  'getPr' | 'getTopic' | 'listTopics' | 'listScouts' | 'search' | 'getViewer' | 'getTeamMembers' | 'prOverlaps' | 'storedPrKeys' | 'lastSyncReport' | 'recordedSyncProgress' | 'recordedAppVersion' | 'listPrNotes'
+>;
 
 /** What every read needs besides the reader. */
 export interface ReadContext {
@@ -120,6 +124,14 @@ const CLOSED_CHECK_WINDOW_MS = 24 * 3600_000;
 
 /** Other agents ask about any repo, whatever repo the app's window has chosen. */
 const ALL_REPOS = { allRepos: true };
+
+/** search_prs also finds PRs scouts pulled in, marked as such (DESIGN.md "Scouts"). */
+const ALL_REPOS_WITH_SCOUTS = { allRepos: true, withScouts: true };
+
+/** Scouted tiles whats_on_me lists at most, after everything that waits on the user. */
+const SCOUTED_SHOWN = 20;
+
+const SCOUTED_TITLE = "Scouted (not in the user's GitHub inbox; nothing is asked of them)";
 
 const REPO_PATTERN = /^[\w.-]+\/[\w.-]+$/;
 
@@ -398,6 +410,9 @@ function prHeadLines(detail: PrDetail, tiles: TileView[], authors: Authors): str
   if (row) {
     lines.push(turnText(row.turn));
   }
+  if (detail.scouted) {
+    lines.push(scoutedLine(detail.scouted));
+  }
   const thread = waitingThreadText(detail.waitingThreads);
   if (thread) {
     lines.push(thread);
@@ -629,7 +644,9 @@ async function readPr(reader: PostPileReader, input: string, topics: Map<string,
     }
     topic = (await topics.get(detail.topicId)) ?? null;
   }
-  return { ok: true, read: { key: resolved.key, detail, topic, tiles: topic ? tilesWith(topic, resolved.key) : [] } };
+  const tiles = topic ? tilesWith(topic, resolved.key) : [];
+  // A scout's section is no topic: its PR is answered on its own, its tile kept for the move and stack lines.
+  return { ok: true, read: { key: resolved.key, detail, topic: topic?.scout ? null : topic, tiles } };
 }
 
 /** '- "#999": PostPile tracks no PR #999. ...': one PR pr_context could not answer for, the caller's input echoed. */
@@ -1054,7 +1071,7 @@ export async function searchPrs(ctx: ReadContext, query: string, options: ListOp
   if (bad) {
     return bad;
   }
-  const result = await reader.search(query, ALL_REPOS);
+  const result = await reader.search(query, ALL_REPOS_WITH_SCOUTS);
   const wanted = new Map(result.topics.map((match) => [match.topicId, new Set(match.prKeys)]));
   const rows: SearchRow[] = [];
   const seen = new Set<PrKey>();
@@ -1079,7 +1096,11 @@ export async function searchPrs(ctx: ReadContext, query: string, options: ListOp
     const filters = result.topics.length > 0 ? ` with ${filterWords(options)}` : '';
     return { text: `No PR matches "${echo(query)}"${filters}. Every word must appear in the title, #number, author, repo, branch or topic name.`, found: false };
   }
-  const lines = page.map((row) => `${prSummaryLine(row.pr)}  · topic ${row.topic.topic.name} (${row.topic.topic.id}) · ${turnText(row.pr.turn)}`);
+  const lines = page.map((row) =>
+    row.topic.scout
+      ? `${prSummaryLine(row.pr)}  · scouted by ${row.topic.scout.name}, not in the user's inbox (pr_context for why)`
+      : `${prSummaryLine(row.pr)}  · topic ${row.topic.topic.name} (${row.topic.topic.id}) · ${turnText(row.pr.turn)}`,
+  );
   const { head, tail } = pageLines(rows.length, options, page.length);
   return { text: answer([...(await header(ctx)), `${head} Filters: ${filterWords(options)}.`], lines, tail), found: true };
 }
@@ -1161,6 +1182,54 @@ function yourMoveGroup(prs: PrSummary[], notes: Map<PrKey, PrNotesView>): QueueG
   return allNoted ? 'noted' : 'your_move';
 }
 
+/** One tile of a scout's section, for whats_on_me's own group. */
+interface ScoutedRow {
+  view: TileView;
+  scoutId: string;
+  scoutName: string;
+}
+
+/**
+ * The scouts' tiles (DESIGN.md "Scouts"): PRs from outside the user's
+ * GitHub inbox, never an ask, so never mixed into the list above. Left out
+ * when the caller asks for the user's moves only.
+ */
+async function scoutedRows(reader: PostPileReader, authors: Authors, options: QueueOptions): Promise<ScoutedRow[]> {
+  if (options.whoseMove === 'you') {
+    return [];
+  }
+  const rows: ScoutedRow[] = [];
+  for (const scout of await reader.listScouts()) {
+    if (scout.tiles === 0) {
+      continue;
+    }
+    const detail = await reader.getTopic(scout.topicId);
+    for (const view of detail?.tiles ?? []) {
+      const matching = view.prs.filter((pr) => stateMatches(pr, options.state) && repoMatches(pr, options.repo) && scopeMatches(authors, pr, options.authorScope));
+      if (matching.length > 0) {
+        rows.push({ view, scoutId: scout.id, scoutName: scout.name });
+      }
+    }
+  }
+  return rows;
+}
+
+function scoutedText(row: ScoutedRow): string {
+  const seen = row.view.scout?.unseen ? ' · unseen' : '';
+  return `- ${row.view.tile.title} (${row.view.prs.map((pr) => pr.key).join(', ')}) · scouted by ${row.scoutName}${seen}
+  why: ${row.view.scout?.reason ?? ''}`;
+}
+
+function scoutedJson(rows: ScoutedRow[]): object[] {
+  return rows.slice(0, SCOUTED_SHOWN).map((row) => ({
+    scout: { id: row.scoutId },
+    tile: tileJson(row.view),
+    prs: row.view.prs.map((pr) => pr.key),
+    unseen: row.view.scout?.unseen ?? false,
+    untrusted: { scoutName: row.scoutName, reason: row.view.scout?.reason ?? '', title: row.view.tile.title },
+  }));
+}
+
 function queueJson(
   rows: QueueRow[],
   page: QueueRow[],
@@ -1170,6 +1239,7 @@ function queueJson(
   meta: MetaJson,
   overlaps: PrOverlapsView,
   now: Date,
+  scouted: ScoutedRow[],
 ): object {
   return {
     meta,
@@ -1187,6 +1257,8 @@ function queueJson(
       untrusted: { topicName: row.topic.topic.name },
       prs: row.view.prs.map((pr) => summaryJson(authors, pr, details.get(pr.key) ?? null, [row.view], row.topic, overlaps)),
     })),
+    // Outside the user's GitHub inbox: never an ask, never on the user's move.
+    scouted: scoutedJson(scouted),
   };
 }
 
@@ -1233,13 +1305,19 @@ export async function whatsOnMe(ctx: ReadContext, options: QueueOptions, format:
   // Reviews and waiting threads come from each PR's stored snapshot: read only for the rows on this page.
   const details = await readDetails(reader, page.flatMap((row) => row.view.prs.map((pr) => pr.key)));
   const overlaps = await reader.prOverlaps();
+  const scouted = await scoutedRows(reader, authors, options);
   if (format === 'json') {
     const meta = await readMeta(ctx, authors);
-    return jsonAnswer([...(await header(ctx)), ...teamNote(authors)], queueJson(rows, page, details, authors, options, meta, overlaps, ctx.now()), rows.length > 0);
+    return jsonAnswer([...(await header(ctx)), ...teamNote(authors)], queueJson(rows, page, details, authors, options, meta, overlaps, ctx.now(), scouted), rows.length > 0);
   }
-  if (rows.length === 0) {
+  const scoutedData = scouted.length === 0 ? [] : ['', `${SCOUTED_TITLE} (${scouted.length} in total):`, ...scouted.slice(0, SCOUTED_SHOWN).map(scoutedText)];
+  if (rows.length === 0 && scouted.length === 0) {
     const text = [...(await header(ctx)), ...teamNote(authors), '', `Nothing waits on the user right now (filters: ${filterWords(options)}).`].join('\n');
     return { text, found: false };
+  }
+  if (rows.length === 0) {
+    const head = [...(await header(ctx)), ...teamNote(authors), `Nothing waits on the user right now (filters: ${filterWords(options)}).`];
+    return { text: answer(head, scoutedData.slice(1)), found: false };
   }
   const { head, tail } = pageLines(rows.length, options, page.length);
   const shown = page.map((row) => ({ group: row.group, text: [row.text, ...queuePrLines(row.view.prs, details, authors, overlaps, notes, now, row.group !== 'unread')].join('\n') }));
@@ -1252,5 +1330,6 @@ export async function whatsOnMe(ctx: ReadContext, options: QueueOptions, format:
     const total = rows.filter((row) => row.group === group).length;
     data.push(...(data.length > 0 ? [''] : []), `${GROUP_TITLES[group]} (${total} in total):`, ...inGroup.map((row) => row.text));
   }
+  data.push(...scoutedData);
   return { text: answer([...(await header(ctx)), ...teamNote(authors), `${head} Filters: ${filterWords(options)}.`], data, tail), found: true };
 }

@@ -7,6 +7,7 @@ import {
   type GitHubWritesStatus,
   type IsoTime,
   type PendingCatchUp,
+  type PendingFollow,
   type PendingThread,
   type PendingWrite,
   type PendingWriteCause,
@@ -14,10 +15,12 @@ import {
   type PendingWritesResult,
   type PrKey,
   type SubscriptionChange,
+  type ThreadOutcome,
   type TilePendingWrite,
 } from '@postpile/core';
 import type { Store } from '@postpile/store';
 import { putBackLocalChange, readLocally } from '../actions/local-change.ts';
+import { recordFollowed } from '../scouts/followed.ts';
 import { errorText } from '../errors.ts';
 import type { MarkReadQueue, ParkedBatch } from '../mark-read-queue.ts';
 import { notTakenDetail, type GitHubWrites } from './github-writes.ts';
@@ -28,6 +31,8 @@ export const CLEANUP_PENDING_DETAIL = 'GitHub writes are locked: the cleanup wai
 export const CLEANUP_DISCARDED_DETAIL = 'cleanup discarded while locked: GitHub keeps them unread';
 export const OBSERVED_PENDING_DETAIL = 'left the inbox: read on github.com or another client; pending mark-read cleared';
 export const SUBSCRIPTION_DISCARDED_DETAIL = 'discarded while locked: the GitHub subscription stays as it was';
+export const FOLLOW_PENDING_DETAIL = 'GitHub writes are locked: the follow waits until you unlock and send it';
+export const FOLLOW_DISCARDED_DETAIL = 'follow discarded: not subscribed on GitHub';
 
 /** The pending write kind and log action of a Mute's or Unmute's subscription change. */
 function subscriptionKind(change: SubscriptionChange): 'subscribe' | 'unsubscribe' {
@@ -140,6 +145,41 @@ export class PendingWrites {
     this.writes.log.record({ action: 'inbox_cleanup', origin: 'cleanup', outcome: 'pending', batch, detail: `${cleanupPicksWords(catchUp)}: ${CLEANUP_PENDING_DETAIL}` });
   }
 
+  /**
+   * A scouted PR's Follow the lock (or a failed send) kept from GitHub
+   * (DESIGN.md "Scouts"). Nothing changes in the app until it is sent; a
+   * failed send says so and can be sent again from the lock.
+   */
+  parkFollow(follow: PendingFollow, context: { origin: 'tile' | 'detail'; batch: string; clickedAt: IsoTime; error: string | null }): void {
+    const at = this.now().toISOString();
+    const id = this.store.pendingWrites.add({
+      kind: 'follow',
+      readBefore: null,
+      createdAt: context.clickedAt,
+      origin: context.origin,
+      tileId: null,
+      batch: context.batch,
+      prKeys: [],
+      handleKeys: [],
+      threads: [],
+      follow,
+    });
+    if (context.error !== null) {
+      this.store.pendingWrites.keepAfterTry(id, [], context.error, at);
+    }
+    const detail = context.error === null ? FOLLOW_PENDING_DETAIL : `GitHub didn't take it: ${context.error}; waits in the lock to be sent again`;
+    this.writes.log.record({ action: 'follow', origin: context.origin, outcome: 'pending', prKey: follow.prKey, batch: context.batch, detail });
+  }
+
+  /** Where a parked Follow of this PR stands: pending, or failed (sent and not taken); null when none waits. */
+  followState(prKey: PrKey): 'pending' | 'failed' | null {
+    const write = this.list().find((candidate) => candidate.kind === 'follow' && candidate.follow?.prKey === prKey);
+    if (!write) {
+      return null;
+    }
+    return write.error !== null && write.error !== PENDING_WRITES_OFF ? 'failed' : 'pending';
+  }
+
   list(): PendingWrite[] {
     return this.store.pendingWrites.list();
   }
@@ -180,6 +220,9 @@ export class PendingWrites {
     if (write.kind === 'subscribe') {
       return `Unmute: ${this.prTitle(write)}`;
     }
+    if (write.follow !== null) {
+      return `Follow: ${this.store.prs.get(write.follow.prKey)?.title ?? write.follow.prKey}`;
+    }
     return this.prTitle(write);
   }
 
@@ -193,7 +236,7 @@ export class PendingWrites {
       title: this.title(write),
       prKeys: write.prKeys,
       tileId: write.tileId,
-      threadCount: write.kind === 'mark_all_read_before' ? unreadOlderThan(threads, write.readBefore ?? '') : write.threads.length,
+      threadCount: write.kind === 'mark_all_read_before' ? unreadOlderThan(threads, write.readBefore ?? '') : write.kind === 'follow' ? 1 : write.threads.length,
       error: write.error,
     }));
   }
@@ -218,6 +261,10 @@ export class PendingWrites {
         batch: write.batch,
         detail: `last_read_at=${write.readBefore ?? ''}: ${CLEANUP_DISCARDED_DETAIL}`,
       });
+    }
+    if (write.follow !== null) {
+      this.writes.log.record({ action: 'follow', origin: 'footer', outcome: 'discarded', prKey: write.follow.prKey, batch: write.batch, detail: FOLLOW_DISCARDED_DETAIL });
+      return;
     }
     if (write.catchUp !== null) {
       this.writes.log.record({
@@ -291,6 +338,9 @@ export class PendingWrites {
         case 'mute_again':
           this.muteAgain(effect.prKeys, write.createdAt);
           break;
+        case 'followed':
+          recordFollowed(this.store, effect.prKey, at);
+          break;
       }
     }
     switch (step.next.kind) {
@@ -352,6 +402,22 @@ export class PendingWrites {
     return this.apply(write, { kind: 'sent', outcomes }, origin, notTaken);
   }
 
+  /** A parked Follow: one GraphQL write; its outcome goes through `pendingWriteStep` like any other. */
+  private async sendFollow(write: PendingWrite, notTaken: string[]): Promise<boolean> {
+    const follow = write.follow;
+    if (follow === null) {
+      return this.apply(write, { kind: 'sent', outcomes: [] }, 'footer', notTaken);
+    }
+    let outcome: ThreadOutcome;
+    try {
+      const result = await this.writes.followPr(follow.subjectId, { origin: 'footer', prKey: follow.prKey, batch: write.batch });
+      outcome = result === 'off' ? { kind: 'off' } : { kind: 'sent' };
+    } catch (error) {
+      outcome = { kind: 'failed', error: errorText(error) };
+    }
+    return this.apply(write, { kind: 'sent', outcomes: [outcome] }, 'footer', notTaken);
+  }
+
   /**
    * Sends one pending write. Returns true when it is done: every thread
    * reached GitHub, was already read, or was left unread on purpose (activity
@@ -364,6 +430,9 @@ export class PendingWrites {
     }
     if (write.kind === 'catch_up') {
       return this.sendCatchUp(write, startCatchUp, notTaken);
+    }
+    if (write.kind === 'follow') {
+      return this.sendFollow(write, notTaken);
     }
     if (isSubscriptionWrite(write)) {
       const context = { origin: 'footer' as const, tileId: write.tileId, batchId: write.batch };

@@ -624,6 +624,14 @@ tints (`lib/why.ts`, `lib/events.ts`, `reviewWord` / `rowStateWord` in `lib/pr.t
   the tile in the same color (`BANDS` in `Tile.tsx`; a routing team gets
   no band, sea means your team); PR rows get the small chip, no band. The tooltip keeps the
   long why-here reason (`whyTitle`). Grey on done tiles.
+- Scout tiles (`TileView.scout`, DESIGN.md "Scouts"): a neutral grey chip
+  with the scout's name takes the for-whom spot, no left band; the scout's
+  reason replaces the glance reason line; never coral, honey or sea. Their
+  footer is `ScoutTileFooter` (Follow, Dismiss), never Mark read, Snooze or
+  Approve: nothing is asked of the user there. The sidebar's Scouted
+  section (`ScoutedSection`, `api/scouts.ts`) sits last with a grey unseen
+  count; opening a scouted PR marks it seen (`lib/use-scout-seen.ts`), not
+  read.
 - Why now: `UnreadStrip`, warm strip, actor avatar with an ink event
   badge (`Glyph`), a coral "NEW" pill (only while `TileView.newBadge`), age. On a revisit (`PrSummary.whatsNew`
   of the strip's PR, `stripNews`) the text, avatar, badge, "+N" and age

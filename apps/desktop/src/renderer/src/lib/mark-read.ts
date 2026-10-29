@@ -9,10 +9,12 @@ import { prNumber } from './tiles.ts';
 // corrections, Inbox declines, removed rules and tailoring lines. Their undo
 // windows never end in a GitHub write.
 const LOCAL_UNDO_PREFIXES = ['memory:', 'proposal:', 'rule:', 'tailoring:'];
+// A scouted PR's Follow (DESIGN.md "Scouts"): it reaches GitHub, but it is no mark-read.
+const FOLLOW_UNDO_PREFIX = 'follow:';
 
 /** True when an undo token belongs to a mark-read waiting to reach GitHub. */
 export function isMarkReadUndoToken(token: string): boolean {
-  return !LOCAL_UNDO_PREFIXES.some((prefix) => token.startsWith(prefix));
+  return !token.startsWith(FOLLOW_UNDO_PREFIX) && !LOCAL_UNDO_PREFIXES.some((prefix) => token.startsWith(prefix));
 }
 
 function lowerFirst(text: string): string {

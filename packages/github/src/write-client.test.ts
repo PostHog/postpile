@@ -82,6 +82,20 @@ describe('GitHubWriteClient', () => {
     expect(body.variables).toEqual({ subjectId: 'IC1' });
   });
 
+  it('follows and unfollows a PR itself through updateSubscription on its node id', async () => {
+    const fake = new FakeFetch([
+      { body: { data: { updateSubscription: { subscribable: { viewerSubscription: 'SUBSCRIBED' } } } } },
+      { body: { data: { updateSubscription: { subscribable: { viewerSubscription: 'UNSUBSCRIBED' } } } } },
+    ]);
+    const client = new GitHubWriteClient(fakeTokens, fake.fn);
+    await client.followPr('PR_kwDO1');
+    await client.unfollowPr('PR_kwDO1');
+    const [follow, unfollow] = fake.requests.map((request) => request.body as { query: string; variables: unknown });
+    expect(follow!.query).toContain('updateSubscription(input: { subscribableId: $subjectId, state: $state })');
+    expect(follow!.variables).toEqual({ subjectId: 'PR_kwDO1', state: 'SUBSCRIBED' });
+    expect(unfollow!.variables).toEqual({ subjectId: 'PR_kwDO1', state: 'UNSUBSCRIBED' });
+  });
+
   it('throws GitHubError when GitHub refuses a mutation with a 200 and errors', async () => {
     const fake = new FakeFetch([{ body: { data: null, errors: [{ message: 'Could not resolve to a node with the global id of T404' }] } }]);
     const call = new GitHubWriteClient(fakeTokens, fake.fn).replyInThread('T404', 'Hi');

@@ -181,6 +181,41 @@ export function ForWhomChip(props: { forWhom: ForWhom; code: WhyCode; provenance
   );
 }
 
+/**
+ * A scout tile's "for whom" spot (DESIGN.md "Scouts"): the scout's name,
+ * neutral grey like a routing team, never honey or sea, and no left band.
+ * Nothing here is aimed at the user.
+ */
+export function ScoutChip(props: { name: string; greyed?: boolean }) {
+  return (
+    <span
+      title={`Scouted by ${props.name}: pulled in from outside your GitHub inbox. Never unread and never your move until you follow it.`}
+      className={`flex h-5 min-w-0 shrink items-center rounded-full px-2 text-[11px] font-[650] whitespace-nowrap ${props.greyed ? 'bg-why-done text-muted' : 'bg-segment text-ink-2'}`}
+    >
+      <span className="truncate">{props.name}</span>
+    </span>
+  );
+}
+
+/** A Follow that waits in the lock ("Follow pending: unlock GitHub writes") or failed there; the same outline as `PendingWritePill`. */
+export function ScoutFollowPill(props: { text: string; failed: boolean }) {
+  return (
+    <span
+      title={
+        props.failed
+          ? 'GitHub did not take the Follow. It waits in the lock in the footer: send it from there, or discard it.'
+          : 'GitHub writes are locked: the Follow waits in the lock in the footer until you unlock and send it.'
+      }
+      className={`flex h-[19px] shrink-0 items-center gap-1 rounded-full border px-[7px] text-[10.5px] font-medium whitespace-nowrap ${
+        props.failed ? 'border-status-bad text-status-bad' : 'border-pill-line bg-subtle text-muted'
+      }`}
+    >
+      <ClockIcon />
+      {props.text}
+    </span>
+  );
+}
+
 const STATE_WORD_LOOKS: Record<Exclude<StateWord['kind'], 'draft'>, { glyph: EventGlyph | null; stroke: number; tone: string }> = {
   review: { glyph: 'eye', stroke: 1.7, tone: 'text-ink-2' },
   approved: { glyph: 'check', stroke: 1.9, tone: 'text-safe' },

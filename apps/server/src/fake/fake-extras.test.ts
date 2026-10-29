@@ -1,6 +1,7 @@
 // The opt-in sample packs: where each pack puts its PRs and the shapes it is
 // there to show. The rules checks over every pack live in pack-invariants.test.ts.
 import { DOSSIER_LIMITS, type TileView, type TopicListItem } from '@postpile/core';
+import { UNSORTED_TOPIC_ID } from '@postpile/engine';
 import { describe, expect, it } from 'vitest';
 import { FakeEngine } from './fake-engine.ts';
 import { fakeExtras, type FakeExtra } from './fake-extras.ts';
@@ -173,7 +174,8 @@ describe('POSTPILE_FAKE_EXTRA=calm', () => {
   it('replaces the sample with topics where nothing is left for you', async () => {
     const engine = engineWith('calm');
     const items = await engine.listTopics();
-    expect(items.map((item) => item.topic.id).toSorted()).toEqual(Object.values(CALM_TOPIC).toSorted());
+    // Unsorted holds the PR the user followed from a scout (fake-scouts.ts): tracked, nothing asked of them.
+    expect(items.map((item) => item.topic.id).toSorted()).toEqual([...Object.values(CALM_TOPIC), UNSORTED_TOPIC_ID].toSorted());
     expect(items.reduce((sum, item) => sum + item.unreadTiles, 0)).toBe(0);
     expect(items.every((item) => item.quiet && item.yourMoves.length === 0)).toBe(true);
     expect(await engine.listFinishedTopics()).toEqual([]);

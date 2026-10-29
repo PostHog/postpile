@@ -440,6 +440,20 @@ export class FakeWriter implements GitHubWriter {
     }
     this.calls.push(`subscribeThread ${threadId}`);
   }
+
+  /** followPr throws while set. */
+  failFollow = false;
+
+  async followPr(subjectId: string): Promise<void> {
+    if (this.failFollow) {
+      throw new Error('boom: follow');
+    }
+    this.calls.push(`followPr ${subjectId}`);
+  }
+
+  async unfollowPr(subjectId: string): Promise<void> {
+    this.calls.push(`unfollowPr ${subjectId}`);
+  }
 }
 
 /**

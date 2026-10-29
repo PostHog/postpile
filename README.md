@@ -62,6 +62,18 @@ Keeps the topic's status and goal next to its people and timeline.
 
 <img src="docs/images/dossier.png" width="533" alt="The topic's status and goal">
 
+Pulls in pull requests from outside your inbox that you asked to see, with scouts. A scout is a short prompt in `~/.config/postpile/scouts.md`: the repos to watch, optional paths, and what to look for in your own words.
+
+```
+## Lookout · structure
+repos: acme/app
+paths: +*/ (new top-level folder), docs/architecture.md
+
+Pull in PRs that change how the app is shaped: new services, API facades.
+```
+
+Each sync lists those repos' recently updated pull requests, leaves out drafts, dependency bots, your own and your team's, and asks Claude which ones match. They show under Scouted at the bottom of the sidebar with the scout's reason and an agent glance, and never count as unread or as your move. Follow subscribes you on GitHub, so the pull request reaches your inbox from then on; Dismiss takes it off the list. A scouted pull request leaves the list three days after its merge, or after three days without activity.
+
 Approves, asks, or marks read from the detail pane, and marks read on GitHub what it handled. To keep PostPile read-only, close the writes lock in the status bar.
 
 <img src="docs/images/approve.png" width="541" alt="The action bar with Approve">
@@ -137,6 +149,7 @@ The app can do this for you. While Claude Code does not have the server, the sta
 - `refresh_from_github` has the running app re-read a PR, or a topic's open PRs, from GitHub now. It only reads, skips PRs fetched in the last minute, and allows 20 refreshes an hour across all agents.
 - `propose_topic_change` files a topic split, rename or merge as a suggestion. It shows under Suggestions as "suggested by Claude Code" and changes nothing until you accept it. Unanswered suggestions expire after 14 days.
 - `note_pr` leaves a short note on a PR that GitHub can't show: covered by another PR's review, nothing to do, or an agent is on it right now. The note shows in the PR pane, where you can clear it, and in the MCP answers. It never changes whose move it is or what is unread, and it goes out of date by itself once the PR changes.
+- Pull requests your scouts pulled in come back marked as scouted: `pr_context` says which scout and why, `whats_on_me` lists them last in a group of their own, and `mark_read` only marks them seen in PostPile, since GitHub never notified you about them.
 - `mark_read` marks PRs read that the agent read in full with `pr_context` and went through with you. A PR with new activity since that read is refused. It goes through the same undo window and GitHub writes lock as the Mark read button, the app shows it with Undo, and a question or mention for you still waits under Needs reply until you reply.
 - The MCP server itself never writes to GitHub; only a `mark_read` reaches it, through the app's queue like a click. When the app is closed, every tool says so and does nothing; the server stays up and answers again once you open the app.
 - It knows what the app knew at its last sync, and each answer says when that was. `pr_context` also says when the PR was fetched.

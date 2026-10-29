@@ -71,6 +71,9 @@ describe('isMarkReadUndoToken', () => {
       expect(isMarkReadUndoToken(token)).toBe(false);
     }
   });
+  it("leaves out a scouted PR's Follow: it reaches GitHub, but it is no mark-read", () => {
+    expect(isMarkReadUndoToken('follow:a1b2')).toBe(false);
+  });
 });
 
 describe('agentReadText', () => {

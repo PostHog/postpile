@@ -5,6 +5,7 @@ import { buildScoutListQuery, buildTreeQuery } from './scouts.ts';
 
 function listed(number: number, overrides: Record<string, unknown> = {}) {
   return {
+    id: `PR_${number}`,
     number,
     updatedAt: '2026-10-29T10:00:00Z',
     state: 'OPEN',
@@ -42,6 +43,7 @@ describe('scout listing', () => {
     expect(page.prs).toEqual([
       {
         key: 'acme/app#1',
+        nodeId: 'PR_1',
         title: 'PR 1',
         body: '',
         author: 'codegen-agent[bot]',

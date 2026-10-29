@@ -107,6 +107,14 @@ import {
   reviewOwnership,
   viewerOpenThreads,
   type ReviewOwnership,
+  isScoutedUnseen,
+  scoutedPrView,
+  scoutIdOfTopic,
+  scoutTopicId,
+  type ScoutConfig,
+  type ScoutFollowState,
+  type ScoutListItem,
+  type TileScout,
 } from '@postpile/core';
 import type { AgentService } from '@postpile/agent';
 import type { Store } from '@postpile/store';
@@ -146,6 +154,15 @@ export interface GlanceStatusSource {
 
 const NO_GLANCE_STATUS: GlanceStatusSource = { agentOff: () => false, catchUp: () => null, catchUpCap: () => ({ off: true, spent: false }) };
 
+/** What the Scouted section needs from outside the store: the scouts in force, and where a Follow stands. */
+export interface ScoutInfoSource {
+  /** The scouts of scouts.md in force, in file order. */
+  configured(): ScoutConfig[];
+  followState(prKey: PrKey): ScoutFollowState | null;
+}
+
+const NO_SCOUTS: ScoutInfoSource = { configured: () => [], followState: () => null };
+
 /** Cold PRs one search reads at most (newest first), with their stacks and sets: a one-letter query must not read the whole store. */
 export const SEARCH_COLD_MAX = 200;
 
@@ -173,6 +190,7 @@ export class ReadModels {
     private readonly now: () => Date,
     private readonly pendingWrites: PendingWrites,
     private readonly glanceStatus: GlanceStatusSource = NO_GLANCE_STATUS,
+    private readonly scoutInfo: ScoutInfoSource = NO_SCOUTS,
   ) {
     this.memory = new MemoryReads(store, now);
     this.notes = new PrNotes(store, now);
@@ -231,7 +249,7 @@ export class ReadModels {
       return new Set(glances.keys());
     }
     const inputs = new GlanceInputs(this.store, board, viewer, this.contexts);
-    const targets = new Map(inputs.targets().map((target) => [target.item.pr.key, target]));
+    const targets = new Map([...inputs.targets(), ...inputs.scoutTargets()].map((target) => [target.item.pr.key, target]));
     const stale = new Set<PrKey>();
     for (const [key, glance] of glances) {
       const target = targets.get(key);
@@ -258,6 +276,70 @@ export class ReadModels {
     for (const [key, glance] of glances) {
       const writing = this.glanceStatus.catchUp(board.memberships.get(key)?.topicId ?? null, key) === 'running';
       result.set(key, { verdict: glance.verdict, stale: stale.has(key), writing });
+    }
+    return result;
+  }
+
+  /** PRs that should have a glance: tracked ones in tiles (`glanceTargetKeys`), and scouted ones on the Scouted section. */
+  private wantedGlances(board: Board): Set<PrKey> {
+    const wanted = glanceTargetKeys(board);
+    const viewer = loadViewer(this.store);
+    if (viewer !== null) {
+      for (const target of new GlanceInputs(this.store, board, viewer, this.contexts).scoutTargets()) {
+        wanted.add(target.item.pr.key);
+      }
+    }
+    return wanted;
+  }
+
+  /** The scout part of a scout tile: the first scouted PR's scout and reason, unseen when any of them is. */
+  private tileScout(board: Board, tile: Tile): TileScout | undefined {
+    const rows = tile.members.flatMap((member) => {
+      const row = board.scouted.get(member.prKey);
+      return row ? [row] : [];
+    });
+    const first = rows[0];
+    if (!first) {
+      return undefined;
+    }
+    const unseen = rows.some((row) => isScoutedUnseen(row, board.prs.get(row.prKey)?.updatedAt ?? row.pulledAt));
+    const follows = rows.map((row) => this.scoutInfo.followState(row.prKey)).filter((state) => state !== null);
+    return { scoutId: first.scoutId, scoutName: first.scoutName, reason: first.reason, unseen, prKeys: rows.map((row) => row.prKey), follow: follows[0] ?? null };
+  }
+
+  /**
+   * The Scouted section (DESIGN.md "Scouts"): one row per scout in force,
+   * in scouts.md order, then any scout no longer in the file that still
+   * has tiles. The count is unseen tiles, never unread: nothing here is in
+   * the GitHub inbox.
+   */
+  listScouts(): ScoutListItem[] {
+    const now = this.now().toISOString();
+    // From the store, not the hot board: a busy inbox leaves tier "others" off it, where most scouted PRs rank.
+    const withRows = this.scoutsWithRows();
+    const ids = new Map(this.scoutInfo.configured().map((scout) => [scout.id, scout.name]));
+    for (const [id, name] of withRows) {
+      if (!ids.has(id)) {
+        ids.set(id, name);
+      }
+    }
+    return [...ids].map(([id, name]) => {
+      const topicId = scoutTopicId(id);
+      if (!withRows.has(id)) {
+        return { id, topicId, name, tiles: 0, unseen: 0 };
+      }
+      const board = Board.forTopic(this.store, now, topicId);
+      const tiles = board.tilesForTopic(topicId);
+      const unseen = tiles.filter((tile) => this.tileScout(board, tile)?.unseen === true).length;
+      return { id, topicId, name, tiles: tiles.length, unseen };
+    });
+  }
+
+  /** Scouts with a PR on the Scouted section, by id, each with the newest name it pulled one under. */
+  private scoutsWithRows(): Map<string, string> {
+    const result = new Map<string, string>();
+    for (const row of this.store.scoutedPrs.listActive()) {
+      result.set(row.scoutId, row.scoutName);
     }
     return result;
   }
@@ -345,8 +427,9 @@ export class ReadModels {
     // An opened topic shows every tile; the repo scope only labels the ones from another repo.
     const tiles = board.tilesForTopic(topicId);
     const stale = this.staleGlances(board, tiles.flatMap((tile) => tile.members.map((m) => m.prKey)));
-    const wanted = glanceTargetKeys(board);
+    const wanted = this.wantedGlances(board);
     const viewer = loadViewer(this.store);
+    const isScout = scoutIdOfTopic(topicId) !== null;
     const pending = this.pendingWrites.byPrKey();
     const baseRepo = labelBaseRepo(tiles.flatMap(memberKeys), settings);
     const orgs = viewerOrgs(viewer?.teams ?? []);
@@ -355,7 +438,7 @@ export class ReadModels {
       const labels = tileRepoLabels(memberKeys(tile), baseRepo, orgs);
       const state = board.stateOf(tile);
       const rows = this.prSummaryInputs(board, tile, stale, viewer, settings, labels.prs, state.kind === 'unread', wanted, pending, opened);
-      return buildTileView({
+      const view = buildTileView({
         tile,
         state,
         prs: rows.map(buildPrSummary),
@@ -370,6 +453,8 @@ export class ReadModels {
         repoLabel: labels.tile,
         now: board.now,
       });
+      const scout = isScout ? this.tileScout(board, tile) : undefined;
+      return scout ? { ...view, scout } : view;
     });
     return views.sort(compareTileViews);
   }
@@ -575,10 +660,50 @@ export class ReadModels {
     return at === null ? null : { state: 'ready', at };
   }
 
+  /**
+   * A scout's pseudo-topic: its tiles and nothing a topic carries beyond
+   * them (no driver, dossier, sets, proposals or moves): nothing here is
+   * the user's work until they follow it.
+   */
+  private scoutTopic(board: Board, topicId: string): TopicDetail | null {
+    const topic = board.topic(topicId);
+    const scoutId = scoutIdOfTopic(topicId);
+    if (!topic || scoutId === null) {
+      return null;
+    }
+    const tiles = this.tileViews(board, topicId);
+    const topicTiles = board.tilesForTopic(topicId);
+    const listed = this.listScouts().find((row) => row.id === scoutId) ?? { id: scoutId, topicId, name: topic.name, tiles: tiles.length, unseen: 0 };
+    return {
+      topic: { ...topic, name: listed.name },
+      driver: null,
+      placement: null,
+      repoLine: null,
+      tiles,
+      yourMoves: [],
+      groupYourMoves: yourMovesByGroup([]),
+      sets: [],
+      setChanges: [],
+      pendingProposals: [],
+      decidedProposals: [],
+      dossier: null,
+      agent: topicAgentOffers([]),
+      archive: null,
+      openInDealtWith: [],
+      prRollup: topicPrRollup(topicTiles, this.topicPrs(board, topicTiles)),
+      section: 'other_topics',
+      memoryUpdating: false,
+      scout: listed,
+    };
+  }
+
   /** The topic whole: from the hot Board, or a Board of its PRs read for this request when some went cold (`Board.forTopic`). */
   getTopic(topicId: string): TopicDetail | null {
     const now = this.now().toISOString();
     const board = Board.forTopic(this.store, now, topicId);
+    if (scoutIdOfTopic(topicId) !== null) {
+      return this.scoutTopic(board, topicId);
+    }
     const topic = board.topic(topicId);
     if (!topic) {
       return null;
@@ -687,6 +812,13 @@ export class ReadModels {
         ...(coldBoard && topic.id !== UNSORTED_TOPIC_ID ? searchable(coldBoard, coldBoard.tilesForTopic(topic.id)) : []),
       ],
     }));
+    if (scope?.withScouts) {
+      for (const [scoutId, name] of this.scoutsWithRows()) {
+        const topicId = scoutTopicId(scoutId);
+        const scoutBoard = Board.forTopic(this.store, board.now, topicId);
+        topics.push({ topicId, name, area: null, tiles: searchable(scoutBoard, scoutBoard.tilesForTopic(topicId)) });
+      }
+    }
     return searchTopics(topics, query);
   }
 
@@ -701,18 +833,18 @@ export class ReadModels {
       return null;
     }
     const glance = this.store.glances.get(key);
-    const tileIds = new Set(
-      board
-        .allTiles()
-        .filter((tile) => tile.members.some((m) => m.prKey === key))
-        .map((tile) => tile.id),
-    );
+    const scoutTopicIdOfPr = board.scoutTopicIdOf(key);
+    const holding = scoutTopicIdOfPr === null ? board.allTiles() : board.tilesForTopic(scoutTopicIdOfPr);
+    const tileIds = new Set(holding.filter((tile) => tile.members.some((m) => m.prKey === key)).map((tile) => tile.id));
     const events = (board.events.get(key) ?? []).map(eventView);
     const viewer = loadViewer(this.store);
     const news = whatsNew(pr, board.events.get(key) ?? [], viewer);
     const stale = this.staleGlances(board, [key]).has(key);
     const gap = this.glanceGap(key, glance !== null);
-    const wanted = glanceTargetKeys(board);
+    const wanted = this.wantedGlances(board);
+    const scoutedRow = this.store.scoutedPrs.get(key);
+    const tracked = board.threads.has(key) || board.found.has(key);
+    const scouted = scoutedRow ? { scouted: scoutedPrView(scoutedRow, pr.updatedAt, tracked, this.scoutInfo.followState(key)) } : {};
     // The activity list shows a folded bot review's comments by their first line and checks bot text for mentions of
     // you, and a bot's change request says what it found: bodies the board leaves out, so it reads this one PR whole.
     const full = this.store.prs.getFull(key);
@@ -736,7 +868,7 @@ export class ReadModels {
       agentApprovers: agentOnlyApprovers(standingApprovals(pr)),
       agentDecline: agentDeclineView(pr),
       botFindings: full === null ? [] : botFindings(full),
-      topicId: board.topicIdOf(key),
+      topicId: board.topicIdOf(key) ?? scoutTopicIdOfPr,
       tileIds: [...tileIds],
       facts: this.memory.prFacts(key),
       waitingThreads: waitingThreads(pr, viewer),
@@ -745,6 +877,7 @@ export class ReadModels {
       unread,
       ownership: this.ownership(pr, viewer),
       openThreads: viewer ? viewerOpenThreads(pr, viewer.login) : 0,
+      ...scouted,
     };
   }
 

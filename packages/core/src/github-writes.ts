@@ -44,9 +44,17 @@ export interface SubscriptionChange {
  * threads), planned again when sent. unsubscribe / subscribe: a Mute's or
  * Unmute's subscription change for `threads`, its own row next to the
  * click's mark_read (same batch): a read elsewhere never clears it, and it
- * turns nothing read here.
+ * turns nothing read here. follow: a scouted PR's Follow (DESIGN.md
+ * "Scouts"), GitHub's updateSubscription(SUBSCRIBED) on the PR's node id;
+ * nothing turns read, and once sent the PR counts as followed.
  */
-export type PendingWriteKind = 'mark_read' | 'mark_all_read_before' | 'catch_up' | 'unsubscribe' | 'subscribe';
+export type PendingWriteKind = 'mark_read' | 'mark_all_read_before' | 'catch_up' | 'unsubscribe' | 'subscribe' | 'follow';
+
+/** A Follow waiting for the lock: the PR and its GitHub node id, read at the click. */
+export interface PendingFollow {
+  prKey: PrKey;
+  subjectId: string;
+}
 
 /** A cleanup waiting for the lock: the picks and when the dialog counted. Sending it runs the same plan. */
 export interface PendingCatchUp extends CleanupPicks {
@@ -78,6 +86,8 @@ export interface PendingWrite {
   readBefore: IsoTime | null;
   /** catch_up: what to plan when it is sent. Null otherwise. */
   catchUp: PendingCatchUp | null;
+  /** follow: the PR to subscribe to. Null otherwise. */
+  follow: PendingFollow | null;
   /** The last send's error, null before any try. */
   error: string | null;
   triedAt: IsoTime | null;
@@ -161,7 +171,9 @@ export type LoggedAction =
   | 'writes_on'
   | 'writes_off'
   | 'agent_refresh'
-  | 'agent_mark_read';
+  | 'agent_mark_read'
+  | 'follow'
+  | 'undo_follow';
 
 /**
  * Who decided it.

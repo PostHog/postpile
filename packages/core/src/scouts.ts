@@ -6,7 +6,7 @@
 import { sameLogin } from './mentions.ts';
 import { shortHash } from './pr-notes.ts';
 import type { ScoutConfig } from './scouts-config.ts';
-import type { IsoTime, PrKey, PrState, Provenance, Viewer } from './types.ts';
+import type { FoundPr, IsoTime, PrKey, PrState, Provenance, Viewer } from './types.ts';
 
 /** GitHub's PatchStatus for a changed file. */
 export type ScoutChangeType = 'ADDED' | 'MODIFIED' | 'DELETED' | 'RENAMED' | 'COPIED' | 'CHANGED';
@@ -19,6 +19,8 @@ export interface ScoutFile {
 /** A PR from a scout's repo listing, with its whole file list once that is read. */
 export interface ScoutCandidate {
   key: PrKey;
+  /** GitHub's node id of the PR: what Follow subscribes to. */
+  nodeId: string;
   title: string;
   body: string;
   /** Login; "name[bot]" for an app account, "" for a deleted one. */
@@ -325,10 +327,135 @@ export function isScoutedUnseen(scouted: Pick<ScoutedPr, 'seenUpdatedAt'>, prUpd
 }
 
 /**
- * How a scouted PR reached the user, for its glance and its tile: found
+ * A scouted PR as a found PR, for its tile on the scout's section: found
  * outside the inbox, by a scout. `via: 'scouted'` is never stored in
- * pr_found, so it never makes the PR tracked.
+ * pr_found, so it never makes the PR tracked anywhere else.
  */
-export function scoutedProvenance(scouted: Pick<ScoutedPr, 'scoutName' | 'reason'>): Provenance {
-  return { kind: 'found', via: 'scouted', reason: `scout "${scouted.scoutName}" pulled it in: ${scouted.reason}` };
+export function scoutedFound(scouted: Pick<ScoutedPr, 'prKey' | 'scoutName' | 'reason' | 'pulledAt'>): FoundPr {
+  return { prKey: scouted.prKey, via: 'scouted', reason: `scout "${scouted.scoutName}" pulled it in: ${scouted.reason}`, foundAt: scouted.pulledAt };
+}
+
+/** How a scouted PR reached the user, for its glance: the same words as its tile's (`scoutedFound`). */
+export function scoutedProvenance(scouted: Pick<ScoutedPr, 'prKey' | 'scoutName' | 'reason' | 'pulledAt'>): Provenance {
+  const found = scoutedFound(scouted);
+  return { kind: 'found', via: found.via, reason: found.reason };
+}
+
+/** The Board's pseudo-topic of one scout, like Unsorted: "scout:<id>". */
+export const SCOUT_TOPIC_PREFIX = 'scout:';
+
+export function scoutTopicId(scoutId: string): string {
+  return `${SCOUT_TOPIC_PREFIX}${scoutId}`;
+}
+
+/** The scout behind a pseudo-topic id; null for any other topic. */
+export function scoutIdOfTopic(topicId: string): string | null {
+  return topicId.startsWith(SCOUT_TOPIC_PREFIX) ? topicId.slice(SCOUT_TOPIC_PREFIX.length) : null;
+}
+
+/**
+ * Which scout shows a stack none of whose layers is tracked (DESIGN.md
+ * "Scouts" › Stacks): the scout that pulled any of its layers first, so the
+ * stack shows whole in one place. A stack with a tracked layer shows in its
+ * normal topic instead (the caller checks that first). Null when no layer
+ * is scouted.
+ */
+export function scoutStackOwner(layers: PrKey[], scouted: ReadonlyMap<PrKey, Pick<ScoutedPr, 'scoutId' | 'pulledAt'>>): string | null {
+  const rows = layers.flatMap((key) => {
+    const row = scouted.get(key);
+    return row ? [row] : [];
+  });
+  rows.sort((a, b) => a.pulledAt.localeCompare(b.pulledAt) || a.scoutId.localeCompare(b.scoutId));
+  return rows[0]?.scoutId ?? null;
+}
+
+/** Where a Follow stands: waiting out its undo window, waiting for the writes lock, or failed and waiting to be sent again. */
+export type ScoutFollowState = 'queued' | 'pending' | 'failed';
+
+/** One row of the sidebar's Scouted section. */
+export interface ScoutListItem {
+  id: string;
+  /** "scout:<id>": opens like a topic. */
+  topicId: string;
+  name: string;
+  /** Tiles on its section: scouted PRs that are active and not tracked. */
+  tiles: number;
+  /** Of those, the ones not seen in PostPile since their last activity. A grey count, never coral. */
+  unseen: number;
+}
+
+/** The scout part of a scouted tile, shown in the "for whom" spot. */
+export interface TileScout {
+  scoutId: string;
+  scoutName: string;
+  /** The model's reason, from the first scouted PR of the tile. */
+  reason: string;
+  /** A PR of the tile is unseen in PostPile. */
+  unseen: boolean;
+  /** The scouted PRs of the tile: what Follow and Dismiss act on. */
+  prKeys: PrKey[];
+  /** A Follow of one of them that has not reached GitHub yet; null when none. */
+  follow: ScoutFollowState | null;
+}
+
+/** What the PR pane and the MCP say about a PR a scout pulled in. */
+export interface ScoutedPrView {
+  scoutId: string;
+  scoutName: string;
+  reason: string;
+  pulledAt: IsoTime;
+  /** Still on the Scouted section. */
+  active: boolean;
+  followedAt: IsoTime | null;
+  dismissedAt: IsoTime | null;
+  dismissReason: string | null;
+  expiredAt: IsoTime | null;
+  expiryReason: ScoutExpiryReason | null;
+  /** Unseen in PostPile since its last activity. */
+  unseen: boolean;
+  /** Tracked normally now: in the GitHub inbox, found by the sync, or followed. */
+  tracked: boolean;
+  follow: ScoutFollowState | null;
+}
+
+export function scoutedPrView(row: ScoutedPr, prUpdatedAt: IsoTime, tracked: boolean, follow: ScoutFollowState | null): ScoutedPrView {
+  return {
+    scoutId: row.scoutId,
+    scoutName: row.scoutName,
+    reason: row.reason,
+    pulledAt: row.pulledAt,
+    active: isScoutedActive(row),
+    followedAt: row.followedAt,
+    dismissedAt: row.dismissedAt,
+    dismissReason: row.dismissReason,
+    expiredAt: row.expiredAt,
+    expiryReason: row.expiryReason,
+    unseen: isScoutedUnseen(row, prUpdatedAt),
+    tracked,
+    follow,
+  };
+}
+
+/** A dismiss reason as stored: whitespace folded, at most 200 characters, null when empty. */
+export function cleanDismissReason(reason: string | null | undefined): string | null {
+  const folded = (reason ?? '').replace(/\s+/g, ' ').trim();
+  return folded === '' ? null : folded.slice(0, 200);
+}
+
+/** One line on a scouted PR for the MCP and the pane: "Scouted by Lookout: adds billing/. Not in the user's GitHub inbox." */
+export function scoutedLine(view: Pick<ScoutedPrView, 'scoutName' | 'reason' | 'tracked' | 'active' | 'followedAt' | 'dismissedAt' | 'expiredAt'>): string {
+  const first = `Scouted by ${view.scoutName}: ${view.reason}.`;
+  if (view.followedAt !== null) {
+    return `${first} Followed on GitHub since.`;
+  }
+  if (view.tracked) {
+    return `${first} It reached the user's inbox since.`;
+  }
+  if (view.dismissedAt !== null) {
+    return `${first} Dismissed by the user.`;
+  }
+  if (view.expiredAt !== null) {
+    return `${first} Off the Scouted section now.`;
+  }
+  return `${first} Not in the user's GitHub inbox.`;
 }

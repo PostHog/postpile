@@ -51,7 +51,9 @@ export type PendingWriteEffect =
   /** Every thread (or the cleanup) logged as discarded. */
   | { kind: 'log_discarded' }
   /** A discarded Unmute: these PRs are muted again, as of the Unmute's click, unless they have a snooze by now. */
-  | { kind: 'mute_again'; prKeys: PrKey[] };
+  | { kind: 'mute_again'; prKeys: PrKey[] }
+  /** A scouted PR's Follow reached GitHub: it counts as followed from now on. */
+  | { kind: 'followed'; prKey: PrKey };
 
 export interface PendingWriteStep {
   next: PendingWriteNext;
@@ -160,6 +162,23 @@ function afterDiscard(write: PendingWrite): PendingWriteStep {
   return { next: { kind: 'gone' }, effects };
 }
 
+/**
+ * A Follow after a send: one outcome, for the PR. Sent: the PR counts as
+ * followed and the row goes. Failed, or the lock closed: it stays pending
+ * with the error, to send again from the lock.
+ */
+function afterFollowSend(write: PendingWrite, outcomes: ThreadOutcome[]): PendingWriteStep {
+  const outcome = outcomes[0];
+  if (write.follow === null) {
+    return { next: { kind: 'gone' }, effects: [] };
+  }
+  if (outcome?.kind === 'sent' || outcome?.kind === 'observed') {
+    return { next: { kind: 'gone' }, effects: [{ kind: 'followed', prKey: write.follow.prKey }] };
+  }
+  const error = outcome?.kind === 'failed' ? outcome.error : PENDING_WRITES_OFF;
+  return { next: { kind: 'kept', threads: [], error }, effects: [{ kind: 'still_pending', error }] };
+}
+
 /** The old cleanup's PUT and the catch-up: no thread list to send, one write as a whole. */
 function isCleanup(write: PendingWrite): boolean {
   return write.kind === 'mark_all_read_before' || write.kind === 'catch_up';
@@ -188,6 +207,9 @@ export function pendingWriteStep(write: PendingWrite, cause: PendingWriteCause):
       }
       return { next: { kind: 'kept', threads: [], error: cause.error }, effects: [{ kind: 'still_pending', error: cause.error }] };
     case 'sent':
+      if (write.kind === 'follow') {
+        return afterFollowSend(write, cause.outcomes);
+      }
       if (isSubscriptionWrite(write)) {
         return afterSubscriptionSend(write, cause.outcomes);
       }

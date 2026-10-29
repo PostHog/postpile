@@ -94,8 +94,16 @@ export interface PrJson {
   ownership: OwnershipJson[] | null;
   /** The review's rough size; null on a closed or merged PR or an unread snapshot. */
   effort: EffortJson | null;
+  /**
+   * A scout pulled the PR in from outside the user's GitHub inbox (DESIGN.md
+   * "Scouts"); the reason is under untrusted. Null for every other PR, and
+   * when the snapshot was not read.
+   */
+  scouted: { scoutId: string; inInbox: boolean; onScoutedSection: boolean; followed: boolean } | null;
   untrusted: {
     title: string;
+    /** Why the scout pulled it in, and the scout's name; null unless scouted. */
+    scouted: { scoutName: string; reason: string } | null;
     /** "Your move: Review", the same sentence as the text answers. Null with whoseMove. */
     whoseMove: string | null;
     unreadReason: string | null;
@@ -250,8 +258,12 @@ export function prJson(input: PrJsonInput): PrJson {
     diffCapped: input.overlaps.capped.includes(base.key),
     ownership: open && detail?.ownership ? ownershipJson(detail.ownership) : null,
     effort: open && detail ? effortJson(detail) : null,
+    scouted: detail?.scouted
+      ? { scoutId: detail.scouted.scoutId, inInbox: detail.scouted.tracked, onScoutedSection: detail.scouted.active && !detail.scouted.tracked, followed: detail.scouted.followedAt !== null }
+      : null,
     untrusted: {
       title: base.title,
+      scouted: detail?.scouted ? { scoutName: detail.scouted.scoutName, reason: detail.scouted.reason } : null,
       whoseMove: summary ? turnText(summary.turn) : null,
       unreadReason: input.unread ? unreadReasonText(input.unread) : null,
       topicName: input.topic?.name ?? null,

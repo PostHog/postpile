@@ -81,18 +81,30 @@ interface FakeCatchUp {
   title: string;
 }
 
+/** A scouted PR's Follow the lock (or a failed send) kept from GitHub, like the engine's `PendingFollow`. */
+export interface FakeFollow {
+  prKey: PrKey;
+  title: string;
+  origin: 'tile' | 'detail';
+  batchId: string;
+}
+
 interface FakePending {
   id: number;
   createdAt: IsoTime;
-  /** A mark-read click, or the click of a Mute or Unmute (then `subscription` is set and its threads are the subscription's). Null for a cleanup. */
+  /** A mark-read click, or the click of a Mute or Unmute (then `subscription` is set and its threads are the subscription's). Null for a cleanup or a Follow. */
   batch: FakeBatch | null;
   /** The inbox cleanup. Null for a mark-read. */
   catchUp: FakeCatchUp | null;
+  /** A scouted PR's Follow. Null for everything else. */
+  follow?: FakeFollow | null;
   /** Why the last "Send N to GitHub" left it pending (POSTPILE_FAKE_FAIL_SEND); null before a failed try. */
   error: string | null;
 }
 
 const SUBSCRIPTION_DISCARDED_DETAIL = 'discarded while locked: the GitHub subscription stays as it was';
+const FOLLOW_PENDING_DETAIL = 'GitHub writes are locked: the follow waits until you unlock and send it';
+const FOLLOW_DISCARDED_DETAIL = 'follow discarded: not subscribed on GitHub';
 
 /** The pending write kind and log action of a subscription change. */
 function subscriptionKind(subscription: FakeSubscription): 'subscribe' | 'unsubscribe' {
@@ -109,6 +121,8 @@ export interface FakeSample {
   title(prKeys: PrKey[], threadId: string | null): string;
   /** A parked inbox cleanup was sent from the lock: run its plan like the dialog would have. */
   startCatchUp(picks: PendingCatchUp): void;
+  /** A parked Follow reached GitHub: the scouted PR counts as followed from now on. */
+  followed(prKey: PrKey): void;
 }
 
 type LogInput = Pick<NewActionLogEntry, 'action' | 'origin' | 'outcome'> & Partial<NewActionLogEntry>;
@@ -145,6 +159,19 @@ export class FakeWrites {
 
   private pendingViews(): PendingWriteView[] {
     return this.pending.map((write): PendingWriteView => {
+      if (write.follow) {
+        return {
+          id: write.id,
+          kind: 'follow',
+          createdAt: write.createdAt,
+          origin: write.follow.origin,
+          title: `Follow: ${write.follow.title}`,
+          prKeys: [],
+          tileId: null,
+          threadCount: 1,
+          error: write.error,
+        };
+      }
       if (write.batch === null) {
         return {
           id: write.id,
@@ -186,6 +213,27 @@ export class FakeWrites {
         error: write.error,
       };
     });
+  }
+
+  /**
+   * A Follow the lock kept from GitHub, or one GitHub did not take (`error`),
+   * like the engine's PendingWrites.parkFollow. Nothing changes in the sample
+   * until it is sent from the lock.
+   */
+  parkFollow(follow: FakeFollow, createdAt: IsoTime, error: string | null): void {
+    this.pending.push({ id: this.nextId, createdAt, batch: null, catchUp: null, follow, error });
+    this.nextId += 1;
+    const detail = error === null ? FOLLOW_PENDING_DETAIL : `GitHub didn't take it: ${error}; waits in the lock to be sent again`;
+    this.record({ action: 'follow', origin: follow.origin, outcome: 'pending', prKey: follow.prKey, batch: follow.batchId, detail });
+  }
+
+  /** Where a parked Follow of this PR stands: pending, or failed (sent and not taken); null when none waits. */
+  followState(prKey: PrKey): 'pending' | 'failed' | null {
+    const write = this.pending.find((candidate) => candidate.follow?.prKey === prKey);
+    if (!write) {
+      return null;
+    }
+    return write.error === null ? 'pending' : 'failed';
   }
 
   /** An inbox cleanup waits for the lock. */
@@ -467,6 +515,7 @@ export class FakeWrites {
       error: null,
       triedAt: null,
       catchUp: null,
+      follow: null,
     };
     const step = pendingWriteStep(write, { kind: 'sent', outcomes });
     for (const effect of step.effects) {
@@ -513,6 +562,19 @@ export class FakeWrites {
     }
   }
 
+  /** A parked Follow from the footer: GitHub takes it (the PR counts as followed), or POSTPILE_FAKE_FAIL_SEND keeps it pending with the error. */
+  private sendFollow(write: FakePending, follow: FakeFollow): void {
+    const base = { action: 'follow' as const, origin: 'footer' as const, prKey: follow.prKey, batch: follow.batchId };
+    if (this.faults.failSend) {
+      const error = 'GitHub POST graphql (updateSubscription) failed with 502: Server Error';
+      this.record({ ...base, outcome: 'failed', detail: `GitHub didn't take it: ${error}; waits in the lock to be sent again` });
+      this.pending.push({ ...write, error });
+      return;
+    }
+    this.record({ ...base, outcome: 'github', detail: SAMPLE_DETAIL });
+    this.sample.followed(follow.prKey);
+  }
+
   /**
    * "Send N to GitHub": refused while locked. A mark-read whose threads
    * GitHub did not take (POSTPILE_FAKE_FAIL_SEND, or a mark_read fault), and
@@ -526,6 +588,10 @@ export class FakeWrites {
       return { ok: false, message: 'Not sent: GitHub writes are off. Unlock GitHub writes first.', done: 0, failed: writes.length, status: this.status() };
     }
     for (const write of writes) {
+      if (write.follow) {
+        this.sendFollow(write, write.follow);
+        continue;
+      }
       if (write.batch === null) {
         if (write.catchUp) {
           this.sample.startCatchUp(write.catchUp.picks);
@@ -580,6 +646,10 @@ export class FakeWrites {
   discardPending(): PendingWritesResult {
     const writes = this.pending.splice(0);
     for (const write of writes) {
+      if (write.follow) {
+        this.record({ action: 'follow', origin: 'footer', outcome: 'discarded', prKey: write.follow.prKey, batch: write.follow.batchId, detail: FOLLOW_DISCARDED_DETAIL });
+        continue;
+      }
       if (write.batch === null) {
         this.record({ action: 'inbox_cleanup', origin: 'footer', outcome: 'discarded', detail: `${write.catchUp?.title ?? 'Inbox cleanup'}: ${CLEANUP_DISCARDED_DETAIL}` });
         continue;

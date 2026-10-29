@@ -22,6 +22,7 @@ describe('writeBlockedReason', () => {
     expect(writeBlockedReason('markRead', OFF)).toBeNull();
     expect(writeBlockedReason('notMine', FORCED)).toBeNull();
     expect(writeBlockedReason('mute', OFF)).toBeNull();
+    expect(writeBlockedReason('follow', OFF)).toBeNull();
     expect(markReadNote(OFF)).toMatch(/pending write/);
     expect(markReadNote(ON)).toBeUndefined();
   });

@@ -261,6 +261,7 @@ describe('PostPile MCP server', () => {
     const reader: PostPileReader = {
       getPr: (key) => engine.getPr(key),
       listTopics: (scope) => engine.listTopics(scope),
+      listScouts: () => engine.listScouts(),
       search: (query, scope) => engine.search(query, scope),
       getViewer: () => engine.getViewer(),
       getTeamMembers: () => engine.getTeamMembers(),
@@ -292,6 +293,7 @@ describe('PostPile MCP server', () => {
     const reader: PostPileReader = {
       getPr: (key) => engine.getPr(key),
       listTopics: (scope) => engine.listTopics(scope),
+      listScouts: () => engine.listScouts(),
       search: (query, scope) => engine.search(query, scope),
       getViewer: () => engine.getViewer(),
       getTeamMembers: () => engine.getTeamMembers(),
@@ -569,6 +571,7 @@ describe('PostPile MCP server', () => {
       },
       getTopic: (topicId) => engine.getTopic(topicId),
       listTopics: (scope) => engine.listTopics(scope),
+      listScouts: () => engine.listScouts(),
       search: (query, scope) => engine.search(query, scope),
       getViewer: () => engine.getViewer(),
       getTeamMembers: () => engine.getTeamMembers(),
@@ -666,6 +669,7 @@ describe('PostPile MCP server', () => {
         return detail && { ...detail, pendingProposals: [], decidedProposals: [rejected] };
       },
       listTopics: (scope) => engine.listTopics(scope),
+      listScouts: () => engine.listScouts(),
       search: (query, scope) => engine.search(query, scope),
       getViewer: () => engine.getViewer(),
       getTeamMembers: () => engine.getTeamMembers(),

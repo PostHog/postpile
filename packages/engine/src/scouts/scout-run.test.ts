@@ -26,6 +26,7 @@ function hoursAgo(hours: number, from: Date = NOW): string {
 function candidate(number: number, overrides: Partial<ScoutCandidate> = {}): ScoutCandidate {
   return {
     key: `acme/app#${number}`,
+    nodeId: `PR_${number}`,
     title: `PR ${number}`,
     body: '',
     author: 'carol',

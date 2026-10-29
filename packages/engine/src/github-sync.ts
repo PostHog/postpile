@@ -35,6 +35,7 @@ import { CAP_FILL_POLL_PRS, CAP_FILL_SYNC_PRS, CapFiller } from './cap-fill.ts';
 import { DIFF_POLL_PRS, DIFF_SYNC_PRS, DiffReader } from './diff-reader.ts';
 import { CodeOwnersKeeper } from './code-owners.ts';
 import { errorText } from './errors.ts';
+import { followedFoundRows } from './scouts/followed.ts';
 import { LessonKeeper } from './lessons/lesson-keeper.ts';
 import { StackLayerFinder } from './stack-layers.ts';
 import { TeamMembers } from './team-members.ts';
@@ -678,7 +679,10 @@ export class GitHubSync {
       errors.push(`found PRs: ${errorText(error)}`);
       return [];
     }
-    this.store.foundPrs.replaceAll(refs.map((found) => ({ prKey: prKey(found.ref), via: found.via, reason: found.reason, foundAt: at })));
+    const finds = refs.map((found) => ({ prKey: prKey(found.ref), via: found.via, reason: found.reason, foundAt: at }));
+    // Scouted PRs the user followed stay tracked until a notification makes them pinged (DESIGN.md "Scouts").
+    const followed = followedFoundRows(this.store, at).filter((row) => !finds.some((found) => found.prKey === row.prKey));
+    this.store.foundPrs.replaceAll([...finds, ...followed]);
     const storedAt = this.store.prs.updatedAtByKey();
     const moved = refs.filter((found) => !alreadyFetched.has(prKey(found.ref)) && storedAt.get(prKey(found.ref)) !== found.updatedAt);
     const prs = [...(await this.fetchPartial(moved.map((found) => found.ref), errors, 'found PRs')).values()];

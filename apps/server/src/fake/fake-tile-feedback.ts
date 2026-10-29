@@ -3,7 +3,7 @@ import { UNSORTED_TOPIC_ID } from '@postpile/engine';
 import type { SampleData } from './sample-data.ts';
 
 /** Same words as the engine's Board for its Unsorted topic. */
-function unsortedTopic(at: string): Topic {
+export function unsortedTopic(at: string): Topic {
   return { ...newTopic(UNSORTED_TOPIC_ID, 'Unsorted', at), summary: 'Waiting for the agent. Each sync places these in a topic.' };
 }
 

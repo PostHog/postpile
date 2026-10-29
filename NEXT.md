@@ -6,6 +6,15 @@ now".
 
 ## Done
 
+- Scouts (2026-10-29; DESIGN.md "Scouts"): core `parseScouts` and the
+  scout rules (`scouts.ts`), migrations 043 to 045 (`scouts_version`,
+  `scout_cursor`, `scout_judgement`, `pr_scouted`, `pending_write.follow`),
+  `ScoutsHistory`, the reader's two-pass listing (`listScoutPrs`,
+  `scoutFiles`, `topLevelFolders`), `scout_judge`, `ScoutRun` in the full
+  sync, `ScoutActions` (Follow, Dismiss, seen), the Board's `scout:<id>`
+  pseudo-topics, `GET /api/scouts`, the Scouted section, MCP answers, and
+  fake data for every state. Later: agent proposals for `scouts.md` from
+  dismiss reasons, a shorter scout cadence than the hourly sync.
 - Picked, pulled in or routed (2026-10-29; DESIGN.md "Picked, pulled in
   or routed"): the reader asks `asCodeOwner` on pending `reviewRequests`
   and stores the names it marks in `Pr.codeOwnerReviewers`
@@ -1837,6 +1846,16 @@ the app meanwhile.
 
 ## Decided
 
+- **Scouts** (2026-10-29, owner; DESIGN.md "Scouts"): PRs from outside the
+  inbox that match a user-written prompt in `~/.config/postpile/scouts.md`
+  (one `## Name` per scout, `repos:`, optional `paths:` and `id:`, versioned
+  like instructions). A Scouted section at the bottom of the sidebar, one
+  row per scout with a grey unseen count, never unread, never a move, never
+  in the Dock badge or the asks. Every pulled PR gets its glance in the same
+  sync. Follow subscribes on GitHub (GraphQL `updateSubscription`) through
+  the undo window and the writes lock; Dismiss takes an optional reason;
+  opening marks seen in PostPile only. Checked by Codex before building.
+
 - **seen_through means "nothing new since your read"** (2026-10-29, owner;
   DESIGN.md "Agents mark read"): every pr_context answer, brief and JSON
   included, hands out the token, computed from the store, not from a
@@ -3000,6 +3019,8 @@ Env switches:
 - `POSTPILE_DB`, `POSTPILE_INSTRUCTIONS`: override the database
   (default `~/Library/Application Support/PostPile/db.sqlite`) and the
   instructions file (default `~/.config/postpile/instructions.md`).
+- `POSTPILE_SCOUTS`: the scouts file (default `~/.config/postpile/scouts.md`;
+  dev: `postpile-dev`). No file: no scouts run.
 - `POSTPILE_TOKEN`: fixed token for the standalone server.
 - `POSTPILE_SYNC_ON_START=0`: the renderer does not sync when it loads
   (UI and perf runs against a DB copy, no GitHub or agent traffic).

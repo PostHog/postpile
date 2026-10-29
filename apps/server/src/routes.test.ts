@@ -139,8 +139,9 @@ describe('server routes over the fake engine', () => {
     const app = appWithFake();
     const repos = (await (await app.request('/api/repos')).json()) as RepoOverview;
     expect(repos.scope).toBeNull();
+    // acme/app's 16 include Unsorted, which holds the PR followed from a scout (fake/fake-scouts.ts).
     expect(repos.repos.map((entry) => [entry.repo, entry.topics])).toEqual([
-      ['acme/app', 15],
+      ['acme/app', 16],
       ['acme/python-sdk', 2],
       ['acme/desktop', 1],
       ['acme/infra', 1],

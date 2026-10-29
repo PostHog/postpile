@@ -1,6 +1,7 @@
 import {
   agentMarkReadCheck,
   agentMarkReadLogDetail,
+  isScoutedUnseen,
   parseSeenThrough,
   unreadIdsHash,
   AgentReadNotices,
@@ -77,6 +78,37 @@ export class AgentMarkRead {
     return { tracked: false, tileId: null };
   }
 
+  /**
+   * A PR only a scout holds (DESIGN.md "Scouts"): it has no notification
+   * thread, so marking it read means seen in PostPile, through its current
+   * update, and nothing on GitHub. The same seen_through guards apply.
+   * Null when the PR is no scouted-only PR.
+   */
+  private scoutedSeen(pr: AgentMarkReadPr, seenThrough: ReturnType<typeof parseSeenThrough>, tracked: boolean): ReturnType<typeof agentMarkReadCheck> | null {
+    const { store } = this.deps;
+    const row = store.scoutedPrs.get(pr.prKey);
+    const snapshot = store.prs.get(pr.prKey);
+    if (tracked || row === null || snapshot === null) {
+      return null;
+    }
+    const seq = seenThrough?.seq ?? 0;
+    const check = agentMarkReadCheck({
+      stored: true,
+      tracked: true,
+      seenThrough,
+      unreadHashNow: unreadIdsHash(unseenIdsThrough(store, pr.prKey, seq)),
+      newestSeq: store.eventLog.maxSeqForPr(pr.prKey),
+      newer: store.eventLog.listSince([pr.prKey], seq).map((entry) => entry.event),
+      snapshotBehind: false,
+      alreadyQueued: false,
+      changesAnything: isScoutedUnseen(row, snapshot.updatedAt),
+    });
+    if (check.kind === 'mark') {
+      store.scoutedPrs.markSeen(pr.prKey, snapshot.updatedAt);
+    }
+    return check;
+  }
+
   handle(request: AgentMarkReadRequest, client: string): AgentMarkReadResult {
     const { store } = this.deps;
     const prs = [...new Map(request.prs.map((pr): [PrKey, AgentMarkReadPr] => [pr.prKey, pr])).values()];
@@ -91,6 +123,15 @@ export class AgentMarkRead {
       const stored = store.prs.get(pr.prKey) !== null;
       const tracking = this.tracking(tiles, pr.prKey);
       const seenThrough = parseSeenThrough(pr.seenThrough);
+      const scouted = this.scoutedSeen(pr, seenThrough, tracking.tracked);
+      if (scouted !== null) {
+        if (scouted.kind === 'mark') {
+          result.seenLocally = [...(result.seenLocally ?? []), pr.prKey];
+        } else {
+          result[scouted.kind].push({ prKey: pr.prKey, reason: scouted.reason });
+        }
+        continue;
+      }
       const seq = seenThrough?.seq ?? 0;
       // Only the events after the token's seq: a busy PR's whole history is not loaded for the check.
       const logged = stored ? store.eventLog.listSince([pr.prKey], seq) : [];
@@ -122,7 +163,8 @@ export class AgentMarkRead {
       result.undoUntil = new Date(batch.dueAt).toISOString();
       this.notices.add(client, result, batch.token, result.undoUntil);
     }
-    this.deps.log.record({ action: 'agent_mark_read', origin: 'agent', outcome: result.marked.length > 0 ? 'queued' : 'skipped', detail: agentMarkReadLogDetail(client, result) });
+    const outcome = result.marked.length > 0 ? 'queued' : (result.seenLocally?.length ?? 0) > 0 ? 'local' : 'skipped';
+    this.deps.log.record({ action: 'agent_mark_read', origin: 'agent', outcome, detail: agentMarkReadLogDetail(client, result) });
     return result;
   }
 }

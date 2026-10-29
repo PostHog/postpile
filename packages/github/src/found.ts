@@ -111,7 +111,8 @@ function reasonFor(alias: FoundAlias, node: RawFoundNode): string {
     case 'involved_merged':
       return `involves you, merged ${(node.mergedAt ?? '').slice(0, 10)}`;
     case 'scouted':
-      // No finder alias finds scouted PRs; the case keeps the switch whole.
+    case 'followed':
+      // No finder alias finds scouted or followed PRs; the case keeps the switch whole.
       return 'pulled in by a scout';
   }
 }

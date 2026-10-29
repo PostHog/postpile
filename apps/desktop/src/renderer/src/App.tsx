@@ -6,6 +6,7 @@ import { useAppConfig } from './api/config.ts';
 import { useLivePoll } from './api/live.ts';
 import { useProposals } from './api/proposals.ts';
 import { useRepos } from './api/repos.ts';
+import { useScouts } from './api/scouts.ts';
 import { useSearch } from './api/search.ts';
 import { useSetupStatus } from './api/setup.ts';
 import { sendTelemetry } from './api/telemetry.ts';
@@ -65,6 +66,7 @@ import { toolsNotice } from './lib/tools.ts';
 import { usePaneWidths } from './lib/use-pane-widths.ts';
 import { useNavHistory, useNavShortcuts } from './lib/use-nav-history.ts';
 import { OpenedReadContext, useOpenedRead } from './lib/use-opened-read.ts';
+import { useScoutSeen } from './lib/use-scout-seen.ts';
 import { useTileVisit } from './lib/use-tile-visit.ts';
 
 function MainPane(props: { children: ReactNode }) {
@@ -83,6 +85,7 @@ export function App() {
   const actions = useActions();
   const topics = useTopics();
   const finished = useFinishedTopics();
+  const scouts = useScouts();
   const proposals = useProposals();
   const live = useLivePoll();
   const viewer = useViewer();
@@ -136,6 +139,8 @@ export function App() {
 
   const listedItems = topics.data ?? [];
   const finishedIds = new Set((finished.data ?? []).map((entry) => entry.id));
+  // A scout's pseudo-topic ("scout:<id>", the sidebar's Scouted section) opens by id like an Archive topic.
+  const scoutTopicIds = new Set((scouts.data ?? []).map((entry) => entry.topicId));
   // The open topic's row, kept on screen after the engine stops listing it (`nextHeldTopic`, 2026-10-26):
   // reading the last unread PR of a topic whose PRs went cold drops it from the list under the user's eyes.
   const [heldState, setHeldState] = useState<TopicListItem | null>(null);
@@ -146,7 +151,7 @@ export function App() {
   const heldTopic = heldScope === repoScope ? heldState : null;
   // Navigation is a back / forward history; the current entry is what the user picked.
   const heldIds = heldTopic === null ? [] : [heldTopic.topic.id];
-  const nav = useNavHistory(new Set([...listedItems.map((item) => item.topic.id), ...heldIds, ...finishedIds]));
+  const nav = useNavHistory(new Set([...listedItems.map((item) => item.topic.id), ...heldIds, ...finishedIds, ...scoutTopicIds]));
   const pickedEntryTopicId = nav.current.pane === 'topic' ? nav.current.topicId : null;
   const heldOffList = heldTopic !== null && heldTopic.topic.id === pickedEntryTopicId && !listedItems.some((item) => item.topic.id === heldTopic.topic.id);
   // Only asked while the row is held off the list: it shows whether the topic is really gone (merged, deleted).
@@ -210,8 +215,10 @@ export function App() {
   // Search and the queue filters cover live topics only: while they narrow, their first match shows.
   // A revealed topic the list does not hold (another repo, finished) opens by id the same way.
   const pickedFinishedId = nav.current.topicId !== null && finishedIds.has(nav.current.topicId) ? nav.current.topicId : null;
+  // Scouts are left out of the search and the queue filters like the Archive: while they narrow, their first match shows.
+  const pickedScoutId = nav.current.topicId !== null && scoutTopicIds.has(nav.current.topicId) ? nav.current.topicId : null;
   const revealedUnlistedId = revealedNow && !items.some((item) => item.topic.id === revealedNow.topicId) ? revealedNow.topicId : null;
-  const finishedId = revealedUnlistedId ?? (narrowed ? null : pickedFinishedId);
+  const finishedId = revealedUnlistedId ?? (narrowed ? null : (pickedFinishedId ?? pickedScoutId));
   const activeItem =
     finishedId === null ? visibleTopic(items, nav.current.topicId, narrowed ? shownItems : null, revealedNow?.topicId ?? keptNow?.topicId ?? null) : null;
   const activeTopicId = finishedId ?? activeItem?.topic.id ?? null;
@@ -324,7 +331,9 @@ export function App() {
   // This follows the picked topic, not the shown one, so a search filter that
   // hides the topic for a moment does not mark it seen.
   const shownTopicId = pane === 'topic' ? activeTopicId : null;
-  const pickedTopicId = pane === 'topic' ? (revealedUnlistedId ?? pickedFinishedId ?? visibleTopic(items, nav.current.topicId, null, null)?.topic.id ?? null) : null;
+  // A scout's pseudo-topic is never marked seen: it has no dossier and no "since you last looked" (its tiles carry their own seen state).
+  const pickedListedId = pickedScoutId !== null ? null : (visibleTopic(items, nav.current.topicId, null, null)?.topic.id ?? null);
+  const pickedTopicId = pane === 'topic' ? (revealedUnlistedId ?? pickedFinishedId ?? pickedListedId) : null;
   const lastPickedTopicId = useRef<string | null>(null);
   useEffect(() => {
     const left = lastPickedTopicId.current;
@@ -452,7 +461,10 @@ export function App() {
   const wideList = pane === 'notifications' || pane === 'quiet';
   // A PR open in the detail pane counts like a visit on github.com when nothing is asked of the user (DESIGN "You already dealt with it").
   const detailShown = !showSetup && !wideList && !agentShown;
-  const openedRead = useOpenedRead(detailShown ? selected.view : null, detailShown ? dwellPrKey(selected, userPick) : null, userOpens);
+  // A scouted PR has no GitHub thread to mark read; opening it marks it seen in PostPile instead (`useScoutSeen`).
+  const scoutShown = selected.view?.scout !== undefined;
+  const openedRead = useOpenedRead(detailShown && !scoutShown ? selected.view : null, detailShown && !scoutShown ? dwellPrKey(selected, userPick) : null, userOpens);
+  useScoutSeen(detailShown ? selected.view : null, detailShown ? dwellPrKey(selected, userPick) : null, userOpens);
   // The user's pick clears its Mac pings from Notification Center, the tile a topic click opened on
   // included; a tile the app picked on its own does not.
   useTileVisit(detailShown && (!selected.auto || pickedByUser(selected, userPick)) ? selected.view : null, visits);

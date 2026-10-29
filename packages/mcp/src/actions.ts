@@ -449,6 +449,7 @@ function markReadStructured(result: AgentMarkReadResult): Record<string, unknown
     skipped: leftJson(result.skipped),
     writes_locked: result.writesLocked,
     undo_until: result.undoUntil,
+    seen_in_postpile_only: result.seenLocally ?? [],
   };
 }
 
@@ -463,7 +464,12 @@ function markReadAnswer(result: AgentMarkReadResult): ToolAnswer {
       head.push(`It reaches GitHub after the ${UNDO_SECONDS} s undo window; until then the user can undo it in the app. After that it can't be undone: GitHub can't mark unread.`);
     }
     head.push('Marking read answers nothing: a personal ask stays under Needs reply until the user replies.');
-  } else {
+  }
+  const seenLocally = result.seenLocally ?? [];
+  if (seenLocally.length > 0) {
+    head.push(`Scouted, outside the user's GitHub inbox: ${seenLocally.join(', ')} seen in PostPile only, nothing on GitHub (no notification to mark read).`);
+  }
+  if (result.marked.length === 0 && seenLocally.length === 0) {
     head.push('Nothing was marked read.');
   }
   const data: string[] = [];

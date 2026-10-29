@@ -19,6 +19,7 @@ import type {
   TopicChangeResult,
   TopicDetail,
   TopicListItem,
+  ScoutListItem,
   ViewerView,
 } from '@postpile/core';
 import type { EngineService } from '@postpile/engine';
@@ -78,6 +79,10 @@ export class RemoteEngine implements SharedEngine {
 
   listTopics(scope?: ListScope): Promise<TopicListItem[]> {
     return this.call('listTopics', [scope]);
+  }
+
+  listScouts(): Promise<ScoutListItem[]> {
+    return this.call('listScouts', []);
   }
 
   search(query: string, scope?: ListScope): Promise<SearchResult> {

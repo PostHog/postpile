@@ -185,6 +185,15 @@ export interface Actions {
   approveAgent(input: { busyKey: string; prs: { prKey: PrKey; headOid: string }[]; from: AgentActionFrom }): Promise<void>;
   /** "Remove <team>": removes the team's review request, unsubscribes and marks the PR done. Final, no undo; blocked while locked. */
   removeTeamRequest(prKey: PrKey, team: string): Promise<void>;
+  /**
+   * Follow on a scouted PR (DESIGN.md "Scouts"): subscribes on GitHub after
+   * the undo window (toast Undo), a pending write while locked. Guarded as `follow`.
+   */
+  followScouted(prKey: PrKey, from: 'tile' | 'detail'): Promise<void>;
+  /** Dismiss on a scout tile or a scouted PR: off the Scouted section for good, the optional reason kept. Local, not a GitHub write. */
+  dismissScouted(prKeys: PrKey[], reason: string | null): Promise<void>;
+  /** The user opened a scouted PR: seen in PostPile only, never a GitHub read. Quiet: no toast unless it fails. */
+  markScoutedSeen(prKey: PrKey): Promise<void>;
   /** Retry on a failed glance: a catch-up run for the PR's topic. Agent calls only, not a GitHub write. */
   retryGlance(prKey: PrKey): Promise<void>;
   /**
@@ -756,6 +765,28 @@ export function ActionsProvider(props: { children: ReactNode }) {
     }
   }
 
+  async function markScoutedSeen(prKey: PrKey): Promise<void> {
+    try {
+      await request<ActionResult>('POST', `${prPath(prKey)}/scout/seen`);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.scouts }),
+        queryClient.invalidateQueries({ queryKey: ['topic'] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.pr(prKey) }),
+      ]);
+    } catch (error) {
+      show('error', `Could not mark the PR seen: ${errorText(error)}`);
+    }
+  }
+
+  /** Dismisses every PR in one click (a scout's stack); the toast says the first failure, else the first answer. */
+  async function dismissScouted(prKeys: PrKey[], reason: string | null): Promise<void> {
+    const task = async () => {
+      const results = await Promise.all(prKeys.map((prKey) => request<ActionResult>('POST', `${prPath(prKey)}/scout/dismiss`, { reason })));
+      return results.find((result) => !result.ok) ?? results[0] ?? { ok: false, message: 'Nothing to dismiss', undoToken: null };
+    };
+    await run(`scoutDismiss:${prKeys.join(',')}`, null, task);
+  }
+
   /** No toast: the dialog closes and the held sync shows in the title bar. */
   async function startAsUsual(): Promise<boolean> {
     try {
@@ -1090,6 +1121,11 @@ export function ActionsProvider(props: { children: ReactNode }) {
       const prKeys = input.prs.map((pr) => pr.prKey);
       await runApprove(input.busyKey, prKeys, () => request<BatchApproveResult>('POST', '/api/agent-actions/approve', { prs: input.prs, from: input.from }));
     },
+    followScouted: async (prKey, from) => {
+      await run(`scoutFollow:${prKey}`, 'follow', () => request('POST', `${prPath(prKey)}/scout/follow`, { from }));
+    },
+    dismissScouted,
+    markScoutedSeen,
     removeTeamRequest: async (prKey, team) => {
       await run(`removeTeam:${prKey}`, 'removeTeam', () => request('POST', `${prPath(prKey)}/remove-team-request`, { team }));
     },

@@ -241,6 +241,10 @@ function entryText(last: ActionLogEntry, decidedBy: ActionLogEntry | null): { te
       return writeText('unsubscribed', last);
     case 'subscribe':
       return writeText('subscribed again', last);
+    case 'follow':
+      return writeText('followed from a scout', last);
+    case 'undo_follow':
+      return writeText('follow undone', last);
     case 'writes_on':
     case 'writes_off':
       return { text: last.action === 'writes_on' ? 'GitHub writes turned on' : 'GitHub writes turned off', tone: 'local' };

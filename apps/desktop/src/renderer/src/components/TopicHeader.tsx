@@ -15,6 +15,7 @@ import { ChevronIcon, PrStateIcon } from './icons.tsx';
 import { MemoryLine } from './MemoryLine.tsx';
 import { ProposalPrList } from './ProposalPrList.tsx';
 import { RelationLine } from './RelationLine.tsx';
+import { ScoutTopicHeader } from './ScoutTopicHeader.tsx';
 import { SinceLastLooked } from './SinceLastLooked.tsx';
 import { TopicLessons } from './TopicLessons.tsx';
 import { TopicRepo } from './TopicRepo.tsx';
@@ -186,11 +187,10 @@ function PrCountPill(props: { detail: TopicDetail }) {
   );
 }
 
-/** Breadcrumb, name, who drives (a menu that moves the topic), the dossier (or the plain summary before one exists), what the user told the agent and the lessons waiting for a decision. */
-export function TopicHeader(props: {
+/** A topic's header: breadcrumb, name, who drives (a menu that moves the topic), the dossier (or the plain summary before one exists), what the user told the agent and the lessons waiting for a decision. */
+function TopicHeaderBody(props: {
   detail: TopicDetail;
   topics: TopicListItem[];
-  /** The section the sidebar draws this topic's row under, null when it draws none. */
   rowSection: TopicSection | null;
   onAskAgent: () => void;
   agentOpen: boolean;
@@ -270,4 +270,19 @@ export function TopicHeader(props: {
       ))}
     </div>
   );
+}
+
+/** The topic column's header; a scout's pseudo-topic gets its own (`ScoutTopicHeader`). */
+export function TopicHeader(props: {
+  detail: TopicDetail;
+  topics: TopicListItem[];
+  /** The section the sidebar draws this topic's row under, null when it draws none. */
+  rowSection: TopicSection | null;
+  onAskAgent: () => void;
+  agentOpen: boolean;
+}) {
+  if (props.detail.scout) {
+    return <ScoutTopicHeader detail={props.detail} />;
+  }
+  return <TopicHeaderBody {...props} />;
 }

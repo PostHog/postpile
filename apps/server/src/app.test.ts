@@ -16,6 +16,10 @@ function notImplemented(): never {
 function fakeEngine(overrides: Partial<EngineService>): EngineService {
   return {
     sync: notImplemented,
+    listScouts: notImplemented,
+    followScouted: notImplemented,
+    dismissScouted: notImplemented,
+    markScoutedSeen: notImplemented,
     setupStatus: notImplemented,
     setupChecks: notImplemented,
     tools: notImplemented,
