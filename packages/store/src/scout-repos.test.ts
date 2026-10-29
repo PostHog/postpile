@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { ScoutedPr, ScoutJudgement } from '@postpile/core';
+import { makePr } from '@postpile/core/fixtures';
 import { Store } from './index.ts';
 
 let store: Store;
@@ -152,4 +153,21 @@ describe('ScoutedPrRepo', () => {
     expect(store.scoutedPrs.get('acme/app#3')).toMatchObject({ expiryReason: 'merged' });
     expect([...store.scoutedPrs.getMany(['acme/app#1', 'acme/app#9']).keys()]).toEqual(['acme/app#1']);
   });
+
+  it('counts active, untracked scouted PRs and the unseen ones per scout from headers', () => {
+    const header = (number: number, updatedAt: string) => makePr({ number, updatedAt });
+    store.prs.upsert(header(1, '2026-10-29T10:00:00.000Z'), '2026-10-29T10:00:00.000Z');
+    store.prs.upsert(header(2, '2026-10-29T12:00:00.000Z'), '2026-10-29T12:00:00.000Z');
+    store.prs.upsert(header(3, '2026-10-29T10:00:00.000Z'), '2026-10-29T10:00:00.000Z');
+    store.prs.upsert(header(4, '2026-10-29T10:00:00.000Z'), '2026-10-29T10:00:00.000Z');
+    store.scoutedPrs.insert(scouted({ prKey: 'acme/app#1', seenUpdatedAt: '2026-10-29T10:00:00.000Z' }));
+    store.scoutedPrs.insert(scouted({ prKey: 'acme/app#2', seenUpdatedAt: '2026-10-29T11:00:00.000Z' }));
+    store.scoutedPrs.insert(scouted({ prKey: 'acme/app#3', dismissedAt: '2026-10-29T11:00:00.000Z' }));
+    store.scoutedPrs.insert(scouted({ prKey: 'acme/app#4' }));
+    store.foundPrs.put({ prKey: 'acme/app#4', via: 'review_requested', reason: 'review requested from you', foundAt: '2026-10-29T11:00:00.000Z' });
+
+    // #1 seen, #2 moved since it was seen, #3 dismissed, #4 tracked now.
+    expect(store.scoutedPrs.countsByScout()).toEqual(new Map([['lookout', { prs: 2, unseen: 1 }]]));
+  });
 });
+

@@ -191,11 +191,13 @@ describe('the Scouted section', () => {
     h.store.scoutedPrs.insert({ ...row, prKey: top.key, scoutId: 'lookout', scoutName: 'Lookout', reason: 'new folder', pulledAt: '2026-09-02T10:00:00.000Z' });
     h.store.scoutedPrs.insert({ ...row, prKey: bottom.key, scoutId: 'billing', scoutName: 'Billing', reason: 'invoices', pulledAt: '2026-09-02T11:00:00.000Z' });
 
+    // The sidebar counts PRs from headers, each under the scout that pulled it; the section shows the stack whole.
     const scouts = await h.engine.listScouts();
     expect(scouts.map((scout) => [scout.id, scout.tiles])).toEqual([
       ['lookout', 1],
-      ['billing', 0],
+      ['billing', 1],
     ]);
+    expect((await h.engine.getTopic('scout:billing'))?.tiles).toEqual([]);
     const tiles = (await h.engine.getTopic('scout:lookout'))?.tiles ?? [];
     expect(tiles.map((view) => view.tile.members.map((member) => member.prKey))).toEqual([[bottom.key, top.key]]);
     // The owning scout speaks for the stack, not the scout of its bottom layer.
@@ -211,7 +213,8 @@ describe('the Scouted section', () => {
     await h.engine.sync({ maxAgentCalls: 0 });
     h.store.scoutedPrs.insert({ prKey: top.key, scoutId: 'lookout', scoutName: 'Lookout', configVersion: 1, reason: 'new folder', pulledAt: NOW.toISOString(), seenUpdatedAt: null, followedAt: null, dismissedAt: null, dismissReason: null, expiredAt: null, expiryReason: null });
 
-    expect((await h.engine.listScouts())[0]?.tiles).toBe(0);
+    // Not in scouts.md and nothing on its section: no row at all.
+    expect(await h.engine.listScouts()).toEqual([]);
     const unsorted = (await h.engine.getTopic('unsorted'))?.tiles ?? [];
     expect(unsorted.flatMap((view) => view.tile.members.map((member) => member.prKey))).toEqual([bottom.key, top.key]);
   });

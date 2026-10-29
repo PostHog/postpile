@@ -327,21 +327,18 @@ export class ReadModels {
    * the GitHub inbox.
    */
   listScouts(): ScoutListItem[] {
-    const now = this.now().toISOString();
-    // From the store, not the hot board: a busy inbox leaves tier "others" off it, where most scouted PRs rank.
+    // One query over headers: no Board, so no cold snapshot is read for the sidebar however many PRs scouts hold.
+    const counts = this.store.scoutedPrs.countsByScout();
     const withRows = this.scoutsWithRows();
     const ids = new Map(this.scoutInfo.configured().map((scout) => [scout.id, scout.name]));
     for (const [id, name] of withRows) {
-      if (!ids.has(id)) {
+      if (!ids.has(id) && counts.has(id)) {
         ids.set(id, name);
       }
     }
-    const follows = this.scoutInfo.followStates();
     return [...ids].map(([id, name]) => {
-      if (!withRows.has(id)) {
-        return { id, topicId: scoutTopicId(id), name, tiles: 0, unseen: 0 };
-      }
-      return this.scoutRow(id, name, Board.forTopic(this.store, now, scoutTopicId(id)), follows);
+      const count = counts.get(id) ?? { prs: 0, unseen: 0 };
+      return { id, topicId: scoutTopicId(id), name, tiles: count.prs, unseen: count.unseen };
     });
   }
 

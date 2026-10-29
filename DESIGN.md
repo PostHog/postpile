@@ -1260,7 +1260,9 @@ contract surfaces.
    MERGED, so a PR opened and merged between two syncs is still seen. A
    page with field errors or a null node is refused, never counted as
    covered. A capped listing stores where it stopped (meta
-   `scout_listing_resume:<repo>`): the next run lists the updates since that
+   `scout_listing_resume:<repo>`, written in the transaction that stores the
+   last scout's candidates on the repo, so a crash before that lists them
+   again): the next run lists the updates since that
    run started, then goes on below the stop down to the floor, instead of
    reading the same top pages again. The quota is asked before every read;
    once it says no, the rest stays pending.
@@ -1283,7 +1285,10 @@ contract surfaces.
    match, the PR is skipped by rule, no model call.
 5. Judge: `scout_judge` (Sonnet, no tools, PR text fenced), up to 12 PRs per
    call, under the sync's existing agent-call cap with its own kind and the
-   agent job `scouts` (`agentJobs` without it runs no scout work). Each
+   agent job `scouts` (`agentJobs` without it runs no scout work), and at
+   most 5 calls per sync (`SCOUT_JUDGE_CALLS_PER_RUN`): the step runs while
+   the sync holds its lock and the poll waits, so the rest stays pending for
+   the next sync. Each
    entry is validated on its own: malformed, left out, answered twice, or
    unknown keys stay pending, never skipped. The prompt lists at most 20
    matching paths per PR, with how many more.
@@ -1321,9 +1326,12 @@ shows whole with the scout that pulled any of its layers first
 close, or three days without activity. Opening it does not keep it.
 
 **The Scouted section.** At the bottom of the sidebar, one row per scout in
-file order (`GET /api/scouts`, `ScoutListItem`), with a grey count of tiles
+file order (`GET /api/scouts`, `ScoutListItem`), with a grey count of PRs
 not seen in PostPile since their last activity, never coral and never in
-unread. A row opens `scout:<id>` like a topic: tiles only, no driver,
+unread. The counts come from one query over `pr_scouted` and the PR headers
+(`countsByScout`), never from a Board, so a busy install reads no cold
+snapshot for the sidebar; a stack counts each layer under the scout that
+pulled it. A row opens `scout:<id>` like a topic: tiles only, no driver,
 dossier, sets or moves. The tile shows the scout's name in the "for whom"
 spot and its reason (`TileView.scout`).
 
