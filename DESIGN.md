@@ -1307,7 +1307,10 @@ contract surfaces.
    A retry whose file list or base tree failed to read last time
    (`scoutRetryStalled`) goes behind the new candidates, so PRs GitHub
    keeps failing to read only take slots nothing else needs. Tree reads
-   fail per batch, like file lists and number lookups.
+   fail per batch, like file lists and number lookups. Pending PRs the
+   listing no longer reaches are looked up by number only as far as the
+   run can judge them, picked by the same schedule, in one read for every
+   scout, and not at all while the agent is off or the budget is spent.
    Each
    entry is validated on its own: malformed, left out, answered twice, or
    unknown keys stay pending, never skipped. The prompt lists at most 20
@@ -1325,11 +1328,15 @@ contract surfaces.
    the board's holds them. The scout's reason reaches the glance prompt
    fenced: it is model output from GitHub text. A failed scout glance's
    Retry runs through the Unsorted catch-up, which covers scouted targets
-   and counts them when it sizes its per-run cap.
+   and counts them when it sizes its per-run cap (from their `pr_scouted`
+   rows, never their snapshots).
 
 **Display, not tracking.** A scouted PR is displayable and glanceable but
 not tracked: no topic assignment, urgency, asks, unread, whose-move counts,
-Dock badge, Mac notifications or read writes. On the Board, each scout is a
+Dock badge, Mac notifications or read writes. A PR only a scout holds is
+left out of the hot board's inbox count and cap (`readHotSet`), so scouts
+never tip the inbox into busy mode; a scouted layer of a tracked stack
+rides along with it. On the Board, each scout is a
 pseudo-topic `scout:<id>` like Unsorted (`Board.tilesForTopic`), with its
 PRs as found PRs of `via: 'scouted'`; it is never part of `allTiles()` or
 `findTile`, so nothing that counts reads it and no tile action (mark read,
