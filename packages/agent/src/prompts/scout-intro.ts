@@ -59,8 +59,9 @@ Answer:
   null. part: quoted exactly from the prompt, word for word, so it can be cut out. why: one sentence.
 - name: a short name for the scout, two to four words, e.g. "Lookout · structure".
 - paths: up to 6 path hints, as gitignore-style globs over repo paths ("services/*/api/**",
-  "docs/architecture.md"). Put "+" in front to count only added files, and use "+*/" for "adds a new
-  top-level folder". Paths are a hard filter: a scout with paths never judges a PR that touches none
+  "docs/architecture.md"). Put "+" in front to count only added files. "+*/" means "adds a new
+  top-level folder", and "+products/*/" means "adds a new folder directly inside products/" (not
+  any file added somewhere under products/; for that, write "+products/**"). Paths are a hard filter: a scout with paths never judges a PR that touches none
   of them. So the hints together must cover EVERY kind of PR the prompt asks for. If one part of the
   prompt can't be pinned to paths ("changes to the public API shape" spread over many files), return
   [] instead: a missing hint only costs a model call, a partial list silently narrows the scout.

@@ -85,7 +85,10 @@ describe('promptWithoutPart', () => {
 
 describe('isScoutPathHint', () => {
   it('takes path globs and refuses long, multi-line, comma, spaced or unsupported ones', () => {
-    expect(['+*/', 'docs/architecture.md', 'services/*/api/**', '+billing/'].every(isScoutPathHint)).toBe(true);
+    expect(['+*/', '+products/*/', 'docs/architecture.md', 'services/*/api/**', '+billing/'].every(isScoutPathHint)).toBe(true);
+    // At most 4 globstars (and 8 stars in all).
+    expect(isScoutPathHint('a/**/b/**/c/**/d/**/e')).toBe(true);
+    expect(isScoutPathHint('a/**/b/**/c/**/d/**/e/**/f')).toBe(false);
     expect([`src/${'a'.repeat(200)}`, 'src/**\nid: billing', 'a,b', 'docs (old)', '!secret/**', '', 'src/[ab]', `${'a*'.repeat(20)}b`].some(isScoutPathHint)).toBe(false);
   });
 });

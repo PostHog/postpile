@@ -20,7 +20,9 @@ const NOTE_MAX = 300;
 /** Longest path hint the card passes on; the turn-on route takes no longer. */
 export const SCOUT_PATH_HINT_MAX = 200;
 /** Most `*` a hint may hold ("services/**\/api/*.ts" has four): matching is linear anyway, this keeps hints plain. */
-const SCOUT_PATH_HINT_STARS = 6;
+const SCOUT_PATH_HINT_STARS = 8;
+/** Most `**` a hint may hold. */
+const SCOUT_PATH_HINT_GLOBSTARS = 4;
 /** What a path glob is made of: no spaces, line breaks, commas or notes. */
 const PATH_GLOB = /^\+?[A-Za-z0-9_.*?/@~-]+$/;
 
@@ -130,7 +132,14 @@ function folded(text: string): string {
  */
 export function isScoutPathHint(entry: string): boolean {
   const stars = entry.split('*').length - 1;
-  return entry.length <= SCOUT_PATH_HINT_MAX && stars <= SCOUT_PATH_HINT_STARS && PATH_GLOB.test(entry) && typeof parsePathHint(entry) !== 'string';
+  const globstars = entry.split('**').length - 1;
+  return (
+    entry.length <= SCOUT_PATH_HINT_MAX &&
+    stars <= SCOUT_PATH_HINT_STARS &&
+    globstars <= SCOUT_PATH_HINT_GLOBSTARS &&
+    PATH_GLOB.test(entry) &&
+    typeof parsePathHint(entry) !== 'string'
+  );
 }
 
 /**

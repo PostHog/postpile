@@ -48,5 +48,6 @@ describe('checkScout', () => {
     expect(runner.promptsFor('scout_check')[0]).toContain(PROMPT);
     // Paths are a hard filter: the prompt asks for all branches covered, or none.
     expect(runner.promptsFor('scout_check')[0]).toContain('must cover EVERY kind of PR the prompt asks for');
+    expect(runner.promptsFor('scout_check')[0]).toContain('"+products/*/" means "adds a new folder directly inside products/"');
   });
 });

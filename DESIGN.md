@@ -1477,7 +1477,7 @@ drafts the first one, checks it and turns it on.
   is usable, the card keeps no hints: a missing hint only costs judge
   calls, a partial list silently narrows the scout. Path hints pass only as
   path globs of at most 200 characters, with no line break, comma or space
-  (`isScoutPathHint`, at most 6 `*`); `scoutSection` writes no other kind, and
+  (`isScoutPathHint`, at most 8 `*` and 4 `**`); `scoutSection` writes no other kind, and
   `appendScout` refuses one and checks the new scout's id and hints read
   back as asked, so a hint can never add a key line. The path hints are
   never shown; they go into the scout, edited in scouts.md. The check and
