@@ -185,6 +185,27 @@ describe('the Scouted section', () => {
     expect(h.store.actionLog.listRecent(5).map((entry) => [entry.action, entry.outcome])).toContainEqual(['follow', 'github']);
   });
 
+  it('never lets a stalled Follow hold the lock\'s queue, and counts it once GitHub answers OK late', async () => {
+    const h = await pulled({ writesEnabled: false });
+    await h.engine.followScouted('acme/app#1', 'detail');
+    h.timers.advance(UNDO_WINDOW_MS);
+    await h.engine.flushPendingWrites();
+    expect(h.store.pendingWrites.list()).toHaveLength(1);
+    await h.engine.setGitHubWrites(true);
+    let answer: () => void = () => {};
+    const subscribe = vi.spyOn(h.writer, 'followPr').mockImplementationOnce(() => new Promise<void>((resolve) => (answer = resolve)));
+
+    const sent = h.engine.sendPendingWrites();
+    await vi.waitFor(() => expect(subscribe).toHaveBeenCalled());
+    h.timers.advance(FOLLOW_LOOKUP_MS);
+    await sent;
+    expect(h.store.pendingWrites.list()).toMatchObject([{ kind: 'follow', error: expect.stringContaining('no answer within 10 s') }]);
+
+    answer();
+    await vi.waitFor(() => expect(h.store.scoutedPrs.get('acme/app#1')?.followedAt).not.toBeNull());
+    expect(h.store.pendingWrites.list()).toEqual([]);
+  });
+
   it('says in the PR pane who scouted it and why', async () => {
     const h = await pulled();
     const pr = await h.engine.getPr('acme/app#1');

@@ -6,6 +6,7 @@ import { failed, ok } from '../actions/results.ts';
 import { errorText } from '../errors.ts';
 import type { GitHubWrites } from '../writes/github-writes.ts';
 import type { PendingWrites } from '../writes/pending-writes.ts';
+import { followWithDeadline, recordLateFollow, withDeadline } from './follow-deadline.ts';
 import { recordFollowed } from './followed.ts';
 
 /** Undo tokens of a Follow carry this, so Engine.undo knows where to send them. */
@@ -35,8 +36,7 @@ interface QueuedFollow {
  * `handled_at`: a scouted PR has no thread, and a handled mark would leak
  * into the inbox rules once the PR reaches the inbox.
  */
-/** How long Follow waits for the PR's node id; a quit's flush waits at most this long for a Follow still looking. */
-export const FOLLOW_LOOKUP_MS = 10_000;
+export { FOLLOW_LOOKUP_MS } from './follow-deadline.ts';
 
 export class ScoutActions {
   private readonly queue: DeferredQueue<QueuedFollow>;
@@ -60,23 +60,6 @@ export class ScoutActions {
     });
   }
 
-  /** `work`'s answer, or a rejection once FOLLOW_LOOKUP_MS passed without one: a stalled GitHub never holds a quit. */
-  private withDeadline<T>(work: Promise<T>): Promise<T> {
-    return new Promise((resolve, reject) => {
-      const deadline = this.timers.setTimeout(() => reject(new Error(`no answer within ${FOLLOW_LOOKUP_MS / 1000} s`)), FOLLOW_LOOKUP_MS);
-      work.then(
-        (value) => {
-          this.timers.clearTimeout(deadline);
-          resolve(value);
-        },
-        (error: unknown) => {
-          this.timers.clearTimeout(deadline);
-          reject(error);
-        },
-      );
-    });
-  }
-
   /** After the undo window: to GitHub while writes are on, else into the lock's pending writes. */
   private async send(follow: QueuedFollow): Promise<void> {
     try {
@@ -93,17 +76,15 @@ export class ScoutActions {
       return;
     }
     let result;
-    const sending = this.writes.followPr(follow.subjectId, { origin: 'queue', prKey: follow.prKey, batch: follow.batch });
     try {
-      // A stalled subscription parks like a failed one, to send again from the lock (subscribing twice is harmless).
-      result = await this.withDeadline(sending);
+      // A stalled subscription parks like a failed one, to send again from the lock (subscribing twice is harmless);
+      // when GitHub takes it after all, it is followed and the parked write goes.
+      result = await followWithDeadline(this.writes, this.timers, follow.subjectId, { origin: 'queue', prKey: follow.prKey, batch: follow.batch }, () => {
+        recordLateFollow(this.store, this.pendingWrites, follow.prKey, follow.batch, this.now().toISOString());
+        this.settledFollows += 1;
+      });
     } catch (error) {
       this.pendingWrites.parkFollow(pending, { ...follow, error: errorText(error) });
-      // Past the deadline GitHub may still take it: then it is followed, and the parked write goes.
-      sending.then(
-        (late) => this.followedLate(follow, late),
-        () => {},
-      );
       return;
     }
     if (result === 'off') {
@@ -111,20 +92,6 @@ export class ScoutActions {
       return;
     }
     recordFollowed(this.store, follow.prKey, this.now().toISOString());
-  }
-
-  /** A subscription GitHub took after the deadline: followed after all, and its parked write cleared. Never throws (the store may be closed by then). */
-  private followedLate(follow: QueuedFollow, result: Awaited<ReturnType<GitHubWrites['followPr']>>): void {
-    if (result === 'off') {
-      return;
-    }
-    try {
-      this.pendingWrites.clearFollow(follow.prKey, follow.batch);
-      recordFollowed(this.store, follow.prKey, this.now().toISOString());
-      this.settledFollows += 1;
-    } catch {
-      // Quit meanwhile: the parked write sends again from the lock next start, subscribing twice is harmless.
-    }
   }
 
   /** Grows each time a Follow leaves its undo window. */
@@ -173,7 +140,7 @@ export class ScoutActions {
     this.lookingUp.add(prKey);
     let subjectId: string | null = null;
     try {
-      subjectId = await this.withDeadline(this.reader.scoutPrNodeId(parsePrKey(prKey)));
+      subjectId = await withDeadline(this.timers, this.reader.scoutPrNodeId(parsePrKey(prKey)));
     } catch (error) {
       // Nothing queued, nothing sent; a quit's flush stops waiting here too.
       this.writes.log.record({ action: 'follow', origin, outcome: 'failed', prKey, detail: `PR lookup failed, nothing queued: ${errorText(error)}` });

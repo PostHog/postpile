@@ -3,6 +3,7 @@ import {
   isSubscriptionWrite,
   pendingWriteStep,
   PENDING_WRITES_OFF,
+  systemTimers,
   unreadOlderThan,
   type GitHubWritesStatus,
   type IsoTime,
@@ -16,10 +17,12 @@ import {
   type PrKey,
   type SubscriptionChange,
   type ThreadOutcome,
+  type Timers,
   type TilePendingWrite,
 } from '@postpile/core';
 import type { Store } from '@postpile/store';
 import { putBackLocalChange, readLocally } from '../actions/local-change.ts';
+import { followWithDeadline, recordLateFollow } from '../scouts/follow-deadline.ts';
 import { recordFollowed } from '../scouts/followed.ts';
 import { errorText } from '../errors.ts';
 import type { MarkReadQueue, ParkedBatch } from '../mark-read-queue.ts';
@@ -79,6 +82,8 @@ export class PendingWrites {
     private readonly store: Store,
     private readonly writes: GitHubWrites,
     private readonly now: () => Date,
+    /** The Follow deadline's clock (`followWithDeadline`); tests pass fake timers. */
+    private readonly timers: Timers = systemTimers,
   ) {}
 
   /**
@@ -426,7 +431,10 @@ export class PendingWrites {
     }
     let outcome: ThreadOutcome;
     try {
-      const result = await this.writes.followPr(follow.subjectId, { origin: 'footer', prKey: follow.prKey, batch: write.batch });
+      // The same deadline as from the undo queue: a stalled Follow never holds sendAll or discard; a late OK still counts.
+      const result = await followWithDeadline(this.writes, this.timers, follow.subjectId, { origin: 'footer', prKey: follow.prKey, batch: write.batch }, () =>
+        recordLateFollow(this.store, this, follow.prKey, write.batch, this.now().toISOString()),
+      );
       outcome = result === 'off' ? { kind: 'off' } : { kind: 'sent' };
     } catch (error) {
       outcome = { kind: 'failed', error: errorText(error) };

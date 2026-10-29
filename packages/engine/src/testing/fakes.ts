@@ -634,7 +634,7 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
   const writes = new GitHubWrites(writeSwitch, new ActionLog(store, now));
   const runner = new FakeRunner();
   const timers = new FakeTimers();
-  const pendingWrites = new PendingWrites(store, writes, now);
+  const pendingWrites = new PendingWrites(store, writes, now, timers);
   const markReadQueue = new MarkReadQueue(
     writes,
     reader,
