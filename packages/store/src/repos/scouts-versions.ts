@@ -36,6 +36,11 @@ export class ScoutsVersionRepo {
     return all<ScoutsVersionRow>(this.db, 'SELECT * FROM scouts_version ORDER BY version DESC LIMIT ?', limit).map(toVersion);
   }
 
+  /** Every version, newest first: the fallback to the last one that parsed may reach back past any window. */
+  listAll(): ScoutsVersion[] {
+    return all<ScoutsVersionRow>(this.db, 'SELECT * FROM scouts_version ORDER BY version DESC').map(toVersion);
+  }
+
   /** Stores the next version and returns it. */
   add(version: NewScoutsVersion): ScoutsVersion {
     return inTransaction(this.db, () => {

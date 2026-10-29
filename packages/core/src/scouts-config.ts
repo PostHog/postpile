@@ -49,8 +49,6 @@ export interface ScoutsParse {
 const KEY_LINE = /^(id|repos|paths)\s*:\s*(.*)$/i;
 const REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-/** A note in brackets after a path entry: "+*\/ (new top-level folder)". */
-const NOTE = /\s*\([^)]*\)\s*$/;
 
 /** "Lookout · structure" -> "lookout-structure". Accents dropped, anything else not a letter or digit becomes one dash. */
 export function scoutSlug(name: string): string {
@@ -62,11 +60,25 @@ export function scoutSlug(name: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
+/**
+ * The entry without a note in brackets at its end: "+*\/ (new top-level
+ * folder)" -> "+*\/". Plain string handling: a regex here ran in polynomial
+ * time on long runs of spaces (CodeQL js/polynomial-redos).
+ */
+function withoutNote(entry: string): string {
+  const trimmed = entry.trim();
+  const open = trimmed.lastIndexOf('(');
+  if (!trimmed.endsWith(')') || open < 0) {
+    return trimmed;
+  }
+  return trimmed.slice(0, open).trim();
+}
+
 /** One `paths:` entry, or an error message. */
 function parsePathHint(entry: string): ScoutPathHint | string {
-  const withoutNote = entry.replace(NOTE, '').trim();
-  const addedOnly = withoutNote.startsWith('+');
-  const pattern = addedOnly ? withoutNote.slice(1).trim() : withoutNote;
+  const bare = withoutNote(entry);
+  const addedOnly = bare.startsWith('+');
+  const pattern = addedOnly ? bare.slice(1).trim() : bare;
   if (pattern === '') {
     return `empty path entry "${entry}"`;
   }
@@ -95,13 +107,39 @@ interface Section {
   lines: string[];
 }
 
+function isSpace(char: string | undefined): boolean {
+  return char !== undefined && char.trim() === '';
+}
+
+/**
+ * The name of a "## Name" heading line, or null for any other line ("###"
+ * included). An optional closing run of "#" after a space is dropped, as in
+ * Markdown. Plain string handling: the regex this replaced ran in
+ * polynomial time on "## " followed by many spaces (CodeQL
+ * js/polynomial-redos).
+ */
+function headingName(raw: string): string | null {
+  if (!raw.startsWith('##') || raw.startsWith('###') || !isSpace(raw[2])) {
+    return null;
+  }
+  const name = raw.slice(2).trim();
+  let end = name.length;
+  while (end > 0 && name[end - 1] === '#') {
+    end -= 1;
+  }
+  if (end === name.length || (end > 0 && !isSpace(name[end - 1]))) {
+    return name;
+  }
+  return name.slice(0, end).trim();
+}
+
 function sectionsOf(text: string): Section[] {
   const sections: Section[] = [];
   let current: Section | null = null;
   text.split(/\r?\n/).forEach((raw, index) => {
-    const heading = /^##\s+(.*?)\s*#*\s*$/.exec(raw);
-    if (heading && !raw.startsWith('###')) {
-      current = { name: heading[1] ?? '', line: index + 1, lines: [] };
+    const name = headingName(raw);
+    if (name !== null) {
+      current = { name, line: index + 1, lines: [] };
       sections.push(current);
       return;
     }
