@@ -47,9 +47,10 @@ function hasWildcard(segment: string): boolean {
  * any depth, `**` spans any number of folders, a trailing "/" only matches
  * inside that folder, and a pattern that names a file or folder also covers
  * everything under it, except when its last segment has a wildcard.
- * Segment by segment with a memo over (pattern segment, path segment), and
- * each state does constant work besides one segment match: a `**` either
- * stops or takes one more folder and stays.
+ * Segment by segment over a table of (pattern segment, path segment),
+ * filled bottom-up without recursion, so neither time nor stack grows with
+ * the number of globstars beyond that table: a `**` either stops or takes
+ * one more folder and stays.
  */
 export function globPathMatches(pattern: string, path: string): boolean {
   const dirOnly = pattern.endsWith('/');
@@ -65,39 +66,29 @@ export function globPathMatches(pattern: string, path: string): boolean {
   const names = path.split('/');
   const last = globs[globs.length - 1]!;
   const exactEnd = !dirOnly && (last === '**' || hasWildcard(last));
-  const memo = new Map<number, boolean>();
-
-  // Whether globs[g..] match names[n..], then what may follow the match.
-  const from = (g: number, n: number): boolean => {
-    const key = g * (names.length + 1) + n;
-    const known = memo.get(key);
-    if (known !== undefined) {
-      return known;
-    }
-    let result: boolean;
-    if (g === globs.length) {
-      const rest = names.length - n;
-      result = dirOnly ? rest >= 1 : exactEnd ? rest === 0 : true;
-    } else if (globs[g] === '**' && g === globs.length - 1) {
-      // Last: everything below, one segment at least; "**/" only inside a folder there, so two.
-      result = names.length - n >= (dirOnly ? 2 : 1);
-    } else if (globs[g] === '**') {
-      // Zero folders here, or take one and stay on the `**`.
-      result = from(g + 1, n) || (n < names.length && from(g, n + 1));
-    } else {
-      result = n < names.length && segmentMatches(globs[g]!, names[n]!) && from(g + 1, n + 1);
-    }
-    memo.set(key, result);
-    return result;
-  };
-
-  if (anchored) {
-    return from(0, 0);
-  }
-  for (let start = 0; start < names.length; start++) {
-    if (from(0, start)) {
-      return true;
+  const width = names.length + 1;
+  // Bottom-up, one pattern segment at a time, no recursion: `row[n]` says
+  // whether globs[g..] match names[n..], then what may follow the match.
+  let row = Array.from({ length: width }, (_, n) => {
+    const rest = names.length - n;
+    return dirOnly ? rest >= 1 : exactEnd ? rest === 0 : true;
+  });
+  for (let g = globs.length - 1; g >= 0; g--) {
+    const glob = globs[g]!;
+    const after = row;
+    row = new Array<boolean>(width).fill(false);
+    for (let n = names.length; n >= 0; n--) {
+      if (glob === '**' && g === globs.length - 1) {
+        // Last: everything below, one segment at least; "**/" only inside a folder there, so two.
+        row[n] = names.length - n >= (dirOnly ? 2 : 1);
+      } else if (glob === '**') {
+        // Zero folders here, or take one and stay on the `**`.
+        row[n] = after[n]! || (n < names.length && row[n + 1]!);
+      } else {
+        row[n] = n < names.length && after[n + 1]! && segmentMatches(glob, names[n]!);
+      }
     }
   }
-  return false;
+  // Anchored at the root; else from any folder down.
+  return anchored ? row[0]! : row.slice(0, names.length).some(Boolean);
 }

@@ -110,6 +110,9 @@ function withoutNote(entry: string): string {
   return trimmed.slice(0, open).trim();
 }
 
+/** Most `**` one path hint may hold: the one rule for scouts.md and the intro card's hints. */
+export const SCOUT_HINT_GLOBSTARS = 4;
+
 /** One `paths:` entry, or an error message. */
 function parsePathHint(entry: string): ScoutPathHint | string {
   const bare = withoutNote(entry);
@@ -117,6 +120,9 @@ function parsePathHint(entry: string): ScoutPathHint | string {
   const pattern = addedOnly ? bare.slice(1).trim() : bare;
   if (pattern === '') {
     return `empty path entry "${entry}"`;
+  }
+  if (pattern.split('**').length - 1 > SCOUT_HINT_GLOBSTARS) {
+    return `path "${pattern.slice(0, 60)}" has more than ${SCOUT_HINT_GLOBSTARS} "**"`;
   }
   // The regex only tells a pattern GitHub skips; matching never uses it (`scoutHintMatches`). New-folder hints too.
   if (codeownersPatternRegex(pattern) === null) {
