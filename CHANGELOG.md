@@ -8,6 +8,10 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 - A move that has waited on you for 3 working days or more shows how long, in grey: " · 6d" after the move on the tile footer, and "6d" on the topic's sidebar row for its oldest wait. Merge moves, drafts and snoozed tiles never show it, and it changes no order and sends no pings.
 
+### Changed
+
+- A review request a person chose you for says so: "alice picked you to review" when the author added you, "ben pulled you in to review" when someone else did. Requests from CODEOWNERS, a team, a bot or a coding agent read as before. Inside a topic's To review tiles, the ones a person chose you for come first. Older PRs show the old wording until their next sync.
+
 ## 0.28.5 (2026-10-27)
 
 ### Fixed

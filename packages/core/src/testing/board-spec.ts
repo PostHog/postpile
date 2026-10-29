@@ -157,7 +157,15 @@ export interface PrSpec {
   staleSnapshot: boolean;
   /** A mark-read of this PR waits for the writes lock (kept only while the lock is on and the thread is unread). */
   pendingWrite: boolean;
+  /**
+   * What the snapshot says about CODEOWNERS requests (`Pr.codeOwnerReviewers`):
+   * unknown (stored before it was fetched), none, or the viewer's pending
+   * personal request was made as code owner.
+   */
+  codeOwners: CodeOwnersSpec;
 }
+
+export type CodeOwnersSpec = 'unknown' | 'none' | 'viewer';
 
 /** A scenario's starting point: ada's open PR, pinged for a review request, with nothing else going on. */
 export const QUIET_PR: PrSpec = {
@@ -180,6 +188,7 @@ export const QUIET_PR: PrSpec = {
   truncated: false,
   staleSnapshot: false,
   pendingWrite: false,
+  codeOwners: 'unknown',
 };
 
 /**
@@ -394,6 +403,8 @@ export const prSpecArb: fc.Arbitrary<PrSpec> = fc.record({
   truncated: sometimes(1, 6),
   staleSnapshot: sometimes(1, 6),
   pendingWrite: fc.boolean(),
+  // Constant here, so the fixed-seed coverage sample keeps its shapes; review PRs vary it.
+  codeOwners: fc.constant<CodeOwnersSpec>('none'),
 });
 
 function groupArb(kind: GroupKind, minLength: number, maxLength: number): fc.Arbitrary<GroupSpec> {
@@ -424,6 +435,7 @@ const reviewPrSpecArb: fc.Arbitrary<PrSpec> = fc
       { weight: 1, arbitrary: fc.constantFrom<RiskWord>('high', 'garbage') },
     ),
     glanceStale: sometimes(1, 7),
+    codeOwners: fc.constantFrom<CodeOwnersSpec>('unknown', 'none', 'viewer'),
   })
   .map((picked) => ({ ...QUIET_PR, steps: [{ kind: 'request' as const, target: 'viewer' as const, byBot: false }], ...picked }));
 

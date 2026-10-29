@@ -263,6 +263,16 @@ describe('tilesInTierOrder', () => {
     expect(tilesInTierOrder(views).map((view) => view.tile.id)).toEqual(['personal', 'teammate', 'routed', 'rest']);
   });
 
+  it('puts reviews a person chose you for before other reviews for you inside To review', () => {
+    const chosen = (id: string, reviewAsk: 'picked' | 'pulled_in') => ({
+      ...tile(id, 'to_review'),
+      turn: { kind: 'you' as const, move: 'review' as const, who: null, what: 'alice picked you to review', prKey: 'o/r#1', reviewAsk },
+    });
+    const routed = { ...tile('routed', 'to_review'), forWhom: { kind: 'team' as const, team: 'team-platform' } };
+    const views = [routed, tile('personal', 'to_review'), chosen('picked', 'picked'), chosen('pulled', 'pulled_in')];
+    expect(tilesInTierOrder(views).map((view) => view.tile.id)).toEqual(['picked', 'pulled', 'personal', 'routed']);
+  });
+
   it('puts a stamphog decline first at each To review level', () => {
     const declined = pr({
       status: {

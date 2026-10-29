@@ -6,6 +6,16 @@ now".
 
 ## Done
 
+- Picked, pulled in or routed (2026-10-29; DESIGN.md "Picked, pulled in
+  or routed"): the reader asks `asCodeOwner` on pending `reviewRequests`
+  and stores the names it marks in `Pr.codeOwnerReviewers`
+  (`pr.code_owner_reviewers`, migration 042, NULL = not known = routed).
+  Core `reviewAsk` classifies the viewer's pending request from the
+  newest request event naming them; whose turn words a chosen review
+  "alice picked you to review" / "ben pulled you in to review" and sets
+  `WhoseTurn.reviewAsk`, which the renderer's `reviewRank` puts first
+  inside To review. Fake mode: `POSTPILE_FAKE_EXTRA=board`, topic
+  "Feature flag audit" (#2022 to #2025).
 - Finished sets close, sets cap at 12 (2026-10-27, owner after a look at
   real data: most sets had been fully merged for one to four weeks and
   still took joins, two grew to topic size; DESIGN.md "Tiles hold
@@ -1826,6 +1836,13 @@ the app meanwhile.
   oldest move. Never on merge moves, drafts, snoozed or done tiles; no
   reorder, no loudness, no pings. Why: responsiveness, an ask that sat for
   days should be visible without adding noise.
+- **Picked, pulled in or routed** (2026-10-29). A review request a person
+  chose you for reads differently from one tooling routed: "alice picked
+  you to review" (the owner, by hand), "ben pulled you in to review"
+  (another person). Team, bot, agent and CODEOWNERS requests stay routed
+  with today's words; an agent-opened PR is routed because the agent picks
+  the reviewers. Only the order inside a topic's To review tiles moves
+  (chosen reviews first); no new section, no loudness change, no pings.
 - **Finished sets close after 2 days, sets cap at 12 members**
   (2026-10-27, owner). A set whose members all merged or closed takes
   nothing new two days after the last one; its tile stays as it was. A

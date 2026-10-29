@@ -74,6 +74,7 @@ const JSON_FIELDS: Record<RowsCollection, Array<keyof FullPr>> = {
     'reviewDecision',
     'reviewerUsers',
     'reviewerTeams',
+    'codeOwnerReviewers',
     'headOid',
     'createdAt',
     'updatedAt',
@@ -148,6 +149,7 @@ interface HeaderColumnsRow {
   assignees: string;
   reviewer_users: string;
   reviewer_teams: string;
+  code_owner_reviewers: string | null;
   base_ref: string;
   head_ref: string;
   head_oid: string;
@@ -163,7 +165,7 @@ interface HeaderRow extends HeaderColumnsRow {
 }
 
 /** SQL: the columns of `HeaderColumnsRow`, over the header `p`. */
-const HEADER_COLUMNS_SQL = `p.key, p.repo, p.number, p.state, p.is_draft, p.title, p.author, p.assignees, p.reviewer_users, p.reviewer_teams,
+const HEADER_COLUMNS_SQL = `p.key, p.repo, p.number, p.state, p.is_draft, p.title, p.author, p.assignees, p.reviewer_users, p.reviewer_teams, p.code_owner_reviewers,
   p.base_ref, p.head_ref, p.head_oid, p.previous_base_refs, p.cross_repository, p.created_at, p.updated_at, p.merged_at`;
 
 /** A PR's header and text rows, with its mentioned teams: what a read takes once the text is in rows. */
@@ -315,6 +317,7 @@ function toHeaderPart(row: HeaderColumnsRow): HeaderPart {
     assignees: listOf(row.assignees),
     reviewerUsers: listOf(row.reviewer_users),
     reviewerTeams: listOf(row.reviewer_teams),
+    codeOwnerReviewers: row.code_owner_reviewers === null ? null : listOf(row.code_owner_reviewers),
     baseRef: row.base_ref,
     headRef: row.head_ref,
     headOid: row.head_oid,
@@ -604,14 +607,14 @@ export class PrRepo {
       const ready = this.readyCollections();
       run(
         this.db,
-        `INSERT INTO pr (key, repo, number, state, is_draft, title, author, assignees, reviewer_users, reviewer_teams,
+        `INSERT INTO pr (key, repo, number, state, is_draft, title, author, assignees, reviewer_users, reviewer_teams, code_owner_reviewers,
            base_ref, head_ref, head_oid, previous_base_refs, cross_repository, created_at, updated_at, merged_at, fetched_at, snapshot_revision,
            rows_version, mentioned_teams)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (key) DO UPDATE SET
            repo = excluded.repo, number = excluded.number, state = excluded.state, is_draft = excluded.is_draft,
            title = excluded.title, author = excluded.author, assignees = excluded.assignees,
-           reviewer_users = excluded.reviewer_users, reviewer_teams = excluded.reviewer_teams,
+           reviewer_users = excluded.reviewer_users, reviewer_teams = excluded.reviewer_teams, code_owner_reviewers = excluded.code_owner_reviewers,
            base_ref = excluded.base_ref, head_ref = excluded.head_ref, head_oid = excluded.head_oid,
            previous_base_refs = excluded.previous_base_refs, cross_repository = excluded.cross_repository,
            created_at = excluded.created_at, updated_at = excluded.updated_at, merged_at = excluded.merged_at,
@@ -627,6 +630,7 @@ export class PrRepo {
         JSON.stringify(pr.assignees ?? []),
         JSON.stringify(pr.reviewerUsers),
         JSON.stringify(pr.reviewerTeams),
+        pr.codeOwnerReviewers === undefined ? null : JSON.stringify(pr.codeOwnerReviewers),
         pr.baseRef,
         pr.headRef,
         pr.headOid,
@@ -763,7 +767,7 @@ export class PrRepo {
     const declared = this.declaredParents();
     const rows = each<HeaderRow>(
       this.db,
-      `SELECT key, repo, number, state, is_draft, title, author, assignees, reviewer_users, reviewer_teams,
+      `SELECT key, repo, number, state, is_draft, title, author, assignees, reviewer_users, reviewer_teams, code_owner_reviewers,
          base_ref, head_ref, head_oid, previous_base_refs, cross_repository, created_at, updated_at, merged_at,
          (SELECT max(at) FROM pr_event WHERE pr_event.pr_key = pr.key) AS last_event_at
        FROM pr ORDER BY repo, number`,

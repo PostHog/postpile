@@ -2,11 +2,12 @@
 // (an approved own PR alone in its topic, a whole "You drive" trio, a
 // teammate's draft asking you, a thanks that asks nothing, a merge the
 // glance calls Not yours, a closed PR next to an open one, a retired
-// standing topic, a long reviewer list, approvals right after a comment).
+// standing topic, a long reviewer list, approvals right after a comment,
+// review requests a person chose you for next to routed ones).
 // PR numbers 2001 and up; names and text are invented.
 import type { PrEvent } from '@postpile/core';
 import { approvedState, type SamplePack, type SamplePackMemory } from './sample-pack-common.ts';
-import { found, pinged, SAMPLE_VIEWER, SampleClock, sampleEvents, sampleGlance, sampleKey, samplePr, sampleTile, sampleTopic } from './sample-builders.ts';
+import { found, pinged, SAMPLE_AGENT, SAMPLE_VIEWER, SampleClock, sampleEvents, sampleGlance, sampleKey, samplePr, sampleTile, sampleTopic } from './sample-builders.ts';
 
 /** Topic ids, exported so a scripted step (WP1) can find them. */
 export const BOARD_TOPIC = {
@@ -21,6 +22,7 @@ export const BOARD_TOPIC = {
   releaseTrain: 'topic-release-train',
   prTemplate: 'topic-pr-template-checks',
   cacheMetrics: 'topic-build-cache-metrics',
+  reviewAsks: 'topic-feature-flag-audit',
 };
 
 function buildTopics(clock: SampleClock) {
@@ -85,6 +87,11 @@ function buildTopics(clock: SampleClock) {
       id: BOARD_TOPIC.cacheMetrics, area: 'CI', name: 'Build cache metrics',
       summary: 'sol reports cache hit rates per job. You approved both PRs.',
       tailoring: '', driver: 'sol', userRole: 'reviewer',
+    }),
+    sampleTopic(clock, {
+      id: BOARD_TOPIC.reviewAsks, area: 'Dev env', name: 'Feature flag audit',
+      summary: 'alice audits stale feature flags. Four PRs ask for your review: alice and ben chose you on two, CODEOWNERS and the coding agent routed the others.',
+      tailoring: '', driver: 'alice', userRole: 'reviewer',
     }),
   ];
 }
@@ -185,6 +192,28 @@ function buildPrs(clock: SampleClock) {
       comments: [{ id: 'issuecomment-2021-1', author: 'rowan', body: 'Dashboard panel looks good on staging.', hoursAgo: 3.002 }],
       reviews: [[SAMPLE_VIEWER, 'APPROVED', '', undefined, 3]],
     }),
+    // DESIGN.md "Picked, pulled in or routed": routed first here, so the topic column's order (chosen reviews first) shows.
+    // CODEOWNERS asked you, credited to the author: routed, "Review, alice asked".
+    samplePr(clock, {
+      number: 2024, title: 'Drop flags that are on for every team', author: 'alice', state: 'OPEN',
+      size: [10, 64, 5], openedHoursAgo: 5, reviewerUsers: [SAMPLE_VIEWER], requestedBy: 'alice', codeOwners: [SAMPLE_VIEWER],
+    }),
+    // The coding agent opened it for alice and picked its reviewers: routed, "Review".
+    samplePr(clock, {
+      number: 2025, title: 'List flags nobody evaluated in 90 days', author: SAMPLE_AGENT, assignees: ['alice'], state: 'OPEN',
+      size: [40, 2, 2], openedHoursAgo: 4, headRef: 'acme-agent/stale-flag-report', reviewerUsers: [SAMPLE_VIEWER], requestedBy: SAMPLE_AGENT,
+      body: 'Opened by the coding agent for @alice. Lists flags with no evaluation in 90 days.',
+    }),
+    // alice chose you by hand: "alice picked you to review".
+    samplePr(clock, {
+      number: 2022, title: 'Warn when a flag key is reused', author: 'alice', state: 'OPEN',
+      size: [24, 3, 2], openedHoursAgo: 3, reviewerUsers: [SAMPLE_VIEWER], requestedBy: 'alice',
+    }),
+    // ben, not the author, added you: "ben pulled you in to review".
+    samplePr(clock, {
+      number: 2023, title: 'Move flag defaults into one file', author: 'alice', state: 'OPEN',
+      size: [60, 48, 6], openedHoursAgo: 2, reviewerUsers: [SAMPLE_VIEWER], requestedBy: 'ben',
+    }),
   ];
 }
 
@@ -261,6 +290,18 @@ function buildEvents(clock: SampleClock): PrEvent[] {
       { kind: 'comment', actor: 'rowan', text: 'commented: "Dashboard panel looks good on staging."', hoursAgo: 3.002, rule: 'loud', sourceId: 'issuecomment-2021-1', seen: true },
       { kind: 'review_approved', actor: SAMPLE_VIEWER, text: 'approved', hoursAgo: 3, rule: 'quiet', sourceId: 'review-2021-0', seen: true },
     ]),
+    ...sampleEvents(clock, 2024, [
+      { kind: 'review_requested', actor: 'alice', text: 'requested a review from you', hoursAgo: 5, rule: 'loud', sourceId: 'request-2024' },
+    ]),
+    ...sampleEvents(clock, 2025, [
+      { kind: 'review_requested', actor: SAMPLE_AGENT, text: 'requested a review from you', hoursAgo: 4, rule: 'loud', sourceId: 'request-2025', isBot: true },
+    ]),
+    ...sampleEvents(clock, 2022, [
+      { kind: 'review_requested', actor: 'alice', text: 'requested a review from you', hoursAgo: 3, rule: 'loud', sourceId: 'request-2022' },
+    ]),
+    ...sampleEvents(clock, 2023, [
+      { kind: 'review_requested', actor: 'ben', text: 'requested a review from you', hoursAgo: 2, rule: 'loud', sourceId: 'request-2023' },
+    ]),
   ];
 }
 
@@ -306,6 +347,22 @@ function buildGlances(clock: SampleClock) {
       verdict: 'LOOKS_SAFE', forYou: 'You approved.', does: 'Sends the hit rates to the CI dashboard.',
       risk: 'Low.', othersSaid: 'rowan checked the panel on staging.',
     }),
+    sampleGlance(clock, 2022, {
+      verdict: 'LOOKS_SAFE', forYou: 'alice asked you in person.', does: 'Fails CI when two flags share a key.',
+      risk: 'Low. A new check.', othersSaid: 'No comments yet.',
+    }),
+    sampleGlance(clock, 2023, {
+      verdict: 'LOOK_CLOSER', forYou: 'ben added you; the defaults file touches your devbox config.', does: 'Moves every flag default into one file.',
+      risk: 'Medium. A missed default turns a flag off.', othersSaid: 'No comments yet.',
+    }),
+    sampleGlance(clock, 2024, {
+      verdict: 'LOOKS_SAFE', forYou: 'CODEOWNERS asked you for the devbox folder.', does: 'Deletes flags that are on for every team.',
+      risk: 'Low. The flags already read true everywhere.', othersSaid: 'No comments yet.',
+    }),
+    sampleGlance(clock, 2025, {
+      verdict: 'LOOKS_SAFE', forYou: 'The coding agent asked you; alice owns the PR.', does: 'Adds a report of flags with no evaluation in 90 days.',
+      risk: 'Low. Read only.', othersSaid: 'No comments yet.',
+    }),
   ];
 }
 
@@ -329,6 +386,10 @@ function buildTiles() {
     single(BOARD_TOPIC.prTemplate, 2019, 'Your template check waits on four reviewers', found(2019, 'own_open', 'your open PR')),
     single(BOARD_TOPIC.cacheMetrics, 2020, 'Cache hit rate report, approved', pinged(2020, 'review_requested')),
     single(BOARD_TOPIC.cacheMetrics, 2021, 'Cache dashboard panel, approved', pinged(2021, 'review_requested')),
+    single(BOARD_TOPIC.reviewAsks, 2024, 'Drop flags on for every team', pinged(2024, 'review_requested')),
+    single(BOARD_TOPIC.reviewAsks, 2025, 'Stale flag report from the agent', pinged(2025, 'review_requested')),
+    single(BOARD_TOPIC.reviewAsks, 2022, 'alice wants your eyes on flag key reuse', pinged(2022, 'review_requested')),
+    single(BOARD_TOPIC.reviewAsks, 2023, 'ben pulled you into the flag defaults move', pinged(2023, 'review_requested')),
   ];
 }
 

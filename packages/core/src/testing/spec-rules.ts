@@ -298,6 +298,26 @@ function standingTurn(pr: Pr, except: string | null): ExpectedTurn | null {
 }
 
 /**
+ * A person chose the viewer for their pending personal request (DESIGN
+ * "Picked, pulled in or routed"): the newest request naming the viewer was
+ * made by a human other than the viewer, CODEOWNERS did not make it, and
+ * the snapshot says so. "lyra picked you to review" from the owner, "ada
+ * pulled you in to review" from anyone else; null when routed.
+ */
+function chosenWords(pr: Pr, viewer: Viewer): string | null {
+  const codeOwners = pr.codeOwnerReviewers;
+  if (codeOwners === undefined || codeOwners.some((name) => sameLogin(name, viewer.login))) {
+    return null;
+  }
+  const requests = pr.timeline.filter((item) => item.kind === 'review_requested' && item.subject !== null && sameLogin(item.subject, viewer.login));
+  const by = requests.toSorted((a, b) => a.at.localeCompare(b.at)).at(-1)?.actor;
+  if (by === undefined || isAutomationLogin(by) || sameLogin(by, viewer.login)) {
+    return null;
+  }
+  return isOwner(pr, by) ? `${by} picked you to review` : `${by} pulled you in to review`;
+}
+
+/**
  * "Review, ada asked" (the newest person who asked the viewer or their
  * team), "Review for team-platform" (the team whose request decides, home
  * or routing), or with the owner for a teammate's PR.
@@ -347,7 +367,11 @@ function othersPrTurn(input: TurnInput): ExpectedTurn {
   }
   const request = pendingRequest(pr, viewer);
   if (headReview === null && (request === 'you' || request === 'team_for_you' || request === 'team')) {
-    return viewerAskedForChanges(pr, viewer) ? you('re_review', reviewWords(pr, viewer, request, 'Re-review')) : you('review', reviewWords(pr, viewer, request, 'Review'));
+    if (viewerAskedForChanges(pr, viewer)) {
+      return you('re_review', reviewWords(pr, viewer, request, 'Re-review'));
+    }
+    const chosen = request === 'you' ? chosenWords(pr, viewer) : null;
+    return you('review', chosen ?? reviewWords(pr, viewer, request, 'Review'));
   }
   if (headReview !== null && request === 'you' && viewerAskedForChanges(pr, viewer)) {
     // Re-requested without a push: a review takes the reviewer off the list, so only the author put them back.

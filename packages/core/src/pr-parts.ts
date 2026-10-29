@@ -579,6 +579,8 @@ export interface HeaderPart {
   headOid: string;
   reviewerUsers: string[];
   reviewerTeams: string[];
+  /** Null: not recorded (PRs stored before it was fetched); read back as missing. */
+  codeOwnerReviewers: string[] | null;
   previousBaseRefs: string[];
   isCrossRepository: boolean;
   createdAt: IsoTime;
@@ -652,6 +654,9 @@ export function joinText(header: HeaderPart, text: TextPart): PrText {
   };
   for (const field of text.absentFields) {
     delete pr[field];
+  }
+  if (header.codeOwnerReviewers !== null) {
+    pr.codeOwnerReviewers = header.codeOwnerReviewers;
   }
   if (text.truncated !== null) {
     pr.truncated = text.truncated;

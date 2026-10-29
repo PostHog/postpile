@@ -1135,6 +1135,46 @@ question is still a question after the merge.
    and read state (`isHotByRule`, "Big inboxes"): reading it and navigating
    away does not drop its topic from Needs reply after a week.
 
+## Picked, pulled in or routed
+
+Decided 2026-10-29. A review request reads the same whether a person chose
+the user or tooling routed it to them, but the two are different asks. A
+person choosing you is a direct ask: they want your eyes in particular.
+CODEOWNERS, an owners-file assigner bot or a coding agent sending the PR to
+you is routing, and on a busy inbox most requests are routed. Requests
+carry who made them (the actor on `ReviewRequestedEvent`) and GitHub says
+whether CODEOWNERS made a pending one (`ReviewRequest.asCodeOwner`, only
+readable while the request is pending).
+
+1. *Classes* (`reviewAsk` in `review-request.ts`), for the user's pending
+   request, read from the newest request event that names them in person:
+   - `picked`: a personal request the PR's owner (`prOwners`: the human
+     author, or the assignee of a bot's PR) made by hand, not as code owner.
+   - `pulled_in`: a personal request a person other than the owner made.
+     Rare, and the strongest signal.
+   - `routed`: everything else. Team requests; requests made by any bot or
+     automation (`isBot`), `posthog[bot]` included; code owner requests;
+     a request the user made themselves; and anything not known (no request
+     event, or a PR stored before `codeOwnerReviewers` was fetched). A PR a
+     coding agent opens on someone's behalf counts as routed even when its
+     owner is a person: the agent picks the reviewers, not the person.
+2. *Words.* The review move names the person first, like the ask footers
+   ("lyra mentioned you"): "alice picked you to review", "ben pulled you in
+   to review" (move `review`, chip "Review"). Routed requests keep their
+   words: "Review, alice asked", "Review for team-devex". A re-request after
+   the user's change request stays the `re_review` move with its own words
+   ("Re-review, alice asked"): an explicit re-request already says "look
+   again".
+3. *Order.* Only inside a topic's To review tiles (`reviewRank` in the
+   renderer, from `WhoseTurn.reviewAsk`): reviews a person chose you for
+   first, then other "For you" reviews, then routed team requests, a
+   stamphog decline first at each level. The sidebar's topic order, the
+   sections, tiers, loudness, pings and whose turn's urgency do not change.
+4. *Storage.* The reader asks `asCodeOwner` on the PR's pending
+   `reviewRequests` and keeps the names it marks in `Pr.codeOwnerReviewers`
+   (store column `pr.code_owner_reviewers`, migration 042, NULL for PRs
+   stored before it, read back as not known).
+
 ## CI is not tracked
 
 Decided 2026-10-05 (0.21.0): PostPile fetches no CI at all. The checks were
@@ -4546,7 +4586,10 @@ the move became the viewer's (see "Waiting on you for days"). No CI move: `fix_c
    - you: a review is requested of you, or of your team, and you have not
      reviewed the head ("Review, rowan asked", "Review for team-devex"). The
      name is who requested you or your team in the timeline, not whoever
-     made the newest request on the PR. A
+     made the newest request on the PR. A personal request a person chose
+     you for names them first: "alice picked you to review" (the owner),
+     "ben pulled you in to review" (anyone else); routed requests keep the
+     words above (2026-10-29, "Picked, pulled in or routed"). A
      team request on a teammate's PR counts like a personal one
      ("Review for team-devex: lyra's PR") until another teammate approves
      or requests changes; a teammate's comment alone does not cover it
@@ -5072,7 +5115,9 @@ another teammate covered stays `team`; routed team requests stay
 a teammate's PR is `to_review` too, before `team` (2026-09-30): a review
 owed, not `team`. Without a home team nothing is `team`. Inside To review the topic column
 puts "For you" tiles (personal and teammate team requests) before routed
-team requests (`tilesInTierOrder` in the renderer).
+team requests (`tilesInTierOrder` in the renderer), and among the "For
+you" tiles those a person picked you or pulled you in for first
+(2026-10-29, "Picked, pulled in or routed").
 Addressed your changes (see whose turn) is `changes_requested` (was
 `to_review` until 2026-09-29), like a change request still waiting on the
 author: a re-review is owed even to a teammate, and the author's own

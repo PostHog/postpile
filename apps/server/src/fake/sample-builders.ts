@@ -101,6 +101,22 @@ export interface SamplePrInput {
   draft?: boolean;
   /** Changed files with their +/- counts; empty by default like a PR fetched without files. */
   files?: [path: string, additions: number, deletions: number][];
+  /** Who asked the viewer for a review: adds a review_requested timeline item (`request-<number>`) when the PR opened. */
+  requestedBy?: string;
+  /** Pending requests CODEOWNERS made (`Pr.codeOwnerReviewers`); none by default. */
+  codeOwners?: string[];
+}
+
+/** The PR's timeline: who asked the viewer for a review, and the merge queue. */
+function sampleTimeline(clock: SampleClock, input: SamplePrInput): TimelineItem[] {
+  const timeline: TimelineItem[] = [];
+  if (input.requestedBy !== undefined) {
+    timeline.push({ id: `request-${input.number}`, kind: 'review_requested', actor: input.requestedBy, at: clock.hoursAgo(input.openedHoursAgo), subject: SAMPLE_VIEWER });
+  }
+  if (input.queued) {
+    timeline.push({ id: `queue-${input.number}`, kind: 'added_to_merge_queue', actor: 'mergify[bot]', at: clock.hoursAgo(1), subject: null });
+  }
+  return timeline;
 }
 
 /** Like GitHub with a review rule: a standing change request wins, then any approval. */
@@ -199,6 +215,7 @@ export function samplePr(clock: SampleClock, input: SamplePrInput): FullPr {
     reviewDecision: sampleReviewDecision(input.reviews ?? []),
     reviewerUsers: input.reviewerUsers ?? [],
     reviewerTeams: input.reviewerTeams ?? [],
+    codeOwnerReviewers: input.codeOwners ?? [],
     reviews,
     commits: (input.commits ?? []).map((commit) => ({
       oid: commit.oid,

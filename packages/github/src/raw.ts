@@ -146,7 +146,8 @@ export interface RawPullRequest {
   mergedBy: RawActor | null;
   labels: { nodes: { name: string }[] };
   files: { nodes: { path: string; additions: number; deletions: number }[] } | null;
-  reviewRequests: { nodes: { requestedReviewer: RawRequestedReviewer | null }[] };
+  /** `asCodeOwner`: CODEOWNERS made the request. Missing in fixtures written before it was asked for. */
+  reviewRequests: { nodes: { requestedReviewer: RawRequestedReviewer | null; asCodeOwner?: boolean }[] };
   reviews: RawConnection<RawReview>;
   comments: RawConnection<RawComment>;
   reviewThreads: RawConnection<RawReviewThread>;

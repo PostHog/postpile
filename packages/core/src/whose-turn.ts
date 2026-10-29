@@ -20,6 +20,8 @@ import {
   newestVerdictBy,
   requestedTeam,
   requestsOfViewer,
+  reviewAsk,
+  reviewChooser,
   reviewRequest,
   teamRequestHold,
   teamRequestTakenBy,
@@ -66,6 +68,12 @@ interface TurnFields {
    * sentence's subject ("Waiting on" sol). Absent means none.
    */
   lead?: string;
+  /**
+   * you, move review only: a person chose the viewer (`reviewAsk` picked or
+   * pulled in), so the topic column can put it ahead of routed reviews.
+   * Absent on every other turn.
+   */
+  reviewAsk?: 'picked' | 'pulled_in';
 }
 
 /**
@@ -350,6 +358,22 @@ function reviewText(ctx: PrContext, ask: ReviewRequest, verb: 'Review' | 'Re-rev
 }
 
 /**
+ * The review move. A person who chose the viewer is named first: "alice
+ * picked you to review" (the owner), "ben pulled you in to review" (anyone
+ * else). A routed request keeps "Review, ada asked" or "Review for
+ * team-devex" (2026-10-29, `reviewAsk`).
+ */
+function reviewTurn(ctx: PrContext, ask: ReviewRequest): WhoseTurn {
+  const chosen = reviewAsk(ctx.pr, ctx.viewer);
+  const by = reviewChooser(ctx.pr, ctx.viewer);
+  if (by === null || (chosen !== 'picked' && chosen !== 'pulled_in')) {
+    return youSince(ctx, 'review', reviewText(ctx, ask, 'Review'), requestedAt(ctx));
+  }
+  const words = chosen === 'picked' ? 'picked you to review' : 'pulled you in to review';
+  return { ...you(ctx, 'review', `${by} ${words}`), reviewAsk: chosen };
+}
+
+/**
  * Unresolved threads whose last word is someone else's (not the viewer's,
  * not a bot's, not bot talk like "fixed" to a review bot), in the PR's
  * thread order. The "Answer 2 threads from mira" move counts them; the MCP
@@ -450,7 +474,7 @@ function othersPrTurn(ctx: PrContext): WhoseTurn {
     if (viewerRequestedChanges(pr, ctx.viewer)) {
       return youSince(ctx, 're_review', reviewText(ctx, ask, 'Re-review'), requestedAt(ctx));
     }
-    return youSince(ctx, 'review', reviewText(ctx, ask, 'Review'), requestedAt(ctx));
+    return reviewTurn(ctx, ask);
   }
   if (reviewed !== null && ask === 'you' && viewerRequestedChanges(pr, ctx.viewer)) {
     // Asked again without a push: GitHub drops a reviewer from the requested
