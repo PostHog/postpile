@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ScoutCandidate } from '@postpile/core';
 import { makePr } from '@postpile/core/fixtures';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { makeHarness, NOW, type Harness } from '../testing/fakes.ts';
 import { UserConfigFile } from '../user-config.ts';
 
@@ -176,6 +176,18 @@ describe('the Scouts intro card', () => {
 
     expect(result.name).toBe('Scout app 2');
     expect((await h.engine.turnOnScout({ name: result.name, prompt: PROMPT, repos: ['acme/app'], paths: [] })).ok).toBe(true);
+  });
+
+  it('reports a scout turned on once scouts.md has it, even when its history row fails', async () => {
+    const { h, file } = setup();
+    vi.spyOn(h.store.scoutsVersions, 'add').mockImplementationOnce(() => {
+      throw new Error('database or disk is full');
+    });
+
+    const result = await h.engine.turnOnScout({ name: 'Lookout', prompt: PROMPT, repos: ['acme/app'], paths: [] });
+
+    expect(result.ok).toBe(true);
+    expect(readFileSync(file, 'utf8')).toContain('## Lookout');
   });
 
   it('refuses a name another scout has', async () => {

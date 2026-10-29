@@ -208,6 +208,9 @@ export class ScoutIntro {
     if ('error' in result) {
       return failed(`Not turned on: ${result.error}`);
     }
+    if (result.historyError !== null) {
+      this.deps.log(`scouts intro: scout turned on, but its history row was not saved: ${result.historyError}`);
+    }
     // The scout is on once scouts.md has it; a config.json that can't be written must not turn that into an error.
     try {
       this.remember();

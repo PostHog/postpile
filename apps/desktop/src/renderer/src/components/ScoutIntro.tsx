@@ -69,16 +69,17 @@ export function ScoutIntro(props: { setupBlocks: boolean; requested: boolean; on
     // Only a new click runs this: a failure that comes back must not ask again by itself.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.requested]);
-  if (state === undefined && props.requested && intro.isError) {
-    return <ScoutIntroLoadError error={intro.error} retrying={intro.isFetching} onRetry={() => void refetch()} onClose={props.onClose} />;
-  }
-  if (state === undefined || !(open || opens)) {
-    return null;
-  }
+  // One way to close for the card and the load error alike: a later load must not reopen what the user closed.
   const close = () => {
     setOpen(false);
     setClosed(true);
     props.onClose();
   };
+  if (state === undefined && props.requested && intro.isError) {
+    return <ScoutIntroLoadError error={intro.error} retrying={intro.isFetching} onRetry={() => void refetch()} onClose={close} />;
+  }
+  if (state === undefined || !(open || opens)) {
+    return null;
+  }
   return <ScoutIntroCard state={state} hidden={waits && !props.requested} onClose={close} />;
 }

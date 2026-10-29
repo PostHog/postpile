@@ -1207,7 +1207,11 @@ contract surfaces.
   comma or space separated), `paths:` (optional, comma separated, a note in
   brackets after an entry is ignored), `id:` (optional). The first other
   line starts the prompt.
-- Paths are CODEOWNERS-style globs (`codeownersPatternRegex`). A `+` in
+- Paths are CODEOWNERS-style globs, matched segment by segment without a
+  regex (`globPathMatches`, at most pattern length times path length):
+  hints can come from the model, and a compiled glob regex can backtrack
+  for seconds. The CODEOWNERS regex only says which patterns are
+  unsupported. A `+` in
   front counts only an added file (ADDED, or RENAMED to the path). `+*/`
   means a new top-level folder: an added file whose first folder is not a
   directory of the tree before the PR (`ScoutFilesRead.foldersOid`, cached
@@ -1464,7 +1468,7 @@ drafts the first one, checks it and turns it on.
   is usable, the card keeps no hints: a missing hint only costs judge
   calls, a partial list silently narrows the scout. Path hints pass only as
   path globs of at most 200 characters, with no line break, comma or space
-  (`isScoutPathHint`); `scoutSection` writes no other kind, and
+  (`isScoutPathHint`, at most 6 `*`); `scoutSection` writes no other kind, and
   `appendScout` refuses one and checks the new scout's id and hints read
   back as asked, so a hint can never add a key line. The path hints are
   never shown; they go into the scout, edited in scouts.md. The check and
