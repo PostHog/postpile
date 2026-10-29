@@ -361,7 +361,40 @@ export class ScoutRun {
    * (or the resumed listing's older one), plus its pending ones whatever
    * the cursor says.
    */
-  private async candidatesFor(scout: ScoutConfig, repo: string, listing: RepoListing, scoutFloor: IsoTime): Promise<ScoutCandidate[]> {
+  /** One scout's pending rows on the repo that its listing did not bring: they need a lookup by number. */
+  private unlistedPending(scout: ScoutConfig, repo: string, listing: RepoListing): ScoutJudgement[] {
+    return this.deps.store.scoutJudgements.listPending(scout.id).filter((row) => repoOf(row.prKey) === repo.toLowerCase() && !listing.prs.has(row.prKey));
+  }
+
+  /** Candidates this run's calls can judge at most: none while the agent is off or the budget is spent. */
+  private judgeCapacity(input: Pick<ScoutRunInput, 'agentOff' | 'budget'>): number {
+    const calls = input.agentOff !== null ? 0 : Math.min(this.judgeCallsLeft, input.budget.remaining());
+    return calls * SCOUT_JUDGE_BATCH;
+  }
+
+  /**
+   * Metadata for pending PRs the listings did not reach, bounded by what
+   * this run can judge: the run's schedule (`scheduleScoutWork`) picks which,
+   * round-robin over the scouts, oldest first, stalled ones last, and one
+   * read serves every scout. Nothing is read when no call can run: the rows
+   * stay pending as they are, for a run that can judge them.
+   */
+  private async lookUpPending(queues: ScoutJudgement[][], capacity: number): Promise<Map<PrKey, ScoutCandidate>> {
+    const items = queues.map((queue) => queue.map((row) => ({ row, pending: true, stalled: scoutRetryStalled(row), observedUpdatedAt: row.observedUpdatedAt })));
+    const keys = [...new Set([...scheduleScoutWork(items, capacity)].map((item) => item.row.prKey))];
+    if (keys.length === 0 || !this.quotaAllows()) {
+      return new Map();
+    }
+    try {
+      return await this.deps.reader.scoutPrsByNumber(keys.map(refOf));
+    } catch (error) {
+      this.deps.log(`scouts: pending PRs: ${errorText(error)}`);
+      return new Map();
+    }
+  }
+
+  /** The listing's PRs since the floor, plus this scout's pending PRs: from the listing, or looked up for this run. */
+  private candidatesFor(scout: ScoutConfig, repo: string, listing: RepoListing, scoutFloor: IsoTime, lookedUp: ReadonlyMap<PrKey, ScoutCandidate>): ScoutCandidate[] {
     const floor = listing.floor < scoutFloor ? listing.floor : scoutFloor;
     const candidates = new Map<PrKey, ScoutCandidate>();
     for (const pr of listing.prs.values()) {
@@ -369,25 +402,10 @@ export class ScoutRun {
         candidates.set(pr.key, pr);
       }
     }
-    const pendingKeys = this.deps.store.scoutJudgements
-      .listPending(scout.id)
-      .map((row) => row.prKey)
-      .filter((key) => repoOf(key) === repo.toLowerCase() && !candidates.has(key));
-    const byKey = new Map([...listing.prs.values()].map((pr) => [pr.key, pr]));
-    const lookUp = pendingKeys.filter((key) => !byKey.has(key));
-    if (lookUp.length > 0) {
-      try {
-        for (const [key, pr] of await this.deps.reader.scoutPrsByNumber(lookUp.map(refOf))) {
-          byKey.set(key, pr);
-        }
-      } catch (error) {
-        this.deps.log(`scouts: pending PRs of ${scout.id}: ${errorText(error)}`);
-      }
-    }
-    for (const key of pendingKeys) {
-      const pr = byKey.get(key);
-      if (pr) {
-        candidates.set(key, pr);
+    for (const row of this.deps.store.scoutJudgements.listPending(scout.id)) {
+      const pr = listing.prs.get(row.prKey) ?? lookedUp.get(row.prKey);
+      if (pr && repoOf(row.prKey) === repo.toLowerCase()) {
+        candidates.set(row.prKey, pr);
       }
     }
     return [...candidates.values()];
@@ -478,8 +496,7 @@ export class ScoutRun {
    */
   private schedule(plans: ScoutPlan[], input: Pick<ScoutRunInput, 'agentOff' | 'budget'>, version: ScoutsVersion | null): void {
     const byCap = input.budget.remaining() < this.judgeCallsLeft;
-    const calls = input.agentOff !== null ? 0 : Math.min(this.judgeCallsLeft, input.budget.remaining());
-    const taken = scheduleScoutWork(plans.map((plan) => plan.triaged), calls * SCOUT_JUDGE_BATCH);
+    const taken = scheduleScoutWork(plans.map((plan) => plan.triaged), this.judgeCapacity(input));
     const left = plans.some((plan) => plan.triaged.some((entry) => !taken.has(entry)));
     let why = 'waits for the next sync (more candidates than scout calls)';
     if (input.agentOff !== null) {
@@ -704,12 +721,14 @@ export class ScoutRun {
       for (const scout of active.scouts) {
         scout.repos.forEach((repo) => lastScoutOn.set(repo, scout.id));
       }
+      const unlisted = active.scouts.flatMap((scout) => scout.repos.map((repo) => this.unlistedPending(scout, repo, listings.get(repo)!)));
+      const lookedUp = await this.lookUpPending(unlisted, this.judgeCapacity(input));
       const plans: ScoutPlan[] = [];
       for (const scout of active.scouts) {
         for (const repo of scout.repos) {
           const listing = listings.get(repo)!;
           const work: ScoutRepoWork = { rows: [], pulls: [] };
-          const candidates = await this.candidatesFor(scout, repo, listing, floors.get(`${scout.id} ${repo}`)!);
+          const candidates = this.candidatesFor(scout, repo, listing, floors.get(`${scout.id} ${repo}`)!, lookedUp);
           plans.push({ scout, repo, listing, work, triaged: this.triage(scout, active.version, candidates, facts, work), scheduled: [] });
         }
       }
