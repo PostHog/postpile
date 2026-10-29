@@ -110,6 +110,7 @@ import {
   isScoutedUnseen,
   scoutedPrView,
   scoutIdOfTopic,
+  stackByPrKey,
   scoutTopicId,
   type ScoutConfig,
   type ScoutFollowState,
@@ -120,6 +121,7 @@ import type { AgentService } from '@postpile/agent';
 import type { Store } from '@postpile/store';
 import { seenThroughNow } from './agent-requests/seen-through.ts';
 import { Board, UNSORTED_TOPIC_ID } from './board.ts';
+import { readStoreShape, threadsByPrKey } from './hot-set.ts';
 import { loadCodeOwnersRules } from './code-owners.ts';
 import { RetireGate } from './consolidation/retire-gate.ts';
 import { debugNotificationRows, quietReadViews } from './debug-notifications.ts';
@@ -326,9 +328,40 @@ export class ReadModels {
    * has tiles. The count is unseen tiles, never unread: nothing here is in
    * the GitHub inbox.
    */
+  /**
+   * PRs per scout on the Scouted section, and the unseen ones, from headers
+   * only: one query over pr_scouted and pr, then the stacks over every
+   * stored header, so a layer whose stack a tracked PR shows (a followed
+   * layer, one in the inbox) leaves the count with it. No Board, so no cold
+   * snapshot is read for the sidebar.
+   */
+  private scoutCounts(): Map<string, { prs: number; unseen: number }> {
+    const rows = this.store.scoutedPrs.listUntracked();
+    const counts = new Map<string, { prs: number; unseen: number }>();
+    if (rows.length === 0) {
+      return counts;
+    }
+    const stackOf = stackByPrKey(readStoreShape(this.store).stacks);
+    const tracked = new Set<PrKey>([
+      ...threadsByPrKey(this.store.notifications.list()).keys(),
+      ...this.store.foundPrs.listAll().keys(),
+      ...this.store.memberships.listAll().map((membership) => membership.prKey),
+    ]);
+    for (const row of rows) {
+      const layers = stackOf.get(row.prKey)?.prKeys ?? [];
+      if (layers.some((key) => tracked.has(key))) {
+        continue;
+      }
+      const count = counts.get(row.scoutId) ?? { prs: 0, unseen: 0 };
+      count.prs += 1;
+      count.unseen += row.unseen ? 1 : 0;
+      counts.set(row.scoutId, count);
+    }
+    return counts;
+  }
+
   listScouts(): ScoutListItem[] {
-    // One query over headers: no Board, so no cold snapshot is read for the sidebar however many PRs scouts hold.
-    const counts = this.store.scoutedPrs.countsByScout();
+    const counts = this.scoutCounts();
     const withRows = this.scoutsWithRows();
     const ids = new Map(this.scoutInfo.configured().map((scout) => [scout.id, scout.name]));
     for (const [id, name] of withRows) {

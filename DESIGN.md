@@ -1329,9 +1329,11 @@ close, or three days without activity. Opening it does not keep it.
 file order (`GET /api/scouts`, `ScoutListItem`), with a grey count of PRs
 not seen in PostPile since their last activity, never coral and never in
 unread. The counts come from one query over `pr_scouted` and the PR headers
-(`countsByScout`), never from a Board, so a busy install reads no cold
-snapshot for the sidebar; a stack counts each layer under the scout that
-pulled it. A row opens `scout:<id>` like a topic: tiles only, no driver,
+(`listUntracked`) plus the stacks over every header, never from a Board, so
+a busy install reads no cold snapshot for the sidebar; a stack counts each
+layer under the scout that pulled it, and none of it once a layer is
+tracked (followed, or in the inbox): the stack then shows whole in its
+normal place. A row opens `scout:<id>` like a topic: tiles only, no driver,
 dossier, sets or moves. The tile shows the scout's name in the "for whom"
 spot and its reason (`TileView.scout`).
 

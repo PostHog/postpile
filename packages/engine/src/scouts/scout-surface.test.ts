@@ -204,6 +204,25 @@ describe('the Scouted section', () => {
     expect(tiles[0]?.scout).toMatchObject({ scoutId: 'lookout', scoutName: 'Lookout', reason: 'new folder' });
   });
 
+  it('stops counting a scouted stack once one of its layers is followed', async () => {
+    const h = makeHarness();
+    const bottom = makePr({ number: 5, headRef: 'billing-1', updatedAt: NOW.toISOString() });
+    const top = makePr({ number: 6, baseRef: 'billing-1', headRef: 'billing-2', updatedAt: NOW.toISOString() });
+    h.store.prs.upsert(bottom, NOW.toISOString());
+    h.store.prs.upsert(top, NOW.toISOString());
+    const row = { scoutId: 'lookout', scoutName: 'Lookout', configVersion: 1, reason: 'new folder', pulledAt: NOW.toISOString(), seenUpdatedAt: null, followedAt: null, dismissedAt: null, dismissReason: null, expiredAt: null, expiryReason: null };
+    h.store.scoutedPrs.insert({ ...row, prKey: bottom.key });
+    h.store.scoutedPrs.insert({ ...row, prKey: top.key });
+    expect((await h.engine.listScouts())[0]).toMatchObject({ tiles: 2, unseen: 2 });
+
+    h.store.scoutedPrs.markFollowed(bottom.key, NOW.toISOString());
+    h.store.foundPrs.put({ prKey: bottom.key, via: 'followed', reason: 'followed from scout "Lookout"', foundAt: NOW.toISOString() });
+
+    // The stack shows whole in Unsorted now; its other layer leaves the Scouted count with it.
+    expect(await h.engine.listScouts()).toEqual([]);
+    expect((await h.engine.getTopic('scout:lookout'))?.tiles ?? []).toEqual([]);
+  });
+
   it('leaves a scouted stack layer to the normal topic when another layer is tracked', async () => {
     const h = makeHarness();
     const bottom = makePr({ number: 5, headRef: 'billing-1', updatedAt: NOW.toISOString() });

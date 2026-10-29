@@ -154,7 +154,7 @@ describe('ScoutedPrRepo', () => {
     expect([...store.scoutedPrs.getMany(['acme/app#1', 'acme/app#9']).keys()]).toEqual(['acme/app#1']);
   });
 
-  it('counts active, untracked scouted PRs and the unseen ones per scout from headers', () => {
+  it('lists active, untracked scouted PRs with their unseen state from headers', () => {
     const header = (number: number, updatedAt: string) => makePr({ number, updatedAt });
     store.prs.upsert(header(1, '2026-10-29T10:00:00.000Z'), '2026-10-29T10:00:00.000Z');
     store.prs.upsert(header(2, '2026-10-29T12:00:00.000Z'), '2026-10-29T12:00:00.000Z');
@@ -167,7 +167,10 @@ describe('ScoutedPrRepo', () => {
     store.foundPrs.put({ prKey: 'acme/app#4', via: 'review_requested', reason: 'review requested from you', foundAt: '2026-10-29T11:00:00.000Z' });
 
     // #1 seen, #2 moved since it was seen, #3 dismissed, #4 tracked now.
-    expect(store.scoutedPrs.countsByScout()).toEqual(new Map([['lookout', { prs: 2, unseen: 1 }]]));
+    expect(store.scoutedPrs.listUntracked()).toEqual([
+      { prKey: 'acme/app#1', scoutId: 'lookout', unseen: false },
+      { prKey: 'acme/app#2', scoutId: 'lookout', unseen: true },
+    ]);
   });
 });
 
