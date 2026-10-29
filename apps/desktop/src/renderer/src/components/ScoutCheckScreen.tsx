@@ -36,7 +36,8 @@ function FitBox(props: { fit: ScoutCheckResult['fit'] }) {
   );
 }
 
-function CantSeeBox(props: { cantSee: ScoutCantSee; onKeep: () => void; onDrop: () => void }) {
+/** "Drop that part" shows only when the part can be cut from the prompt word for word (`rewrite`). */
+function CantSeeBox(props: { cantSee: ScoutCantSee; onKeep: () => void; onDrop: (() => void) | null }) {
   return (
     <div className="flex items-start gap-2.5 rounded-[10px] bg-amber-soft px-3 py-2.5">
       <RoundMark fill="var(--amber)" check={false} />
@@ -48,9 +49,11 @@ function CantSeeBox(props: { cantSee: ScoutCantSee; onKeep: () => void; onDrop: 
           <button type="button" onClick={props.onKeep} className="rounded-control bg-surface px-2.5 py-1 text-xs text-amber-ink inset-ring inset-ring-amber hover:bg-subtle">
             Keep it anyway
           </button>
-          <button type="button" onClick={props.onDrop} title="Takes that part out of the prompt" className="px-1.5 py-1 text-xs text-amber-ink underline hover:text-ink">
-            Drop that part
-          </button>
+          {props.onDrop && (
+            <button type="button" onClick={props.onDrop} title="Takes that part out of the prompt" className="px-1.5 py-1 text-xs text-amber-ink underline hover:text-ink">
+              Drop that part
+            </button>
+          )}
         </span>
       </div>
     </div>
@@ -99,7 +102,7 @@ export function ScoutCheckScreen(props: {
   repos: string[];
   name: string;
   onName: (name: string) => void;
-  onDropPart: (cantSee: ScoutCantSee) => void;
+  onDropPart: (rewrite: string) => void;
 }) {
   const { result } = props;
   const [cantSeeOpen, setCantSeeOpen] = useState(true);
@@ -132,10 +135,14 @@ export function ScoutCheckScreen(props: {
           <CantSeeBox
             cantSee={cantSee}
             onKeep={() => setCantSeeOpen(false)}
-            onDrop={() => {
-              props.onDropPart(cantSee);
-              setCantSeeOpen(false);
-            }}
+            onDrop={
+              cantSee.rewrite === null
+                ? null
+                : () => {
+                    props.onDropPart(cantSee.rewrite!);
+                    setCantSeeOpen(false);
+                  }
+            }
           />
         )}
       </div>

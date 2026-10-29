@@ -574,8 +574,9 @@ export class Engine implements EngineService {
       agent: deps.agent,
       contexts,
       history: scoutsHistory,
-      // Its own runner: the dry run must not share a running sync's per-run state.
-      scoutRun: scoutRunDeps === null ? null : new ScoutRun(scoutRunDeps),
+      scoutRunDeps,
+      callLog: deps.callLog,
+      log: lineLog,
       userConfig: deps.userConfig ?? null,
       allowance: this.catchUpCap,
       agentOff,

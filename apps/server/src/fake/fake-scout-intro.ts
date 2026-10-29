@@ -30,7 +30,6 @@ const CHECK_ANSWER: ScoutCheckAnswer = {
   cantSee: {
     part: CANT_SEE_PART,
     why: 'That usually hides inside the code, and scouts never read diffs. It only catches the ones that say so in the title or description.',
-    rewrite: FAKE_SCOUT_DRAFT.replace(`, ${CANT_SEE_PART},`, ','),
   },
   name: 'Lookout · structure',
   paths: ['+*/'],

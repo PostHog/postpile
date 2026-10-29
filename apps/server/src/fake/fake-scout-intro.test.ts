@@ -26,8 +26,7 @@ describe('FakeEngine scouts intro', () => {
     expect(checked.trial).toMatchObject({ days: 2, pulled: 5, complete: true });
     expect(checked.trial?.examples.map((example) => example.prKey)).toEqual(['acme/app#2701', 'acme/app#2688']);
     const rewrite = checked.cantSee?.rewrite ?? '';
-    expect(rewrite.length).toBeGreaterThan(0);
-    expect(rewrite).not.toContain(checked.cantSee?.part);
+    expect(rewrite).toBe(FAKE_SCOUT_DRAFT.replace(' models shared across module boundaries,', ''));
     expect((await fake.checkScout({ prompt: rewrite, repos: ['acme/app'] })).cantSee).toBeNull();
   });
 

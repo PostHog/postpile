@@ -56,11 +56,10 @@ Answer:
   of it does; "no" when almost none of it does.
 - note: one sentence for the developer saying why, in plain words.
 - cantSee: the one part of the prompt a scout can't see (it would need the code or the discussion), or
-  null. part: quoted exactly from the prompt. why: one sentence. rewrite: the whole prompt again with
-  that part dropped and nothing else changed.
+  null. part: quoted exactly from the prompt, word for word, so it can be cut out. why: one sentence.
 - name: a short name for the scout, two to four words, e.g. "Lookout · structure".
 - paths: up to 6 path hints that would mark a matching PR, as gitignore-style globs over repo paths
   ("services/*/api/**", "docs/architecture.md"). Put "+" in front to count only added files, and
   use "+*/" for "adds a new top-level folder". Empty when paths would not help.
-${jsonOnly('{"fit": "fits", "note": "...", "cantSee": {"part": "...", "why": "...", "rewrite": "..."}, "name": "...", "paths": ["+*/"]}')}`;
+${jsonOnly('{"fit": "fits", "note": "...", "cantSee": {"part": "...", "why": "..."}, "name": "...", "paths": ["+*/"]}')}`;
 }

@@ -381,7 +381,7 @@ export const scoutDraftOutput = z.object({
 export const scoutCheckOutput = z.object({
   fit: text.default('partly'),
   note: text.default(''),
-  cantSee: z.object({ part: text, why: text.default(''), rewrite: text.default('') }).nullable().default(null),
+  cantSee: z.object({ part: text, why: text.default('') }).nullable().default(null),
   name: text.default(''),
   paths: z.array(text).default([]),
 });

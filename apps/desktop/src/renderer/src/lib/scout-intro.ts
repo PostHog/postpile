@@ -1,7 +1,7 @@
 // The Scouts intro card (DESIGN.md "Scouts" › The intro card): when it opens,
 // the repo picker, whether "Check scout" can run, the draft that must never
 // overwrite the user's typing, and the words of the check screen.
-import { SCOUT_TRIAL_DAYS, trialRateWords, type InboxCleanupView, type InterruptionsView, type ScoutCantSee, type ScoutDraftResult, type ScoutFitVerdict, type ScoutIntroState, type ScoutTrial } from '@postpile/core';
+import { SCOUT_TRIAL_DAYS, trialRateWords, type InboxCleanupView, type InterruptionsView, type ScoutDraftResult, type ScoutFitVerdict, type ScoutIntroState, type ScoutTrial } from '@postpile/core';
 import { plural } from './plural.ts';
 
 /** Repos one scout may watch from the card, like the engine's check. */
@@ -109,11 +109,6 @@ export function textAfterDraft(draft: ScoutDraftResult, typed: boolean): string 
 /** The textarea's placeholder: quiet while the draft loads, a short example once it starts empty. */
 export function promptPlaceholder(drafting: boolean): string {
   return drafting ? 'Drafting from your instructions…' : 'e.g. New top-level folders or services, and changes to the public API shape';
-}
-
-/** "Drop that part": the prompt the check suggests without the part a scout can't see. */
-export function promptWithoutPart(cantSee: ScoutCantSee): string {
-  return cantSee.rewrite;
 }
 
 /** "acme/app", "acme/app and acme/web", "acme/app, acme/web and acme/api". */

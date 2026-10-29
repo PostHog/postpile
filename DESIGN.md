@@ -1395,7 +1395,11 @@ drafts the first one, checks it and turns it on.
 - *When it opens:* by itself on load while no scout exists and the user
   never answered it (`scoutIntroAutoShows`), never over setup or the inbox
   start dialog. "Not now", and turning a scout on, are kept in config.json
-  (`scoutsIntroDismissedAt`); it never opens by itself again. A quiet "Set
+  (`scoutsIntroDismissedAt`); it never opens by itself again. "Not now"
+  closes the card only once that is saved; a failed save keeps it open
+  with the error. For Turn on, saving the answer is best effort: the scout
+  is on once scouts.md has it, so a config.json that can't be written is
+  logged and the turn-on still reports success. A quiet "Set
   up a scout" entry in the Scouted section (shown even with no scouts)
   opens it any time. Quitting with the card open shows it again next
   start: it was never answered.
@@ -1408,12 +1412,23 @@ drafts the first one, checks it and turns it on.
   scope, else the board's busiest repo); "+ repo" adds up to five.
 - *Check scout:* one `scout_check` call, mapped onto the prompt like the
   setup fit check (`mapScoutCheck`): a fit verdict and note, at most one
-  part a scout can't see (quoted from the prompt, with a rewrite that
-  drops it: "Drop that part"), a suggested name and up to 6 path hints.
-  The path hints are never shown; they go into the scout, edited in
-  scouts.md. Then a dry run (`ScoutRun.trial`) over the last 2 days of the
-  chosen repos with the sync's own listing, rules, file reads and judge, on
-  a runner of its own, at most 5 judge calls under the same allowance,
+  part a scout can't see (quoted from the prompt), a suggested name and up
+  to 6 path hints. "Drop that part" cuts that quote out of the user's
+  prompt where it appears word for word and tidies the punctuation
+  (`promptWithoutPart`); no model rewrite of the whole prompt is taken, so
+  nothing else in it can change. When the quote is not there word for
+  word, the card offers only "Keep it anyway". Path hints pass only as
+  path globs of at most 200 characters, with no line break, comma or space
+  (`isScoutPathHint`); `scoutSection` writes no other kind, and
+  `appendScout` refuses one and checks the new scout's id and hints read
+  back as asked, so a hint can never add a key line. The path hints are
+  never shown; they go into the scout, edited in scouts.md. Then a dry run
+  (`ScoutRun.trial`) over the last 2 days of the chosen repos with the
+  sync's own listing, rules, file reads and judge, on a new runner per
+  check (no per-run state shared with a sync or another check) and in a
+  call-log run of its own (`scout-check:<time>`, so its calls never count
+  in a sync running meanwhile), at most 5 judge calls under the same
+  allowance,
   scheduled like a sync (`scheduleScoutWork`): only what those calls can
   judge gets its files read, and a check that leaves some unjudged says
   "more PRs than one check judges". It writes nothing: no judgement, pull, cursor, resume point or snapshot.

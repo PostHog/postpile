@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ScoutCheckResult, ScoutIntroState } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
 import { useAgentOffReason } from '../api/tools.ts';
-import { checkBlockedReason, checkingText, initialRepos, promptPlaceholder, promptWithoutPart, textAfterDraft, turnOnBlockedReason } from '../lib/scout-intro.ts';
+import { checkBlockedReason, checkingText, initialRepos, promptPlaceholder, textAfterDraft, turnOnBlockedReason } from '../lib/scout-intro.ts';
 import { Button } from './Button.tsx';
 import { ScoutCheckScreen } from './ScoutCheckScreen.tsx';
 import { ScoutIntroArt } from './ScoutIntroArt.tsx';
@@ -121,9 +121,11 @@ export function ScoutIntroCard(props: { state: ScoutIntroState; hidden: boolean;
     setShowResult(true);
   }
 
+  // Closes only once the answer is saved; a failed save shows its toast and keeps the card and the button.
   async function notNow() {
-    await actions.dismissScoutIntro();
-    onClose();
+    if (await actions.dismissScoutIntro()) {
+      onClose();
+    }
   }
 
   async function turnOn() {
@@ -154,7 +156,7 @@ export function ScoutIntroCard(props: { state: ScoutIntroState; hidden: boolean;
       >
         {showResult && result ? (
           <>
-            <ScoutCheckScreen result={result} repos={repos} name={name} onName={setName} onDropPart={(cantSee) => setPrompt(promptWithoutPart(cantSee))} />
+            <ScoutCheckScreen result={result} repos={repos} name={name} onName={setName} onDropPart={setPrompt} />
             <div className="flex items-center gap-2.5">
               <button type="button" onClick={() => setShowResult(false)} className="px-1 py-2 text-[13px] text-accent hover:text-ink">
                 ← Edit prompt

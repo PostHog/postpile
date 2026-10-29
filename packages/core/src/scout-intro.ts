@@ -2,7 +2,7 @@
 // by itself, what the check of a drafted scout found, and how a scout the
 // user turns on is written into scouts.md. Rules only, no IO.
 import { clipText } from './dossier.ts';
-import { parsePathHint, parseScouts } from './scouts-config.ts';
+import { parsePathHint, parseScouts, scoutSlug } from './scouts-config.ts';
 import type { IsoTime, PrKey } from './types.ts';
 
 /** The dry run of "Check scout" looks this far back. */
@@ -15,6 +15,10 @@ export const SCOUT_TRIAL_EXAMPLES = 2;
 export const SCOUT_CHECK_PATHS = 6;
 const NAME_MAX = 60;
 const NOTE_MAX = 300;
+/** Longest path hint the card passes on; the turn-on route takes no longer. */
+export const SCOUT_PATH_HINT_MAX = 200;
+/** What a path glob is made of: no spaces, line breaks, commas or notes. */
+const PATH_GLOB = /^\+?[A-Za-z0-9_.*?/@~-]+$/;
 
 /** What the card needs before it opens: whether it opens by itself, and the repos for the picker. */
 export interface ScoutIntroState {
@@ -56,8 +60,12 @@ export interface ScoutCantSee {
   /** Quoted from the prompt as the user wrote it. */
   part: string;
   why: string;
-  /** The prompt with that part dropped: what "Drop that part" puts in the textarea. */
-  rewrite: string;
+  /**
+   * The prompt with that part cut out (`promptWithoutPart`): what "Drop
+   * that part" puts in the textarea. Null when the part is not in the
+   * prompt word for word: the card then offers only "Keep it anyway".
+   */
+  rewrite: string | null;
 }
 
 export interface ScoutTrialExample {
@@ -98,7 +106,7 @@ export interface ScoutCheckResult {
 export interface ScoutCheckAnswer {
   fit: string;
   note: string;
-  cantSee: { part: string; why: string; rewrite: string } | null;
+  cantSee: { part: string; why: string } | null;
   name: string;
   paths: string[];
 }
@@ -109,22 +117,58 @@ function folded(text: string): string {
 }
 
 /**
+ * A path hint scouts.md can hold as one list item: a glob of path
+ * characters with an optional leading "+", at most SCOUT_PATH_HINT_MAX
+ * long, that parses. No line break, comma or space, so it can never end
+ * its line or start a key of its own.
+ */
+export function isScoutPathHint(entry: string): boolean {
+  return entry.length <= SCOUT_PATH_HINT_MAX && PATH_GLOB.test(entry) && typeof parsePathHint(entry) !== 'string';
+}
+
+/**
+ * The prompt with `part` cut out where it appears word for word, the
+ * punctuation around the cut tidied: "A, B, or C." without "B" reads
+ * "A, or C.". Null when the part is not in the prompt as written, or
+ * nothing would be left.
+ */
+export function promptWithoutPart(prompt: string, part: string): string | null {
+  const quote = part.trim();
+  const at = quote === '' ? -1 : prompt.indexOf(quote);
+  if (at < 0) {
+    return null;
+  }
+  const rest = (prompt.slice(0, at) + prompt.slice(at + quote.length))
+    .replace(/\(\s*\)/g, '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/[ \t]+([,.;:!?)])/g, '$1')
+    .replace(/[,;:]+(\s*[,;:.!?])/g, '$1')
+    .replace(/^[\s,;:.]+/, '')
+    .replace(/[ \t]+$/gm, '')
+    .trim();
+  if (rest === '' || !/[A-Za-z0-9]/.test(rest)) {
+    return null;
+  }
+  // Cut from the start: the sentence that is left starts with a capital again.
+  return at === 0 ? rest.charAt(0).toUpperCase() + rest.slice(1) : rest;
+}
+
+/**
  * The check answer onto the user's prompt, like the setup fit check: a
- * "can't see" part stays only when it quotes the prompt and its rewrite is
- * a real, shorter prompt; path hints only when they parse (no commas, no
- * "!", "[ ]" or "\"), at most SCOUT_CHECK_PATHS. An unknown verdict reads
- * as partly, the cautious middle.
+ * "can't see" part stays only when it quotes the prompt, and dropping it
+ * cuts exactly that part (`promptWithoutPart`), never a model rewrite;
+ * path hints only when `isScoutPathHint`, at most SCOUT_CHECK_PATHS. An
+ * unknown verdict reads as partly, the cautious middle.
  */
 export function mapScoutCheck(answer: ScoutCheckAnswer, prompt: string): Pick<ScoutCheckResult, 'fit' | 'cantSee' | 'name' | 'paths'> {
   const verdicts: ScoutFitVerdict[] = ['fits', 'partly', 'no'];
   const verdict = verdicts.find((entry) => entry === answer.fit.trim().toLowerCase()) ?? 'partly';
   const raw = answer.cantSee;
   const quotes = raw !== null && raw.part.trim() !== '' && folded(prompt).includes(folded(raw.part));
-  const rewrite = raw?.rewrite.trim() ?? '';
-  const cantSee = raw !== null && quotes && rewrite !== '' && rewrite.length < prompt.trim().length ? { part: raw.part.trim(), why: clipText(raw.why, NOTE_MAX), rewrite } : null;
+  const cantSee = raw !== null && quotes ? { part: raw.part.trim(), why: clipText(raw.why, NOTE_MAX), rewrite: promptWithoutPart(prompt.trim(), raw.part) } : null;
   const paths = answer.paths
     .map((entry) => entry.trim())
-    .filter((entry) => entry !== '' && !entry.includes(',') && typeof parsePathHint(entry) !== 'string')
+    .filter(isScoutPathHint)
     .slice(0, SCOUT_CHECK_PATHS);
   const name = clipText(answer.name.replace(/\s+/g, ' ').trim(), NAME_MAX) || 'My scout';
   return { fit: { verdict, note: clipText(answer.note, NOTE_MAX) }, cantSee, name, paths };
@@ -151,11 +195,16 @@ export interface ScoutTurnOnRequest {
   paths: string[];
 }
 
-/** One scout's section of scouts.md, as the parser reads it back. */
+/**
+ * One scout's section of scouts.md, as the parser reads it back. Only
+ * hints that pass `isScoutPathHint` are written: a hint can never break
+ * its line and add a key line (an `id:` taking another scout's history).
+ */
 export function scoutSection(scout: ScoutTurnOnRequest): string {
   const lines = [`## ${scout.name.replace(/\s+/g, ' ').trim()}`, `repos: ${scout.repos.join(', ')}`];
-  if (scout.paths.length > 0) {
-    lines.push(`paths: ${scout.paths.join(', ')}`);
+  const paths = scout.paths.map((entry) => entry.trim()).filter(isScoutPathHint);
+  if (paths.length > 0) {
+    lines.push(`paths: ${paths.join(', ')}`);
   }
   return `${lines.join('\n')}\n\n${scout.prompt.trim()}\n`;
 }
@@ -166,6 +215,10 @@ export function scoutSection(scout: ScoutTurnOnRequest): string {
  * asked (a prompt line that looks like a heading or a key line would not).
  */
 export function appendScout(text: string, scout: ScoutTurnOnRequest): { text: string } | { error: string } {
+  const badHint = scout.paths.find((entry) => !isScoutPathHint(entry.trim()));
+  if (badHint !== undefined) {
+    return { error: `"${clipText(badHint.replace(/\s+/g, ' '), 60)}" is not a path hint scouts.md can hold` };
+  }
   const before = parseScouts(text);
   if (before.errors.length > 0) {
     return { error: `scouts.md does not parse (${before.errors[0]}); fix it first` };
@@ -177,7 +230,13 @@ export function appendScout(text: string, scout: ScoutTurnOnRequest): { text: st
     return { error: after.errors[0]! };
   }
   const added = after.scouts[after.scouts.length - 1];
-  if (after.scouts.length !== before.scouts.length + 1 || !added || added.prompt !== scout.prompt.trim() || added.repos.join(',') !== scout.repos.join(',')) {
+  const readsBack =
+    added !== undefined &&
+    added.id === scoutSlug(added.name) &&
+    added.prompt === scout.prompt.trim() &&
+    added.repos.join(',') === scout.repos.join(',') &&
+    added.paths.map((hint) => `${hint.addedOnly ? '+' : ''}${hint.pattern}`).join(',') === scout.paths.map((entry) => entry.trim()).join(',');
+  if (after.scouts.length !== before.scouts.length + 1 || !readsBack) {
     return { error: 'the prompt would not read back as written; remove lines starting with "##" or "repos:"' };
   }
   return { text: next };

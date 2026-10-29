@@ -8,6 +8,7 @@ import {
   SCOUT_TRIAL_DAYS,
   SCOUT_TRIAL_JUDGE_CALLS,
   type ActionResult,
+  type AgentCallStats,
   type ScoutCheckRequest,
   type ScoutCheckResult,
   type ScoutDraftResult,
@@ -17,6 +18,7 @@ import {
 import type { AgentService } from '@postpile/agent';
 import type { Store } from '@postpile/store';
 import { failed, ok } from '../actions/results.ts';
+import type { AgentCallLog } from '../agent-call-log.ts';
 import { Board } from '../board.ts';
 import { AgentBudget, type CallAllowance } from '../budget.ts';
 import { errorText } from '../errors.ts';
@@ -25,7 +27,7 @@ import { loadRepoSettings } from '../repo-settings.ts';
 import type { UserConfigFile } from '../user-config.ts';
 import { loadViewer } from '../viewer-meta.ts';
 import type { ScoutsHistory } from './history.ts';
-import type { ScoutRun } from './scout-run.ts';
+import { ScoutRun, type ScoutRunDeps } from './scout-run.ts';
 
 const REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 /** Repos one scout may watch from the card. */
@@ -37,8 +39,10 @@ export interface ScoutIntroDeps {
   contexts: PromptContextSource;
   /** Null without a scouts file (tests): nothing can be turned on. */
   history: ScoutsHistory | null;
-  /** Null without a scouts file: the check runs no dry run. */
-  scoutRun: ScoutRun | null;
+  /** Null without a scouts file: the check runs no dry run. Each check builds its own ScoutRun from these. */
+  scoutRunDeps: ScoutRunDeps | null;
+  /** A check's calls count in a run of their own, never in a sync running meanwhile. */
+  callLog: AgentCallLog;
   /** Null in tests: the dismissal is kept in memory. */
   userConfig: UserConfigFile | null;
   /** The daily allowance the intro's agent calls take from, like glance catch-ups. */
@@ -46,6 +50,7 @@ export interface ScoutIntroDeps {
   agentOff: () => string | null;
   quotaAllows: () => boolean;
   now: () => Date;
+  log: (line: string) => void;
 }
 
 /**
@@ -129,6 +134,11 @@ export class ScoutIntro {
    * judge calls, all under the daily allowance. Saves nothing.
    */
   async check(request: ScoutCheckRequest): Promise<ScoutCheckResult> {
+    const stats = emptyAgentCallStats();
+    return this.deps.callLog.withRun(`scout-check:${this.deps.now().toISOString()}`, stats, () => this.checkInRun(request, stats));
+  }
+
+  private async checkInRun(request: ScoutCheckRequest, stats: AgentCallStats): Promise<ScoutCheckResult> {
     const refused = (message: string): ScoutCheckResult => ({ ok: false, message, fit: { verdict: 'partly', note: '' }, cantSee: null, name: '', paths: [], trial: null });
     const repos = this.cleanRepos(request.repos);
     const prompt = request.prompt.trim();
@@ -152,18 +162,22 @@ export class ScoutIntro {
     } catch (error) {
       return refused(`The check failed: ${errorText(error)}`);
     }
-    const trial = await this.trial({ name: checked.name, prompt, repos, paths: checked.paths }, viewer);
+    const trial = await this.trial({ name: checked.name, prompt, repos, paths: checked.paths }, viewer, stats);
     return { ok: true, message: null, ...checked, trial };
   }
 
-  /** The dry run, or null without a scout runner or for a scout that would not parse. */
-  private async trial(scout: ScoutTurnOnRequest, viewer: NonNullable<ReturnType<typeof loadViewer>>): Promise<ScoutCheckResult['trial']> {
+  /**
+   * The dry run, or null without a scouts file or for a scout that would
+   * not parse. A ScoutRun of its own per check: its per-run state (calls
+   * left, files read) is never shared with a sync or another check.
+   */
+  private async trial(scout: ScoutTurnOnRequest, viewer: NonNullable<ReturnType<typeof loadViewer>>, stats: AgentCallStats): Promise<ScoutCheckResult['trial']> {
     const config = parseScouts(scoutSection(scout)).scouts[0];
-    if (!this.deps.scoutRun || !config) {
+    if (!this.deps.scoutRunDeps || !config) {
       return null;
     }
-    const budget = new AgentBudget(SCOUT_TRIAL_JUDGE_CALLS, emptyAgentCallStats(), this.deps.allowance);
-    return this.deps.scoutRun.trial(config, SCOUT_TRIAL_DAYS, { viewer, budget, agentOff: this.deps.agentOff(), quotaAllows: this.deps.quotaAllows });
+    const budget = new AgentBudget(SCOUT_TRIAL_JUDGE_CALLS, stats, this.deps.allowance);
+    return new ScoutRun(this.deps.scoutRunDeps).trial(config, SCOUT_TRIAL_DAYS, { viewer, budget, agentOff: this.deps.agentOff(), quotaAllows: this.deps.quotaAllows });
   }
 
   /** "Turn on scout": appended to scouts.md, recorded as an `intro` version; the next full sync runs it. The card is answered. */
@@ -179,13 +193,22 @@ export class ScoutIntro {
     if ('error' in result) {
       return failed(`Not turned on: ${result.error}`);
     }
-    this.remember();
+    // The scout is on once scouts.md has it; a config.json that can't be written must not turn that into an error.
+    try {
+      this.remember();
+    } catch (error) {
+      this.deps.log(`scouts intro: scout turned on, but the card's answer was not saved: ${errorText(error)}`);
+    }
     return ok(`Scout on: ${request.name.trim()}. Finds show under Scouted after the next sync.`);
   }
 
   /** "Not now": the card never opens by itself again; the Scouted section's "Set up a scout" still opens it. */
   dismiss(): ActionResult {
-    this.remember();
+    try {
+      this.remember();
+    } catch (error) {
+      return failed(`Could not save "Not now": ${errorText(error)}`);
+    }
     return ok('Not now. Set up a scout from the Scouted section any time.');
   }
 }

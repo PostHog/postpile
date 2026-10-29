@@ -8,7 +8,6 @@ import {
   exampleRef,
   fitLook,
   initialRepos,
-  promptWithoutPart,
   removeRepo,
   replaceRepo,
   repoListText,
@@ -117,10 +116,6 @@ describe('textAfterDraft', () => {
 });
 
 describe('check screen', () => {
-  it('drops the part a scout cannot see by taking the suggested rewrite', () => {
-    expect(promptWithoutPart({ part: 'models shared across modules', why: 'Hides in the code.', rewrite: 'New folders.' })).toBe('New folders.');
-  });
-
   it('lists repos in running text', () => {
     expect(repoListText(['acme/app'])).toBe('acme/app');
     expect(repoListText(['acme/app', 'acme/web'])).toBe('acme/app and acme/web');

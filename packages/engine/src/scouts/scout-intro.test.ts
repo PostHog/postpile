@@ -114,6 +114,35 @@ describe('the Scouts intro card', () => {
     expect((await h.engine.scoutIntroState()).autoShow).toBe(false);
   });
 
+  it('keeps a scout turned on when the card answer cannot be saved, and keeps Not now unsaved as a failure', async () => {
+    const { h, file, config } = setup({ scouts: '## Billing\nrepos: acme/billing\n\nInvoices.\n' });
+    writeFileSync(config, '{ not json');
+
+    const result = await h.engine.turnOnScout({ name: 'Lookout', prompt: PROMPT, repos: ['acme/app'], paths: [] });
+
+    expect(result.ok).toBe(true);
+    expect(readFileSync(file, 'utf8')).toContain('## Lookout');
+    expect(await h.engine.dismissScoutIntro()).toMatchObject({ ok: false, message: expect.stringContaining('Could not save') });
+  });
+
+  it('gives each check its own runner and call budget, apart from any sync run', async () => {
+    const { h } = setup();
+    onGitHub(h, 70);
+    for (let check = 0; check < 2; check++) {
+      h.runner.answer('scout_check', { fit: 'fits', note: 'ok', cantSee: null, name: 'Lookout', paths: [] });
+    }
+    for (let call = 0; call < 10; call++) {
+      h.runner.answer('scout_judge', { judgements: [] });
+    }
+
+    const [first, second] = await Promise.all([h.engine.checkScout({ prompt: PROMPT, repos: ['acme/app'] }), h.engine.checkScout({ prompt: PROMPT, repos: ['acme/app'] })]);
+
+    expect(h.runner.promptsFor('scout_judge')).toHaveLength(10);
+    expect([first.trial?.judged, second.trial?.judged]).toEqual([60, 60]);
+    const runs = h.store.db.prepare("SELECT DISTINCT run_id FROM agent_call WHERE kind = 'scout_judge'").all() as { run_id: string }[];
+    expect(runs.every((row) => row.run_id.startsWith('scout-check:'))).toBe(true);
+  });
+
   it('refuses a name another scout has', async () => {
     const { h } = setup({ scouts: '## Lookout\nrepos: acme/app\n\nx\n' });
     expect((await h.engine.turnOnScout({ name: 'Lookout', prompt: PROMPT, repos: ['acme/app'], paths: [] })).ok).toBe(false);

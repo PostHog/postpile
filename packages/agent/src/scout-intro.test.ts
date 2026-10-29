@@ -38,8 +38,8 @@ describe('draftScout', () => {
 describe('checkScout', () => {
   it('maps the answer onto the prompt: a part it does not quote is dropped', async () => {
     const runner = new FakeRunner()
-      .answer('scout_check', { fit: 'fits', note: 'Folders show in paths.', cantSee: { part: 'models used across services', why: 'In the code.', rewrite: 'PRs that add a new top-level folder.' }, name: 'Lookout', paths: ['+*/'] })
-      .answer('scout_check', { fit: 'fits', note: 'ok', cantSee: { part: 'billing tables', why: 'x', rewrite: 'y' }, name: 'Lookout', paths: [] });
+      .answer('scout_check', { fit: 'fits', note: 'Folders show in paths.', cantSee: { part: 'models used across services', why: 'In the code.' }, name: 'Lookout', paths: ['+*/'] })
+      .answer('scout_check', { fit: 'fits', note: 'ok', cantSee: { part: 'billing tables', why: 'x' }, name: 'Lookout', paths: [] });
     const service = new RunnerAgentService(runner);
     const input = { prompt: PROMPT, repos: ['acme/app'], viewer, context: emptyContext };
 
