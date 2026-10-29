@@ -34,14 +34,26 @@ describe('parseScouts', () => {
     const [lookout, billing] = scouts;
     expect(lookout).toMatchObject({ name: 'Lookout · structure', repos: ['acme/app'] });
     expect(lookout!.prompt).toBe('Pull in PRs that change how the app is shaped: new services,\nAPI facades, contract surfaces.');
-    expect(lookout!.paths.map(({ pattern, addedOnly, newTopLevelFolder }) => ({ pattern, addedOnly, newTopLevelFolder }))).toEqual([
-      { pattern: '*/', addedOnly: true, newTopLevelFolder: true },
-      { pattern: 'services/*/api/**', addedOnly: true, newTopLevelFolder: false },
-      { pattern: 'docs/architecture.md', addedOnly: false, newTopLevelFolder: false },
+    expect(lookout!.paths.map(({ pattern, addedOnly, newFolderIn }) => ({ pattern, addedOnly, newFolderIn }))).toEqual([
+      { pattern: '*/', addedOnly: true, newFolderIn: '' },
+      { pattern: 'services/*/api/**', addedOnly: true, newFolderIn: null },
+      { pattern: 'docs/architecture.md', addedOnly: false, newFolderIn: null },
     ]);
     expect(scoutHintMatches(lookout!.paths[0]!, 'billing/main.ts')).toBe(false);
     expect(scoutHintMatches(lookout!.paths[1]!, 'services/billing/api/routes.ts')).toBe(true);
     expect(billing).toMatchObject({ id: 'billing', repos: ['acme/app', 'acme/billing'], paths: [], prompt: 'Anything touching how invoices are computed.' });
+  });
+
+  it('reads "+<folder>/*/" as a new folder in that folder, and other forms as plain globs', () => {
+    const text = '## Lookout\nrepos: acme/app\npaths: +products/*/, +/apps/web/*/, products/*/, +services/*/api/*/, +*.md\n\nNew products.\n';
+    const paths = parseScouts(text).scouts[0]!.paths;
+    expect(paths.map((hint) => [hint.pattern, hint.newFolderIn])).toEqual([
+      ['products/*/', 'products'],
+      ['/apps/web/*/', 'apps/web'],
+      ['products/*/', null],
+      ['services/*/api/*/', null],
+      ['*.md', null],
+    ]);
   });
 
   it('gives an empty list for an empty file', () => {
@@ -96,7 +108,7 @@ describe('parseScouts', () => {
 
   it('reads a plain */ as a path pattern, not the new-folder hint', () => {
     const { scouts } = parseScouts('## A\nrepos: acme/app\npaths: */\n\np\n');
-    expect(scouts[0]!.paths[0]).toMatchObject({ pattern: '*/', addedOnly: false, newTopLevelFolder: false });
+    expect(scouts[0]!.paths[0]).toMatchObject({ pattern: '*/', addedOnly: false, newFolderIn: null });
   });
 
   it('reads headings with a closing run of # and keeps a # that is part of the name', () => {

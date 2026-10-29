@@ -10,6 +10,7 @@ import {
   scoutPrefilter,
   scoutPullStep,
   scoutRetentionCutoff,
+  scoutFolderParents,
   scoutSignals,
   SCOUT_TRIAL_EXAMPLES,
   SCOUT_TRIAL_JUDGE_CALLS,
@@ -32,7 +33,7 @@ import {
   type ScoutsVersion,
   type Viewer,
 } from '@postpile/core';
-import { GitHubError, ScoutReadsLimited, type GitHubReader, type ScoutFilesRead } from '@postpile/github';
+import { GitHubError, scoutFolderKey, ScoutReadsLimited, type GitHubReader, type ScoutFilesRead, type ScoutFolderRead } from '@postpile/github';
 import type { Store } from '@postpile/store';
 import type { AgentBudget } from '../budget.ts';
 import { errorText } from '../errors.ts';
@@ -341,23 +342,33 @@ export class ScoutRun {
     }
   }
 
-  /** Root folders of the bases that need them, from the cache or one read. A failed read leaves them unknown. */
-  private async baseFolders(repo: string, oids: string[]): Promise<void> {
-    const wanted = [...new Set(oids)].filter((oid) => !this.trees.has(`${repo}@${oid}`));
+  /**
+   * The base's folders inside each parent the new-folder hints name, per
+   * (commit, parent), from the cache or one read. A failed read leaves them
+   * unknown.
+   */
+  private async baseFolders(repo: string, reads: ScoutFolderRead[]): Promise<void> {
+    const wanted = [...new Map(reads.map((read) => [scoutFolderKey(read), read])).values()].filter((read) => !this.trees.has(`${repo}@${scoutFolderKey(read)}`));
     if (wanted.length === 0 || !this.canRead()) {
       return;
     }
-    let read: Map<string, string[]>;
+    let answered: Map<string, string[]>;
     try {
-      read = await this.deps.reader.topLevelFolders(repo, wanted);
+      answered = await this.deps.reader.scoutFolders(repo, wanted);
     } catch (error) {
       this.stopOnRateLimit(error);
       this.deps.log(`scouts: base tree of ${repo}: ${errorText(error)}`);
-      read = error instanceof ScoutReadsLimited ? (error.partial as Map<string, string[]>) : new Map();
+      answered = error instanceof ScoutReadsLimited ? (error.partial as Map<string, string[]>) : new Map();
     }
-    for (const [oid, folders] of read) {
-      this.trees.set(`${repo}@${oid}`, folders);
+    for (const [key, folders] of answered) {
+      this.trees.set(`${repo}@${key}`, folders);
     }
+  }
+
+  /** The base folders inside every parent, as one list; null while one of them is not read. */
+  private foldersOf(repo: string, oid: string, parents: string[]): string[] | null {
+    const lists = parents.map((parent) => this.trees.get(`${repo}@${scoutFolderKey({ oid, parent })}`));
+    return lists.some((list) => list === undefined) ? null : lists.flatMap((list) => list!);
   }
 
   /**
@@ -500,10 +511,12 @@ export class ScoutRun {
    */
   private async prepare(scout: ScoutConfig, version: ScoutsVersion | null, repo: string, needFiles: Triaged[], work: ScoutRepoWork): Promise<JudgeItem[]> {
     const files = await this.files(needFiles.map((entry) => entry.candidate));
-    const wantsTree = scout.paths.some((hint) => hint.newTopLevelFolder);
+    const parents = scoutFolderParents(scout);
+    const wantsTree = parents.length > 0;
     if (wantsTree) {
       // The folders before the PR: its base while open, the commit before its merge once merged.
-      await this.baseFolders(repo, [...files.values()].filter((read) => read.files !== null).map((read) => read.foldersOid));
+      const oids = [...files.values()].filter((read) => read.files !== null).map((read) => read.foldersOid);
+      await this.baseFolders(repo, oids.flatMap((oid) => parents.map((parent) => ({ oid, parent }))));
     }
     const toJudge: JudgeItem[] = [];
     for (const { candidate, before } of needFiles) {
@@ -514,12 +527,12 @@ export class ScoutRun {
         work.rows.push(this.pending(base, this.rateLimited ? RATE_LIMITED_WAIT : SCOUT_FILES_NOT_READ));
         continue;
       }
-      const folders = this.trees.get(`${repo}@${read.foldersOid}`);
-      if (wantsTree && folders === undefined) {
+      const folders = wantsTree ? this.foldersOf(repo, read.foldersOid, parents) : [];
+      if (folders === null) {
         work.rows.push(this.pending(base, this.rateLimited ? RATE_LIMITED_WAIT : SCOUT_TREE_NOT_READ));
         continue;
       }
-      const signals = scoutSignals(scout, read.files, new Set(folders ?? []));
+      const signals = scoutSignals(scout, read.files, new Set(folders));
       const inputHash = scoutInputHash(scout, candidate, read.files, signals);
       const step = scoutJudgeStep({ existing: before, pulledByThisScout: false, inputHash, hasPathHints: scout.paths.length > 0, signals: signals.length });
       if (step === 'unchanged') {
@@ -527,7 +540,7 @@ export class ScoutRun {
       } else if (step === 'no_signal') {
         work.rows.push(this.judged(base, 'skipped', 'no path signal', inputHash, false));
       } else {
-        toJudge.push({ candidate, inputHash, existing: before, item: this.judgeItem(candidate, read.files, signals, folders ?? []) });
+        toJudge.push({ candidate, inputHash, existing: before, item: this.judgeItem(candidate, read.files, signals, folders) });
       }
     }
     return toJudge;

@@ -2,7 +2,7 @@ import type { ActivityPr, IsoTime, NotificationThread, FullPr, PrKey, PrRef, PrS
 import type { CodeOwnersFile } from './code-owners.ts';
 import type { FoundRef } from './found.ts';
 import type { PrDiffRead } from './pr-diff.ts';
-import type { ScoutFilesRead, ScoutListPage } from './scouts.ts';
+import type { ScoutFilesRead, ScoutFolderRead, ScoutListPage } from './scouts.ts';
 
 export interface PartialPrs {
   prs: Map<PrKey, FullPr>;
@@ -205,8 +205,12 @@ export interface GitHubReader {
    */
   scoutFiles(refs: PrRef[]): Promise<Map<PrKey, ScoutFilesRead>>;
 
-  /** Scouts: the directory names at the root of each commit's tree, by commit oid. One GitHub does not answer for is left out. */
-  topLevelFolders(repo: string, commitOids: string[]): Promise<Map<string, string[]>>;
+  /**
+   * Scouts: the folders inside each asked folder at its commit, as repo
+   * paths, keyed "<oid>:<parent>" ("" parent for the root). A folder the
+   * commit does not have answers []; a failed batch is left out.
+   */
+  scoutFolders(repo: string, reads: ScoutFolderRead[]): Promise<Map<string, string[]>>;
 }
 
 /** PRs aliased per GraphQL query. 12 kept ghatchup well inside the node limit. */

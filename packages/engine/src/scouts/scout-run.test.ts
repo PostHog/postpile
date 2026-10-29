@@ -509,6 +509,22 @@ describe('the scout step of a full sync', () => {
     expect(h.store.scoutJudgements.listPending('lookout').map((row) => row.lastError)).toEqual(['lookup by number not answered', 'lookup by number not answered', 'lookup by number not answered']);
   });
 
+  it('reads the base folders inside a "+<folder>/*/" parent once per base, and signals only a new folder there', async () => {
+    const h = setup('## Products\nrepos: acme/app\npaths: +products/*/\n\nNew products.\n');
+    onGitHub(h, candidate(1), [{ path: 'products/ledger/main.ts', changeType: 'ADDED' }]);
+    onGitHub(h, candidate(2), [{ path: 'products/billing/new.ts', changeType: 'ADDED' }]);
+    h.reader.scoutTrees.set('base1:products', ['billing']);
+    pulls(h, [1, 'pull', 'adds products/ledger/']);
+
+    await h.engine.sync({});
+
+    expect(h.reader.scoutCalls.filter((call) => call.startsWith('tree'))).toEqual(['tree acme/app base1:products']);
+    // #2 adds a file to products/billing, which the base has: no signal, no model call.
+    expect(h.store.scoutJudgements.get('products', 'acme/app#2')).toMatchObject({ verdict: 'skipped', reason: 'no path signal' });
+    expect(h.runner.promptsFor('scout_judge')[0]).toContain('Folders of the base branch the path hints look in: products/billing');
+    expect(h.store.scoutJudgements.get('products', 'acme/app#1')).toMatchObject({ verdict: 'pulled' });
+  });
+
   it('runs no scout work when the sync asks for other agent jobs only', async () => {
     const h = setup();
     onGitHub(h, candidate(1), [{ path: 'billing/main.ts', changeType: 'ADDED' }]);

@@ -5,7 +5,7 @@
 //   ## Lookout · structure
 //   id: lookout-structure            (optional, else the slug of the name)
 //   repos: acme/app, acme/infra      (required)
-//   paths: +*/ (new top-level folder), +services/*/api/**, docs/architecture.md
+//   paths: +*/ (new top-level folder), +products/*/ (new folder in products/), +services/*/api/**, docs/architecture.md
 //
 //   Pull in PRs that change how the app is shaped: ...
 //
@@ -21,18 +21,39 @@ export interface ScoutPathHint {
   pattern: string;
   /** "+" in front: only an added (or renamed-to) file counts. */
   addedOnly: boolean;
-  /** "+*\/": a file in a top-level folder the PR's base does not have yet. */
-  newTopLevelFolder: boolean;
+  /**
+   * "+<folder>/*\/": an added file in a new folder directly inside
+   * <folder>, one the base tree at <folder> does not have yet. "" for "+*\/"
+   * (a new top-level folder), "products" for "+products/*\/". Null for every
+   * other hint. Only a folder without wildcards reads this way; other
+   * patterns are plain globs.
+   */
+  newFolderIn: string | null;
 }
 
 /**
  * Whether a repo path matches the hint's CODEOWNERS-style pattern
  * (`globPathMatches`, no regex: hints can come from the model, and a regex
- * of theirs could backtrack for seconds). Never for `newTopLevelFolder`,
- * which the base tree decides.
+ * of theirs could backtrack for seconds). Never for a new-folder hint
+ * (`newFolderIn`), which the base tree decides.
  */
 export function scoutHintMatches(hint: ScoutPathHint, path: string): boolean {
-  return !hint.newTopLevelFolder && globPathMatches(hint.pattern, path);
+  return hint.newFolderIn === null && globPathMatches(hint.pattern, path);
+}
+
+/** "+*\/" -> "", "+products/*\/" -> "products"; null for a pattern that is no new-folder hint. */
+function newFolderIn(pattern: string, addedOnly: boolean): string | null {
+  if (!addedOnly || !pattern.endsWith('*/')) {
+    return null;
+  }
+  const folder = pattern.slice(0, -2).replace(/^\/+/, '').replace(/\/+$/, '');
+  if (folder === '' && pattern === '*/') {
+    return '';
+  }
+  if (folder === '' || !pattern.slice(0, -2).endsWith('/') || folder.includes('*') || folder.includes('?')) {
+    return null;
+  }
+  return folder;
 }
 
 export interface ScoutConfig {
@@ -91,14 +112,15 @@ export function parsePathHint(entry: string): ScoutPathHint | string {
   if (pattern === '') {
     return `empty path entry "${entry}"`;
   }
-  if (addedOnly && pattern === '*/') {
-    return { pattern, addedOnly, newTopLevelFolder: true };
+  const folder = newFolderIn(pattern, addedOnly);
+  if (folder !== null) {
+    return { pattern, addedOnly, newFolderIn: folder };
   }
   // The regex only tells a pattern GitHub skips; matching never uses it (`scoutHintMatches`).
   if (codeownersPatternRegex(pattern) === null) {
     return `path "${pattern}" uses "!", "[ ]" or "\\", which paths do not support`;
   }
-  return { pattern, addedOnly, newTopLevelFolder: false };
+  return { pattern, addedOnly, newFolderIn: null };
 }
 
 /** Comma-separated; whitespace too for repos, which never hold spaces. */

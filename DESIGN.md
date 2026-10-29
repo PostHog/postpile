@@ -1196,7 +1196,7 @@ next to instructions.md, the user's own file:
 ## Lookout · structure
 id: lookout-structure
 repos: acme/app
-paths: +*/ (new top-level folder), +services/*/api/**, docs/architecture.md
+paths: +*/ (new top-level folder), +products/*/ (new folder in products/), +services/*/api/**, docs/architecture.md
 
 Pull in PRs that change how the app is shaped: new services, API facades,
 contract surfaces.
@@ -1213,10 +1213,16 @@ contract surfaces.
   for seconds. The CODEOWNERS regex only says which patterns are
   unsupported. A `+` in
   front counts only an added file (ADDED, or RENAMED to the path). `+*/`
-  means a new top-level folder: an added file whose first folder is not a
-  directory of the tree before the PR (`ScoutFilesRead.foldersOid`, cached
-  per commit): the base commit while open, the merge commit's first parent
-  once merged, since by then the base branch holds the PR's own folder.
+  means a new top-level folder, and `+<folder>/*/` a new folder directly
+  inside <folder> (`ScoutPathHint.newFolderIn`): an added file whose folder
+  there is not a directory of the tree before the PR at that place
+  (`ScoutFilesRead.foldersOid`; folders read per commit and parent with
+  `object(expression: "<oid>:<parent>")`, cached per run): the base commit
+  while open, the merge commit's first parent once merged, since by then
+  the base branch holds the PR's own folder. Only a <folder> without
+  wildcards reads this way; any other `+<glob>` is a plain glob over added
+  files. Added after a replay of a busy repo showed `+products/*/` read
+  as "anything added under products/" (2026-10-29).
 - Identity: `id:`, else the slug of the name. Duplicate ids are a parse
   error. A rename without `id:` is a new scout with fresh cursors and
   history (accepted, documented).
@@ -1282,7 +1288,8 @@ contract surfaces.
    once it says no, the rest stays pending.
 2. Pre-filter, shared by all scouts (`scoutPrefilter`): open drafts (judged
    once they turn ready), dependency and merge-queue bots only (dependabot,
-   renovate, trunk-io, mergify and the like; agent accounts that open PRs
+   renovate, trunk-io, mergify and the like, and any name holding
+   dependabot, renovate or upgrader; agent accounts that open PRs
    for people stay in), the viewer's and their teammates' PRs by the
    PR-ownership rules (`prOwners`: an agent PR is its assignees'), and PRs
    already tracked (a notification thread, `pr_found`, or followed).
@@ -1297,7 +1304,9 @@ contract surfaces.
    first 600 characters and the matched (path, change type) pairs, or the
    whole file list for a scout without `paths:`. With `paths:` and no
    match, the PR is skipped by rule, no model call.
-5. Judge: `scout_judge` (Sonnet, no tools, PR text fenced), up to 12 PRs per
+5. Judge: `scout_judge` (Sonnet, no tools, PR text fenced; each changed
+   file as `path (added, +12/−0)`, so lines added to a file read apart
+   from a removal), up to 12 PRs per
    call, under the sync's existing agent-call cap with its own kind and the
    agent job `scouts` (`agentJobs` without it runs no scout work), and at
    most 5 calls per sync (`SCOUT_JUDGE_CALLS_PER_RUN`): the step runs while
