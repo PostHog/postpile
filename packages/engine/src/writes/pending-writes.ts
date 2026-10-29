@@ -86,6 +86,14 @@ export class PendingWrites {
     private readonly timers: Timers = systemTimers,
   ) {}
 
+  /** Follows GitHub took after the deadline, reconciled here: the live status counts them, so the renderer refetches. */
+  private lateFollows = 0;
+
+  /** Grows with each late Follow reconciled (`liveStatus().changeCount`). */
+  changes(): number {
+    return this.lateFollows;
+  }
+
   /**
    * Stores a batch the queue did not send. A batch queued while writes were
    * on already changed the app; that change is put back first, so the app
@@ -432,9 +440,10 @@ export class PendingWrites {
     let outcome: ThreadOutcome;
     try {
       // The same deadline as from the undo queue: a stalled Follow never holds sendAll or discard; a late OK still counts.
-      const result = await followWithDeadline(this.writes, this.timers, follow.subjectId, { origin: 'footer', prKey: follow.prKey, batch: write.batch }, () =>
-        recordLateFollow(this.store, this, follow.prKey, write.batch, this.now().toISOString()),
-      );
+      const result = await followWithDeadline(this.writes, this.timers, follow.subjectId, { origin: 'footer', prKey: follow.prKey, batch: write.batch }, () => {
+        recordLateFollow(this.store, this, follow.prKey, write.batch, this.now().toISOString());
+        this.lateFollows += 1;
+      });
       outcome = result === 'off' ? { kind: 'off' } : { kind: 'sent' };
     } catch (error) {
       outcome = { kind: 'failed', error: errorText(error) };

@@ -1172,7 +1172,7 @@ export class Engine implements EngineService {
     const poll = this.livePoller?.currentStatus() ?? OFF_POLL_STATUS;
     return {
       ...poll,
-      changeCount: poll.changeCount + this.writeRefreshesDone + this.deps.markReadQueue.mirrored() + this.syncsDone + this.clickedReadRetry.decided() + this.cleanup.changeCount() + this.prNotes.changes() + this.agentMarkRead.changes() + this.scoutActions.changes(),
+      changeCount: poll.changeCount + this.writeRefreshesDone + this.deps.markReadQueue.mirrored() + this.syncsDone + this.clickedReadRetry.decided() + this.cleanup.changeCount() + this.prNotes.changes() + this.agentMarkRead.changes() + this.scoutActions.changes() + this.deps.pendingWrites.changes(),
       syncRunning: this.syncing !== null,
       nextAutoSyncAt: this.autoSync?.nextSyncAt() ?? null,
       nextAutoSyncIsBacklog: this.autoSync?.nextSyncIsBacklog() ?? false,

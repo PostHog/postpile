@@ -86,7 +86,6 @@ export class ScoutedPrRepo {
          AND NOT EXISTS (SELECT 1 FROM notification_thread t WHERE t.pr_key = s.pr_key)
          AND NOT EXISTS (SELECT 1 FROM pr_found f WHERE f.pr_key = s.pr_key)
          AND NOT EXISTS (SELECT 1 FROM topic_membership m WHERE m.pr_key = s.pr_key)
-         AND NOT EXISTS (SELECT 1 FROM pr_pull_in l WHERE l.pr_key = s.pr_key)
        ORDER BY s.pr_key`,
     );
     return rows.map((row) => ({ prKey: row.pr_key, scoutId: row.scout_id, unseen: row.unseen === 1 }));

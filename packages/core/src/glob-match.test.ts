@@ -24,6 +24,11 @@ describe('globPathMatches', () => {
     expect(performance.now() - started).toBeLessThan(50);
   });
 
+  it('never runs out of stack, however many globstars a pattern has', () => {
+    expect(globPathMatches(`${'**/'.repeat(10_000)}x.ts`, 'y.ts')).toBe(false);
+    expect(globPathMatches(`${'**/'.repeat(10_000)}x.ts`, 'a/x.ts')).toBe(true);
+  });
+
   it('stays fast on a hint built to backtrack', () => {
     const hint = `${'a*'.repeat(20)}b`;
     const path = `${'a'.repeat(80)}c`;

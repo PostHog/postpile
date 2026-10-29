@@ -201,9 +201,12 @@ describe('the Scouted section', () => {
     await sent;
     expect(h.store.pendingWrites.list()).toMatchObject([{ kind: 'follow', error: expect.stringContaining('no answer within 10 s') }]);
 
+    const before = (await h.engine.livePollStatus()).changeCount;
     answer();
     await vi.waitFor(() => expect(h.store.scoutedPrs.get('acme/app#1')?.followedAt).not.toBeNull());
     expect(h.store.pendingWrites.list()).toEqual([]);
+    // The renderer refetches: the live status moved.
+    expect((await h.engine.livePollStatus()).changeCount).toBeGreaterThan(before);
   });
 
   it('says in the PR pane who scouted it and why', async () => {
@@ -403,6 +406,18 @@ describe('the Scouted section', () => {
 
     await h.engine.markScoutedSeen(top.key);
     expect((await h.engine.getTopic('scout:lookout'))?.tiles[0]?.scout?.unseen).toBe(false);
+  });
+
+  it('counts a scouted PR that was once a pulled-in stack layer, by where the board places it now', async () => {
+    const h = makeHarness();
+    const pr = makePr({ number: 8, headRef: 'solo', updatedAt: NOW.toISOString() });
+    h.store.prs.upsert(pr, NOW.toISOString());
+    // Pulled in once as a layer of a stack it has left since: history, not a place.
+    h.store.pullIns.put({ prKey: pr.key, anchorPrKey: 'acme/app#99', reason: 'stack layer below #99', pulledAt: '2026-09-01T10:00:00.000Z' });
+    h.store.scoutedPrs.insert({ prKey: pr.key, scoutId: 'lookout', scoutName: 'Lookout', configVersion: 1, reason: 'new folder', pulledAt: NOW.toISOString(), seenUpdatedAt: null, followedAt: null, dismissedAt: null, dismissReason: null, expiredAt: null, expiryReason: null });
+
+    expect((await h.engine.getTopic('scout:lookout'))?.tiles).toHaveLength(1);
+    expect((await h.engine.listScouts()).map((scout) => [scout.id, scout.tiles, scout.unseen])).toEqual([['lookout', 1, 1]]);
   });
 
   it('stops counting a scouted stack once one of its layers is followed', async () => {
