@@ -9230,8 +9230,9 @@ that flow, without a separate ask.
   list itself.
   `mark_read` needs one per PR, and it is only printed with the "Unread
   since you looked" section below. The app refuses a PR with events logged
-  after it ("new activity since you read it: 2 events, newest from
-  alice; read it again with pr_context") and one whose `seen_through` is
+  after it ("new activity since you read it: 2 events; read it again with
+  pr_context", no names: an author name is free GitHub text and the
+  reason sits outside the untrusted fence) and one whose `seen_through` is
   ahead of the log. Other PRs of the call still go through. The event log
   seq, not an event time: it grows with every event PostPile first
   stores, so an event that arrives late with an older timestamp (an older

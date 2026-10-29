@@ -158,11 +158,14 @@ export interface AgentMarkReadInput {
 
 export type AgentMarkReadCheck = { kind: 'mark' } | { kind: 'refused'; reason: string } | { kind: 'skipped'; reason: string };
 
-/** "new activity since you read it: 2 events, newest from alice; read it again with pr_context". */
-export function newActivityReason(newer: Pick<PrEvent, 'actor' | 'at'>[]): string {
-  const newest = newer.reduce((latest, event) => (event.at > latest.at ? event : latest));
+/**
+ * "new activity since you read it: 2 events; read it again with pr_context".
+ * No names: a commit's author name is free text from GitHub, and this reason
+ * reaches the agent outside the untrusted fence.
+ */
+export function newActivityReason(newer: readonly unknown[]): string {
   const count = newer.length === 1 ? '1 event' : `${newer.length} events`;
-  return `new activity since you read it: ${count}, newest from ${newest.actor}; read it again with pr_context`;
+  return `new activity since you read it: ${count}; read it again with pr_context`;
 }
 
 function keyList(left: AgentMarkReadLeft[]): string {

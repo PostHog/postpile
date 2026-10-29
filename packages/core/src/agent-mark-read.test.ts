@@ -27,7 +27,7 @@ describe('agentMarkReadCheck', () => {
     ];
     expect(agentMarkReadCheck({ ...BASE, newestSeq: 42, newer })).toEqual({
       kind: 'refused',
-      reason: 'new activity since you read it: 2 events, newest from alice; read it again with pr_context',
+      reason: 'new activity since you read it: 2 events; read it again with pr_context',
     });
   });
 
@@ -62,7 +62,7 @@ describe('agentMarkReadCheck', () => {
   });
 
   it('words one event in the singular', () => {
-    expect(newActivityReason([{ actor: 'bob', at: '2026-10-29T10:00:00Z' }])).toContain('1 event, newest from bob');
+    expect(newActivityReason([{ actor: 'bob', at: '2026-10-29T10:00:00Z' }])).toBe('new activity since you read it: 1 event; read it again with pr_context');
   });
 });
 

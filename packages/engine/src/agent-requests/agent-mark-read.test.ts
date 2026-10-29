@@ -118,7 +118,7 @@ describe('markReadForAgent', () => {
     );
 
     expect(result.marked).toEqual([other.key]);
-    expect(result.refused).toEqual([{ prKey: pr.key, reason: 'new activity since you read it: 1 event, newest from bob; read it again with pr_context' }]);
+    expect(result.refused).toEqual([{ prKey: pr.key, reason: 'new activity since you read it: 1 event; read it again with pr_context' }]);
   });
 
   it('reads seen_through before the activity, so a sync landing in between makes mark_read refuse', async () => {
@@ -141,7 +141,7 @@ describe('markReadForAgent', () => {
 
     const result = await h.engine.markReadForAgent({ prs: [{ prKey: pr.key, seenThrough: detail?.seenThrough ?? '' }] }, CLIENT);
     expect(result.marked).toEqual([]);
-    expect(result.refused[0]?.reason).toContain('newest from carol');
+    expect(result.refused[0]?.reason).toBe('new activity since you read it: 1 event; read it again with pr_context');
   });
 
   it('refuses an old token once an Undo brought events back unseen that the read did not list', async () => {

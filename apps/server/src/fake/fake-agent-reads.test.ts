@@ -37,7 +37,7 @@ describe('FakeEngine.markReadForAgent', () => {
     );
 
     expect(result.marked).toEqual([]);
-    expect(result.refused[0]?.reason).toMatch(/^new activity since you read it: 1 event, newest from /);
+    expect(result.refused[0]?.reason).toMatch(/^new activity since you read it: 1 event; /);
     expect(result.refused[1]).toEqual({ prKey: 'acme/app#9999', reason: 'PostPile does not track this PR' });
     expect((await engine.livePollStatus()).agentReads).toEqual([]);
   });

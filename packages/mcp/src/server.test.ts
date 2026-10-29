@@ -700,7 +700,7 @@ describe('PostPile MCP server', () => {
     const stale = await client.callTool({ name: 'mark_read', arguments: { prs: [{ pr: 'acme/app#1902', seen_through: seenThroughToken((parseSeenThrough(seen)?.seq ?? 1) - 1, []) }] } });
     const staleText = (stale.content as { text: string }[])[0]?.text ?? '';
     expect(staleText).toContain('Nothing was marked read.');
-    expect(fencedPart(staleText)).toMatch(/refused acme\/app#1902: new activity since you read it: 1 event, newest from /);
+    expect(fencedPart(staleText)).toMatch(/refused acme\/app#1902: new activity since you read it: 1 event; read it again/);
     expect(stale.structuredContent).toMatchObject({ status: 'done', marked: [], refused: [{ pr: 'acme/app#1902' }] });
 
     const marked = await client.callTool({ name: 'mark_read', arguments: { prs: [{ pr: '#1902', seen_through: seen }] } });
