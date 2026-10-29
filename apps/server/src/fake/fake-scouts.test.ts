@@ -124,4 +124,17 @@ describe('FakeEngine scouts', () => {
     expect((await engine.getPr(LEDGER))?.scouted?.unseen).toBe(false);
     expect(await engine.markScoutedSeen('acme/app#1')).toMatchObject({ ok: false });
   });
+
+  it("lets an agent's mark_read mark a scouted PR seen in PostPile only, with the usual guards", async () => {
+    const { engine } = engineAt();
+    const seenThrough = (await engine.getPr(LEDGER))?.seenThrough ?? '';
+    expect(await engine.markReadForAgent({ prs: [{ prKey: LEDGER, seenThrough: '0-0' }] }, { client: 'claude-code' })).toMatchObject({ marked: [], refused: [{ prKey: LEDGER }] });
+
+    const result = await engine.markReadForAgent({ prs: [{ prKey: LEDGER, seenThrough }] }, { client: 'claude-code' });
+
+    expect(result).toMatchObject({ marked: [], refused: [], seenLocally: [LEDGER] });
+    expect((await engine.getPr(LEDGER))?.scouted?.unseen).toBe(false);
+    expect((await engine.githubWrites()).pending.map((write) => write.kind)).toEqual(['follow']);
+    expect(await engine.markReadForAgent({ prs: [{ prKey: LEDGER, seenThrough }] }, { client: 'claude-code' })).toMatchObject({ marked: [], skipped: [{ prKey: LEDGER }] });
+  });
 });

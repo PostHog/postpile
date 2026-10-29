@@ -330,6 +330,12 @@ export class FakeScouts {
     return isScoutedUnseen(row, this.pr(row.prKey)?.updatedAt ?? row.pulledAt);
   }
 
+  /** A PR only a scout holds, on the section and unseen: what an agent's mark_read would mark seen. */
+  isUnseenKey(key: PrKey): boolean {
+    const row = this.rows.get(key);
+    return row !== undefined && this.isUnseen(row);
+  }
+
   /** Sends Follows whose undo window ran out: to "GitHub" while writes are on, else into the lock. Called before reads, like FakeWrites.settle. */
   settle(): void {
     const due = this.now().getTime() - UNDO_WINDOW_MS;

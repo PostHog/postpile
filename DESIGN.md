@@ -1361,7 +1361,10 @@ spot and its reason (`TileView.scout`).
 GitHub inbox." inside the fence and answers the PR on its own (no topic
 block); JSON carries `scouted`. `whats_on_me` lists scouted tiles last, in a
 group of their own, never as a move (left out with `whose_move: "you"`).
-`search_prs` finds scouted PRs and marks them. `mark_read` on a scouted PR
+`search_prs` finds scouted PRs and marks them: it matches the scouted PRs'
+headers first (the scout's name stands in for the topic) and reads one
+Board for the matches only, at most `SEARCH_COLD_MAX`, never one per scout
+on every keystroke. `mark_read` on a scouted PR
 marks it seen in PostPile only, with the usual `seen_through` guards, and
 says so ("seen in PostPile only, nothing on GitHub"). For a scouted PR the
 token also covers its stored update time, so a title or description edit

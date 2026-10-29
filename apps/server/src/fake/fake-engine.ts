@@ -1641,12 +1641,18 @@ export class FakeEngine implements EngineService {
       .map(eventView);
   }
 
-  /** Like the engine's unseenIdsThrough: the sample's events in the order they were added stand in for the event log. */
+  /**
+   * Like the engine's unseenIdsThrough: the sample's events in the order
+   * they were added stand in for the event log; a PR only a scout holds adds
+   * its update time, like the engine.
+   */
   private unseenIdsThrough(prKey: PrKey, seq: number): string[] {
-    return this.eventsOf(prKey)
+    const ids = this.eventsOf(prKey)
       .slice(0, seq)
       .filter((event) => event.seenAt === null)
       .map((event) => event.id);
+    const scouted = this.scouts.pr(prKey);
+    return scouted ? [...ids, `updated:${scouted.updatedAt}`] : ids;
   }
 
   /** Like the engine's seenThroughNow, over the sample. */
@@ -2459,11 +2465,33 @@ export class FakeEngine implements EngineService {
     let tileId: string | null = null;
     const waiting = this.writes.waitingPrKeys();
     for (const pr of prs) {
+      const seenThrough = parseSeenThrough(pr.seenThrough);
+      const seq = seenThrough?.seq ?? 0;
+      // Like the engine's AgentMarkRead: a PR only a scout holds is marked seen here, nothing on GitHub.
+      if (this.scouts.pr(pr.prKey)) {
+        const scoutEvents = this.eventsOf(pr.prKey);
+        const scoutCheck = agentMarkReadCheck({
+          stored: true,
+          tracked: true,
+          seenThrough,
+          unreadHashNow: unreadIdsHash(this.unseenIdsThrough(pr.prKey, seq)),
+          newestSeq: scoutEvents.length,
+          newer: scoutEvents.slice(seq),
+          snapshotBehind: false,
+          alreadyQueued: false,
+          changesAnything: this.scouts.isUnseenKey(pr.prKey),
+        });
+        if (scoutCheck.kind === 'mark') {
+          this.scouts.markSeen(pr.prKey);
+          result.seenLocally = [...(result.seenLocally ?? []), pr.prKey];
+        } else {
+          result[scoutCheck.kind].push({ prKey: pr.prKey, reason: scoutCheck.reason });
+        }
+        continue;
+      }
       const stored = this.data.prs.some((candidate) => candidate.key === pr.prKey);
       const events = this.eventsOf(pr.prKey);
       const tracking = this.trackingTile(pr.prKey);
-      const seenThrough = parseSeenThrough(pr.seenThrough);
-      const seq = seenThrough?.seq ?? 0;
       const check = agentMarkReadCheck({
         stored,
         tracked: tracking !== null,
@@ -2492,7 +2520,8 @@ export class FakeEngine implements EngineService {
       result.undoUntil = new Date((batch?.queuedAt ?? this.now().getTime()) + UNDO_WINDOW_MS).toISOString();
       this.agentReads.add(options.client, result, marked.token, result.undoUntil);
     }
-    this.writes.record({ action: 'agent_mark_read', origin: 'agent', outcome: result.marked.length > 0 ? 'queued' : 'skipped', detail: agentMarkReadLogDetail(options.client, result) });
+    const outcome = result.marked.length > 0 ? 'queued' : (result.seenLocally?.length ?? 0) > 0 ? 'local' : 'skipped';
+    this.writes.record({ action: 'agent_mark_read', origin: 'agent', outcome, detail: agentMarkReadLogDetail(options.client, result) });
     return result;
   }
 

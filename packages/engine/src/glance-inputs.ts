@@ -162,7 +162,7 @@ export class GlanceInputs {
 
   /**
    * Scouted PRs that should have a glance (DESIGN.md "Scouts"): active ones
-   * (not followed, dismissed or expired) that `prWantsGlance`, topic-less
+   * (not followed, dismissed or expired), merged or not (`scoutedWantsGlance`), topic-less
    * like Unsorted. Read from the store when the hot board left them out:
    * scouted PRs are no tile of the board's. A scouted PR that reached the
    * inbox by itself is tracked and gets its glance with its tile instead.

@@ -413,6 +413,15 @@ describe('server routes over the fake engine', () => {
     expect((await post(app, '/api/sync', { maxPrs: 0 })).status).toBe(400);
   });
 
+  it('follows and dismisses a scouted PR with no request body at all', async () => {
+    const app = appWithFake();
+    const follow = (await (await app.request('/api/prs/acme/app/2701/scout/follow', { method: 'POST' })).json()) as ActionResult;
+    expect(follow).toMatchObject({ ok: true });
+    const dismiss = await app.request('/api/prs/acme/app/2711/scout/dismiss', { method: 'POST' });
+    expect(dismiss.status).toBe(200);
+    expect(((await dismiss.json()) as ActionResult).ok).toBe(true);
+  });
+
   it('marks a tile read and undoes it', async () => {
     const app = appWithFake();
     await post(app, '/api/github-writes', { enabled: true });

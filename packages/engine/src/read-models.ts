@@ -826,6 +826,27 @@ export class ReadModels {
   }
 
   /**
+   * The Scouted section's PRs that match every term, matched on their
+   * headers with the scout's name standing in for the topic; at most
+   * SEARCH_COLD_MAX, newest first.
+   */
+  private scoutedMatches(terms: string[]): PrKey[] {
+    const headers = new Map<PrKey, PrHeader>(this.store.prs.listHeaders().map((pr) => [pr.key, pr]));
+    const names = this.scoutsWithRows();
+    const matches: PrHeader[] = [];
+    for (const row of this.store.scoutedPrs.listActive()) {
+      const pr = headers.get(row.prKey);
+      if (pr && prMatchesTerms({ name: names.get(row.scoutId) ?? row.scoutName, area: null }, pr, terms)) {
+        matches.push(pr);
+      }
+    }
+    return matches
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .slice(0, SEARCH_COLD_MAX)
+      .map((pr) => pr.key);
+  }
+
+  /**
    * Search bar filter over the PRs of the topics the sidebar lists, each
    * with all its tiles, like an opened topic (`Board.forTopic`): the hot
    * Board's tiles, plus the tiles of matching PRs that went cold, read for
@@ -856,10 +877,12 @@ export class ReadModels {
         ...(coldBoard && topic.id !== UNSORTED_TOPIC_ID ? searchable(coldBoard, coldBoard.tilesForTopic(topic.id)) : []),
       ],
     }));
-    if (scope?.withScouts) {
+    const scouted = scope?.withScouts && terms.length > 0 ? this.scoutedMatches(terms) : [];
+    if (scouted.length > 0) {
+      // One Board of the matches with their stacks, never a Board per scout: a search runs on every keystroke.
+      const scoutBoard = Board.forPrs(this.store, board.now, scouted);
       for (const [scoutId, name] of this.scoutsWithRows()) {
         const topicId = scoutTopicId(scoutId);
-        const scoutBoard = Board.forTopic(this.store, board.now, topicId);
         topics.push({ topicId, name, area: null, tiles: searchable(scoutBoard, scoutBoard.tilesForTopic(topicId)) });
       }
     }
