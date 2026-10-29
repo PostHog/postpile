@@ -742,6 +742,7 @@ export class ScoutRun {
     this.quotaAllows = input.quotaAllows;
     this.runFiles = new Map();
     this.judgeCallsLeft = SCOUT_TRIAL_JUDGE_CALLS;
+    this.rateLimited = false;
     const errors: string[] = [];
     const fresh: ScoutConfig = { ...scout, id: '__trial__' };
     const floor = new Date(this.deps.now().getTime() - days * 24 * 60 * 60 * 1000).toISOString();
@@ -771,6 +772,9 @@ export class ScoutRun {
     const pending = rows.filter((row) => row.status === 'pending');
     const judged = rows.filter((row) => row.attempts > 0 || row.status === 'judged').length;
     let problem: string | null = errors[0] ?? null;
+    if (problem === null && this.rateLimited) {
+      problem = 'GitHub asked to slow down; check again in a few minutes';
+    }
     if (problem === null && !listedWhole) {
       problem = 'more PRs than one check lists';
     }

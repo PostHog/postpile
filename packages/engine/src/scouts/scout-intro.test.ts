@@ -143,6 +143,18 @@ describe('the Scouts intro card', () => {
     expect(runs.every((row) => row.run_id.startsWith('scout-check:'))).toBe(true);
   });
 
+  it('skips the dry run, and every GitHub read, when the check took the day\'s last agent call', async () => {
+    const { h } = setup({ calls: 1 });
+    onGitHub(h, 3);
+    h.runner.answer('scout_check', { fit: 'fits', note: 'ok', cantSee: null, name: 'Lookout', paths: [], pathsCoverAll: false });
+
+    const result = await h.engine.checkScout({ prompt: PROMPT, repos: ['acme/app'] });
+
+    expect(result.ok).toBe(true);
+    expect(result.trial).toMatchObject({ problem: 'no agent calls left today for a dry run', candidates: 0, complete: false });
+    expect(h.reader.scoutCalls).toEqual([]);
+  });
+
   it('refuses a check whose prompt would not turn on as written, before any call or read', async () => {
     const { h } = setup();
     onGitHub(h, 3);

@@ -5,6 +5,7 @@ import {
   addRepo,
   addRepoBlockedReason,
   checkBlockedReason,
+  checkedLead,
   exampleRef,
   fitLook,
   initialRepos,
@@ -17,6 +18,7 @@ import {
   textAfterDraft,
   trialHeading,
   trialNote,
+  trialSkipped,
   turnOnBlockedReason,
   unpickedRepos,
 } from './scout-intro.ts';
@@ -139,6 +141,11 @@ describe('check screen', () => {
     expect(trialNote(null)).not.toBeNull();
     expect(trialNote({ ...TRIAL, complete: false, problem: 'the call cap ran out' })).toContain('the call cap ran out');
     expect(trialNote({ ...TRIAL, complete: false, judged: 5 })).toContain('judged 5 of 9 candidates');
+    // Nothing tried at all: says why, never "no PRs matched".
+    const skipped = { ...TRIAL, pulled: 0, examples: [], candidates: 0, judged: 0, complete: false, problem: 'no agent calls left today for a dry run' };
+    expect(trialSkipped(skipped)).toBe(true);
+    expect(trialNote(skipped)).toBe('No dry run: no agent calls left today for a dry run. Turn it on and its finds show under Scouted after the next sync.');
+    expect(checkedLead(skipped, ['acme/app'])).toBe('PostPile checked what a scout can see in it. Nothing is saved yet.');
   });
 
   it('shows an example as #number with one repo, the full key with several', () => {

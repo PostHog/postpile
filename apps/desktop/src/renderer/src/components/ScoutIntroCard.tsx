@@ -78,6 +78,15 @@ export function ScoutIntroCard(props: { state: ScoutIntroState; hidden: boolean;
   const typed = useRef(false);
   // One draft per opening: StrictMode runs the effect twice, and each run would be an agent call.
   const draftAsked = useRef(false);
+  // False once this card is gone: a Turn on or Not now that settles after Esc and a reopen must not close the new card.
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (draftAsked.current) {
@@ -123,7 +132,7 @@ export function ScoutIntroCard(props: { state: ScoutIntroState; hidden: boolean;
 
   // Closes only once the answer is saved; a failed save shows its toast and keeps the card and the button.
   async function notNow() {
-    if (await actions.dismissScoutIntro()) {
+    if ((await actions.dismissScoutIntro()) && mounted.current) {
       onClose();
     }
   }
@@ -132,7 +141,7 @@ export function ScoutIntroCard(props: { state: ScoutIntroState; hidden: boolean;
     if (result === null) {
       return;
     }
-    if (await actions.turnOnScout({ name: name.trim(), prompt: prompt.trim(), repos, paths: result.paths })) {
+    if ((await actions.turnOnScout({ name: name.trim(), prompt: prompt.trim(), repos, paths: result.paths })) && mounted.current) {
       onClose();
     }
   }

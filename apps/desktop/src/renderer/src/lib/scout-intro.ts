@@ -125,8 +125,13 @@ export function checkingText(repos: string[]): string {
 }
 
 /** Under "Your scout, checked": what was tried, and that nothing is saved. */
+/** A dry run that stopped before it tried anything (no agent calls left today, GitHub said stop): the card says so instead of "no PRs matched". */
+export function trialSkipped(trial: ScoutTrial): boolean {
+  return !trial.complete && trial.candidates === 0 && trial.judged === 0 && trial.problem !== null;
+}
+
 export function checkedLead(trial: ScoutTrial | null, repos: string[]): string {
-  if (trial === null) {
+  if (trial === null || trialSkipped(trial)) {
     return 'PostPile checked what a scout can see in it. Nothing is saved yet.';
   }
   return `PostPile tried it on the last ${trial.days} days of ${repoListText(repos)}. Nothing is saved yet.`;
@@ -160,6 +165,9 @@ export function trialNote(trial: ScoutTrial | null): string | null {
   }
   if (trial.complete) {
     return null;
+  }
+  if (trialSkipped(trial)) {
+    return `No dry run: ${trial.problem}. Turn it on and its finds show under Scouted after the next sync.`;
   }
   const why = trial.problem ?? `judged ${trial.judged} of ${trial.candidates} candidates`;
   return `Only part of it ran: ${why}. The real count may be higher.`;

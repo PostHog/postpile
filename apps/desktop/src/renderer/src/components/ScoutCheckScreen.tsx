@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { ScoutCantSee, ScoutCheckResult, ScoutTrial } from '@postpile/core';
-import { checkedLead, exampleRef, fitLook, trialHeading, trialNote, type FitTone } from '../lib/scout-intro.ts';
+import { checkedLead, exampleRef, fitLook, trialHeading, trialNote, trialSkipped, type FitTone } from '../lib/scout-intro.ts';
 import { ScoutCheckedArt } from './ScoutIntroArt.tsx';
 
 const FIT_BOXES: Record<FitTone, { box: string; mark: string }> = {
@@ -66,7 +66,7 @@ function TrialSection(props: { trial: ScoutTrial | null; repos: string[] }) {
   const examples = trial?.examples ?? [];
   return (
     <div className="flex flex-col gap-2">
-      {trial && (
+      {trial && !trialSkipped(trial) && (
         <div className="flex items-baseline justify-between gap-3">
           <span className="text-xs font-semibold text-ink">{trialHeading(trial)}</span>
           {examples.length > 0 && <span className="text-[11.5px] text-hint">for example</span>}

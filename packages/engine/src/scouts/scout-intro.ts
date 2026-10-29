@@ -44,8 +44,8 @@ export interface ScoutIntroDeps {
   callLog: AgentCallLog;
   /** Null in tests: the dismissal is kept in memory. */
   userConfig: UserConfigFile | null;
-  /** The daily allowance the intro's agent calls take from, like glance catch-ups. */
-  allowance: CallAllowance;
+  /** The daily allowance the intro's agent calls take from, like glance catch-ups; `remaining` sizes the dry run before it reads. */
+  allowance: CallAllowance & { remaining(): number };
   agentOff: () => string | null;
   quotaAllows: () => boolean;
   now: () => Date;
@@ -182,7 +182,12 @@ export class ScoutIntro {
       return null;
     }
     const config = asWritten.config;
-    const budget = new AgentBudget(SCOUT_TRIAL_JUDGE_CALLS, stats, this.deps.allowance);
+    // The day's allowance bounds the dry run before it reads anything: no listing or file read for calls it can't make.
+    const calls = Math.min(SCOUT_TRIAL_JUDGE_CALLS, this.deps.allowance.remaining());
+    if (calls === 0) {
+      return { days: SCOUT_TRIAL_DAYS, pulled: 0, examples: [], candidates: 0, judged: 0, complete: false, problem: 'no agent calls left today for a dry run' };
+    }
+    const budget = new AgentBudget(calls, stats, this.deps.allowance);
     return new ScoutRun(this.deps.scoutRunDeps).trial(config, SCOUT_TRIAL_DAYS, { viewer, budget, agentOff: this.deps.agentOff(), quotaAllows: this.deps.quotaAllows });
   }
 

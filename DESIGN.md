@@ -1468,7 +1468,8 @@ drafts the first one, checks it and turns it on.
   check (no per-run state shared with a sync or another check) and in a
   call-log run of its own (`scout-check:<time>`, so its calls never count
   in a sync running meanwhile), at most 5 judge calls under the same
-  allowance,
+  allowance (fewer when the day has fewer left; with none left it reads
+  nothing and the card says "no agent calls left today for a dry run"),
   scheduled like a sync (`scheduleScoutWork`): only what those calls can
   judge gets its files read, and a check that leaves some unjudged says
   "more PRs than one check judges". It writes nothing: no judgement, pull, cursor, resume point or snapshot.
