@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseScouts, scoutSlug } from './scouts-config.ts';
+import { parseScouts, scoutHintMatches, scoutSlug } from './scouts-config.ts';
 
 const SAMPLE = `Scouts for PostPile. Text up here is ignored.
 
@@ -39,8 +39,8 @@ describe('parseScouts', () => {
       { pattern: 'services/*/api/**', addedOnly: true, newTopLevelFolder: false },
       { pattern: 'docs/architecture.md', addedOnly: false, newTopLevelFolder: false },
     ]);
-    expect(lookout!.paths[0]!.regex).toBeNull();
-    expect(lookout!.paths[1]!.regex!.test('services/billing/api/routes.ts')).toBe(true);
+    expect(scoutHintMatches(lookout!.paths[0]!, 'billing/main.ts')).toBe(false);
+    expect(scoutHintMatches(lookout!.paths[1]!, 'services/billing/api/routes.ts')).toBe(true);
     expect(billing).toMatchObject({ id: 'billing', repos: ['acme/app', 'acme/billing'], paths: [], prompt: 'Anything touching how invoices are computed.' });
   });
 
