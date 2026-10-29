@@ -14,6 +14,7 @@ import {
   scoutSignals,
   SCOUT_TRIAL_EXAMPLES,
   SCOUT_TRIAL_JUDGE_CALLS,
+  SCOUT_TRIAL_NEAR_MISSES,
   scheduleScoutWork,
   scoutRetryStalled,
   SCOUT_FILES_NOT_READ,
@@ -22,6 +23,8 @@ import {
   type ScoutWorkItem,
   type IsoTime,
   type ScoutTrial,
+  type ScoutTrialExample,
+  type ScoutSignal,
   type PrKey,
   type PrRef,
   type ScoutCandidate,
@@ -113,6 +116,30 @@ export interface ScoutRunReport {
   /** The GitHub quota was low at the start: nothing ran. */
   quotaLow: boolean;
   durationMs: number;
+}
+
+/** The id a dry run judges under: never a real scout's, so no stored judgement is consulted. */
+const TRIAL_SCOUT_ID = '__trial__';
+
+/** One PR a dry run judged, with what scout_refine is told about it. */
+export interface ScoutTrialPr {
+  prKey: PrKey;
+  title: string;
+  bodyHead: string;
+  files: ScoutFile[];
+  signals: ScoutSignal[];
+  pulled: boolean;
+  /** The judge's reason, or "no path signal". */
+  reason: string;
+}
+
+/** A dry run: what the card shows, plus what the engine keeps for "Tighten". */
+export interface ScoutTrialRun {
+  trial: ScoutTrial;
+  /** Every PR the scout would pull, not only the examples. */
+  pulled: Set<PrKey>;
+  /** The judged PRs whose files were read, by key. */
+  prs: Map<PrKey, ScoutTrialPr>;
 }
 
 /** One repo's listing for this run, shared by every scout on it. */
@@ -230,6 +257,12 @@ export class ScoutRun {
   private passedPrefilter = 0;
   /** This run's schedule or judge left work for lack of calls, for the run report. */
   private ranOutOfCalls = false;
+  /** A `retrial`: every read comes from what the last trial read, never from GitHub. */
+  private cachedOnly = false;
+  /** The last trial's listings and window, for `retrial`. File lists stay in `runFiles`, base folders in `trees`. */
+  private trialListings: { days: number; listings: Map<string, RepoListing> } | null = null;
+  /** The replay running or last run: the next `retrial` starts after it. */
+  private replays: Promise<unknown> = Promise.resolve();
 
   constructor(private readonly deps: ScoutRunDeps) {}
 
@@ -350,7 +383,7 @@ export class ScoutRun {
 
   /** Scout reads may go on: GitHub has not rate-limited one this run, and the quota allows background work. */
   private canRead(): boolean {
-    return !this.rateLimited && this.quotaAllows();
+    return !this.cachedOnly && !this.rateLimited && this.quotaAllows();
   }
 
   /**
@@ -775,45 +808,119 @@ export class ScoutRun {
     return expired;
   }
 
+  /** One judged PR of a dry run, as scout_refine is told about it; null when its files were not read. */
+  private trialPr(scout: ScoutConfig, repo: string, candidate: ScoutCandidate, row: ScoutJudgement): ScoutTrialPr | null {
+    const read = this.runFiles.get(`${candidate.key}@${candidate.headOid}`);
+    if (!read || read.files === null || row.verdict === null) {
+      return null;
+    }
+    const folders = this.foldersOf(repo, read.foldersOid, scoutFolderParents(scout)) ?? [];
+    return {
+      prKey: candidate.key,
+      title: candidate.title,
+      bodyHead: scoutBodyHead(candidate.body),
+      files: read.files,
+      signals: scoutSignals(scout, read.files, new Set(folders)),
+      pulled: row.verdict === 'pulled',
+      reason: row.reason ?? '',
+    };
+  }
+
+  /** The dry run's counters, fresh for each trial; the file lists and base folders read so far stay. */
+  private startTrial(input: Pick<ScoutRunInput, 'quotaAllows'>): void {
+    this.quotaAllows = input.quotaAllows;
+    this.judgeCallsLeft = SCOUT_TRIAL_JUDGE_CALLS;
+    this.rateLimited = false;
+    this.passedPrefilter = 0;
+    this.ranOutOfCalls = false;
+  }
+
   /**
    * "Check scout" (DESIGN.md "Scouts" › The intro card): the scout as the
    * sync would run it on the last `days` of its repos, with the same
    * listing, rules, file reads and judge, under `input.budget` (the caller
    * caps it). Writes NOTHING: no judgement, no pull, no cursor, no resume
    * point, no snapshot. A scout of the same id that exists is not
-   * consulted: the trial judges as if it were new.
+   * consulted: the trial judges as if it were new. The listing and the
+   * reads stay on this runner for `retrial`.
    */
-  async trial(scout: ScoutConfig, days: number, input: Omit<ScoutRunInput, 'glance' | 'errors'>): Promise<ScoutTrial> {
-    this.quotaAllows = input.quotaAllows;
+  async trial(scout: ScoutConfig, days: number, input: Omit<ScoutRunInput, 'glance' | 'errors'>): Promise<ScoutTrialRun> {
+    this.startTrial(input);
     this.runFiles = new Map();
-    this.judgeCallsLeft = SCOUT_TRIAL_JUDGE_CALLS;
-    this.rateLimited = false;
-    this.passedPrefilter = 0;
-    this.ranOutOfCalls = false;
     const errors: string[] = [];
-    const fresh: ScoutConfig = { ...scout, id: '__trial__' };
     const floor = new Date(this.deps.now().getTime() - days * 24 * 60 * 60 * 1000).toISOString();
+    const listings = new Map<string, RepoListing>();
+    for (const repo of scout.repos) {
+      const prs = new Map<PrKey, ScoutCandidate>();
+      const end = await this.pass(repo, null, floor, { pages: SCOUT_LIST_MAX_PAGES }, prs, errors);
+      listings.set(repo, { prs, complete: end.kind === 'done', end, startedAt: floor, scouts: [TRIAL_SCOUT_ID], floor, pageCapped: end.kind === 'capped' });
+    }
+    this.trialListings = { days, listings };
+    return this.judgeTrial(scout, days, listings, input, errors);
+  }
+
+  /**
+   * "Tighten" (DESIGN.md "Scouts" › The intro card): the last `trial` again
+   * for a revised scout on the same repos, on what that trial read: its
+   * listing, file lists and base folders. No GitHub read at all, so it costs
+   * judge calls only; a PR the first trial never read (a new folder hint's
+   * tree, say) stays unjudged and the trial says so. Null without a trial
+   * on these repos to replay. Replays on one runner run one after another.
+   */
+  retrial(scout: ScoutConfig, input: Omit<ScoutRunInput, 'glance' | 'errors'>): Promise<ScoutTrialRun | null> {
+    // One replay at a time: they share this runner's counters and its cached-only switch, so an overlapping one waits its turn.
+    const turn = this.replays.then(() => this.replay(scout, input));
+    this.replays = turn.catch(() => null);
+    return turn;
+  }
+
+  private async replay(scout: ScoutConfig, input: Omit<ScoutRunInput, 'glance' | 'errors'>): Promise<ScoutTrialRun | null> {
+    const kept = this.trialListings;
+    if (kept === null || [...kept.listings.keys()].join(' ') !== scout.repos.join(' ')) {
+      return null;
+    }
+    this.startTrial(input);
+    this.cachedOnly = true;
+    try {
+      return await this.judgeTrial(scout, kept.days, kept.listings, input, []);
+    } finally {
+      this.cachedOnly = false;
+    }
+  }
+
+  /** The dry run on listings already made: rules, the sync's schedule, file reads (or the kept ones), the judge. */
+  private async judgeTrial(scout: ScoutConfig, days: number, listings: Map<string, RepoListing>, input: Omit<ScoutRunInput, 'glance' | 'errors'>, errors: string[]): Promise<ScoutTrialRun> {
+    const fresh: ScoutConfig = { ...scout, id: TRIAL_SCOUT_ID };
     const facts = { viewer: input.viewer, tracked: this.trackedKeys() };
     const titles = new Map<PrKey, string>();
     const rows: ScoutJudgement[] = [];
-    let listedWhole = true;
+    const listedWhole = [...listings.values()].every((listing) => listing.complete);
     const plans: ScoutPlan[] = [];
-    for (const repo of fresh.repos) {
-      const prs = new Map<PrKey, ScoutCandidate>();
-      const end = await this.pass(repo, null, floor, { pages: SCOUT_LIST_MAX_PAGES }, prs, errors);
-      listedWhole &&= end.kind === 'done';
-      prs.forEach((pr) => titles.set(pr.key, pr.title));
-      const listing: RepoListing = { prs, complete: end.kind === 'done', end, startedAt: floor, scouts: [fresh.id], floor, pageCapped: end.kind === 'capped' };
+    for (const [repo, listing] of listings) {
+      listing.prs.forEach((pr) => titles.set(pr.key, pr.title));
       const work: ScoutRepoWork = { rows: [], pulls: [] };
-      plans.push({ scout: fresh, repo, listing, work, triaged: this.triage(fresh, null, [...prs.values()], facts, work), scheduled: [] });
+      plans.push({ scout: fresh, repo, listing, work, triaged: this.triage(fresh, null, [...listing.prs.values()], facts, work), scheduled: [] });
     }
     // The same schedule as a sync, within the trial's calls: what it can't take stays pending, unread.
     this.schedule(plans, input, null);
     const judgedWhole = plans.every((plan) => plan.scheduled.length === plan.triaged.length);
-    for (const { repo, work, scheduled } of plans) {
+    const prs = new Map<PrKey, ScoutTrialPr>();
+    const nearMisses: ScoutTrialExample[] = [];
+    for (const { repo, listing, work, scheduled } of plans) {
       const items = await this.prepare(fresh, null, repo, scheduled, work);
       await this.judge(fresh, null, items, { ...input, errors, glance: async () => {} }, work);
       rows.push(...work.rows);
+      for (const row of work.rows.filter((entry) => entry.status === 'judged')) {
+        const pr = this.trialPr(fresh, repo, listing.prs.get(row.prKey)!, row);
+        if (pr === null) {
+          continue;
+        }
+        prs.set(row.prKey, pr);
+        // A near miss had a path match and reached the judge (attempted), which skipped it.
+        if (!pr.pulled && row.attempts > 0 && pr.signals.length > 0 && nearMisses.length < SCOUT_TRIAL_NEAR_MISSES) {
+          nearMisses.push({ prKey: row.prKey, title: pr.title, reason: pr.reason });
+        }
+      }
     }
     // What the scout would really show: a pull verdict on a PR another scout owns already pulls nothing (`scoutPullStep`).
     const pulled = plans.flatMap((plan) => plan.work.pulls);
@@ -829,18 +936,24 @@ export class ScoutRun {
     if (problem === null && !judgedWhole && input.agentOff === null) {
       problem = 'more PRs than one check judges';
     }
+    if (problem === null && this.cachedOnly && pending.some((row) => row.lastError === SCOUT_FILES_NOT_READ || row.lastError === SCOUT_TREE_NOT_READ)) {
+      problem = 'the new path hints need folders the first dry run did not read; check again for a full count';
+    }
     if (problem === null && pending.length > 0) {
       problem = pending[0]!.lastError;
     }
-    return {
+    const trial: ScoutTrial = {
       days,
       pulled: pulled.length,
       examples: pulled.slice(0, SCOUT_TRIAL_EXAMPLES).map((pull) => ({ prKey: pull.prKey, title: titles.get(pull.prKey) ?? pull.prKey, reason: pull.reason })),
+      nearMisses,
+      session: null,
       candidates: rows.length,
       judged,
       complete: listedWhole && pending.length === 0,
       problem,
     };
+    return { trial, pulled: new Set(pulled.map((pull) => pull.prKey)), prs };
   }
 
   async run(input: ScoutRunInput): Promise<ScoutRunReport> {

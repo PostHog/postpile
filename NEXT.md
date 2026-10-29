@@ -20,6 +20,13 @@ now".
   `ScoutedClosures` sweep over `pr_scouted.closure_reported_at` (migration
   046), Follow failures, `scout_seen`, the intro card funnel, `tile_opened`
   `scouted` and the `active_scouts` person property.
+- Scout card labels and Tighten (2026-10-29; DESIGN.md "Scouts" › The
+  intro card): up to 8 examples and 3 near misses with Want / Noise and a
+  why, `scout_refine` (prompt, schema, `mapScoutRefine`), `ScoutRun.retrial`
+  on the check's kept listing and reads (judge calls only), the card's
+  session in `ScoutIntro`, lost-want detection, Undo through a version
+  stack in the card, `scout_tightened` / `scout_tighten_undone`, and a
+  canned refine plus second dry run in fake mode.
 - Picked, pulled in or routed (2026-10-29; DESIGN.md "Picked, pulled in
   or routed"): the reader asks `asCodeOwner` on pending `reviewRequests`
   and stores the names it marks in `Pr.codeOwnerReviewers`

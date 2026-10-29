@@ -26,6 +26,8 @@ import type {
   PrState,
   ScoutCheckResult,
   ScoutFile,
+  ScoutLabel,
+  ScoutRefined,
   ScoutSignal,
   ScoutStackedOn,
   PrSet,
@@ -523,6 +525,34 @@ export interface ScoutCheckInput {
   context: PromptContext;
 }
 
+/** One example the user labeled on the intro card, as the dry run saw it. Title, body, paths and the judge's reason are GitHub text or come from it. */
+export interface ScoutRefineExample {
+  prKey: PrKey;
+  title: string;
+  /** The start of the description (`scoutBodyHead`). */
+  bodyHead: string;
+  files: ScoutFile[];
+  /** Files that matched the version's path hints. */
+  signals: ScoutSignal[];
+  /** Whether the version pulled it, and the judge's reason ("no path signal" when no hint matched). */
+  pulled: boolean;
+  reason: string;
+  label: ScoutLabel;
+  /** The user's own note on the label, '' when none. */
+  why: string;
+}
+
+/** The intro card's "Tighten": the current version and the labeled examples. Runs without tools. */
+export interface ScoutRefineInput {
+  name: string;
+  prompt: string;
+  paths: string[];
+  repos: string[];
+  examples: ScoutRefineExample[];
+  viewer: Viewer;
+  context: PromptContext;
+}
+
 /** Second opinion on new loud events, one call per topic instead of one per PR. */
 export interface EventBatchInput {
   topic: Topic | null;
@@ -815,4 +845,6 @@ export interface AgentService {
   draftScout(input: ScoutDraftInput): Promise<string>;
   /** The intro card's check: mapped onto the prompt (`mapScoutCheck`), so a quoted part is really in it. */
   checkScout(input: ScoutCheckInput): Promise<Pick<ScoutCheckResult, 'fit' | 'cantSee' | 'name' | 'paths'>>;
+  /** The intro card's "Tighten": a revised prompt and path hints from the labels, mapped onto the current version (`mapScoutRefine`). */
+  refineScout(input: ScoutRefineInput): Promise<ScoutRefined>;
 }

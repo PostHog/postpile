@@ -141,17 +141,24 @@ describe('TELEMETRY_EVENTS', () => {
     expect(TELEMETRY_EVENTS.scout_follow_failed.safeParse({ stage: 'acme/app#1' }).success).toBe(false);
     expect(TELEMETRY_EVENTS.scout_follow_late_success.safeParse({}).success).toBe(true);
     expect(TELEMETRY_EVENTS.scout_seen.safeParse({ via: 'mcp' }).success).toBe(true);
+    const tightened = { round: 1, wants: 3, noise: 2, pulls_before: 14, pulls_after: 5, lost_wants: 0 };
+    expect(TELEMETRY_EVENTS.scout_tightened.safeParse(tightened).success).toBe(true);
+    expect(TELEMETRY_EVENTS.scout_tightened.safeParse({ ...tightened, prompt: 'Skip fixes' }).success).toBe(false);
+    expect(TELEMETRY_EVENTS.scout_tightened.safeParse({ ...tightened, paths: ['+*/'] }).success).toBe(false);
+    expect(TELEMETRY_EVENTS.scout_tighten_undone.safeParse({}).success).toBe(true);
   });
 
   it('lets the renderer send the intro card funnel, validated by the catalogue', () => {
     expect(RENDERER_TELEMETRY_EVENTS).toContain('scout_intro_shown');
     expect(RENDERER_TELEMETRY_EVENTS).toContain('scout_intro_closed');
+    expect(RENDERER_TELEMETRY_EVENTS).toContain('scout_tighten_undone');
     expect(TELEMETRY_EVENTS.scout_intro_shown.safeParse({ trigger: 'manual' }).success).toBe(true);
     expect(TELEMETRY_EVENTS.scout_intro_shown.safeParse({ trigger: 'sidebar' }).success).toBe(false);
     expect(TELEMETRY_EVENTS.scout_intro_closed.safeParse({ stage: 'check', action: 'escape' }).success).toBe(true);
     expect(TELEMETRY_EVENTS.scout_intro_closed.safeParse({ stage: 'check', action: 'turn_on' }).success).toBe(false);
     // The engine has the facts for the rest: the check's verdict, the run, follows and closures.
     expect(RENDERER_TELEMETRY_EVENTS).not.toContain('scout_checked');
+    expect(RENDERER_TELEMETRY_EVENTS).not.toContain('scout_tightened');
     expect(RENDERER_TELEMETRY_EVENTS).not.toContain('scout_pr_closed');
   });
 

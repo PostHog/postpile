@@ -40,6 +40,8 @@ import type {
   ReviewNoteSource,
   ScoutCheckRequest,
   ScoutCheckResult,
+  ScoutRefineRequest,
+  ScoutRefineResult,
   ScoutDraftResult,
   ScoutTurnOnRequest,
   SetupAcceptRequest,
@@ -202,6 +204,8 @@ export interface Actions {
   draftScout(): Promise<ScoutDraftResult>;
   /** "Check scout": the agent's check plus a dry run, nothing written. A failed request comes back as ok: false, shown in the card. */
   checkScout(body: ScoutCheckRequest): Promise<ScoutCheckResult>;
+  /** "Tighten": scout_refine from the labels and the dry run again, nothing written. A failed request comes back as ok: false, shown in the card. */
+  refineScout(body: ScoutRefineRequest): Promise<ScoutRefineResult>;
   /** "Turn on scout": appends it to scouts.md. Local, not a GitHub write; the toast says what happens next. True when it is on. */
   turnOnScout(body: ScoutTurnOnRequest): Promise<boolean>;
   /** "Not now" on the intro card: it stops opening by itself. Local. */
@@ -815,6 +819,14 @@ export function ActionsProvider(props: { children: ReactNode }) {
     }
   }
 
+  async function refineScout(body: ScoutRefineRequest): Promise<ScoutRefineResult> {
+    try {
+      return await withBusy('scout:refine', () => request<ScoutRefineResult>('POST', '/api/scouts/intro/refine', body));
+    } catch (error) {
+      return { ok: false, message: `Could not tighten the scout: ${errorText(error)}`, refined: null, trial: null, lostWants: [], uncheckedWants: [] };
+    }
+  }
+
   /** No toast: the dialog closes and the held sync shows in the title bar. */
   async function startAsUsual(): Promise<boolean> {
     try {
@@ -1156,6 +1168,7 @@ export function ActionsProvider(props: { children: ReactNode }) {
     markScoutedSeen,
     draftScout,
     checkScout,
+    refineScout,
     turnOnScout: (body) => run('scout:turn-on', null, () => request('POST', '/api/scouts/intro/turn-on', body)),
     dismissScoutIntro: () => run('scout:dismiss-intro', null, () => request('POST', '/api/scouts/intro/dismiss')),
     removeTeamRequest: async (prKey, team) => {

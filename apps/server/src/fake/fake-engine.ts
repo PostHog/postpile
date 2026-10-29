@@ -45,6 +45,8 @@ import type {
   ScoutDraftResult,
   ScoutCheckResult,
   ScoutCheckRequest,
+  ScoutRefineRequest,
+  ScoutRefineResult,
   ScoutTurnOnRequest,
   SyncPhaseTimings,
   SyncProgress,
@@ -2066,6 +2068,10 @@ export class FakeEngine implements EngineService {
 
   async checkScout(request: ScoutCheckRequest): Promise<ScoutCheckResult> {
     return this.scoutIntro.check(request);
+  }
+
+  async refineScout(request: ScoutRefineRequest): Promise<ScoutRefineResult> {
+    return this.scoutIntro.refine(request);
   }
 
   async turnOnScout(request: ScoutTurnOnRequest): Promise<ActionResult> {

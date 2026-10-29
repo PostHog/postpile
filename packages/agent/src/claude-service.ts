@@ -1,4 +1,4 @@
-import { clipText, mapScoutCheck, type ScoutCheckResult, LESSON_TEXT_MAX, mapSetupDraft, mapSetupFit, PING_BODY_MAX, PING_TITLE_MAX, type IsoTime, type ReconcileAction, type SetupFitNote } from '@postpile/core';
+import { clipText, mapScoutCheck, mapScoutRefine, type ScoutCheckResult, type ScoutRefined, LESSON_TEXT_MAX, mapSetupDraft, mapSetupFit, PING_BODY_MAX, PING_TITLE_MAX, type IsoTime, type ReconcileAction, type SetupFitNote } from '@postpile/core';
 import type { z } from 'zod';
 import { mapConsolidationAnswer } from './consolidation-answer.ts';
 import { mapDossierAnswer } from './dossier-answer.ts';
@@ -27,6 +27,7 @@ import { setupDraftPrompt, setupFitPrompt, setupRefinePrompt } from './prompts/s
 import { topicAssignmentPrompt } from './prompts/topics.ts';
 import { scoutJudgePrompt } from './prompts/scout-judge.ts';
 import { scoutCheckPrompt, scoutDraftPrompt } from './prompts/scout-intro.ts';
+import { scoutRefinePrompt } from './prompts/scout-refine.ts';
 import { mapReconcileAnswer } from './reconcile-answer.ts';
 import { mapSetAnswer } from './set-answer.ts';
 import { mapTidyAnswer } from './tidy-answer.ts';
@@ -56,6 +57,7 @@ import {
   scoutJudgementOutput,
   scoutCheckOutput,
   scoutDraftOutput,
+  scoutRefineOutput,
 } from './schemas.ts';
 import type {
   AgentChatReply,
@@ -101,6 +103,7 @@ import type {
   ScoutJudgeResult,
   ScoutCheckInput,
   ScoutDraftInput,
+  ScoutRefineInput,
 } from './service.ts';
 import { WORK_THREADS_MAX } from './service.ts';
 
@@ -137,6 +140,7 @@ const timeouts: Record<AgentPurpose, number> = {
   // The intro card: the user watches a placeholder while these run.
   scout_draft: 90_000,
   scout_check: 90_000,
+  scout_refine: 90_000,
 };
 
 /** Bounds for the work context digest, so a runaway answer cannot bloat every prompt. */
@@ -577,6 +581,11 @@ export class RunnerAgentService implements AgentService {
   async checkScout(input: ScoutCheckInput): Promise<Pick<ScoutCheckResult, 'fit' | 'cantSee' | 'name' | 'paths'>> {
     const { value } = await this.ask('scout_check', scoutCheckPrompt(input), scoutCheckOutput);
     return mapScoutCheck(value, input.prompt);
+  }
+
+  async refineScout(input: ScoutRefineInput): Promise<ScoutRefined> {
+    const { value } = await this.ask('scout_refine', scoutRefinePrompt(input), scoutRefineOutput);
+    return mapScoutRefine({ prompt: value.prompt, paths: value.paths, summary: value.summary }, { prompt: input.prompt, paths: input.paths });
   }
 
   async consolidate(input: ConsolidationInput): Promise<ConsolidationResult> {

@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import type { ScoutCantSee, ScoutCheckResult, ScoutTrial } from '@postpile/core';
-import { checkedLead, exampleRef, fitLook, trialHeading, trialNote, trialSkipped, type FitTone } from '../lib/scout-intro.ts';
+import type { ScoutCantSee, ScoutCheckResult } from '@postpile/core';
+import { checkedLead, fitLook, type FitTone } from '../lib/scout-intro.ts';
 import { ScoutCheckedArt } from './ScoutIntroArt.tsx';
 
 const FIT_BOXES: Record<FitTone, { box: string; mark: string }> = {
@@ -60,45 +60,17 @@ function CantSeeBox(props: { cantSee: ScoutCantSee; onKeep: () => void; onDrop: 
   );
 }
 
-function TrialSection(props: { trial: ScoutTrial | null; repos: string[] }) {
-  const { trial } = props;
-  const note = trialNote(trial);
-  const examples = trial?.examples ?? [];
-  return (
-    <div className="flex flex-col gap-2">
-      {trial && !trialSkipped(trial) && (
-        <div className="flex items-baseline justify-between gap-3">
-          <span className="text-xs font-semibold text-ink">{trialHeading(trial)}</span>
-          {examples.length > 0 && <span className="text-[11.5px] text-hint">for example</span>}
-        </div>
-      )}
-      {examples.length > 0 && (
-        <ul className="flex flex-col overflow-hidden rounded-[10px] inset-ring inset-ring-edge-hairline">
-          {examples.map((example) => (
-            <li key={example.prKey} className="flex items-start gap-2.5 border-b border-hairline px-3 py-[9px] last:border-b-0">
-              <span className={`shrink-0 font-mono text-[11.5px] text-hint ${props.repos.length > 1 ? '' : 'w-[46px]'}`}>{exampleRef(example.prKey, props.repos)}</span>
-              <span className="flex min-w-0 flex-col gap-0.5">
-                <span className="text-[12.5px] font-semibold text-ink [overflow-wrap:anywhere]">{example.title}</span>
-                <span className="text-xs text-ink-2">{example.reason}</span>
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-      {note && <p className="text-[11.5px] leading-normal text-hint">{note}</p>}
-    </div>
-  );
-}
-
 /**
  * The card after "Check scout" (design canvas "Scouts intro", Check): the
- * name to keep, whether the prompt fits what a scout reads, the one part it
- * can't see with Keep or Drop, and what the dry run would have pulled.
- * Nothing is saved until "Turn on scout" (the card's footer). The path
- * hints in `result.paths` go along unseen; they are edited in scouts.md.
+ * name to keep, whether the prompt fits what a scout reads, and the one
+ * part it can't see with Keep or Drop. The dry run below it is
+ * `ScoutTrialSection`. Nothing is saved until "Turn on scout" (the card's
+ * footer).
  */
 export function ScoutCheckScreen(props: {
   result: ScoutCheckResult;
+  /** The dry run the lead line describes: the current version's. */
+  trial: ScoutCheckResult['trial'];
   repos: string[];
   name: string;
   onName: (name: string) => void;
@@ -115,7 +87,7 @@ export function ScoutCheckScreen(props: {
           <h2 id="scout-intro-title" className="text-[17px] font-[650] text-ink">
             Your scout, checked
           </h2>
-          <p className="text-[12.5px] text-hint">{checkedLead(result.trial, props.repos)}</p>
+          <p className="text-[12.5px] text-hint">{checkedLead(props.trial, props.repos)}</p>
         </div>
       </div>
       <div className="flex items-center gap-2.5">
@@ -146,7 +118,6 @@ export function ScoutCheckScreen(props: {
           />
         )}
       </div>
-      <TrialSection trial={result.trial} repos={props.repos} />
     </>
   );
 }

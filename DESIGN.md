@@ -1497,7 +1497,8 @@ drafts the first one, checks it and turns it on.
   (`isScoutPathHint`, at most 8 `*` and 4 `**`); `scoutSection` writes no other kind, and
   `appendScout` refuses one and checks the new scout's id and hints read
   back as asked, so a hint can never add a key line. The path hints are
-  never shown; they go into the scout, edited in scouts.md. The check and
+  not shown with the check; they go into the scout, edited in scouts.md,
+  and show only in a tightening's before and after. The check and
   its dry run use the scout exactly as Turn on would write it
   (`scoutFromCard`, `appendScout`'s read-back): a prompt that would not
   turn on (a line such as "repos: …" that would widen the scope) is
@@ -1512,7 +1513,69 @@ drafts the first one, checks it and turns it on.
   scheduled like a sync (`scheduleScoutWork`): only what those calls can
   judge gets its files read, and a check that leaves some unjudged says
   "more PRs than one check judges". It writes nothing: no judgement, pull, cursor, resume point or snapshot.
-  The card shows pulls per day (`trialRateWords`) and two examples.
+  The card shows pulls per day (`trialRateWords`), up to 8 example pulls
+  (`SCOUT_TRIAL_EXAMPLES`) and up to 3 near misses
+  (`SCOUT_TRIAL_NEAR_MISSES`): PRs with a path match that reached the
+  judge and were skipped, each with the judge's reason.
+- *Label and Tighten* (2026-10-29). A real eval showed how a scout gets
+  precise: run it on recent PRs, have a person mark each find want or
+  noise, adjust the prompt, path hints and skip rules, run it again. Five
+  rounds took first drafts from about 56 to about 6 pulls a day without
+  losing a wanted PR. Precision came mostly from path hints and explicit
+  "Skip …" rules, and every tightening risked dropping a wanted PR. The
+  card runs that loop in miniature, so a casual user can do it:
+  - Every example and near miss has two word buttons, Want and Noise
+    (the same one again takes the label off), and an optional one-line
+    "why" once labeled. A near miss marked Want means "should have
+    pulled". Labels are card state keyed by PR key (`lib/scout-tighten.ts`),
+    never stored; they carry over between versions and checks. Clicking the
+    active button again clears a label on any shown example. A refine takes
+    at most 50 (`SCOUT_REFINE_MAX_LABELS`, the route's limit): the newest,
+    every Want before any Noise, so a long session drops old Noise first.
+  - "Tighten" runs once 3 examples are labeled
+    (`SCOUT_REFINE_MIN_LABELS`): one `scout_refine` call (Sonnet, no
+    tools, an action call like `scout_check`, under the same daily
+    allowance) with the name, prompt and hints, and per labeled PR its
+    title, description start, changed files with +N/−M, matched hints, the
+    judge's reason, the label and the why. PR text and the judge's reasons
+    are fenced like `scout_judge`'s; the label and the user's why are not.
+    The prompt carries the eval's lessons: prefer explicit "Skip …" rules
+    and narrower hints over rewording the goal; every Want must still
+    match a hint and fit the prompt; a why outranks a guess; hints follow
+    the scouts.md syntax.
+  - The answer is checked field by field (`scoutRefineOutput`,
+    `mapScoutRefine`): an empty prompt keeps the current one; a `paths`
+    the answer left out or did not give as a list keeps the current hints
+    (only an explicit `[]` turns the filter off); each hint
+    must pass `isScoutPathHint` or it is dropped and counted ("1 suggested
+    path hint could not go into scouts.md"), never written; when every
+    suggested hint fails, the current hints stay, since an empty list
+    would turn the path filter off. A revised prompt that would not turn on
+    as written (`scoutFromCard`) is refused before the re-run.
+  - The re-run uses the check's own `ScoutRun` (`retrial`): its listing,
+    file lists and base folders, the same window and the same 5 judge
+    calls at most, and no GitHub read at all, so a tightening costs one
+    refine call and judge calls. Replays on one session run one after
+    another (they share the runner's counters and its cached-only switch,
+    so an overlap could let one read GitHub). The engine keeps one session per card
+    (`ScoutTrial.session`; a new check, Turn on or Not now ends it), with
+    each version's pulls by prompt and hints, so Undo can go back and
+    tighten again from an older version. A new folder hint whose base tree
+    the first run never read leaves those PRs unjudged, and the card says
+    to check again for a full count; reading it would make the re-run cost
+    GitHub reads.
+  - The card shows the new count against the old ("Tightened: 14 → 4
+    PRs"), the 1–2 sentence summary, the changed words of the prompt and
+    the hints added and removed (the hints show here, nowhere else), and
+    "Lost 1 PR you wanted: …" for a Want the version before pulled and the
+    re-run judged and skipped (`scoutWantsAfter`). A Want the re-run never
+    judged (the call cap, a failed call, folders the first run did not
+    read) is listed apart as "Not checked this round", never as lost.
+    "Undo this tightening" goes back one version (a history stack in the
+    card). A Tighten reply applies only while the version it was asked
+    from is still on screen: a new check, Drop that part, Edit prompt or
+    Undo meanwhile makes it stale, and it is ignored. Turn on writes the
+    version the card shows.
 - *Turn on scout:* the scout is appended to scouts.md through
   `ScoutsHistory.appendScout` and recorded as a version of origin `intro`;
   refused when the file or the new scout would not parse back exactly as
@@ -8769,6 +8832,11 @@ topic names are never event props.
      dry_run_complete, or dry_run_skipped_reason `no_scouts_file` /
      `no_calls_left`) and `scout_turned_on` (repos, paths: counts) from the
      engine.
+   - Tighten: `scout_tightened` from the engine after a refine answered
+     (round: tightenings in this check, undone ones too; wants, noise:
+     labels sent; pulls_before, pulls_after; lost_wants: all counts), and
+     `scout_tighten_undone` (no props) from the renderer, since Undo is
+     card state. Never a prompt, a hint, a PR or a repo.
 
 **Verification**: a throwaway script or CLI run with `POSTPILE_TELEMETRY=1`
 and a scratch data dir sends one `telemetry_test` event (distinct id

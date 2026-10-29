@@ -648,7 +648,12 @@ tints (`lib/why.ts`, `lib/events.ts`, `reviewWord` / `rowStateWord` in `lib/pr.t
   that keeps typing); while it shows, the card holds the open-read dwell
   like a menu (`holdMenuOpen`), so the PR behind it is never marked read;
   draft and check write nothing and show failures in the card, not a toast; Turn on and Not now go through `run` (toast,
-  refetch). Path hints from the check go along to Turn on but never show.
+  refetch). Path hints go along to Turn on and show only in a
+  tightening's before and after. `ScoutTrialSection` holds the dry run:
+  examples and near misses with Want / Noise word buttons and the why
+  field, Tighten, and the tightened box with Undo. Labels and the version
+  stack live in `ScoutIntroCard` state; the rules are in
+  `lib/scout-tighten.ts`. Turn on writes the newest version.
 - Why now: `UnreadStrip`, warm strip, actor avatar with an ink event
   badge (`Glyph`), a coral "NEW" pill (only while `TileView.newBadge`), age. On a revisit (`PrSummary.whatsNew`
   of the strip's PR, `stripNews`) the text, avatar, badge, "+N" and age

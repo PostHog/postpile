@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { appendScout, isScoutPathHint, mapScoutCheck, promptWithoutPart, scoutFromCard, scoutIntroAutoShows, scoutNameWithId, SCOUT_NAME_MAX, scoutSection, trialRateWords } from './scout-intro.ts';
+import {
+  appendScout,
+  cleanScoutLabels,
+  isScoutPathHint,
+  mapScoutCheck,
+  mapScoutRefine,
+  scoutWantsAfter,
+  SCOUT_LABEL_WHY_MAX,
+  SCOUT_REFINE_PATHS,
+  promptWithoutPart, scoutFromCard, scoutIntroAutoShows, scoutNameWithId, SCOUT_NAME_MAX, scoutSection, trialRateWords } from './scout-intro.ts';
 import { parseScouts, scoutSlug } from './scouts-config.ts';
 
 const PROMPT = 'PRs that add a new top-level folder or service, or models used across services. Skip fixes inside one service.';
@@ -135,5 +144,70 @@ describe('appendScout', () => {
     expect(appendScout('## A\nrepos: nope\n\nx\n', scout)).toMatchObject({ error: expect.stringContaining('does not parse') });
     expect(appendScout(scoutSection(scout), scout)).toMatchObject({ error: expect.stringContaining('already used') });
     expect(appendScout('', { ...scout, prompt: 'repos: acme/web\nlook here' })).toHaveProperty('error');
+  });
+});
+
+describe('mapScoutRefine', () => {
+  const current = { prompt: PROMPT, paths: ['+*/', 'services/**'] };
+
+  it('takes the revised prompt, the valid hints and the summary', () => {
+    const refined = mapScoutRefine({ prompt: ' Skip fixes. Pull new services. ', paths: ['+*/', ' services/*/api/** '], summary: 'Added a skip rule.\n Narrowed services.' }, current);
+    expect(refined).toEqual({ prompt: 'Skip fixes. Pull new services.', paths: ['+*/', 'services/*/api/**'], summary: 'Added a skip rule. Narrowed services.', droppedHints: 0 });
+  });
+
+  it('drops hints scouts.md could not hold and counts them, never writing one', () => {
+    const refined = mapScoutRefine({ prompt: PROMPT, paths: ['+*/', 'a b', 'x, y', 'docs/**\nid: other', 42, '**/**/**/**/**/x'], summary: '' }, current);
+    expect(refined.paths).toEqual(['+*/']);
+    expect(refined.droppedHints).toBe(5);
+  });
+
+  it('keeps the current hints when the answer has no list of them; only an explicit empty list turns the filter off', () => {
+    expect(mapScoutRefine({ prompt: PROMPT, paths: undefined, summary: '' }, current)).toMatchObject({ paths: current.paths, droppedHints: 0 });
+  });
+
+  it('keeps the current hints when every suggested one is invalid, and turns the filter off only on an empty list', () => {
+    expect(mapScoutRefine({ prompt: PROMPT, paths: ['not a hint'], summary: '' }, current).paths).toEqual(current.paths);
+    expect(mapScoutRefine({ prompt: PROMPT, paths: [], summary: '' }, current).paths).toEqual([]);
+  });
+
+  it('keeps the current prompt when the answer has none, and caps the hints', () => {
+    const many = Array.from({ length: SCOUT_REFINE_PATHS + 3 }, (_, index) => `dir${index}/**`);
+    const refined = mapScoutRefine({ prompt: '  ', paths: many, summary: 'x' }, current);
+    expect(refined.prompt).toBe(PROMPT);
+    expect(refined.paths).toHaveLength(SCOUT_REFINE_PATHS);
+  });
+});
+
+describe('cleanScoutLabels', () => {
+  it('keeps one label per PR, the last one, with the note on one clipped line', () => {
+    const labels = cleanScoutLabels([
+      { prKey: 'acme/app#1', label: 'want', why: 'x' },
+      { prKey: 'acme/app#1', label: 'noise', why: ' just\n a fix ' },
+      { prKey: 'acme/app#2', label: 'maybe' as 'want', why: '' },
+      { prKey: 'acme/app#3', label: 'want', why: 'y'.repeat(SCOUT_LABEL_WHY_MAX + 50) },
+    ]);
+    expect(labels.map((entry) => [entry.prKey, entry.label])).toEqual([
+      ['acme/app#1', 'noise'],
+      ['acme/app#3', 'want'],
+    ]);
+    expect(labels[0]!.why).toBe('just a fix');
+    expect(labels[1]!.why.length).toBe(SCOUT_LABEL_WHY_MAX);
+  });
+});
+
+describe('scoutWantsAfter', () => {
+  const labels = [
+    { prKey: 'acme/app#1', label: 'want' as const, why: '' },
+    { prKey: 'acme/app#2', label: 'want' as const, why: '' },
+    { prKey: 'acme/app#3', label: 'noise' as const, why: '' },
+    { prKey: 'acme/app#4', label: 'want' as const, why: 'should have pulled' },
+    { prKey: 'acme/app#5', label: 'want' as const, why: '' },
+  ];
+
+  it('calls a want lost only when the re-run judged it and skipped it; one it never judged is unchecked', () => {
+    const before = new Set(['acme/app#1', 'acme/app#2', 'acme/app#3', 'acme/app#5']);
+    // #1 judged and skipped: lost. #2 still pulled. #3 is noise. #4 a near miss, judged, still skipped: not lost. #5 never judged: unchecked.
+    const after = { pulled: new Set(['acme/app#2']), judged: new Set(['acme/app#1', 'acme/app#2', 'acme/app#3', 'acme/app#4']) };
+    expect(scoutWantsAfter(labels, before, after)).toEqual({ lost: ['acme/app#1'], unchecked: ['acme/app#5'] });
   });
 });

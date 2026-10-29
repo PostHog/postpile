@@ -81,10 +81,11 @@ describe('the Scouts intro card', () => {
 
     expect(result).toMatchObject({ ok: true, fit: { verdict: 'fits' }, name: 'Lookout', paths: ['+*/'] });
     expect(result.trial).toMatchObject({ days: 2, pulled: 6, candidates: 70, complete: false });
-    expect(result.trial?.examples).toEqual([
-      { prKey: 'acme/app#1', title: 'Add service 1', reason: 'adds svc1/' },
-      { prKey: 'acme/app#11', title: 'Add service 11', reason: 'adds svc11/' },
-    ]);
+    expect(result.trial?.examples.map((example) => example.prKey)).toEqual([1, 11, 21, 31, 41, 51].map((number) => `acme/app#${number}`));
+    expect(result.trial?.examples[0]).toEqual({ prKey: 'acme/app#1', title: 'Add service 1', reason: 'adds svc1/' });
+    // Near misses: a path match the judge skipped, with its reason; at most 3.
+    expect(result.trial?.nearMisses).toEqual([2, 3, 4].map((number) => ({ prKey: `acme/app#${number}`, title: `Add service ${number}`, reason: `adds svc${number}/` })));
+    expect(result.trial?.session).toEqual(expect.any(String));
     expect(h.runner.promptsFor('scout_judge')).toHaveLength(5);
     // Scheduled like a sync: only what the 5 calls can judge gets its files read.
     expect(result.trial?.problem).toBe('more PRs than one check judges');
@@ -224,6 +225,182 @@ describe('the Scouts intro card', () => {
   it('refuses a name another scout has', async () => {
     const { h } = setup({ scouts: '## Lookout\nrepos: acme/app\n\nx\n' });
     expect((await h.engine.turnOnScout({ name: 'Lookout', prompt: PROMPT, repos: ['acme/app'], paths: [] })).ok).toBe(false);
+  });
+
+  /** A check of 70 PRs whose 5 judge calls pull #1, #11, #21, #31, #41 and #51. */
+  async function checked(h: Harness) {
+    onGitHub(h, 70);
+    h.runner.answer('scout_check', { fit: 'fits', note: 'ok', cantSee: null, name: 'Lookout', paths: ['+*/'], pathsCoverAll: true });
+    answerJudge(h, (number) => number % 10 === 1);
+    return h.engine.checkScout({ prompt: PROMPT, repos: ['acme/app'] });
+  }
+
+  /** Five judge answers over the 60 PRs a trial schedules. */
+  function answerJudge(h: Harness, pull: (number: number) => boolean): void {
+    for (let call = 0; call < 5; call++) {
+      const keys = Array.from({ length: 12 }, (_, index) => call * 12 + index + 1);
+      h.runner.answer('scout_judge', { judgements: keys.map((number) => ({ prKey: `acme/app#${number}`, verdict: pull(number) ? 'pull' : 'skip', reason: `adds svc${number}/` })) });
+    }
+  }
+
+  const LABELS = [
+    { prKey: 'acme/app#1', label: 'want' as const, why: 'a new service' },
+    { prKey: 'acme/app#11', label: 'want' as const, why: '' },
+    { prKey: 'acme/app#21', label: 'noise' as const, why: 'only a rename' },
+  ];
+
+  it('tightens from the labels: one scout_refine call, then the dry run again on the kept reads, judge calls only', async () => {
+    const { h } = setup();
+    const first = await checked(h);
+    const readsAfterCheck = [...h.reader.scoutCalls];
+    h.runner.answer('scout_refine', { prompt: `${PROMPT} Skip renames.`, paths: ['+*/', 'svc1*/**', 'not a hint'], summary: 'Added a skip rule for renames.' });
+    answerJudge(h, (number) => number === 1 || number === 21);
+
+    const result = await h.engine.refineScout({ session: first.trial!.session!, name: 'Lookout', prompt: PROMPT, repos: ['acme/app'], paths: ['+*/'], labels: LABELS });
+
+    expect(result).toMatchObject({ ok: true, refined: { prompt: `${PROMPT} Skip renames.`, paths: ['+*/', 'svc1*/**'], summary: 'Added a skip rule for renames.', droppedHints: 1 } });
+    expect(result.trial).toMatchObject({ pulled: 2, session: first.trial!.session });
+    // #11 was pulled before and is wanted: lost. #21 is noise, #1 is still pulled.
+    expect(result.lostWants).toEqual([{ prKey: 'acme/app#11', title: 'Add service 11', reason: 'adds svc11/' }]);
+    // No GitHub read at all: the listing and the file lists come from the check.
+    expect(h.reader.scoutCalls).toEqual(readsAfterCheck);
+    expect(h.runner.promptsFor('scout_refine')).toHaveLength(1);
+    expect(h.runner.promptsFor('scout_refine')[0]).toContain('=== acme/app#21: NOISE');
+    // The cap: 5 judge calls for the check, 5 for the re-run.
+    expect(h.runner.promptsFor('scout_judge')).toHaveLength(10);
+    // Counted like scout_check, an action call; the re-run's judge calls in a run of their own, never a sync's.
+    const runs = h.store.db.prepare('SELECT kind, run_id FROM agent_call ORDER BY id').all() as { kind: string; run_id: string }[];
+    expect(runs.filter((row) => row.kind === 'scout_refine').map((row) => row.run_id)).toEqual(['action']);
+    expect(runs.slice(-5).every((row) => row.kind === 'scout_judge' && row.run_id.startsWith('scout-refine:'))).toBe(true);
+    expect(h.telemetry.events.filter((entry) => entry.event === 'scout_tightened').map((entry) => entry.props)).toEqual([
+      { round: 1, wants: 2, noise: 1, pulls_before: 6, pulls_after: 2, lost_wants: 1 },
+    ]);
+  });
+
+  it('counts the refine against the daily allowance and re-runs only with the calls left', async () => {
+    // 1 check + 5 judge calls + 1 refine leave 1 call for the re-run.
+    const { h } = setup({ calls: 8 });
+    const first = await checked(h);
+    h.runner.answer('scout_refine', { prompt: `${PROMPT} Skip renames.`, paths: ['+*/'], summary: 'Added a skip rule.' });
+    answerJudge(h, () => true);
+
+    const labels = [...LABELS, { prKey: 'acme/app#51', label: 'want' as const, why: '' }];
+    const result = await h.engine.refineScout({ session: first.trial!.session!, name: 'Lookout', prompt: PROMPT, repos: ['acme/app'], paths: ['+*/'], labels });
+
+    expect(result.ok).toBe(true);
+    expect(h.runner.promptsFor('scout_judge')).toHaveLength(6);
+    // The one call judged #1 to #12: #51 was not judged this round, so it is unchecked, never lost.
+    expect(result.lostWants).toEqual([]);
+    expect(result.uncheckedWants).toEqual([{ prKey: 'acme/app#51', title: 'Add service 51', reason: 'not judged this round' }]);
+    expect(result.trial).toMatchObject({ judged: 12, complete: false, problem: 'more PRs than one check judges' });
+    // The day is spent now: the next tightening is refused before any call.
+    const again = await h.engine.refineScout({ session: first.trial!.session!, name: 'Lookout', prompt: `${PROMPT} Skip renames.`, repos: ['acme/app'], paths: ['+*/'], labels: LABELS });
+    expect(again).toMatchObject({ ok: false, message: expect.stringContaining('used up') });
+    expect(h.runner.promptsFor('scout_refine')).toHaveLength(1);
+  });
+
+  it('runs overlapping tightenings of one check one after another, still without a GitHub read', async () => {
+    const { h } = setup();
+    onGitHub(h, 3);
+    h.reader.scoutTrees.set('base1:svc1', ['old']);
+    // acme/web's folders inside svc1/ are not answered during the check, so its PRs stay unjudged there.
+    const web = [1, 2, 3].map((number) => ({ ...candidate(number), key: `acme/web#${number}`, headOid: `w${number}`, baseOid: 'base2' }));
+    h.reader.scoutListings.set('acme/web', web);
+    for (const pr of web) {
+      h.reader.scoutFileLists.set(pr.key, { headOid: pr.headOid, baseOid: 'base2', foldersOid: 'base2', stackedOn: null, files: [{ path: 'svc1/new/main.ts', changeType: 'ADDED' }] });
+    }
+    h.reader.scoutTrees.set('base2', ['src']);
+    const PATHS = ['+*/', '+svc1/*/'];
+    h.runner.answer('scout_check', { fit: 'fits', note: 'ok', cantSee: null, name: 'Lookout', paths: PATHS, pathsCoverAll: true });
+    h.runner.answer('scout_judge', { judgements: [1, 2, 3].map((number) => ({ prKey: `acme/app#${number}`, verdict: 'pull', reason: 'adds a service' })) });
+    const first = await h.engine.checkScout({ prompt: PROMPT, repos: ['acme/app', 'acme/web'] });
+    // GitHub would answer now: a replay allowed to read would read it.
+    h.reader.scoutTrees.set('base2:svc1', ['old']);
+    const readsAfterCheck = [...h.reader.scoutCalls];
+    h.runner.answer('scout_refine', { prompt: `${PROMPT} Skip renames.`, paths: ['+*/'], summary: 'Dropped the svc1 hint.' });
+    h.runner.answer('scout_refine', { prompt: `${PROMPT} Skip docs.`, paths: PATHS, summary: 'Added a skip rule.' });
+    for (let call = 0; call < 4; call++) {
+      h.runner.answer('scout_judge', { judgements: [] });
+    }
+    // Every judge call waits until the test lets its tightening go on.
+    const held: { prompt: string; go: () => void }[] = [];
+    const run = h.runner.run.bind(h.runner);
+    vi.spyOn(h.runner, 'run').mockImplementation(async (request) => {
+      if (request.purpose === 'scout_judge') {
+        await new Promise<void>((go) => held.push({ prompt: request.prompt, go }));
+      }
+      return run(request);
+    });
+    const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+    const releaseUntil = async (marker: string, done: () => boolean) => {
+      for (let step = 0; step < 50 && !done(); step++) {
+        for (const entry of held.filter((call) => call.prompt.includes(marker))) {
+          held.splice(held.indexOf(entry), 1);
+          entry.go();
+        }
+        await tick();
+      }
+    };
+    const labels = [
+      { prKey: 'acme/app#1', label: 'want' as const, why: '' },
+      { prKey: 'acme/app#2', label: 'noise' as const, why: '' },
+      { prKey: 'acme/app#3', label: 'noise' as const, why: '' },
+    ];
+    const request = { session: first.trial!.session!, name: 'Lookout', prompt: PROMPT, repos: ['acme/app', 'acme/web'], paths: PATHS, labels };
+    let firstDone = false;
+    let secondDone = false;
+
+    const one = h.engine.refineScout(request).finally(() => (firstDone = true));
+    await tick();
+    const two = h.engine.refineScout(request).finally(() => (secondDone = true));
+    await tick();
+    // The first tightening ends while the second, run alongside, would still be waiting on its first judge call.
+    await releaseUntil('Skip renames', () => firstDone);
+    await releaseUntil('Skip docs', () => secondDone);
+    const results = await Promise.all([one, two]);
+
+    expect(results.map((result) => result.message)).toEqual([null, null]);
+    expect(h.reader.scoutCalls).toEqual(readsAfterCheck);
+  });
+
+  it('tightens again from an undone version, which the session still knows', async () => {
+    const { h } = setup();
+    const first = await checked(h);
+    h.runner.answer('scout_refine', { prompt: `${PROMPT} Skip renames.`, paths: ['+*/'], summary: 'Added a skip rule.' });
+    answerJudge(h, (number) => number === 1);
+    await h.engine.refineScout({ session: first.trial!.session!, name: 'Lookout', prompt: PROMPT, repos: ['acme/app'], paths: ['+*/'], labels: LABELS });
+    h.runner.answer('scout_refine', { prompt: `${PROMPT} Skip docs.`, paths: ['+*/'], summary: 'Added a skip rule for docs.' });
+    answerJudge(h, (number) => number % 10 === 1);
+
+    // Undo is card state: the card sends the first version again.
+    const result = await h.engine.refineScout({ session: first.trial!.session!, name: 'Lookout', prompt: PROMPT, repos: ['acme/app'], paths: ['+*/'], labels: LABELS });
+
+    expect(result).toMatchObject({ ok: true, lostWants: [], uncheckedWants: [] });
+    expect(h.telemetry.events.filter((entry) => entry.event === 'scout_tightened').map((entry) => entry.props)).toMatchObject([{ round: 1, lost_wants: 1 }, { round: 2, lost_wants: 0, pulls_before: 6 }]);
+  });
+
+  it('refuses to tighten without the dry run it names or with fewer than 3 labels, before any call', async () => {
+    const { h } = setup();
+    const first = await checked(h);
+    const request = { session: first.trial!.session!, name: 'Lookout', prompt: PROMPT, repos: ['acme/app'], paths: ['+*/'], labels: LABELS };
+
+    expect(await h.engine.refineScout({ ...request, session: 'gone' })).toMatchObject({ ok: false, message: expect.stringContaining('no longer kept') });
+    expect(await h.engine.refineScout({ ...request, prompt: 'Something else.' })).toMatchObject({ ok: false, message: expect.stringContaining('no dry run') });
+    expect(await h.engine.refineScout({ ...request, labels: LABELS.slice(0, 2) })).toMatchObject({ ok: false, message: expect.stringContaining('at least 3') });
+    // A label on a PR no dry run read cannot be described, so it does not count.
+    expect(await h.engine.refineScout({ ...request, labels: [...LABELS.slice(0, 2), { prKey: 'acme/app#999', label: 'noise', why: '' }] })).toMatchObject({ ok: false });
+    expect(h.runner.promptsFor('scout_refine')).toEqual([]);
+  });
+
+  it('refuses a tightened prompt that would not turn on as written, without a re-run', async () => {
+    const { h } = setup();
+    const first = await checked(h);
+    h.runner.answer('scout_refine', { prompt: 'repos: acme/other\nEverything.', paths: ['+*/'], summary: 'Widened.' });
+
+    const result = await h.engine.refineScout({ session: first.trial!.session!, name: 'Lookout', prompt: PROMPT, repos: ['acme/app'], paths: ['+*/'], labels: LABELS });
+
+    expect(result).toMatchObject({ ok: false, message: expect.stringContaining('could not be turned on as written') });
+    expect(h.runner.promptsFor('scout_judge')).toHaveLength(5);
   });
 
   it('defaults the picker to the busiest repo on the board', async () => {

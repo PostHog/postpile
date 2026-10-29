@@ -11,6 +11,8 @@ import {
   RENDERER_TELEMETRY_EVENTS,
   rendererExceptionProps,
   SCOUT_NAME_MAX,
+  SCOUT_PROMPT_MAX,
+  SCOUT_REFINE_MAX_LABELS,
   TELEMETRY_EVENTS,
   type AppConfig,
   type TelemetryEventName,
@@ -306,6 +308,20 @@ export function createApp(
   app.post('/api/scouts/intro/check', async (c) => {
     const body = z.object({ prompt: z.string().min(1).max(3000), repos: z.array(z.string().min(3).max(200)).min(1).max(5) }).parse(await c.req.json());
     return c.json(await engine.checkScout(body));
+  });
+  // "Tighten": scout_refine from the card's Want / Noise labels, then the dry run again on the check's kept reads. Saves nothing.
+  app.post('/api/scouts/intro/refine', async (c) => {
+    const body = z
+      .object({
+        session: z.string().min(1).max(100),
+        name: z.string().max(SCOUT_NAME_MAX),
+        prompt: z.string().min(1).max(SCOUT_PROMPT_MAX),
+        repos: z.array(z.string().min(3).max(200)).min(1).max(5),
+        paths: z.array(z.string().min(1).max(200)).max(10),
+        labels: z.array(z.object({ prKey: z.string().min(3).max(300), label: z.enum(['want', 'noise']), why: z.string().max(1000).default('') })).max(SCOUT_REFINE_MAX_LABELS),
+      })
+      .parse(await c.req.json());
+    return c.json(await engine.refineScout(body));
   });
   app.post('/api/scouts/intro/turn-on', async (c) => {
     const body = z
