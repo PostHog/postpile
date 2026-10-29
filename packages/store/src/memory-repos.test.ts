@@ -73,6 +73,15 @@ describe('EventLogRepo', () => {
     store.eventLog.append([{ id: `${pr1}:comment:c`, prKey: pr1 }], at(4));
     expect(store.eventLog.listSince([pr1], 2).map((entry) => entry.seq)).toEqual([3]);
   });
+
+  it("gives one PR's newest log position, 0 for a PR without one", () => {
+    store.events.upsertDerived(pr1, [event(pr1, 'a', 1)]);
+    store.events.upsertDerived(pr2, [event(pr2, 'b', 2)]);
+    store.eventLog.append([{ id: `${pr1}:comment:a`, prKey: pr1 }, { id: `${pr2}:comment:b`, prKey: pr2 }], at(3));
+    expect(store.eventLog.maxSeqForPr(pr1)).toBe(1);
+    expect(store.eventLog.maxSeqForPr(pr2)).toBe(2);
+    expect(store.eventLog.maxSeqForPr('acme/app#9999')).toBe(0);
+  });
 });
 
 describe('CursorRepo', () => {

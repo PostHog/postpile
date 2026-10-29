@@ -1,8 +1,9 @@
 // The tools that ask the running app to do something: re-read PRs from
 // GitHub (refresh_from_github), file a topic suggestion for the user
-// (propose_topic_change) and leave a note on a PR (note_pr). The MCP process itself still never writes the
-// database or GitHub; see agent-requests.ts.
-import { AGENT_REQUEST_WAIT_MS, parsePrKey, type AgentRefreshResult, type AgentRefreshTarget, type AgentRequestResult, type PrKey, type PrNoteKind, type PrNoteRequest, type PrNoteResult, type TopicChangeKind, type TopicChangeResult } from '@postpile/core';
+// (propose_topic_change), leave a note on a PR (note_pr) and mark PRs read
+// (mark_read). The MCP process itself still never writes the database or
+// GitHub; see agent-requests.ts.
+import { AGENT_REQUEST_WAIT_MS, parsePrKey, UNDO_WINDOW_MS, type AgentMarkReadLeft, type AgentMarkReadPr, type AgentMarkReadResult, type AgentRefreshResult, type AgentRefreshTarget, type AgentRequestResult, type PrKey, type PrNoteKind, type PrNoteRequest, type PrNoteResult, type TopicChangeKind, type TopicChangeResult } from '@postpile/core';
 import type { AgentAsk, AgentRequests } from './agent-requests.ts';
 import { parsePrInput } from './pr-input.ts';
 import { notTracked, resolvePr, resolveTopic, toolError, type ReadContext, type ResolvedPr, type ToolAnswer } from './reads.ts';
@@ -406,4 +407,87 @@ export async function notePr(ctx: ActionContext, args: NotePrArgs): Promise<Tool
     return { text: answer(head, [outcome.reason ?? 'pending']), found: true, structured: noteStructured(outcome) };
   }
   return noteAnswer(outcome, ctx.now());
+}
+
+// ---------------------------------------------------------------------------
+// mark_read
+// ---------------------------------------------------------------------------
+
+export interface MarkReadArgs {
+  prs: { pr: string; seen_through: number }[];
+}
+
+const UNDO_SECONDS = UNDO_WINDOW_MS / 1000;
+
+/** Each PR resolved to its key, the first unresolvable one failing the call; a PR named twice keeps its last seen_through. */
+async function markReadPrs(ctx: ActionContext, args: MarkReadArgs): Promise<AgentMarkReadPr[] | ToolAnswer> {
+  const prs = new Map<PrKey, number>();
+  for (const entry of args.prs) {
+    const resolved = await resolvePr(ctx.reader, entry.pr, 'prs[].pr');
+    if (!resolved.ok) {
+      return resolved.error;
+    }
+    prs.set(resolved.key, entry.seen_through);
+  }
+  return [...prs].map(([prKey, seenThrough]) => ({ prKey, seenThrough }));
+}
+
+function leftJson(left: AgentMarkReadLeft[]): { pr: PrKey; reason: string }[] {
+  return left.map((entry) => ({ pr: entry.prKey, reason: entry.reason }));
+}
+
+function markReadStructured(result: AgentMarkReadResult): Record<string, unknown> {
+  return {
+    status: 'done',
+    marked: result.marked,
+    refused: leftJson(result.refused),
+    skipped: leftJson(result.skipped),
+    writes_locked: result.writesLocked,
+    undo_until: result.undoUntil,
+  };
+}
+
+/** What happened, in PostPile's words (outside the fence); the per-PR reasons name GitHub logins and go inside it. */
+function markReadAnswer(result: AgentMarkReadResult): ToolAnswer {
+  const head: string[] = [];
+  if (result.marked.length > 0) {
+    head.push(`Marked read in PostPile: ${result.marked.join(', ')}.`);
+    if (result.writesLocked) {
+      head.push("GitHub writes are locked: it waits in PostPile's pending writes until the user unlocks and sends it. The app shows it with Undo for now.");
+    } else {
+      head.push(`It reaches GitHub after the ${UNDO_SECONDS} s undo window; until then the user can undo it in the app. After that it can't be undone: GitHub can't mark unread.`);
+    }
+    head.push('Marking read answers nothing: a personal ask stays under Needs reply until the user replies.');
+  } else {
+    head.push('Nothing was marked read.');
+  }
+  const data: string[] = [];
+  for (const entry of result.refused) {
+    data.push(`refused ${entry.prKey}: ${entry.reason}`);
+  }
+  for (const entry of result.skipped) {
+    data.push(`skipped ${entry.prKey}: ${entry.reason}`);
+  }
+  const footer = ['Tell the user which PRs you marked read, and which were refused and why.'];
+  const text = data.length > 0 ? answer([...head, WHY], data, footer) : [...head, '', ...footer].join('\n');
+  return { text, found: true, structured: markReadStructured(result) };
+}
+
+export async function markRead(ctx: ActionContext, args: MarkReadArgs): Promise<ToolAnswer> {
+  const prs = await markReadPrs(ctx, args);
+  if (!Array.isArray(prs)) {
+    return prs;
+  }
+  const asked = await ask(ctx, { kind: 'mark_read', payload: { prs } });
+  if (asked.kind === 'answer') {
+    return asked.answer;
+  }
+  if (asked.kind === 'running') {
+    return toolError([`PostPile took the request but did not answer within ${WAIT_SECONDS} s. Check pr_context in a minute; calling again is safe, a PR already marked read is skipped.`]);
+  }
+  const { result } = asked;
+  if (result.kind !== 'mark_read') {
+    return toolError(['PostPile answered a different request. Nothing is known about this mark-read; check pr_context before trying again.']);
+  }
+  return markReadAnswer(result.markRead);
 }

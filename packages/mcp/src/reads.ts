@@ -716,6 +716,17 @@ async function prContextJson(ctx: ReadContext, reads: PrRead[], failures: PrFail
 }
 
 /**
+ * Outside the fence: the seen_through mark_read needs, only in full text
+ * answers, the ones that list the PR's activity (DESIGN.md "Agents mark read").
+ */
+function seenThroughLines(read: PrRead, detail: Detail): string[] {
+  if (detail !== 'full') {
+    return [];
+  }
+  return [`${read.key}: seen_through for mark_read: ${read.detail.seenThrough} (the newest activity this answer covers).`];
+}
+
+/**
  * pr_context for one PR or several (at most MAX_PRS_PER_CALL). A PR that
  * cannot be read is listed with its error; the call fails only when none
  * can. Several PRs print each topic once, then each PR's lines.
@@ -755,12 +766,12 @@ export async function prContext(ctx: ReadContext, input: string | string[], deta
     footer.push(`Could not answer for ${failures.length} of ${inputs.length}:`, ...failures.map(failureLine), '');
   }
   if (single) {
-    footer.push(...overlapNotes(overlaps, first.key), prFreshnessLine(first.detail, ctx), tokenLine(first.detail.notes));
+    footer.push(...overlapNotes(overlaps, first.key), prFreshnessLine(first.detail, ctx), tokenLine(first.detail.notes), ...seenThroughLines(first, detail));
   } else {
     const notes = [...new Set(reads.flatMap((read) => overlapNotes(overlaps, read.key)))];
-    footer.push(...notes, ...reads.map((read) => `${read.key}: ${prFreshnessLine(read.detail, ctx)} ${tokenLine(read.detail.notes)}`));
+    footer.push(...notes, ...reads.map((read) => `${read.key}: ${prFreshnessLine(read.detail, ctx)} ${tokenLine(read.detail.notes)}`), ...reads.flatMap((read) => seenThroughLines(read, detail)));
   }
-  const more = detail === 'brief' ? 'detail: "full" adds activity, facts and the whole topic. ' : '';
+  const more = detail === 'brief' ? 'detail: "full" adds activity, facts, the whole topic and the seen_through mark_read needs. ' : '';
   footer.push(`Next: ${more}Stale? call refresh_from_github. Wrong topic? propose_topic_change.`);
   return { text: answer([...(await header(ctx)), ...teamNote(authors)], data, footer), found: true };
 }

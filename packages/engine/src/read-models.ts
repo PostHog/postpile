@@ -735,6 +735,7 @@ export class ReadModels {
       facts: this.memory.prFacts(key),
       waitingThreads: waitingThreads(pr, viewer),
       notes: this.notes.viewFor(pr),
+      seenThrough: this.store.eventLog.maxSeqForPr(key),
       ownership: this.ownership(pr, viewer),
       openThreads: viewer ? viewerOpenThreads(pr, viewer.login) : 0,
     };

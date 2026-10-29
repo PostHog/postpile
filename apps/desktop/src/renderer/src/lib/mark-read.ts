@@ -1,7 +1,9 @@
 // The toast after a mark-read, from what core says the mark-read leaves
 // (`TileView.afterRead`). What the buttons say and which one leads come from
 // core too (`TileView.offers`); the renderer only displays them.
-import type { TileAfterRead } from '@postpile/core';
+import type { AgentReadNotice, TileAfterRead } from '@postpile/core';
+import { clientDisplayName } from './proposals.ts';
+import { prNumber } from './tiles.ts';
 
 // Undo tokens of purely local choices, matching the engine's prefixes: memory
 // corrections, Inbox declines, removed rules and tailoring lines. Their undo
@@ -69,4 +71,17 @@ export function markReadNotice(input: MarkReadNoticeInput): MarkReadNotice {
  */
 export function snoozeMessage(message: string, ok: boolean, unreadOnGitHub: boolean): string {
   return ok && unreadOnGitHub ? `${message.replace(/\.$/, '')}. Still unread on GitHub.` : message;
+}
+
+/**
+ * The toast for an outside agent's mark_read (DESIGN.md "Agents mark read"):
+ * "Claude Code marked #1902 and #1911 read", and while GitHub writes are
+ * locked that it waits for them. The toast offers Undo like a button's.
+ */
+export function agentReadText(notice: Pick<AgentReadNotice, 'client' | 'prKeys' | 'writesLocked'>): string {
+  const numbers = notice.prKeys.map((key) => `#${prNumber(key)}`);
+  const last = numbers.pop();
+  const prs = numbers.length === 0 ? (last ?? '') : `${numbers.join(', ')} and ${last}`;
+  const base = `${clientDisplayName(notice.client)} marked ${prs} read`;
+  return notice.writesLocked ? `${base}: pending until you unlock GitHub writes, stays unread here until then` : base;
 }

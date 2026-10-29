@@ -8889,8 +8889,8 @@ outbox in the data folder, no port and no token (the app's HTTP token can
 approve PRs, so it is never handed to other processes).
 
 - The MCP process writes `<data folder>/agent-requests/<uuid>.json` (temp file,
-  then rename): `{v: 1, kind: "refresh" | "propose_topic_change" | "note_pr", createdAt,
-  expiresAt, client, payload}`. `client` is the MCP client's name from the
+  then rename): `{v: 1, kind: "refresh" | "propose_topic_change" | "note_pr" |
+  "mark_read", createdAt, expiresAt, client, payload}`. `client` is the MCP client's name from the
   initialize handshake (`clientInfo.name`, e.g. "claude-code").
 - The app watches the folder (and scans it at start), validates with zod,
   handles the request, writes `<uuid>.result.json` and deletes the request.
@@ -9202,6 +9202,80 @@ the reporting agent and checked by Codex).
   `planNoteRenew` / `planNoteClear`, `prNotesView`), `PrNoteRepo`, engine
   `PrNotes`, `FakePrNotes` over the same planners (sample data has one
   no_action note on #1955).
+
+### Agents mark read (`mark_read`) (2026-10-29)
+
+The user works through a PR with an agent ("ok, let's review this"): the
+agent reads it in full with `pr_context` and passes it on as a summary, a
+review or a discussion. At that point the PR has been read on the user's
+behalf, yet it stayed unread in PostPile and on GitHub, and the user had
+to go back to the app or github.com to clear it. `mark_read` saves that
+trip: the agent marks the PRs it went through with the user, as part of
+that flow, without a separate ask.
+
+- **Only what the agent saw.** `pr_context` with `detail: "full"` (the
+  text answer that lists the activity) prints a `seen_through` per PR,
+  outside the fence: the PR's newest event-log position
+  (`EventLogRepo.maxSeqForPr`, `PrDetail.seenThrough`, 0 when none).
+  `mark_read` needs one per PR. The app refuses a PR with events logged
+  after it ("new activity since you read it: 2 events, newest from
+  alice; read it again with pr_context") and one whose `seen_through` is
+  ahead of the log. Other PRs of the call still go through. The event log
+  seq, not an event time: it grows with every event PostPile first
+  stores, so an event that arrives late with an older timestamp (an older
+  page, a review submitted later) still counts as new, and a comment edit
+  is a new event id. Any event counts, bots included: re-reading is
+  cheap, and a mark-read on GitHub covers the whole thread. Brief and JSON
+  answers carry no `seen_through`, since they list no activity; the brief
+  footer points at `detail: "full"`. `topic` lists no PR activity, so it
+  has none either.
+- **The same path as the button.** A new agent-request kind `mark_read`
+  through the outbox; the app answers through `AgentMarkRead` (engine),
+  which hands the PRs it accepts to the `ReadMarker` as one batch with one
+  undo token, cause `button`, origin `agent`. So the undo window, the
+  writes lock, pending writes and the send-time recheck (`ClickedReadRetry`)
+  all apply, and nothing in the MCP process writes GitHub. While writes
+  are locked it is queued like a locked click: the app does not change and
+  the batch becomes a pending write after the window. The answer says so
+  (`writes_locked`).
+- **Scope:** PRs named one by one, 1 to 20 per call
+  (`AGENT_MARK_READ_MAX_PRS`), resolved with the reads' resolvers on the
+  MCP side (an unresolvable one fails the call before anything is asked)
+  and checked again in the app (`parseAgentRequest`, then stored and
+  tracked). No topic-wide or "everything" form. A PR named twice keeps its
+  last `seen_through`.
+- **Skipped, not refused:** a PR already read (no unread thread, no unseen
+  event, already handled), and a stack layer that is only pulled in for
+  context (no tile tracks it): it has no notification of its own. Refused:
+  an unknown PR, a `seen_through` that does not fit, new activity.
+- **Rules stay in charge.** Marking read never answers anything: a
+  personal ask (mention, question, reply) stays the user's move under
+  Needs reply until they reply, as with the button. A team mention clears
+  on read, as with the button. The tool description says both.
+- **Undo and the toast.** The engine keeps the newest call as an
+  `AgentReadNotice` (client, PRs, locked, undo token and end) in the live
+  status (`agentRead`), next to `keptUnread`; the renderer shows a toast
+  "Claude Code marked #1902 and #1911 read" with Undo while the window
+  runs, and counts it like a clicked mark-read. Once the queue has sent it
+  to GitHub it can't be undone, because GitHub can't mark unread; the tool
+  description and the answer say so.
+- **Action log:** each thread's `mark_read` rows carry origin `agent`, so
+  the notifications view reads "from an outside agent". The client name
+  goes on one `agent_mark_read` row per call (no thread or PR, like
+  `agent_refresh`): "claude-code: marked read acme/app#1902; refused …".
+  Putting the name into the thread rows' detail was left out: an empty
+  detail on a queued row means "writes on" to the renderer.
+- **Tool description and server instructions:** after reading a PR with
+  `pr_context(detail: "full")` and going through it with the user, mark it
+  read with that read's `seen_through`; never PRs only listed, skimmed or
+  searched past (`whats_on_me` and `search_prs` rows); tell the user what
+  was marked and what was refused and why. The instructions carry it as a
+  bullet in the coordination block, since `mark_read` may be a deferred
+  tool like `note_pr`. To stay under the 1950-character budget, a few
+  lines below the block got shorter (freshness, propose, JSON).
+- **Sample data:** `FakeEngine.markReadForAgent` does the same over the
+  sample (its "event log" is a PR's events in the order they were added),
+  so `pnpm cli mcp` over the fake server can try it.
 
 ## Fixes from the codebase review (2026-09-29)
 

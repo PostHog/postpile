@@ -1,4 +1,6 @@
 import type {
+  AgentMarkReadRequest,
+  AgentMarkReadResult,
   AgentRefreshOptions,
   AgentRefreshResult,
   AgentRefreshTarget,
@@ -24,7 +26,7 @@ import { TOKEN_HEADER, type SharedEngineMethod } from '@postpile/server';
 import type { PostPileReader } from './reads.ts';
 
 /** What an MCP server needs from an engine: the reads, plus the asks InMemoryAgentRequests passes on. */
-export type SharedEngine = PostPileReader & Pick<EngineService, 'refreshNow' | 'proposeTopicChange' | 'notePr'>;
+export type SharedEngine = PostPileReader & Pick<EngineService, 'refreshNow' | 'proposeTopicChange' | 'notePr' | 'markReadForAgent'>;
 
 /**
  * The engine of a running fake server (POSTPILE_FAKE=1 pnpm server), reached
@@ -120,5 +122,9 @@ export class RemoteEngine implements SharedEngine {
 
   notePr(request: PrNoteRequest, options: { client: string }): Promise<PrNoteResult> {
     return this.call('notePr', [request, options]);
+  }
+
+  markReadForAgent(request: AgentMarkReadRequest, options: { client: string }): Promise<AgentMarkReadResult> {
+    return this.call('markReadForAgent', [request, options]);
   }
 }

@@ -11,6 +11,8 @@ import type {
   PrApproveResult,
   ReviewNoteKind,
   ReviewNoteSource,
+  AgentMarkReadRequest,
+  AgentMarkReadResult,
   AgentRefreshOptions,
   AgentRefreshResult,
   AgentRefreshTarget,
@@ -128,6 +130,7 @@ import { muteHoldsNow } from './mute-holds.ts';
 import { GitHubError, type GitHubReader } from '@postpile/github';
 import { recordedVersion, type Store } from '@postpile/store';
 import { ChatActions } from './actions/chat-actions.ts';
+import { AgentMarkRead } from './agent-requests/agent-mark-read.ts';
 import { AgentRefresher, type RefreshRun } from './agent-requests/agent-refresh.ts';
 import { answerAgentRequest } from './agent-requests/answer.ts';
 import { AgentRequestInbox } from './agent-requests/inbox.ts';
@@ -360,6 +363,7 @@ export class Engine implements EngineService {
   /** What the next poll cycle also looks at, set by refreshOnFocus. */
   private focus: PollFocus = NO_FOCUS;
   private readonly agentRefresher: AgentRefresher;
+  private readonly agentMarkRead: AgentMarkRead;
   /** Threads a clicked mark-read's retry holds: the inbox leaves their rows alone meanwhile. */
   private readonly heldThreads = new Set<string>();
   private readonly clickedReadRetry: ClickedReadRetry;
@@ -429,6 +433,7 @@ export class Engine implements EngineService {
     const log = deps.writes.log;
     const readMarker = new ReadMarker(store, deps.markReadQueue, log, now);
     this.tiles = new TileActions(store, readMarker, now);
+    this.agentMarkRead = new AgentMarkRead({ store, readMarker, log, now });
     this.openedReads = new OpenedReads(store, readMarker, deps.writes, now, deps.syncLog ?? ((line) => console.log(line)));
     this.prActions = new PrActions(store, deps.writes, deps.agent, contexts, readMarker, now, (key) => this.refreshAfterWrite(key));
     this.feedback = new FeedbackActions(store, readMarker, now);
@@ -1074,6 +1079,10 @@ export class Engine implements EngineService {
     return this.prNotes.handle(request, options.client);
   }
 
+  async markReadForAgent(request: AgentMarkReadRequest, options: { client: string }): Promise<AgentMarkReadResult> {
+    return this.agentMarkRead.handle(request, options.client);
+  }
+
   async clearPrNote(noteId: string): Promise<PrNoteResult> {
     return this.prNotes.clear(noteId, CLEARED_BY_USER);
   }
@@ -1105,13 +1114,14 @@ export class Engine implements EngineService {
     const poll = this.livePoller?.currentStatus() ?? OFF_POLL_STATUS;
     return {
       ...poll,
-      changeCount: poll.changeCount + this.writeRefreshesDone + this.deps.markReadQueue.mirrored() + this.syncsDone + this.clickedReadRetry.decided() + this.cleanup.changeCount() + this.prNotes.changes(),
+      changeCount: poll.changeCount + this.writeRefreshesDone + this.deps.markReadQueue.mirrored() + this.syncsDone + this.clickedReadRetry.decided() + this.cleanup.changeCount() + this.prNotes.changes() + this.agentMarkRead.changes(),
       syncRunning: this.syncing !== null,
       nextAutoSyncAt: this.autoSync?.nextSyncAt() ?? null,
       nextAutoSyncIsBacklog: this.autoSync?.nextSyncIsBacklog() ?? false,
       catchUpChanges: this.catchUps.changes(),
       githubQuota: this.quota.view(poll.everySeconds),
       keptUnread: this.clickedReadRetry.notice(),
+      agentRead: this.agentMarkRead.notice(),
     };
   }
 

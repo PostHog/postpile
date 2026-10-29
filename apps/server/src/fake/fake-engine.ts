@@ -57,6 +57,9 @@ import type {
   PendingProposals,
   PrDetail,
   PrNoteRequest,
+  AgentMarkReadPr,
+  AgentMarkReadRequest,
+  AgentMarkReadResult,
   PrNoteResult,
   PrNotesView,
   PrEvent,
@@ -103,6 +106,8 @@ import type {
   BusyInboxView,
 } from '@postpile/core';
 import {
+  agentMarkReadCheck,
+  agentMarkReadLogDetail,
   appendTailoring,
   CLEARED_BY_USER,
   busyInboxView,
@@ -230,6 +235,7 @@ import {
   withViewerReaction,
 } from '@postpile/core';
 import { AgentRefresher, approveNoteBody, AutoSyncSchedule, LivePoller, MemoryPingHold, muteMessage, NEW_COMMITS_SINCE_LOOKED, nextApproveOpener, NoteCoverReader, PingDelivery, readMessage, topicChatId, unmuteMessage, UNSORTED_TOPIC_ID, type AutoSyncOptions, type EngineService, type GitHubQuota, type LivePollOptions, type PollCycle } from '@postpile/engine';
+import { FakeAgentReads } from './fake-agent-reads.ts';
 import { FakeCatchUp } from './fake-catch-up.ts';
 import { FakeInstructions } from './fake-instructions.ts';
 import { FakeLessons } from './fake-lessons.ts';
@@ -464,6 +470,7 @@ export class FakeEngine implements EngineService {
   private readonly mcp: FakeMcp;
   private readonly topicChanges: FakeTopicChanges;
   private readonly prNotes: FakePrNotes;
+  private readonly agentReads = new FakeAgentReads();
   private readonly agentRefresher: AgentRefresher;
   private readonly checkDelayMs: number;
   private lastSync: SyncReport | null = null;
@@ -1591,6 +1598,8 @@ export class FakeEngine implements EngineService {
       facts: this.memory.prFacts(prKey),
       waitingThreads: waitingThreads(pr, this.viewer()),
       notes: this.prNotes.viewFor(prKey),
+      // The sample has no event log: a PR's events in the order they were added stand in for it.
+      seenThrough: this.eventsOf(prKey).length,
       ownership: this.ownershipOf(pr),
       openThreads: viewerOpenThreads(pr, this.data.viewer),
     };
@@ -1785,7 +1794,7 @@ export class FakeEngine implements EngineService {
   private markPrsRead(
     prKeys: PrKey[],
     handleKeys: PrKey[],
-    origin: 'tile' | 'detail' | 'debug',
+    origin: 'tile' | 'detail' | 'debug' | 'agent',
     tileId: string | null,
     extraThreads: NotificationThread[] = [],
     subscription: FakeSubscription | null = null,
@@ -2312,6 +2321,49 @@ export class FakeEngine implements EngineService {
     return this.prNotes.handle(request, options.client);
   }
 
+  /** Whether a tile tracks the PR (not only a pulled-in layer), and the first such tile. */
+  private trackingTile(prKey: PrKey): string | null {
+    const tile = this.tilesHolding(prKey).find((candidate) => candidate.members.some((member) => member.prKey === prKey && member.provenance.kind !== 'pulled_in'));
+    return tile?.id ?? null;
+  }
+
+  /** Like the engine's AgentMarkRead, over the sample: checked per PR, the marked ones as one batch with one undo token. */
+  async markReadForAgent(request: AgentMarkReadRequest, options: { client: string }): Promise<AgentMarkReadResult> {
+    const prs = [...new Map(request.prs.map((pr): [PrKey, AgentMarkReadPr] => [pr.prKey, pr])).values()];
+    const result: AgentMarkReadResult = { marked: [], refused: [], skipped: [], writesLocked: false, undoUntil: null };
+    let tileId: string | null = null;
+    for (const pr of prs) {
+      const stored = this.data.prs.some((candidate) => candidate.key === pr.prKey);
+      const events = this.eventsOf(pr.prKey);
+      const tracking = this.trackingTile(pr.prKey);
+      const check = agentMarkReadCheck({
+        stored,
+        tracked: tracking !== null,
+        seenThrough: pr.seenThrough,
+        newestSeq: events.length,
+        newer: events.slice(pr.seenThrough),
+        changesAnything: stored && (this.prThreads().get(pr.prKey)?.unread === true || this.readChangesAnything(pr.prKey)),
+      });
+      if (check.kind === 'refused') {
+        result.refused.push({ prKey: pr.prKey, reason: check.reason });
+      } else if (check.kind === 'skipped') {
+        result.skipped.push({ prKey: pr.prKey, reason: check.reason });
+      } else {
+        result.marked.push(pr.prKey);
+        tileId = tracking;
+      }
+    }
+    if (result.marked.length > 0) {
+      const marked = this.markPrsRead(result.marked, result.marked, 'agent', result.marked.length === 1 ? tileId : null);
+      const batch = this.batches.find((candidate) => candidate.token === marked.token);
+      result.writesLocked = !marked.writesOn && marked.threadIds.length > 0;
+      result.undoUntil = new Date((batch?.queuedAt ?? this.now().getTime()) + UNDO_WINDOW_MS).toISOString();
+      this.agentReads.marked(options.client, result, marked.token);
+    }
+    this.writes.record({ action: 'agent_mark_read', origin: 'agent', outcome: result.marked.length > 0 ? 'queued' : 'skipped', detail: agentMarkReadLogDetail(options.client, result) });
+    return result;
+  }
+
   async clearPrNote(noteId: string): Promise<PrNoteResult> {
     return this.prNotes.clear(noteId, CLEARED_BY_USER);
   }
@@ -2674,12 +2726,13 @@ export class FakeEngine implements EngineService {
     const poll = this.livePoller?.currentStatus() ?? OFF_POLL_STATUS;
     return {
       ...poll,
-      changeCount: poll.changeCount + this.cleanup.changeCount() + this.prNotes.changes() + this.script.changes(),
+      changeCount: poll.changeCount + this.cleanup.changeCount() + this.prNotes.changes() + this.agentReads.changes() + this.script.changes(),
       syncRunning: this.syncing !== null,
       nextAutoSyncAt: this.autoSync?.nextSyncAt() ?? null,
       nextAutoSyncIsBacklog: this.autoSync?.nextSyncIsBacklog() ?? false,
       catchUpChanges: this.catchUp.changes(),
       githubQuota: this.quota.view(poll.everySeconds),
+      agentRead: this.agentReads.notice(),
     };
   }
 

@@ -108,6 +108,7 @@ function fakeEngine(overrides: Partial<EngineService>): EngineService {
     refreshNow: notImplemented,
     proposeTopicChange: notImplemented,
     notePr: notImplemented,
+    markReadForAgent: notImplemented,
     clearPrNote: notImplemented,
     listPrNotes: notImplemented,
     startAgentRequests: () => {},

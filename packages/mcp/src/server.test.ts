@@ -49,10 +49,10 @@ function fencedPart(text: string): string {
 }
 
 describe('PostPile MCP server', () => {
-  it('lists seven tools with short descriptions that say when to use them', async () => {
+  it('lists eight tools with short descriptions that say when to use them', async () => {
     const client = await connected();
     const { tools } = await client.listTools();
-    expect(tools.map((tool) => tool.name).sort()).toEqual(['note_pr', 'pr_context', 'propose_topic_change', 'refresh_from_github', 'search_prs', 'topic', 'whats_on_me']);
+    expect(tools.map((tool) => tool.name).sort()).toEqual(['mark_read', 'note_pr', 'pr_context', 'propose_topic_change', 'refresh_from_github', 'search_prs', 'topic', 'whats_on_me']);
     const annotations = Object.fromEntries(tools.map((tool) => [tool.name, tool.annotations]));
     for (const read of ['pr_context', 'topic', 'search_prs', 'whats_on_me']) {
       expect(annotations[read]).toMatchObject({ readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
@@ -60,6 +60,7 @@ describe('PostPile MCP server', () => {
     expect(annotations.refresh_from_github).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true });
     expect(annotations.propose_topic_change).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false });
     expect(annotations.note_pr).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true });
+    expect(annotations.mark_read).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true });
     for (const tool of tools) {
       expect(tool.description?.length ?? 0).toBeLessThan(CLAUDE_CODE_CUT);
       expect(tool.description).toContain('Use when:');
@@ -167,8 +168,10 @@ describe('PostPile MCP server', () => {
       refresh_from_github: ['pr', 'topic'],
       propose_topic_change: ['by', 'dry_run', 'into_topic', 'kind', 'name', 'prs', 'reason', 'topic'],
       note_pr: ['action', 'by', 'cover_token', 'covered_by', 'kind', 'lease_minutes', 'note', 'note_id', 'pr', 'token'],
+      mark_read: ['prs'],
     });
     const schemaOf = (name: string) => tools.find((tool) => tool.name === name)?.inputSchema.properties ?? {};
+    expect(schemaOf('mark_read').prs).toMatchObject({ type: 'array', minItems: 1, maxItems: 20, items: { type: 'object', required: ['pr', 'seen_through'] } });
     expect(schemaOf('pr_context').pr).toMatchObject({ anyOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' }, maxItems: 10 }] });
     for (const name of ['pr_context', 'topic', 'search_prs', 'whats_on_me']) {
       expect(schemaOf(name).format).toMatchObject({ type: 'string', enum: ['text', 'json'] });
@@ -673,5 +676,46 @@ describe('PostPile MCP server', () => {
     expect(topic.structuredContent).toMatchObject({
       suggestions: [{ id: 'p1', kind: 'rename', outcome: 'rejected', source: 'agent', untrusted: { change: 'rename to "Depot runners"', reason: 'Shorter name' } }],
     });
+  });
+
+  it('marks a PR read with the seen_through of a full pr_context read, and refuses a stale one', async () => {
+    const engine = new FakeEngine();
+    const client = await connected(engine, { requests: new InMemoryAgentRequests(engine) });
+
+    const brief = await callText(client, 'pr_context', { pr: 'acme/app#1902' });
+    expect(brief).not.toContain('seen_through for mark_read');
+    expect(brief).toContain('the seen_through mark_read needs');
+    const full = await callText(client, 'pr_context', { pr: 'acme/app#1902', detail: 'full' });
+    const seen = Number(/acme\/app#1902: seen_through for mark_read: (\d+)/.exec(full)?.[1]);
+    expect(seen).toBeGreaterThan(0);
+    // Outside the fence: PostPile wrote it, not GitHub.
+    expect(fencedPart(full)).not.toContain('seen_through');
+
+    const stale = await client.callTool({ name: 'mark_read', arguments: { prs: [{ pr: 'acme/app#1902', seen_through: seen - 1 }] } });
+    const staleText = (stale.content as { text: string }[])[0]?.text ?? '';
+    expect(staleText).toContain('Nothing was marked read.');
+    expect(fencedPart(staleText)).toMatch(/refused acme\/app#1902: new activity since you read it: 1 event, newest from /);
+    expect(stale.structuredContent).toMatchObject({ status: 'done', marked: [], refused: [{ pr: 'acme/app#1902' }] });
+
+    const marked = await client.callTool({ name: 'mark_read', arguments: { prs: [{ pr: '#1902', seen_through: seen }] } });
+    const markedText = (marked.content as { text: string }[])[0]?.text ?? '';
+    expect(markedText).toContain('Marked read in PostPile: acme/app#1902.');
+    expect(markedText).toContain("can't be undone: GitHub can't mark unread");
+    expect(markedText).toContain('a personal ask stays under Needs reply until the user replies');
+    expect(marked.structuredContent).toMatchObject({ status: 'done', marked: ['acme/app#1902'], refused: [], skipped: [], writes_locked: false, undo_until: expect.any(String) });
+    expect((await engine.livePollStatus()).agentRead).toMatchObject({ client: 'test', prKeys: ['acme/app#1902'] });
+  });
+
+  it('refuses a mark_read call without seen_through or over the cap, before asking the app', async () => {
+    const client = await connected();
+    const missing = await call(client, 'mark_read', { prs: [{ pr: 'acme/app#1902' }] });
+    expect(missing.isError).toBe(true);
+    expect(missing.text).toContain('seen_through');
+    const many = Array.from({ length: 21 }, (_, index) => ({ pr: `acme/app#${1900 + index}`, seen_through: 1 }));
+    const over = await call(client, 'mark_read', { prs: many });
+    expect(over.isError).toBe(true);
+    expect(over.text).toContain('1 to 20 entries');
+    const unknown = await call(client, 'mark_read', { prs: [{ pr: 'not a pr', seen_through: 1 }] });
+    expect(unknown.isError).toBe(true);
   });
 });

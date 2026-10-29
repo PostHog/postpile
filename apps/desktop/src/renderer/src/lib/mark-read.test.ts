@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TileAfterRead, WhoseTurn } from '@postpile/core';
-import { isMarkReadUndoToken, markReadNotice, moveWords, snoozeMessage } from './mark-read.ts';
+import { agentReadText, isMarkReadUndoToken, markReadNotice, moveWords, snoozeMessage } from './mark-read.ts';
 
 const NONE: WhoseTurn = { kind: 'none', who: null, what: '', prKey: null };
 const REREVIEW: WhoseTurn = { kind: 'you', move: 're_review', who: null, what: 'pim addressed your changes: re-review', prKey: 'acme/app#1960' };
@@ -70,5 +70,16 @@ describe('isMarkReadUndoToken', () => {
     for (const token of ['memory:a1b2', 'memory:workctx:a1b2', 'proposal:a1b2', 'rule:a1b2', 'tailoring:a1b2']) {
       expect(isMarkReadUndoToken(token)).toBe(false);
     }
+  });
+});
+
+describe('agentReadText', () => {
+  it('names the agent and the PRs it marked read', () => {
+    expect(agentReadText({ client: 'claude-code', prKeys: ['acme/app#1902'], writesLocked: false })).toBe('Claude Code marked #1902 read');
+    expect(agentReadText({ client: 'codex-mcp-client', prKeys: ['acme/app#1902', 'acme/app#1911', 'acme/app#1930'], writesLocked: false })).toBe('Codex marked #1902, #1911 and #1930 read');
+  });
+
+  it('says a locked mark-read waits for GitHub writes', () => {
+    expect(agentReadText({ client: '', prKeys: ['acme/app#1902'], writesLocked: true })).toBe('an outside agent marked #1902 read: pending until you unlock GitHub writes, stays unread here until then');
   });
 });

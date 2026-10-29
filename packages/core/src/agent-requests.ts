@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { AGENT_MARK_READ_MAX_PRS, type AgentMarkReadRequest, type AgentMarkReadResult } from './agent-mark-read.ts';
 import { PR_NOTE_BY_MAX, PR_NOTE_KINDS, PR_NOTE_LEASE_MAX_MINUTES, PR_NOTE_MAX, type PrNoteRequest, type PrNoteResult } from './pr-notes.ts';
 import { OUTSIDE_REASON_MAX, TOPIC_NAME_MAX, type TopicChangeRequest, type TopicChangeResult } from './topic-change-plan.ts';
 import type { IsoTime, PrKey } from './types.ts';
@@ -6,8 +7,10 @@ import type { IsoTime, PrKey } from './types.ts';
 // What outside agents may ask the running app to do through the MCP server
 // (DESIGN.md "Agent requests"): re-read PRs from GitHub now
 // (refresh_from_github), file a topic change for the user to decide
-// (propose_topic_change), or leave, renew or clear a note on a PR (note_pr). The app does the work: only it holds the GitHub
-// client, the quota readings and the database's write lock.
+// (propose_topic_change), leave, renew or clear a note on a PR (note_pr), or
+// mark PRs read that the agent read in full (mark_read). The app does the
+// work: only it holds the GitHub client, the quota readings and the
+// database's write lock.
 
 /** A PR fetched this recently is skipped as fresh. */
 export const AGENT_REFRESH_FRESH_MS = 60_000;
@@ -65,7 +68,7 @@ export const AGENT_RESULT_MAX_AGE_MS = 3600_000;
 /** `<uuid>.json`, the only names the app reads. */
 export const AGENT_REQUEST_FILE = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.json$/;
 
-export type AgentRequestKind = 'refresh' | 'propose_topic_change' | 'note_pr';
+export type AgentRequestKind = 'refresh' | 'propose_topic_change' | 'note_pr' | 'mark_read';
 
 interface AgentRequestBase {
   v: typeof AGENT_REQUEST_VERSION;
@@ -78,12 +81,14 @@ interface AgentRequestBase {
 export type AgentRequest =
   | (AgentRequestBase & { kind: 'refresh'; payload: AgentRefreshTarget })
   | (AgentRequestBase & { kind: 'propose_topic_change'; payload: TopicChangeRequest })
-  | (AgentRequestBase & { kind: 'note_pr'; payload: PrNoteRequest });
+  | (AgentRequestBase & { kind: 'note_pr'; payload: PrNoteRequest })
+  | (AgentRequestBase & { kind: 'mark_read'; payload: AgentMarkReadRequest });
 
 export type AgentRequestResult =
   | { v: typeof AGENT_REQUEST_VERSION; ok: true; kind: 'refresh'; refresh: AgentRefreshResult }
   | { v: typeof AGENT_REQUEST_VERSION; ok: true; kind: 'propose_topic_change'; topicChange: TopicChangeResult }
   | { v: typeof AGENT_REQUEST_VERSION; ok: true; kind: 'note_pr'; prNote: PrNoteResult }
+  | { v: typeof AGENT_REQUEST_VERSION; ok: true; kind: 'mark_read'; markRead: AgentMarkReadResult }
   | { v: typeof AGENT_REQUEST_VERSION; ok: false; error: string };
 
 const prKeySchema = z.string().regex(/^[\w.-]+\/[\w.-]+#\d+$/);
@@ -131,6 +136,15 @@ const prNoteSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('clear'), noteId: noteIdSchema }).strict(),
 ]);
 
+const markReadSchema = z
+  .object({
+    prs: z
+      .array(z.object({ prKey: prKeySchema, seenThrough: z.number().int().min(0) }).strict())
+      .min(1)
+      .max(AGENT_MARK_READ_MAX_PRS),
+  })
+  .strict();
+
 /** The envelope, loose on v and kind so an unknown one can be answered with why. */
 const envelopeSchema = z.object({
   v: z.number(),
@@ -171,6 +185,10 @@ export function parseAgentRequest(text: string): AgentRequestCheck {
   if (kind === 'note_pr') {
     const note = prNoteSchema.safeParse(payload);
     return note.success ? { ok: true, request: { ...base, kind, payload: note.data as PrNoteRequest } } : { ok: false, error: 'bad note_pr payload' };
+  }
+  if (kind === 'mark_read') {
+    const markRead = markReadSchema.safeParse(payload);
+    return markRead.success ? { ok: true, request: { ...base, kind, payload: markRead.data } } : { ok: false, error: `bad mark_read payload: one to ${AGENT_MARK_READ_MAX_PRS} PRs, each with prKey and seenThrough` };
   }
   return { ok: false, error: `unknown request kind ${kind}` };
 }

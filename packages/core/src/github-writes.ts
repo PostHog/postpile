@@ -132,7 +132,10 @@ export interface GitHubWritesChange {
  * the summary when it ended); its calls are logged on their own.
  * `agent_refresh` is an outside agent's refresh_from_github: a GitHub read,
  * logged with no thread or PR (the detail lists the PRs) so it never shows
- * as a thread's last action.
+ * as a thread's last action. `agent_mark_read` is an outside agent's
+ * mark_read as a whole, like `agent_refresh` without thread or PR: the
+ * detail names the client and what was marked, refused or skipped; each
+ * thread's own `mark_read` rows carry origin `agent`.
  * `remove_team_request` and `unsubscribe` are the detail pane's "Remove
  * <team>" (2026-09-29); `unsubscribe` is also Mute and `subscribe` Unmute
  * (2026-10-05). `comment_review` is the pane's "Comment review", a
@@ -157,7 +160,8 @@ export type LoggedAction =
   | 'bring_back'
   | 'writes_on'
   | 'writes_off'
-  | 'agent_refresh';
+  | 'agent_refresh'
+  | 'agent_mark_read';
 
 /**
  * Who decided it.

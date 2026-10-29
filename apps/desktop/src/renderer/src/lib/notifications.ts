@@ -247,6 +247,9 @@ function entryText(last: ActionLogEntry, decidedBy: ActionLogEntry | null): { te
     case 'agent_refresh':
       // Logged without a thread or PR, so a debug row never shows it; here for completeness.
       return { text: `re-read from GitHub for ${WHO[last.origin]}`, tone: 'outside' };
+    case 'agent_mark_read':
+      // Also logged without a thread or PR; each thread's own mark_read row carries origin agent.
+      return { text: `mark_read from ${WHO[last.origin]}`, tone: 'local' };
   }
 }
 

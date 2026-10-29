@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { EngineService } from '@postpile/engine';
 
 /**
- * The engine methods an MCP server needs: its eleven reads plus the three
+ * The engine methods an MCP server needs: its eleven reads plus the four
  * asks that the real app answers from its request folder. Nothing else is
  * callable through the route below.
  */
@@ -22,6 +22,7 @@ export const SHARED_ENGINE_METHODS = [
   'refreshNow',
   'proposeTopicChange',
   'notePr',
+  'markReadForAgent',
 ] as const;
 
 export type SharedEngineMethod = (typeof SHARED_ENGINE_METHODS)[number];

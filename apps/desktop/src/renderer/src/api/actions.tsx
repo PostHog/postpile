@@ -62,7 +62,7 @@ import { backlogSyncMinutes, capNote, type NextSync } from '../lib/agent-stats.t
 import { writeBlockedReason, type GithubWrite } from '../lib/guard.ts';
 import { isTransientWriteFailure, writeFailureText, type PaneWrite } from '../lib/write-failure.ts';
 import { approvedMessage, batchMarkReadMessage } from '../lib/agent-actions.ts';
-import { isMarkReadUndoToken, markReadNotice, snoozeMessage } from '../lib/mark-read.ts';
+import { agentReadText, isMarkReadUndoToken, markReadNotice, snoozeMessage } from '../lib/mark-read.ts';
 import { approvedDetail, markedReadPr, markedReadTile, mutedTile, snoozedTile, withApprovedPrs, withTile, withTiles } from '../lib/optimistic.ts';
 import { newerReport } from '../lib/sync-report.ts';
 import { teamRoleNotice } from '../lib/team-roles.ts';
@@ -379,6 +379,9 @@ export function ActionsProvider(props: { children: ReactNode }) {
   const backgroundSync = live?.syncRunning ?? false;
   const liveLoaded = live !== undefined;
   const keptUnread = live?.keptUnread ?? null;
+  const agentRead = live?.agentRead ?? null;
+  // The newest agent mark-read notice this window has seen; undefined until the live status first loads.
+  const seenAgentRead = useRef<number | null | undefined>(undefined);
   // The newest kept-unread notice this window has seen; undefined until the live status first loads.
   const seenKeptUnread = useRef<number | null | undefined>(undefined);
   const cleanup = useInboxCleanup().data;
@@ -407,6 +410,25 @@ export function ActionsProvider(props: { children: ReactNode }) {
     seenKeptUnread.current = keptUnread?.id ?? null;
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- show is new every render; only a new notice matters
   }, [liveLoaded, keptUnread?.id]);
+
+  // An outside agent marked PRs read through the MCP (mark_read): the toast says so and offers Undo while the window runs.
+  // One from before this window opened is not shown.
+  useEffect(() => {
+    if (!liveLoaded) {
+      return;
+    }
+    if (seenAgentRead.current !== undefined && agentRead !== null && agentRead.id !== seenAgentRead.current) {
+      const until = Date.parse(agentRead.undoUntil);
+      const open = until > Date.now();
+      show('ok', agentReadText(agentRead), open ? agentRead.undoToken : null);
+      if (open) {
+        setPendingUndos((current) => [...current, { token: agentRead.undoToken, until }]);
+      }
+      void refreshAll();
+    }
+    seenAgentRead.current = agentRead?.id ?? null;
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- show and refreshAll are new every render; only a new notice matters
+  }, [liveLoaded, agentRead?.id]);
 
   // An inbox cleanup ran to its end in the background: the done toast, with "Show". One that ended before this window opened is not shown.
   useEffect(() => {

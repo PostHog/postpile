@@ -538,6 +538,12 @@ export interface PrDetail {
   /** Agent notes on the PR and its observation token (DESIGN.md "Agent notes on PRs"). Advisory: no rule reads them. */
   notes: PrNotesView;
   /**
+   * The PR's newest event-log position (`EventLogRepo.maxSeqForPr`), 0
+   * when none: pr_context prints it as seen_through, and mark_read refuses
+   * the PR when events were logged after it (DESIGN.md "Agents mark read").
+   */
+  seenThrough: number;
+  /**
    * Who CODEOWNERS hands the changed files to (`reviewOwnership`): the
    * requested teams and the viewer's. Null when the repo's CODEOWNERS is
    * not fetched yet, missing or unreadable: then nothing is said.
