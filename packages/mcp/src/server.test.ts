@@ -688,8 +688,9 @@ describe('PostPile MCP server', () => {
     const full = await callText(client, 'pr_context', { pr: 'acme/app#1902', detail: 'full' });
     const seen = Number(/acme\/app#1902: seen_through for mark_read: (\d+)/.exec(full)?.[1]);
     expect(seen).toBeGreaterThan(0);
-    // Outside the fence: PostPile wrote it, not GitHub.
+    // Outside the fence: PostPile wrote it, not GitHub. The list it vouches for sits inside.
     expect(fencedPart(full)).not.toContain('seen_through');
+    expect(fencedPart(full)).toMatch(/Unread since you looked \(\d+, oldest first, every one; mark_read marks exactly these read\):/);
 
     const stale = await client.callTool({ name: 'mark_read', arguments: { prs: [{ pr: 'acme/app#1902', seen_through: seen - 1 }] } });
     const staleText = (stale.content as { text: string }[])[0]?.text ?? '';
@@ -717,5 +718,26 @@ describe('PostPile MCP server', () => {
     expect(over.text).toContain('1 to 20 entries');
     const unknown = await call(client, 'mark_read', { prs: [{ pr: 'not a pr', seen_through: 1 }] });
     expect(unknown.isError).toBe(true);
+  });
+
+  it('prints the unread list whole: every event one line, people\'s text in full under it', async () => {
+    class OneUnread extends FakeEngine {
+      override async getPr(key: string) {
+        const detail = await super.getPr(key);
+        if (!detail) {
+          return null;
+        }
+        const unread = [
+          { id: 'e1', kind: 'comment' as const, actor: 'alice', isBot: false, at: '2026-10-29T10:00:00Z', summary: 'alice commented', body: 'First paragraph.\n\nSecond paragraph.' },
+          { id: 'e2', kind: 'bot_comment' as const, actor: 'greptile-apps[bot]', isBot: true, at: '2026-10-29T10:05:00Z', summary: 'greptile commented', body: null },
+        ];
+        return { ...detail, unread };
+      }
+    }
+    const client = await connected(new OneUnread());
+    const data = fencedPart(await callText(client, 'pr_context', { pr: 'acme/app#1902', detail: 'full' }));
+    expect(data).toContain('Unread since you looked (2, oldest first, every one; mark_read marks exactly these read):');
+    expect(data).toMatch(/alice commented\n {6}First paragraph\.\n {6}\n {6}Second paragraph\./);
+    expect(data).toMatch(/greptile commented \(bot\)/);
   });
 });

@@ -107,6 +107,7 @@ import type {
 } from '@postpile/core';
 import {
   agentMarkReadCheck,
+  unreadSinceLooked,
   agentMarkReadLogDetail,
   AgentReadNotices,
   appendTailoring,
@@ -1601,6 +1602,7 @@ export class FakeEngine implements EngineService {
       notes: this.prNotes.viewFor(prKey),
       // The sample has no event log: a PR's events in the order they were added stand in for it.
       seenThrough: this.eventsOf(prKey).length,
+      unread: unreadSinceLooked(this.eventsOf(prKey), pr),
       ownership: this.ownershipOf(pr),
       openThreads: viewerOpenThreads(pr, this.data.viewer),
     };

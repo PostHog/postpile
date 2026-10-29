@@ -63,6 +63,7 @@ export * from './topic-exclusions.ts';
 export * from './proposal-quality.ts';
 export * from './agent-requests.ts';
 export * from './agent-mark-read.ts';
+export * from './unread-since.ts';
 export * from './topic-change-plan.ts';
 export * from './pr-notes.ts';
 export * from './topic-roles.ts';

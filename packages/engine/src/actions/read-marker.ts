@@ -125,14 +125,16 @@ export class ReadMarker {
 
   /**
    * PRs whose mark-read already waits: a batch in its undo window, or a
-   * pending mark-read write while GitHub writes are locked.
+   * thread a pending mark-read write still has to send. A pending write's
+   * threads narrow as sends go through (`keepAfterTry`, `replaceThreads`),
+   * so a PR whose thread was sent no longer counts.
    */
   waitingPrKeys(): Set<PrKey> {
     const queued = this.queue.pending().flatMap((batch) => batch.prKeys);
     const pending = this.store.pendingWrites
       .list()
       .filter((write) => write.kind === 'mark_read')
-      .flatMap((write) => write.prKeys);
+      .flatMap((write) => write.threads.flatMap((thread) => (thread.prKey === null ? [] : [thread.prKey])));
     return new Set([...queued, ...pending]);
   }
 

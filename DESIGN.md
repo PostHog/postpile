@@ -9217,7 +9217,8 @@ that flow, without a separate ask.
   text answer that lists the activity) prints a `seen_through` per PR,
   outside the fence: the PR's newest event-log position
   (`EventLogRepo.maxSeqForPr`, `PrDetail.seenThrough`, 0 when none).
-  `mark_read` needs one per PR. The app refuses a PR with events logged
+  `mark_read` needs one per PR, and it is only printed with the "Unread
+  since you looked" section below. The app refuses a PR with events logged
   after it ("new activity since you read it: 2 events, newest from
   alice; read it again with pr_context") and one whose `seen_through` is
   ahead of the log. Other PRs of the call still go through. The event log
@@ -9229,24 +9230,26 @@ that flow, without a separate ask.
   answers carry no `seen_through`, since they list no activity; the brief
   footer points at `detail: "full"`. `topic` lists no PR activity, so it
   has none either.
-- **`seen_through` covers only what the answer showed** (PostHog Review on
-  #199). The full answer lists every unread activity line (new since the
-  user looked, or holding an unseen event) uncapped; the 12-line cap only
-  cuts read history (`shownActivity`). Before, a PR with more than 12
-  unread lines got a watermark over lines the answer left out. Under each
-  unread line, inside the fence, the people's text in full: a comment's or
-  review's whole body and every reply a bot-thread line folds, never cut
-  (`unreadTextLines`); a one-line summary of 100 characters is not "read".
-  Read history stays summarised. Bot and CI noise stays folded into its
-  count line, as in the pane; an unread person's comment folded there
-  (muted by the events agent) has no body in the answer, so such a PR
-  gets no `seen_through`, only a line saying it can't be marked read from
-  this answer (`unreadTextLeftOut`). `getPr` reads
-  the watermark before the Board: a sync committing in between only adds
-  events the answer shows beyond it, so mark_read refuses rather than
-  marks unseen activity. A cached Board is only reused while the database
-  is unchanged since it was read, so it holds everything up to the
-  watermark too.
+- **"Unread since you looked": the list `seen_through` vouches for**
+  (PostHog Review on #199, round 5). The full answer has its own section,
+  inside the fence, built straight from the store's seen state
+  (`unreadSinceLooked` over the PR's events, `PrDetail.unread`): every
+  event whose `seenAt` is null, which is exactly what `planRead` marks
+  seen (`unseenUpTo`). Oldest first; a person's comment, reply or review
+  with its whole body under its line, never cut; bot and CI events,
+  pushes, review requests and state changes one line each. Nothing is
+  folded, muted or capped, however long the section gets. The activity
+  section above stays as the pane draws it (capped, folded, summarised),
+  purely for reading. Rounds 1 to 4 patched the activity view instead (an
+  uncapped unread part, bodies under unread lines, folded replies, muted
+  comments), but its flags (`isNew`, `unseen`, folds, mutes) exist for
+  presentation, and each round found another case they hid. A list from
+  the seen state has no such cases. `getPr` reads the watermark before the
+  Board: a sync committing in between only adds events the section shows
+  beyond it, so mark_read refuses rather than marks unseen activity. A
+  cached Board is only reused while the database is unchanged since it
+  was read, so it holds every event up to the watermark too. Brief and
+  JSON answers have neither the section nor `seen_through`.
 - **The same path as the button.** A new agent-request kind `mark_read`
   through the outbox; the app answers through `AgentMarkRead` (engine),
   which hands the PRs it accepts to the `ReadMarker` as one batch with one
@@ -9265,7 +9268,9 @@ that flow, without a separate ask.
 - **Skipped, not refused:** a PR already read (no unread thread, no unseen
   event, already handled), a PR whose mark-read already waits (a batch in
   its undo window, or a pending write while locked:
-  `ReadMarker.waitingPrKeys`), and a stack layer that is only pulled in for
+  `ReadMarker.waitingPrKeys`, from the threads a pending write still has
+  to send, so a partly sent one stops holding the PRs that went out), and
+  a stack layer that is only pulled in for
   context (no tile tracks it): it has no notification of its own. So a
   retry, also while writes are locked, never adds a second batch or
   pending write. Refused: an unknown PR, a `seen_through` that does not

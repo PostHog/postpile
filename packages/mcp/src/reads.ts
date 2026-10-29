@@ -13,9 +13,6 @@ import {
   proposalOutcome,
   proposalOutcomeAt,
   reviewerStates,
-  type ActivityLine,
-  type ActivityList,
-  isPersonText,
   type AuthorPlace,
   type AuthorScope,
   SYNC_PROGRESS_STALE_MS,
@@ -422,52 +419,25 @@ function briefPrLines(detail: PrDetail, tiles: TileView[], authors: Authors): st
   return lines;
 }
 
-/** A line the user has not seen yet: new since they looked, or holding an unseen event. */
-function isUnreadLine(line: ActivityLine): boolean {
-  return line.isNew || line.unseen;
-}
-
 /**
- * The activity lines a full answer lists, newest first. Every unread line
- * shows, uncapped: seen_through covers all of it, and mark_read may only
- * mark what the answer showed. The cap only cuts already-read history.
+ * "Unread since you looked": every event a mark-read would mark seen, from
+ * the stored seen state, oldest first. People's comments, replies and
+ * reviews with their whole text; everything else one line each. Nothing is
+ * folded, muted or capped, however long: mark_read's seen_through vouches
+ * for this list only (DESIGN.md "Agents mark read").
  */
-export function shownActivity(activity: ActivityList): ActivityLine[] {
-  const lines = [...activity.fresh, ...activity.earlier];
-  let room = Math.max(0, activity.cap - lines.filter(isUnreadLine).length);
-  return lines.filter((line) => {
-    if (isUnreadLine(line)) {
-      return true;
-    }
-    if (room > 0) {
-      room -= 1;
-      return true;
-    }
-    return false;
-  });
-}
-
-/**
- * An unread line's people's text in full, indented under it: a comment's or
- * review's whole body, and every reply a bot-thread line folds. Printed
- * whole, never cut: seen_through lets mark_read clear all of it. A line
- * without a body (an approval without text) says all there is in its summary.
- */
-export function unreadTextLines(line: ActivityLine): string[] {
-  const texts = line.body === null ? [] : [line.body];
-  if (line.fold === 'bot_thread') {
-    texts.push(...line.folded.map((reply) => `${reply.actor}: ${reply.body}`));
+function unreadSectionLines(detail: PrDetail): string[] {
+  if (detail.unread.length === 0) {
+    return ['Unread since you looked: nothing.'];
   }
-  return texts.flatMap((text) => text.split('\n').map((row) => `      ${row}`));
-}
-
-/**
- * Unread people's text a full answer can only count, never print: a
- * comment or review the agent muted, folded with the noise. The answer
- * then gives no seen_through.
- */
-export function unreadTextLeftOut(activity: ActivityList): boolean {
-  return [...activity.freshNoise, ...activity.noise].some((event) => event.unseen && isPersonText(event));
+  const lines = [`Unread since you looked (${detail.unread.length}, oldest first, every one; mark_read marks exactly these read):`];
+  for (const event of detail.unread) {
+    lines.push(`  ${day(event.at)}  ${withActor(event.actor, event.summary)}${event.isBot ? ' (bot)' : ''}`);
+    if (event.body !== null) {
+      lines.push(...event.body.split('\n').map((row) => `      ${row}`));
+    }
+  }
+  return lines;
 }
 
 function fullPrLines(detail: PrDetail, tiles: TileView[], authors: Authors): string[] {
@@ -479,20 +449,18 @@ function fullPrLines(detail: PrDetail, tiles: TileView[], authors: Authors): str
   }
   // The detail pane's list: push bursts collapsed, bot and CI noise folded into one line.
   const { activity } = detail;
-  const shown = shownActivity(activity);
+  const shown = [...activity.fresh, ...activity.earlier].slice(0, activity.cap);
   if (shown.length > 0) {
-    lines.push('', 'Activity (newest first; * = new since you looked; unread text in full below its line):');
+    lines.push('', 'Activity (newest first; * = new since you looked):');
     for (const line of shown) {
       lines.push(`  ${line.isNew ? '*' : ' '} ${day(line.at)}  ${withActor(line.actor, line.summary)}`);
-      if (isUnreadLine(line)) {
-        lines.push(...unreadTextLines(line));
-      }
     }
   }
   const noise = activity.noise.length + activity.freshNoise.length;
   if (noise > 0) {
     lines.push(`  Folded: ${[activity.freshNoiseLabel, activity.noiseLabel].filter((label) => label !== '').join('; ')}`);
   }
+  lines.push('', ...unreadSectionLines(detail));
   return lines;
 }
 
@@ -777,10 +745,7 @@ function seenThroughLines(read: PrRead, detail: Detail): string[] {
   if (detail !== 'full') {
     return [];
   }
-  if (unreadTextLeftOut(read.detail.activity)) {
-    return [`${read.key}: can't be marked read from this answer: it only counts some unread comments (muted by PostPile's agent), so mark_read gets no seen_through for it.`];
-  }
-  return [`${read.key}: seen_through for mark_read: ${read.detail.seenThrough} (the newest activity this answer covers).`];
+  return [`${read.key}: seen_through for mark_read: ${read.detail.seenThrough} (covers its "Unread since you looked" list).`];
 }
 
 /**

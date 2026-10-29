@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { UNDO_WINDOW_MS, type AgentRequestResult, type FullPr } from '@postpile/core';
-import { at, makeComment, makeEvent, makePr, makeThreadFor } from '@postpile/core/fixtures';
+import { at, makeComment, makeEvent, makePr, makeThread, makeThreadFor } from '@postpile/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { makeHarness, type Harness } from '../testing/fakes.ts';
 import { reviewRequestedPr } from '../testing/prs.ts';
@@ -274,5 +274,89 @@ describe('mark_read through the request folder', () => {
     const result = await answer(h, { prs });
     expect(result).toMatchObject({ ok: false, error: expect.stringContaining('one to 20 PRs') });
     expect((await h.engine.livePollStatus()).agentReads).toEqual([]);
+  });
+});
+
+describe('Unread since you looked (PrDetail.unread)', () => {
+  const BOT = 'greptile-apps[bot]';
+  const botComment = makeComment({ id: 'g1', author: BOT, body: 'The port is hardcoded.', createdAt: at(2) });
+  const reply = makeComment({ id: 'a1', author: 'alice', body: 'Moved it into the config.\n\nAlso added a test.', createdAt: at(3) });
+  const thread = makeThread('t1', [botComment, reply]);
+  const talk = Array.from({ length: 14 }, (_, index) =>
+    makeComment({ id: `b${index}`, author: 'bob', body: index === 0 ? 'First paragraph of a long note.\n\nSecond paragraph with the point.' : `note ${index}`, createdAt: at(4 + index) }),
+  );
+  const busy = makePr({ number: 21, author: 'viewer', comments: [...thread.comments, ...talk], threads: [thread], updatedAt: at(30) });
+
+  it('lists every unseen event with full text, even ones the activity folds, mutes or caps, and seen_through covers nothing else', async () => {
+    const h = makeHarness();
+    topicWithPrs(h, 'busy', [busy]);
+    await h.engine.sync({ maxAgentCalls: 0 });
+    // The events agent muted one of bob's comments: the activity folds it into the noise.
+    const muted = h.store.events.listForPr(busy.key).find((event) => event.sourceId === 'b5');
+    h.store.events.setOverride(muted!.id, { loudness: 'muted', reason: 'chatter', by: 'agent' });
+
+    const detail = (await h.engine.getPr(busy.key))!;
+
+    const lines = [...detail.activity.fresh, ...detail.activity.earlier];
+    expect(lines.some((line) => line.fold === 'bot_thread')).toBe(true);
+    expect(detail.activity.noise.some((event) => event.id === muted!.id) || detail.activity.freshNoise.some((event) => event.id === muted!.id)).toBe(true);
+    expect(lines.length).toBeGreaterThan(detail.activity.cap);
+
+    const unread = detail.unread;
+    expect(unread.find((event) => event.actor === 'alice')?.body).toBe('Moved it into the config.\n\nAlso added a test.');
+    expect(unread.find((event) => event.id === muted!.id)?.body).toBe('note 5');
+    expect(unread.find((event) => event.body?.startsWith('First paragraph'))?.body).toBe('First paragraph of a long note.\n\nSecond paragraph with the point.');
+    expect(unread.filter((event) => event.actor === 'bob')).toHaveLength(14);
+    // Everything a mark-read with this seen_through would mark seen is in the list.
+    const covered = h.store.eventLog
+      .listSince([busy.key], 0)
+      .filter((entry) => entry.seq <= detail.seenThrough && entry.event.seenAt === null)
+      .map((entry) => entry.event.id);
+    expect(covered.length).toBeGreaterThan(12);
+    expect(new Set(unread.map((event) => event.id))).toEqual(new Set(covered));
+  });
+});
+
+describe('waitingPrKeys after a partly sent pending write', () => {
+  it('stops counting a PR once its thread went out, so mark_read can handle it again', async () => {
+    const h = makeHarness();
+    const other = followedPr(12);
+    topicWithPrs(h, 'cache', [pr, other]);
+    await h.engine.sync({ maxAgentCalls: 0 });
+    await h.engine.setGitHubWrites(false);
+    await h.engine.markReadForAgent(
+      {
+        prs: [
+          { prKey: pr.key, seenThrough: await seenThrough(h, pr.key) },
+          { prKey: other.key, seenThrough: await seenThrough(h, other.key) },
+        ],
+      },
+      CLIENT,
+    );
+    h.timers.advance(UNDO_WINDOW_MS);
+    await settle();
+    expect(h.store.pendingWrites.list()).toHaveLength(1);
+
+    // Sending it gets one thread through; the other fails and stays pending.
+    await h.engine.setGitHubWrites(true);
+    h.writer.failingThreads.add(`thread-${other.ref.number}`);
+    await h.engine.sendPendingWrites();
+
+    const left = h.store.pendingWrites.list();
+    expect(left).toHaveLength(1);
+    expect(left[0]?.threads.map((thread) => thread.prKey)).toEqual([other.key]);
+    const retry = await h.engine.markReadForAgent(
+      {
+        prs: [
+          { prKey: pr.key, seenThrough: await seenThrough(h, pr.key) },
+          { prKey: other.key, seenThrough: await seenThrough(h, other.key) },
+        ],
+      },
+      CLIENT,
+    );
+    expect(retry.skipped).toEqual([
+      { prKey: pr.key, reason: 'already read' },
+      { prKey: other.key, reason: 'already queued to mark read' },
+    ]);
   });
 });

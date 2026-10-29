@@ -423,7 +423,8 @@ export class FakeWrites {
   waitingPrKeys(): Set<PrKey> {
     this.settle();
     const queued = this.batches.filter((batch) => batch.subscription === null).flatMap((batch) => batch.prKeys);
-    const pending = this.pending.flatMap((write) => (write.batch && write.batch.subscription === null ? write.batch.prKeys : []));
+    // Like the engine: the threads a pending write still has to send, not the PRs it started with.
+    const pending = this.pending.flatMap((write) => (write.batch && write.batch.subscription === null ? write.batch.threads.flatMap((thread) => (thread.prKey === null ? [] : [thread.prKey])) : []));
     return new Set([...queued, ...pending]);
   }
 

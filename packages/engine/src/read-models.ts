@@ -1,4 +1,5 @@
 import {
+  unreadSinceLooked,
   isLiveProposal,
   archiveEndsAt,
   lastJoinAt,
@@ -740,6 +741,7 @@ export class ReadModels {
       waitingThreads: waitingThreads(pr, viewer),
       notes: this.notes.viewFor(pr),
       seenThrough,
+      unread: unreadSinceLooked(board.events.get(key) ?? [], full),
       ownership: this.ownership(pr, viewer),
       openThreads: viewer ? viewerOpenThreads(pr, viewer.login) : 0,
     };
