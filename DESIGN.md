@@ -1233,11 +1233,15 @@ contract surfaces.
   to the cursor minus 5 minutes, inclusive; the first run looks back 24 h.
 - `scout_judgement (scout_id, pr_key, status, verdict, reason, input_hash,
   config_version, head_oid, observed_updated_at, attempts, last_error,
-  judged_at)`: one row per scout and PR. `status` pending or judged (a
+  judged_at, left_out)`: one row per scout and PR. `status` pending or judged (a
   CHECK ties verdict to judged). Pending work (files not read whole, base
   tree unknown, the call cap, a failed call, a PR left out of the answer)
   is retried every run whatever the cursor says, looked up by number when
-  the listing no longer reaches it. Skipped rows go 30 days after their
+  the listing no longer reaches it. `left_out` names the pre-filter rule
+  that skipped a pending PR before any read (it turned draft, say). That
+  skip is no verdict: the same-head shortcut passes it by, so a draft
+  marked ready without a push is judged at the next listing (added
+  2026-10-29, raised in review). Skipped rows go 30 days after their
   observed update; pulled ones stay.
 - `pr_scouted (pr_key, scout_id, scout_name, config_version, reason,
   pulled_at, seen_updated_at, followed_at, dismissed_at, dismiss_reason,
