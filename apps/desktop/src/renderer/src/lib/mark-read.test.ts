@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TileAfterRead, WhoseTurn } from '@postpile/core';
-import { isMarkReadUndoToken, markReadNotice, moveWords, snoozeMessage } from './mark-read.ts';
+import { agentReadsToast, agentReadText, combinedUndoResult, isMarkReadUndoToken, markReadNotice, moveWords, snoozeMessage } from './mark-read.ts';
 
 const NONE: WhoseTurn = { kind: 'none', who: null, what: '', prKey: null };
 const REREVIEW: WhoseTurn = { kind: 'you', move: 're_review', who: null, what: 'pim addressed your changes: re-review', prKey: 'acme/app#1960' };
@@ -70,5 +70,55 @@ describe('isMarkReadUndoToken', () => {
     for (const token of ['memory:a1b2', 'memory:workctx:a1b2', 'proposal:a1b2', 'rule:a1b2', 'tailoring:a1b2']) {
       expect(isMarkReadUndoToken(token)).toBe(false);
     }
+  });
+});
+
+describe('agentReadText', () => {
+  it('names the agent and the PRs it marked read', () => {
+    expect(agentReadText({ client: 'claude-code', prKeys: ['acme/app#1902'], writesLocked: false })).toBe('Claude Code marked #1902 read');
+    expect(agentReadText({ client: 'codex-mcp-client', prKeys: ['acme/app#1902', 'acme/app#1911', 'acme/app#1930'], writesLocked: false })).toBe('Codex marked #1902, #1911 and #1930 read');
+  });
+
+  it('says a locked mark-read waits for GitHub writes', () => {
+    expect(agentReadText({ client: '', prKeys: ['acme/app#1902'], writesLocked: true })).toBe('an outside agent marked #1902 read: pending until you unlock GitHub writes, stays unread here until then');
+  });
+});
+
+describe('agentReadsToast', () => {
+  const NOW = Date.parse('2026-10-29T12:00:00Z');
+  const notice = (id: number, prKey: string, undoUntil: string, undoable = true) => ({ id, at: '2026-10-29T11:59:55Z', undoable, client: 'claude-code', prKeys: [prKey], writesLocked: false, undoToken: `t${id}`, undoUntil });
+
+  it('puts every new notice into one toast with an undo per batch, gone when the first window ends', () => {
+    const toast = agentReadsToast([notice(1, 'acme/app#1', '2026-10-29T12:00:03Z'), notice(2, 'acme/app#2', '2026-10-29T12:00:05Z'), notice(3, 'acme/app#3', '2026-10-29T12:00:06Z')], 1, NOW);
+    expect(toast).toEqual({
+      message: 'Claude Code marked #2 read; Claude Code marked #3 read',
+      // Each batch keeps its own window end, so the refetch after the later one sees it parked.
+      batches: [
+        { token: 't2', until: Date.parse('2026-10-29T12:00:05Z') },
+        { token: 't3', until: Date.parse('2026-10-29T12:00:06Z') },
+      ],
+      undoUntil: Date.parse('2026-10-29T12:00:05Z'),
+    });
+  });
+
+  it('still says what was marked once the undo window ended (a window minimised meanwhile), without Undo', () => {
+    expect(agentReadsToast([notice(2, 'acme/app#2', '2026-10-29T11:59:59Z'), notice(3, 'acme/app#3', '2026-10-29T12:00:05Z', false)], 1, NOW)).toEqual({
+      message: 'Claude Code marked #2 read; Claude Code marked #3 read',
+      batches: [],
+      undoUntil: null,
+    });
+  });
+
+  it('shows nothing it showed before', () => {
+    expect(agentReadsToast([notice(1, 'acme/app#1', '2026-10-29T12:00:05Z')], 1, NOW)).toBeNull();
+  });
+});
+
+describe('combinedUndoResult', () => {
+  it('reports the first failure of undos sent together, else the first answer', () => {
+    const done = { ok: true, message: 'Undone', undoToken: null };
+    const gone = { ok: false, message: 'Nothing to undo: already sent to GitHub', undoToken: null };
+    expect(combinedUndoResult([done, gone, done])).toBe(gone);
+    expect(combinedUndoResult([done, done])).toBe(done);
   });
 });

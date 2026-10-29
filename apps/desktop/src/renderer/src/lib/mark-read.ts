@@ -1,7 +1,9 @@
 // The toast after a mark-read, from what core says the mark-read leaves
 // (`TileView.afterRead`). What the buttons say and which one leads come from
 // core too (`TileView.offers`); the renderer only displays them.
-import type { TileAfterRead } from '@postpile/core';
+import type { ActionResult, AgentReadNotice, TileAfterRead } from '@postpile/core';
+import { clientDisplayName } from './proposals.ts';
+import { prNumber } from './tiles.ts';
 
 // Undo tokens of purely local choices, matching the engine's prefixes: memory
 // corrections, Inbox declines, removed rules and tailoring lines. Their undo
@@ -69,4 +71,52 @@ export function markReadNotice(input: MarkReadNoticeInput): MarkReadNotice {
  */
 export function snoozeMessage(message: string, ok: boolean, unreadOnGitHub: boolean): string {
   return ok && unreadOnGitHub ? `${message.replace(/\.$/, '')}. Still unread on GitHub.` : message;
+}
+
+/**
+ * The toast for an outside agent's mark_read (DESIGN.md "Agents mark read"):
+ * "Claude Code marked #1902 and #1911 read", and while GitHub writes are
+ * locked that it waits for them. The toast offers Undo like a button's.
+ */
+export function agentReadText(notice: Pick<AgentReadNotice, 'client' | 'prKeys' | 'writesLocked'>): string {
+  const numbers = notice.prKeys.map((key) => `#${prNumber(key)}`);
+  const last = numbers.pop();
+  const prs = numbers.length === 0 ? (last ?? '') : `${numbers.join(', ')} and ${last}`;
+  const base = `${clientDisplayName(notice.client)} marked ${prs} read`;
+  return notice.writesLocked ? `${base}: pending until you unlock GitHub writes, stays unread here until then` : base;
+}
+
+export interface AgentReadsToast {
+  message: string;
+  /** The batches that can still be undone, each with its own window end: the provider refetches after each, so a locked batch shows as pending once it parked. */
+  batches: { token: string; until: number }[];
+  /** When the first of their undo windows ends: the toast's Undo, which takes them all back, goes then. Null when none can be undone. */
+  undoUntil: number | null;
+}
+
+/**
+ * One toast for the agent mark-reads newer than the last one this window
+ * showed, oldest first; null when there are none. Two calls between two
+ * polls share the toast, and its Undo takes back every batch that can
+ * still be undone. A window that was minimised past the undo window still
+ * says what was marked, without Undo.
+ */
+export function agentReadsToast(notices: AgentReadNotice[], seenId: number, now: number): AgentReadsToast | null {
+  const fresh = notices.filter((notice) => notice.id > seenId);
+  if (fresh.length === 0) {
+    return null;
+  }
+  const batches = fresh
+    .filter((notice) => notice.undoable && Date.parse(notice.undoUntil) > now)
+    .map((notice) => ({ token: notice.undoToken, until: Date.parse(notice.undoUntil) }));
+  return {
+    message: fresh.map(agentReadText).join('; '),
+    batches,
+    undoUntil: batches.length === 0 ? null : Math.min(...batches.map((batch) => batch.until)),
+  };
+}
+
+/** One result for several undos sent together: the first failure, else the first answer. */
+export function combinedUndoResult(results: ActionResult[]): ActionResult {
+  return results.find((result) => !result.ok) ?? results[0] ?? { ok: false, message: 'Nothing to undo', undoToken: null };
 }

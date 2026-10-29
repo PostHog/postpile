@@ -7,6 +7,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 ### Added
 
 - A move that has waited on you for 3 working days or more shows how long, in grey: " · 6d" after the move on the tile footer, and "6d" on the topic's sidebar row for its oldest wait. Merge moves, drafts and snoozed tiles never show it, and it changes no order and sends no pings.
+- Agents can mark PRs read for you with the new `mark_read` MCP tool. When you go through a PR with Claude, it reads the PR in full with `pr_context` and marks it read once it passed it on, so you no longer go back to the app or GitHub to clear it. It only marks what it saw: a PR with new activity since its read is refused. It goes through the same undo window and GitHub writes lock as the Mark read button, the app shows a toast with Undo, and a personal ask still waits under Needs reply until you reply.
 
 ### Changed
 

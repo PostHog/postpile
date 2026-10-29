@@ -16,6 +16,13 @@ now".
   `WhoseTurn.reviewAsk`, which the renderer's `reviewRank` puts first
   inside To review. Fake mode: `POSTPILE_FAKE_EXTRA=board`, topic
   "Feature flag audit" (#2022 to #2025).
+- MCP `mark_read` (2026-10-29; DESIGN.md "Agents mark read"): agent
+  request kind `mark_read`, core `agentMarkReadCheck`, engine
+  `AgentMarkRead` over the `ReadMarker` (origin `agent`, one batch, one
+  undo token, `agent_mark_read` log row), `PrDetail.seenThrough` from
+  `EventLogRepo.maxSeqForPr`, printed by `pr_context(detail: "full")`,
+  `LivePollStatus.agentRead` and the renderer toast with Undo, the fake
+  engine's `markReadForAgent`.
 - Finished sets close, sets cap at 12 (2026-10-27, owner after a look at
   real data: most sets had been fully merged for one to four weeks and
   still took joins, two grew to topic size; DESIGN.md "Tiles hold
@@ -1843,6 +1850,13 @@ the app meanwhile.
   with today's words; an agent-opened PR is routed because the agent picks
   the reviewers. Only the order inside a topic's To review tiles moves
   (chosen reviews first); no new section, no loudness change, no pings.
+- **Agents mark read what they went through with the user** (2026-10-29,
+  owner; DESIGN.md "Agents mark read"): MCP `mark_read`, PRs one by one
+  (up to 20), each with the `seen_through` of a full `pr_context` read; a
+  PR with activity after it is refused. Called as part of the review flow
+  once the agent passed the PR on to the user, not only on request. Same
+  queue, undo, writes lock and pending writes as the button; personal asks
+  stay under Needs reply until answered.
 - **Finished sets close after 2 days, sets cap at 12 members**
   (2026-10-27, owner). A set whose members all merged or closed takes
   nothing new two days after the last one; its tile stays as it was. A

@@ -123,6 +123,21 @@ export class ReadMarker {
     return this.enqueueBatch(threads, { prKeys: [], handleKeys: [] }, { kind: 'button' }, origin, null);
   }
 
+  /**
+   * PRs whose mark-read already waits: a batch in its undo window, or a
+   * thread a pending mark-read write still has to send. A pending write's
+   * threads narrow as sends go through (`keepAfterTry`, `replaceThreads`),
+   * so a PR whose thread was sent no longer counts.
+   */
+  waitingPrKeys(): Set<PrKey> {
+    const queued = this.queue.pending().flatMap((batch) => batch.prKeys);
+    const pending = this.store.pendingWrites
+      .list()
+      .filter((write) => write.kind === 'mark_read')
+      .flatMap((write) => write.threads.flatMap((thread) => (thread.prKey === null ? [] : [thread.prKey])));
+    return new Set([...queued, ...pending]);
+  }
+
   /** The batch still waits out its undo window. */
   canUndo(token: string): boolean {
     return this.queue.pending().some((batch) => batch.token === token);

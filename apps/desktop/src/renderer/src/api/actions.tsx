@@ -6,6 +6,7 @@ import { useQueryClient, type QueryKey } from '@tanstack/react-query';
 import type {
   ActionResult,
   AgentActionFrom,
+  AgentReadNotice,
   AppConfig,
   BatchApproveResult,
   ChatReply,
@@ -62,7 +63,7 @@ import { backlogSyncMinutes, capNote, type NextSync } from '../lib/agent-stats.t
 import { writeBlockedReason, type GithubWrite } from '../lib/guard.ts';
 import { isTransientWriteFailure, writeFailureText, type PaneWrite } from '../lib/write-failure.ts';
 import { approvedMessage, batchMarkReadMessage } from '../lib/agent-actions.ts';
-import { isMarkReadUndoToken, markReadNotice, snoozeMessage } from '../lib/mark-read.ts';
+import { agentReadsToast, combinedUndoResult, isMarkReadUndoToken, markReadNotice, snoozeMessage } from '../lib/mark-read.ts';
 import { approvedDetail, markedReadPr, markedReadTile, mutedTile, snoozedTile, withApprovedPrs, withTile, withTiles } from '../lib/optimistic.ts';
 import { newerReport } from '../lib/sync-report.ts';
 import { teamRoleNotice } from '../lib/team-roles.ts';
@@ -87,6 +88,8 @@ export const CLEANUP_BUSY = {
 } as const;
 // Room for the engine to send or park a batch after its window ends.
 const UNDO_SETTLE_MS = 400;
+/** A stable empty list while the live status has none. */
+const NO_AGENT_READS: AgentReadNotice[] = [];
 
 export type NoticeTone = 'ok' | 'error' | 'blocked';
 
@@ -95,6 +98,10 @@ export interface Notice {
   tone: NoticeTone;
   message: string;
   undoToken: string | null;
+  /** More batches the same Undo takes back (agent mark-reads that arrived together). */
+  moreUndoTokens?: string[];
+  /** When Undo stops working (epoch ms): the toast drops it then. Absent: it lasts as long as the toast. */
+  undoUntil?: number;
   /** The toast offers "Snooze" for this tile: a mark-read left it your move. */
   snoozeTileId: string | null;
   /** The toast offers "Show": the notifications view, where each thread's last action is listed (the inbox cleanup's done toast). */
@@ -206,6 +213,8 @@ export interface Actions {
    */
   unsnooze(tileId: string, muted?: boolean): Promise<void>;
   undo(undoToken: string): Promise<void>;
+  /** Undo for several batches at once (a combined agent toast): every engine undo goes out before the one refetch. */
+  undoMany(undoTokens: string[]): Promise<void>;
   feedback(input: FeedbackInput): Promise<void>;
   unmute(eventId: string): Promise<void>;
   /** True when it was stored (or logged, for just this once). */
@@ -379,6 +388,10 @@ export function ActionsProvider(props: { children: ReactNode }) {
   const backgroundSync = live?.syncRunning ?? false;
   const liveLoaded = live !== undefined;
   const keptUnread = live?.keptUnread ?? null;
+  const agentReads = live?.agentReads ?? NO_AGENT_READS;
+  const newestAgentRead = agentReads.at(-1)?.id ?? 0;
+  // The highest agent mark-read notice id this window has seen; undefined until the live status first loads.
+  const seenAgentRead = useRef<number | undefined>(undefined);
   // The newest kept-unread notice this window has seen; undefined until the live status first loads.
   const seenKeptUnread = useRef<number | null | undefined>(undefined);
   const cleanup = useInboxCleanup().data;
@@ -395,6 +408,19 @@ export function ActionsProvider(props: { children: ReactNode }) {
     return () => clearTimeout(timer);
   }, [notice]);
 
+  // A toast whose undo window ends before it fades loses its Undo then: after that the engine has sent it to GitHub.
+  useEffect(() => {
+    if (!notice || notice.undoUntil === undefined || notice.undoToken === null) {
+      return;
+    }
+    const id = notice.id;
+    const timer = setTimeout(
+      () => setNotice((current) => (current?.id === id ? { ...current, undoToken: null, moreUndoTokens: [] } : current)),
+      Math.max(notice.undoUntil - Date.now(), 0),
+    );
+    return () => clearTimeout(timer);
+  }, [notice]);
+
   // A Mark read GitHub skipped for newer activity that stayed unread after the engine's refresh:
   // the toast says what is new. One from before this window opened is not shown.
   useEffect(() => {
@@ -407,6 +433,24 @@ export function ActionsProvider(props: { children: ReactNode }) {
     seenKeptUnread.current = keptUnread?.id ?? null;
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- show is new every render; only a new notice matters
   }, [liveLoaded, keptUnread?.id]);
+
+  // An outside agent marked PRs read through the MCP (mark_read): the toast says so and offers Undo while the window runs.
+  // One from before this window opened is not shown (the first load only notes the newest id); one that came while the
+  // window was minimised shows once polling resumes, without Undo when its window has ended.
+  useEffect(() => {
+    if (!liveLoaded) {
+      return;
+    }
+    const toast = seenAgentRead.current === undefined ? null : agentReadsToast(agentReads, seenAgentRead.current, Date.now());
+    if (toast) {
+      const [first, ...more] = toast.batches.map((batch) => batch.token);
+      setNotice({ id: Date.now(), tone: 'ok', message: toast.message, undoToken: first ?? null, moreUndoTokens: more, undoUntil: toast.undoUntil ?? undefined, snoozeTileId: null });
+      setPendingUndos((current) => [...current, ...toast.batches]);
+      void refreshAll();
+    }
+    seenAgentRead.current = Math.max(seenAgentRead.current ?? 0, newestAgentRead);
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- refreshAll is new every render; only a new notice matters
+  }, [liveLoaded, newestAgentRead]);
 
   // An inbox cleanup ran to its end in the background: the done toast, with "Show". One that ended before this window opened is not shown.
   useEffect(() => {
@@ -689,6 +733,12 @@ export function ActionsProvider(props: { children: ReactNode }) {
   async function undo(undoToken: string): Promise<void> {
     setPendingUndos((current) => current.filter((entry) => entry.token !== undoToken));
     await run(`undo:${undoToken}`, null, () => request('POST', '/api/undo', { undoToken }));
+  }
+
+  async function undoMany(undoTokens: string[]): Promise<void> {
+    setPendingUndos((current) => current.filter((entry) => !undoTokens.includes(entry.token)));
+    const task = async () => combinedUndoResult(await Promise.all(undoTokens.map((undoToken) => request<ActionResult>('POST', '/api/undo', { undoToken }))));
+    await run(`undo:${undoTokens.join(',')}`, null, task);
   }
 
   async function feedback(input: FeedbackInput): Promise<void> {
@@ -1092,6 +1142,7 @@ export function ActionsProvider(props: { children: ReactNode }) {
       await run(`snooze:${tileId}`, muted ? 'mute' : null, () => request('DELETE', `${tilePath(tileId)}/snooze`));
     },
     undo,
+    undoMany,
     feedback,
     unmute: async (eventId) => {
       await run(`unmute:${eventId}`, null, () => request('POST', `/api/events/${encodeURIComponent(eventId)}/unmute`));

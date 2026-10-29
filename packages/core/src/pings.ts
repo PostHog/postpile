@@ -1,6 +1,7 @@
 // Mac pings: which new activity may interrupt the user, and what the
 // notification says when the agent does not write it. Rules only, no IO.
 // DESIGN.md "Live poll and Mac pings" has the whole flow.
+import type { AgentReadNotice } from './agent-mark-read.ts';
 import { isAutomation } from './bots.ts';
 import { CHANGES_ANSWERED_REASON, isChangesAnswerEvent } from './changes-answered.ts';
 import { clipText } from './dossier.ts';
@@ -153,6 +154,8 @@ export interface LivePollStatus {
   githubQuota: GitHubQuotaView | null;
   /** The newest clicked mark-read that stayed unread after its refresh, for the toast; null before the first. */
   keptUnread: KeptUnreadNotice | null;
+  /** Mark-reads outside agents asked for (mark_read) in the last hour, oldest first, for the toast; Undo while each can still be undone. */
+  agentReads: AgentReadNotice[];
 }
 
 /**
@@ -186,6 +189,7 @@ export const OFF_POLL_STATUS: LivePollStatus = {
   catchUpChanges: 0,
   githubQuota: null,
   keptUnread: null,
+  agentReads: [],
 };
 
 /**

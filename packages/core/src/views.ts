@@ -29,6 +29,7 @@ import type { AgentDeclineView } from './agent-decline.ts';
 import type { BotFinding } from './bot-findings.ts';
 import type { DossierView, FactChangeCounts, FactView, MemoryTarget } from './memory-views.ts';
 import type { PrNotesView } from './pr-notes.ts';
+import type { UnreadEvent } from './unread-since.ts';
 import type { PrPaneView } from './pr-pane.ts';
 import type { PrStatus } from './pr-status.ts';
 import type { PrPrimaryAction } from './primary-action.ts';
@@ -537,6 +538,20 @@ export interface PrDetail {
   waitingThreads: WaitingThread[];
   /** Agent notes on the PR and its observation token (DESIGN.md "Agent notes on PRs"). Advisory: no rule reads them. */
   notes: PrNotesView;
+  /**
+   * mark_read's token for `unread` (`seenThroughToken`): the PR's newest
+   * event-log position (`EventLogRepo.maxSeqForPr`, 0 when none) and a
+   * hash of the listed unread ids. mark_read refuses the PR when events
+   * were logged after it, or when the unseen events up to it changed
+   * (DESIGN.md "Agents mark read").
+   */
+  seenThrough: string;
+  /**
+   * Every event a mark-read would mark seen (`unreadSinceLooked`, the
+   * store's seen state), oldest first, people's text in full: pr_context's
+   * "Unread since you looked", the only list seen_through vouches for.
+   */
+  unread: UnreadEvent[];
   /**
    * Who CODEOWNERS hands the changed files to (`reviewOwnership`): the
    * requested teams and the viewer's. Null when the repo's CODEOWNERS is

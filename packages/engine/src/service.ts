@@ -5,6 +5,8 @@ import type {
   AgentActionFrom,
   ApprovePrRequest,
   BatchApproveResult,
+  AgentMarkReadRequest,
+  AgentMarkReadResult,
   AgentRefreshOptions,
   AgentRefreshResult,
   AgentRefreshTarget,
@@ -197,6 +199,14 @@ export interface EngineService {
    * since. Never changes whose move, unread, sections or counts.
    */
   notePr(request: PrNoteRequest, options: { client: string }): Promise<PrNoteResult>;
+  /**
+   * mark_read from an outside agent (DESIGN.md "Agents mark read"): marks
+   * the PRs read like the pane's Mark read, as one batch with one undo
+   * token, through the same queue and writes lock. A PR with events logged
+   * after its seenThrough is refused; untracked layers and read PRs are
+   * skipped. Never answers an ask: personal asks stay until replied to.
+   */
+  markReadForAgent(request: AgentMarkReadRequest, options: { client: string }): Promise<AgentMarkReadResult>;
   /** The PR pane's Clear on an agent note; cleared by "user". */
   clearPrNote(noteId: string): Promise<PrNoteResult>;
   /** The notes of the PRs among `prKeys` that have any, in one read (whats_on_me). */
@@ -259,6 +269,8 @@ export interface EngineService {
    * Stack mates are left out. Local, no GitHub call.
    */
   prOverlaps(): Promise<PrOverlapsView>;
+  /** Every stored PR's key, in one read: mark_read resolves all its PR references against it. */
+  storedPrKeys(): Promise<PrKey[]>;
   /** Who is on each home team, from the team member cache (no GitHub call); MCP tags PR authors with it. */
   getTeamMembers(): Promise<TeamMembersView>;
   /**

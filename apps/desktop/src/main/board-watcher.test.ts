@@ -42,6 +42,14 @@ describe('BoardWatcher', () => {
     expect(state.reads).toBe(3);
   });
 
+  it('reads again after an agent marked PRs read through the request folder', async () => {
+    const { watcher, state } = setup(1);
+    const notice = { id: 1, at: '2026-10-29T10:00:00Z', undoable: true, client: 'claude-code', prKeys: ['acme/app#1'], writesLocked: false, undoToken: 't1', undoUntil: '2026-10-29T10:00:06Z' };
+    await watcher.checkStatus(status({ changeCount: 1 }));
+    await watcher.checkStatus(status({ changeCount: 1, agentReads: [notice] }));
+    expect(state.reads).toBe(2);
+  });
+
   it('runs once more when asked during a read', async () => {
     const { watcher, state } = setup(1);
     await Promise.all([watcher.refresh(), watcher.refresh(), watcher.refresh()]);

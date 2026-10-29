@@ -8,6 +8,7 @@ import {
   AGENT_REQUEST_TTL_MS,
   AGENT_REQUEST_VERSION,
   AGENT_REQUEST_WAIT_MS,
+  type AgentMarkReadRequest,
   type AgentRefreshTarget,
   type AgentRequest,
   type AgentRequestResult,
@@ -19,7 +20,8 @@ import { answerAgentRequest, type EngineService } from '@postpile/engine';
 export type AgentAsk =
   | { kind: 'refresh'; payload: AgentRefreshTarget }
   | { kind: 'propose_topic_change'; payload: TopicChangeRequest }
-  | { kind: 'note_pr'; payload: PrNoteRequest };
+  | { kind: 'note_pr'; payload: PrNoteRequest }
+  | { kind: 'mark_read'; payload: AgentMarkReadRequest };
 
 /**
  * What came of a request:
@@ -50,6 +52,9 @@ function envelope(ask: AgentAsk, client: string, now: Date): AgentRequest {
   }
   if (ask.kind === 'note_pr') {
     return { ...base, kind: 'note_pr', payload: ask.payload };
+  }
+  if (ask.kind === 'mark_read') {
+    return { ...base, kind: 'mark_read', payload: ask.payload };
   }
   return { ...base, kind: 'propose_topic_change', payload: ask.payload };
 }
@@ -146,11 +151,11 @@ export class FileAgentRequests implements AgentRequests {
 /**
  * Sample data (POSTPILE_FAKE=1): no app to ask. The fake engine answers in
  * memory, through the same answerAgentRequest the app's inbox uses, so
- * `pnpm cli mcp` over sample data can try both tools.
+ * `pnpm cli mcp` over sample data can try every tool that asks the app.
  */
 export class InMemoryAgentRequests implements AgentRequests {
   constructor(
-    private readonly engine: Pick<EngineService, 'refreshNow' | 'proposeTopicChange' | 'notePr'>,
+    private readonly engine: Pick<EngineService, 'refreshNow' | 'proposeTopicChange' | 'notePr' | 'markReadForAgent'>,
     private readonly now: () => Date = () => new Date(),
   ) {}
 

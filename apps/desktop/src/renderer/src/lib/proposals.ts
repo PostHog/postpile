@@ -27,7 +27,7 @@ export function proposalText(proposal: TopicProposal, topicName: (topicId: strin
 }
 
 /**
- * Display names of MCP clients that file topic suggestions, keyed by the
+ * Display names of MCP clients (topic suggestions, agent mark-reads), keyed by the
  * name they send in the initialize handshake (clientInfo.name).
  */
 const CLIENT_NAMES: Record<string, string> = {
@@ -36,20 +36,21 @@ const CLIENT_NAMES: Record<string, string> = {
   'cursor-vscode': 'Cursor',
 };
 
-/**
- * Who suggested a topic change from outside the app ("Claude Code"; an
- * unknown client shows its own name, "an outside agent" when it sent none),
- * or null for the app's own consolidation.
- */
-export function suggestedBy(proposal: TopicProposal): string | null {
-  if (proposal.source !== 'agent') {
-    return null;
-  }
-  const client = (proposal.client ?? '').trim().slice(0, 40);
+/** An MCP client's display name ("Claude Code"); an unknown client shows its own name, "an outside agent" when it sent none. */
+export function clientDisplayName(name: string | null): string {
+  const client = (name ?? '').trim().slice(0, 40);
   if (Object.hasOwn(CLIENT_NAMES, client)) {
     return CLIENT_NAMES[client] ?? client;
   }
   return client === '' ? 'an outside agent' : client;
+}
+
+/** Who suggested a topic change from outside the app, or null for the app's own consolidation. */
+export function suggestedBy(proposal: TopicProposal): string | null {
+  if (proposal.source !== 'agent') {
+    return null;
+  }
+  return clientDisplayName(proposal.client);
 }
 
 /**

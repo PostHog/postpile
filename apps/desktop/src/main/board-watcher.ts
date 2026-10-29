@@ -16,9 +16,15 @@ export interface BoardSnapshot {
   unreadPrKeys: PrKey[];
 }
 
-/** What changes when the board can have changed: a poll cycle that stored something, a catch-up run, a sync. */
+/**
+ * What changes when the board can have changed: a poll cycle that stored
+ * something, a catch-up run, a sync, an agent's mark_read (it reaches the
+ * engine through the request folder, not the API, so nothing else wakes
+ * the watcher for it).
+ */
 function statusSignature(status: LivePollStatus): string {
-  return `${status.changeCount}:${status.catchUpChanges}:${status.syncRunning}`;
+  const newestAgentRead = status.agentReads.at(-1)?.id ?? 0;
+  return `${status.changeCount}:${status.catchUpChanges}:${status.syncRunning}:${newestAgentRead}`;
 }
 
 /**

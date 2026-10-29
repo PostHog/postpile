@@ -13,7 +13,7 @@ import { PERSONAL_ASK_KINDS, PUSH_KINDS } from './kinds.ts';
 import { isOwnTeam, sameLogin } from './mentions.ts';
 import { findComment, replyTarget } from './reply.ts';
 import { effectiveLoudness } from './loudness.ts';
-import type { EventDisplayState, EventKind, FullComment, FullPr, IsoTime, NotificationThread, Viewer } from './types.ts';
+import type { EventDisplayState, EventKind, FullComment, FullPr, IsoTime, NotificationThread, PrEvent, Viewer } from './types.ts';
 import type { EventView } from './views.ts';
 
 /** About this many lines show before "Show all N". */
@@ -245,7 +245,11 @@ function groupBursts(events: EventView[]): EventView[][] {
 
 /** The full body behind a human comment or review event; bots keep the one-line summary. */
 function fullBody(view: EventView, pr: FullPr | null): string | null {
-  const { event } = view;
+  return personTextBody(view.event, pr);
+}
+
+/** The whole text of a person's comment, reply or review event; null for bots, other kinds, and a review without text. */
+export function personTextBody(event: Pick<PrEvent, 'kind' | 'isBot' | 'sourceId'>, pr: FullPr | null): string | null {
   if (!pr || event.isBot || !HUMAN_TALK.includes(event.kind)) {
     return null;
   }

@@ -65,7 +65,7 @@ import {
 } from './text.ts';
 
 /** The read methods the tools use; the read-only engine and the sample-data engine both have them. */
-export type PostPileReader = Pick<EngineService, 'getPr' | 'getTopic' | 'listTopics' | 'search' | 'getViewer' | 'getTeamMembers' | 'prOverlaps' | 'lastSyncReport' | 'recordedSyncProgress' | 'recordedAppVersion' | 'listPrNotes'>;
+export type PostPileReader = Pick<EngineService, 'getPr' | 'getTopic' | 'listTopics' | 'search' | 'getViewer' | 'getTeamMembers' | 'prOverlaps' | 'storedPrKeys' | 'lastSyncReport' | 'recordedSyncProgress' | 'recordedAppVersion' | 'listPrNotes'>;
 
 /** What every read needs besides the reader. */
 export interface ReadContext {
@@ -237,6 +237,34 @@ export type ResolvedPr = { ok: true; key: PrKey } | { ok: false; error: ToolAnsw
 async function storedSpelling(reader: PostPileReader, key: PrKey): Promise<PrKey> {
   const stored = await keysWithNumber(reader, parsePrKey(key).number);
   return stored.find((candidate) => candidate.toLowerCase() === key.toLowerCase()) ?? key;
+}
+
+/**
+ * A PR reference resolved against a list of stored keys, without another
+ * read: a full reference by its stored spelling (case aside; one PostPile
+ * does not store comes back as typed), #123 when exactly one stored PR has
+ * that number. mark_read resolves all its references against one list.
+ */
+export function resolvePrAmong(keys: PrKey[], input: string, param = 'pr'): ResolvedPr {
+  const parsed = parsePrInput(input);
+  if (!parsed) {
+    return {
+      ok: false,
+      error: toolError([`Could not read "${echo(input)}" as a PR. Pass owner/repo#123, a PR URL, or #123 when the number is unique. Example: ${param}: "acme/app#1902"`]),
+    };
+  }
+  if (parsed.kind === 'key') {
+    const wanted = parsed.key.toLowerCase();
+    return { ok: true, key: keys.find((key) => key.toLowerCase() === wanted) ?? parsed.key };
+  }
+  const matches = keys.filter((key) => parsePrKey(key).number === parsed.number).sort();
+  if (matches.length === 1) {
+    return { ok: true, key: matches[0] as PrKey };
+  }
+  if (matches.length === 0) {
+    return { ok: false, error: toolError([`PostPile tracks no PR #${parsed.number}. ${NOT_TRACKED_HINT} Find one with search_prs, e.g. search_prs(query: "cache").`]) };
+  }
+  return { ok: false, error: toolError([`Several PRs are #${parsed.number}; pass the full reference, e.g. ${param}: "${matches[0]}". They are: ${matches.join(', ')}`]) };
 }
 
 /** A PR reference as the tools take it, to a key. The error says how to pass it instead. */
@@ -419,6 +447,28 @@ function briefPrLines(detail: PrDetail, tiles: TileView[], authors: Authors): st
   return lines;
 }
 
+/**
+ * "Unread since you looked": every event a mark-read would mark seen, from
+ * the stored seen state, oldest first. People's comments, replies and
+ * reviews with their whole text; everything else one line each. Nothing is
+ * folded, muted or capped, however long: mark_read's seen_through vouches
+ * for this list only (DESIGN.md "Agents mark read").
+ */
+function unreadSectionLines(detail: PrDetail): string[] {
+  if (detail.unread.length === 0) {
+    return ['Unread since you looked: nothing.'];
+  }
+  const lines = [`Unread since you looked (${detail.unread.length}, oldest first, every one; mark_read marks exactly these read):`];
+  for (const event of detail.unread) {
+    lines.push(`  ${day(event.at)}  ${withActor(event.actor, event.summary)}${event.isBot ? ' (bot)' : ''}`);
+    if (event.body !== null) {
+      // One entry for the whole body: a body can have tens of thousands of lines, too many to spread into push.
+      lines.push(event.body.split('\n').map((row) => `      ${row}`).join('\n'));
+    }
+  }
+  return lines;
+}
+
 function fullPrLines(detail: PrDetail, tiles: TileView[], authors: Authors): string[] {
   const lines = [...prHeadLines(detail, tiles, authors), ...reviewSizeLines(detail, true)];
   lines.push('', ...(detail.glance ? glanceLines(detail.glance, detail.glanceStale) : [`No agent glance yet (${detail.glanceState}).`]));
@@ -438,6 +488,10 @@ function fullPrLines(detail: PrDetail, tiles: TileView[], authors: Authors): str
   const noise = activity.noise.length + activity.freshNoise.length;
   if (noise > 0) {
     lines.push(`  Folded: ${[activity.freshNoiseLabel, activity.noiseLabel].filter((label) => label !== '').join('; ')}`);
+  }
+  lines.push('');
+  for (const line of unreadSectionLines(detail)) {
+    lines.push(line);
   }
   return lines;
 }
@@ -647,7 +701,10 @@ async function severalPrsData(reader: PostPileReader, reads: PrRead[], authors: 
       data.push('Not in a topic yet:');
     }
     for (const read of group.reads) {
-      data.push('', ...(await prLinesWithOverlaps(reader, read, authors, detail, overlaps, now)));
+      data.push('');
+      for (const line of await prLinesWithOverlaps(reader, read, authors, detail, overlaps, now)) {
+        data.push(line);
+      }
     }
   }
   return data;
@@ -716,6 +773,17 @@ async function prContextJson(ctx: ReadContext, reads: PrRead[], failures: PrFail
 }
 
 /**
+ * Outside the fence: the seen_through mark_read needs, only in full text
+ * answers, the ones that list the PR's activity (DESIGN.md "Agents mark read").
+ */
+function seenThroughLines(read: PrRead, detail: Detail): string[] {
+  if (detail !== 'full') {
+    return [];
+  }
+  return [`${read.key}: seen_through for mark_read: ${read.detail.seenThrough} (covers its "Unread since you looked" list).`];
+}
+
+/**
  * pr_context for one PR or several (at most MAX_PRS_PER_CALL). A PR that
  * cannot be read is listed with its error; the call fails only when none
  * can. Several PRs print each topic once, then each PR's lines.
@@ -755,12 +823,12 @@ export async function prContext(ctx: ReadContext, input: string | string[], deta
     footer.push(`Could not answer for ${failures.length} of ${inputs.length}:`, ...failures.map(failureLine), '');
   }
   if (single) {
-    footer.push(...overlapNotes(overlaps, first.key), prFreshnessLine(first.detail, ctx), tokenLine(first.detail.notes));
+    footer.push(...overlapNotes(overlaps, first.key), prFreshnessLine(first.detail, ctx), tokenLine(first.detail.notes), ...seenThroughLines(first, detail));
   } else {
     const notes = [...new Set(reads.flatMap((read) => overlapNotes(overlaps, read.key)))];
-    footer.push(...notes, ...reads.map((read) => `${read.key}: ${prFreshnessLine(read.detail, ctx)} ${tokenLine(read.detail.notes)}`));
+    footer.push(...notes, ...reads.map((read) => `${read.key}: ${prFreshnessLine(read.detail, ctx)} ${tokenLine(read.detail.notes)}`), ...reads.flatMap((read) => seenThroughLines(read, detail)));
   }
-  const more = detail === 'brief' ? 'detail: "full" adds activity, facts and the whole topic. ' : '';
+  const more = detail === 'brief' ? 'detail: "full" adds activity, facts, the whole topic and the seen_through mark_read needs. ' : '';
   footer.push(`Next: ${more}Stale? call refresh_from_github. Wrong topic? propose_topic_change.`);
   return { text: answer([...(await header(ctx)), ...teamNote(authors)], data, footer), found: true };
 }

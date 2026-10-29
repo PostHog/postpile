@@ -48,6 +48,16 @@ export class EventLogRepo {
   }
 
   /**
+   * The newest log position of one PR's events, 0 when none: mark_read's
+   * seen_through (DESIGN.md "Agents mark read"). Log rows only, so it
+   * never moves back when a comment is deleted.
+   */
+  maxSeqForPr(prKey: PrKey): number {
+    const row = one<{ seq: number | null }>(this.db, 'SELECT MAX(seq) AS seq FROM event_log WHERE pr_key = ?', prKey);
+    return row?.seq ?? 0;
+  }
+
+  /**
    * Events of these PRs logged after afterSeq, oldest seq first, joined with
    * pr_event. Log rows whose pr_event is gone (deleted comment) are skipped.
    */
