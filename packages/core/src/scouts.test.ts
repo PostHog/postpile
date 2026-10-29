@@ -32,6 +32,7 @@ function candidate(overrides: Partial<ScoutCandidate> = {}): ScoutCandidate {
     title: 'Add a billing service',
     body: 'Adds the service.',
     author: 'carol',
+    assignees: [],
     isDraft: false,
     state: 'OPEN',
     headOid: 'h1',
@@ -69,6 +70,14 @@ describe('scoutPrefilter', () => {
     expect(scoutPrefilter(candidate({ author: 'mergify' }), facts)).toBe('dependency_bot');
     expect(scoutPrefilter(candidate({ author: 'copilot-swe-agent[bot]' }), facts)).toBeNull();
     expect(scoutPrefilter(candidate({ author: 'codegen-agent[bot]' }), facts)).toBeNull();
+  });
+
+  it('counts an agent PR as its assignees\' work, like every ownership rule', () => {
+    expect(scoutPrefilter(candidate({ author: 'codegen-agent[bot]', assignees: ['bob'] }), facts)).toBe('your_team');
+    expect(scoutPrefilter(candidate({ author: 'codegen-agent[bot]', assignees: ['alice'] }), facts)).toBe('you');
+    expect(scoutPrefilter(candidate({ author: 'codegen-agent[bot]', assignees: ['dmitri'] }), facts)).toBeNull();
+    // A person's PR stays theirs whoever it is assigned to.
+    expect(scoutPrefilter(candidate({ author: 'carol', assignees: ['bob'] }), facts)).toBeNull();
   });
 
   it('has no teammates before the member list is known', () => {

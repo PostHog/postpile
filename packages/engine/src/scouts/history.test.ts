@@ -69,4 +69,15 @@ describe('ScoutsHistory', () => {
     expect(history.active()).toMatchObject({ scouts: [{ id: 'lookout' }], version: null, errors: [] });
     expect(store.scoutsVersions.latest()).toBeNull();
   });
+
+  it('finds the last valid version behind any number of broken edits', () => {
+    const { file, store, history } = setup(VALID);
+    history.active();
+    for (let edit = 0; edit < 150; edit++) {
+      store.scoutsVersions.add({ text: `## Broken ${edit}\n`, summary: 'Edited outside the app', origin: 'outside', createdAt: NOW.toISOString() });
+    }
+    writeFileSync(file, '## Lookout\nrepos: nope\n\nbroken\n');
+    expect(history.active()).toMatchObject({ scouts: [{ id: 'lookout' }], version: { version: 1 } });
+  });
 });
+

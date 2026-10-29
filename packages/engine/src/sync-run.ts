@@ -397,9 +397,10 @@ export class SyncRun {
    * match the user's scouts.md, judged under the same agent-call cap and
    * glanced right away. A failure is one error line; the sync goes on.
    */
-  private async runScouts(viewer: Viewer, run: { phases: PhaseClock; budget: AgentBudget; tally: DigestTally; errors: string[] }): Promise<void> {
+  private async runScouts(viewer: Viewer, jobs: AgentJob[], run: { phases: PhaseClock; budget: AgentBudget; tally: DigestTally; errors: string[] }): Promise<void> {
     const scouts = this.deps.scouts;
-    if (!scouts) {
+    // `agentJobs` without "scouts" runs none of it: the step spends agent calls, and its glances only with "glances" too.
+    if (!scouts || !jobs.includes('scouts')) {
       return;
     }
     try {
@@ -409,8 +410,8 @@ export class SyncRun {
           budget: run.budget,
           errors: run.errors,
           agentOff: this.deps.agentOff(),
-          quotaAllows: this.quota.allowsBackground(),
-          glance: () => new GlanceBatchWriter(this.digestDeps(viewer, run)).runScouted(),
+          quotaAllows: () => this.quota.allowsBackground(),
+          glance: () => (jobs.includes('glances') ? new GlanceBatchWriter(this.digestDeps(viewer, run)).runScouted() : Promise.resolve()),
         }),
       );
     } catch (error) {
@@ -428,7 +429,7 @@ export class SyncRun {
     const { store, now } = this.deps;
     await this.digest(fetched, options.agentJobs, run);
     // After the inbox work, so the user's own PRs get the budget first.
-    await this.runScouts(fetched.viewer, run);
+    await this.runScouts(fetched.viewer, options.agentJobs ?? ALL_AGENT_JOBS, run);
     // Before the retire step: what PostPile clears by itself no longer holds a finished topic.
     await this.handleQuietly(run.errors);
     // Last, so the new events, what was read on GitHub and the quiet reads all count.

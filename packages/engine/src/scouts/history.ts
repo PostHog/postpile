@@ -2,9 +2,6 @@ import { parseScouts, type ScoutConfig, type ScoutsVersion } from '@postpile/cor
 import type { Store } from '@postpile/store';
 import { readInstructions } from '../instructions/file.ts';
 
-/** scouts.md versions are short; this many are enough to find the last one that parsed. */
-const VALID_VERSION_LOOKBACK = 100;
-
 export interface CurrentScoutsText {
   text: string;
   /** Null only while no text was ever seen. */
@@ -67,7 +64,8 @@ export class ScoutsHistory {
     if (parsed.errors.length === 0) {
       return { scouts: parsed.scouts, version, errors: [] };
     }
-    for (const older of this.store.scoutsVersions.list(VALID_VERSION_LOOKBACK)) {
+    // Every stored version, however many broken edits came after the last valid one: the texts are short and few.
+    for (const older of this.store.scoutsVersions.listAll()) {
       const olderParse = parseScouts(older.text);
       if (olderParse.errors.length === 0) {
         return { scouts: olderParse.scouts, version: older, errors: parsed.errors };

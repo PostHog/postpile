@@ -15,6 +15,7 @@ function candidate(number: number, overrides: Partial<ScoutCandidate> = {}): Sco
     title: `PR ${number}`,
     body: '',
     author: 'carol',
+    assignees: [],
     isDraft: false,
     state: 'OPEN',
     headOid: `h${number}`,

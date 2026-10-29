@@ -52,6 +52,7 @@ import {
   topicDigestOutput,
   topicTidyOutput,
   scoutJudgeOutput,
+  scoutJudgementOutput,
 } from './schemas.ts';
 import type {
   AgentChatReply,
@@ -528,7 +529,7 @@ export class RunnerAgentService implements AgentService {
       return { answers: [], missing: [], model };
     }
     const asked = new Map(input.items.map((item) => [item.prKey.toLowerCase(), item.prKey]));
-    let answer: { value: { judgements: { prKey: string; verdict: 'pull' | 'skip'; reason: string }[] }; model: string };
+    let answer: { value: { judgements: unknown[] }; model: string };
     try {
       answer = await this.ask('scout_judge', scoutJudgePrompt(input), scoutJudgeOutput);
     } catch (error) {
@@ -539,7 +540,12 @@ export class RunnerAgentService implements AgentService {
     }
     const byKey = new Map<string, ScoutJudgeAnswer>();
     const twice = new Set<string>();
-    for (const entry of answer.value.judgements) {
+    for (const raw of answer.value.judgements) {
+      const parsed = scoutJudgementOutput.safeParse(raw);
+      if (!parsed.success) {
+        continue;
+      }
+      const entry = parsed.data;
       const key = asked.get(entry.prKey.trim().toLowerCase());
       if (key === undefined) {
         continue;

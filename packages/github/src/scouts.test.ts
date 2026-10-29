@@ -16,6 +16,7 @@ function listed(number: number, overrides: Record<string, unknown> = {}) {
     title: `PR ${number}`,
     body: null,
     author: { __typename: 'Bot', login: 'codegen-agent' },
+    assignees: { nodes: [{ login: 'dmitri' }, null] },
     repository: { nameWithOwner: 'acme/app' },
     ...overrides,
   };
@@ -33,7 +34,7 @@ describe('scout listing', () => {
 
   it('reads one page into candidates and the next cursor', async () => {
     const fetch = new FakeFetch([
-      { body: { data: { repository: { pullRequests: { pageInfo: { hasNextPage: true, endCursor: 'c1' }, nodes: [listed(1), null] } } } } },
+      { body: { data: { repository: { pullRequests: { pageInfo: { hasNextPage: true, endCursor: 'c1' }, nodes: [listed(1)] } } } } },
     ]);
     const client = new GitHubClient(fakeTokens, fetch.fn);
 
@@ -47,6 +48,7 @@ describe('scout listing', () => {
         title: 'PR 1',
         body: '',
         author: 'codegen-agent[bot]',
+        assignees: ['dmitri'],
         isDraft: false,
         state: 'OPEN',
         headOid: 'h1',
@@ -55,6 +57,15 @@ describe('scout listing', () => {
         mergedAt: null,
       },
     ]);
+  });
+
+  it('refuses a page with a null node or field errors: it would miss a PR', async () => {
+    const withNull = new FakeFetch([{ body: { data: { repository: { pullRequests: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [listed(1), null] } } } } }]);
+    await expect(new GitHubClient(fakeTokens, withNull.fn).listScoutPrs('acme/app', null)).rejects.toThrow('incomplete page');
+    const withErrors = new FakeFetch([
+      { body: { data: { repository: { pullRequests: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [listed(1)] } } }, errors: [{ message: 'Something went wrong' }] } },
+    ]);
+    await expect(new GitHubClient(fakeTokens, withErrors.fn).listScoutPrs('acme/app', null)).rejects.toThrow('incomplete page');
   });
 
   it('fails a repo the token cannot see', async () => {
@@ -89,6 +100,34 @@ describe('scout files', () => {
       ],
     });
     expect(JSON.stringify(fetch.requests[1]!.body)).toContain('after: \\"f1\\"');
+  });
+
+  it('asks for the next pages of several long lists in one query', async () => {
+    const fetch = new FakeFetch([
+      {
+        body: {
+          data: {
+            p0: { pullRequest: filesPage('h1', [{ path: 'a.ts', changeType: 'MODIFIED' }], 'f1') },
+            p1: { pullRequest: { ...filesPage('h2', [{ path: 'b.ts', changeType: 'MODIFIED' }], 'g1'), baseRefOid: 'b1' } },
+          },
+        },
+      },
+      {
+        body: {
+          data: {
+            p0: { pullRequest: filesPage('h1', [{ path: 'a2.ts', changeType: 'ADDED' }], null) },
+            p1: { pullRequest: filesPage('h2', [{ path: 'b2.ts', changeType: 'ADDED' }], null) },
+          },
+        },
+      },
+    ]);
+    const read = await new GitHubClient(fakeTokens, fetch.fn).scoutFiles([
+      { repo: 'acme/app', number: 1 },
+      { repo: 'acme/app', number: 2 },
+    ]);
+    expect(fetch.requests).toHaveLength(2);
+    expect(read.get('acme/app#1')?.files?.map((file) => file.path)).toEqual(['a.ts', 'a2.ts']);
+    expect(read.get('acme/app#2')?.files?.map((file) => file.path)).toEqual(['b.ts', 'b2.ts']);
   });
 
   it('gives no list when the head moved while paging', async () => {

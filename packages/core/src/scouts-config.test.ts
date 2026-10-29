@@ -98,4 +98,18 @@ describe('parseScouts', () => {
     const { scouts } = parseScouts('## A\nrepos: acme/app\npaths: */\n\np\n');
     expect(scouts[0]!.paths[0]).toMatchObject({ pattern: '*/', addedOnly: false, newTopLevelFolder: false });
   });
+
+  it('reads headings with a closing run of # and keeps a # that is part of the name', () => {
+    const { scouts } = parseScouts('## Lookout ##\nrepos: acme/app\n\np\n## C# watch\nrepos: acme/app\n\nq\n');
+    expect(scouts.map((scout) => scout.name)).toEqual(['Lookout', 'C# watch']);
+  });
+
+  it('stays fast on a heading or path entry with a long run of spaces', () => {
+    const spaces = ' '.repeat(50_000);
+    const started = performance.now();
+    const parsed = parseScouts(`##${spaces}x${spaces}\nrepos: acme/app\npaths: src/**${spaces}(${spaces}\n\np\n`);
+    expect(performance.now() - started).toBeLessThan(500);
+    expect(parsed.scouts[0]?.name).toBe('x');
+  });
 });
+

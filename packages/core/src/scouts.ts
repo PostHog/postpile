@@ -3,6 +3,8 @@
 // they carry, when a judged PR is judged again, how long judgements are
 // kept, when a scouted PR leaves the board and which scout owns it. Rules
 // only, no IO.
+import { prOwners } from './pr-owners.ts';
+import { isTeammate } from './review-request.ts';
 import { sameLogin } from './mentions.ts';
 import { shortHash } from './pr-notes.ts';
 import type { ScoutConfig } from './scouts-config.ts';
@@ -25,6 +27,8 @@ export interface ScoutCandidate {
   body: string;
   /** Login; "name[bot]" for an app account, "" for a deleted one. */
   author: string;
+  /** Assigned users' logins: an agent PR belongs to them (`prOwners`). */
+  assignees: string[];
   isDraft: boolean;
   state: PrState;
   headOid: string;
@@ -149,19 +153,22 @@ export interface ScoutPrefilterFacts {
  * The deterministic first cut, shared by every scout on the repo. Drafts
  * wait until they turn ready (that moves their updatedAt, so a later
  * listing sees them). The viewer's own and their teammates' PRs reach them
- * anyway; tracked ones already have a tile.
+ * anyway, owned by the PR-ownership rules (`prOwners`: an agent PR is its
+ * assignees'); tracked ones already have a tile.
  */
-export function scoutPrefilter(candidate: Pick<ScoutCandidate, 'key' | 'author' | 'isDraft' | 'state'>, facts: ScoutPrefilterFacts): ScoutPrefilterReason | null {
+export function scoutPrefilter(candidate: Pick<ScoutCandidate, 'key' | 'author' | 'assignees' | 'isDraft' | 'state'>, facts: ScoutPrefilterFacts): ScoutPrefilterReason | null {
   if (candidate.state === 'OPEN' && candidate.isDraft) {
     return 'draft';
   }
   if (SCOUT_SKIPPED_BOT.test(candidate.author)) {
     return 'dependency_bot';
   }
-  if (sameLogin(candidate.author, facts.viewer.login)) {
+  // Whose PR it is, as everywhere else: an agent PR belongs to the people it is assigned to.
+  const owners = prOwners(candidate);
+  if (owners.some((owner) => sameLogin(owner, facts.viewer.login))) {
     return 'you';
   }
-  if ((facts.viewer.teamMembers ?? []).some((member) => sameLogin(member, candidate.author))) {
+  if (owners.some((owner) => isTeammate(owner, facts.viewer))) {
     return 'your_team';
   }
   if (facts.tracked.has(candidate.key)) {

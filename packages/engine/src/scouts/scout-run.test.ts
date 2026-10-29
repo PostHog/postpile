@@ -30,6 +30,7 @@ function candidate(number: number, overrides: Partial<ScoutCandidate> = {}): Sco
     title: `PR ${number}`,
     body: '',
     author: 'carol',
+    assignees: [],
     isDraft: false,
     state: 'OPEN',
     headOid: `h${number}`,
@@ -231,4 +232,93 @@ describe('the scout step of a full sync', () => {
     await h.engine.sync({});
     expect(h.reader.scoutCalls).toEqual([]);
   });
+
+  it('reads the files again after a scouts.md edit, and judges again only when this scout changed', async () => {
+    const file = scoutsFile(LOOKOUT);
+    const h = makeHarness({ scoutsFile: file });
+    h.reader.scoutTrees.set('base1', ['src', 'docs']);
+    onGitHub(h, candidate(1), [{ path: 'billing/main.ts', changeType: 'ADDED' }]);
+    pulls(h, [1, 'skip', 'fixtures only']);
+    await h.engine.sync({});
+
+    // Another scout added: this scout is unchanged, so no new call for it.
+    writeFileSync(file, `${LOOKOUT}\n## Other\nrepos: acme/web\n\nx\n`);
+    onGitHub(h, candidate(1, { updatedAt: hoursAgo(1 / 60) }), [{ path: 'billing/main.ts', changeType: 'ADDED' }]);
+    await h.engine.sync({});
+    expect(h.runner.promptsFor('scout_judge')).toHaveLength(1);
+
+    // This scout's prompt edited: judged again under it.
+    writeFileSync(file, LOOKOUT.replace('New top-level folders', 'Any new folders'));
+    onGitHub(h, candidate(1, { updatedAt: hoursAgo(1 / 120) }), [{ path: 'billing/main.ts', changeType: 'ADDED' }]);
+    pulls(h, [1, 'pull', 'a new folder billing/']);
+    await h.engine.sync({});
+    expect(h.runner.promptsFor('scout_judge')).toHaveLength(2);
+    expect(h.store.scoutedPrs.get('acme/app#1')).not.toBeNull();
+  });
+
+  it('goes on below where a capped listing stopped, instead of reading the top again', async () => {
+    let now = NOW;
+    const h = setup(LOOKOUT, () => now);
+    h.reader.scoutPageSize = 1;
+    const many = Array.from({ length: 12 }, (_, index) => candidate(index + 1, { updatedAt: hoursAgo(1 + index / 60) }));
+    h.reader.scoutListings.set('acme/app', many);
+    await h.engine.sync({ maxAgentCalls: 0 });
+    expect(h.store.scoutCursors.get('lookout', 'acme/app')).toBeNull();
+    expect(h.store.meta.get('scout_listing_resume:acme/app')).not.toBeNull();
+
+    now = new Date(NOW.getTime() + 60 * 60 * 1000);
+    const calls = h.reader.scoutCalls.length;
+    await h.engine.sync({ maxAgentCalls: 0 });
+
+    const listed = h.reader.scoutCalls.slice(calls).filter((call) => call.startsWith('list'));
+    // The top page (nothing new since), then pages 10 and 11 below the stop.
+    expect(listed).toEqual(['list acme/app -', 'list acme/app 10', 'list acme/app 11']);
+    expect(h.store.scoutCursors.get('lookout', 'acme/app')?.coveredThrough).toBe(now.toISOString());
+    expect(h.store.meta.get('scout_listing_resume:acme/app')).toBeNull();
+    expect(h.store.scoutJudgements.get('lookout', 'acme/app#12')).not.toBeNull();
+  });
+
+  it('never expires a scouted PR on a snapshot the refresh could not check', async () => {
+    let now = NOW;
+    const h = setup(LOOKOUT, () => now);
+    onGitHub(h, candidate(1), [{ path: 'billing/main.ts', changeType: 'ADDED' }]);
+    pulls(h, [1, 'pull', 'new folder billing/']);
+    await h.engine.sync({});
+
+    now = new Date(NOW.getTime() + 4 * 24 * 60 * 60 * 1000);
+    h.reader.prs.delete('acme/app#1');
+    await h.engine.sync({});
+
+    expect(h.store.scoutedPrs.listActive().map((row) => row.prKey)).toEqual(['acme/app#1']);
+  });
+
+  it('runs no scout work when the sync asks for other agent jobs only', async () => {
+    const h = setup();
+    onGitHub(h, candidate(1), [{ path: 'billing/main.ts', changeType: 'ADDED' }]);
+    await h.engine.sync({ agentJobs: ['topics'] });
+    expect(h.reader.scoutCalls).toEqual([]);
+  });
+
+  it('reads a file list once for every scout on the repo', async () => {
+    const h = setup(`${LOOKOUT}\n## Billing\nrepos: acme/app\n\nAnything about billing.\n`);
+    onGitHub(h, candidate(1), [{ path: 'billing/main.ts', changeType: 'ADDED' }]);
+    pulls(h, [1, 'skip', 'no']);
+    pulls(h, [1, 'skip', 'no']);
+    await h.engine.sync({});
+    expect(h.reader.scoutCalls.filter((call) => call.startsWith('files'))).toEqual(['files acme/app#1']);
+  });
+
+  it('stops reading GitHub once the quota runs low, leaving the window uncovered', async () => {
+    const h = setup();
+    onGitHub(h, candidate(1), [{ path: 'billing/main.ts', changeType: 'ADDED' }]);
+    let reads = 0;
+    h.reader.onListScoutPrs = () => {
+      reads += 1;
+      h.quota.note({ resource: 'graphql', limit: 5000, remaining: 10, resetAtMs: h.timers.now() + 3600_000 });
+    };
+    await h.engine.sync({});
+    expect(reads).toBe(1);
+    expect(h.reader.scoutCalls.filter((call) => call.startsWith('files'))).toEqual([]);
+  });
 });
+

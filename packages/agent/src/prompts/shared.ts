@@ -175,6 +175,10 @@ export function howItReached(provenance: Provenance): string {
   if (provenance.kind === 'pinged') {
     return `GitHub notified them about it (reason: ${provenance.reason}).`;
   }
+  if (provenance.kind === 'found' && provenance.via === 'scouted') {
+    // The scout's reason is model output from GitHub text: fenced, so a PR cannot steer its own glance through it.
+    return `Not in their notifications; one of their scouts pulled it in from outside their inbox. The scout's note:\n${githubData(provenance.reason)}`;
+  }
   if (provenance.kind === 'found') {
     return `Not in their notifications; the app found it on GitHub: ${provenance.reason}.`;
   }

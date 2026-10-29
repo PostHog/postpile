@@ -32,7 +32,7 @@ export interface ScoutFilesRead {
   files: ScoutFile[] | null;
 }
 
-const LIST_FIELDS = 'id number updatedAt state isDraft mergedAt headRefOid baseRefOid title body author { __typename login } repository { nameWithOwner }';
+const LIST_FIELDS = 'id number updatedAt assignees(first: 10) { nodes { login } } state isDraft mergedAt headRefOid baseRefOid title body author { __typename login } repository { nameWithOwner }';
 
 interface RawListedPr {
   id: string;
@@ -46,6 +46,7 @@ interface RawListedPr {
   title: string;
   body: string | null;
   author: RawActor | null;
+  assignees: { nodes: ({ login: string } | null)[] } | null;
   repository: { nameWithOwner: string };
 }
 
@@ -80,6 +81,7 @@ export function toScoutCandidate(raw: RawListedPr): ScoutCandidate {
     title: raw.title,
     body: raw.body ?? '',
     author: actorLogin(raw.author),
+    assignees: (raw.assignees?.nodes ?? []).flatMap((node) => (node ? [node.login] : [])),
     isDraft: raw.isDraft,
     state: raw.state,
     headOid: raw.headRefOid,
@@ -117,19 +119,13 @@ function filesSelection(after: string | null): string {
   return `headRefOid baseRefOid files(first: ${SCOUT_FILES_PAGE_SIZE}${cursor}) { pageInfo { hasNextPage endCursor } nodes { path changeType } }`;
 }
 
-/** The first file page of each PR, aliased. */
-export function buildScoutFilesQuery(refs: PrRef[]): string {
-  const lines = refs.map((ref, index) => {
+/** One file page per PR, aliased: the first page (`after` null) or the next one of a longer list. */
+export function buildScoutFilesQuery(pages: { ref: PrRef; after: string | null }[]): string {
+  const lines = pages.map(({ ref, after }, index) => {
     const [owner, name] = ownerAndName(ref.repo);
-    return `  ${batchAlias(index)}: repository(owner: ${JSON.stringify(owner)}, name: ${JSON.stringify(name)}) { pullRequest(number: ${ref.number}) { ${filesSelection(null)} } }`;
+    return `  ${batchAlias(index)}: repository(owner: ${JSON.stringify(owner)}, name: ${JSON.stringify(name)}) { pullRequest(number: ${ref.number}) { ${filesSelection(after)} } }`;
   });
   return `query {\n${lines.join('\n')}\n}`;
-}
-
-/** A later file page of one PR. */
-export function buildScoutFilesPageQuery(ref: PrRef, after: string): string {
-  const [owner, name] = ownerAndName(ref.repo);
-  return `query {\n  ${batchAlias(0)}: repository(owner: ${JSON.stringify(owner)}, name: ${JSON.stringify(name)}) { pullRequest(number: ${ref.number}) { ${filesSelection(after)} } }\n}`;
 }
 
 /** The root tree of each commit, aliased t0, t1, ... */
@@ -151,12 +147,20 @@ function chunk<T>(items: T[], size: number): T[][] {
   return chunks;
 }
 
-/** One page of the listing. Throws when GitHub answers no data; a repo the token cannot see is an error too. */
+/**
+ * One page of the listing. Throws when GitHub answers no data, or answers
+ * with field errors or a null node: a page missing a PR is no page, or the
+ * caller would count its window as covered without that PR. A repo the
+ * token cannot see is an error too.
+ */
 export async function listScoutPrs(http: GitHubHttp, repo: string, after: string | null): Promise<ScoutListPage> {
   const response = await http.graphql<RawListResponse>(buildScoutListQuery(repo, after));
   const connection = response.data?.repository?.pullRequests;
   if (!connection) {
     throw graphqlFailure(`scout listing of ${repo}`, response.errors);
+  }
+  if (response.errors.length > 0 || connection.nodes.some((node) => node === null)) {
+    throw graphqlFailure(`scout listing of ${repo} (incomplete page)`, response.errors);
   }
   const prs = connection.nodes.flatMap((node) => (node ? [toScoutCandidate(node)] : []));
   return { prs, nextCursor: connection.pageInfo.hasNextPage ? connection.pageInfo.endCursor : null };
@@ -181,50 +185,72 @@ export async function scoutPrsByNumber(http: GitHubHttp, refs: PrRef[]): Promise
   return result;
 }
 
-/**
- * Pages one PR's files to the end. Every page must answer at the head the
- * first page saw; a moved head (a push while paging) or a failed page makes
- * the list unknown, never a shorter one: a signal on page two must not read
- * as "no signal".
- */
-async function remainingFiles(http: GitHubHttp, ref: PrRef, first: RawFilesPage): Promise<ScoutFile[] | null> {
-  const files = filesOf(first);
-  let after = first.files?.pageInfo.hasNextPage ? first.files.pageInfo.endCursor : null;
-  let pages = 1;
-  while (after !== null) {
-    if (pages >= SCOUT_FILES_MAX_PAGES) {
-      return null;
-    }
-    const response = await http.graphql<RawFilesBatch>(buildScoutFilesPageQuery(ref, after));
-    const page = response.data?.[batchAlias(0)]?.pullRequest;
-    if (!page?.files || page.headRefOid !== first.headRefOid || page.baseRefOid !== first.baseRefOid) {
-      return null;
-    }
-    files.push(...filesOf(page));
-    pages += 1;
-    after = page.files.pageInfo.hasNextPage ? page.files.pageInfo.endCursor : null;
-  }
-  return files;
+/** One PR's file list while it is being paged. */
+interface FilesProgress {
+  ref: PrRef;
+  headOid: string;
+  baseOid: string;
+  files: ScoutFile[];
+  /** GitHub's cursor for the next page; null once the list is whole. */
+  after: string | null;
+  pages: number;
+  /** The head or base moved while paging, a page failed, or the list ran past SCOUT_FILES_MAX_PAGES. */
+  broken: boolean;
 }
 
-/** The whole file list per PR. A PR GitHub does not answer for is left out. */
+/** The next page of each PR in the batch, in one aliased query. Every page must answer at the head the first one saw. */
+async function nextFilePages(http: GitHubHttp, batch: FilesProgress[]): Promise<void> {
+  let response;
+  try {
+    response = await http.graphql<RawFilesBatch>(buildScoutFilesQuery(batch.map((entry) => ({ ref: entry.ref, after: entry.after }))));
+  } catch {
+    batch.forEach((entry) => (entry.broken = true));
+    return;
+  }
+  batch.forEach((entry, index) => {
+    const page = response.data?.[batchAlias(index)]?.pullRequest;
+    if (!page?.files || page.headRefOid !== entry.headOid || page.baseRefOid !== entry.baseOid) {
+      entry.broken = true;
+      return;
+    }
+    entry.files.push(...filesOf(page));
+    entry.pages += 1;
+    entry.after = page.files.pageInfo.hasNextPage ? page.files.pageInfo.endCursor : null;
+    entry.broken = entry.after !== null && entry.pages >= SCOUT_FILES_MAX_PAGES;
+  });
+}
+
+/**
+ * The whole file list per PR: the first pages aliased, then the next pages
+ * of every longer list together, SCOUT_FILES_BATCH_SIZE PRs per query,
+ * until each is whole. A moved head (a push while paging) or a failed page
+ * makes that PR's list unknown, never a shorter one: a signal on page two
+ * must not read as "no signal". A PR GitHub does not answer for is left out.
+ */
 export async function scoutFiles(http: GitHubHttp, refs: PrRef[]): Promise<Map<PrKey, ScoutFilesRead>> {
-  const result = new Map<PrKey, ScoutFilesRead>();
+  const progress: FilesProgress[] = [];
   for (const batch of chunk(refs, SCOUT_FILES_BATCH_SIZE)) {
-    const response = await http.graphql<RawFilesBatch>(buildScoutFilesQuery(batch));
+    const response = await http.graphql<RawFilesBatch>(buildScoutFilesQuery(batch.map((ref) => ({ ref, after: null }))));
     if (!response.data) {
       throw graphqlFailure('scout files query', response.errors);
     }
-    for (const [index, ref] of batch.entries()) {
-      const first = response.data[batchAlias(index)]?.pullRequest;
+    batch.forEach((ref, index) => {
+      const first = response.data?.[batchAlias(index)]?.pullRequest;
       if (!first) {
-        continue;
+        return;
       }
-      const files = first.files ? await remainingFiles(http, ref, first).catch(() => null) : null;
-      result.set(prKey(ref), { headOid: first.headRefOid, baseOid: first.baseRefOid, files });
-    }
+      const after = first.files?.pageInfo.hasNextPage ? first.files.pageInfo.endCursor : null;
+      progress.push({ ref, headOid: first.headRefOid, baseOid: first.baseRefOid, files: filesOf(first), after, pages: 1, broken: first.files === null });
+    });
   }
-  return result;
+  let open = progress.filter((entry) => !entry.broken && entry.after !== null);
+  while (open.length > 0) {
+    for (const batch of chunk(open, SCOUT_FILES_BATCH_SIZE)) {
+      await nextFilePages(http, batch);
+    }
+    open = open.filter((entry) => !entry.broken && entry.after !== null);
+  }
+  return new Map(progress.map((entry) => [prKey(entry.ref), { headOid: entry.headOid, baseOid: entry.baseOid, files: entry.broken ? null : entry.files }]));
 }
 
 /** Directory names at the root of each commit's tree. A commit GitHub does not answer for is left out. */

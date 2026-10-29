@@ -58,6 +58,7 @@ describe('ScoutsVersionRepo', () => {
     expect(store.scoutsVersions.latest()).toEqual(second);
     expect(store.scoutsVersions.get(1)?.text).toBe('a');
     expect(store.scoutsVersions.list(10).map((version) => version.version)).toEqual([2, 1]);
+    expect(store.scoutsVersions.listAll().map((version) => version.version)).toEqual([2, 1]);
   });
 });
 
