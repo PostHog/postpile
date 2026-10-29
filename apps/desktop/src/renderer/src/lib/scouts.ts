@@ -20,7 +20,7 @@ export function scoutRowTitle(item: ScoutListItem): string {
   if (item.tiles === 0) {
     return `${item.name}: nothing pulled in right now`;
   }
-  return `${item.name}: ${item.tiles} ${item.tiles === 1 ? 'tile' : 'tiles'} from outside your GitHub inbox`;
+  return `${item.name}: ${item.tiles} ${item.tiles === 1 ? 'PR' : 'PRs'} from outside your GitHub inbox`;
 }
 
 /**

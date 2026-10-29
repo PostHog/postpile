@@ -43,7 +43,7 @@ describe('isScoutTopicId', () => {
 describe('scout row words', () => {
   it('says what the count counts and that the PRs are outside the inbox', () => {
     expect(scoutCountTitle(item(4, 2))).toBe('2 of 4 tiles not seen in PostPile yet');
-    expect(scoutRowTitle(item(1, 0))).toBe('Lookout: 1 tile from outside your GitHub inbox');
+    expect(scoutRowTitle(item(1, 0))).toBe('Lookout: 1 PR from outside your GitHub inbox');
     expect(scoutRowTitle(item(0, 0))).toBe('Lookout: nothing pulled in right now');
   });
 });

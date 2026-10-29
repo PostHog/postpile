@@ -386,7 +386,7 @@ export interface ScoutListItem {
   /** "scout:<id>": opens like a topic. */
   topicId: string;
   name: string;
-  /** Tiles on its section: scouted PRs that are active and not tracked. */
+  /** PRs on its section: active scouted PRs PostPile does not track otherwise (a stack counts each layer). */
   tiles: number;
   /** Of those, the ones not seen in PostPile since their last activity. A grey count, never coral. */
   unseen: number;

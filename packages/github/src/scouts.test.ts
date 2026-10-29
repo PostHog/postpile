@@ -139,6 +139,13 @@ describe('scout files', () => {
     expect(read.get('acme/app#1')?.files).toBeNull();
   });
 
+  it('gives no list when a page has a null file node or field errors', async () => {
+    const withNull = new FakeFetch([{ body: { data: { p0: { pullRequest: { ...filesPage('h1', [{ path: 'a.ts', changeType: 'MODIFIED' }], null), files: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [{ path: 'a.ts', changeType: 'MODIFIED' }, null] } } } } } }]);
+    expect((await new GitHubClient(fakeTokens, withNull.fn).scoutFiles([{ repo: 'acme/app', number: 1 }])).get('acme/app#1')?.files).toBeNull();
+    const withErrors = new FakeFetch([{ body: { data: { p0: { pullRequest: filesPage('h1', [{ path: 'a.ts', changeType: 'MODIFIED' }], null) } }, errors: [{ message: 'Something went wrong' }] } }]);
+    expect((await new GitHubClient(fakeTokens, withErrors.fn).scoutFiles([{ repo: 'acme/app', number: 1 }])).get('acme/app#1')?.files).toBeNull();
+  });
+
   it('gives no list when a later page fails', async () => {
     const fetch = new FakeFetch([
       { body: { data: { p0: { pullRequest: filesPage('h1', [{ path: 'a.ts', changeType: 'MODIFIED' }], 'f1') } } } },
