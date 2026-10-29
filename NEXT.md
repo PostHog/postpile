@@ -1756,8 +1756,21 @@ the app meanwhile.
   - Pending Follow titles from headers: `PendingWrites.views()` reads a
     whole snapshot per pending Follow for its title; batch the titles from
     PR headers.
-  - All four are fine at today's load (scouted PRs expire after 3 days and
-    arrive a few a day), so not thousands active.
+  - Parentheses in path hints: `withoutNote` reads `app/(auth)` as a hint
+    plus an annotation and keeps `app/`. Treat a note as an annotation only
+    when whitespace separates it from the path.
+  - Renamed scouts in search: `scoutedMatches` and the topic search input
+    use the names stored at pull time, so searching for a scout renamed
+    under the same `id:` finds none of its PRs. Use the configured names.
+  - Scout placement over an old pull-in anchor: for a PR that left its
+    tracked stack and is now scout-only, `board.topicIdOf` still follows
+    the old pull-in topic, so `getPr` and MCP attach that topic. Prefer the
+    current scout placement.
+  - Scout board seeds: `scoutedKeys` still seeds PRs that moved into normal
+    tracking or another scout's stack, loading their cold snapshots on each
+    section refresh. Filter by `scoutTopicIdOf` first.
+  - The load-related items are fine at today's load (scouted PRs expire
+    after 3 days and arrive a few a day), so not thousands active.
 
 - Normalize the PR snapshot (started after 0.19.0; first this, then the
   `utilityProcess` move below). The short fields live in the PR header
