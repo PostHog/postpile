@@ -92,6 +92,17 @@ describe('scout listing', () => {
   });
 });
 
+describe('scout PR node id', () => {
+  it('answers the id, null for a PR GitHub says is not there, and throws on any other failure', async () => {
+    const client = (body: unknown, status = 200) => new GitHubClient(fakeTokens, new FakeFetch([{ status, body }]).fn);
+    expect(await client({ data: { repository: { pullRequest: { id: 'PR_1' } } } }).scoutPrNodeId({ repo: 'acme/app', number: 1 })).toBe('PR_1');
+    const missing = { data: { repository: { pullRequest: null } }, errors: [{ type: 'NOT_FOUND', message: 'Could not resolve to a PullRequest' }] };
+    expect(await client(missing).scoutPrNodeId({ repo: 'acme/app', number: 1 })).toBeNull();
+    await expect(client({ data: null, errors: [{ type: 'RATE_LIMITED', message: 'API rate limit exceeded' }] }).scoutPrNodeId({ repo: 'acme/app', number: 1 })).rejects.toThrow('rate limit');
+    await expect(client({ message: 'Bad credentials' }, 401).scoutPrNodeId({ repo: 'acme/app', number: 1 })).rejects.toThrow();
+  });
+});
+
 describe('scout files', () => {
   it('pages a long file list to the end', async () => {
     const fetch = new FakeFetch([

@@ -125,6 +125,15 @@ describe('FakeEngine scouts', () => {
     expect(await engine.markScoutedSeen('acme/app#1')).toMatchObject({ ok: false });
   });
 
+  it('finds scouted PRs in a search that asks for scouts, and knows them as stored PRs', async () => {
+    const { engine } = engineAt();
+    expect((await engine.search('#2701')).topics).toEqual([]);
+    const found = await engine.search('#2701', { allRepos: true, withScouts: true });
+    expect(found.topics.map((topic) => topic.topicId)).toEqual([LOOKOUT]);
+    expect(found.topics[0]?.prKeys).toEqual([LEDGER]);
+    expect(await engine.storedPrKeys()).toContain(LEDGER);
+  });
+
   it("lets an agent's mark_read mark a scouted PR seen in PostPile only, with the usual guards", async () => {
     const { engine } = engineAt();
     const seenThrough = (await engine.getPr(LEDGER))?.seenThrough ?? '';

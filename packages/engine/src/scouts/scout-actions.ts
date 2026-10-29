@@ -39,6 +39,8 @@ export class ScoutActions {
   private readonly queue: DeferredQueue<QueuedFollow>;
   /** Follows that left their window (followed, or parked in the lock): the live status counts them, so the renderer refetches. */
   private settledFollows = 0;
+  /** PRs whose Follow is looking up the node id: reserved, so an overlapping Follow is refused. */
+  private readonly lookingUp = new Set<PrKey>();
 
   constructor(
     private readonly store: Store,
@@ -107,14 +109,18 @@ export class ScoutActions {
     if (row.followedAt !== null) {
       return ok('Already followed');
     }
-    if (this.followStates().has(prKey)) {
+    if (this.followStates().has(prKey) || this.lookingUp.has(prKey)) {
       return ok('Follow already on its way');
     }
+    // Reserved until the lookup settles: a second click meanwhile must not queue a second subscription.
+    this.lookingUp.add(prKey);
     let subjectId: string | null = null;
     try {
-      subjectId = (await this.reader.scoutPrsByNumber([parsePrKey(prKey)])).get(prKey)?.nodeId ?? null;
+      subjectId = await this.reader.scoutPrNodeId(parsePrKey(prKey));
     } catch (error) {
-      return failed(`Could not read the PR from GitHub: ${errorText(error)}`);
+      return failed(`Could not follow: GitHub did not answer (${errorText(error)}). Click Follow again to retry.`);
+    } finally {
+      this.lookingUp.delete(prKey);
     }
     if (subjectId === null) {
       return failed('GitHub has no such PR the token can see');

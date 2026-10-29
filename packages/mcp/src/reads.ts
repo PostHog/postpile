@@ -33,6 +33,7 @@ import {
   type TopicDetail,
   type TopicListItem,
   type TopicProposal,
+  scoutIdOfTopic,
 } from '@postpile/core';
 import { UNSORTED_TOPIC_ID, type EngineService } from '@postpile/engine';
 import { contextNoteLines, notesJson, queueNoteLines, tokenLine } from './notes-text.ts';
@@ -947,7 +948,8 @@ function summaryJson(authors: Authors, pr: PrSummary, detail: PrDetail | null, t
     teamsKnown: authors.known,
     reviews: detail ? reviewerStates(detail.pr) : null,
     unread: prUnreadReason(tiles, pr.key),
-    topic: { id: topic.topic.id, name: topic.topic.name },
+    // A scout's pseudo-topic is no topic the topic tool can open: left out, like pr_context does.
+    topic: scoutIdOfTopic(topic.topic.id) === null ? { id: topic.topic.id, name: topic.topic.name } : null,
     overlaps,
   });
 }
