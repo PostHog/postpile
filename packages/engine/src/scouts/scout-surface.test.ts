@@ -153,6 +153,20 @@ describe('the Scouted section', () => {
     expect(reply.lastingPoint).toMatchObject({ topicId: null, text: 'Skip codegen folders.' });
   });
 
+  it('parks a Follow whose subscription never answers after the deadline, so a quit never hangs', async () => {
+    const h = await pulled();
+    const subscribe = vi.spyOn(h.writer, 'followPr').mockImplementationOnce(() => new Promise(() => {}));
+    await h.engine.followScouted('acme/app#1', 'tile');
+
+    const flushed = h.engine.flushPendingWrites();
+    await vi.waitFor(() => expect(subscribe).toHaveBeenCalled());
+    h.timers.advance(FOLLOW_LOOKUP_MS);
+    await flushed;
+
+    expect(h.store.pendingWrites.list()).toMatchObject([{ kind: 'follow', follow: { prKey: 'acme/app#1' }, error: expect.stringContaining('no answer within 10 s') }]);
+    expect(h.store.scoutedPrs.get('acme/app#1')?.followedAt).toBeNull();
+  });
+
   it('says in the PR pane who scouted it and why', async () => {
     const h = await pulled();
     const pr = await h.engine.getPr('acme/app#1');

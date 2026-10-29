@@ -1390,9 +1390,10 @@ it is opened.
   It tells GitHub's "no such PR" (NOT_FOUND) from a request that failed
   (unreachable, auth, rate limit), which shows its error and asks to click
   Follow again. The lookup has a 10 s deadline (`FOLLOW_LOOKUP_MS`): past
-  it the Follow fails with nothing queued and an action-log line. A quit's
-  flush waits for Follows still looking up their PR, so at most that long,
-  before it drains the queue. A chat on a scout is topic-less like
+  it the Follow fails with nothing queued and an action-log line. The
+  subscription has the same deadline: past it the Follow parks in the lock
+  as failed, to send again. A quit's flush waits for Follows still looking
+  up their PR, so at most that long, before it drains the queue. A chat on a scout is topic-less like
   Unsorted's: its lasting point can't be kept for a topic.
   Queued, pending, failed, discarded and undone follows stay apart in the
   action log (`follow`, `undo_follow`).
