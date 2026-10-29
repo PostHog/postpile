@@ -1401,7 +1401,8 @@ it is opened.
   Follow again. The lookup has a 10 s deadline (`FOLLOW_LOOKUP_MS`): past
   it the Follow fails with nothing queued and an action-log line. The
   subscription has the same deadline: past it the Follow parks in the lock
-  as failed, to send again. A quit's flush waits for Follows still looking
+  as failed, to send again; when GitHub answers OK after all, the PR counts
+  as followed and the parked write is cleared. A quit's flush waits for Follows still looking
   up their PR, so at most that long, before it drains the queue. A chat on a scout is topic-less like
   Unsorted's: its lasting point can't be kept for a topic.
   Queued, pending, failed, discarded and undone follows stay apart in the

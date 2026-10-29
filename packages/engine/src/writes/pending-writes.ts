@@ -171,6 +171,20 @@ export class PendingWrites {
     this.writes.log.record({ action: 'follow', origin: context.origin, outcome: 'pending', prKey: follow.prKey, batch: context.batch, detail });
   }
 
+  /**
+   * A parked Follow that GitHub took after all (its answer came after the
+   * deadline): the write goes, with a log line. False when none is parked.
+   */
+  clearFollow(prKey: PrKey, batch: string): boolean {
+    const write = this.list().find((entry) => entry.kind === 'follow' && entry.follow?.prKey === prKey && entry.batch === batch);
+    if (!write) {
+      return false;
+    }
+    this.store.pendingWrites.remove(write.id);
+    this.writes.log.record({ action: 'follow', origin: 'queue', outcome: 'github', prKey, batch, detail: 'GitHub took it after the deadline; the pending write is cleared' });
+    return true;
+  }
+
   /** Where each parked Follow stands, by PR: pending, or failed (sent and not taken). One read of the queue for a whole request. */
   followStates(): Map<PrKey, 'pending' | 'failed'> {
     const states = new Map<PrKey, 'pending' | 'failed'>();
