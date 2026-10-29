@@ -90,6 +90,12 @@ describe('scoutSignals', () => {
   const base = new Set(['src', 'docs', 'services']);
   const files = (...entries: [string, ScoutFile['changeType']][]): ScoutFile[] => entries.map(([path, changeType]) => ({ path, changeType }));
 
+  it('matches a hint built to backtrack in no time, without a regex', () => {
+    const started = performance.now();
+    expect(scoutSignals(scout(`${'a*'.repeat(20)}b`), files([`${'a'.repeat(80)}c`, 'MODIFIED']), base)).toEqual([]);
+    expect(performance.now() - started).toBeLessThan(50);
+  });
+
   it('matches plain hints on any change and "+" hints on added files only', () => {
     const lookout = scout('+services/*/api/**, docs/architecture.md');
     const signals = scoutSignals(

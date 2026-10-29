@@ -13,6 +13,7 @@
 // come right after the heading (blank lines between them are fine); the
 // first other line starts the prompt, which runs to the next "## ".
 import { codeownersPatternRegex } from './codeowners.ts';
+import { globPathMatches } from './glob-match.ts';
 
 /** One `paths:` entry. */
 export interface ScoutPathHint {
@@ -22,8 +23,16 @@ export interface ScoutPathHint {
   addedOnly: boolean;
   /** "+*\/": a file in a top-level folder the PR's base does not have yet. */
   newTopLevelFolder: boolean;
-  /** CODEOWNERS-style match over a repo path (`codeownersPatternRegex`). Null only for `newTopLevelFolder`. */
-  regex: RegExp | null;
+}
+
+/**
+ * Whether a repo path matches the hint's CODEOWNERS-style pattern
+ * (`globPathMatches`, no regex: hints can come from the model, and a regex
+ * of theirs could backtrack for seconds). Never for `newTopLevelFolder`,
+ * which the base tree decides.
+ */
+export function scoutHintMatches(hint: ScoutPathHint, path: string): boolean {
+  return !hint.newTopLevelFolder && globPathMatches(hint.pattern, path);
 }
 
 export interface ScoutConfig {
@@ -83,13 +92,13 @@ function parsePathHint(entry: string): ScoutPathHint | string {
     return `empty path entry "${entry}"`;
   }
   if (addedOnly && pattern === '*/') {
-    return { pattern, addedOnly, newTopLevelFolder: true, regex: null };
+    return { pattern, addedOnly, newTopLevelFolder: true };
   }
-  const regex = codeownersPatternRegex(pattern);
-  if (regex === null) {
+  // The regex only tells a pattern GitHub skips; matching never uses it (`scoutHintMatches`).
+  if (codeownersPatternRegex(pattern) === null) {
     return `path "${pattern}" uses "!", "[ ]" or "\\", which paths do not support`;
   }
-  return { pattern, addedOnly, newTopLevelFolder: false, regex };
+  return { pattern, addedOnly, newTopLevelFolder: false };
 }
 
 /** Comma-separated; whitespace too for repos, which never hold spaces. */

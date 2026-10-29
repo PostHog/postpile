@@ -7,7 +7,7 @@ import { prOwners } from './pr-owners.ts';
 import { isTeammate } from './review-request.ts';
 import { sameLogin } from './mentions.ts';
 import { shortHash } from './pr-notes.ts';
-import type { ScoutConfig } from './scouts-config.ts';
+import { scoutHintMatches, type ScoutConfig } from './scouts-config.ts';
 import type { IsoTime, PrKey, PrState, Provenance, Viewer } from './types.ts';
 
 /** GitHub's PatchStatus for a changed file. */
@@ -209,7 +209,7 @@ export function scoutSignals(scout: Pick<ScoutConfig, 'paths'>, files: ScoutFile
         const folder = topLevelFolder(file.path);
         return folder !== null && !baseFolders.has(folder);
       }
-      return candidate.regex?.test(file.path) ?? false;
+      return scoutHintMatches(candidate, file.path);
     });
     if (hint) {
       signals.push({ path: file.path, changeType: file.changeType, hint: `${hint.addedOnly ? '+' : ''}${hint.pattern}` });
