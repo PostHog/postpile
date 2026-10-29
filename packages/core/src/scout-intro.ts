@@ -9,8 +9,18 @@ import type { IsoTime, PrKey } from './types.ts';
 export const SCOUT_TRIAL_DAYS = 2;
 /** scout_judge calls the dry run may spend at most. */
 export const SCOUT_TRIAL_JUDGE_CALLS = 5;
-/** Example pulls the check shows. */
-export const SCOUT_TRIAL_EXAMPLES = 2;
+/** Example pulls the check shows, each to label Want or Noise. */
+export const SCOUT_TRIAL_EXAMPLES = 8;
+/** Near misses the check shows: PRs with a path match that the judge skipped. */
+export const SCOUT_TRIAL_NEAR_MISSES = 3;
+/** Labeled examples "Tighten" needs before it runs. */
+export const SCOUT_REFINE_MIN_LABELS = 3;
+/** Longest "why" note on a label. */
+export const SCOUT_LABEL_WHY_MAX = 200;
+/** Path hints a tightened scout may keep. */
+export const SCOUT_REFINE_PATHS = 8;
+/** Longest scout prompt the card takes (the routes' limit). */
+export const SCOUT_PROMPT_MAX = 3000;
 /** Path hints a check may suggest. */
 export const SCOUT_CHECK_PATHS = 6;
 const NAME_MAX = 60;
@@ -84,6 +94,14 @@ export interface ScoutTrial {
   /** PRs the scout would have pulled. */
   pulled: number;
   examples: ScoutTrialExample[];
+  /** PRs with a path match the judge skipped, with its reason: a Want on one means "should have pulled". */
+  nearMisses: ScoutTrialExample[];
+  /**
+   * The engine keeps this dry run's listing and file reads under this id
+   * while the card is open, so "Tighten" re-runs on the same PRs with judge
+   * calls only. Null when nothing is kept (no dry run, sample data aside).
+   */
+  session: string | null;
   /** Candidates after the rules, and how many of them the model saw within its call cap. */
   candidates: number;
   judged: number;
@@ -283,4 +301,95 @@ export function scoutFromCard(scout: ScoutTurnOnRequest): { config: ScoutConfig 
     return result;
   }
   return { config: parseScouts(result.text).scouts[0]! };
+}
+
+// -----------------------------------------------------------------------
+// "Tighten" (DESIGN.md "Scouts" › The intro card): the user labels the dry
+// run's examples Want or Noise, scout_refine rewrites the prompt and path
+// hints from those labels, and the dry run runs again on the same PRs.
+// -----------------------------------------------------------------------
+
+export type ScoutLabel = 'want' | 'noise';
+
+/** One labeled example, keyed by PR. `why` is the user's own optional note. */
+export interface ScoutExampleLabel {
+  prKey: PrKey;
+  label: ScoutLabel;
+  why: string;
+}
+
+export interface ScoutRefineRequest {
+  /** The dry run the labels are about (`ScoutTrial.session`). */
+  session: string;
+  name: string;
+  /** The version the card shows now: what the labels were given against. */
+  prompt: string;
+  repos: string[];
+  paths: string[];
+  labels: ScoutExampleLabel[];
+}
+
+/** scout_refine's answer after zod, before it is checked: each field on its own, the hints as given. */
+export interface ScoutRefineAnswer {
+  prompt: string;
+  paths: unknown[];
+  summary: string;
+}
+
+/** The tightened version, checked: what the card shows and Turn on would write. */
+export interface ScoutRefined {
+  prompt: string;
+  paths: string[];
+  /** One or two sentences: what changed and why. */
+  summary: string;
+  /** Hints the model suggested that scouts.md could not hold; never written. */
+  droppedHints: number;
+}
+
+export interface ScoutRefineResult {
+  ok: boolean;
+  /** Why it did not run; null when it did. */
+  message: string | null;
+  refined: ScoutRefined | null;
+  /** The dry run again on the same PRs; null when it could not run. */
+  trial: ScoutTrial | null;
+  /** Wanted PRs the version before pulled and this one does not. */
+  lostWants: ScoutTrialExample[];
+}
+
+/**
+ * The labels as the refine takes them: one per PR (the last one wins), a
+ * known label only, the note on one line and clipped.
+ */
+export function cleanScoutLabels(labels: ScoutExampleLabel[]): ScoutExampleLabel[] {
+  const byKey = new Map<PrKey, ScoutExampleLabel>();
+  for (const entry of labels) {
+    if (entry.label !== 'want' && entry.label !== 'noise') {
+      continue;
+    }
+    byKey.set(entry.prKey, { prKey: entry.prKey, label: entry.label, why: clipText(entry.why.replace(/\s+/g, ' ').trim(), SCOUT_LABEL_WHY_MAX) });
+  }
+  return [...byKey.values()];
+}
+
+/**
+ * scout_refine's answer onto the current version. The prompt falls back to
+ * the current one when the answer has none. Each hint must pass
+ * `isScoutPathHint` or it is dropped and counted, never written; when the
+ * answer had hints and none passes, the current hints stay (an empty list
+ * would turn the path filter off, the opposite of tightening). An empty
+ * list on purpose turns it off.
+ */
+export function mapScoutRefine(answer: ScoutRefineAnswer, current: { prompt: string; paths: string[] }): ScoutRefined {
+  const prompt = answer.prompt.trim() === '' ? current.prompt : clipText(answer.prompt.trim(), SCOUT_PROMPT_MAX);
+  const given = answer.paths.map((entry) => (typeof entry === 'string' ? entry.trim() : ''));
+  const valid = [...new Set(given.filter(isScoutPathHint))].slice(0, SCOUT_REFINE_PATHS);
+  const droppedHints = given.filter((entry) => !isScoutPathHint(entry)).length;
+  const paths = given.length > 0 && valid.length === 0 ? current.paths : valid;
+  return { prompt, paths, summary: clipText(answer.summary.replace(/\s+/g, ' ').trim(), NOTE_MAX), droppedHints };
+}
+
+/** Wanted PRs the version before pulled that the new one does not: what the card warns about, with Undo. */
+export function scoutLostWants(labels: ScoutExampleLabel[], pulledBefore: ReadonlySet<PrKey>, pulledAfter: ReadonlySet<PrKey>): PrKey[] {
+  return labels.filter((entry) => entry.label === 'want' && pulledBefore.has(entry.prKey) && !pulledAfter.has(entry.prKey)).map((entry) => entry.prKey);
 }

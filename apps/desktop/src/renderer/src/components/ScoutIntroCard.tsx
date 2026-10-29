@@ -5,10 +5,12 @@ import { sendTelemetry } from '../api/telemetry.ts';
 import { useAgentOffReason } from '../api/tools.ts';
 import { checkBlockedReason, checkingText, draftFailedToLoad, initialRepos, promptPlaceholder, textAfterDraft, turnOnBlockedReason } from '../lib/scout-intro.ts';
 import { holdMenuOpen } from '../lib/open-menus.ts';
+import { checkedVersions, currentVersion, labelsForRequest, pushVersion, undoVersion, type ScoutLabels, type ScoutVersion } from '../lib/scout-tighten.ts';
 import { Button } from './Button.tsx';
 import { ScoutCheckScreen } from './ScoutCheckScreen.tsx';
 import { ScoutIntroArt } from './ScoutIntroArt.tsx';
 import { ScoutRepoPicker } from './ScoutRepoPicker.tsx';
+import { ScoutTrialSection } from './ScoutTrialSection.tsx';
 
 function WarningMark() {
   return (
@@ -78,6 +80,11 @@ export function ScoutIntroCard(props: { state: ScoutIntroState; hidden: boolean;
   const [result, setResult] = useState<ScoutCheckResult | null>(null);
   const [showResult, setShowResult] = useState(false);
   const [name, setName] = useState('');
+  // The versions after a check, newest last: "Tighten" pushes one, Undo pops one. Turn on writes the newest.
+  const [versions, setVersions] = useState<ScoutVersion[] | null>(null);
+  // Want / Noise by PR key; they carry over between versions and checks. Never stored.
+  const [labels, setLabels] = useState<ScoutLabels>({});
+  const [tightenError, setTightenError] = useState<string | null>(null);
   // Set by the first keystroke: a draft that lands later never overwrites it. A ref, so the draft's promise reads it now.
   const typed = useRef(false);
   // One draft per opening: StrictMode runs the effect twice, and each run would be an agent call.
@@ -164,14 +171,51 @@ export function ScoutIntroCard(props: { state: ScoutIntroState; hidden: boolean;
       return;
     }
     setResult(checked);
+    setVersions(checkedVersions(prompt.trim(), checked.paths, checked.trial));
+    setTightenError(null);
     setName(checked.name);
     setShowResult(true);
+  }
+
+  // One scout_refine call from the labels, then the dry run again on the same PRs; the new version goes on top.
+  async function tighten() {
+    const current = versions === null ? null : currentVersion(versions);
+    const session = current?.trial?.session ?? null;
+    if (current === null || session === null) {
+      return;
+    }
+    setTightenError(null);
+    const answer = await actions.refineScout({ session, name: name.trim(), prompt: current.prompt, repos, paths: current.paths, labels: labelsForRequest(labels) });
+    if (!mounted.current) {
+      return;
+    }
+    if (!answer.ok || answer.refined === null) {
+      setTightenError(answer.message ?? 'The tightening did not run.');
+      return;
+    }
+    const refined = answer.refined;
+    const tightening = { summary: refined.summary, droppedHints: refined.droppedHints, lostWants: answer.lostWants };
+    setVersions((now) => (now === null ? now : pushVersion(now, { prompt: refined.prompt, paths: refined.paths, trial: answer.trial, tightening })));
+    setPrompt(refined.prompt);
+  }
+
+  // "Undo this tightening": back one version, its prompt in the textarea too.
+  function undoTightening() {
+    if (versions === null || versions.length < 2) {
+      return;
+    }
+    const back = undoVersion(versions);
+    setVersions(back);
+    setPrompt(currentVersion(back).prompt);
+    setTightenError(null);
+    sendTelemetry('scout_tighten_undone', {});
   }
 
   // The check ran on the old prompt: its counts, examples and Turn on no longer hold, so back to Check on the new one.
   function dropPart(rewrite: string) {
     setPrompt(rewrite);
     setResult(null);
+    setVersions(null);
     setShowResult(false);
     setRefusal('Dropped that part. Check the scout again to see what it finds now.');
   }
@@ -184,18 +228,21 @@ export function ScoutIntroCard(props: { state: ScoutIntroState; hidden: boolean;
     }
   }
 
+  // Writes the version the card shows: the checked one, or the newest tightening.
   async function turnOn() {
-    if (result === null) {
+    if (versions === null) {
       return;
     }
-    if ((await actions.turnOnScout({ name: name.trim(), prompt: prompt.trim(), repos, paths: result.paths })) && mounted.current) {
+    const current = currentVersion(versions);
+    if ((await actions.turnOnScout({ name: name.trim(), prompt: current.prompt, repos, paths: current.paths })) && mounted.current) {
       onClose();
     }
   }
 
   const checkBlocked = checkBlockedReason({ prompt, repos, agentOff });
   const turnOnBusy = actions.isBusy('scout:turn-on');
-  const turnOnBlocked = turnOnBlockedReason(name);
+  const tightening = actions.isBusy('scout:refine');
+  const turnOnBlocked = tightening ? 'Wait for the tightening to finish' : turnOnBlockedReason(name);
   const notNowButton = (
     <Button size="md" disabled={actions.isBusy('scout:dismiss-intro')} title="The card stops opening by itself. Set up a scout from the Scouted section any time." onClick={() => void notNow()}>
       Not now
@@ -210,9 +257,19 @@ export function ScoutIntroCard(props: { state: ScoutIntroState; hidden: boolean;
         aria-labelledby="scout-intro-title"
         className="flex max-h-full w-[580px] max-w-full flex-col gap-4 overflow-y-auto rounded-[16px] bg-surface px-7 pt-[26px] pb-[22px] shadow-menu"
       >
-        {showResult && result ? (
+        {showResult && result && versions ? (
           <>
-            <ScoutCheckScreen result={result} repos={repos} name={name} onName={setName} onDropPart={dropPart} />
+            <ScoutCheckScreen result={result} trial={currentVersion(versions).trial} repos={repos} name={name} onName={setName} onDropPart={dropPart} />
+            <ScoutTrialSection
+              versions={versions}
+              repos={repos}
+              labels={labels}
+              onLabels={setLabels}
+              onTighten={() => void tighten()}
+              onUndo={undoTightening}
+              tightening={tightening}
+              tightenError={tightenError}
+            />
             <div className="flex items-center gap-2.5">
               <button type="button" onClick={() => setShowResult(false)} className="px-1 py-2 text-[13px] text-accent hover:text-ink">
                 ← Edit prompt

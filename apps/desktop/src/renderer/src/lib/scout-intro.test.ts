@@ -28,7 +28,7 @@ import {
 const STATE: ScoutIntroState = { autoShow: true, mainRepo: 'acme/app', repos: ['acme/app', 'acme/web', 'acme/api'], scouts: 0 };
 const IDLE = { start: null, running: null } as InboxCleanupView;
 const CHOSEN = { mode: 'never', chosen: true, roundupTimes: [] } as unknown as InterruptionsView;
-const TRIAL: ScoutTrial = { days: 2, pulled: 5, examples: [], candidates: 9, judged: 9, complete: true, problem: null };
+const TRIAL: ScoutTrial = { days: 2, pulled: 5, examples: [], nearMisses: [], session: null, candidates: 9, judged: 9, complete: true, problem: null };
 
 describe('scoutIntroWaits', () => {
   it('lets the card through once setup, the start dialog and the interruptions question are out of the way', () => {

@@ -23,6 +23,7 @@ function fakeEngine(overrides: Partial<EngineService>): EngineService {
     scoutIntroState: notImplemented,
     draftScout: notImplemented,
     checkScout: notImplemented,
+    refineScout: notImplemented,
     turnOnScout: notImplemented,
     dismissScoutIntro: notImplemented,
     setupStatus: notImplemented,

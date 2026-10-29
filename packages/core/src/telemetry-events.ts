@@ -303,6 +303,11 @@ export const TELEMETRY_EVENTS = {
     })
     .strict(),
   scout_turned_on: z.object({ repos: count, paths: count }).strict(),
+  // "Tighten" on the card ran scout_refine and dry-ran the new version. round: tightenings in this check (undone ones count);
+  // wants / noise: labels sent; pulls_before / pulls_after: the dry run's pulls before and after; lost_wants: wanted PRs no longer pulled.
+  scout_tightened: z.object({ round: count, wants: count, noise: count, pulls_before: count, pulls_after: count, lost_wants: count }).strict(),
+  // "Undo this tightening": the card went back one version. Card state only, so the renderer sends it.
+  scout_tighten_undone: NO_PROPS,
 
   // Manual verification only (see NEXT.md "Verify once for real"). Never
   // sent from normal app code, not part of the analytics surface above.
@@ -349,6 +354,7 @@ export const RENDERER_TELEMETRY_EVENTS = [
   'glance_retry_clicked',
   'scout_intro_shown',
   'scout_intro_closed',
+  'scout_tighten_undone',
 ] as const satisfies readonly TelemetryEventName[];
 
 export type RendererTelemetryEvent = (typeof RENDERER_TELEMETRY_EVENTS)[number];

@@ -423,7 +423,9 @@ export type AgentCallKind =
   /** The Scouts intro card: a first scout prompt drafted from the user's instructions and work context. */
   | 'scout_draft'
   /** The Scouts intro card's "Check scout": fit, a part it can't see, a name and path hints. */
-  | 'scout_check';
+  | 'scout_check'
+  /** The Scouts intro card's "Tighten": a revised prompt and path hints from the user's Want and Noise labels. */
+  | 'scout_refine';
 
 /** One row per runner call, persisted in agent_call. */
 export interface AgentCallRecord {

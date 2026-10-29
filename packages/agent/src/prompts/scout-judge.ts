@@ -10,7 +10,7 @@ export const SCOUT_JUDGE_SIGNALS = 20;
 const SCOUT_JUDGE_FOLDERS = 60;
 
 /** "billing/main.ts (added, +12/−0)": lines added to a file read apart from a removal. Counts only when GitHub gave them. */
-function fileLine(file: ScoutFile): string {
+export function fileLine(file: ScoutFile): string {
   const lines = file.additions === undefined || file.deletions === undefined ? '' : `, +${file.additions}/−${file.deletions}`;
   return `${file.path} (${file.changeType.toLowerCase()}${lines})`;
 }

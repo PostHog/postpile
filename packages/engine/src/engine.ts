@@ -8,6 +8,8 @@ import type {
   ScoutDraftResult,
   ScoutCheckRequest,
   ScoutCheckResult,
+  ScoutRefineRequest,
+  ScoutRefineResult,
   ScoutTurnOnRequest,
   ListScope,
   ActionLogEntry,
@@ -1941,6 +1943,11 @@ export class Engine implements EngineService {
   /** "Check scout": the agent's check and a dry run on the last 2 days that writes nothing. */
   async checkScout(request: ScoutCheckRequest): Promise<ScoutCheckResult> {
     return this.scoutIntro.check(request);
+  }
+
+  /** "Tighten" on the intro card: scout_refine from the labels and the dry run again on the same PRs, judge calls only. */
+  async refineScout(request: ScoutRefineRequest): Promise<ScoutRefineResult> {
+    return this.scoutIntro.refine(request);
   }
 
   /** "Turn on scout": appended to scouts.md as an intro version; the next full sync runs it. */

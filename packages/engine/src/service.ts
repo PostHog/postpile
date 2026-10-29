@@ -5,6 +5,8 @@ import type {
   ScoutDraftResult,
   ScoutCheckRequest,
   ScoutCheckResult,
+  ScoutRefineRequest,
+  ScoutRefineResult,
   ScoutTurnOnRequest,
   ActionLogEntry,
   ActionResult,
@@ -314,6 +316,8 @@ export interface EngineService {
   draftScout(): Promise<ScoutDraftResult>;
   /** "Check scout": scout_check, then a dry run of the last 2 days (at most 5 judge calls) that writes nothing. */
   checkScout(request: ScoutCheckRequest): Promise<ScoutCheckResult>;
+  /** "Tighten": scout_refine from the labeled examples, then the dry run again on the check's kept reads (judge calls only). Saves nothing. */
+  refineScout(request: ScoutRefineRequest): Promise<ScoutRefineResult>;
   /** "Turn on scout": appends it to scouts.md (origin intro); the next full sync runs it. */
   turnOnScout(request: ScoutTurnOnRequest): Promise<ActionResult>;
   /** "Not now": kept in config.json; the card never opens by itself again. */
