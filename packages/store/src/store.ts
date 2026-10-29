@@ -27,6 +27,10 @@ import { PullInRepo } from './repos/pull-ins.ts';
 import { PrDiffRepo } from './repos/pr-diffs.ts';
 import { FoundPrRepo } from './repos/found-prs.ts';
 import { RuleProposalRepo } from './repos/rule-proposals.ts';
+import { ScoutCursorRepo } from './repos/scout-cursors.ts';
+import { ScoutJudgementRepo } from './repos/scout-judgements.ts';
+import { ScoutedPrRepo } from './repos/scouted-prs.ts';
+import { ScoutsVersionRepo } from './repos/scouts-versions.ts';
 import { PrSetRepo } from './repos/sets.ts';
 import { SnoozeRepo } from './repos/snoozes.ts';
 import { TopicRepo } from './repos/topics.ts';
@@ -64,6 +68,10 @@ export class Store {
   readonly pingDecisions: PingDecisionRepo;
   readonly macPings: MacPingRepo;
   readonly workContext: WorkContextRepo;
+  readonly scoutsVersions: ScoutsVersionRepo;
+  readonly scoutCursors: ScoutCursorRepo;
+  readonly scoutJudgements: ScoutJudgementRepo;
+  readonly scoutedPrs: ScoutedPrRepo;
 
   readonly actionLog: ActionLogRepo;
   readonly pendingWrites: PendingWriteRepo;
@@ -100,6 +108,10 @@ export class Store {
     this.actionLog = new ActionLogRepo(db);
     this.pendingWrites = new PendingWriteRepo(db);
     this.workContext = new WorkContextRepo(db);
+    this.scoutsVersions = new ScoutsVersionRepo(db);
+    this.scoutCursors = new ScoutCursorRepo(db);
+    this.scoutJudgements = new ScoutJudgementRepo(db);
+    this.scoutedPrs = new ScoutedPrRepo(db);
   }
 
   static open(path: string): Store {

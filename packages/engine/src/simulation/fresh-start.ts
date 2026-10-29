@@ -32,6 +32,7 @@ export const KEPT_TABLES: Record<string, string> = {
   pending_write: 'unsent mark-reads; nothing in the digest reads them',
   feedback: 'only rows tied to no topic, set or tile stay (see startFresh)',
   pr_note: "outside agents' notes on PRs; advisory, no digest or rule reads them",
+  scouts_version: "the user's scouts.md history",
 };
 
 /** Removed completely, with why. Tables missing in the schema (pr_set_change before it exists) are skipped. */
@@ -56,6 +57,9 @@ export const WIPED_TABLES: Record<string, string> = {
   snooze: 'old tile snoozes (unused since migration 19)',
   pr_snooze: 'snoozes the user set on old tiles; a new user has none',
   mac_ping: 'pings held for a roundup or the Dock badge; a new user has none',
+  scout_cursor: 'how far each scout covered its repos; a new user has not run one',
+  scout_judgement: "scouts' agent calls on PRs outside the inbox",
+  pr_scouted: 'PRs scouts pulled in, with follow and dismiss state; a new user has none',
 };
 
 /**
