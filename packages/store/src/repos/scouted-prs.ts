@@ -91,6 +91,27 @@ export class ScoutedPrRepo {
     return rows.map((row) => ({ prKey: row.pr_key, scoutId: row.scout_id, unseen: row.unseen === 1 }));
   }
 
+  /**
+   * Rows whose first exit from the Scouted section is not reported yet
+   * (`closure_reported_at`), each with the PR's stored update time; null
+   * without a stored header. What telemetry's scout_pr_closed sweep reads.
+   */
+  listClosureUnreported(): { scouted: ScoutedPr; prUpdatedAt: IsoTime | null }[] {
+    const rows = all<ScoutedPrRow & { pr_updated_at: string | null }>(
+      this.db,
+      `SELECT s.*, p.updated_at AS pr_updated_at
+       FROM pr_scouted s LEFT JOIN pr p ON p.key = s.pr_key
+       WHERE s.closure_reported_at IS NULL
+       ORDER BY s.pulled_at, s.pr_key`,
+    );
+    return rows.map((row) => ({ scouted: toScouted(row), prUpdatedAt: row.pr_updated_at }));
+  }
+
+  /** Marks the PR's exit as reported. True only the first time, so scout_pr_closed is sent at most once. */
+  markClosureReported(prKey: PrKey, at: IsoTime): boolean {
+    return run(this.db, 'UPDATE pr_scouted SET closure_reported_at = ? WHERE pr_key = ? AND closure_reported_at IS NULL', at, prKey) > 0;
+  }
+
   /** First scout wins: a PR another scout already pulled keeps its row. True when this one was stored. */
   insert(scouted: ScoutedPr): boolean {
     const changed = run(

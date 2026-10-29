@@ -29,7 +29,7 @@ describe('NoopTelemetry', () => {
   it('never throws, whatever is called', async () => {
     const telemetry = new NoopTelemetry();
     telemetry.capture('app_active', {});
-    telemetry.identifyPerson({ appVersion: '1', osVersion: '1', arch: 'arm64', isPosthogMember: false, agentAvailable: false });
+    telemetry.identifyPerson({ appVersion: '1', osVersion: '1', arch: 'arm64', isPosthogMember: false, agentAvailable: false, activeScouts: 0 });
     telemetry.setViewerIdentity(1);
     telemetry.captureException(new Error('boom'));
     telemetry.captureRendererException({ source: 'window_error', type: 'Error', message: 'boom', stack: null, chunk_ids: {} });
@@ -91,12 +91,12 @@ describe('PostHogTelemetry', () => {
   it('identifies the person via $set, never with login/name/email fields', async () => {
     const { fetch, sent } = fakeFetch();
     const telemetry = new PostHogTelemetry({ installId: 'install-1', appVersion: '0.1.0', profile: 'default', fetch });
-    telemetry.identifyPerson({ appVersion: '0.1.0', osVersion: '15.0', arch: 'arm64', isPosthogMember: true, agentAvailable: true });
+    telemetry.identifyPerson({ appVersion: '0.1.0', osVersion: '15.0', arch: 'arm64', isPosthogMember: true, agentAvailable: true, activeScouts: 2 });
     await telemetry.shutdown();
 
     const identify = sent.find((event) => event.event === '$identify')!;
     const props = identify.properties as Record<string, unknown>;
-    expect(props.$set).toMatchObject({ is_posthog_member: true, agent_available: true, arch: 'arm64' });
+    expect(props.$set).toMatchObject({ is_posthog_member: true, agent_available: true, arch: 'arm64', active_scouts: 2 });
     expect(JSON.stringify(props)).not.toMatch(/login|email/i);
   });
 

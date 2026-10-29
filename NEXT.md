@@ -15,6 +15,11 @@ now".
   pseudo-topics, `GET /api/scouts`, the Scouted section, MCP answers, and
   fake data for every state. Later: agent proposals for `scouts.md` from
   dismiss reasons, a shorter scout cadence than the hourly sync.
+- Scout telemetry (2026-10-29; DESIGN.md "Usage analytics" › Scouts):
+  `scout_run_completed` from `ScoutRunReport`, `scout_pr_closed` from the
+  `ScoutedClosures` sweep over `pr_scouted.closure_reported_at` (migration
+  046), Follow failures, `scout_seen`, the intro card funnel, `tile_opened`
+  `scouted` and the `active_scouts` person property.
 - Picked, pulled in or routed (2026-10-29; DESIGN.md "Picked, pulled in
   or routed"): the reader asks `asCodeOwner` on pending `reviewRequests`
   and stores the names it marks in `Pr.codeOwnerReviewers`

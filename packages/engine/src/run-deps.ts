@@ -7,6 +7,7 @@ import type { RaisedPings } from './live/raised-pings.ts';
 import type { FactWriter } from './memory/fact-writer.ts';
 import type { PromptContextSource } from './prompt-context.ts';
 import type { ScoutRun } from './scouts/scout-run.ts';
+import type { ScoutedClosures } from './scouts/scouted-closures.ts';
 import { NoopTelemetry, type Telemetry } from './telemetry/telemetry.ts';
 
 /** What a sync run and a consolidation run both need. */
@@ -31,6 +32,8 @@ export interface RunDeps {
   topicDigest?: boolean;
   /** The scout step of a full sync (DESIGN.md "Scouts"). Missing: no scouts.md wired, e.g. in tests. */
   scouts?: ScoutRun;
+  /** Telemetry's scout_pr_closed sweep, run right after the inbox fetch, before scout expiry. Missing: none. */
+  scoutClosures?: ScoutedClosures;
 }
 
 /** RunDeps.telemetry defaults to a no-op, so SyncRun and ConsolidationRun never have to branch on whether it is set. */

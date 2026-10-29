@@ -634,7 +634,8 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
   const writes = new GitHubWrites(writeSwitch, new ActionLog(store, now));
   const runner = new FakeRunner();
   const timers = new FakeTimers();
-  const pendingWrites = new PendingWrites(store, writes, now, timers);
+  const telemetry = options.telemetry ?? new FakeTelemetry();
+  const pendingWrites = new PendingWrites(store, writes, now, timers, telemetry);
   const markReadQueue = new MarkReadQueue(
     writes,
     reader,
@@ -648,7 +649,6 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
   const agent = new FakeAgent(runner, callLog);
   const commands = new FakeCommands();
   const tools = new ToolHealth({ commands: commands.run, now, path: () => '/usr/bin', isExecutable: commands.isExecutable, claudeBinary: 'claude', log: () => {} });
-  const telemetry = options.telemetry ?? new FakeTelemetry();
   const quota = new GitHubQuota(
     () => timers.now(),
     (resource, level) => telemetry.capture('github_quota_low', { resource, level }),

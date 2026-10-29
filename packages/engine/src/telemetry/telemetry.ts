@@ -19,12 +19,14 @@ export interface TelemetryPersonInfo {
   isPosthogMember: boolean;
   /** Whether `claude` was found on PATH, whatever its login state. */
   agentAvailable: boolean;
+  /** Scouts in force from scouts.md (DESIGN.md "Scouts"); a count, never a name. */
+  activeScouts: number;
 }
 
 /** The one thing every app entry point needs at the end: flush what is queued before the process exits. */
 export interface Telemetry {
   capture<K extends TelemetryEventName>(event: K, props: TelemetryEventProps<K>): void;
-  /** Person properties via $set (DESIGN.md): app_version, os_version, arch, is_posthog_member, agent_available. Never login, name or email. */
+  /** Person properties via $set (DESIGN.md): app_version, os_version, arch, is_posthog_member, agent_available, active_scouts. Never login, name or email. */
   identifyPerson(info: TelemetryPersonInfo): void;
   /** Switches from the random install id to the hashed GitHub id, and links the two so PostHog treats them as one person. */
   setViewerIdentity(githubDatabaseId: number): void;
@@ -132,6 +134,7 @@ export class PostHogTelemetry implements Telemetry {
         arch: info.arch,
         is_posthog_member: info.isPosthogMember,
         agent_available: info.agentAvailable,
+        active_scouts: info.activeScouts,
       }),
     });
   }

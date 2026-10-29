@@ -148,7 +148,7 @@ export function wireEngine(options: CreateEngineOptions = {}): Engine {
   const markThreadReadLocally = (threadId: string, readAt: string): void => {
     store.notifications.markRead(threadId, readAt);
   };
-  const pendingWrites = new PendingWrites(store, writes, now);
+  const pendingWrites = new PendingWrites(store, writes, now, systemTimers, telemetry);
   const callLog = new AgentCallLog(store, now);
   return new Engine({
     store,

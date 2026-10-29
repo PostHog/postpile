@@ -69,6 +69,7 @@ export * from './pr-notes.ts';
 export * from './scouts-config.ts';
 export * from './scouts.ts';
 export * from './scout-intro.ts';
+export * from './scout-telemetry.ts';
 export * from './topic-roles.ts';
 export * from './deferred-queue.ts';
 export * from './memory.ts';

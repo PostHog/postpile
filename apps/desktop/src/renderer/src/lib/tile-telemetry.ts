@@ -17,7 +17,7 @@ const VERDICT: Record<Verdict, TileOpenedProps['verdict']> = {
   NOT_YOURS: 'not_yours',
 };
 
-/** For tile_opened: the tile's own kind and for-whom chip, plus the lead PR's glance (if any). */
+/** For tile_opened: the tile's own kind and for-whom chip, the lead PR's glance (if any), and whether it is a scout's tile. */
 export function tileOpenedProps(view: TileView): TileOpenedProps {
   const pr = leadPr(view);
   const verdict = pr?.verdict ?? null;
@@ -26,5 +26,6 @@ export function tileOpenedProps(view: TileView): TileOpenedProps {
     for_whom: FOR_WHOM[view.forWhom.kind],
     has_glance: pr?.forYou !== null && pr?.forYou !== undefined,
     verdict: verdict ? VERDICT[verdict] : null,
+    scouted: view.scout !== undefined,
   };
 }

@@ -13,7 +13,9 @@ import {
   type ScoutCheckResult,
   type ScoutDraftResult,
   type ScoutIntroState,
+  type ScoutTrial,
   type ScoutTurnOnRequest,
+  type TelemetryEventProps,
 } from '@postpile/core';
 import type { AgentService } from '@postpile/agent';
 import type { Store } from '@postpile/store';
@@ -22,6 +24,7 @@ import type { AgentCallLog } from '../agent-call-log.ts';
 import { Board } from '../board.ts';
 import { AgentBudget, type CallAllowance } from '../budget.ts';
 import { errorText } from '../errors.ts';
+import type { Telemetry } from '../telemetry/telemetry.ts';
 import type { PromptContextSource } from '../prompt-context.ts';
 import { loadRepoSettings } from '../repo-settings.ts';
 import type { UserConfigFile } from '../user-config.ts';
@@ -49,8 +52,31 @@ export interface ScoutIntroDeps {
   allowance: CallAllowance & { remaining(): number };
   agentOff: () => string | null;
   quotaAllows: () => boolean;
+  /** scout_checked for every check that ran (counts and enums only). */
+  telemetry: Telemetry;
   now: () => Date;
   log: (line: string) => void;
+}
+
+/** Why a check ran no dry run, as scout_checked reports it. */
+type DryRunSkipped = NonNullable<TelemetryEventProps<'scout_checked'>['dry_run_skipped_reason']>;
+
+/** The dry run, or why none ran; neither for a scout that would not turn on as written (refused before, so not expected). */
+interface TrialOutcome {
+  trial: ScoutTrial | null;
+  skipped: DryRunSkipped | null;
+}
+
+/** scout_checked's props: the verdict, whether a part can't be seen, and the dry run's pulls or why it did not run. */
+function scoutCheckedProps(result: ScoutCheckResult, skipped: DryRunSkipped | null): TelemetryEventProps<'scout_checked'> {
+  const props: TelemetryEventProps<'scout_checked'> = { fit: result.fit.verdict, cant_see: result.cantSee !== null };
+  if (skipped !== null) {
+    return { ...props, dry_run_skipped_reason: skipped };
+  }
+  if (result.trial === null) {
+    return props;
+  }
+  return { ...props, dry_run_pulls: result.trial.pulled, dry_run_complete: result.trial.complete };
 }
 
 /**
@@ -170,29 +196,36 @@ export class ScoutIntro {
     // The name field's start must turn on as is: an id it can slug, not one another scout has.
     const takenIds = new Set(this.deps.history?.active().scouts.map((scout) => scout.id) ?? []);
     const name = scoutNameWithId(checked.name, repos, takenIds);
-    const trial = await this.trial({ name, prompt, repos, paths: checked.paths }, viewer, stats);
-    return { ok: true, message: null, ...checked, name, trial };
+    const { trial, skipped } = await this.trial({ name, prompt, repos, paths: checked.paths }, viewer, stats);
+    const result: ScoutCheckResult = { ok: true, message: null, ...checked, name, trial };
+    this.deps.telemetry.capture('scout_checked', scoutCheckedProps(result, skipped));
+    return result;
   }
 
   /**
-   * The dry run, or null without a scouts file or for a scout that would
-   * not turn on as written (`scoutFromCard`, Turn on's own check). A
+   * The dry run, or none without a scouts file or for a scout that would
+   * not turn on as written (`scoutFromCard`, Turn on's own check), with why
+   * for telemetry; with no calls left today, a trial that says so. A
    * ScoutRun of its own per check: its per-run state (calls left, files
    * read) is never shared with a sync or another check.
    */
-  private async trial(scout: ScoutTurnOnRequest, viewer: NonNullable<ReturnType<typeof loadViewer>>, stats: AgentCallStats): Promise<ScoutCheckResult['trial']> {
+  private async trial(scout: ScoutTurnOnRequest, viewer: NonNullable<ReturnType<typeof loadViewer>>, stats: AgentCallStats): Promise<TrialOutcome> {
+    if (!this.deps.scoutRunDeps) {
+      return { trial: null, skipped: 'no_scouts_file' };
+    }
     const asWritten = scoutFromCard(scout);
-    if (!this.deps.scoutRunDeps || 'error' in asWritten) {
-      return null;
+    if ('error' in asWritten) {
+      return { trial: null, skipped: null };
     }
     const config = asWritten.config;
     // The day's allowance bounds the dry run before it reads anything: no listing or file read for calls it can't make.
     const calls = Math.min(SCOUT_TRIAL_JUDGE_CALLS, this.deps.allowance.remaining());
     if (calls === 0) {
-      return { days: SCOUT_TRIAL_DAYS, pulled: 0, examples: [], candidates: 0, judged: 0, complete: false, problem: 'no agent calls left today for a dry run' };
+      return { trial: { days: SCOUT_TRIAL_DAYS, pulled: 0, examples: [], candidates: 0, judged: 0, complete: false, problem: 'no agent calls left today for a dry run' }, skipped: 'no_calls_left' };
     }
     const budget = new AgentBudget(calls, stats, this.deps.allowance);
-    return new ScoutRun(this.deps.scoutRunDeps).trial(config, SCOUT_TRIAL_DAYS, { viewer, budget, agentOff: this.deps.agentOff(), quotaAllows: this.deps.quotaAllows });
+    const trial = await new ScoutRun(this.deps.scoutRunDeps).trial(config, SCOUT_TRIAL_DAYS, { viewer, budget, agentOff: this.deps.agentOff(), quotaAllows: this.deps.quotaAllows });
+    return { trial, skipped: null };
   }
 
   /** "Turn on scout": appended to scouts.md, recorded as an `intro` version; the next full sync runs it. The card is answered. */

@@ -178,6 +178,7 @@ import { ScoutsHistory } from './scouts/history.ts';
 import { ScoutRun } from './scouts/scout-run.ts';
 import { ScoutActions } from './scouts/scout-actions.ts';
 import { ScoutIntro } from './scouts/scout-intro.ts';
+import { ScoutedClosures } from './scouts/scouted-closures.ts';
 import type { RunDeps } from './run-deps.ts';
 import { InstructionsProposer } from './instructions/proposer.ts';
 import { LivePoller } from './live/live-poller.ts';
@@ -326,6 +327,10 @@ export class Engine implements EngineService {
   private readonly reads: ReadModels;
   /** Follow, Dismiss and seen on scouted PRs (DESIGN.md "Scouts"). */
   private readonly scoutActions: ScoutActions;
+  /** Sends scout_pr_closed once per scouted PR that left the Scouted section. */
+  private readonly scoutedClosures: ScoutedClosures;
+  /** Null without a scouts file (tests): no scouts, active_scouts 0. */
+  private readonly scoutsHistory: ScoutsHistory | null;
   /** The Scouts intro card: its draft, check and turn on. */
   private readonly scoutIntro: ScoutIntro;
   private readonly tiles: TileActions;
@@ -444,7 +449,9 @@ export class Engine implements EngineService {
     });
     const contexts = new PromptContextSource(store, history, () => this.workContext.promptText());
     const scoutsHistory = deps.scoutsFile ? new ScoutsHistory(store, deps.scoutsFile, now, deps.storeReadOnly === true) : null;
-    this.scoutActions = new ScoutActions(store, deps.reader, deps.writes, deps.pendingWrites, timers, now);
+    this.scoutsHistory = scoutsHistory;
+    this.scoutedClosures = new ScoutedClosures(store, this.telemetry, now, deps.syncLog ?? ((line) => console.log(line)));
+    this.scoutActions = new ScoutActions(store, deps.reader, deps.writes, deps.pendingWrites, timers, now, this.telemetry, this.scoutedClosures);
     this.reads = new ReadModels(
       store,
       deps.agent,
@@ -461,7 +468,7 @@ export class Engine implements EngineService {
     const log = deps.writes.log;
     const readMarker = new ReadMarker(store, deps.markReadQueue, log, now);
     this.tiles = new TileActions(store, readMarker, now);
-    this.agentMarkRead = new AgentMarkRead({ store, readMarker, log, now });
+    this.agentMarkRead = new AgentMarkRead({ store, readMarker, log, now, telemetry: this.telemetry });
     this.openedReads = new OpenedReads(store, readMarker, deps.writes, now, deps.syncLog ?? ((line) => console.log(line)));
     this.prActions = new PrActions(store, deps.writes, deps.agent, contexts, readMarker, now, (key) => this.refreshAfterWrite(key));
     this.feedback = new FeedbackActions(store, readMarker, now);
@@ -523,6 +530,7 @@ export class Engine implements EngineService {
     if (scoutRunDeps !== null) {
       runDeps.scouts = new ScoutRun(scoutRunDeps);
     }
+    runDeps.scoutClosures = this.scoutedClosures;
     this.clickedReadRetry = new ClickedReadRetry(store, deps.reader, deps.writes, (key) => this.refreshForRetry(key), this.heldThreads);
     deps.markReadQueue.retryWith(this.clickedReadRetry);
     deps.markReadQueue.checkMutesWith((key) => muteHoldsNow(store, key, now().toISOString()));
@@ -581,6 +589,7 @@ export class Engine implements EngineService {
       allowance: this.catchUpCap,
       agentOff,
       quotaAllows: () => this.quota.allowsBackground(),
+      telemetry: this.telemetry,
       now,
     });
     const topicCatchUp = new TopicCatchUp(runDeps, this.catchUpCap, lineLog);
@@ -848,6 +857,8 @@ export class Engine implements EngineService {
     }
     await this.keepWritesDefault();
     const report = await this.syncRun.run(options);
+    // Expiries and PRs that reached the inbox by themselves, plus Follows the lock sent late.
+    this.scoutedClosures.report();
     this.reportIdentity();
     return report;
   }
@@ -863,14 +874,20 @@ export class Engine implements EngineService {
     if (!viewer?.databaseId) {
       return;
     }
-    this.telemetry.setViewerIdentity(viewer.databaseId);
-    this.telemetry.identifyPerson({
-      appVersion: this.deps.appVersion ?? 'unknown',
-      osVersion: release(),
-      arch: arch(),
-      isPosthogMember: isPostHogMember(viewer),
-      agentAvailable: this.toolHealth.agentOffReason() === null,
-    });
+    // Reads scouts.md, which can fail on disk; analytics must never fail a sync that completed.
+    try {
+      this.telemetry.setViewerIdentity(viewer.databaseId);
+      this.telemetry.identifyPerson({
+        appVersion: this.deps.appVersion ?? 'unknown',
+        osVersion: release(),
+        arch: arch(),
+        isPosthogMember: isPostHogMember(viewer),
+        agentAvailable: this.toolHealth.agentOffReason() === null,
+        activeScouts: this.scoutsHistory?.active().scouts.length ?? 0,
+      });
+    } catch (error) {
+      (this.deps.syncLog ?? console.log)(`telemetry: person properties not sent: ${errorText(error)}`);
+    }
   }
 
   private blockedSyncReport(reason: string): SyncReport {
@@ -1355,6 +1372,8 @@ export class Engine implements EngineService {
   async sendPendingWrites(): Promise<PendingWritesResult> {
     const hadCleanup = this.deps.pendingWrites.pendingCleanupCutoff() !== null;
     const result = await this.deps.pendingWrites.send(this.deps.markReadQueue, (write) => this.cleanup.startFromPending(write), () => this.writesStatus());
+    // A Follow from the lock may have gone through: it left the Scouted section.
+    this.scoutedClosures.report();
     if (hadCleanup && this.deps.pendingWrites.pendingCleanupCutoff() === null) {
       await this.rereadInbox().catch(() => {});
       return { ...result, status: this.writesStatus() };

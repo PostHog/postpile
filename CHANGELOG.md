@@ -10,6 +10,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - Follow on a scouted pull request subscribes you to it on GitHub, after the usual undo window and through the GitHub writes lock, so it reaches your inbox from then on; PostPile tracks it right away. Dismiss takes it off the list, with an optional reason. Opening one marks it seen in PostPile only.
 - A card introduces scouts on the first start of 0.29.0 while you have none. It drafts a first scout from your instructions, checks it ("Fits PostPile", and any part a scout can't see), tries it on the last 2 days of your repo without saving anything, and turns it on into `scouts.md`. "Not now" keeps it closed; "Set up a scout" in the Scouted section opens it again.
 - The MCP answers know about scouted pull requests: `pr_context` says which scout pulled it in and why, `whats_on_me` lists them in their own group after what waits on you, `search_prs` finds and marks them, and `mark_read` marks them seen in PostPile only.
+- Usage analytics cover scouts, so the team can tell how much they pull in and what happens to each find: one event per sync with scout counts, one when a find leaves the Scouted section (followed, dismissed, expired or reached your inbox), Follow failures, the intro card's steps, and whether a tile opened was a scout's. Counts, yes/no values and fixed words only: never a scout's name or prompt, a repo, a path or a pull request. The full list is in DESIGN.md under "Usage analytics".
 
 ### Changed
 
