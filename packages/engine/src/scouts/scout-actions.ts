@@ -60,6 +60,23 @@ export class ScoutActions {
     });
   }
 
+  /** `work`'s answer, or a rejection once FOLLOW_LOOKUP_MS passed without one: a stalled GitHub never holds a quit. */
+  private withDeadline<T>(work: Promise<T>): Promise<T> {
+    return new Promise((resolve, reject) => {
+      const deadline = this.timers.setTimeout(() => reject(new Error(`no answer within ${FOLLOW_LOOKUP_MS / 1000} s`)), FOLLOW_LOOKUP_MS);
+      work.then(
+        (value) => {
+          this.timers.clearTimeout(deadline);
+          resolve(value);
+        },
+        (error: unknown) => {
+          this.timers.clearTimeout(deadline);
+          reject(error);
+        },
+      );
+    });
+  }
+
   /** After the undo window: to GitHub while writes are on, else into the lock's pending writes. */
   private async send(follow: QueuedFollow): Promise<void> {
     try {
@@ -77,7 +94,8 @@ export class ScoutActions {
     }
     let result;
     try {
-      result = await this.writes.followPr(follow.subjectId, { origin: 'queue', prKey: follow.prKey, batch: follow.batch });
+      // A stalled subscription parks like a failed one, to send again from the lock (subscribing twice is harmless).
+      result = await this.withDeadline(this.writes.followPr(follow.subjectId, { origin: 'queue', prKey: follow.prKey, batch: follow.batch }));
     } catch (error) {
       this.pendingWrites.parkFollow(pending, { ...follow, error: errorText(error) });
       return;
@@ -101,23 +119,6 @@ export class ScoutActions {
       states.set(follow.prKey, 'queued');
     }
     return states;
-  }
-
-  /** The PR's node id, or a rejection once FOLLOW_LOOKUP_MS passed without an answer. */
-  private lookUpNodeId(prKey: PrKey): Promise<string | null> {
-    return new Promise((resolve, reject) => {
-      const deadline = this.timers.setTimeout(() => reject(new Error(`no answer within ${FOLLOW_LOOKUP_MS / 1000} s`)), FOLLOW_LOOKUP_MS);
-      this.reader.scoutPrNodeId(parsePrKey(prKey)).then(
-        (id) => {
-          this.timers.clearTimeout(deadline);
-          resolve(id);
-        },
-        (error: unknown) => {
-          this.timers.clearTimeout(deadline);
-          reject(error);
-        },
-      );
-    });
   }
 
   /**
@@ -152,7 +153,7 @@ export class ScoutActions {
     this.lookingUp.add(prKey);
     let subjectId: string | null = null;
     try {
-      subjectId = await this.lookUpNodeId(prKey);
+      subjectId = await this.withDeadline(this.reader.scoutPrNodeId(parsePrKey(prKey)));
     } catch (error) {
       // Nothing queued, nothing sent; a quit's flush stops waiting here too.
       this.writes.log.record({ action: 'follow', origin, outcome: 'failed', prKey, detail: `PR lookup failed, nothing queued: ${errorText(error)}` });
