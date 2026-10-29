@@ -14,6 +14,8 @@ export const SCOUT_TRIAL_EXAMPLES = 2;
 /** Path hints a check may suggest. */
 export const SCOUT_CHECK_PATHS = 6;
 const NAME_MAX = 60;
+/** Longest scout name Turn on takes (the route's limit). */
+export const SCOUT_NAME_MAX = 80;
 const NOTE_MAX = 300;
 /** Longest path hint the card passes on; the turn-on route takes no longer. */
 export const SCOUT_PATH_HINT_MAX = 200;
@@ -182,14 +184,17 @@ export function mapScoutCheck(answer: ScoutCheckAnswer, prompt: string): Pick<Sc
 /**
  * A name the card can turn on as is: its slug is the scout's id, so a name
  * with no letters or digits it can slug (all CJK, say) falls back to
- * "Scout <repo>", and a name whose id another scout has gets " 2", " 3".
+ * "Scout <repo>", and a name whose id another scout has gets " 2", " 3",
+ * all within SCOUT_NAME_MAX.
  */
 export function scoutNameWithId(name: string, repos: string[], takenIds: ReadonlySet<string>): string {
   const repoName = repos[0]?.split('/')[1] ?? '';
   const base = scoutSlug(name) !== '' ? name : `Scout ${repoName}`.trim();
-  let candidate = base;
+  // Within Turn on's limit, the " 2" suffix included: a long repo name is cut, never the suffix.
+  const within = (suffix: string) => `${base.slice(0, SCOUT_NAME_MAX - suffix.length).trimEnd()}${suffix}`;
+  let candidate = within('');
   for (let n = 2; takenIds.has(scoutSlug(candidate)); n++) {
-    candidate = `${base} ${n}`;
+    candidate = within(` ${n}`);
   }
   return candidate;
 }

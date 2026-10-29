@@ -12,6 +12,7 @@ import {
   removeRepo,
   replaceRepo,
   repoListText,
+  scoutIntroLoadRetries,
   scoutIntroOpens,
   scoutIntroWaits,
   SCOUT_REPOS_MAX,
@@ -156,5 +157,14 @@ describe('check screen', () => {
   it('needs a name to turn on', () => {
     expect(turnOnBlockedReason('Lookout')).toBeNull();
     expect(turnOnBlockedReason(' ')).not.toBeNull();
+  });
+});
+
+describe('scoutIntroLoadRetries', () => {
+  it('asks again once per Set up a scout click while the state failed to load', () => {
+    expect(scoutIntroLoadRetries({ requested: true, failed: true, retried: false })).toBe(true);
+    expect(scoutIntroLoadRetries({ requested: true, failed: true, retried: true })).toBe(false);
+    expect(scoutIntroLoadRetries({ requested: false, failed: true, retried: false })).toBe(false);
+    expect(scoutIntroLoadRetries({ requested: true, failed: false, retried: false })).toBe(false);
   });
 });

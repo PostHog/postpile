@@ -1740,6 +1740,10 @@ the app meanwhile.
     `nextFilePages`), so healthy PRs read again each sync. Use each error's
     `path` to drop only the affected alias; keep batch-wide rejection for
     errors without a path.
+  - Per-repo batch costs in the check's dry run: the schedule counts PRs,
+    but judge calls go per repo, so small repos can spend the calls while
+    a big repo's file lists were all read for nothing. Schedule by per-repo
+    batch cost and bound file reads by the calls left.
 
 - Normalize the PR snapshot (started after 0.19.0; first this, then the
   `utilityProcess` move below). The short fields live in the PR header

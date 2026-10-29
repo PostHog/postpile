@@ -10,6 +10,7 @@ import {
   RENDERER_EXCEPTION_EVENT,
   RENDERER_TELEMETRY_EVENTS,
   rendererExceptionProps,
+  SCOUT_NAME_MAX,
   TELEMETRY_EVENTS,
   type AppConfig,
   type TelemetryEventName,
@@ -309,7 +310,7 @@ export function createApp(
   app.post('/api/scouts/intro/turn-on', async (c) => {
     const body = z
       .object({
-        name: z.string().min(1).max(80),
+        name: z.string().min(1).max(SCOUT_NAME_MAX),
         prompt: z.string().min(1).max(3000),
         repos: z.array(z.string().min(3).max(200)).min(1).max(5),
         paths: z.array(z.string().min(1).max(200)).max(10).default([]),

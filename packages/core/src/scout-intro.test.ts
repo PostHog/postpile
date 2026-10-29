@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { appendScout, isScoutPathHint, mapScoutCheck, promptWithoutPart, scoutFromCard, scoutIntroAutoShows, scoutNameWithId, scoutSection, trialRateWords } from './scout-intro.ts';
-import { parseScouts } from './scouts-config.ts';
+import { appendScout, isScoutPathHint, mapScoutCheck, promptWithoutPart, scoutFromCard, scoutIntroAutoShows, scoutNameWithId, SCOUT_NAME_MAX, scoutSection, trialRateWords } from './scout-intro.ts';
+import { parseScouts, scoutSlug } from './scouts-config.ts';
 
 const PROMPT = 'PRs that add a new top-level folder or service, or models used across services. Skip fixes inside one service.';
 
@@ -55,6 +55,15 @@ describe('scoutNameWithId', () => {
     expect(scoutNameWithId('结构哨兵', ['acme/app'], new Set())).toBe('Scout app');
     expect(scoutNameWithId('Lookout', ['acme/app'], new Set(['lookout', 'lookout-2']))).toBe('Lookout 3');
     expect(scoutNameWithId('结构哨兵', ['acme/app'], new Set(['scout-app']))).toBe('Scout app 2');
+  });
+
+  it('keeps a fallback within the Turn on limit, the step suffix included', () => {
+    const repo = `acme/${'x'.repeat(100)}`;
+    const first = scoutNameWithId('结构哨兵', [repo], new Set());
+    expect(first).toHaveLength(SCOUT_NAME_MAX);
+    const second = scoutNameWithId('结构哨兵', [repo], new Set([scoutSlug(first)]));
+    expect(second).toHaveLength(SCOUT_NAME_MAX);
+    expect(second.endsWith(' 2')).toBe(true);
   });
 });
 

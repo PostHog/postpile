@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useInboxCleanup } from '../api/cleanup.ts';
 import { useInterruptions } from '../api/interruptions.ts';
 import { useScoutIntro } from '../api/scouts.ts';
-import { scoutIntroOpens, scoutIntroWaits } from '../lib/scout-intro.ts';
+import { scoutIntroLoadRetries, scoutIntroOpens, scoutIntroWaits } from '../lib/scout-intro.ts';
 import { Button } from './Button.tsx';
 import { ScoutIntroCard } from './ScoutIntroCard.tsx';
 
@@ -53,14 +53,22 @@ export function ScoutIntro(props: { setupBlocks: boolean; requested: boolean; on
       setOpen(true);
     }
   }, [opens]);
-  // "Set up a scout" after the state failed to load asks again; nothing else refetches it (no focus or reconnect refetch).
+  // "Set up a scout" after the state failed to load asks again, once per click; after that only "Try again" does.
   const { refetch } = intro;
   const failed = state === undefined && intro.isError;
+  const retried = useRef(false);
   useEffect(() => {
-    if (props.requested && failed) {
+    if (!props.requested) {
+      retried.current = false;
+      return;
+    }
+    if (scoutIntroLoadRetries({ requested: props.requested, failed, retried: retried.current })) {
+      retried.current = true;
       void refetch();
     }
-  }, [props.requested, failed, refetch]);
+    // Only a new click runs this: a failure that comes back must not ask again by itself.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.requested]);
   if (state === undefined && props.requested && intro.isError) {
     return <ScoutIntroLoadError error={intro.error} retrying={intro.isFetching} onRetry={() => void refetch()} onClose={props.onClose} />;
   }

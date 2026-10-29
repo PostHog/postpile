@@ -106,6 +106,15 @@ export function textAfterDraft(draft: ScoutDraftResult, typed: boolean): string 
   return draft.text;
 }
 
+/**
+ * "Set up a scout" clicked while the card's state failed to load: ask again
+ * once for that click. Later failures wait for "Try again", so a server that
+ * keeps failing is never asked in a loop.
+ */
+export function scoutIntroLoadRetries(input: { requested: boolean; failed: boolean; retried: boolean }): boolean {
+  return input.requested && input.failed && !input.retried;
+}
+
 /** The textarea's placeholder: quiet while the draft loads, a short example once it starts empty. */
 export function promptPlaceholder(drafting: boolean): string {
   return drafting ? 'Drafting from your instructions…' : 'e.g. New top-level folders or services, and changes to the public API shape';
