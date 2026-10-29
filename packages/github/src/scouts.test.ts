@@ -71,6 +71,15 @@ describe('scout listing', () => {
     await expect(new GitHubClient(fakeTokens, fetch.fn).listScoutPrs('acme/secret', null)).rejects.toThrow('Could not resolve');
   });
 
+  it('keeps the lookups of the batches that answered when one fails', async () => {
+    const refs = Array.from({ length: 13 }, (_, index) => ({ repo: 'acme/app', number: index + 1 }));
+    const first = Object.fromEntries(refs.slice(0, 12).map((ref, index) => [`p${index}`, { pullRequest: listed(ref.number) }]));
+    const fetch = new FakeFetch([{ body: { data: first } }, { status: 502, body: { message: 'bad gateway' } }]);
+    const found = await new GitHubClient(fakeTokens, fetch.fn).scoutPrsByNumber(refs);
+    expect(found.size).toBe(12);
+    expect(found.has('acme/app#13')).toBe(false);
+  });
+
   it('looks PRs up by number, keyed as asked', async () => {
     const fetch = new FakeFetch([{ body: { data: { p0: { pullRequest: listed(5, { repository: { nameWithOwner: 'Acme/App' } }) }, p1: { pullRequest: null } } } }]);
     const found = await new GitHubClient(fakeTokens, fetch.fn).scoutPrsByNumber([

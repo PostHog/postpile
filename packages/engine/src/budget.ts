@@ -34,6 +34,11 @@ export class AgentBudget {
     return true;
   }
 
+  /** Calls the run's own cap still grants (the daily allowance aside). */
+  remaining(): number {
+    return Math.max(this.max - this.grantedCalls, 0);
+  }
+
   /** Calls granted so far, for live progress. */
   granted(): number {
     return this.grantedCalls;
