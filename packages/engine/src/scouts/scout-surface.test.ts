@@ -115,6 +115,18 @@ describe('the Scouted section', () => {
     expect(h.writer.calls).toContain('followPr PR_1');
   });
 
+  it('keeps an unseen merged find out of Dealt with until it is opened', async () => {
+    const h = makeHarness();
+    const merged = makePr({ number: 7, state: 'MERGED', mergedAt: NOW.toISOString(), updatedAt: NOW.toISOString() });
+    h.store.prs.upsert(merged, NOW.toISOString());
+    h.store.scoutedPrs.insert({ prKey: merged.key, scoutId: 'lookout', scoutName: 'Lookout', configVersion: 1, reason: 'new folder', pulledAt: NOW.toISOString(), seenUpdatedAt: null, followedAt: null, dismissedAt: null, dismissReason: null, expiredAt: null, expiryReason: null });
+
+    expect((await h.engine.getTopic('scout:lookout'))?.tiles[0]).toMatchObject({ group: 'open', state: { kind: 'done' }, scout: { unseen: true } });
+
+    await h.engine.markScoutedSeen(merged.key);
+    expect((await h.engine.getTopic('scout:lookout'))?.tiles[0]?.group).toBe('dealt_with');
+  });
+
   it('says in the PR pane who scouted it and why', async () => {
     const h = await pulled();
     const pr = await h.engine.getPr('acme/app#1');

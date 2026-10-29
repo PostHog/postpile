@@ -497,7 +497,12 @@ export class ReadModels {
         now: board.now,
       });
       const scout = scoutId === null ? undefined : this.tileScout(board, tile, scoutId, follows);
-      return scout ? { ...view, scout } : view;
+      if (!scout) {
+        return view;
+      }
+      // A scout's find the user has not opened yet never sits collapsed in Dealt with, merged or not: it is why the row counts.
+      const group = scout.unseen && view.group === 'dealt_with' ? 'open' : view.group;
+      return { ...view, scout, group };
     });
     return views.sort(compareTileViews);
   }
