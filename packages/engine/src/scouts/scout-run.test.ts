@@ -475,6 +475,20 @@ describe('the scout step of a full sync', () => {
     expect(rows.every((row) => !scoutRetryStalled(row))).toBe(true);
   });
 
+  it('stops every scout read for the sync when the listing itself is rate-limited', async () => {
+    const h = setup(`${LOOKOUT}\n## Docs\nrepos: acme/docs\n\nDocs changes.\n`);
+    onGitHub(h, candidate(1), [{ path: 'billing/main.ts', changeType: 'ADDED' }]);
+    h.reader.scoutListings.set('acme/docs', [candidate(2, { key: 'acme/docs#2' })]);
+    const limit = new GitHubError('GitHub POST graphql failed with 403: You have exceeded a secondary rate limit', 403, { rateLimited: true, retryAfterSeconds: 60 });
+    vi.spyOn(h.reader, 'listScoutPrs').mockRejectedValueOnce(limit);
+
+    await h.engine.sync({});
+
+    // The first listing hit the limit: no other repo's listing, lookup, file or tree read follows.
+    expect(h.reader.scoutCalls).toEqual([]);
+    expect(h.runner.promptsFor('scout_judge')).toEqual([]);
+  });
+
   it('keeps a stalled reason when it defers a retry, and counts an unanswered lookup as stalled', async () => {
     let now = NOW;
     const h = setup(LOOKOUT, () => now);

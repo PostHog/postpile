@@ -251,6 +251,7 @@ export class ScoutRun {
       try {
         result = await this.deps.reader.listScoutPrs(repo, cursor);
       } catch (error) {
+        this.stopOnRateLimit(error);
         errors.push(`scouts: listing ${repo}: ${errorText(error)}`);
         return { kind: 'failed' };
       }
