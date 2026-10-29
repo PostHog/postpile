@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { IsoTime, PrKey, ScoutJudgement, ScoutJudgementStatus, ScoutVerdict } from '@postpile/core';
+import type { IsoTime, PrKey, ScoutJudgement, ScoutJudgementStatus, ScoutPrefilterReason, ScoutVerdict } from '@postpile/core';
 import { all, one, placeholders, run } from '../sql.ts';
 
 interface ScoutJudgementRow {
@@ -15,6 +15,7 @@ interface ScoutJudgementRow {
   attempts: number;
   last_error: string | null;
   judged_at: string | null;
+  left_out: string | null;
 }
 
 function toJudgement(row: ScoutJudgementRow): ScoutJudgement {
@@ -31,6 +32,7 @@ function toJudgement(row: ScoutJudgementRow): ScoutJudgement {
     attempts: row.attempts,
     lastError: row.last_error,
     judgedAt: row.judged_at,
+    leftOut: row.left_out as ScoutPrefilterReason | null,
   };
 }
 
@@ -66,12 +68,12 @@ export class ScoutJudgementRepo {
   save(judgement: ScoutJudgement): void {
     run(
       this.db,
-      `INSERT INTO scout_judgement (scout_id, pr_key, status, verdict, reason, input_hash, config_version, head_oid, observed_updated_at, attempts, last_error, judged_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO scout_judgement (scout_id, pr_key, status, verdict, reason, input_hash, config_version, head_oid, observed_updated_at, attempts, last_error, judged_at, left_out)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (scout_id, pr_key) DO UPDATE SET
          status = excluded.status, verdict = excluded.verdict, reason = excluded.reason, input_hash = excluded.input_hash,
          config_version = excluded.config_version, head_oid = excluded.head_oid, observed_updated_at = excluded.observed_updated_at,
-         attempts = excluded.attempts, last_error = excluded.last_error, judged_at = excluded.judged_at`,
+         attempts = excluded.attempts, last_error = excluded.last_error, judged_at = excluded.judged_at, left_out = excluded.left_out`,
       judgement.scoutId,
       judgement.prKey,
       judgement.status,
@@ -84,6 +86,7 @@ export class ScoutJudgementRepo {
       judgement.attempts,
       judgement.lastError,
       judgement.judgedAt,
+      judgement.leftOut,
     );
   }
 

@@ -27,6 +27,7 @@ function judgement(overrides: Partial<ScoutJudgement> = {}): ScoutJudgement {
     attempts: 0,
     lastError: null,
     judgedAt: '2026-10-29T10:05:00.000Z',
+    leftOut: null,
     ...overrides,
   };
 }
