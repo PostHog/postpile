@@ -485,21 +485,39 @@ export interface ScoutWorkItem {
   pending: boolean;
   /** When the PR was observed: pending retries go oldest first. */
   observedUpdatedAt: IsoTime;
+  /**
+   * A pending retry whose last try failed before the model call (its file
+   * list or base tree could not be read): it waits behind other work.
+   */
+  stalled: boolean;
+}
+
+/** Why a pending row's last try stopped before the model call: its reads failed, not the judge. */
+export const SCOUT_FILES_NOT_READ = 'file list not read whole';
+export const SCOUT_TREE_NOT_READ = 'base tree not read';
+
+/** A pending row whose last try failed in the reads, so the next run puts it behind other work. */
+export function scoutRetryStalled(row: Pick<ScoutJudgement, 'status' | 'lastError'>): boolean {
+  return row.status === 'pending' && (row.lastError === SCOUT_FILES_NOT_READ || row.lastError === SCOUT_TREE_NOT_READ);
 }
 
 /**
  * Which work one run takes on, when there is more than it can judge
  * (DESIGN.md "Scouts" › Scheduling). Each queue is one scout on one repo,
  * in scouts.md order: its pending retries first, oldest observed first,
- * then its new candidates in the order given. The run takes one item from
+ * then its new candidates in the order given, then the stalled retries
+ * (their reads failed last time), oldest first: a PR GitHub keeps failing
+ * to read only takes slots nothing else needs. The run takes one item from
  * each queue in turn, round-robin, until `capacity` (the calls left times
  * the batch size) is used, so no scout, repo or wave of new PRs starves the
  * rest. Everything not taken waits for the next run without a file read.
  */
 export function scheduleScoutWork<T extends ScoutWorkItem>(queues: T[][], capacity: number): Set<T> {
+  const oldestFirst = (a: T, b: T) => a.observedUpdatedAt.localeCompare(b.observedUpdatedAt);
   const ordered = queues.map((queue) => [
-    ...queue.filter((item) => item.pending).sort((a, b) => a.observedUpdatedAt.localeCompare(b.observedUpdatedAt)),
+    ...queue.filter((item) => item.pending && !item.stalled).sort(oldestFirst),
     ...queue.filter((item) => !item.pending),
+    ...queue.filter((item) => item.pending && item.stalled).sort(oldestFirst),
   ]);
   const taken = new Set<T>();
   let round = 0;

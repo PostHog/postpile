@@ -247,11 +247,17 @@ describe('isScoutedActive and isScoutedUnseen', () => {
 });
 
 describe('scheduleScoutWork', () => {
-  const item = (id: string, pending: boolean, observedUpdatedAt = '2026-10-29T10:00:00.000Z') => ({ id, pending, observedUpdatedAt });
+  const item = (id: string, pending: boolean, observedUpdatedAt = '2026-10-29T10:00:00.000Z', stalled = false) => ({ id, pending, observedUpdatedAt, stalled });
 
   it('takes pending retries first, oldest observed first, then new candidates', () => {
     const queue = [item('new1', false), item('old', true, '2026-10-20T00:00:00.000Z'), item('older', true, '2026-10-10T00:00:00.000Z'), item('new2', false)];
     expect([...scheduleScoutWork([queue], 3)].map((entry) => entry.id)).toEqual(['older', 'old', 'new1']);
+  });
+
+  it('puts retries whose reads failed behind new candidates, so they never hold every slot', () => {
+    const stalled = Array.from({ length: 5 }, (_, index) => item(`s${index}`, true, '2026-10-01T00:00:00.000Z', true));
+    const queue = [...stalled, item('new1', false), item('retry', true, '2026-10-20T00:00:00.000Z')];
+    expect([...scheduleScoutWork([queue], 3)].map((entry) => entry.id)).toEqual(['retry', 'new1', 's0']);
   });
 
   it('shares the capacity round-robin across scouts and repos', () => {

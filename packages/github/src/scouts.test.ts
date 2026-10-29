@@ -103,12 +103,25 @@ describe('scout files', () => {
     expect(read.get('acme/app#1')).toEqual({
       headOid: 'h1',
       baseOid: 'b1',
+      foldersOid: 'b1',
       files: [
         { path: 'a.ts', changeType: 'MODIFIED' },
         { path: 'new/b.ts', changeType: 'ADDED' },
       ],
     });
     expect(JSON.stringify(fetch.requests[1]!.body)).toContain('after: \\"f1\\"');
+  });
+
+  it('takes the folders before a merged PR from its merge commit\'s first parent', async () => {
+    const merged = { ...filesPage('h1', [{ path: 'billing/a.ts', changeType: 'ADDED' }], null), mergeCommit: { parents: { nodes: [{ oid: 'before1' }] } } };
+    const fetch = new FakeFetch([{ body: { data: { p0: { pullRequest: merged }, p1: { pullRequest: { ...filesPage('h2', [], null), mergeCommit: null } } } } }]);
+    const read = await new GitHubClient(fakeTokens, fetch.fn).scoutFiles([
+      { repo: 'acme/app', number: 1 },
+      { repo: 'acme/app', number: 2 },
+    ]);
+    expect(read.get('acme/app#1')?.foldersOid).toBe('before1');
+    expect(read.get('acme/app#2')?.foldersOid).toBe('b1');
+    expect(JSON.stringify(fetch.requests[0]!.body)).toContain('mergeCommit { parents(first: 1) { nodes { oid } } }');
   });
 
   it('asks for the next pages of several long lists in one query', async () => {
@@ -191,5 +204,14 @@ describe('top-level folders', () => {
     ]);
     const folders = await new GitHubClient(fakeTokens, fetch.fn).topLevelFolders('acme/app', ['c1', 'c2']);
     expect(folders).toEqual(new Map([['c1', ['src']]]));
+  });
+
+  it('keeps the trees of the batches that answered when one fails', async () => {
+    const oids = Array.from({ length: 13 }, (_, index) => `c${index}`);
+    const first = Object.fromEntries(oids.slice(0, 12).map((_, index) => [`t${index}`, { tree: { entries: [{ name: 'src', type: 'tree' }] } }]));
+    const fetch = new FakeFetch([{ body: { data: { repository: first } } }, { status: 502, body: { message: 'bad gateway' } }]);
+    const folders = await new GitHubClient(fakeTokens, fetch.fn).topLevelFolders('acme/app', oids);
+    expect(folders.size).toBe(12);
+    expect(folders.has('c12')).toBe(false);
   });
 });
