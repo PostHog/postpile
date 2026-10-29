@@ -434,7 +434,8 @@ function unreadSectionLines(detail: PrDetail): string[] {
   for (const event of detail.unread) {
     lines.push(`  ${day(event.at)}  ${withActor(event.actor, event.summary)}${event.isBot ? ' (bot)' : ''}`);
     if (event.body !== null) {
-      lines.push(...event.body.split('\n').map((row) => `      ${row}`));
+      // One entry for the whole body: a body can have tens of thousands of lines, too many to spread into push.
+      lines.push(event.body.split('\n').map((row) => `      ${row}`).join('\n'));
     }
   }
   return lines;
@@ -460,7 +461,10 @@ function fullPrLines(detail: PrDetail, tiles: TileView[], authors: Authors): str
   if (noise > 0) {
     lines.push(`  Folded: ${[activity.freshNoiseLabel, activity.noiseLabel].filter((label) => label !== '').join('; ')}`);
   }
-  lines.push('', ...unreadSectionLines(detail));
+  lines.push('');
+  for (const line of unreadSectionLines(detail)) {
+    lines.push(line);
+  }
   return lines;
 }
 
@@ -669,7 +673,10 @@ async function severalPrsData(reader: PostPileReader, reads: PrRead[], authors: 
       data.push('Not in a topic yet:');
     }
     for (const read of group.reads) {
-      data.push('', ...(await prLinesWithOverlaps(reader, read, authors, detail, overlaps, now)));
+      data.push('');
+      for (const line of await prLinesWithOverlaps(reader, read, authors, detail, overlaps, now)) {
+        data.push(line);
+      }
     }
   }
   return data;

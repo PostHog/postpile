@@ -740,4 +740,22 @@ describe('PostPile MCP server', () => {
     expect(data).toMatch(/alice commented\n {6}First paragraph\.\n {6}\n {6}Second paragraph\./);
     expect(data).toMatch(/greptile commented \(bot\)/);
   });
+
+  it('answers when unread comments have more lines than a call can take as arguments', async () => {
+    const body = Array.from({ length: 32_000 }, () => 'x').join('\n');
+    class HugeUnread extends FakeEngine {
+      override async getPr(key: string) {
+        const detail = await super.getPr(key);
+        if (!detail) {
+          return null;
+        }
+        const unread = Array.from({ length: 5 }, (_, index) => ({ id: `e${index}`, kind: 'comment' as const, actor: 'alice', isBot: false, at: '2026-10-29T10:00:00Z', summary: 'alice commented', body }));
+        return { ...detail, unread };
+      }
+    }
+    const client = await connected(new HugeUnread());
+    const data = fencedPart(await callText(client, 'pr_context', { pr: 'acme/app#1902', detail: 'full' }));
+    expect(data).toContain('Unread since you looked (5, oldest first, every one; mark_read marks exactly these read):');
+    expect(data.split('\n').length).toBeGreaterThan(160_000);
+  });
 });
