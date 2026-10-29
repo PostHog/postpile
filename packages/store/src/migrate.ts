@@ -41,6 +41,8 @@ import * as prNote from './migrations/039_pr_note.ts';
 import * as topicProposalBy from './migrations/040_topic_proposal_by.ts';
 import * as prSetClosed from './migrations/041_pr_set_closed.ts';
 import * as prCodeOwnerReviewers from './migrations/042_pr_code_owner_reviewers.ts';
+import * as scoutsVersion from './migrations/043_scouts_version.ts';
+import * as scouts from './migrations/044_scouts.ts';
 
 interface Migration {
   version: number;
@@ -50,7 +52,7 @@ interface Migration {
 }
 
 // Append new migrations here, in order. Never edit one that has shipped.
-const migrations: Migration[] = [init, engineMemory, factRecheck, instructionsVersions, topicAreas, pullIns, pingDecisions, actionLog, workContext, dropBroughtBack, pendingWrite, prEventOrderIndex, pendingWriteKind, foundPr, dropTopicDeferred, glanceKeyFiles, topicProposalSource, cleanTopicNames, prSnooze, topicRetiredAt, dropStartFresh, prSetChange, topicKind, topicDriverPick, lesson, pendingCatchUp, macPing, prHeader, snapshotRevision, dropCi, prDiscussion, prEventChatter, prActivity, prText, retireSnapshot, prReviewUrl, prDiff, glanceBasis, prNote, topicProposalBy, prSetClosed, prCodeOwnerReviewers];
+const migrations: Migration[] = [init, engineMemory, factRecheck, instructionsVersions, topicAreas, pullIns, pingDecisions, actionLog, workContext, dropBroughtBack, pendingWrite, prEventOrderIndex, pendingWriteKind, foundPr, dropTopicDeferred, glanceKeyFiles, topicProposalSource, cleanTopicNames, prSnooze, topicRetiredAt, dropStartFresh, prSetChange, topicKind, topicDriverPick, lesson, pendingCatchUp, macPing, prHeader, snapshotRevision, dropCi, prDiscussion, prEventChatter, prActivity, prText, retireSnapshot, prReviewUrl, prDiff, glanceBasis, prNote, topicProposalBy, prSetClosed, prCodeOwnerReviewers, scoutsVersion, scouts];
 
 /** The schema version this build writes and expects. */
 export const LATEST_VERSION = migrations[migrations.length - 1]!.version;

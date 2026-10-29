@@ -34,3 +34,7 @@ export { FactRepo, type FactClosing } from './repos/facts.ts';
 export { RuleProposalRepo } from './repos/rule-proposals.ts';
 export { AgentCallRepo } from './repos/agent-calls.ts';
 export { InstructionsRepo, type NewInstructionsVersion } from './repos/instructions.ts';
+export { ScoutsVersionRepo, type NewScoutsVersion } from './repos/scouts-versions.ts';
+export { ScoutCursorRepo } from './repos/scout-cursors.ts';
+export { ScoutJudgementRepo } from './repos/scout-judgements.ts';
+export { ScoutedPrRepo } from './repos/scouted-prs.ts';
