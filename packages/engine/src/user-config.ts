@@ -17,6 +17,8 @@ export interface UserConfigData {
    * (mise or asdf shims, a custom install). Read once at app launch.
    */
   toolPath?: string[];
+  /** When the Scouts intro card was answered ("Not now", or a scout turned on): it never opens by itself again. */
+  scoutsIntroDismissedAt?: string;
 }
 
 /** A list of strings, trimmed, empties dropped; null when the value is not a list of strings. */
@@ -75,15 +77,28 @@ export class UserConfigFile {
     if (toolPath !== null) {
       data.toolPath = toolPath;
     }
+    if (typeof raw.scoutsIntroDismissedAt === 'string') {
+      data.scoutsIntroDismissedAt = raw.scoutsIntroDismissedAt;
+    }
     return data;
   }
 
-  /** Writes the sweep skip list, keeping every other key. Written to a temp file first, then moved into place. */
-  setSweepSkip(patterns: string[]): void {
-    const next = { ...this.readRaw(), sweepSkip: stringList(patterns) ?? [] };
+  /** Writes the file with one key changed, keeping every other key. Written to a temp file first, then moved into place. */
+  private write(changes: Record<string, unknown>): void {
+    const next = { ...this.readRaw(), ...changes };
     mkdirSync(dirname(this.path), { recursive: true });
     const temp = `${this.path}.tmp`;
     writeFileSync(temp, `${JSON.stringify(next, null, 2)}\n`);
     renameSync(temp, this.path);
+  }
+
+  /** Writes the sweep skip list, keeping every other key. */
+  setSweepSkip(patterns: string[]): void {
+    this.write({ sweepSkip: stringList(patterns) ?? [] });
+  }
+
+  /** The Scouts intro card was answered: it never opens by itself again. */
+  setScoutsIntroDismissedAt(at: string): void {
+    this.write({ scoutsIntroDismissedAt: at });
   }
 }

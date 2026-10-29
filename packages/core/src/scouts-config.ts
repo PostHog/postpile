@@ -75,7 +75,7 @@ function withoutNote(entry: string): string {
 }
 
 /** One `paths:` entry, or an error message. */
-function parsePathHint(entry: string): ScoutPathHint | string {
+export function parsePathHint(entry: string): ScoutPathHint | string {
   const bare = withoutNote(entry);
   const addedOnly = bare.startsWith('+');
   const pattern = addedOnly ? bare.slice(1).trim() : bare;

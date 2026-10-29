@@ -41,6 +41,9 @@ import type {
   McpConnectionView,
   SyncPhase,
   ScoutListItem,
+  ScoutIntroState,
+  ScoutDraftResult,
+  ScoutCheckResult,
   SyncPhaseTimings,
   SyncProgress,
   RecordedSyncProgress,
@@ -2028,6 +2031,26 @@ export class FakeEngine implements EngineService {
     const userStates = new Map([[prKey, this.data.userStates.find((state) => state.prKey === prKey) ?? null]]);
     const plan = planRead({ scope, cause: { kind: 'opened' }, events: this.eventsByKey(scope.prKeys), userStates, at: this.timestamp() });
     return plan.change.eventIds.length > 0 || plan.change.handledKeys.length > 0;
+  }
+
+  async scoutIntroState(): Promise<ScoutIntroState> {
+    return { autoShow: false, mainRepo: null, repos: [], scouts: 0 };
+  }
+
+  async draftScout(): Promise<ScoutDraftResult> {
+    return { text: null, why: 'agent_off' };
+  }
+
+  async checkScout(): Promise<ScoutCheckResult> {
+    return { ok: false, message: 'Sample data has no scout check yet', fit: { verdict: 'partly', note: '' }, cantSee: null, name: '', paths: [], trial: null };
+  }
+
+  async turnOnScout(): Promise<ActionResult> {
+    return { ok: false, message: 'Sample data has no scouts file', undoToken: null };
+  }
+
+  async dismissScoutIntro(): Promise<ActionResult> {
+    return { ok: true, message: 'Not now', undoToken: null };
   }
 
   async listScouts(): Promise<ScoutListItem[]> {

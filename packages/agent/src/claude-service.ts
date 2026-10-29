@@ -1,4 +1,4 @@
-import { clipText, LESSON_TEXT_MAX, mapSetupDraft, mapSetupFit, PING_BODY_MAX, PING_TITLE_MAX, type IsoTime, type ReconcileAction, type SetupFitNote } from '@postpile/core';
+import { clipText, mapScoutCheck, type ScoutCheckResult, LESSON_TEXT_MAX, mapSetupDraft, mapSetupFit, PING_BODY_MAX, PING_TITLE_MAX, type IsoTime, type ReconcileAction, type SetupFitNote } from '@postpile/core';
 import type { z } from 'zod';
 import { mapConsolidationAnswer } from './consolidation-answer.ts';
 import { mapDossierAnswer } from './dossier-answer.ts';
@@ -26,6 +26,7 @@ import { topicTidyPrompt } from './prompts/topic-tidy.ts';
 import { setupDraftPrompt, setupFitPrompt, setupRefinePrompt } from './prompts/setup.ts';
 import { topicAssignmentPrompt } from './prompts/topics.ts';
 import { scoutJudgePrompt } from './prompts/scout-judge.ts';
+import { scoutCheckPrompt, scoutDraftPrompt } from './prompts/scout-intro.ts';
 import { mapReconcileAnswer } from './reconcile-answer.ts';
 import { mapSetAnswer } from './set-answer.ts';
 import { mapTidyAnswer } from './tidy-answer.ts';
@@ -53,6 +54,8 @@ import {
   topicTidyOutput,
   scoutJudgeOutput,
   scoutJudgementOutput,
+  scoutCheckOutput,
+  scoutDraftOutput,
 } from './schemas.ts';
 import type {
   AgentChatReply,
@@ -96,6 +99,8 @@ import type {
   ScoutJudgeAnswer,
   ScoutJudgeInput,
   ScoutJudgeResult,
+  ScoutCheckInput,
+  ScoutDraftInput,
 } from './service.ts';
 import { WORK_THREADS_MAX } from './service.ts';
 
@@ -129,6 +134,9 @@ const timeouts: Record<AgentPurpose, number> = {
   setup_fit: 90_000,
   // A batch of PR titles and file lists against one short prompt; nobody waits on it.
   scout_judge: 180_000,
+  // The intro card: the user watches a placeholder while these run.
+  scout_draft: 90_000,
+  scout_check: 90_000,
 };
 
 /** Bounds for the work context digest, so a runaway answer cannot bloat every prompt. */
@@ -559,6 +567,16 @@ export class RunnerAgentService implements AgentService {
     const answered = new Set(answers.map((entry) => entry.prKey));
     const missing = input.items.map((item) => item.prKey).filter((key) => !answered.has(key));
     return { answers, missing, model: answer.model };
+  }
+
+  async draftScout(input: ScoutDraftInput): Promise<string> {
+    const { value } = await this.ask('scout_draft', scoutDraftPrompt(input), scoutDraftOutput);
+    return clipText(value.prompt, 1200);
+  }
+
+  async checkScout(input: ScoutCheckInput): Promise<Pick<ScoutCheckResult, 'fit' | 'cantSee' | 'name' | 'paths'>> {
+    const { value } = await this.ask('scout_check', scoutCheckPrompt(input), scoutCheckOutput);
+    return mapScoutCheck(value, input.prompt);
   }
 
   async consolidate(input: ConsolidationInput): Promise<ConsolidationResult> {

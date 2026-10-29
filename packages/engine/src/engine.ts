@@ -2,7 +2,13 @@ import { tmpdir } from 'node:os';
 import type { AgentService } from '@postpile/agent';
 import type {
   PrOverlapsView,
+  PrRef,
   ScoutListItem,
+  ScoutIntroState,
+  ScoutDraftResult,
+  ScoutCheckRequest,
+  ScoutCheckResult,
+  ScoutTurnOnRequest,
   ListScope,
   ActionLogEntry,
   ActionResult,
@@ -171,6 +177,7 @@ import { InstructionsHistory } from './instructions/history.ts';
 import { ScoutsHistory } from './scouts/history.ts';
 import { ScoutRun } from './scouts/scout-run.ts';
 import { ScoutActions } from './scouts/scout-actions.ts';
+import { ScoutIntro } from './scouts/scout-intro.ts';
 import type { RunDeps } from './run-deps.ts';
 import { InstructionsProposer } from './instructions/proposer.ts';
 import { LivePoller } from './live/live-poller.ts';
@@ -319,6 +326,8 @@ export class Engine implements EngineService {
   private readonly reads: ReadModels;
   /** Follow, Dismiss and seen on scouted PRs (DESIGN.md "Scouts"). */
   private readonly scoutActions: ScoutActions;
+  /** The Scouts intro card: its draft, check and turn on. */
+  private readonly scoutIntro: ScoutIntro;
   private readonly tiles: TileActions;
   private readonly openedReads: OpenedReads;
   private readonly prActions: PrActions;
@@ -498,17 +507,21 @@ export class Engine implements EngineService {
       (thread) => deps.writes.ownBulkReadAt(thread),
     );
     this.github = github;
-    if (scoutsHistory !== null) {
-      runDeps.scouts = new ScoutRun({
-        store,
-        reader: deps.reader,
-        agent: deps.agent,
-        contexts,
-        history: scoutsHistory,
-        storePrs: (refs, errors) => github.fetchAndStoreScouted(refs, errors),
-        now,
-        log: deps.syncLog ?? ((line) => console.log(line)),
-      });
+    const scoutRunDeps =
+      scoutsHistory === null
+        ? null
+        : {
+            store,
+            reader: deps.reader,
+            agent: deps.agent,
+            contexts,
+            history: scoutsHistory,
+            storePrs: (refs: PrRef[], errors: string[]) => github.fetchAndStoreScouted(refs, errors),
+            now,
+            log: deps.syncLog ?? ((line: string) => console.log(line)),
+          };
+    if (scoutRunDeps !== null) {
+      runDeps.scouts = new ScoutRun(scoutRunDeps);
     }
     this.clickedReadRetry = new ClickedReadRetry(store, deps.reader, deps.writes, (key) => this.refreshForRetry(key), this.heldThreads);
     deps.markReadQueue.retryWith(this.clickedReadRetry);
@@ -556,6 +569,19 @@ export class Engine implements EngineService {
     this.consolidationRun = new ConsolidationRun(runDeps);
     const lineLog = deps.syncLog ?? ((line: string) => console.log(line));
     this.catchUpCap = new CatchUpCap(deps.catchUpCallsPerDay ?? 0, now);
+    this.scoutIntro = new ScoutIntro({
+      store,
+      agent: deps.agent,
+      contexts,
+      history: scoutsHistory,
+      // Its own runner: the dry run must not share a running sync's per-run state.
+      scoutRun: scoutRunDeps === null ? null : new ScoutRun(scoutRunDeps),
+      userConfig: deps.userConfig ?? null,
+      allowance: this.catchUpCap,
+      agentOff,
+      quotaAllows: () => this.quota.allowsBackground(),
+      now,
+    });
     const topicCatchUp = new TopicCatchUp(runDeps, this.catchUpCap, lineLog);
     this.topicCatchUp = topicCatchUp;
     // Never beside a full sync or a consolidation: the request is skipped and the sync covers the topic.
@@ -1880,6 +1906,35 @@ export class Engine implements EngineService {
       this.telemetry.capture('scout_dismissed', { with_reason: reason !== null && reason.trim() !== '' });
     }
     return result;
+  }
+
+  /** Whether the Scouts intro card opens by itself, and the repos for its picker. */
+  async scoutIntroState(): Promise<ScoutIntroState> {
+    return this.scoutIntro.state();
+  }
+
+  /** The intro card's drafted prompt (one agent call under the daily allowance), or why it starts empty. */
+  async draftScout(): Promise<ScoutDraftResult> {
+    return this.scoutIntro.draft();
+  }
+
+  /** "Check scout": the agent's check and a dry run on the last 2 days that writes nothing. */
+  async checkScout(request: ScoutCheckRequest): Promise<ScoutCheckResult> {
+    return this.scoutIntro.check(request);
+  }
+
+  /** "Turn on scout": appended to scouts.md as an intro version; the next full sync runs it. */
+  async turnOnScout(request: ScoutTurnOnRequest): Promise<ActionResult> {
+    const result = this.scoutIntro.turnOn(request);
+    if (result.ok) {
+      this.telemetry.capture('scout_turned_on', { repos: request.repos.length, paths: request.paths.length });
+    }
+    return result;
+  }
+
+  /** "Not now" on the intro card: it never opens by itself again. */
+  async dismissScoutIntro(): Promise<ActionResult> {
+    return this.scoutIntro.dismiss();
   }
 
   /** A scouted PR was opened: seen in PostPile through its current update. Never a GitHub read. */

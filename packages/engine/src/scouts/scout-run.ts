@@ -11,7 +11,9 @@ import {
   scoutPullStep,
   scoutRetentionCutoff,
   scoutSignals,
+  SCOUT_TRIAL_EXAMPLES,
   type IsoTime,
+  type ScoutTrial,
   type PrKey,
   type PrRef,
   type ScoutCandidate,
@@ -560,6 +562,55 @@ export class ScoutRun {
       }
     }
     return expired;
+  }
+
+  /**
+   * "Check scout" (DESIGN.md "Scouts" › The intro card): the scout as the
+   * sync would run it on the last `days` of its repos, with the same
+   * listing, rules, file reads and judge, under `input.budget` (the caller
+   * caps it). Writes NOTHING: no judgement, no pull, no cursor, no resume
+   * point, no snapshot. A scout of the same id that exists is not
+   * consulted: the trial judges as if it were new.
+   */
+  async trial(scout: ScoutConfig, days: number, input: Omit<ScoutRunInput, 'glance' | 'errors'>): Promise<ScoutTrial> {
+    this.quotaAllows = input.quotaAllows;
+    this.runFiles = new Map();
+    const errors: string[] = [];
+    const fresh: ScoutConfig = { ...scout, id: '__trial__' };
+    const floor = new Date(this.deps.now().getTime() - days * 24 * 60 * 60 * 1000).toISOString();
+    const facts = { viewer: input.viewer, tracked: this.trackedKeys() };
+    const titles = new Map<PrKey, string>();
+    const rows: ScoutJudgement[] = [];
+    let listedWhole = true;
+    for (const repo of fresh.repos) {
+      const prs = new Map<PrKey, ScoutCandidate>();
+      const end = await this.pass(repo, null, floor, { pages: SCOUT_LIST_MAX_PAGES }, prs, errors);
+      listedWhole &&= end.kind === 'done';
+      prs.forEach((pr) => titles.set(pr.key, pr.title));
+      const work: ScoutRepoWork = { rows: [], pulls: [] };
+      const items = await this.prepare(fresh, null, repo, [...prs.values()], facts, work);
+      await this.judge(fresh, null, items, { ...input, errors, glance: async () => {} }, work);
+      rows.push(...work.rows);
+    }
+    const pulled = rows.filter((row) => row.verdict === 'pulled');
+    const pending = rows.filter((row) => row.status === 'pending');
+    const judged = rows.filter((row) => row.attempts > 0 || row.status === 'judged').length;
+    let problem: string | null = errors[0] ?? null;
+    if (problem === null && !listedWhole) {
+      problem = 'more PRs than one check lists';
+    }
+    if (problem === null && pending.length > 0) {
+      problem = pending[0]!.lastError;
+    }
+    return {
+      days,
+      pulled: pulled.length,
+      examples: pulled.slice(0, SCOUT_TRIAL_EXAMPLES).map((row) => ({ prKey: row.prKey, title: titles.get(row.prKey) ?? row.prKey, reason: row.reason ?? '' })),
+      candidates: rows.length,
+      judged,
+      complete: listedWhole && pending.length === 0,
+      problem,
+    };
   }
 
   async run(input: ScoutRunInput): Promise<ScoutRunReport> {
