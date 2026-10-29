@@ -1730,6 +1730,48 @@ the app meanwhile.
 
 ## Later
 
+- **Scouts follow-ups** (review of the Scouts stack, deferred until it lands):
+  - Budget deferral and backlog sync timing: when the schedule defers work
+    while one call is still left, and that call then spends the cap, no
+    budget skip is recorded, so `syncLeftBacklog` waits an hour instead of
+    two minutes. Record capped work after the granted calls are spent.
+  - Per-alias file-page errors: a GraphQL field error on one PR marks the
+    whole twelve-PR batch's file lists broken (`readFilePages`,
+    `nextFilePages`), so healthy PRs read again each sync. Use each error's
+    `path` to drop only the affected alias; keep batch-wide rejection for
+    errors without a path.
+  - Per-repo batch costs in the check's dry run: the schedule counts PRs,
+    but judge calls go per repo, so small repos can spend the calls while
+    a big repo's file lists were all read for nothing. Schedule by per-repo
+    batch cost and bound file reads by the calls left.
+  - Bounded scout glance planning: `scoutTargets` loads every active
+    scouted PR's cold snapshot before the glance writer checks its budget.
+    Page the targets and load a bounded batch at a time.
+  - Scout mark_read snapshot reuse: `AgentMarkRead.scoutedSeen` reads the
+    snapshot before checking eligibility. Check that first and reuse the
+    board's snapshot.
+  - Scout seen_through token from the header: `seenThroughNow` rebuilds a
+    cold scouted PR only for its `updatedAt`; read it with a keyed header
+    query.
+  - Pending Follow titles from headers: `PendingWrites.views()` reads a
+    whole snapshot per pending Follow for its title; batch the titles from
+    PR headers.
+  - Parentheses in path hints: `withoutNote` reads `app/(auth)` as a hint
+    plus an annotation and keeps `app/`. Treat a note as an annotation only
+    when whitespace separates it from the path.
+  - Renamed scouts in search: `scoutedMatches` and the topic search input
+    use the names stored at pull time, so searching for a scout renamed
+    under the same `id:` finds none of its PRs. Use the configured names.
+  - Scout placement over an old pull-in anchor: for a PR that left its
+    tracked stack and is now scout-only, `board.topicIdOf` still follows
+    the old pull-in topic, so `getPr` and MCP attach that topic. Prefer the
+    current scout placement.
+  - Scout board seeds: `scoutedKeys` still seeds PRs that moved into normal
+    tracking or another scout's stack, loading their cold snapshots on each
+    section refresh. Filter by `scoutTopicIdOf` first.
+  - The load-related items are fine at today's load (scouted PRs expire
+    after 3 days and arrive a few a day), so not thousands active.
+
 - Normalize the PR snapshot (started after 0.19.0; first this, then the
   `utilityProcess` move below). The short fields live in the PR header
   (`pr`, migration 028), the rest of each PR is one JSON blob in
@@ -1855,6 +1897,11 @@ the app meanwhile.
   sync. Follow subscribes on GitHub (GraphQL `updateSubscription`) through
   the undo window and the writes lock; Dismiss takes an optional reason;
   opening marks seen in PostPile only. Checked by Codex before building.
+- **Scouts intro card** (2026-10-29, owner; mockup with the searchlight art,
+  option E): opens by itself while no scout exists until answered, drafts
+  the prompt, checks it (fit, a part it can't see, a dry run on the last 2
+  days that saves nothing), turns it on into scouts.md. Path hints stay out
+  of the card. "Set up a scout" in the Scouted section reopens it.
 
 - **seen_through means "nothing new since your read"** (2026-10-29, owner;
   DESIGN.md "Agents mark read"): every pr_context answer, brief and JSON

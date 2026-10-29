@@ -10,6 +10,7 @@ import {
   RENDERER_EXCEPTION_EVENT,
   RENDERER_TELEMETRY_EVENTS,
   rendererExceptionProps,
+  SCOUT_NAME_MAX,
   TELEMETRY_EVENTS,
   type AppConfig,
   type TelemetryEventName,
@@ -299,6 +300,25 @@ export function createApp(
   app.get('/api/busy-inbox', async (c) => c.json(await engine.busyInbox()));
   // The sidebar's Scouted section (DESIGN.md "Scouts"): one row per scout; a row opens getTopic("scout:<id>").
   app.get('/api/scouts', async (c) => c.json(await engine.listScouts()));
+  // The Scouts intro card (DESIGN.md "Scouts" › The intro card). Check runs a dry run that writes nothing; Turn on appends to scouts.md.
+  app.get('/api/scouts/intro', async (c) => c.json(await engine.scoutIntroState()));
+  app.post('/api/scouts/intro/draft', async (c) => c.json(await engine.draftScout()));
+  app.post('/api/scouts/intro/check', async (c) => {
+    const body = z.object({ prompt: z.string().min(1).max(3000), repos: z.array(z.string().min(3).max(200)).min(1).max(5) }).parse(await c.req.json());
+    return c.json(await engine.checkScout(body));
+  });
+  app.post('/api/scouts/intro/turn-on', async (c) => {
+    const body = z
+      .object({
+        name: z.string().min(1).max(SCOUT_NAME_MAX),
+        prompt: z.string().min(1).max(3000),
+        repos: z.array(z.string().min(3).max(200)).min(1).max(5),
+        paths: z.array(z.string().min(1).max(200)).max(10).default([]),
+      })
+      .parse(await c.req.json());
+    return c.json(await engine.turnOnScout(body));
+  });
+  app.post('/api/scouts/intro/dismiss', async (c) => c.json(await engine.dismissScoutIntro()));
   app.get('/api/viewer', async (c) => c.json(await engine.getViewer()));
   // Home or routing only per team (DESIGN.md "Team roles"). A flip is local and sticks; it may read the team's members from GitHub.
   app.get('/api/team-roles', async (c) => c.json(await engine.getTeamRoles()));

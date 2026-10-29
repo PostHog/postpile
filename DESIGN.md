@@ -1207,7 +1207,11 @@ contract surfaces.
   comma or space separated), `paths:` (optional, comma separated, a note in
   brackets after an entry is ignored), `id:` (optional). The first other
   line starts the prompt.
-- Paths are CODEOWNERS-style globs (`codeownersPatternRegex`). A `+` in
+- Paths are CODEOWNERS-style globs, matched segment by segment without a
+  regex (`globPathMatches`, at most pattern length times path length):
+  hints can come from the model, and a compiled glob regex can backtrack
+  for seconds. The CODEOWNERS regex only says which patterns are
+  unsupported. A `+` in
   front counts only an added file (ADDED, or RENAMED to the path). `+*/`
   means a new top-level folder, and `+<folder>/*/` a new folder directly
   inside <folder> (`ScoutPathHint.newFolderIn`): an added file whose folder
@@ -1436,6 +1440,71 @@ the board places it (a scouted layer of a stack with a tracked layer is
 not on the section) (a followed PR is tracked before
 GitHub notifies about it); the scouted group in `whats_on_me` pages with the
 same `offset` and `limit` (`scoutedPage`).
+
+**The intro card** (2026-10-29, owner-approved mockup, searchlight art).
+An empty scouts.md says nothing about what a good scout is, so a card
+drafts the first one, checks it and turns it on.
+
+- *When it opens:* by itself on load while no scout exists and the user
+  never answered it (`scoutIntroAutoShows`), never over setup or the inbox
+  start dialog. "Not now", and turning a scout on, are kept in config.json
+  (`scoutsIntroDismissedAt`); it never opens by itself again. "Not now"
+  closes the card only once that is saved; a failed save keeps it open
+  with the error. For Turn on, saving the answer is best effort: the scout
+  is on once scouts.md has it, so a config.json that can't be written is
+  logged and the turn-on still reports success. A quiet "Set
+  up a scout" entry in the Scouted section (shown even with no scouts)
+  opens it any time. Quitting with the card open shows it again next
+  start: it was never answered.
+- *The draft:* one `scout_draft` call (Sonnet, no tools) when the card
+  opens, from the user's instructions, the work context digest and their
+  active topic names (fenced: agent-written from GitHub text), under the
+  daily catch-up allowance like glance catch-ups. Agent off or the
+  allowance spent: the textarea starts empty with a short example
+  placeholder. The repo picker defaults to the main repo (setup's repo
+  scope, else the board's busiest repo); "+ repo" adds up to five.
+- *Check scout:* one `scout_check` call, mapped onto the prompt like the
+  setup fit check (`mapScoutCheck`): a fit verdict and note, at most one
+  part a scout can't see (quoted from the prompt), a suggested name and up
+  to 6 path hints. The name is one that turns on (`scoutNameWithId`): one
+  that slugs to no id falls back to "Scout <repo>", one whose id is taken
+  gets " 2", " 3". "Drop that part" cuts that quote out of the user's
+  prompt where it appears word for word and tidies the punctuation
+  (`promptWithoutPart`); no model rewrite of the whole prompt is taken, so
+  nothing else in it can change. When the quote is not there word for
+  word, the card offers only "Keep it anyway". Dropping a part clears the
+  check (its counts, examples and Turn on) and asks to check the new prompt. Paths are a hard filter (a
+  scout with paths never judges a PR that touches none), so the check
+  must cover every kind of PR the prompt asks for or return none, and say
+  so (`pathsCoverAll`). Unless it says they cover it all, and every hint
+  is usable, the card keeps no hints: a missing hint only costs judge
+  calls, a partial list silently narrows the scout. Path hints pass only as
+  path globs of at most 200 characters, with no line break, comma or space
+  (`isScoutPathHint`, at most 8 `*` and 4 `**`); `scoutSection` writes no other kind, and
+  `appendScout` refuses one and checks the new scout's id and hints read
+  back as asked, so a hint can never add a key line. The path hints are
+  never shown; they go into the scout, edited in scouts.md. The check and
+  its dry run use the scout exactly as Turn on would write it
+  (`scoutFromCard`, `appendScout`'s read-back): a prompt that would not
+  turn on (a line such as "repos: …" that would widen the scope) is
+  refused before any agent call or GitHub read. Then a dry run
+  (`ScoutRun.trial`) over the last 2 days of the chosen repos with the
+  sync's own listing, rules, file reads and judge, on a new runner per
+  check (no per-run state shared with a sync or another check) and in a
+  call-log run of its own (`scout-check:<time>`, so its calls never count
+  in a sync running meanwhile), at most 5 judge calls under the same
+  allowance (fewer when the day has fewer left; with none left it reads
+  nothing and the card says "no agent calls left today for a dry run"),
+  scheduled like a sync (`scheduleScoutWork`): only what those calls can
+  judge gets its files read, and a check that leaves some unjudged says
+  "more PRs than one check judges". It writes nothing: no judgement, pull, cursor, resume point or snapshot.
+  The card shows pulls per day (`trialRateWords`) and two examples.
+- *Turn on scout:* the scout is appended to scouts.md through
+  `ScoutsHistory.appendScout` and recorded as a version of origin `intro`;
+  refused when the file or the new scout would not parse back exactly as
+  asked. The next full sync runs it. Toast: "Scout on: <name>. Finds show
+  under Scouted after the next sync." Telemetry `scout_turned_on` (repo and
+  path counts).
 
 **Accepted trade-offs:**
 

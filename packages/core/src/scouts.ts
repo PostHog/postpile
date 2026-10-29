@@ -49,7 +49,8 @@ export interface ScoutSignal {
 }
 
 /** scouts.md as it was at some point: its history, like instructions_version. */
-export type ScoutsOrigin = 'outside' | 'app';
+/** outside: found on disk (a hand edit); app: written by the app; intro: a scout turned on from the intro card. */
+export type ScoutsOrigin = 'outside' | 'app' | 'intro';
 
 export interface ScoutsVersion {
   /** 1, 2, 3, ... */

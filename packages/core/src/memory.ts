@@ -419,7 +419,11 @@ export type AgentCallKind =
   /** Setup's fit check: lines of the draft PostPile cannot act on or that sit under the wrong heading. */
   | 'setup_fit'
   /** Scouts: which PRs from outside the inbox match a scout's prompt. One call per scout per batch, during the full sync. */
-  | 'scout_judge';
+  | 'scout_judge'
+  /** The Scouts intro card: a first scout prompt drafted from the user's instructions and work context. */
+  | 'scout_draft'
+  /** The Scouts intro card's "Check scout": fit, a part it can't see, a name and path hints. */
+  | 'scout_check';
 
 /** One row per runner call, persisted in agent_call. */
 export interface AgentCallRecord {

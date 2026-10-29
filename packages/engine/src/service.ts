@@ -1,6 +1,11 @@
 import type {
   PrOverlapsView,
   ScoutListItem,
+  ScoutIntroState,
+  ScoutDraftResult,
+  ScoutCheckRequest,
+  ScoutCheckResult,
+  ScoutTurnOnRequest,
   ActionLogEntry,
   ActionResult,
   AgentActionFrom,
@@ -303,6 +308,16 @@ export interface EngineService {
   dismissScouted(prKey: PrKey, reason: string | null): Promise<ActionResult>;
   /** The user opened a scouted PR: seen in PostPile through its current update. Never a GitHub read, never `handled_at`. */
   markScoutedSeen(prKey: PrKey): Promise<ActionResult>;
+  /** The Scouts intro card (DESIGN.md "Scouts" › The intro card): whether it opens by itself, the main repo and the known repos. */
+  scoutIntroState(): Promise<ScoutIntroState>;
+  /** Its drafted prompt: one scout_draft call under the daily allowance, or why the textarea starts empty. */
+  draftScout(): Promise<ScoutDraftResult>;
+  /** "Check scout": scout_check, then a dry run of the last 2 days (at most 5 judge calls) that writes nothing. */
+  checkScout(request: ScoutCheckRequest): Promise<ScoutCheckResult>;
+  /** "Turn on scout": appends it to scouts.md (origin intro); the next full sync runs it. */
+  turnOnScout(request: ScoutTurnOnRequest): Promise<ActionResult>;
+  /** "Not now": kept in config.json; the card never opens by itself again. */
+  dismissScoutIntro(): Promise<ActionResult>;
   /** The title bar's repo menu: repos with topic and PR counts, the chosen repo and the quiet repos. */
   listRepos(): Promise<RepoOverview>;
   /**

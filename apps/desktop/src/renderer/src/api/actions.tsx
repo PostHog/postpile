@@ -38,6 +38,10 @@ import type {
   RepoOverview,
   ReviewNoteKind,
   ReviewNoteSource,
+  ScoutCheckRequest,
+  ScoutCheckResult,
+  ScoutDraftResult,
+  ScoutTurnOnRequest,
   SetupAcceptRequest,
   SetupAcceptResult,
   SetupFitRequest,
@@ -194,6 +198,14 @@ export interface Actions {
   dismissScouted(prKeys: PrKey[], reason: string | null): Promise<void>;
   /** The user opened a scouted PR: seen in PostPile only, never a GitHub read. Quiet: no toast unless it fails. */
   markScoutedSeen(prKey: PrKey): Promise<void>;
+  /** The Scouts intro card's draft: one agent call from the instructions, nothing written. A failed request reads as `failed`, no toast. */
+  draftScout(): Promise<ScoutDraftResult>;
+  /** "Check scout": the agent's check plus a dry run, nothing written. A failed request comes back as ok: false, shown in the card. */
+  checkScout(body: ScoutCheckRequest): Promise<ScoutCheckResult>;
+  /** "Turn on scout": appends it to scouts.md. Local, not a GitHub write; the toast says what happens next. True when it is on. */
+  turnOnScout(body: ScoutTurnOnRequest): Promise<boolean>;
+  /** "Not now" on the intro card: it stops opening by itself. Local. */
+  dismissScoutIntro(): Promise<boolean>;
   /** Retry on a failed glance: a catch-up run for the PR's topic. Agent calls only, not a GitHub write. */
   retryGlance(prKey: PrKey): Promise<void>;
   /**
@@ -787,6 +799,22 @@ export function ActionsProvider(props: { children: ReactNode }) {
     await run(`scoutDismiss:${prKeys.join(',')}`, null, task);
   }
 
+  async function draftScout(): Promise<ScoutDraftResult> {
+    try {
+      return await withBusy('scout:draft', () => request<ScoutDraftResult>('POST', '/api/scouts/intro/draft'));
+    } catch {
+      return { text: null, why: 'failed' };
+    }
+  }
+
+  async function checkScout(body: ScoutCheckRequest): Promise<ScoutCheckResult> {
+    try {
+      return await withBusy('scout:check', () => request<ScoutCheckResult>('POST', '/api/scouts/intro/check', body));
+    } catch (error) {
+      return { ok: false, message: `Could not check the scout: ${errorText(error)}`, fit: { verdict: 'partly', note: '' }, cantSee: null, name: '', paths: [], trial: null };
+    }
+  }
+
   /** No toast: the dialog closes and the held sync shows in the title bar. */
   async function startAsUsual(): Promise<boolean> {
     try {
@@ -1126,6 +1154,10 @@ export function ActionsProvider(props: { children: ReactNode }) {
     },
     dismissScouted,
     markScoutedSeen,
+    draftScout,
+    checkScout,
+    turnOnScout: (body) => run('scout:turn-on', null, () => request('POST', '/api/scouts/intro/turn-on', body)),
+    dismissScoutIntro: () => run('scout:dismiss-intro', null, () => request('POST', '/api/scouts/intro/dismiss')),
     removeTeamRequest: async (prKey, team) => {
       await run(`removeTeam:${prKey}`, 'removeTeam', () => request('POST', `${prPath(prKey)}/remove-team-request`, { team }));
     },

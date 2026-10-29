@@ -166,6 +166,7 @@ export const TELEMETRY_EVENTS = {
   proposal_resolved: z.object({ kind: proposalKind, accepted: z.boolean(), source: proposalSource.optional() }).strict(),
   scout_followed: z.object({ from: z.enum(['tile', 'detail']) }).strict(),
   scout_dismissed: z.object({ with_reason: z.boolean() }).strict(),
+  scout_turned_on: z.object({ repos: count, paths: count }).strict(),
   instructions_edited: NO_PROPS,
 
   // 5. Health

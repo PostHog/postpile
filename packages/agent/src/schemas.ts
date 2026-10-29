@@ -371,3 +371,18 @@ export const scoutJudgementOutput = z.object({
   verdict: z.enum(['pull', 'skip']),
   reason: text.default(''),
 });
+
+/** The intro card's draft: one scout prompt. */
+export const scoutDraftOutput = z.object({
+  prompt: text.default(''),
+});
+
+/** "Check scout": the fit, at most one part a scout can't see, a name and path hints. */
+export const scoutCheckOutput = z.object({
+  fit: text.default('partly'),
+  note: text.default(''),
+  cantSee: z.object({ part: text, why: text.default('') }).nullable().default(null),
+  name: text.default(''),
+  paths: z.array(text).default([]),
+  pathsCoverAll: z.boolean().default(false),
+});

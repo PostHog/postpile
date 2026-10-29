@@ -24,6 +24,7 @@ import type {
   PrEvent,
   PrKey,
   PrState,
+  ScoutCheckResult,
   ScoutFile,
   ScoutSignal,
   PrSet,
@@ -501,6 +502,24 @@ export interface ScoutJudgeResult {
   model: string;
 }
 
+/** The Scouts intro card's first draft of a scout prompt. Runs without tools. */
+export interface ScoutDraftInput {
+  viewer: Viewer;
+  /** The user's instructions and the work context digest. */
+  context: PromptContext;
+  /** Names of the user's active topics: agent-written from GitHub text, so fenced in the prompt. */
+  topics: string[];
+  repos: string[];
+}
+
+/** "Check scout": what a scout reads, judged against the user's prompt. Runs without tools. */
+export interface ScoutCheckInput {
+  prompt: string;
+  repos: string[];
+  viewer: Viewer;
+  context: PromptContext;
+}
+
 /** Second opinion on new loud events, one call per topic instead of one per PR. */
 export interface EventBatchInput {
   topic: Topic | null;
@@ -789,4 +808,8 @@ export interface AgentService {
    * `missing` and stay pending, never skipped.
    */
   judgeScouts(input: ScoutJudgeInput): Promise<ScoutJudgeResult>;
+  /** The intro card: a short scout prompt drafted from the user's instructions and work context; '' when the answer had none. */
+  draftScout(input: ScoutDraftInput): Promise<string>;
+  /** The intro card's check: mapped onto the prompt (`mapScoutCheck`), so a quoted part is really in it. */
+  checkScout(input: ScoutCheckInput): Promise<Pick<ScoutCheckResult, 'fit' | 'cantSee' | 'name' | 'paths'>>;
 }

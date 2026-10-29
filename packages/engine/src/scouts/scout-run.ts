@@ -12,6 +12,8 @@ import {
   scoutRetentionCutoff,
   scoutFolderParents,
   scoutSignals,
+  SCOUT_TRIAL_EXAMPLES,
+  SCOUT_TRIAL_JUDGE_CALLS,
   scheduleScoutWork,
   scoutRetryStalled,
   SCOUT_FILES_NOT_READ,
@@ -19,6 +21,7 @@ import {
   SCOUT_TREE_NOT_READ,
   type ScoutWorkItem,
   type IsoTime,
+  type ScoutTrial,
   type PrKey,
   type PrRef,
   type ScoutCandidate,
@@ -739,6 +742,72 @@ export class ScoutRun {
       }
     }
     return expired;
+  }
+
+  /**
+   * "Check scout" (DESIGN.md "Scouts" › The intro card): the scout as the
+   * sync would run it on the last `days` of its repos, with the same
+   * listing, rules, file reads and judge, under `input.budget` (the caller
+   * caps it). Writes NOTHING: no judgement, no pull, no cursor, no resume
+   * point, no snapshot. A scout of the same id that exists is not
+   * consulted: the trial judges as if it were new.
+   */
+  async trial(scout: ScoutConfig, days: number, input: Omit<ScoutRunInput, 'glance' | 'errors'>): Promise<ScoutTrial> {
+    this.quotaAllows = input.quotaAllows;
+    this.runFiles = new Map();
+    this.judgeCallsLeft = SCOUT_TRIAL_JUDGE_CALLS;
+    this.rateLimited = false;
+    const errors: string[] = [];
+    const fresh: ScoutConfig = { ...scout, id: '__trial__' };
+    const floor = new Date(this.deps.now().getTime() - days * 24 * 60 * 60 * 1000).toISOString();
+    const facts = { viewer: input.viewer, tracked: this.trackedKeys() };
+    const titles = new Map<PrKey, string>();
+    const rows: ScoutJudgement[] = [];
+    let listedWhole = true;
+    const plans: ScoutPlan[] = [];
+    for (const repo of fresh.repos) {
+      const prs = new Map<PrKey, ScoutCandidate>();
+      const end = await this.pass(repo, null, floor, { pages: SCOUT_LIST_MAX_PAGES }, prs, errors);
+      listedWhole &&= end.kind === 'done';
+      prs.forEach((pr) => titles.set(pr.key, pr.title));
+      const listing: RepoListing = { prs, complete: end.kind === 'done', end, startedAt: floor, scouts: [fresh.id], floor };
+      const work: ScoutRepoWork = { rows: [], pulls: [] };
+      plans.push({ scout: fresh, repo, listing, work, triaged: this.triage(fresh, null, [...prs.values()], facts, work), scheduled: [] });
+    }
+    // The same schedule as a sync, within the trial's calls: what it can't take stays pending, unread.
+    this.schedule(plans, input, null);
+    const judgedWhole = plans.every((plan) => plan.scheduled.length === plan.triaged.length);
+    for (const { repo, work, scheduled } of plans) {
+      const items = await this.prepare(fresh, null, repo, scheduled, work);
+      await this.judge(fresh, null, items, { ...input, errors, glance: async () => {} }, work);
+      rows.push(...work.rows);
+    }
+    // What the scout would really show: a pull verdict on a PR another scout owns already pulls nothing (`scoutPullStep`).
+    const pulled = plans.flatMap((plan) => plan.work.pulls);
+    const pending = rows.filter((row) => row.status === 'pending');
+    const judged = rows.filter((row) => row.attempts > 0 || row.status === 'judged').length;
+    let problem: string | null = errors[0] ?? null;
+    if (problem === null && this.rateLimited) {
+      problem = 'GitHub asked to slow down; check again in a few minutes';
+    }
+    if (problem === null && !listedWhole) {
+      problem = 'more PRs than one check lists';
+    }
+    if (problem === null && !judgedWhole && input.agentOff === null) {
+      problem = 'more PRs than one check judges';
+    }
+    if (problem === null && pending.length > 0) {
+      problem = pending[0]!.lastError;
+    }
+    return {
+      days,
+      pulled: pulled.length,
+      examples: pulled.slice(0, SCOUT_TRIAL_EXAMPLES).map((pull) => ({ prKey: pull.prKey, title: titles.get(pull.prKey) ?? pull.prKey, reason: pull.reason })),
+      candidates: rows.length,
+      judged,
+      complete: listedWhole && pending.length === 0,
+      problem,
+    };
   }
 
   async run(input: ScoutRunInput): Promise<ScoutRunReport> {

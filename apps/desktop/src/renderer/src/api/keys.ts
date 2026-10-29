@@ -11,6 +11,7 @@ export const queryKeys = {
   topics: ['topics'] as const,
   finishedTopics: ['finished-topics'] as const,
   scouts: ['scouts'] as const,
+  scoutIntro: ['scout-intro'] as const,
   viewer: ['viewer'] as const,
   teamRoles: ['team-roles'] as const,
   repos: ['repos'] as const,

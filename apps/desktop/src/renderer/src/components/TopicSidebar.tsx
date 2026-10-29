@@ -433,6 +433,8 @@ interface TopicSidebarProps {
   /** The tile selected in the open topic: while it stays selected, the topic's row keeps its place. */
   selectedTileId: string | null;
   onSelect: (topicId: string) => void;
+  /** The Scouted section's "Set up a scout": opens the Scouts intro card. */
+  onSetUpScout: () => void;
   inboxCount: number;
   inboxOpen: boolean;
   onOpenInbox: () => void;
@@ -736,7 +738,7 @@ export function TopicSidebar(props: TopicSidebarProps) {
         />
       )}
       {/* Scouts pull in PRs from outside the inbox: last, under the Archive, and like it out of the search and queue filters. */}
-      {!narrowed && <ScoutedSection activeTopicId={props.activeTopicId} onSelect={props.onSelect} />}
+      {!narrowed && <ScoutedSection activeTopicId={props.activeTopicId} onSelect={props.onSelect} onSetUpScout={props.onSetUpScout} />}
       {/*
         The list fades out at the bottom instead of stopping at a hard edge. Sticky, so it stays at
         the bottom while the list scrolls; at the end of the list it slides under the footer, where

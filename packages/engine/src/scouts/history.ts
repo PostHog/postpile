@@ -1,6 +1,6 @@
-import { parseScouts, type ScoutConfig, type ScoutsVersion } from '@postpile/core';
+import { appendScout, parseScouts, type ScoutConfig, type ScoutsVersion, type ScoutTurnOnRequest } from '@postpile/core';
 import type { Store } from '@postpile/store';
-import { readInstructions } from '../instructions/file.ts';
+import { readInstructions, writeInstructionsAtomically } from '../instructions/file.ts';
 
 export interface CurrentScoutsText {
   text: string;
@@ -56,6 +56,36 @@ export class ScoutsHistory {
       createdAt: this.now().toISOString(),
     });
     return { text, version };
+  }
+
+  /**
+   * The intro card's "Turn on scout": the scout appended to scouts.md and
+   * the text recorded as a version of origin `intro`. Whatever is on disk is
+   * recorded first (`current`), so a hand edit made meanwhile stays its own
+   * version. Refused when the file or the new scout would not parse.
+   */
+  /**
+   * The scout appended to scouts.md, then recorded as an `intro` version.
+   * The file is the source of truth, so a written file is a scout turned
+   * on: a failed history insert comes back as `historyError` (the next read
+   * stores the text as a version anyway), never as a failed activation.
+   */
+  appendScout(scout: ScoutTurnOnRequest): { version: ScoutsVersion | null; historyError: string | null } | { error: string } {
+    if (this.readOnly) {
+      return { error: 'read-only: scouts.md is not written from here' };
+    }
+    const { text } = this.current();
+    const next = appendScout(text, scout);
+    if ('error' in next) {
+      return next;
+    }
+    writeInstructionsAtomically(this.file, next.text);
+    try {
+      const version = this.store.scoutsVersions.add({ text: next.text, summary: `Turned on ${scout.name} from the intro card`, origin: 'intro', createdAt: this.now().toISOString() });
+      return { version, historyError: null };
+    } catch (error) {
+      return { version: null, historyError: error instanceof Error ? error.message : String(error) };
+    }
   }
 
   active(): ActiveScouts {
