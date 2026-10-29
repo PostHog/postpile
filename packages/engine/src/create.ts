@@ -167,6 +167,7 @@ export function wireEngine(options: CreateEngineOptions = {}): Engine {
     ),
     pendingWrites,
     instructionsFile: paths.instructionsFile,
+    scoutsFile: paths.scoutsFile ?? null,
     storeReadOnly: options.withoutLock === true,
     now,
     pingDecisionsPerDay: options.pingDecisionsPerDay ?? pingCapFromEnv(process.env.POSTPILE_PING_CAP),

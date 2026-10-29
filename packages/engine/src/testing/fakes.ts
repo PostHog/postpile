@@ -8,6 +8,7 @@ import type {
   PrKey,
   PrRef,
   ReviewedPr,
+  ScoutCandidate,
   TelemetryEventName,
   TelemetryEventProps,
   Viewer,
@@ -31,7 +32,11 @@ import type {
   TeamMembersResult,
   ThreadsSinceResult,
   FoundRef,
+  ScoutFilesRead,
+  ScoutFolderRead,
+  ScoutListPage,
 } from '@postpile/github';
+import { scoutFolderKey } from '@postpile/github';
 import type { UserConfigFile } from '../user-config.ts';
 import type { CommandResult, CommandRunner } from '../setup/setup-checks.ts';
 import type { Telemetry, TelemetryPersonInfo } from '../telemetry/telemetry.ts';
@@ -282,6 +287,57 @@ export class FakeReader implements GitHubReader {
     return this.notificationsProblem;
   }
 
+  /** Scout listings per repo, newest update first; listScoutPrs answers them `scoutPageSize` at a time. */
+  scoutListings = new Map<string, ScoutCandidate[]>();
+  /** Page size of the fake listing; small so tests can page. */
+  scoutPageSize = 50;
+  /** Repos whose listing throws, like a repo the token cannot see. */
+  failingScoutRepos = new Set<string>();
+  /** File lists per PR key for scoutFiles; null stands for a list that could not be read whole. */
+  scoutFileLists = new Map<PrKey, ScoutFilesRead>();
+  /** Root directories per commit oid for topLevelFolders. */
+  scoutTrees = new Map<string, string[]>();
+  /** Every scout read, for asserting on GitHub traffic. */
+  scoutCalls: string[] = [];
+
+  /** Runs on every listScoutPrs, e.g. to note a quota reading the answer carried. */
+  onListScoutPrs: (() => void) | null = null;
+
+  async listScoutPrs(repo: string, after: string | null): Promise<ScoutListPage> {
+    this.scoutCalls.push(`list ${repo} ${after ?? '-'}`);
+    this.onListScoutPrs?.();
+    if (this.failingScoutRepos.has(repo)) {
+      throw new Error(`GitHub scout listing of ${repo} failed`);
+    }
+    const all = this.scoutListings.get(repo) ?? [];
+    const start = after === null ? 0 : Number(after);
+    const end = start + this.scoutPageSize;
+    return { prs: all.slice(start, end), nextCursor: end < all.length ? String(end) : null };
+  }
+
+  async scoutPrsByNumber(refs: PrRef[]): Promise<Map<PrKey, ScoutCandidate>> {
+    this.scoutCalls.push(`numbers ${refs.map(prKey).join(',')}`);
+    const all = [...this.scoutListings.values()].flat();
+    return new Map(refs.flatMap((ref) => all.filter((pr) => pr.key === prKey(ref)).map((pr): [PrKey, ScoutCandidate] => [pr.key, pr])));
+  }
+
+  async scoutFiles(refs: PrRef[]): Promise<Map<PrKey, ScoutFilesRead>> {
+    this.scoutCalls.push(`files ${refs.map(prKey).join(',')}`);
+    return new Map(refs.flatMap((ref) => {
+      const read = this.scoutFileLists.get(prKey(ref));
+      return read ? [[prKey(ref), read] as [PrKey, ScoutFilesRead]] : [];
+    }));
+  }
+
+  /** scoutTrees: folder names by "<oid>" for the root, "<oid>:<parent>" for a folder; a key left out is a read GitHub did not answer. */
+  async scoutFolders(repo: string, reads: ScoutFolderRead[]): Promise<Map<string, string[]>> {
+    this.scoutCalls.push(`tree ${repo} ${reads.map(scoutFolderKey).join(',')}`);
+    return new Map(reads.flatMap((read) => {
+      const names = this.scoutTrees.get(read.parent === '' ? read.oid : scoutFolderKey(read));
+      return names ? [[scoutFolderKey(read), names.map((name) => (read.parent === '' ? name : `${read.parent}/${name}`))] as [string, string[]]] : [];
+    }));
+  }
+
   /** CODEOWNERS per repo (lower case) for codeOwnersFiles; a repo missing here has none. */
   codeOwners = new Map<string, CodeOwnersFile>();
   /** Every codeOwnersFiles call's repos. */
@@ -490,6 +546,8 @@ export interface Harness {
 
 export interface HarnessOptions {
   instructionsFile?: string;
+  /** The user's scouts.md; none by default, so the sync runs no scouts. */
+  scoutsFile?: string;
   /** The store was opened read-only, as in the MCP process: the engine must not record anything. */
   storeReadOnly?: boolean;
   /** Clock for the engine; tests move it forward by changing what it returns. */
@@ -578,6 +636,7 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
     markReadQueue,
     pendingWrites,
     instructionsFile,
+    scoutsFile: options.scoutsFile ?? null,
     storeReadOnly: options.storeReadOnly,
     now,
     timers,

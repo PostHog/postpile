@@ -8,7 +8,7 @@ import { isTeammate } from './review-request.ts';
 import { sameLogin } from './mentions.ts';
 import { shortHash } from './pr-notes.ts';
 import { scoutHintMatches, type ScoutConfig } from './scouts-config.ts';
-import type { IsoTime, PrKey, PrState, Viewer } from './types.ts';
+import type { IsoTime, PrKey, PrState, Provenance, Viewer } from './types.ts';
 
 /** GitHub's PatchStatus for a changed file. */
 export type ScoutChangeType = 'ADDED' | 'MODIFIED' | 'DELETED' | 'RENAMED' | 'COPIED' | 'CHANGED';
@@ -16,6 +16,9 @@ export type ScoutChangeType = 'ADDED' | 'MODIFIED' | 'DELETED' | 'RENAMED' | 'CO
 export interface ScoutFile {
   path: string;
   changeType: ScoutChangeType;
+  /** Lines added and removed, from GitHub's file list; left out where a read did not give them. */
+  additions?: number;
+  deletions?: number;
 }
 
 /** A PR from a scout's repo listing, with its whole file list once that is read. */
@@ -94,6 +97,12 @@ export interface ScoutJudgement {
   /** Why it is still pending, for the sync report. */
   lastError: string | null;
   judgedAt: IsoTime | null;
+  /**
+   * The pre-filter rule that skipped it before any read, else null. Such a
+   * skip is no verdict on the PR: once the rule stops applying (a draft
+   * marked ready, a PR no longer tracked) it is judged like a new one.
+   */
+  leftOut: ScoutPrefilterReason | null;
 }
 
 /** A PR a scout pulled in: what the board's Scouted section shows. One row per PR, first scout wins. */
@@ -346,4 +355,83 @@ export function scoutPullStep(existing: Pick<ScoutedPr, 'scoutId'> | null, scout
 /** Unseen in PostPile: never opened, or GitHub activity after the update it was seen through. */
 export function isScoutedUnseen(scouted: Pick<ScoutedPr, 'seenUpdatedAt'>, prUpdatedAt: IsoTime): boolean {
   return scouted.seenUpdatedAt === null || scouted.seenUpdatedAt < prUpdatedAt;
+}
+
+/**
+ * How a scouted PR reached the user, for its glance and its tile: found
+ * outside the inbox, by a scout. `via: 'scouted'` is never stored in
+ * pr_found, so it never makes the PR tracked.
+ */
+export function scoutedProvenance(scouted: Pick<ScoutedPr, 'scoutName' | 'reason'>): Provenance {
+  return { kind: 'found', via: 'scouted', reason: `scout "${scouted.scoutName}" pulled it in: ${scouted.reason}` };
+}
+
+/** One piece of scout work that needs a file read and a model call: a scout's candidate on one repo. */
+export interface ScoutWorkItem {
+  /** A retry of a pending judgement, as opposed to a new or moved candidate. */
+  pending: boolean;
+  /** When the PR was observed: pending retries go oldest first. */
+  observedUpdatedAt: IsoTime;
+  /**
+   * A pending retry whose last try failed before the model call (its file
+   * list or base tree could not be read): it waits behind other work.
+   */
+  stalled: boolean;
+}
+
+/** Why a pending row's last try stopped before the model call: its reads failed, not the judge. */
+export const SCOUT_FILES_NOT_READ = 'file list not read whole';
+export const SCOUT_TREE_NOT_READ = 'base tree not read';
+export const SCOUT_LOOKUP_FAILED = 'lookup by number not answered';
+const SCOUT_READ_FAILURES = new Set([SCOUT_FILES_NOT_READ, SCOUT_TREE_NOT_READ, SCOUT_LOOKUP_FAILED]);
+
+/**
+ * A pending row whose last try failed in the reads (file list, base tree,
+ * or the lookup by number), so the next run puts it behind other work. The
+ * reason is the one stored retry state: a deferral keeps it.
+ */
+export function scoutRetryStalled(row: Pick<ScoutJudgement, 'status' | 'lastError'>): boolean {
+  return row.status === 'pending' && row.lastError !== null && SCOUT_READ_FAILURES.has(row.lastError);
+}
+
+/**
+ * Which work one run takes on, when there is more than it can judge
+ * (DESIGN.md "Scouts" › Scheduling). Each queue is one scout on one repo,
+ * in scouts.md order: its pending retries first, oldest observed first,
+ * then its new candidates in the order given, then the stalled retries
+ * (their reads failed last time), oldest first: a PR GitHub keeps failing
+ * to read only takes slots nothing else needs. The run takes one item from
+ * each queue in turn, round-robin, until `capacity` (the calls left times
+ * the batch size) is used, so no scout, repo or wave of new PRs starves the
+ * rest. Everything not taken waits for the next run without a file read.
+ */
+export function scheduleScoutWork<T extends ScoutWorkItem>(queues: T[][], capacity: number): Set<T> {
+  const oldestFirst = (a: T, b: T) => a.observedUpdatedAt.localeCompare(b.observedUpdatedAt);
+  const ordered = queues.map((queue) => [
+    ...queue.filter((item) => item.pending && !item.stalled).sort(oldestFirst),
+    ...queue.filter((item) => !item.pending),
+    ...queue.filter((item) => item.pending && item.stalled).sort(oldestFirst),
+  ]);
+  const taken = new Set<T>();
+  let round = 0;
+  while (taken.size < capacity && ordered.some((queue) => queue.length > round)) {
+    for (const queue of ordered) {
+      const item = queue[round];
+      if (item !== undefined && taken.size < capacity) {
+        taken.add(item);
+      }
+    }
+    round += 1;
+  }
+  return taken;
+}
+
+/**
+ * A scouted PR wants a glance while it is on the Scouted section, open,
+ * merged or closed: it is there to be looked at. A merge changes its glance
+ * input, so it gets one fresh glance after the merge. Inbox PRs keep
+ * `prWantsGlance`.
+ */
+export function scoutedWantsGlance(scouted: Pick<ScoutedPr, 'followedAt' | 'dismissedAt' | 'expiredAt'>): boolean {
+  return isScoutedActive(scouted);
 }

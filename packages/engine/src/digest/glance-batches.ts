@@ -176,11 +176,29 @@ export class GlanceBatchWriter {
       // scope.prKeys is the refresh on look.
       this.glanceTopic(topicId, group, inputs, byKey, dossiers.settled(topicId), scope?.prKeys !== undefined),
     );
-    const stillMissing = (await Promise.all(topics)).flat();
+    this.reportMissing((await Promise.all(topics)).flat());
+  }
+
+  /** PRs still without a glance after their retry: a gap each, and an error line. */
+  private reportMissing(stillMissing: PrKey[]): void {
     for (const key of stillMissing) {
       const detail = this.lastError.get(key) ?? MISSING_REASON;
       this.markGap([key], 'failed', detail);
       this.deps.errors.push(`glance ${key}: ${detail}`);
     }
+  }
+
+  /**
+   * Scouted PRs (DESIGN.md "Scouts"), right after the scouts pulled them:
+   * the explicit glance-target path, topic-less like Unsorted, since no
+   * tile of the board's holds them. Same batches, retry and gaps as a topic.
+   */
+  async runScouted(): Promise<void> {
+    const { store, viewer, contexts } = this.deps;
+    const board = Board.load(store, this.deps.now().toISOString());
+    const inputs = new GlanceInputs(store, board, viewer, contexts);
+    const byKey = new Map<PrKey, GlanceTarget>();
+    const missing = await this.glanceTopic(null, inputs.scoutTargets(), inputs, byKey, Promise.resolve(), false);
+    this.reportMissing(missing);
   }
 }

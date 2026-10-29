@@ -25,6 +25,7 @@ import { topicDigestPrompt } from './prompts/topic-digest.ts';
 import { topicTidyPrompt } from './prompts/topic-tidy.ts';
 import { setupDraftPrompt, setupFitPrompt, setupRefinePrompt } from './prompts/setup.ts';
 import { topicAssignmentPrompt } from './prompts/topics.ts';
+import { scoutJudgePrompt } from './prompts/scout-judge.ts';
 import { mapReconcileAnswer } from './reconcile-answer.ts';
 import { mapSetAnswer } from './set-answer.ts';
 import { mapTidyAnswer } from './tidy-answer.ts';
@@ -50,6 +51,8 @@ import {
   topicAssignmentOutput,
   topicDigestOutput,
   topicTidyOutput,
+  scoutJudgeOutput,
+  scoutJudgementOutput,
 } from './schemas.ts';
 import type {
   AgentChatReply,
@@ -90,6 +93,9 @@ import type {
   SetupRefineInput,
   TopicAssignment,
   TopicAssignmentInput,
+  ScoutJudgeAnswer,
+  ScoutJudgeInput,
+  ScoutJudgeResult,
 } from './service.ts';
 import { WORK_THREADS_MAX } from './service.ts';
 
@@ -121,6 +127,8 @@ const timeouts: Record<AgentPurpose, number> = {
   setup_refine: 180_000,
   // Sonnet over the user's own short text, while they look at the Accept step.
   setup_fit: 90_000,
+  // A batch of PR titles and file lists against one short prompt; nobody waits on it.
+  scout_judge: 180_000,
 };
 
 /** Bounds for the work context digest, so a runaway answer cannot bloat every prompt. */
@@ -507,6 +515,50 @@ export class RunnerAgentService implements AgentService {
   async checkSetupFit(input: SetupFitInput): Promise<SetupFitNote[]> {
     const { value } = await this.ask('setup_fit', setupFitPrompt(input), setupFitOutput);
     return mapSetupFit(value, input.sections);
+  }
+
+  /**
+   * Keys match ignoring case, as GitHub does. A key answered twice counts
+   * as not answered: two verdicts for one PR say nothing. An answer whose
+   * outer JSON does not parse leaves every PR missing; runner failures
+   * throw.
+   */
+  async judgeScouts(input: ScoutJudgeInput): Promise<ScoutJudgeResult> {
+    const model = modelFor('scout_judge');
+    if (input.items.length === 0) {
+      return { answers: [], missing: [], model };
+    }
+    const asked = new Map(input.items.map((item) => [item.prKey.toLowerCase(), item.prKey]));
+    let answer: { value: { judgements: unknown[] }; model: string };
+    try {
+      answer = await this.ask('scout_judge', scoutJudgePrompt(input), scoutJudgeOutput);
+    } catch (error) {
+      if (error instanceof AgentOutputError) {
+        return { answers: [], missing: input.items.map((item) => item.prKey), model };
+      }
+      throw error;
+    }
+    const byKey = new Map<string, ScoutJudgeAnswer>();
+    const twice = new Set<string>();
+    for (const raw of answer.value.judgements) {
+      const parsed = scoutJudgementOutput.safeParse(raw);
+      if (!parsed.success) {
+        continue;
+      }
+      const entry = parsed.data;
+      const key = asked.get(entry.prKey.trim().toLowerCase());
+      if (key === undefined) {
+        continue;
+      }
+      if (byKey.has(key)) {
+        twice.add(key);
+      }
+      byKey.set(key, { prKey: key, verdict: entry.verdict, reason: clipText(entry.reason, 200) });
+    }
+    const answers = [...byKey.values()].filter((entry) => !twice.has(entry.prKey) && entry.reason !== '');
+    const answered = new Set(answers.map((entry) => entry.prKey));
+    const missing = input.items.map((item) => item.prKey).filter((key) => !answered.has(key));
+    return { answers, missing, model: answer.model };
   }
 
   async consolidate(input: ConsolidationInput): Promise<ConsolidationResult> {

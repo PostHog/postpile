@@ -80,6 +80,23 @@ function waitingAsksAfterMerge(store: Store, viewer: Viewer | null): Set<PrKey> 
   );
 }
 
+/**
+ * PRs stored only because a scout pulled them in (DESIGN.md "Scouts"): a
+ * `pr_scouted` row, no thread, not found, and no tracked stack or set mate
+ * (a layer of a tracked stack rides along with it). They are no part of the
+ * inbox, so they never count toward its cap or busy mode: the scout's
+ * section reads them on its own (`Board.forTopic`).
+ */
+function scoutOnlyKeys(store: Store, shape: StoreShape, threads: Map<PrKey, NotificationThread>, found: ReadonlyMap<PrKey, unknown>): Set<PrKey> {
+  const tracked = (key: PrKey) => threads.has(key) || found.has(key);
+  const scouted = store.scoutedPrs.listAll().map((row) => row.prKey).filter((key) => !tracked(key));
+  if (scouted.length === 0) {
+    return new Set();
+  }
+  const withTrackedMate = new Set(shape.groups.filter((group) => group.some(tracked)).flat());
+  return new Set(scouted.filter((key) => !withTrackedMate.has(key)));
+}
+
 /** The hot PRs as the store stands (`selectHotBoard`), from PR headers, threads, found PRs and personal asks. */
 export function readHotSet(store: Store, now: string, threads: Map<PrKey, NotificationThread>): HotSet {
   const shape = readStoreShape(store);
@@ -87,7 +104,8 @@ export function readHotSet(store: Store, now: string, threads: Map<PrKey, Notifi
   const found = store.foundPrs.listAll();
   const asks = store.events.prKeysWithPersonalAsks();
   const asksAfterMerge = waitingAsksAfterMerge(store, viewer);
-  const facts = shape.headers.map((pr) =>
+  const scoutOnly = scoutOnlyKeys(store, shape, threads, found);
+  const facts = shape.headers.filter((pr) => !scoutOnly.has(pr.key)).map((pr) =>
     hotFactsOf(pr, {
       thread: threads.get(pr.key) ?? null,
       found: found.get(pr.key)?.via ?? null,

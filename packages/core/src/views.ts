@@ -567,10 +567,10 @@ export interface PrDetail {
  * Agent jobs a sync can run. 'dossiers' includes reconciling the facts the
  * dossier updates produced.
  */
-export type AgentJob = 'topics' | 'dossiers' | 'sets' | 'glances' | 'events';
+export type AgentJob = 'topics' | 'dossiers' | 'sets' | 'glances' | 'events' | 'scouts';
 
 /** In the order a sync runs them, which is also the order a capped budget is spent in. */
-export const ALL_AGENT_JOBS: AgentJob[] = ['topics', 'dossiers', 'sets', 'glances', 'events'];
+export const ALL_AGENT_JOBS: AgentJob[] = ['topics', 'dossiers', 'sets', 'glances', 'events', 'scouts'];
 
 /** Knobs for cheap runs (smoke tests, first look). Everything is unlimited by default. */
 export interface SyncOptions {
@@ -589,10 +589,10 @@ export interface SyncOptions {
  * (see DESIGN.md › Sync flow › Scheduling), so each timing is the wall time
  * from that step's start to its end, not a slice of the total.
  */
-export type SyncPhase = 'tidy' | 'fetch' | 'topics' | 'dossiers' | 'facts' | 'sets' | 'glances' | 'events';
+export type SyncPhase = 'tidy' | 'fetch' | 'topics' | 'dossiers' | 'facts' | 'sets' | 'glances' | 'events' | 'scouts';
 
 /** In the order a sync starts them. */
-export const SYNC_PHASES: SyncPhase[] = ['tidy', 'fetch', 'topics', 'dossiers', 'facts', 'sets', 'glances', 'events'];
+export const SYNC_PHASES: SyncPhase[] = ['tidy', 'fetch', 'topics', 'dossiers', 'facts', 'sets', 'glances', 'events', 'scouts'];
 
 /** Milliseconds per phase that ran. */
 export type SyncPhaseTimings = Partial<Record<SyncPhase, number>>;

@@ -417,7 +417,9 @@ export type AgentCallKind =
   /** "Tell the agent what's off" on the setup draft. */
   | 'setup_refine'
   /** Setup's fit check: lines of the draft PostPile cannot act on or that sit under the wrong heading. */
-  | 'setup_fit';
+  | 'setup_fit'
+  /** Scouts: which PRs from outside the inbox match a scout's prompt. One call per scout per batch, during the full sync. */
+  | 'scout_judge';
 
 /** One row per runner call, persisted in agent_call. */
 export interface AgentCallRecord {

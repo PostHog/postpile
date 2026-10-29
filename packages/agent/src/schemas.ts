@@ -356,3 +356,18 @@ export const consolidationOutput = z.object({
     .default([]),
   finished: z.array(z.object({ topicId: text, reason: text.min(1) })).default([]),
 });
+
+/**
+ * Scouts: pull or skip per PR. Each entry is checked on its own with
+ * scoutJudgementOutput, like the glances, so one malformed entry costs one
+ * PR (it stays pending), not the batch.
+ */
+export const scoutJudgeOutput = z.object({
+  judgements: z.array(z.unknown()),
+});
+
+export const scoutJudgementOutput = z.object({
+  prKey: text,
+  verdict: z.enum(['pull', 'skip']),
+  reason: text.default(''),
+});

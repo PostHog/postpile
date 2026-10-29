@@ -23,6 +23,10 @@ const SWEEP_MODEL = 'opus';
 // The setup draft is written once and shapes every later prompt, so it gets
 // the strongest model too. POSTPILE_SETUP_MODEL overrides it (draft and refine).
 const SETUP_MODEL = 'opus';
+// Scouts judge short PR summaries against a short prompt in batches, during
+// the full sync: Sonnet, like the glances. POSTPILE_MODEL overrides it with
+// every other default call.
+const SCOUT_MODEL = SONNET;
 
 export function modelFor(purpose: AgentPurpose): string {
   if (purpose === 'glance_batch') {
@@ -34,6 +38,9 @@ export function modelFor(purpose: AgentPurpose): string {
   // The topic tidy reads every topic once and reshapes them without asking: it gets the setup model too.
   if (purpose === 'setup_draft' || purpose === 'setup_refine' || purpose === 'topic_tidy') {
     return process.env.POSTPILE_SETUP_MODEL || SETUP_MODEL;
+  }
+  if (purpose === 'scout_judge') {
+    return process.env.POSTPILE_MODEL || SCOUT_MODEL;
   }
   return process.env.POSTPILE_MODEL || DEFAULT_MODEL;
 }

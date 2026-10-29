@@ -1,7 +1,8 @@
-import type { ActivityPr, IsoTime, NotificationThread, FullPr, PrKey, PrRef, PrState, ReviewedPr, Viewer, ViewerTeamSize } from '@postpile/core';
+import type { ActivityPr, IsoTime, NotificationThread, FullPr, PrKey, PrRef, PrState, ReviewedPr, ScoutCandidate, Viewer, ViewerTeamSize } from '@postpile/core';
 import type { CodeOwnersFile } from './code-owners.ts';
 import type { FoundRef } from './found.ts';
 import type { PrDiffRead } from './pr-diff.ts';
+import type { ScoutFilesRead, ScoutFolderRead, ScoutListPage } from './scouts.ts';
 
 export interface PartialPrs {
   prs: Map<PrKey, FullPr>;
@@ -183,6 +184,30 @@ export interface GitHubReader {
 
   /** Setup check: null when the token can read notifications, else why not. Marks nothing read. */
   probeNotifications(): Promise<string | null>;
+
+  /**
+   * Scouts: one page of a repo's open and merged PRs, newest update first,
+   * metadata only (title, body, author, draft, head and base). Throws on a
+   * failed request or a repo the token cannot see.
+   */
+  listScoutPrs(repo: string, after: string | null): Promise<ScoutListPage>;
+
+  /** Scouts: the same metadata for PRs known by number, keyed as asked. A PR GitHub does not answer for is left out. */
+  scoutPrsByNumber(refs: PrRef[]): Promise<Map<PrKey, ScoutCandidate>>;
+
+  /**
+   * Scouts: each PR's whole changed-file list with change types, paged to
+   * the end at one head. `files` is null when the list could not be read
+   * whole. A PR GitHub does not answer for is left out.
+   */
+  scoutFiles(refs: PrRef[]): Promise<Map<PrKey, ScoutFilesRead>>;
+
+  /**
+   * Scouts: the folders inside each asked folder at its commit, as repo
+   * paths, keyed "<oid>:<parent>" ("" parent for the root). A folder the
+   * commit does not have answers []; a failed batch is left out.
+   */
+  scoutFolders(repo: string, reads: ScoutFolderRead[]): Promise<Map<string, string[]>>;
 }
 
 /** PRs aliased per GraphQL query. 12 kept ghatchup well inside the node limit. */

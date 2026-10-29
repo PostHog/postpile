@@ -19,6 +19,7 @@ import { withdrawStaleProposals } from './consolidation/withdraw.ts';
 import { reviveRetiredTopics, reviveUnreadTopics } from './consolidation/revive.ts';
 import type { DigestDeps, DigestTally } from './digest/deps.ts';
 import { Digester } from './digest/digester.ts';
+import { GlanceBatchWriter } from './digest/glance-batches.ts';
 import { TopicTidy } from './digest/topic-tidy.ts';
 import { errorText } from './errors.ts';
 import type { GitHubQuota, QuotaRunStats } from './github-quota.ts';
@@ -391,6 +392,34 @@ export class SyncRun {
     }
   }
 
+  /**
+   * The scout step (DESIGN.md "Scouts"): PRs from outside the inbox that
+   * match the user's scouts.md, judged under the same agent-call cap and
+   * glanced right away. A failure is one error line; the sync goes on.
+   */
+  private async runScouts(viewer: Viewer, jobs: AgentJob[], run: { phases: PhaseClock; budget: AgentBudget; tally: DigestTally; errors: string[] }): Promise<void> {
+    const scouts = this.deps.scouts;
+    // `agentJobs` without "scouts" runs none of it: the step spends agent calls, and its glances only with "glances" too.
+    if (!scouts || !jobs.includes('scouts')) {
+      return;
+    }
+    try {
+      await run.phases.time('scouts', () =>
+        scouts.run({
+          viewer,
+          budget: run.budget,
+          errors: run.errors,
+          agentOff: this.deps.agentOff(),
+          quotaAllows: () => this.quota.allowsBackground(),
+          glance: () => (jobs.includes('glances') ? new GlanceBatchWriter(this.digestDeps(viewer, run)).runScouted() : Promise.resolve()),
+        }),
+      );
+    } catch (error) {
+      run.errors.push(`scouts: ${errorText(error)}`);
+      this.log(`scouts: failed: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);
+    }
+  }
+
   /** Everything after the fetch: the agent digest, the quiet reads, then the retire steps. */
   private async afterFetch(
     fetched: FetchedForDigest,
@@ -399,6 +428,8 @@ export class SyncRun {
   ): Promise<void> {
     const { store, now } = this.deps;
     await this.digest(fetched, options.agentJobs, run);
+    // After the inbox work, so the user's own PRs get the budget first.
+    await this.runScouts(fetched.viewer, options.agentJobs ?? ALL_AGENT_JOBS, run);
     // Before the retire step: what PostPile clears by itself no longer holds a finished topic.
     await this.handleQuietly(run.errors);
     // Last, so the new events, what was read on GitHub and the quiet reads all count.

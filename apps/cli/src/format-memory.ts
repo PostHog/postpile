@@ -14,6 +14,7 @@ const KIND_ORDER: AgentCallKind[] = [
   'topic_tidy',
   'event_classification',
   'glance_batch',
+  'scout_judge',
   'set_grouping',
   'fact_reconcile',
   'consolidation',
