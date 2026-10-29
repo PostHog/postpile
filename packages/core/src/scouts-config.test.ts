@@ -56,6 +56,14 @@ describe('parseScouts', () => {
     ]);
   });
 
+  it('reads a hint with a long run of slashes in no time, as a plain glob', () => {
+    const hint = `+a${'/'.repeat(50_000)}b/*/`;
+    const started = performance.now();
+    const paths = parseScouts(`## Lookout\nrepos: acme/app\npaths: ${hint}\n\nNew folders.\n`).scouts[0]?.paths ?? [];
+    expect(performance.now() - started).toBeLessThan(100);
+    expect(paths.map((path) => path.newFolderIn)).toEqual([null]);
+  });
+
   it('refuses unsupported syntax in a new-folder hint too', () => {
     const { scouts, errors } = parseScouts('## Lookout\nrepos: acme/app\npaths: +src/[ab]/*/\n\nNew folders.\n');
     expect(scouts).toEqual([]);
