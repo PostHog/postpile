@@ -1,6 +1,6 @@
 {
   "name": "@postpile/core",
-  "version": "0.28.6",
+  "version": "0.29.0",
   "description": "PostPile domain types and pure logic: tiles, loudness, whose turn, memory rules",
   "private": true,
   "license": "MIT",
