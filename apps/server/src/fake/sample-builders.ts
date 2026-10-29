@@ -107,18 +107,6 @@ export interface SamplePrInput {
   codeOwners?: string[];
 }
 
-/** The PR's timeline: who asked the viewer for a review, and the merge queue. */
-function sampleTimeline(clock: SampleClock, input: SamplePrInput): TimelineItem[] {
-  const timeline: TimelineItem[] = [];
-  if (input.requestedBy !== undefined) {
-    timeline.push({ id: `request-${input.number}`, kind: 'review_requested', actor: input.requestedBy, at: clock.hoursAgo(input.openedHoursAgo), subject: SAMPLE_VIEWER });
-  }
-  if (input.queued) {
-    timeline.push({ id: `queue-${input.number}`, kind: 'added_to_merge_queue', actor: 'mergify[bot]', at: clock.hoursAgo(1), subject: null });
-  }
-  return timeline;
-}
-
 /** Like GitHub with a review rule: a standing change request wins, then any approval. */
 function sampleReviewDecision(reviews: [string, ReviewState, string?, string?, number?][]): ReviewDecision {
   if (reviews.some(([, state]) => state === 'CHANGES_REQUESTED')) {
@@ -134,12 +122,19 @@ function reviewBodyComments(reviews: FullReview[], url: string): FullComment[] {
     .map((review) => ({ id: review.id, author: review.author, body: review.body, createdAt: review.submittedAt, kind: 'review' as const, url: review.url ?? `${url}#${review.id}`, path: null, threadId: null }));
 }
 
-/** The review request (`requestedHoursAgo`) and the merge queue entry (`queued`), oldest first. */
+/**
+ * The review request and the merge queue entry (`queued`), oldest first.
+ * `requestedBy` asks the viewer by hand; otherwise `requestedHoursAgo` has
+ * the author ask the first reviewer. The request dates from
+ * `requestedHoursAgo`, else from when the PR opened.
+ */
 function sampleTimeline(clock: SampleClock, input: SamplePrInput): TimelineItem[] {
   const items: TimelineItem[] = [];
-  const subject = input.reviewerUsers?.[0] ?? input.reviewerTeams?.[0];
-  if (input.requestedHoursAgo !== undefined && subject !== undefined) {
-    items.push({ id: `request-${input.number}`, kind: 'review_requested', actor: input.author, at: clock.hoursAgo(input.requestedHoursAgo), subject });
+  const subject = input.requestedBy !== undefined ? SAMPLE_VIEWER : (input.reviewerUsers?.[0] ?? input.reviewerTeams?.[0]);
+  const asked = input.requestedBy !== undefined || input.requestedHoursAgo !== undefined;
+  if (asked && subject !== undefined) {
+    const at = clock.hoursAgo(input.requestedHoursAgo ?? input.openedHoursAgo);
+    items.push({ id: `request-${input.number}`, kind: 'review_requested', actor: input.requestedBy ?? input.author, at, subject });
   }
   if (input.queued) {
     items.push({ id: `queue-${input.number}`, kind: 'added_to_merge_queue', actor: 'mergify[bot]', at: clock.hoursAgo(1), subject: null });

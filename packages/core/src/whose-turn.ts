@@ -370,7 +370,7 @@ function reviewTurn(ctx: PrContext, ask: ReviewRequest): WhoseTurn {
     return youSince(ctx, 'review', reviewText(ctx, ask, 'Review'), requestedAt(ctx));
   }
   const words = chosen === 'picked' ? 'picked you to review' : 'pulled you in to review';
-  return { ...you(ctx, 'review', `${by} ${words}`), reviewAsk: chosen };
+  return { ...youSince(ctx, 'review', `${by} ${words}`, requestedAt(ctx)), reviewAsk: chosen };
 }
 
 /**

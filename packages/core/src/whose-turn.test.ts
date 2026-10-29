@@ -36,17 +36,18 @@ describe('whoseTurn: your move', () => {
   it('says who picked you or pulled you in to review, and keeps routed wording otherwise', () => {
     const asked = (actor: string) => [makeTimelineItem({ actor, subject: me })];
     const pr = makePr({ author: 'alice', reviewerUsers: [me], codeOwnerReviewers: [], timeline: asked('alice') });
-    expect(single(pr)).toEqual({ kind: 'you', move: 'review', who: null, what: 'alice picked you to review', prKey: pr.key, reviewAsk: 'picked' });
+    const since = pr.timeline[0]!.at;
+    expect(single(pr)).toEqual({ kind: 'you', move: 'review', who: null, what: 'alice picked you to review', prKey: pr.key, reviewAsk: 'picked', since });
     expect(single({ ...pr, timeline: asked('ben') })).toMatchObject({ what: 'ben pulled you in to review', reviewAsk: 'pulled_in' });
     // Routed: CODEOWNERS or a bot made it; the words stay as before and no reviewAsk is set.
-    expect(single({ ...pr, codeOwnerReviewers: [me] })).toEqual({ kind: 'you', move: 'review', who: null, what: 'Review, alice asked', prKey: pr.key });
-    expect(single({ ...pr, timeline: asked('posthog[bot]') })).toEqual({ kind: 'you', move: 'review', who: null, what: 'Review', prKey: pr.key });
+    expect(single({ ...pr, codeOwnerReviewers: [me] })).toEqual({ kind: 'you', move: 'review', who: null, what: 'Review, alice asked', prKey: pr.key, since });
+    expect(single({ ...pr, timeline: asked('posthog[bot]') })).toEqual({ kind: 'you', move: 'review', who: null, what: 'Review', prKey: pr.key, since });
   });
 
   it('keeps a re-request after your changes request a re-review, picked or not', () => {
     const changes = makeReview({ author: me, state: 'CHANGES_REQUESTED', submittedAt: at(5), commitOid: 'old' });
     const pr = makePr({ author: 'alice', reviewerUsers: [me], codeOwnerReviewers: [], reviews: [changes], timeline: [makeTimelineItem({ actor: 'alice', subject: me, at: at(10) })] });
-    expect(single(pr)).toEqual({ kind: 'you', move: 're_review', who: null, what: 'Re-review, alice asked', prKey: pr.key });
+    expect(single(pr)).toEqual({ kind: 'you', move: 're_review', who: null, what: 'Re-review, alice asked', prKey: pr.key, since: at(10) });
   });
 
   it('names who asked you, not whoever requested someone else later', () => {
