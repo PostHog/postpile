@@ -295,7 +295,7 @@ export class FakeReader implements GitHubReader {
   failingScoutRepos = new Set<string>();
   /** File lists per PR key for scoutFiles; null stands for a list that could not be read whole. */
   scoutFileLists = new Map<PrKey, ScoutFilesRead>();
-  /** Root directories per commit oid for topLevelFolders. */
+  /** Folder names per "<oid>" (the root) or "<oid>:<parent>", for scoutFolders. */
   scoutTrees = new Map<string, string[]>();
   /** Every scout read, for asserting on GitHub traffic. */
   scoutCalls: string[] = [];
