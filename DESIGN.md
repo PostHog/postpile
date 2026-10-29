@@ -4395,8 +4395,8 @@ merged: purple merge, closed: red closed pull request; in the merge queue
 the Octicons merge-queue icon, amber, red once the queue took it out,
 2026-10-02, see "Merge queue"), words in its tooltip. The icon is core's
 `PrStatus.icon`. The review state is an icon + word: "Needs
-review" (eye, neutral ink), "Approved" (green check; "Approved by agent" when only
-agents approved), "Changes requested" (red). On a PR row drafts show an
+review" (eye, neutral ink), "Approved" (green check; "Approved by reviewbot" when only
+that agent approved, "Approved by agents" for several, 2026-10-29), "Changes requested" (red). On a PR row drafts show an
 outlined "DRAFT" chip with a pencil and merged / closed PRs show the colored
 word ("Merged" purple, "Closed" red) in place of the review. Colours
 follow "Colour per meaning" (2026-10-01; Needs review was honey, queued
@@ -4916,8 +4916,9 @@ worth seeing, so the app says who approved instead of a bare "approved".
   renderer never imports it; it gets the result as data.
 - `PrStatus.agentApprovers` / `PrDetail.agentApprovers` (`agentOnlyApprovers`)
   hold the agent names ("reviewbot") only when no person approved. The
-  review word then reads "Approved by agent" (tooltip "Approved by reviewbot
-  (agent)"), the detail's "To merge" says "approved by reviewbot (agent)",
+  review word then reads "Approved by reviewbot" (named like a decline
+  names stamphog, 2026-10-29; "Approved by agents" for several; tooltip
+  "Approved by reviewbot (agent)"), the detail's "To merge" says "approved by reviewbot (agent)",
   and the Approve button's review glyph says the same in its tooltip. Same
   calm green as any approval, no warning colors. Once a person approved it
   is the usual "approved". GitHub says APPROVED while a review request is
@@ -4973,7 +4974,7 @@ is worth seeing on the tile, and the glance should weigh the reasons.
   commit" once the head moved. "To merge" says "needs review · stamphog
   declined: …" with the reasons as its tooltip; the Approve button's
   review glyph says the same. After an agent-only approval (another bot
-  approved, GitHub says APPROVED) the word stays "Approved by agent", and
+  approved, GitHub says APPROVED) the word stays "Approved by reviewbot", and
   its tooltip and "To merge" add the decline: "approved by reviewbot
   (agent) · stamphog declined: …".
 - Order: inside a topic's To review tiles, a tile holding a declined PR

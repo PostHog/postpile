@@ -2,11 +2,12 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
-## 0.28.7 (unreleased)
+## 0.29.0 (unreleased)
 
 ### Changed
 
 - `mark_read`'s `seen_through` comes with every `pr_context` answer, brief ones included; full answers fold bot and CI noise in the unread list. Before, only full answers had it, and a full read of a few busy PRs got too big for an agent to take in. The token now means "nothing new since your read": `mark_read` still refuses a PR with new activity, or one whose unread events changed since (an Undo), and a question or mention for you still waits under Needs reply until you reply.
+- An approval from a single agent names it in the status pill, "Approved by reviewbot", the same way a decline says "stamphog declined". It used to read "Approved by agent". Several agents still read "Approved by agents", named in the tooltip.
 
 ## 0.28.6 (2026-10-29)
 

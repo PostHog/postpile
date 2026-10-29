@@ -88,10 +88,10 @@ describe('state words', () => {
     expect(reviewWord(open)).toBeNull();
   });
 
-  it('says "approved by agent" when only agents approved, names in the tooltip', () => {
+  it('names the agent when only one agent approved, like a decline names it', () => {
     expect(reviewWord({ ...open, review: 'approved', agentApprovers: ['reviewbot'] })).toEqual({
       kind: 'approved',
-      text: 'Approved by agent',
+      text: 'Approved by reviewbot',
       title: 'Approved by reviewbot (agent)',
     });
     expect(reviewWord({ ...open, review: 'approved', agentApprovers: ['reviewbot', 'lintbot'] })?.text).toBe('Approved by agents');
@@ -111,11 +111,11 @@ describe('state words', () => {
     expect(reviewWord({ ...open, review: 'approved', agentDecline: decline })?.text).toBe('Approved');
   });
 
-  it('keeps "Approved by agent" after an agent-only approval and adds the decline to the tooltip', () => {
+  it('keeps naming the approving agent after a decline and adds the decline to the tooltip', () => {
     const decline = { agent: 'stamphog', kind: 'needs_person' as const, reason: 'Touches billing.', earlierCommit: false };
     expect(reviewWord({ ...open, review: 'approved', agentApprovers: ['reviewbot'], agentDecline: decline })).toEqual({
       kind: 'approved',
-      text: 'Approved by agent',
+      text: 'Approved by reviewbot',
       title: 'Approved by reviewbot (agent) · stamphog declined: needs a person to review',
     });
   });
