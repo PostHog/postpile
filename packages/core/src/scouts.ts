@@ -362,10 +362,16 @@ export interface ScoutWorkItem {
 /** Why a pending row's last try stopped before the model call: its reads failed, not the judge. */
 export const SCOUT_FILES_NOT_READ = 'file list not read whole';
 export const SCOUT_TREE_NOT_READ = 'base tree not read';
+export const SCOUT_LOOKUP_FAILED = 'lookup by number not answered';
+const SCOUT_READ_FAILURES = new Set([SCOUT_FILES_NOT_READ, SCOUT_TREE_NOT_READ, SCOUT_LOOKUP_FAILED]);
 
-/** A pending row whose last try failed in the reads, so the next run puts it behind other work. */
+/**
+ * A pending row whose last try failed in the reads (file list, base tree,
+ * or the lookup by number), so the next run puts it behind other work. The
+ * reason is the one stored retry state: a deferral keeps it.
+ */
 export function scoutRetryStalled(row: Pick<ScoutJudgement, 'status' | 'lastError'>): boolean {
-  return row.status === 'pending' && (row.lastError === SCOUT_FILES_NOT_READ || row.lastError === SCOUT_TREE_NOT_READ);
+  return row.status === 'pending' && row.lastError !== null && SCOUT_READ_FAILURES.has(row.lastError);
 }
 
 /**

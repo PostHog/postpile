@@ -14,6 +14,7 @@ import {
   scheduleScoutWork,
   scoutRetryStalled,
   SCOUT_FILES_NOT_READ,
+  SCOUT_LOOKUP_FAILED,
   SCOUT_TREE_NOT_READ,
   type ScoutWorkItem,
   type IsoTime,
@@ -28,7 +29,7 @@ import {
   type ScoutsVersion,
   type Viewer,
 } from '@postpile/core';
-import type { GitHubReader, ScoutFilesRead } from '@postpile/github';
+import { GitHubError, ScoutReadsLimited, type GitHubReader, type ScoutFilesRead } from '@postpile/github';
 import type { Store } from '@postpile/store';
 import type { AgentBudget } from '../budget.ts';
 import { errorText } from '../errors.ts';
@@ -155,6 +156,14 @@ interface ScoutPlan {
   scheduled: Triaged[];
 }
 
+const RATE_LIMITED_WAIT = 'GitHub rate limit: waits for the next sync';
+
+/** Pending PRs looked up by number for this run: what GitHub answered, and what it was asked and did not answer. */
+interface PendingLookup {
+  found: Map<PrKey, ScoutCandidate>;
+  failed: Set<PrKey>;
+}
+
 /** A candidate read whole and ready to ask the model about. */
 interface JudgeItem {
   candidate: ScoutCandidate;
@@ -190,6 +199,8 @@ export class ScoutRun {
   private runFiles = new Map<string, ScoutFilesRead>();
   /** The running sync's quota check; reads stop once it says no and the rest stays pending. */
   private quotaAllows: () => boolean = () => true;
+  /** GitHub rate-limited a scout read this run: every scout read stops until the next run. */
+  private rateLimited = false;
   /** scout_judge calls this run may still make (SCOUT_JUDGE_CALLS_PER_RUN). */
   private judgeCallsLeft = SCOUT_JUDGE_CALLS_PER_RUN;
 
@@ -231,7 +242,7 @@ export class ScoutRun {
   private async pass(repo: string, after: string | null, floor: IsoTime, budget: { pages: number }, prs: Map<PrKey, ScoutCandidate>, errors: string[]): Promise<PassEnd> {
     let cursor = after;
     while (budget.pages > 0) {
-      if (!this.quotaAllows()) {
+      if (!this.canRead()) {
         this.deps.log(`scouts: GitHub quota low, stopped listing ${repo}`);
         return { kind: 'failed' };
       }
@@ -309,18 +320,39 @@ export class ScoutRun {
     return { prs, complete: lower.kind === 'done', end: lower, startedAt: resume.startedAt, scouts, floor: lowest };
   }
 
+  /** Scout reads may go on: GitHub has not rate-limited one this run, and the quota allows background work. */
+  private canRead(): boolean {
+    return !this.rateLimited && this.quotaAllows();
+  }
+
+  /**
+   * A rate limit (a secondary limit, 429, GraphQL RATE_LIMITED) stops every
+   * scout read for the rest of the run, so scouts never prolong throttling
+   * that the inbox reads share. Whatever is left stays pending.
+   */
+  private stopOnRateLimit(error: unknown): void {
+    if (error instanceof GitHubError && error.rateLimited && !this.rateLimited) {
+      this.rateLimited = true;
+      this.deps.log(`scouts: GitHub rate limit, scout reads stop for this sync: ${errorText(error)}`);
+    }
+  }
+
   /** Root folders of the bases that need them, from the cache or one read. A failed read leaves them unknown. */
   private async baseFolders(repo: string, oids: string[]): Promise<void> {
     const wanted = [...new Set(oids)].filter((oid) => !this.trees.has(`${repo}@${oid}`));
-    if (wanted.length === 0 || !this.quotaAllows()) {
+    if (wanted.length === 0 || !this.canRead()) {
       return;
     }
+    let read: Map<string, string[]>;
     try {
-      for (const [oid, folders] of await this.deps.reader.topLevelFolders(repo, wanted)) {
-        this.trees.set(`${repo}@${oid}`, folders);
-      }
+      read = await this.deps.reader.topLevelFolders(repo, wanted);
     } catch (error) {
+      this.stopOnRateLimit(error);
       this.deps.log(`scouts: base tree of ${repo}: ${errorText(error)}`);
+      read = error instanceof ScoutReadsLimited ? (error.partial as Map<string, string[]>) : new Map();
+    }
+    for (const [oid, folders] of read) {
+      this.trees.set(`${repo}@${oid}`, folders);
     }
   }
 
@@ -340,18 +372,22 @@ export class ScoutRun {
         unread.push(candidate);
       }
     }
-    if (unread.length === 0 || !this.quotaAllows()) {
+    if (unread.length === 0 || !this.canRead()) {
       return result;
     }
+    let reads: Map<PrKey, ScoutFilesRead>;
     try {
-      for (const [key, read] of await this.deps.reader.scoutFiles(unread.map((candidate) => refOf(candidate.key)))) {
-        result.set(key, read);
-        if (read.files !== null) {
-          this.runFiles.set(`${key}@${read.headOid}`, read);
-        }
-      }
+      reads = await this.deps.reader.scoutFiles(unread.map((candidate) => refOf(candidate.key)));
     } catch (error) {
+      this.stopOnRateLimit(error);
       this.deps.log(`scouts: file lists: ${errorText(error)}`);
+      reads = error instanceof ScoutReadsLimited ? (error.partial as Map<PrKey, ScoutFilesRead>) : new Map();
+    }
+    for (const [key, read] of reads) {
+      result.set(key, read);
+      if (read.files !== null) {
+        this.runFiles.set(`${key}@${read.headOid}`, read);
+      }
     }
     return result;
   }
@@ -379,17 +415,21 @@ export class ScoutRun {
    * read serves every scout. Nothing is read when no call can run: the rows
    * stay pending as they are, for a run that can judge them.
    */
-  private async lookUpPending(queues: ScoutJudgement[][], capacity: number): Promise<Map<PrKey, ScoutCandidate>> {
+  private async lookUpPending(queues: ScoutJudgement[][], capacity: number): Promise<PendingLookup> {
     const items = queues.map((queue) => queue.map((row) => ({ row, pending: true, stalled: scoutRetryStalled(row), observedUpdatedAt: row.observedUpdatedAt })));
     const keys = [...new Set([...scheduleScoutWork(items, capacity)].map((item) => item.row.prKey))];
-    if (keys.length === 0 || !this.quotaAllows()) {
-      return new Map();
+    if (keys.length === 0 || !this.canRead()) {
+      return { found: new Map(), failed: new Set() };
     }
     try {
-      return await this.deps.reader.scoutPrsByNumber(keys.map(refOf));
+      const found = await this.deps.reader.scoutPrsByNumber(keys.map(refOf));
+      // Asked and not answered (a failed batch, a PR gone): stalled, so it waits behind healthy work next time.
+      return { found, failed: new Set(keys.filter((key) => !found.has(key))) };
     } catch (error) {
+      this.stopOnRateLimit(error);
       this.deps.log(`scouts: pending PRs: ${errorText(error)}`);
-      return new Map();
+      // Cut off by a rate limit: what was not answered was never really tried, so it stays as it was.
+      return { found: error instanceof ScoutReadsLimited ? (error.partial as Map<PrKey, ScoutCandidate>) : new Map(), failed: new Set() };
     }
   }
 
@@ -466,12 +506,13 @@ export class ScoutRun {
       const base = this.judgementRow(scout.id, version, candidate, before);
       const read = files.get(candidate.key);
       if (!read || read.files === null || read.headOid !== candidate.headOid) {
-        work.rows.push(this.pending(base, SCOUT_FILES_NOT_READ));
+        // Cut off by a rate limit is no read failure: it waits as ordinary pending work.
+        work.rows.push(this.pending(base, this.rateLimited ? RATE_LIMITED_WAIT : SCOUT_FILES_NOT_READ));
         continue;
       }
       const folders = this.trees.get(`${repo}@${read.foldersOid}`);
       if (wantsTree && folders === undefined) {
-        work.rows.push(this.pending(base, SCOUT_TREE_NOT_READ));
+        work.rows.push(this.pending(base, this.rateLimited ? RATE_LIMITED_WAIT : SCOUT_TREE_NOT_READ));
         continue;
       }
       const signals = scoutSignals(scout, read.files, new Set(folders ?? []));
@@ -511,7 +552,9 @@ export class ScoutRun {
     for (const plan of plans) {
       plan.scheduled = plan.triaged.filter((entry) => taken.has(entry));
       for (const entry of plan.triaged.filter((candidate) => !taken.has(candidate))) {
-        plan.work.rows.push(this.pending(this.judgementRow(plan.scout.id, version, entry.candidate, entry.before), why));
+        // A stalled retry keeps its read failure, so it stays behind healthy work next time too.
+        const reason = entry.stalled ? entry.before!.lastError! : why;
+        plan.work.rows.push(this.pending(this.judgementRow(plan.scout.id, version, entry.candidate, entry.before), reason));
       }
     }
   }
@@ -633,7 +676,7 @@ export class ScoutRun {
       .map((row) => row.prKey)
       .filter((key) => !alreadyStored.has(key));
     const current = new Set(alreadyStored);
-    if (keys.length === 0 || !this.quotaAllows()) {
+    if (keys.length === 0 || !this.canRead()) {
       return current;
     }
     let remote: Map<PrKey, IsoTime>;
@@ -696,7 +739,8 @@ export class ScoutRun {
     this.quotaAllows = input.quotaAllows;
     this.runFiles = new Map();
     this.judgeCallsLeft = SCOUT_JUDGE_CALLS_PER_RUN;
-    if (!this.quotaAllows()) {
+    this.rateLimited = false;
+    if (!this.canRead()) {
       this.deps.log('scouts: GitHub quota low, skipped this sync');
       return report;
     }
@@ -721,14 +765,17 @@ export class ScoutRun {
       for (const scout of active.scouts) {
         scout.repos.forEach((repo) => lastScoutOn.set(repo, scout.id));
       }
-      const unlisted = active.scouts.flatMap((scout) => scout.repos.map((repo) => this.unlistedPending(scout, repo, listings.get(repo)!)));
-      const lookedUp = await this.lookUpPending(unlisted, this.judgeCapacity(input));
+      const unlisted = new Map(active.scouts.flatMap((scout) => scout.repos.map((repo): [string, ScoutJudgement[]] => [`${scout.id} ${repo}`, this.unlistedPending(scout, repo, listings.get(repo)!)])));
+      const lookedUp = await this.lookUpPending([...unlisted.values()], this.judgeCapacity(input));
       const plans: ScoutPlan[] = [];
       for (const scout of active.scouts) {
         for (const repo of scout.repos) {
           const listing = listings.get(repo)!;
           const work: ScoutRepoWork = { rows: [], pulls: [] };
-          const candidates = this.candidatesFor(scout, repo, listing, floors.get(`${scout.id} ${repo}`)!, lookedUp);
+          for (const row of unlisted.get(`${scout.id} ${repo}`)!.filter((entry) => lookedUp.failed.has(entry.prKey))) {
+            work.rows.push({ ...row, lastError: SCOUT_LOOKUP_FAILED });
+          }
+          const candidates = this.candidatesFor(scout, repo, listing, floors.get(`${scout.id} ${repo}`)!, lookedUp.found);
           plans.push({ scout, repo, listing, work, triaged: this.triage(scout, active.version, candidates, facts, work), scheduled: [] });
         }
       }
@@ -743,7 +790,8 @@ export class ScoutRun {
       }
       report.pulled = pulled.length;
     }
-    const stored = new Set(await this.deps.storePrs(pulled.map(refOf), input.errors));
+    // Rate-limited: the pulled PRs' snapshots wait for the next run's refresh, which stores any it has not.
+    const stored = new Set(this.rateLimited ? [] : await this.deps.storePrs(pulled.map(refOf), input.errors));
     report.expired = this.expire(await this.refresh(stored, input.errors));
     store.scoutJudgements.deleteSkippedBefore(scoutRetentionCutoff(runStart));
     if (input.agentOff === null && store.scoutedPrs.listActive().length > 0) {
