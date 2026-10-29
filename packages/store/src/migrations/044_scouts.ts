@@ -49,6 +49,7 @@ CREATE TABLE scout_judgement (
 );
 CREATE INDEX scout_judgement_pending ON scout_judgement (scout_id) WHERE status = 'pending';
 CREATE INDEX scout_judgement_skipped ON scout_judgement (observed_updated_at) WHERE verdict = 'skipped';
+CREATE INDEX scout_judgement_pr ON scout_judgement (pr_key, judged_at, scout_id);
 
 CREATE TABLE pr_scouted (
   pr_key           TEXT PRIMARY KEY,

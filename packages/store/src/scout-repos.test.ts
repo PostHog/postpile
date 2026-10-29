@@ -105,6 +105,9 @@ describe('ScoutJudgementRepo', () => {
     expect([...store.scoutJudgements.getMany('lookout', ['acme/app#10', 'acme/app#12']).keys()]).toEqual(['acme/app#10']);
     expect(store.scoutJudgements.getMany('lookout', [])).toEqual(new Map());
     expect(store.scoutJudgements.forPr('acme/app#10').map((row) => row.scoutId)).toEqual(['lookout', 'billing']);
+    // One PR's history reads through its own index, not a scan of every judgement.
+    const plan = store.db.prepare("EXPLAIN QUERY PLAN SELECT * FROM scout_judgement WHERE pr_key = ? ORDER BY judged_at, scout_id").all('acme/app#10') as { detail: string }[];
+    expect(plan.map((step) => step.detail).join(' ')).toContain('scout_judgement_pr');
   });
 
   it('deletes only skipped rows observed before the cutoff', () => {
