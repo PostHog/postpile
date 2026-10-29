@@ -728,6 +728,7 @@ export class ScoutRun {
     try {
       remote = await this.deps.reader.prUpdatedAts(keys.map(refOf));
     } catch (error) {
+      this.stopOnRateLimit(error);
       errors.push(`scouts: refresh: ${errorText(error)}`);
       return current;
     }

@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { sanitizeTelemetryProps, TELEMETRY_EVENTS, UNDO_WINDOW_MS, type ScoutCandidate, type TelemetryEventName } from '@postpile/core';
 import { makePr, makeThreadFor, viewer } from '@postpile/core/fixtures';
 import { describe, expect, it, vi } from 'vitest';
+import { GitHubError } from '@postpile/github';
 import { makeHarness, NOW, type Harness } from '../testing/fakes.ts';
 import { FOLLOW_LOOKUP_MS } from './scout-actions.ts';
 
@@ -86,6 +87,16 @@ describe('scout_run_completed', () => {
     // The cursor moved past both: nothing new to list or judge the second time.
     expect(propsOf(h, 'scout_run_completed')[1]).toMatchObject({ scouts: 1, listed: 0, candidates: 0, judged: 0, pulled: 0, judge_calls: 0 });
     expectSafe(h);
+  });
+
+  it('says rate_limited when GitHub throttles the refresh of scouted PRs', async () => {
+    const { h } = await pulled();
+    const limit = new GitHubError('GitHub POST graphql failed with 403: You have exceeded a secondary rate limit', 403, { rateLimited: true, retryAfterSeconds: 60 });
+    vi.spyOn(h.reader, 'prUpdatedAts').mockRejectedValueOnce(limit);
+
+    await h.engine.sync({});
+
+    expect(propsOf(h, 'scout_run_completed')[1]).toMatchObject({ rate_limited: true });
   });
 
   it('says capped when the agent-call cap leaves candidates for the next sync', async () => {
