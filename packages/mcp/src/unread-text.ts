@@ -15,8 +15,13 @@ function rangeText(from: string, to: string): string {
   return from === to ? stamp(from) : `${stamp(from)} – ${stamp(to)}`;
 }
 
+/** The body cut to `max` characters with "… (cut)"; whole when `max` is null. */
+function clippedBody(body: string, max: number | null): string {
+  return max === null || body.length <= max ? body : `${body.slice(0, max)}… (cut)`;
+}
+
 /** One row's lines; a body is one entry, since it can have tens of thousands of lines, too many to spread into push. */
-function rowLines(row: UnreadRow): string[] {
+function rowLines(row: UnreadRow, bodyMax: number | null): string[] {
   if (row.kind === 'folded') {
     return [`  ${row.actor}: ${row.count} ${row.what}, ${rangeText(row.from, row.to)}`];
   }
@@ -25,17 +30,22 @@ function rowLines(row: UnreadRow): string[] {
   if (event.body === null) {
     return [head];
   }
-  return [head, event.body.split('\n').map((text) => `      ${text}`).join('\n')];
+  return [head, clippedBody(event.body, bodyMax).split('\n').map((text) => `      ${text}`).join('\n')];
 }
 
-/** The section's lines, header first. Goes inside the fence: summaries, bodies and logins come from GitHub. */
-export function unreadSectionLines(unread: UnreadEvent[]): string[] {
+/**
+ * The section's lines, header first. Goes inside the fence: summaries,
+ * bodies and logins come from GitHub. `bodyMax` clips each body when
+ * several PRs share one answer's size budget; null keeps them whole.
+ */
+export function unreadSectionLines(unread: UnreadEvent[], bodyMax: number | null = null): string[] {
   if (unread.length === 0) {
     return ['Unread since you looked: nothing.'];
   }
-  const lines = [`Unread since you looked (${unread.length} events, oldest first; people's text in full, bots, CI and pushes counted):`];
+  const text = bodyMax === null ? "people's text in full" : `people's text up to ${bodyMax} characters each`;
+  const lines = [`Unread since you looked (${unread.length} events, oldest first; ${text}, bots, CI and pushes counted):`];
   for (const row of unreadRows(unread)) {
-    for (const line of rowLines(row)) {
+    for (const line of rowLines(row, bodyMax)) {
       lines.push(line);
     }
   }

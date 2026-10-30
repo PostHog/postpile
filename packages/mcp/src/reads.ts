@@ -465,28 +465,75 @@ function briefPrLines(detail: PrDetail, tiles: TileView[], authors: Authors): st
   return lines;
 }
 
-function fullPrLines(detail: PrDetail, tiles: TileView[], authors: Authors): string[] {
-  const lines = [...prHeadLines(detail, tiles, authors), ...reviewSizeLines(detail, true)];
-  lines.push('', ...(detail.glance ? glanceLines(detail.glance, detail.glanceStale) : [`No agent glance yet (${detail.glanceState}).`]));
-  const facts = formatFacts(detail.facts);
-  if (facts.length > 0) {
-    lines.push('', ...facts);
-  }
-  // The detail pane's list: push bursts collapsed, bot and CI noise folded into one line.
+/**
+ * pr_context with detail "full" on several PRs keeps its data under this
+ * many characters; one PR alone is never cut. Seen 2026-10-30: 7 PRs came
+ * to about 87k characters, past the caller's tool output limit, so the
+ * answer spilled to a file and most of it went unread.
+ */
+export const FULL_MANY_BUDGET = 40_000;
+/** The first cut: activity lines kept per PR. */
+const CUT_ACTIVITY_LINES = 10;
+/** The first cut: characters kept of each unread comment body. */
+const CUT_BODY_CHARS = 400;
+
+/** What a multi-PR full answer leaves out to fit FULL_MANY_BUDGET. Each step keeps the cuts before it. */
+interface FullCuts {
+  /** Activity capped at CUT_ACTIVITY_LINES per PR, unread bodies at CUT_BODY_CHARS. */
+  activity: boolean;
+  /** Topics as in a brief answer: no dossier, no tile list. */
+  topics: boolean;
+  /** No activity and no unread list at all. */
+  noActivity: boolean;
+  /** CODEOWNERS lines as in a brief answer: counts and a short path list. */
+  ownership: boolean;
+}
+
+const NO_CUTS: FullCuts = { activity: false, topics: false, noActivity: false, ownership: false };
+
+/** Tried in order until the data fits: activity first, then the topics, then activity altogether and the owned path lists. */
+const CUT_STEPS: FullCuts[] = [
+  NO_CUTS,
+  { activity: true, topics: false, noActivity: false, ownership: false },
+  { activity: true, topics: true, noActivity: false, ownership: false },
+  { activity: true, topics: true, noActivity: true, ownership: true },
+];
+
+/** The detail pane's list: push bursts collapsed, bot and CI noise folded into one line. Capped under `cuts.activity`. */
+function activityLines(detail: PrDetail, cuts: FullCuts): string[] {
   const { activity } = detail;
-  const shown = [...activity.fresh, ...activity.earlier].slice(0, activity.cap);
+  const all = [...activity.fresh, ...activity.earlier].slice(0, activity.cap);
+  const shown = cuts.activity ? all.slice(0, CUT_ACTIVITY_LINES) : all;
+  const lines: string[] = [];
   if (shown.length > 0) {
     lines.push('', 'Activity (newest first; * = new since you looked):');
     for (const line of shown) {
       lines.push(`  ${line.isNew ? '*' : ' '} ${day(line.at)}  ${withActor(line.actor, line.summary)}`);
     }
   }
+  if (all.length > shown.length) {
+    lines.push(`  ${all.length - shown.length} older lines cut: pr_context on this PR alone has them.`);
+  }
   const noise = activity.noise.length + activity.freshNoise.length;
   if (noise > 0) {
     lines.push(`  Folded: ${[activity.freshNoiseLabel, activity.noiseLabel].filter((label) => label !== '').join('; ')}`);
   }
-  lines.push('');
-  for (const line of unreadSectionLines(detail.unread)) {
+  return lines;
+}
+
+function fullPrLines(detail: PrDetail, tiles: TileView[], authors: Authors, cuts: FullCuts): string[] {
+  const lines = [...prHeadLines(detail, tiles, authors), ...reviewSizeLines(detail, !cuts.ownership)];
+  lines.push('', ...(detail.glance ? glanceLines(detail.glance, detail.glanceStale) : [`No agent glance yet (${detail.glanceState}).`]));
+  const facts = formatFacts(detail.facts);
+  if (facts.length > 0) {
+    lines.push('', ...facts);
+  }
+  if (cuts.noActivity) {
+    lines.push('', 'Activity and the unread list: cut to fit several PRs in one answer; pr_context on this PR alone has them.');
+    return lines;
+  }
+  lines.push(...activityLines(detail, cuts), '');
+  for (const line of unreadSectionLines(detail.unread, cuts.activity ? CUT_BODY_CHARS : null)) {
     lines.push(line);
   }
   return lines;
@@ -615,11 +662,27 @@ async function authorsOfOverlaps(reader: PostPileReader, overlaps: PrOverlap[]):
   return new Map(shown.flatMap((overlap, index) => details[index] ? [[overlap.other, details[index].pr.author] as const] : []));
 }
 
+/** Per PR asked about: the authors of the PRs it overlaps with. Read once per call, so the cut passes never read again. */
+type OverlapAuthors = Map<PrKey, Map<PrKey, string>>;
+
+async function readOverlapAuthors(reader: PostPileReader, reads: PrRead[], overlaps: PrOverlapsView): Promise<OverlapAuthors> {
+  const maps = await Promise.all(reads.map((read) => authorsOfOverlaps(reader, overlaps.overlaps[read.key] ?? [])));
+  return new Map(reads.map((read, index) => [read.key, maps[index] ?? new Map<PrKey, string>()]));
+}
+
+/** What every PR's lines need besides the PR: the user's authors, the overlaps and their authors, and the time. */
+interface PrLineContext {
+  authors: Authors;
+  overlaps: PrOverlapsView;
+  overlapAuthors: OverlapAuthors;
+  now: Date;
+}
+
 /** The PR's lines with the overlap lines after them, as pr_context prints them. */
-async function prLinesWithOverlaps(reader: PostPileReader, read: PrRead, authors: Authors, detail: Detail, overlaps: PrOverlapsView, now: Date): Promise<string[]> {
-  const authorOf = await authorsOfOverlaps(reader, overlaps.overlaps[read.key] ?? []);
-  const notes = contextNoteLines(read.detail.notes, now);
-  return [...prLines(read, authors, detail), ...overlapLines(overlaps, read.key, authorOf), ...(notes.length > 0 ? ['', ...notes] : [])];
+function prLinesWithOverlaps(read: PrRead, lc: PrLineContext, detail: Detail, cuts: FullCuts): string[] {
+  const authorOf = lc.overlapAuthors.get(read.key) ?? new Map<PrKey, string>();
+  const notes = contextNoteLines(read.detail.notes, lc.now);
+  return [...prLines(read, lc.authors, detail, cuts), ...overlapLines(lc.overlaps, read.key, authorOf), ...(notes.length > 0 ? ['', ...notes] : [])];
 }
 
 export interface PrFailure {
@@ -669,13 +732,13 @@ function topicGroups(reads: PrRead[]): { topic: TopicDetail | null; reads: PrRea
 }
 
 /** The PR's lines, brief or full. */
-function prLines(read: PrRead, authors: Authors, detail: Detail): string[] {
-  return detail === 'full' ? fullPrLines(read.detail, read.tiles, authors) : briefPrLines(read.detail, read.tiles, authors);
+function prLines(read: PrRead, authors: Authors, detail: Detail, cuts: FullCuts): string[] {
+  return detail === 'full' ? fullPrLines(read.detail, read.tiles, authors, cuts) : briefPrLines(read.detail, read.tiles, authors);
 }
 
-/** One PR: its lines, then its topic, as pr_context always answered. */
-async function singlePrData(reader: PostPileReader, read: PrRead, authors: Authors, detail: Detail, overlaps: PrOverlapsView, now: Date): Promise<string[]> {
-  const data = await prLinesWithOverlaps(reader, read, authors, detail, overlaps, now);
+/** One PR: its lines, then its topic, as pr_context always answered. Never cut. */
+function singlePrData(read: PrRead, lc: PrLineContext, detail: Detail): string[] {
+  const data = prLinesWithOverlaps(read, lc, detail, NO_CUTS);
   const asked = new Set([read.key]);
   if (read.topic) {
     data.push('', ...(detail === 'full' ? fullTopicLines(read.topic, asked) : briefTopicForPrs(read.topic, asked)));
@@ -686,7 +749,7 @@ async function singlePrData(reader: PostPileReader, read: PrRead, authors: Autho
 }
 
 /** Several PRs: each topic once, then the lines of each PR asked about in it. */
-async function severalPrsData(reader: PostPileReader, reads: PrRead[], authors: Authors, detail: Detail, overlaps: PrOverlapsView, now: Date): Promise<string[]> {
+function severalPrsData(reads: PrRead[], lc: PrLineContext, detail: Detail, cuts: FullCuts): string[] {
   const data: string[] = [];
   for (const group of topicGroups(reads)) {
     if (data.length > 0) {
@@ -694,18 +757,73 @@ async function severalPrsData(reader: PostPileReader, reads: PrRead[], authors: 
     }
     const asked = new Set(group.reads.map((read) => read.key));
     if (group.topic) {
-      data.push(...(detail === 'full' ? fullTopicLines(group.topic, asked) : briefTopicForPrs(group.topic, asked)));
+      const full = detail === 'full' && !cuts.topics;
+      data.push(...(full ? fullTopicLines(group.topic, asked) : briefTopicForPrs(group.topic, asked)));
     } else {
       data.push('Not in a topic yet:');
     }
     for (const read of group.reads) {
       data.push('');
-      for (const line of await prLinesWithOverlaps(reader, read, authors, detail, overlaps, now)) {
+      for (const line of prLinesWithOverlaps(read, lc, detail, cuts)) {
         data.push(line);
       }
     }
   }
   return data;
+}
+
+/** The lines that fit FULL_MANY_BUDGET, whole lines only, with a closing line that says where it stopped. */
+function cutAtBudget(data: string[]): string[] {
+  const kept: string[] = [];
+  let size = 0;
+  for (const line of data) {
+    // Room for the closing line.
+    if (size + line.length + 1 > FULL_MANY_BUDGET - 200) {
+      break;
+    }
+    kept.push(line);
+    size += line.length + 1;
+  }
+  return [...kept, '', `[Stopped here at ${FULL_MANY_BUDGET} characters: ask for fewer PRs.]`];
+}
+
+/**
+ * Several PRs with detail "full", cut step by step (`CUT_STEPS`) until the
+ * data fits FULL_MANY_BUDGET. Still over after the last step (long owned
+ * paths, many facts): the data stops at the budget (`stopped`).
+ */
+function severalPrsFullData(reads: PrRead[], lc: PrLineContext): { data: string[]; cuts: FullCuts; stopped: boolean } {
+  for (const step of CUT_STEPS) {
+    const data = severalPrsData(reads, lc, 'full', step);
+    if (data.join('\n').length <= FULL_MANY_BUDGET) {
+      return { data, cuts: step, stopped: false };
+    }
+  }
+  const last = CUT_STEPS[CUT_STEPS.length - 1] ?? NO_CUTS;
+  return { data: cutAtBudget(severalPrsData(reads, lc, 'full', last)), cuts: last, stopped: true };
+}
+
+/** Outside the fence: what a multi-PR full answer left out and how to get it. Empty when nothing was cut. */
+function cutNote(cuts: FullCuts, stopped: boolean, count: number): string[] {
+  const parts: string[] = [];
+  if (cuts.noActivity) {
+    parts.push('activity and unread lists left out');
+  } else if (cuts.activity) {
+    parts.push(`activity cut to the newest ${CUT_ACTIVITY_LINES} lines per PR and unread comments to ${CUT_BODY_CHARS} characters each`);
+  }
+  if (cuts.topics) {
+    parts.push('topics without dossier and tile list');
+  }
+  if (cuts.ownership) {
+    parts.push('owned file lists shortened as in a brief answer');
+  }
+  if (stopped) {
+    parts.push('the rest past the limit');
+  }
+  if (parts.length === 0) {
+    return [];
+  }
+  return [`Cut to keep ${count} PRs under ${FULL_MANY_BUDGET} characters: ${parts.join('; ')}. For everything, call pr_context with detail: "full" on one PR at a time; topic(topic: "<id>", detail: "full") has a topic's dossier and tiles.`];
 }
 
 interface StackJson {
@@ -814,8 +932,18 @@ export async function prContext(ctx: ReadContext, input: string | string[], deta
   }
   const single = reads.length === 1;
   const now = ctx.now();
-  const data = single ? await singlePrData(reader, first, authors, detail, overlaps, now) : await severalPrsData(reader, reads, authors, detail, overlaps, now);
-  const footer: string[] = [];
+  const lc: PrLineContext = { authors, overlaps, overlapAuthors: await readOverlapAuthors(reader, reads, overlaps), now };
+  let data: string[];
+  let cuts = NO_CUTS;
+  let stopped = false;
+  if (single) {
+    data = singlePrData(first, lc, detail);
+  } else if (detail === 'full') {
+    ({ data, cuts, stopped } = severalPrsFullData(reads, lc));
+  } else {
+    data = severalPrsData(reads, lc, detail, NO_CUTS);
+  }
+  const footer: string[] = [...cutNote(cuts, stopped, reads.length)];
   if (failures.length > 0) {
     footer.push(`Could not answer for ${failures.length} of ${inputs.length}:`, ...failures.map(failureLine), '');
   }

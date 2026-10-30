@@ -8,6 +8,10 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 - The MCP answers know stamphog's verdict. `pr_context` says whether stamphog approved or declined, which gates failed, its reasons, whether it judged an older commit, and what the author can do next: re-add the label after a push, or ask a person to review. `whats_on_me` and `search_prs` take `agent_verdict: "declined"` (or `"approved"`) and name the verdict on each pull request's line. Before, a decline looked like no review at all.
 
+### Changed
+
+- `pr_context` with `detail: "full"` on several pull requests stays under 40,000 characters, so it fits an agent's tool output instead of spilling to a file. It shortens the activity first, then the topics' dossier and tile list, and says what it cut. One pull request alone still gets everything.
+
 ## 0.29.0 (2026-10-29)
 
 ### Added
