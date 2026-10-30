@@ -5431,8 +5431,9 @@ is worth seeing on the tile, and the glance should weigh the reasons.
   declined (left out once a person approved), the decline kind, the gate
   names the table marks failed (`failedGates`, prerequisites included;
   the detail column is not kept), the clipped reason, `olderHead` (made
-  on a commit that is no longer the head) and `nobodyAsked` (declined and
-  no person or team is asked to review; pending bots do not count).
+  on a commit that is no longer the head) and `nobodyAsked` (declined, no
+  person or team is asked to review and no person asked for changes;
+  pending bots do not count).
   - pr_context, brief and full: "Agent approver: stamphog declined:
     outside what it may auto-approve (failed: size) (date)", "Its
     reasons: …", and what the author can do, by rules: on an older head,

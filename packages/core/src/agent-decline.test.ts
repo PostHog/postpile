@@ -185,6 +185,12 @@ describe('agentVerdictView', () => {
     expect(agentVerdictView(prWith([verdict('r1', NEEDS_PERSON, 5)], { reviewerTeams: ['acme/team-platform'] }))?.nobodyAsked).toBe(false);
   });
 
+  it('is not stuck once a person asked for changes: the author has their changes to address', () => {
+    const decline = verdict('r1', NEEDS_PERSON, 5);
+    const changes = makeReview({ id: 'p1', author: 'carol', state: 'CHANGES_REQUESTED', submittedAt: at(6) });
+    expect(agentVerdictView(prWith([decline], { reviews: [decline.review, changes] }))?.nobodyAsked).toBe(false);
+  });
+
   it('reads an approval, also on an older head, and keeps it after a person approved', () => {
     const approval = [verdict('r1', NEEDS_PERSON, 4), verdict('r2', APPROVED, 5, 'APPROVED', 'old')];
     expect(agentVerdictView(prWith(approval))).toMatchObject({ verdict: 'approved', declineKind: null, failedGates: [], olderHead: true, nobodyAsked: false, reason: 'Small and covered by tests.' });

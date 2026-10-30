@@ -5,8 +5,9 @@
 // verdict review by rules, no agent call. Pure, from the PR snapshot.
 import { standingApprovals } from './approvals.ts';
 import { TRIMMED_MARKER } from './bot-bodies.ts';
-import { isBot, STAMPHOG_LOGIN } from './bots.ts';
+import { STAMPHOG_LOGIN } from './bots.ts';
 import { stripHtmlComments } from './html-comments.ts';
+import { reviewerStates } from './reviewer-states.ts';
 import type { Pr, Review } from './types.ts';
 
 /** The longest reason kept, in characters, "…" included. */
@@ -233,9 +234,9 @@ export interface AgentVerdictView {
   /** The verdict was made on a commit that is no longer the head: re-adding the label runs it on the new one. */
   olderHead: boolean;
   /**
-   * Declined and no person or team is asked to review: nothing moves until
-   * the author asks someone. Pending bot reviewers do not count. Always
-   * false on an approval.
+   * Declined, no person or team is asked to review and no person asked for
+   * changes: nothing moves until the author asks someone. Pending bot
+   * reviewers do not count. Always false on an approval.
    */
   nobodyAsked: boolean;
 }
@@ -258,8 +259,10 @@ export function agentVerdictView(pr: Pr): AgentVerdictView | null {
   if (standingApprovals(pr).people.length > 0) {
     return null;
   }
-  const askedPeople = pr.reviewerUsers.some((user) => user !== '' && !isBot(user)) || pr.reviewerTeams.length > 0;
-  return { agent: 'stamphog', verdict: 'declined', declineKind: latest.decline, failedGates: failedGates(latest.body), reason, at, olderHead, nobodyAsked: !askedPeople };
+  // A person who asked for changes already reviewed: GitHub dropped them from the requested list, and the move is the author's to address them.
+  const states = reviewerStates(pr);
+  const personInvolved = states.pendingUsers.length > 0 || states.pendingTeams.length > 0 || states.changesRequestedBy.length > 0;
+  return { agent: 'stamphog', verdict: 'declined', declineKind: latest.decline, failedGates: failedGates(latest.body), reason, at, olderHead, nobodyAsked: !personInvolved };
 }
 
 /**
