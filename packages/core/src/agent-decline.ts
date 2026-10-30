@@ -5,7 +5,7 @@
 // verdict review by rules, no agent call. Pure, from the PR snapshot.
 import { standingApprovals } from './approvals.ts';
 import { TRIMMED_MARKER } from './bot-bodies.ts';
-import { STAMPHOG_LOGIN } from './bots.ts';
+import { isBot, STAMPHOG_LOGIN } from './bots.ts';
 import { stripHtmlComments } from './html-comments.ts';
 import type { Pr, Review } from './types.ts';
 
@@ -47,8 +47,8 @@ function firstLine(body: string): string {
   return body.split('\n').find((line) => line.trim() !== '')?.trim() ?? '';
 }
 
-/** Gate names in the gate table whose result column is a cross: "| size | ✗ | too large |" -> "size". */
-function failedGates(body: string): string[] {
+/** Gate names in the gate table whose result column is a cross: "| size | ✗ | too large |" -> "size". GitHub text. */
+export function failedGates(body: string): string[] {
   const gates: string[] = [];
   for (const line of body.split('\n')) {
     const cells = line.trim().split('|').map((cell) => cell.trim());
@@ -121,7 +121,7 @@ function clipped(text: string, max: number): string {
  * bold first line), without the cut marker, the gate details and HTML comments, bold marks
  * dropped, whitespace collapsed, clipped.
  */
-function declineReason(body: string): string {
+function verdictReason(body: string): string {
   const whole = isTrimmed(body) ? body.slice(0, -TRIMMED_MARKER.length) : body;
   const lines = stripHtmlComments(withoutDetails(whole)).split('\n');
   const readd = lines.findIndex((line) => /re-?add the `?stamphog`? label/i.test(line));
@@ -138,42 +138,59 @@ function verdictBody(pr: Pr, review: Review): string | null {
   return pr.comments.find((comment) => comment.kind === 'review' && comment.id === review.id)?.body ?? null;
 }
 
+/** stamphog's latest verdict that decides: an approval or a decline, with its review and body. */
+type LatestVerdict = { kind: 'approved'; review: Review; body: string | null } | { kind: 'declined'; decline: AgentDeclineKind; review: Review; body: string };
+
 /**
- * stamphog's latest verdict as a decline, else null. Only verdict reviews
- * count (a body that starts with "**Approved" or "**Not approved"); its
- * plain status comments never do. A later approval cancels an earlier
- * decline, also one a push dismissed since. An unknown latest verdict
- * (`readVerdict`) shows no decline until the PR is fetched again
- * (`hasTrimmedAgentVerdict`). Null on merged and closed
- * PRs, and once a person approved: the decline no longer stands between
- * the PR and a merge.
+ * stamphog's latest deciding verdict on an open PR, else null. Only verdict
+ * reviews count (a body that starts with "**Approved" or "**Not approved");
+ * its plain status comments never do. An approval review counts even when
+ * its body says nothing we know. A waiting or unknown latest verdict
+ * (`readVerdict`) decides nothing: null until the PR is fetched again
+ * (`hasTrimmedAgentVerdict`).
  */
-export function agentDecline(pr: Pr): AgentDecline | null {
+function latestVerdict(pr: Pr): LatestVerdict | null {
   if (pr.state !== 'OPEN') {
-    return null;
-  }
-  if (standingApprovals(pr).people.length > 0) {
     return null;
   }
   const newestFirst = pr.reviews
     .filter((review) => review.author === STAMPHOG_LOGIN && review.state !== 'PENDING')
     .sort((a, b) => (a.submittedAt < b.submittedAt ? 1 : -1));
   for (const review of newestFirst) {
-    // An approval counts even when its body says nothing we know.
-    if (review.state === 'APPROVED') {
-      return null;
-    }
     const body = verdictBody(pr, review);
+    if (review.state === 'APPROVED') {
+      return { kind: 'approved', review, body };
+    }
     const verdict = body === null ? null : readVerdict(body);
     if (verdict === null) {
       continue;
     }
-    if (body === null || verdict.kind !== 'declined') {
+    if (body === null || verdict.kind === 'waiting' || verdict.kind === 'unknown') {
       return null;
     }
-    return { agent: 'stamphog', kind: verdict.decline, reason: declineReason(body), at: review.submittedAt, commitOid: review.commitOid };
+    if (verdict.kind === 'approved') {
+      return { kind: 'approved', review, body };
+    }
+    return { kind: 'declined', decline: verdict.decline, review, body };
   }
   return null;
+}
+
+/**
+ * stamphog's latest verdict as a decline, else null. A later approval
+ * cancels an earlier decline, also one a push dismissed since. Null on
+ * merged and closed PRs, and once a person approved: the decline no longer
+ * stands between the PR and a merge.
+ */
+export function agentDecline(pr: Pr): AgentDecline | null {
+  if (standingApprovals(pr).people.length > 0) {
+    return null;
+  }
+  const latest = latestVerdict(pr);
+  if (latest?.kind !== 'declined') {
+    return null;
+  }
+  return { agent: 'stamphog', kind: latest.decline, reason: verdictReason(latest.body), at: latest.review.submittedAt, commitOid: latest.review.commitOid };
 }
 
 /** What the tile and the detail pane get of a decline: the renderer never imports the rule. */
@@ -197,6 +214,52 @@ export function agentDeclineView(pr: Pr): AgentDeclineView | null {
     reason: decline.reason,
     earlierCommit: decline.commitOid !== null && decline.commitOid !== pr.headOid,
   };
+}
+
+/**
+ * stamphog's standing verdict for readers outside the app (MCP): approved,
+ * or declined as `agentDecline` has it. Facts by rules, no agent call.
+ */
+export interface AgentVerdictView {
+  agent: string;
+  verdict: 'approved' | 'declined';
+  /** Why it declined; null on an approval. */
+  declineKind: AgentDeclineKind | null;
+  /** Gate names the gate table marks failed (`failedGates`), "prerequisites" included. GitHub text. */
+  failedGates: string[];
+  /** The verdict's prose, clipped like a decline's; empty when the review has no body. GitHub text. */
+  reason: string;
+  at: string;
+  /** The verdict was made on a commit that is no longer the head: re-adding the label runs it on the new one. */
+  olderHead: boolean;
+  /**
+   * Declined and no person or team is asked to review: nothing moves until
+   * the author asks someone. Pending bot reviewers do not count. Always
+   * false on an approval.
+   */
+  nobodyAsked: boolean;
+}
+
+/**
+ * `latestVerdict` as reader data, null when there is none. A decline is
+ * left out once a person approved, like `agentDecline`; an approval stays.
+ */
+export function agentVerdictView(pr: Pr): AgentVerdictView | null {
+  const latest = latestVerdict(pr);
+  if (latest === null) {
+    return null;
+  }
+  const olderHead = latest.review.commitOid !== null && latest.review.commitOid !== pr.headOid;
+  const reason = latest.body === null ? '' : verdictReason(latest.body);
+  const at = latest.review.submittedAt;
+  if (latest.kind === 'approved') {
+    return { agent: 'stamphog', verdict: 'approved', declineKind: null, failedGates: [], reason, at, olderHead, nobodyAsked: false };
+  }
+  if (standingApprovals(pr).people.length > 0) {
+    return null;
+  }
+  const askedPeople = pr.reviewerUsers.some((user) => user !== '' && !isBot(user)) || pr.reviewerTeams.length > 0;
+  return { agent: 'stamphog', verdict: 'declined', declineKind: latest.decline, failedGates: failedGates(latest.body), reason, at, olderHead, nobodyAsked: !askedPeople };
 }
 
 /**

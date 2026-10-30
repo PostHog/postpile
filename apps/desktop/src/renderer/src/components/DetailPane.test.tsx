@@ -76,6 +76,7 @@ function detailOf(pr: Pr, activity: ActivityList = activityList([], null)): PrDe
     viewerReview: null,
     agentApprovers: [],
     agentDecline: null,
+    agentVerdict: null,
     botFindings: [],
     topicId: 'topic-1',
     tileIds: ['stack:acme/app#11'],

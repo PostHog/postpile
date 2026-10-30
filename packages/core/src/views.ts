@@ -25,7 +25,7 @@ import type { WaitingThread } from './waiting-threads.ts';
 import type { TileAfterRead } from './after-read.ts';
 import type { GlanceRefreshBlock, GlanceState } from './glance-state.ts';
 import type { AgentCallStats, DossierStatus, TopicRelation } from './memory.ts';
-import type { AgentDeclineView } from './agent-decline.ts';
+import type { AgentDeclineView, AgentVerdictView } from './agent-decline.ts';
 import type { BotFinding } from './bot-findings.ts';
 import type { DossierView, FactChangeCounts, FactView, MemoryTarget } from './memory-views.ts';
 import type { PrNotesView } from './pr-notes.ts';
@@ -526,6 +526,12 @@ export interface PrDetail {
    * when there is none. "To merge" says it in words.
    */
   agentDecline: AgentDeclineView | null;
+  /**
+   * stamphog's standing verdict, approved or declined (`agentVerdictView`),
+   * with its failed gates and whether it is on an older head; null when
+   * there is none. The MCP reads it; the pane uses `agentDecline`.
+   */
+  agentVerdict: AgentVerdictView | null;
   /**
    * Each bot whose standing review asks for changes, with a line of what it
    * found (`botFindings`), so "Address <bot>'s changes" can say what the

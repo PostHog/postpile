@@ -2,6 +2,12 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## Unreleased
+
+### Added
+
+- The MCP answers know stamphog's verdict. `pr_context` says whether stamphog approved or declined, which gates failed, its reasons, whether it judged an older commit, and what the author can do next: re-add the label after a push, or ask a person to review. `whats_on_me` and `search_prs` take `agent_verdict: "declined"` (or `"approved"`) and name the verdict on each pull request's line. Before, a decline looked like no review at all.
+
 ## 0.29.0 (2026-10-29)
 
 ### Added

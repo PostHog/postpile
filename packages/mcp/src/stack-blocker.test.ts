@@ -15,7 +15,7 @@ import { prContext, whatsOnMe, type QueueOptions, type ReadContext } from './rea
 
 const VIEWER: Viewer = { login: 'alice', teams: ['acme/team-platform'] };
 const NOW = new Date('2026-09-01T10:00:00Z');
-const LIST: QueueOptions = { limit: 25, offset: 0, state: 'open', repo: null, whoseMove: 'any', authorScope: 'any' };
+const LIST: QueueOptions = { limit: 25, offset: 0, state: 'open', repo: null, whoseMove: 'any', agentVerdict: 'any', authorScope: 'any' };
 const UPDATED = '2026-09-01T09:00:00Z';
 
 describe('MCP: stack blockers and bot findings', () => {

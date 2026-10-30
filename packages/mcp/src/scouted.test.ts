@@ -14,7 +14,7 @@ import { prContext, searchPrs, whatsOnMe, type QueueOptions, type ReadContext } 
 const VIEWER: Viewer = { login: 'alice', teams: ['acme/team-platform'] };
 const NOW = new Date('2026-09-01T10:00:00Z');
 const UPDATED = '2026-09-01T09:00:00Z';
-const LIST: QueueOptions = { limit: 25, offset: 0, state: 'open', repo: null, whoseMove: 'any', authorScope: 'any' };
+const LIST: QueueOptions = { limit: 25, offset: 0, state: 'open', repo: null, whoseMove: 'any', agentVerdict: 'any', authorScope: 'any' };
 
 function scouted(prKey: string): ScoutedPr {
   return {
@@ -84,11 +84,11 @@ describe('MCP: scouted PRs', () => {
   });
 
   it('finds scouted PRs in search_prs, marked as such', async () => {
-    const text = (await searchPrs(ctx, 'billing', { limit: 25, offset: 0, state: 'any', repo: null, whoseMove: 'any' })).text;
+    const text = (await searchPrs(ctx, 'billing', { limit: 25, offset: 0, state: 'any', repo: null, whoseMove: 'any', agentVerdict: 'any' })).text;
     expect(text).toContain("acme/app#40");
     expect(text).toContain("scouted by Lookout, not in the user's inbox");
     // No scout:<id> as a topic reference: the topic tool cannot open one, and pr_context leaves it out too.
-    const json = (await searchPrs(ctx, 'billing', { limit: 25, offset: 0, state: 'any', repo: null, whoseMove: 'any' }, 'json')).structured as { prs: { key: string; topic: unknown }[] };
+    const json = (await searchPrs(ctx, 'billing', { limit: 25, offset: 0, state: 'any', repo: null, whoseMove: 'any', agentVerdict: 'any' }, 'json')).structured as { prs: { key: string; topic: unknown }[] };
     expect(json.prs.find((pr) => pr.key === 'acme/app#40')?.topic).toBeNull();
   });
 

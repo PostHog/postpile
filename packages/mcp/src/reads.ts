@@ -36,6 +36,7 @@ import {
   scoutIdOfTopic,
 } from '@postpile/core';
 import { UNSORTED_TOPIC_ID, type EngineService } from '@postpile/engine';
+import { agentVerdictLines, agentVerdictShort } from './agent-verdict-text.ts';
 import { contextNoteLines, notesJson, queueNoteLines, tokenLine } from './notes-text.ts';
 import { overlapLines, overlapMarker, overlapNotes } from './overlaps.ts';
 import { jsonAnswer, prJson, prUnreadReason, tileJson, topicJson, type Format, type MetaJson, type PrJson } from './json.ts';
@@ -95,6 +96,8 @@ export type Detail = 'brief' | 'full';
 export type StateFilter = 'open' | 'merged' | 'closed' | 'any';
 export type WhoseMoveFilter = 'you' | 'them' | 'any';
 export type AuthorScopeFilter = AuthorScope | 'any';
+/** stamphog's standing verdict (`PrDetail.agentVerdict`). */
+export type AgentVerdictFilter = 'declined' | 'approved' | 'any';
 
 /** Paging and flat filters of search_prs and whats_on_me. */
 export interface ListOptions {
@@ -104,6 +107,7 @@ export interface ListOptions {
   /** owner/name, or null for every repo. */
   repo: string | null;
   whoseMove: WhoseMoveFilter;
+  agentVerdict: AgentVerdictFilter;
 }
 
 /** whats_on_me's filters: the list ones plus whose PRs. */
@@ -433,7 +437,7 @@ function prHeadLines(detail: PrDetail, tiles: TileView[], authors: Authors): str
   if (detail.viewerApproval) {
     lines.push(`You approved it on ${day(detail.viewerApproval.at)}.`);
   }
-  lines.push(reviewersLine(reviewerStates(pr)));
+  lines.push(reviewersLine(reviewerStates(pr)), ...agentVerdictLines(detail.agentVerdict));
   if (detail.whatsNew) {
     lines.push(`New since you looked: ${whatsNewText(detail.whatsNew)}`);
   }
@@ -1009,6 +1013,17 @@ function moveMatches(subject: Pick<TileView, 'turn'>, whoseMove: WhoseMoveFilter
   return whoseMove === 'any' || subject.turn.kind === whoseMove;
 }
 
+/** stamphog's standing verdict on the PR (`PrDetail.agentVerdict`); a PR without a stored snapshot only matches any. */
+function verdictMatches(detail: PrDetail | null | undefined, filter: AgentVerdictFilter): boolean {
+  return filter === 'any' || detail?.agentVerdict?.verdict === filter;
+}
+
+/** " · stamphog declined: ..." after a PR's line, empty without a verdict. */
+function verdictSuffix(detail: PrDetail | null | undefined): string {
+  const verdict = detail?.agentVerdict ?? null;
+  return verdict === null ? '' : ` · ${agentVerdictShort(verdict)}`;
+}
+
 /** "Showing 26-50 of 80." plus the line that says how to get the next page, for a cut list. */
 function pageLines(total: number, options: ListOptions, shown: number): { head: string; tail: string[] } {
   if (shown === 0) {
@@ -1030,6 +1045,9 @@ function filterWords(options: ListOptions & Partial<Pick<QueueOptions, 'authorSc
   if (options.authorScope && options.authorScope !== 'any') {
     words.push(`author ${options.authorScope}`);
   }
+  if (options.agentVerdict !== 'any') {
+    words.push(`agent verdict ${options.agentVerdict}`);
+  }
   return words.join(', ');
 }
 
@@ -1041,7 +1059,7 @@ function pageJson(total: number, options: ListOptions, shown: number): { total: 
 
 /** The filters as the caller passed them, for a JSON answer. */
 function filtersJson(options: ListOptions & Partial<Pick<QueueOptions, 'authorScope'>>): Record<string, string | null> {
-  return { state: options.state, repo: options.repo, whoseMove: options.whoseMove, ...(options.authorScope ? { authorScope: options.authorScope } : {}) };
+  return { state: options.state, repo: options.repo, whoseMove: options.whoseMove, agentVerdict: options.agentVerdict, ...(options.authorScope ? { authorScope: options.authorScope } : {}) };
 }
 
 /** One search hit: the PR's row, the tile it was found in and its topic. */
@@ -1051,9 +1069,8 @@ interface SearchRow {
   topic: TopicDetail;
 }
 
-async function searchJson(ctx: ReadContext, rows: SearchRow[], page: SearchRow[], options: ListOptions): Promise<ToolAnswer> {
+async function searchJson(ctx: ReadContext, rows: SearchRow[], page: SearchRow[], options: ListOptions, details: Map<PrKey, PrDetail | null>): Promise<ToolAnswer> {
   const authors = await readAuthors(ctx.reader);
-  const details = await readDetails(ctx.reader, page.map((row) => row.pr.key));
   const overlaps = await ctx.reader.prOverlaps();
   const data = {
     meta: await readMeta(ctx, authors),
@@ -1086,21 +1103,25 @@ export async function searchPrs(ctx: ReadContext, query: string, options: ListOp
       }
     }
   }
-  const page = rows.slice(options.offset, options.offset + options.limit);
+  // The verdict lives in each PR's stored snapshot: with the filter every match is read, else only this page.
+  const verdictDetails = options.agentVerdict === 'any' ? new Map<PrKey, PrDetail | null>() : await readDetails(reader, rows.map((row) => row.pr.key));
+  const matching = rows.filter((row) => verdictMatches(verdictDetails.get(row.pr.key), options.agentVerdict));
+  const page = matching.slice(options.offset, options.offset + options.limit);
+  const details = options.agentVerdict === 'any' ? await readDetails(reader, page.map((row) => row.pr.key)) : verdictDetails;
   if (format === 'json') {
-    return searchJson(ctx, rows, page, options);
+    return searchJson(ctx, matching, page, options, details);
   }
-  if (rows.length === 0) {
+  if (matching.length === 0) {
     // Matches that the filters dropped: say which filters, so the caller can widen them.
     const filters = result.topics.length > 0 ? ` with ${filterWords(options)}` : '';
     return { text: `No PR matches "${echo(query)}"${filters}. Every word must appear in the title, #number, author, repo, branch or topic name.`, found: false };
   }
   const lines = page.map((row) =>
     row.topic.scout
-      ? `${prSummaryLine(row.pr)}  · scouted by ${row.topic.scout.name}, not in the user's inbox (pr_context for why)`
-      : `${prSummaryLine(row.pr)}  · topic ${row.topic.topic.name} (${row.topic.topic.id}) · ${turnText(row.pr.turn)}`,
+      ? `${prSummaryLine(row.pr)}  · scouted by ${row.topic.scout.name}, not in the user's inbox (pr_context for why)${verdictSuffix(details.get(row.pr.key))}`
+      : `${prSummaryLine(row.pr)}  · topic ${row.topic.topic.name} (${row.topic.topic.id}) · ${turnText(row.pr.turn)}${verdictSuffix(details.get(row.pr.key))}`,
   );
-  const { head, tail } = pageLines(rows.length, options, page.length);
+  const { head, tail } = pageLines(matching.length, options, page.length);
   return { text: answer([...(await header(ctx)), `${head} Filters: ${filterWords(options)}.`], lines, tail), found: true };
 }
 
@@ -1136,7 +1157,7 @@ function queuePrLines(prs: PrSummary[], details: Map<PrKey, PrDetail | null>, au
     const owners = detail?.pr.state === 'OPEN' ? ownershipShort(detail.ownership) : '';
     // A merged or closed layer of a live tile says so: only the open ones are there to act on.
     const state = pr.state === 'OPEN' ? '' : ` (${stateWord(pr.state, pr.isDraft)})`;
-    const lines = [`  ${pr.key}${state} by ${pr.author}${authorTag(placeOf(authors, pr), authors.known)} · reviews: ${reviews}${overlapMarker(overlaps, pr.key)}${owners ? ` · ${owners}` : ''}`];
+    const lines = [`  ${pr.key}${state} by ${pr.author}${authorTag(placeOf(authors, pr), authors.known)} · reviews: ${reviews}${verdictSuffix(detail)}${overlapMarker(overlaps, pr.key)}${owners ? ` · ${owners}` : ''}`];
     const view = notes.get(pr.key);
     if (view) {
       lines.push(...queueNoteLines(view, now).map((line) => `    ${line}`));
@@ -1188,6 +1209,15 @@ interface ScoutedRow {
   scoutName: string;
 }
 
+/** One of these PRs has the verdict asked for; reads their snapshots only when a verdict is asked for. */
+async function anyVerdictMatches(reader: PostPileReader, prs: PrSummary[], filter: AgentVerdictFilter): Promise<boolean> {
+  if (filter === 'any') {
+    return true;
+  }
+  const details = await readDetails(reader, prs.map((pr) => pr.key));
+  return prs.some((pr) => verdictMatches(details.get(pr.key), filter));
+}
+
 /**
  * The scouts' tiles (DESIGN.md "Scouts"): PRs from outside the user's
  * GitHub inbox, never an ask, so never mixed into the list above. Left out
@@ -1205,7 +1235,7 @@ async function scoutedRows(reader: PostPileReader, authors: Authors, options: Qu
     const detail = await reader.getTopic(scout.topicId);
     for (const view of detail?.tiles ?? []) {
       const matching = view.prs.filter((pr) => stateMatches(pr, options.state) && repoMatches(pr, options.repo) && scopeMatches(authors, pr, options.authorScope));
-      if (matching.length > 0) {
+      if (matching.length > 0 && (await anyVerdictMatches(reader, matching, options.agentVerdict))) {
         rows.push({ view, scoutId: scout.id, scoutName: scout.name });
       }
     }
@@ -1287,7 +1317,7 @@ export async function whatsOnMe(ctx: ReadContext, options: QueueOptions, format:
   for (const detail of await readTopics(reader, items.map((item) => item.topic.id))) {
     for (const view of detail.tiles.filter(isLive)) {
       const matching = view.prs.filter((pr) => stateMatches(pr, options.state) && repoMatches(pr, options.repo) && scopeMatches(authors, pr, options.authorScope));
-      if (matching.length === 0 || !moveMatches(view, options.whoseMove)) {
+      if (matching.length === 0 || !moveMatches(view, options.whoseMove) || !(await anyVerdictMatches(reader, matching, options.agentVerdict))) {
         continue;
       }
       const line = `- ${view.tile.title} (${view.prs.map((pr) => pr.key).join(', ')}) · topic ${detail.topic.name} (${detail.topic.id}) · ${fetchedText(tileFetchedAt(view), now)}`;

@@ -22,6 +22,7 @@ import {
   type Verdict,
   type WhoseTurn,
 } from '@postpile/core';
+import { agentVerdictJson, agentVerdictUntrusted, type AgentVerdictJson } from './agent-verdict-text.ts';
 import { commentPreview, fenced, leadUnreadReason, stripInvisible, turnText, unreadReasonText, UNTRUSTED_NOTE } from './text.ts';
 
 export type Format = 'text' | 'json';
@@ -77,6 +78,8 @@ export interface PrJson {
   unread: UnreadJson | null;
   /** Null when the PR's stored snapshot was not read. */
   reviews: ReviewsJson | null;
+  /** stamphog's standing verdict (`PrDetail.agentVerdict`); null without one or when the snapshot was not read. */
+  agentVerdict: AgentVerdictJson | null;
   /** On the user's own PR: unresolved threads whose last word waits on them. Null when the snapshot was not read. */
   threadsWaitingOnYou: number | null;
   fetchedAt: string | null;
@@ -114,6 +117,8 @@ export interface PrJson {
     latestThread: { author: string; path: string; preview: string | null } | null;
     /** Each bot's standing change request and one line of what it found (`PrDetail.botFindings`); empty without the snapshot. */
     botFindings: { by: string; summary: string }[];
+    /** The verdict's failed gate names and clipped reason; null with agentVerdict. */
+    agentVerdict: { failedGates: string[]; reason: string } | null;
   };
 }
 
@@ -250,6 +255,7 @@ export function prJson(input: PrJsonInput): PrJson {
     whoseMove: summary ? moveJson(summary.turn) : null,
     unread: unreadJson(input.unread),
     reviews: input.reviews ? reviewsJson(input.reviews) : null,
+    agentVerdict: agentVerdictJson(detail?.agentVerdict ?? null),
     threadsWaitingOnYou: detail ? detail.waitingThreads.length : null,
     fetchedAt: summary?.fetchedAt ?? detail?.fetchedAt ?? null,
     topic: input.topic ? { id: input.topic.id } : null,
@@ -279,6 +285,7 @@ export function prJson(input: PrJsonInput): PrJson {
       glanceRisk: glance?.risk ?? null,
       latestThread: newest ? { author: newest.author, path: newest.path, preview: newest.body === null ? null : commentPreview(newest.body) } : null,
       botFindings: (detail?.botFindings ?? []).map((finding) => ({ by: finding.by, summary: finding.summary })),
+      agentVerdict: agentVerdictUntrusted(detail?.agentVerdict ?? null),
     },
   };
 }

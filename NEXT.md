@@ -6,6 +6,15 @@ now".
 
 ## Done
 
+- stamphog verdicts in MCP answers (2026-10-30; DESIGN.md "An agent
+  approver's decline" › In MCP answers): core `agentVerdictView`
+  (`PrDetail.agentVerdict`) gives the standing verdict, approved or
+  declined, with failed gates, older head and "nobody asked". pr_context
+  prints an "Agent approver:" line with the reasons and what the author
+  can do (JSON `agentVerdict`, gates and reason under `untrusted`);
+  whats_on_me and search_prs take `agent_verdict` and name the verdict
+  on each PR's line. Whose move does not change (see "Needs Julian's
+  decisions").
 - Scouts (2026-10-29; DESIGN.md "Scouts"): core `parseScouts` and the
   scout rules (`scouts.ts`), migrations 043 to 045 (`scouts_version`,
   `scout_cursor`, `scout_judgement`, `pr_scouted`, `pending_write.follow`),
@@ -1590,6 +1599,15 @@ the app meanwhile.
 
 ## Needs Julian's decisions
 
+- **A stamphog decline with nobody asked as a move** (2026-10-30): such a
+  PR is stuck, yet core's whose move says nobody's (the author's own PR
+  with nothing else open) or keeps another move. Only the MCP says it
+  waits on the author to ask a person, as a hint next to the move. Making
+  it a real move needs a new "your move" kind (address changes would
+  mislabel it) across sections, tiers, pings, the renderer and the spec
+  oracle, which would restate the verdict parser; DESIGN.md said a
+  decline leaves whose turn alone (2026-10-27). Worth it?
+
 - **Setup flow**:
   - An existing install with instructions never sees the flow; one with an
     empty file and no flag (e.g. the dev profile) will on its next start.
@@ -1900,6 +1918,10 @@ the app meanwhile.
 
 ## Decided
 
+- **No read or scout for the team's PRs outside the inbox** (2026-10-30,
+  owner): PostPile does not read or scout the team's open PRs that never
+  reached the user's inbox; teammates may assign reviews to each other on
+  purpose. `author_scope: my_team` stays a filter over the inbox.
 - **Scouts** (2026-10-29, owner; DESIGN.md "Scouts"): PRs from outside the
   inbox that match a user-written prompt in `~/.config/postpile/scouts.md`
   (one `## Name` per scout, `repos:`, optional `paths:` and `id:`, versioned

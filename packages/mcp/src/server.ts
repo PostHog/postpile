@@ -71,7 +71,7 @@ const REFRESH = { readOnlyHint: false, destructiveHint: false, idempotentHint: t
 /** Files a suggestion in the app; the same suggestion twice is refused, so calling again changes nothing. */
 const PROPOSE = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
 
-const PR_CONTEXT_DESCRIPTION = `What PostPile knows about a PR and the topic around it: whose move it is (with the newest unanswered thread on the user's own PR; on a stack, also what holds the whole stack and which lower layers can land alone), what a bot's change request found, why it is unread, its stack position (also a stack its body declares) or a PR it must merge after, whether the author is the user or on their team, who reviewed (approved, changes requested, still asked; agents apart), what is new since the user looked, which changed files CODEOWNERS gives each requested team and the user's teams (only teams it gives files), a rough effort (PR size, open threads, and lines and files in the user's teams' area when there are any), the agent's glance (verdict, what it means for the user, risk; each says whether the agent checked it or only inferred it), when PostPile last fetched it, other open PRs that edit the same or nearby lines of a file (no merge conflict, yet merging both can drop changes), and the topic's other PRs. detail: "full" adds facts, the activity list, the topic dossier (goal, status, people, open questions, timeline) and every tile.
+const PR_CONTEXT_DESCRIPTION = `What PostPile knows about a PR and the topic around it: whose move it is (with the newest unanswered thread on the user's own PR; on a stack, also what holds the whole stack and which lower layers can land alone), what a bot's change request found, why it is unread, its stack position (also a stack its body declares) or a PR it must merge after, whether the author is the user or on their team, who reviewed (approved, changes requested, still asked; agents apart), stamphog's verdict (approved or declined and why, failed gates, whether it is on an older head, what the author can do), what is new since the user looked, which changed files CODEOWNERS gives each requested team and the user's teams (only teams it gives files), a rough effort (PR size, open threads, and lines and files in the user's teams' area when there are any), the agent's glance (verdict, what it means for the user, risk; each says whether the agent checked it or only inferred it), when PostPile last fetched it, other open PRs that edit the same or nearby lines of a file (no merge conflict, yet merging both can drop changes), and the topic's other PRs. detail: "full" adds facts, the activity list, the topic dossier (goal, status, people, open questions, timeline) and every tile.
 pr takes one PR or a list of up to ${MAX_PRS_PER_CALL}: each topic prints once, then its PRs; a PR it cannot read is listed with the reason.
 Use when: before you review, comment on, merge or change code for a PR, to learn what the user already knows and owes.
 Not for: finding PRs (search_prs, whats_on_me) or live CI status (ask GitHub).
@@ -83,14 +83,14 @@ Not for: one PR's details (pr_context).
 Example: topic(topic: "depot", detail: "full")`;
 
 const SEARCH_DESCRIPTION = `Find PRs PostPile tracks. Every word must match the title, #number, author, repo, branch or topic name. One line per PR with its topic and whose move, 25 per page.
-Filters: state (open, merged, closed, any; default any), repo (owner/name), whose_move (you, them, any). Page with limit (max 100) and offset.
+Filters: state (open, merged, closed, any; default any), repo (owner/name), whose_move (you, them, any), agent_verdict (declined, approved, any: stamphog's standing verdict). A PR stamphog declined says so on its line. Page with limit (max 100) and offset.
 Use when: you have a name, number or keyword and need the PR reference or its topic.
 Not for: the user's queue (whats_on_me), or searching GitHub itself: PostPile only knows PRs that reached the user, and ones their scouts pulled in (marked "scouted").
 Example: search_prs(query: "turbo cache", state: "open")`;
 
 const WHATS_ON_ME_DESCRIPTION = `The user's queue as PostPile sees it: tiles where it is their move (review, reply, merge), then unread ones where it is not, each with its topic, what happened (bot activity named, not quoted) and when PostPile last fetched it. While the app runs a full sync, the header says so and how far it got. Each PR gets a line with its author, tagged (you), (your team: ...) or (outside your team), and its reviews: human approvals and change requests as counts, who is still asked, agents by name, and how many of its files CODEOWNERS gives each requested team (only teams it gives files); on the user's move an effort line (PR size, open threads, and lines and files in their teams' area when there are any); "overlaps #N" marks another open PR editing the same lines, "near #N" one editing within 10 lines of them (pr_context has the files).
 On the user's own PR with threads waiting on them, a short preview of the newest one's last comment. Last, in a group of its own, PRs the user's scouts pulled in from outside their inbox: never an ask.
-Filters: state (open, merged, closed, any; default open), repo (owner/name), whose_move (you, them, any), author_scope (me, my_team, others, any; "your team" means the user's home teams, never a team a review request names). A tile matches when any of its PRs does. Page with limit (max 100) and offset.
+Filters: state (open, merged, closed, any; default open), repo (owner/name), whose_move (you, them, any), author_scope (me, my_team, others, any; "your team" means the user's home teams, never a team a review request names), agent_verdict (declined, approved, any: stamphog's standing verdict; a PR's line names it). A tile matches when any of its PRs does. Page with limit (max 100) and offset.
 Use when: the user asks what to do next or what waits on them, or you plan a work session.
 Not for: one PR's details (pr_context).
 Example: whats_on_me(whose_move: "you", author_scope: "others", limit: 10)`;
@@ -224,6 +224,10 @@ function listShape(defaultState: ListOptions['state']) {
       .enum(['you', 'them', 'any'], { error: 'whose_move must be you, them or any, e.g. whose_move: "you"' })
       .default('any')
       .describe("you: the user's move; them: someone else's; any (default)"),
+    agent_verdict: z
+      .enum(['declined', 'approved', 'any'], { error: 'agent_verdict must be declined, approved or any, e.g. agent_verdict: "declined"' })
+      .default('any')
+      .describe("stamphog's standing verdict: declined (no person approved since), approved, any (default)"),
   };
 }
 
@@ -233,11 +237,12 @@ interface ListArgs {
   state: ListOptions['state'];
   repo?: string;
   whose_move: ListOptions['whoseMove'];
+  agent_verdict: ListOptions['agentVerdict'];
 }
 
 function listOptions(args: ListArgs): ListOptions {
   const repo = args.repo?.trim();
-  return { limit: args.limit, offset: args.offset, state: args.state, repo: repo ? repo : null, whoseMove: args.whose_move };
+  return { limit: args.limit, offset: args.offset, state: args.state, repo: repo ? repo : null, whoseMove: args.whose_move, agentVerdict: args.agent_verdict };
 }
 
 const authorScopeSchema = z
