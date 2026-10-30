@@ -9055,7 +9055,15 @@ how they answer is under "Tool design" below):
   marked), then each asked PR's lines; PRs in no topic last. A PR that
   cannot be resolved or is not tracked is listed after the fence with its
   error; the call is a tool error only when none can be read. One PR
-  answers as before. Owner and repo ignore case, as on GitHub
+  answers as before. Several PRs with detail "full" keep their data under
+  40,000 characters (`FULL_MANY_BUDGET`, 2026-10-30: 7 PRs came to about
+  87k, past the caller's tool output limit, so the answer spilled to a
+  file). Cuts are tried in order until it fits: activity to the newest 10
+  lines per PR and unread comment bodies to 400 characters; then topics as
+  in a brief answer (no dossier, no tile list); then no activity or unread
+  list at all. A note after the fence says what was cut and points to
+  pr_context on one PR at a time and `topic(detail: "full")`. One PR alone
+  is never cut. Owner and repo ignore case, as on GitHub
   (2026-10-10): "ACME/APP#1932" finds acme/app#1932, the way `search_prs`'
   repo filter already did. The key is looked up among the stored PRs with
   that number; one PostPile does not store is used as typed. `note_pr` and

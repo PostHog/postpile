@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { AGENT_MARK_READ_MAX_PRS, OUTSIDE_REASON_MAX, PR_NOTE_BY_MAX, PR_NOTE_LEASE_DEFAULT_MINUTES, PR_NOTE_LEASE_MAX_MINUTES, PR_NOTE_LEASE_MIN_MINUTES, PR_NOTE_MAX, TOPIC_NAME_MAX, UNDO_WINDOW_MS } from '@postpile/core';
 import { markRead, notePr, proposeTopicChange, refreshFromGithub, type ActionContext } from './actions.ts';
 import type { AgentRequests } from './agent-requests.ts';
-import { DEFAULT_LIMIT, MAX_LIMIT, MAX_PRS_PER_CALL, prContext, searchPrs, topicOverview, whatsOnMe, type ListOptions, type PostPileReader, type QueueOptions, type ToolAnswer } from './reads.ts';
+import { DEFAULT_LIMIT, FULL_MANY_BUDGET, MAX_LIMIT, MAX_PRS_PER_CALL, prContext, searchPrs, topicOverview, whatsOnMe, type ListOptions, type PostPileReader, type QueueOptions, type ToolAnswer } from './reads.ts';
 
 export type McpToolName = 'pr_context' | 'topic' | 'search_prs' | 'whats_on_me' | 'refresh_from_github' | 'propose_topic_change' | 'note_pr' | 'mark_read';
 
@@ -72,7 +72,7 @@ const REFRESH = { readOnlyHint: false, destructiveHint: false, idempotentHint: t
 const PROPOSE = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
 
 const PR_CONTEXT_DESCRIPTION = `What PostPile knows about a PR and the topic around it: whose move it is (with the newest unanswered thread on the user's own PR; on a stack, also what holds the whole stack and which lower layers can land alone), what a bot's change request found, why it is unread, its stack position (also a stack its body declares) or a PR it must merge after, whether the author is the user or on their team, who reviewed (approved, changes requested, still asked; agents apart), stamphog's verdict (approved or declined and why, failed gates, whether it is on an older head, what the author can do), what is new since the user looked, which changed files CODEOWNERS gives each requested team and the user's teams (only teams it gives files), a rough effort (PR size, open threads, and lines and files in the user's teams' area when there are any), the agent's glance (verdict, what it means for the user, risk; each says whether the agent checked it or only inferred it), when PostPile last fetched it, other open PRs that edit the same or nearby lines of a file (no merge conflict, yet merging both can drop changes), and the topic's other PRs. detail: "full" adds facts, the activity list, the topic dossier (goal, status, people, open questions, timeline) and every tile.
-pr takes one PR or a list of up to ${MAX_PRS_PER_CALL}: each topic prints once, then its PRs; a PR it cannot read is listed with the reason.
+pr takes one PR or a list of up to ${MAX_PRS_PER_CALL}: each topic prints once, then its PRs; a PR it cannot read is listed with the reason. detail: "full" on several PRs stays under ${FULL_MANY_BUDGET} characters by cutting activity first, then the topics' dossier and tiles, and says what it cut; one PR alone is never cut.
 Use when: before you review, comment on, merge or change code for a PR, to learn what the user already knows and owes.
 Not for: finding PRs (search_prs, whats_on_me) or live CI status (ask GitHub).
 Example: pr_context(pr: ["acme/app#1902", "acme/app#1911"])`;

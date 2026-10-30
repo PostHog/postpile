@@ -6,6 +6,11 @@ now".
 
 ## Done
 
+- Multi-PR full pr_context under a size cap (2026-10-30; DESIGN.md
+  "Tools" › pr_context): 40,000 characters of data (`FULL_MANY_BUDGET`),
+  cut in steps (activity and unread bodies, then topics to brief, then no
+  activity) with a note on what was cut. No `sections` param: one PR
+  alone or `topic(detail: "full")` gets the rest.
 - stamphog verdicts in MCP answers (2026-10-30; DESIGN.md "An agent
   approver's decline" › In MCP answers): core `agentVerdictView`
   (`PrDetail.agentVerdict`) gives the standing verdict, approved or
