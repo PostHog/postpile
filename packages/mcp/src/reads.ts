@@ -1013,9 +1013,9 @@ function moveMatches(subject: Pick<TileView, 'turn'>, whoseMove: WhoseMoveFilter
   return whoseMove === 'any' || subject.turn.kind === whoseMove;
 }
 
-/** stamphog's standing verdict on the PR (`PrDetail.agentVerdict`); a PR without a stored snapshot only matches any. */
-function verdictMatches(detail: PrDetail | null | undefined, filter: AgentVerdictFilter): boolean {
-  return filter === 'any' || detail?.agentVerdict?.verdict === filter;
+/** stamphog's standing verdict on the PR, from its row (`PrStatus.agentVerdict`): no PR read needed. */
+function verdictMatches(pr: PrSummary, filter: AgentVerdictFilter): boolean {
+  return filter === 'any' || pr.status.agentVerdict === filter;
 }
 
 /** " · stamphog declined: ..." after a PR's line, empty without a verdict. */
@@ -1103,11 +1103,10 @@ export async function searchPrs(ctx: ReadContext, query: string, options: ListOp
       }
     }
   }
-  // The verdict lives in each PR's stored snapshot: with the filter every match is read, else only this page.
-  const verdictDetails = options.agentVerdict === 'any' ? new Map<PrKey, PrDetail | null>() : await readDetails(reader, rows.map((row) => row.pr.key));
-  const matching = rows.filter((row) => verdictMatches(verdictDetails.get(row.pr.key), options.agentVerdict));
+  const matching = rows.filter((row) => verdictMatches(row.pr, options.agentVerdict));
   const page = matching.slice(options.offset, options.offset + options.limit);
-  const details = options.agentVerdict === 'any' ? await readDetails(reader, page.map((row) => row.pr.key)) : verdictDetails;
+  // Each PR line names its verdict with gates from the stored snapshot: read for this page only.
+  const details = await readDetails(reader, page.map((row) => row.pr.key));
   if (format === 'json') {
     return searchJson(ctx, matching, page, options, details);
   }
@@ -1209,15 +1208,6 @@ interface ScoutedRow {
   scoutName: string;
 }
 
-/** One of these PRs has the verdict asked for; reads their snapshots only when a verdict is asked for. */
-async function anyVerdictMatches(reader: PostPileReader, prs: PrSummary[], filter: AgentVerdictFilter): Promise<boolean> {
-  if (filter === 'any') {
-    return true;
-  }
-  const details = await readDetails(reader, prs.map((pr) => pr.key));
-  return prs.some((pr) => verdictMatches(details.get(pr.key), filter));
-}
-
 /**
  * The scouts' tiles (DESIGN.md "Scouts"): PRs from outside the user's
  * GitHub inbox, never an ask, so never mixed into the list above. Left out
@@ -1235,7 +1225,7 @@ async function scoutedRows(reader: PostPileReader, authors: Authors, options: Qu
     const detail = await reader.getTopic(scout.topicId);
     for (const view of detail?.tiles ?? []) {
       const matching = view.prs.filter((pr) => stateMatches(pr, options.state) && repoMatches(pr, options.repo) && scopeMatches(authors, pr, options.authorScope));
-      if (matching.length > 0 && (await anyVerdictMatches(reader, matching, options.agentVerdict))) {
+      if (matching.some((pr) => verdictMatches(pr, options.agentVerdict))) {
         rows.push({ view, scoutId: scout.id, scoutName: scout.name });
       }
     }
@@ -1243,9 +1233,14 @@ async function scoutedRows(reader: PostPileReader, authors: Authors, options: Qu
   return rows;
 }
 
+/** "acme/app#1 (stamphog declined)": a scouted tile's PR with its verdict word, so a stack shows which layer has it. */
+function keyWithVerdict(pr: PrSummary): string {
+  return pr.status.agentVerdict === null ? pr.key : `${pr.key} (stamphog ${pr.status.agentVerdict})`;
+}
+
 function scoutedText(row: ScoutedRow): string {
   const seen = row.view.scout?.unseen ? ' · unseen' : '';
-  return `- ${row.view.tile.title} (${row.view.prs.map((pr) => pr.key).join(', ')}) · scouted by ${row.scoutName}${seen}
+  return `- ${row.view.tile.title} (${row.view.prs.map(keyWithVerdict).join(', ')}) · scouted by ${row.scoutName}${seen}
   why: ${row.view.scout?.reason ?? ''}`;
 }
 
@@ -1263,6 +1258,8 @@ function scoutedJson(rows: ScoutedRow[]): object[] {
     scout: { id: row.scoutId },
     tile: tileJson(row.view),
     prs: row.view.prs.map((pr) => pr.key),
+    // stamphog's standing verdict per PR ("approved" / "declined"), only those that have one.
+    agentVerdicts: row.view.prs.flatMap((pr) => (pr.status.agentVerdict === null ? [] : [{ prKey: pr.key, verdict: pr.status.agentVerdict }])),
     unseen: row.view.scout?.unseen ?? false,
     untrusted: { scoutName: row.scoutName, reason: row.view.scout?.reason ?? '', title: row.view.tile.title },
   }));
@@ -1317,7 +1314,7 @@ export async function whatsOnMe(ctx: ReadContext, options: QueueOptions, format:
   for (const detail of await readTopics(reader, items.map((item) => item.topic.id))) {
     for (const view of detail.tiles.filter(isLive)) {
       const matching = view.prs.filter((pr) => stateMatches(pr, options.state) && repoMatches(pr, options.repo) && scopeMatches(authors, pr, options.authorScope));
-      if (matching.length === 0 || !moveMatches(view, options.whoseMove) || !(await anyVerdictMatches(reader, matching, options.agentVerdict))) {
+      if (!matching.some((pr) => verdictMatches(pr, options.agentVerdict)) || !moveMatches(view, options.whoseMove)) {
         continue;
       }
       const line = `- ${view.tile.title} (${view.prs.map((pr) => pr.key).join(', ')}) · topic ${detail.topic.name} (${detail.topic.id}) · ${fetchedText(tileFetchedAt(view), now)}`;

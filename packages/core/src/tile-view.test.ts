@@ -83,7 +83,7 @@ function row(number: number, overrides: Partial<PrSummary> = {}): PrSummary {
     forWhom: { kind: 'you' },
     tier: 'to_review',
     authorRelation: 'team',
-    status: { lifecycle: 'open', review: 'review', agentApprovers: [], agentDecline: null, mergeQueue: null, icon: 'open' },
+    status: { lifecycle: 'open', review: 'review', agentApprovers: [], agentDecline: null, agentVerdict: null, mergeQueue: null, icon: 'open' },
     openThreads: 0,
     verdict: 'LOOKS_SAFE',
     glanceStale: false,

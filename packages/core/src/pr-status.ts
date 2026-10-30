@@ -2,7 +2,7 @@
 // apply, the merge queue, and the state icon they make. Pure, from the PR
 // snapshot. No checks: CI is not a signal (DESIGN.md "CI is not a signal");
 // the detail pane reads them from the PR itself.
-import { agentDeclineView, type AgentDeclineView } from './agent-decline.ts';
+import { agentDeclineView, agentVerdictView, type AgentDeclineView, type AgentVerdictView } from './agent-decline.ts';
 import { agentOnlyApprovers, standingApprovals } from './approvals.ts';
 import { mergeQueueState, type MergeQueueState } from './merge-queue.ts';
 import type { Pr } from './types.ts';
@@ -34,6 +34,12 @@ export interface PrStatus {
    * Null on merged and closed PRs and when there is none.
    */
   agentDecline: AgentDeclineView | null;
+  /**
+   * stamphog's standing verdict in one word (`agentVerdictView`), so the
+   * MCP's agent_verdict filter needs no PR detail read. Null on merged and
+   * closed PRs and when there is none.
+   */
+  agentVerdict: AgentVerdictView['verdict'] | null;
   /** Where the PR stands in the Trunk merge queue (`mergeQueueState`); null when it is not in it or not open. */
   mergeQueue: MergeQueueState | null;
   /** The state icon (`prIcon`): every PR row, the detail header and the topic rollups draw it. */
@@ -92,7 +98,7 @@ function prIcon(life: PrLifecycle, mergeQueue: MergeQueueState | null): PrIcon {
 export function prStatus(pr: Pr): PrStatus {
   const life = lifecycle(pr);
   if (life === 'merged' || life === 'closed') {
-    return { lifecycle: life, review: null, agentApprovers: [], agentDecline: null, mergeQueue: null, icon: life };
+    return { lifecycle: life, review: null, agentApprovers: [], agentDecline: null, agentVerdict: null, mergeQueue: null, icon: life };
   }
   const review = life === 'draft' ? null : REVIEW[pr.reviewDecision];
   const mergeQueue = life === 'draft' ? null : mergeQueueState(pr);
@@ -101,6 +107,7 @@ export function prStatus(pr: Pr): PrStatus {
     review,
     agentApprovers: review === 'approved' ? agentOnlyApprovers(standingApprovals(pr)) : [],
     agentDecline: agentDeclineView(pr),
+    agentVerdict: agentVerdictView(pr)?.verdict ?? null,
     mergeQueue,
     icon: prIcon(life, mergeQueue),
   };

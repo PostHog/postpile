@@ -5445,8 +5445,10 @@ is worth seeing on the tile, and the glance should weigh the reasons.
     `untrusted.agentVerdict`.
   - whats_on_me and search_prs take `agent_verdict` (declined, approved,
     any); a tile matches when one of its PRs does, scouted tiles too.
-    With the filter, every candidate PR's snapshot is read. Each PR line
-    ends with the short verdict.
+    The filter reads `PrStatus.agentVerdict` (the verdict word on each PR
+    row), so it costs no PR read. Each PR line ends with the short
+    verdict; a scouted tile names it per PR ("acme/app#41 (stamphog
+    declined)", JSON `agentVerdicts`).
   - Whose move does not change: a declined PR with nobody asked stays
     nobody's move (the author's own PR with nothing else open) or keeps
     its other move. The "nobody asked" hint says it in MCP answers only.
