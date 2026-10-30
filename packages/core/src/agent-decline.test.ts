@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { agentDecline, agentDeclineView, DECLINE_REASON_MAX, hasTrimmedAgentVerdict } from './agent-decline.ts';
+import { agentDecline, agentDeclineView, agentVerdictView, DECLINE_REASON_MAX, hasTrimmedAgentVerdict } from './agent-decline.ts';
 import { TRIMMED_MARKER } from './bot-bodies.ts';
 import { at, makeComment, makePr, makeReview } from './fixtures.ts';
 import type { FullPr, FullReview } from './types.ts';
@@ -159,5 +159,57 @@ describe('agentDeclineView', () => {
     expect(agentDeclineView(prWith([verdict('r1', NEEDS_PERSON, 5, 'COMMENTED', 'old')]))?.earlierCommit).toBe(true);
     expect(agentDeclineView(prWith([verdict('r1', NEEDS_PERSON, 5)]))?.earlierCommit).toBe(false);
     expect(agentDeclineView(prWith([]))).toBeNull();
+  });
+});
+
+describe('agentVerdictView', () => {
+  const GATES = waiting(['| prerequisites | ✗ | merge conflicts present |', '| size | ✗ | too large |', '| tier | ✓ | low |']);
+  const PERSON = makeReview({ id: 'p1', author: 'carol', state: 'APPROVED', submittedAt: at(6) });
+
+  it('names the failed gates of a decline, prerequisites included', () => {
+    expect(agentVerdictView(prWith([verdict('r1', GATES, 5)]))).toEqual({
+      agent: 'stamphog',
+      verdict: 'declined',
+      declineKind: 'gates',
+      failedGates: ['prerequisites', 'size'],
+      reason: 'Fix these first.',
+      at: at(5),
+      olderHead: false,
+      nobodyAsked: true,
+    });
+  });
+
+  it('is stuck only while no person or team is asked; a pending bot does not count', () => {
+    expect(agentVerdictView(prWith([verdict('r1', NEEDS_PERSON, 5)], { reviewerUsers: ['reviewbot[bot]'] }))?.nobodyAsked).toBe(true);
+    expect(agentVerdictView(prWith([verdict('r1', NEEDS_PERSON, 5)], { reviewerUsers: ['carol'] }))?.nobodyAsked).toBe(false);
+    expect(agentVerdictView(prWith([verdict('r1', NEEDS_PERSON, 5)], { reviewerTeams: ['acme/team-platform'] }))?.nobodyAsked).toBe(false);
+  });
+
+  it('is not stuck once a person asked for changes: the author has their changes to address', () => {
+    const decline = verdict('r1', NEEDS_PERSON, 5);
+    const changes = makeReview({ id: 'p1', author: 'carol', state: 'CHANGES_REQUESTED', submittedAt: at(6) });
+    expect(agentVerdictView(prWith([decline], { reviews: [decline.review, changes] }))?.nobodyAsked).toBe(false);
+  });
+
+  it('reads an approval, also on an older head, and keeps it after a person approved', () => {
+    const approval = [verdict('r1', NEEDS_PERSON, 4), verdict('r2', APPROVED, 5, 'APPROVED', 'old')];
+    expect(agentVerdictView(prWith(approval))).toMatchObject({ verdict: 'approved', declineKind: null, failedGates: [], olderHead: true, nobodyAsked: false, reason: 'Small and covered by tests.' });
+    expect(agentVerdictView(prWith(approval, { reviews: [...approval.map((v) => v.review), PERSON] }))?.verdict).toBe('approved');
+  });
+
+  it('has no verdict once its approval was dismissed, and the earlier decline stays cancelled', () => {
+    const dismissed = [verdict('r1', NEEDS_PERSON, 4), verdict('r2', APPROVED, 5, 'DISMISSED')];
+    expect(agentVerdictView(prWith(dismissed))).toBeNull();
+    expect(agentDecline(prWith(dismissed))).toBeNull();
+  });
+
+  it('drops a decline once a person approved, like agentDecline', () => {
+    const decline = verdict('r1', NEEDS_PERSON, 5);
+    expect(agentVerdictView(prWith([decline], { reviews: [decline.review, PERSON] }))).toBeNull();
+  });
+
+  it('is null while it waits on prerequisites, and on merged PRs', () => {
+    expect(agentVerdictView(prWith([verdict('r1', waiting(['| prerequisites | ✗ | conflicts |']), 5)]))).toBeNull();
+    expect(agentVerdictView(prWith([verdict('r1', APPROVED, 5, 'APPROVED')], { state: 'MERGED' }))).toBeNull();
   });
 });

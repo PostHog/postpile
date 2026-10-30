@@ -164,8 +164,8 @@ describe('PostPile MCP server', () => {
     expect(properties).toEqual({
       pr_context: ['detail', 'format', 'pr'],
       topic: ['detail', 'format', 'topic'],
-      search_prs: ['format', 'limit', 'offset', 'query', 'repo', 'state', 'whose_move'],
-      whats_on_me: ['author_scope', 'format', 'limit', 'offset', 'repo', 'state', 'whose_move'],
+      search_prs: ['agent_verdict', 'format', 'limit', 'offset', 'query', 'repo', 'state', 'whose_move'],
+      whats_on_me: ['agent_verdict', 'author_scope', 'format', 'limit', 'offset', 'repo', 'state', 'whose_move'],
       refresh_from_github: ['pr', 'topic'],
       propose_topic_change: ['by', 'dry_run', 'into_topic', 'kind', 'name', 'prs', 'reason', 'topic'],
       note_pr: ['action', 'by', 'cover_token', 'covered_by', 'kind', 'lease_minutes', 'note', 'note_id', 'pr', 'token'],
@@ -178,6 +178,9 @@ describe('PostPile MCP server', () => {
       expect(schemaOf(name).format).toMatchObject({ type: 'string', enum: ['text', 'json'] });
     }
     expect(schemaOf('whats_on_me').author_scope).toMatchObject({ type: 'string', enum: ['me', 'my_team', 'others', 'any'] });
+    for (const name of ['search_prs', 'whats_on_me']) {
+      expect(schemaOf(name).agent_verdict).toMatchObject({ type: 'string', enum: ['declined', 'approved', 'any'] });
+    }
   });
 
   it('refuses every tool while the app is not running, and answers again once it is', async () => {

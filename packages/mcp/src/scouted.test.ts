@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ScoutedPr, Viewer } from '@postpile/core';
-import { makePr } from '@postpile/core/fixtures';
+import { makeComment, makePr, makeReview } from '@postpile/core/fixtures';
 import { createEngine, type EngineService } from '@postpile/engine';
 import { Store } from '@postpile/store';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -14,7 +14,7 @@ import { prContext, searchPrs, whatsOnMe, type QueueOptions, type ReadContext } 
 const VIEWER: Viewer = { login: 'alice', teams: ['acme/team-platform'] };
 const NOW = new Date('2026-09-01T10:00:00Z');
 const UPDATED = '2026-09-01T09:00:00Z';
-const LIST: QueueOptions = { limit: 25, offset: 0, state: 'open', repo: null, whoseMove: 'any', authorScope: 'any' };
+const LIST: QueueOptions = { limit: 25, offset: 0, state: 'open', repo: null, whoseMove: 'any', agentVerdict: 'any', authorScope: 'any' };
 
 function scouted(prKey: string): ScoutedPr {
   return {
@@ -83,12 +83,33 @@ describe('MCP: scouted PRs', () => {
     expect(((await whatsOnMe(ctx, { ...LIST, offset: 1 }, 'json')).structured as { scouted: unknown[] }).scouted).toEqual([]);
   });
 
+  it('names the scouted PR stamphog declined, and keeps only such tiles under agent_verdict', async () => {
+    const body = '**Not approved — this change needs a human reviewer.**\n\nTouches billing.';
+    const declined = makePr({
+      number: 41,
+      author: 'carol',
+      title: 'Billing invoices',
+      headOid: 'head',
+      reviewDecision: 'REVIEW_REQUIRED',
+      updatedAt: UPDATED,
+      reviews: [makeReview({ id: 'r41', author: 'stamphog[bot]', state: 'COMMENTED', body, submittedAt: UPDATED, commitOid: 'head' })],
+      comments: [makeComment({ id: 'r41', author: 'stamphog[bot]', body, kind: 'review', createdAt: UPDATED })],
+    });
+    app.prs.upsert(declined, UPDATED);
+    app.scoutedPrs.insert(scouted(declined.key));
+    const text = (await whatsOnMe(ctx, { ...LIST, agentVerdict: 'declined' })).text;
+    expect(text).toContain('(acme/app#41 (stamphog declined)) · scouted by Lookout');
+    expect(text).not.toContain('acme/app#40');
+    const json = (await whatsOnMe(ctx, { ...LIST, agentVerdict: 'declined' }, 'json')).structured as { scouted: { agentVerdicts: unknown }[] };
+    expect(json.scouted).toMatchObject([{ agentVerdicts: [{ prKey: 'acme/app#41', verdict: 'declined' }] }]);
+  });
+
   it('finds scouted PRs in search_prs, marked as such', async () => {
-    const text = (await searchPrs(ctx, 'billing', { limit: 25, offset: 0, state: 'any', repo: null, whoseMove: 'any' })).text;
+    const text = (await searchPrs(ctx, 'billing', { limit: 25, offset: 0, state: 'any', repo: null, whoseMove: 'any', agentVerdict: 'any' })).text;
     expect(text).toContain("acme/app#40");
     expect(text).toContain("scouted by Lookout, not in the user's inbox");
     // No scout:<id> as a topic reference: the topic tool cannot open one, and pr_context leaves it out too.
-    const json = (await searchPrs(ctx, 'billing', { limit: 25, offset: 0, state: 'any', repo: null, whoseMove: 'any' }, 'json')).structured as { prs: { key: string; topic: unknown }[] };
+    const json = (await searchPrs(ctx, 'billing', { limit: 25, offset: 0, state: 'any', repo: null, whoseMove: 'any', agentVerdict: 'any' }, 'json')).structured as { prs: { key: string; topic: unknown }[] };
     expect(json.prs.find((pr) => pr.key === 'acme/app#40')?.topic).toBeNull();
   });
 

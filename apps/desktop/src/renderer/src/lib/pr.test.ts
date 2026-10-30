@@ -79,7 +79,7 @@ describe('pr helpers', () => {
 });
 
 describe('state words', () => {
-  const open: PrStatus = { lifecycle: 'open', review: null, agentApprovers: [], agentDecline: null, mergeQueue: null, icon: 'open' };
+  const open: PrStatus = { lifecycle: 'open', review: null, agentApprovers: [], agentDecline: null, agentVerdict: null, mergeQueue: null, icon: 'open' };
 
   it('says the review state in words, never CI', () => {
     expect(reviewWord({ ...open, review: 'review' })).toEqual({ kind: 'review', text: 'Needs review', title: 'Review required' });
@@ -135,7 +135,7 @@ describe('state words', () => {
 });
 
 describe('merge queue words', () => {
-  const open: PrStatus = { lifecycle: 'open', review: 'approved', agentApprovers: [], agentDecline: null, mergeQueue: null, icon: 'open' };
+  const open: PrStatus = { lifecycle: 'open', review: 'approved', agentApprovers: [], agentDecline: null, agentVerdict: null, mergeQueue: null, icon: 'open' };
   const now = new Date(at(60));
   const clock = (minutes: number) => {
     const date = new Date(at(minutes));
@@ -161,7 +161,7 @@ describe('merge queue words', () => {
 });
 
 describe('stack queue word', () => {
-  const open: PrStatus = { lifecycle: 'open', review: 'approved', agentApprovers: [], agentDecline: null, mergeQueue: null, icon: 'open' };
+  const open: PrStatus = { lifecycle: 'open', review: 'approved', agentApprovers: [], agentDecline: null, agentVerdict: null, mergeQueue: null, icon: 'open' };
   const queued: PrStatus = { ...open, icon: 'merge_queue', mergeQueue: { state: 'submitted', since: at(28), reason: null, testingOn: null } };
   const failed: PrStatus = { ...open, icon: 'merge_queue_failed', mergeQueue: { state: 'failed', since: at(28), reason: 'tests failed', testingOn: null } };
   const stacks = [{ id: 'stack:acme/app#1861', prKeys: ['acme/app#1861', 'acme/app#1862', 'acme/app#1863'] }];

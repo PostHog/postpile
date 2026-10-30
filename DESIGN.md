@@ -5423,6 +5423,40 @@ is worth seeing on the tile, and the glance should weigh the reasons.
   and to say in forYou when they ask for a review from the user or their
   teams. The decline counts in the glance input hash, added only when there
   is one, so no other PR's stored glance went out of date.
+- In MCP answers (2026-10-30): stamphog posts its verdict as a COMMENTED
+  review, so the reviewer states (`reviewerStates`) drop it and a decline
+  looked like no review at all. Core `agentVerdictView`
+  (`PrDetail.agentVerdict`) reads the same latest verdict as
+  `agentDecline`: approved (an approval stays after a person approved; a
+  dismissed one is no verdict, yet still cancels an earlier decline) or
+  declined (left out once a person approved), the decline kind, the gate
+  names the table marks failed (`failedGates`, prerequisites included;
+  the detail column is not kept), the clipped reason, `olderHead` (made
+  on a commit that is no longer the head) and `nobodyAsked` (declined, no
+  person or team is asked to review and no person asked for changes;
+  pending bots do not count).
+  - pr_context, brief and full: "Agent approver: stamphog declined:
+    outside what it may auto-approve (failed: size) (date)", "Its
+    reasons: …", and what the author can do, by rules: on an older head,
+    re-adding the `stamphog` label re-runs it; else re-adding it gives the
+    same result while nothing changes, so ask a person. With
+    `nobodyAsked`: "Nobody is asked to review it: it waits on the author
+    to ask a person." Inside the fence. JSON: `agentVerdict` (agent,
+    verdict, declineKind, at, olderHead, nobodyAsked, `authorCan`:
+    `ask_person` / `readd_label` / null), gate names and reason under
+    `untrusted.agentVerdict`.
+  - whats_on_me and search_prs take `agent_verdict` (declined, approved,
+    any); a tile matches when one of its PRs does, scouted tiles too.
+    The filter reads `PrStatus.agentVerdict` (the verdict word on each PR
+    row), so it costs no PR read. Each PR line ends with the short
+    verdict; a scouted tile names it per PR ("acme/app#41 (stamphog
+    declined)", JSON `agentVerdicts`).
+  - Whose move does not change: a declined PR with nobody asked stays
+    nobody's move (the author's own PR with nothing else open) or keeps
+    its other move. The "nobody asked" hint says it in MCP answers only.
+    A real move would need a new "your move" kind (address changes would
+    mislabel it) across sections, tiers, pings, the renderer and the spec
+    oracle; left to the owner (NEXT.md "Needs Julian's decisions").
 
 A tile takes the most urgent member (you over them over none); on a tie the
 PR with the newest unseen loud event wins, so the footer and the unread strip

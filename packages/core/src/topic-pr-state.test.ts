@@ -102,7 +102,7 @@ describe('topicPrRollup', () => {
 
 describe('isDraftTile', () => {
   const row = (icon: PrIcon, provenance: Provenance = pinged): Pick<PrSummary, 'status' | 'provenance'> => ({
-    status: { lifecycle: 'open', review: null, agentApprovers: [], agentDecline: null, mergeQueue: null, icon },
+    status: { lifecycle: 'open', review: null, agentApprovers: [], agentDecline: null, agentVerdict: null, mergeQueue: null, icon },
     provenance,
   });
 

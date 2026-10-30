@@ -136,6 +136,7 @@ import {
   activityList,
   whatsNew,
   agentDeclineView,
+  agentVerdictView,
   agentOnlyApprovers,
   botFindings,
   standingApprovals,
@@ -1718,6 +1719,7 @@ export class FakeEngine implements EngineService {
       viewerReview: viewerReviewStand(pr, this.viewer()),
       agentApprovers: agentOnlyApprovers(standingApprovals(pr)),
       agentDecline: agentDeclineView(pr),
+      agentVerdict: agentVerdictView(pr),
       botFindings: botFindings(pr),
       // Unsorted keeps no membership (like the engine's), so its tile says where the PR is; a scouted PR shows in its scout's pseudo-topic.
       topicId: this.data.membership.get(prKey) ?? this.unsortedTopicIdOf(prKey) ?? this.scouts.topicIdOf(prKey),
