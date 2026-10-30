@@ -9061,9 +9061,12 @@ how they answer is under "Tool design" below):
   file). Cuts are tried in order until it fits: activity to the newest 10
   lines per PR and unread comment bodies to 400 characters; then topics as
   in a brief answer (no dossier, no tile list); then no activity or unread
-  list at all. A note after the fence says what was cut and points to
-  pr_context on one PR at a time and `topic(detail: "full")`. One PR alone
-  is never cut. Owner and repo ignore case, as on GitHub
+  list at all and owned file lists as in a brief answer. Still over after
+  that (long owned paths, many facts), the data stops at the last whole
+  line that fits, with a closing line saying so. A note after the fence
+  says what was cut and points to pr_context on one PR at a time and
+  `topic(detail: "full")`. One PR alone is never cut. Overlap authors are
+  read once per call, not once per cut pass. Owner and repo ignore case, as on GitHub
   (2026-10-10): "ACME/APP#1932" finds acme/app#1932, the way `search_prs`'
   repo filter already did. The key is looked up among the stored PRs with
   that number; one PostPile does not store is used as typed. `note_pr` and

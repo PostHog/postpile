@@ -13,10 +13,15 @@ class LongUnread extends FakeEngine {
     private readonly count: number,
     private readonly size: number,
   ) {
-    super();
+    // The mcp extra adds overlaps: acme/app#1902 overlaps acme/app#2301, whose author is read too.
+    super({ setupStepMs: 0, syncStepMs: 0, extras: new Set(['mcp']) });
   }
 
+  /** How many PR reads the answer took. */
+  reads = 0;
+
   override async getPr(key: string) {
+    this.reads += 1;
     const detail = await super.getPr(key);
     if (!detail) {
       return null;
@@ -70,5 +75,29 @@ describe('pr_context: several PRs with detail "full" keep under a size budget', 
     expect(text).toContain('Activity and the unread list: cut to fit several PRs in one answer; pr_context on this PR alone has them.');
     expect(text).not.toContain('y'.repeat(400));
     expect(fencedPart(text).length).toBeLessThanOrEqual(FULL_MANY_BUDGET);
+  });
+
+  it('reads each PR and its overlaps once, however many cut passes it takes', async () => {
+    const keys = KEYS;
+    const brief = new LongUnread(40, 3000);
+    await prContext(contextOf(brief), keys, 'brief');
+    const full = new LongUnread(40, 3000);
+    const text = (await prContext(contextOf(full), keys, 'full')).text;
+    expect(text).toContain('activity and unread lists left out');
+    expect(full.reads).toBe(brief.reads);
+    expect(full.reads).toBeGreaterThan(keys.length);
+  });
+
+  it('stops at the budget when even the last cut is over, and says so', async () => {
+    class LongTitles extends FakeEngine {
+      override async getPr(key: string) {
+        const detail = await super.getPr(key);
+        return detail ? { ...detail, pr: { ...detail.pr, title: 'z'.repeat(15_000) } } : null;
+      }
+    }
+    const text = (await prContext(contextOf(new LongTitles()), KEYS, 'full')).text;
+    expect(fencedPart(text).length).toBeLessThanOrEqual(FULL_MANY_BUDGET);
+    expect(text).toContain(`[Stopped here at ${FULL_MANY_BUDGET} characters: ask for fewer PRs.]`);
+    expect(text).toContain('the rest past the limit');
   });
 });
