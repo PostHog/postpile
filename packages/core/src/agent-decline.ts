@@ -146,7 +146,8 @@ type LatestVerdict = { kind: 'approved'; review: Review; body: string | null } |
  * stamphog's latest deciding verdict on an open PR, else null. Only verdict
  * reviews count (a body that starts with "**Approved" or "**Not approved");
  * its plain status comments never do. An approval review counts even when
- * its body says nothing we know. A waiting or unknown latest verdict
+ * its body says nothing we know; a dismissed one is no standing verdict,
+ * yet still cancels an earlier decline. A waiting or unknown latest verdict
  * (`readVerdict`) decides nothing: null until the PR is fetched again
  * (`hasTrimmedAgentVerdict`).
  */
@@ -166,11 +167,9 @@ function latestVerdict(pr: Pr): LatestVerdict | null {
     if (verdict === null) {
       continue;
     }
-    if (body === null || verdict.kind === 'waiting' || verdict.kind === 'unknown') {
+    // An "Approved" body on a review that is no approval (dismissed) still cancels earlier declines, but no longer stands.
+    if (body === null || verdict.kind !== 'declined') {
       return null;
-    }
-    if (verdict.kind === 'approved') {
-      return { kind: 'approved', review, body };
     }
     return { kind: 'declined', decline: verdict.decline, review, body };
   }

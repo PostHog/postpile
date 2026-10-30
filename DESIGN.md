@@ -5427,7 +5427,8 @@ is worth seeing on the tile, and the glance should weigh the reasons.
   review, so the reviewer states (`reviewerStates`) drop it and a decline
   looked like no review at all. Core `agentVerdictView`
   (`PrDetail.agentVerdict`) reads the same latest verdict as
-  `agentDecline`: approved (an approval stays after a person approved) or
+  `agentDecline`: approved (an approval stays after a person approved; a
+  dismissed one is no verdict, yet still cancels an earlier decline) or
   declined (left out once a person approved), the decline kind, the gate
   names the table marks failed (`failedGates`, prerequisites included;
   the detail column is not kept), the clipped reason, `olderHead` (made

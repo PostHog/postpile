@@ -197,6 +197,12 @@ describe('agentVerdictView', () => {
     expect(agentVerdictView(prWith(approval, { reviews: [...approval.map((v) => v.review), PERSON] }))?.verdict).toBe('approved');
   });
 
+  it('has no verdict once its approval was dismissed, and the earlier decline stays cancelled', () => {
+    const dismissed = [verdict('r1', NEEDS_PERSON, 4), verdict('r2', APPROVED, 5, 'DISMISSED')];
+    expect(agentVerdictView(prWith(dismissed))).toBeNull();
+    expect(agentDecline(prWith(dismissed))).toBeNull();
+  });
+
   it('drops a decline once a person approved, like agentDecline', () => {
     const decline = verdict('r1', NEEDS_PERSON, 5);
     expect(agentVerdictView(prWith([decline], { reviews: [decline.review, PERSON] }))).toBeNull();
