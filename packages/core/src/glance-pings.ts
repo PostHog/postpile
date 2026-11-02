@@ -8,7 +8,7 @@ import { isOwnTeam, sameLogin } from './mentions.ts';
 import { isPrOwner } from './pr-owners.ts';
 import { ownedByTeammate, reviewedHead, reviewRequestTarget, teamSlug } from './review-request.ts';
 import { isRoutingTeam } from './team-roles.ts';
-import type { Glance, IsoTime, Pr, PrEvent, UserPrState, Viewer } from './types.ts';
+import type { Glance, IsoTime, Pr, PrEvent, PrKey, UserPrState, Viewer } from './types.ts';
 
 /**
  * A request for this team on this PR is routed: the team only routes
@@ -134,4 +134,50 @@ export function lookCloserEvent(pr: Pr, team: string, requestId: string, at: Iso
     override: null,
     seenAt: null,
   };
+}
+
+/** How long a Look closer ping folds the next ones from the same author in the same topic. */
+export const LOOK_CLOSER_FOLD_MS = 60 * 60 * 1000;
+
+/** A PR where a Look closer ping went out, or would: where it sits now, who opened it and when. */
+export interface LookCloserSeriesPr {
+  prKey: PrKey;
+  /** The topic it sits in now; null when it has none (Unsorted counts as none). */
+  topicId: string | null;
+  author: string;
+  at: IsoTime;
+}
+
+/**
+ * "One author's series pings once" (DESIGN.md "Live poll and Mac pings",
+ * 2026-11-02). The Look closer ping this one folds into: the newest ping
+ * sent in the last hour for a PR in the same topic by the same author, or
+ * null when it pings. A PR without a topic never folds. Only pings that
+ * went out count, so a long series pings again once an hour has passed.
+ */
+export function lookCloserFoldedBy(candidate: LookCloserSeriesPr, pinged: LookCloserSeriesPr[]): LookCloserSeriesPr | null {
+  if (candidate.topicId === null) {
+    return null;
+  }
+  const now = new Date(candidate.at).getTime();
+  let newest: LookCloserSeriesPr | null = null;
+  for (const ping of pinged) {
+    if (ping.prKey === candidate.prKey || ping.topicId !== candidate.topicId || !sameLogin(ping.author, candidate.author)) {
+      continue;
+    }
+    const age = now - new Date(ping.at).getTime();
+    if (age < 0 || age >= LOOK_CLOSER_FOLD_MS) {
+      continue;
+    }
+    if (newest === null || ping.at > newest.at) {
+      newest = ping;
+    }
+  }
+  return newest;
+}
+
+/** The reason line of a folded ping: "Look closer folded: acme/app#12 by alice in this topic pinged 14 min ago". */
+export function lookCloserFoldReason(foldedBy: LookCloserSeriesPr, at: IsoTime): string {
+  const minutes = Math.floor((new Date(at).getTime() - new Date(foldedBy.at).getTime()) / 60_000);
+  return `Look closer folded: ${foldedBy.prKey} by ${foldedBy.author} in this topic pinged ${minutes} min ago`;
 }

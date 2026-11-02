@@ -106,6 +106,12 @@ describe('PrRepo', () => {
     expect(store.prs.listAll()).toHaveLength(3);
   });
 
+  it('reads the author from the header row', () => {
+    store.prs.upsert(makePr({ number: 3, author: 'alice' }), at(1));
+    expect(store.prs.authorOf('acme/app#3')).toBe('alice');
+    expect(store.prs.authorOf('nope/nope#1')).toBeNull();
+  });
+
   it('replaces the snapshot and reports updated_at per key', () => {
     store.prs.upsert(makePr({ updatedAt: at(1) }), at(1));
     store.prs.upsert(makePr({ updatedAt: at(2), title: 'renamed' }), at(2));
@@ -906,6 +912,17 @@ describe('PingDecisionRepo', () => {
     expect(store.pingDecisions.listForThreads([])).toEqual([]);
     expect(store.pingDecisions.countBetween(at(1), at(4))).toEqual({ pinged: 1, withheldRules: 1, withheldAgent: 1, glance: 0 });
     expect(store.pingDecisions.countBetween(at(4), at(9))).toEqual({ pinged: 0, withheldRules: 0, withheldAgent: 0, glance: 0 });
+  });
+
+  it('lists the Look closer pings that went out and counts a folded one as withheld by the rules', () => {
+    const base = { threadId: 't1', title: '', body: '', reason: 'r', source: 'glance' as const };
+    store.pingDecisions.add({ ...base, prKey: 'acme/app#1', ping: true, at: at(1) });
+    store.pingDecisions.add({ ...base, prKey: 'acme/app#2', ping: true, at: at(3) });
+    store.pingDecisions.add({ ...base, prKey: 'acme/app#3', ping: false, at: at(4) });
+    store.pingDecisions.add({ ...base, prKey: 'acme/app#4', ping: true, source: 'agent', at: at(5) });
+
+    expect(store.pingDecisions.listGlancePingsSince(at(1)).map((decision) => decision.prKey)).toEqual(['acme/app#2']);
+    expect(store.pingDecisions.countBetween(at(0), at(9))).toEqual({ pinged: 1, withheldRules: 1, withheldAgent: 0, glance: 2 });
   });
 });
 

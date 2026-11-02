@@ -752,6 +752,11 @@ export class PrRepo {
     });
   }
 
+  /** The stored PR's author from its header row, never the json; null when it is not stored. */
+  authorOf(key: PrKey): string | null {
+    return one<{ author: string }>(this.db, 'SELECT author FROM pr WHERE key = ?', key)?.author ?? null;
+  }
+
   /** Every stored key. */
   keys(): PrKey[] {
     return all<{ key: string }>(this.db, 'SELECT key FROM pr ORDER BY key').map((row) => row.key);

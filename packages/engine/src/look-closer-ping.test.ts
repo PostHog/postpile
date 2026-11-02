@@ -8,7 +8,7 @@ import { topicWithPrs } from './testing/topics.ts';
 const TEAM = 'acme/team-platform';
 
 /** rowan's PR from outside the team; a reviewer-assigning bot routed the review to the viewer's team. */
-function routedPr(overrides: Partial<FullPr> = {}): FullPr {
+function routedPr(overrides: Parameters<typeof makePr>[0] = {}): FullPr {
   return makePr({
     number: 31,
     author: 'rowan',
@@ -164,6 +164,66 @@ describe('routed team requests ping when the glance says Look closer', () => {
     const own = await synced(ownPr);
     written(own.h, own.pings, glance(ownPr, 'LOOK_CLOSER'));
     expect(own.pings.drain()).toEqual([]);
+  });
+
+  describe("one author's series pings once", () => {
+    async function series(prs: FullPr[], topicFor: (pr: FullPr) => string = () => 'depot') {
+      const h = makeHarness();
+      for (const topicId of new Set(prs.map(topicFor))) {
+        topicWithPrs(h, topicId, prs.filter((pr) => topicFor(pr) === topicId));
+      }
+      await h.engine.sync({ maxAgentCalls: 0 });
+      const clock = { now: new Date('2026-09-02T12:00:00Z') };
+      return { h, clock, pings: new GlancePings(h.store, () => clock.now) };
+    }
+
+    it('folds the next PR by the same author in the same topic and keeps it handled', async () => {
+      const first = routedPr({ number: 31 });
+      const second = routedPr({ number: 32, timeline: [makeTimelineItem({ id: 'rr-2', actor: 'assignbot[bot]', subject: TEAM, at: at(1) })] });
+      const { h, clock, pings } = await series([first, second]);
+      written(h, pings, glance(first, 'LOOK_CLOSER'));
+      clock.now = new Date('2026-09-02T12:14:00Z');
+
+      written(h, pings, glance(second, 'LOOK_CLOSER'));
+
+      expect(pings.drain().map((ping) => ping.target.prKey)).toEqual([first.key]);
+      expect(glanceDecisions(h)[0]).toMatchObject({ prKey: second.key, ping: false, reason: `Look closer folded: ${first.key} by rowan in this topic pinged 14 min ago` });
+      expect(h.store.meta.get(lookCloserMetaKey(second.key))).toBe('rr-2');
+      // The tile still says Look closer in the list; only the Mac ping is folded.
+      expect(h.store.events.listForPr(second.key).some((event) => event.kind === 'look_closer')).toBe(true);
+
+      clock.now = new Date('2026-09-02T14:00:00Z');
+      pings.afterGlances([second.key]);
+      expect(pings.drain()).toEqual([]);
+    });
+
+    it('folds a startup batch after its first ping', async () => {
+      const prs = [31, 32, 33].map((number) => routedPr({ number, timeline: [makeTimelineItem({ id: `rr-${number}`, actor: 'assignbot[bot]', subject: TEAM, at: at(1) })] }));
+      const { h, pings } = await series(prs);
+      for (const pr of prs) {
+        h.store.glances.put(glance(pr, 'LOOK_CLOSER'));
+      }
+
+      pings.afterGlances(prs.map((pr) => pr.key));
+
+      expect(pings.drain().map((ping) => ping.target.prKey)).toEqual([prs[0]!.key]);
+      expect(glanceDecisions(h).map((decision) => decision.ping)).toEqual([false, false, true]);
+    });
+
+    it('still pings for another author, another topic or after an hour', async () => {
+      const first = routedPr({ number: 31 });
+      const otherAuthor = routedPr({ number: 32, author: 'juno' });
+      const otherTopic = routedPr({ number: 33 });
+      const later = routedPr({ number: 34 });
+      const { h, clock, pings } = await series([first, otherAuthor, otherTopic, later], (pr) => (pr.key === otherTopic.key ? 'billing' : 'depot'));
+      written(h, pings, glance(first, 'LOOK_CLOSER'));
+      written(h, pings, glance(otherAuthor, 'LOOK_CLOSER'));
+      written(h, pings, glance(otherTopic, 'LOOK_CLOSER'));
+      clock.now = new Date('2026-09-02T13:01:00Z');
+      written(h, pings, glance(later, 'LOOK_CLOSER'));
+
+      expect(pings.drain().map((ping) => ping.target.prKey)).toEqual([first.key, otherAuthor.key, otherTopic.key, later.key]);
+    });
   });
 
   it('reaches the Mac through the next poll cycle', async () => {

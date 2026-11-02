@@ -11,6 +11,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 ### Changed
 
 - `pr_context` with `detail: "full"` on several pull requests stays under 40,000 characters, so it fits an agent's tool output instead of spilling to a file. It shortens the activity first, then the topics' dossier and tile list, and says what it cut. One pull request alone still gets everything.
+- A series of Look closer reviews from one author in one topic sends one Mac ping per hour instead of one per pull request. The others still show as unread with their Look closer reason in the list.
 
 ## 0.29.0 (2026-10-29)
 
