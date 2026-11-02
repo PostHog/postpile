@@ -106,6 +106,12 @@ describe('PrRepo', () => {
     expect(store.prs.listAll()).toHaveLength(3);
   });
 
+  it('reads the author from the header row', () => {
+    store.prs.upsert(makePr({ number: 3, author: 'alice' }), at(1));
+    expect(store.prs.authorOf('acme/app#3')).toBe('alice');
+    expect(store.prs.authorOf('nope/nope#1')).toBeNull();
+  });
+
   it('replaces the snapshot and reports updated_at per key', () => {
     store.prs.upsert(makePr({ updatedAt: at(1) }), at(1));
     store.prs.upsert(makePr({ updatedAt: at(2), title: 'renamed' }), at(2));

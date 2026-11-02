@@ -47,15 +47,15 @@ export class GlancePings {
    * Where the PR sits now and who opened it; Unsorted counts as no topic.
    * The topic comes from the board either way (a stack layer sits in its
    * stack's topic); a PR off the hot board (read since it pinged, on a busy
-   * install) takes its author from the stored header.
+   * install) takes its author from the stored header row.
    */
   private seriesPr(board: Board, prKey: PrKey, at: IsoTime): LookCloserSeriesPr | null {
-    const pr = board.prs.get(prKey) ?? this.store.prs.get(prKey);
-    if (!pr) {
+    const author = board.prs.get(prKey)?.author ?? this.store.prs.authorOf(prKey);
+    if (author === null) {
       return null;
     }
     const topicId = board.topicIdOf(prKey);
-    return { prKey, topicId: topicId === UNSORTED_TOPIC_ID ? null : topicId, author: pr.author, at };
+    return { prKey, topicId: topicId === UNSORTED_TOPIC_ID ? null : topicId, author, at };
   }
 
   /** The Look closer pings of the last hour, read from the ping decisions. */
