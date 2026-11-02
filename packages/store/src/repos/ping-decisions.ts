@@ -73,9 +73,15 @@ export class PingDecisionRepo {
     ).map(toDecision);
   }
 
+  /** Look closer pings that went out (source `glance`, ping on) after `since`, newest first. */
+  listGlancePingsSince(since: string): PingDecision[] {
+    return all<PingDecisionRow>(this.db, "SELECT * FROM ping_decision WHERE source = 'glance' AND ping = 1 AND at > ? ORDER BY id DESC", since).map(toDecision);
+  }
+
   /**
    * Decisions with `since < at <= until` (ISO times). A fallback always
-   * pings, so withheld only comes from the rules or the agent.
+   * pings, so withheld only comes from the rules or the agent. A folded
+   * Look closer (source `glance`, ping off) counts as withheld by the rules.
    */
   countBetween(since: string, until: string): PingDecisionCounts {
     const rows = all<{ ping: number; source: string; n: number }>(
@@ -86,7 +92,7 @@ export class PingDecisionRepo {
     );
     const counts: PingDecisionCounts = { pinged: 0, withheldRules: 0, withheldAgent: 0, glance: 0 };
     for (const row of rows) {
-      if (row.source === 'glance') {
+      if (row.source === 'glance' && toBool(row.ping)) {
         counts.glance += row.n;
       } else if (toBool(row.ping)) {
         counts.pinged += row.n;

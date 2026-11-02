@@ -1,6 +1,18 @@
-import { lookCloserEvent, lookCloserPingCheck, lookCloserPingText, lookCloserReason, type Ping, type PrKey } from '@postpile/core';
+import {
+  LOOK_CLOSER_FOLD_MS,
+  lookCloserEvent,
+  lookCloserFoldedBy,
+  lookCloserFoldReason,
+  lookCloserPingCheck,
+  lookCloserPingText,
+  lookCloserReason,
+  type IsoTime,
+  type LookCloserSeriesPr,
+  type Ping,
+  type PrKey,
+} from '@postpile/core';
 import type { Store } from '@postpile/store';
-import { Board } from '../board.ts';
+import { Board, UNSORTED_TOPIC_ID } from '../board.ts';
 import { placeOnBoard } from './ping-target.ts';
 
 /** Meta key: the review request a PR last pinged for through its glance. */
@@ -16,6 +28,12 @@ export function lookCloserMetaKey(prKey: PrKey): string {
  * The ping is recorded as a ping decision (source `glance`), an app-made
  * loud `look_closer` event makes the tile unread, and the ping waits here
  * until the live poller hands it to the Mac (`drain`, next poll cycle).
+ *
+ * One author's series pings once (`lookCloserFoldedBy`): when a PR in the
+ * same topic by the same author pinged in the last hour, the request is
+ * handled and the tile still gets its `look_closer` event, but no Mac ping
+ * goes out, so it stays off the Dock badge. The decision is kept with ping
+ * off and the fold as its reason.
  */
 export class GlancePings {
   private waiting: Ping[] = [];
@@ -24,6 +42,29 @@ export class GlancePings {
     private readonly store: Store,
     private readonly now: () => Date,
   ) {}
+
+  /** Where the PR sits now and who opened it; Unsorted counts as no topic. */
+  private seriesPr(board: Board, prKey: PrKey, at: IsoTime): LookCloserSeriesPr | null {
+    const pr = board.prs.get(prKey);
+    if (!pr) {
+      return null;
+    }
+    const topicId = board.topicIdOf(prKey);
+    return { prKey, topicId: topicId === UNSORTED_TOPIC_ID ? null : topicId, author: pr.author, at };
+  }
+
+  /** The Look closer pings of the last hour, read from the ping decisions (pings of this batch included). */
+  private recentPings(board: Board, at: IsoTime): LookCloserSeriesPr[] {
+    const since = new Date(new Date(at).getTime() - LOOK_CLOSER_FOLD_MS).toISOString();
+    const recent: LookCloserSeriesPr[] = [];
+    for (const decision of this.store.pingDecisions.listGlancePingsSince(since)) {
+      const seriesPr = this.seriesPr(board, decision.prKey, decision.at);
+      if (seriesPr !== null) {
+        recent.push(seriesPr);
+      }
+    }
+    return recent;
+  }
 
   afterGlances(prKeys: PrKey[]): void {
     const at = this.now().toISOString();
@@ -53,13 +94,19 @@ export class GlancePings {
       }
       const text = lookCloserPingText(pr, check.team, glance);
       const event = lookCloserEvent(pr, check.team, check.requestId, at);
+      const candidate = this.seriesPr(board, key, at);
+      const foldedBy = candidate === null ? null : lookCloserFoldedBy(candidate, this.recentPings(board, at));
+      const reason = foldedBy === null ? lookCloserReason(check.team) : lookCloserFoldReason(foldedBy, at);
       this.store.transaction(() => {
         this.store.meta.set(lookCloserMetaKey(key), check.requestId);
         if (this.store.events.addAppEvent(event)) {
           this.store.eventLog.append([{ id: event.id, prKey: key }], at);
         }
-        this.store.pingDecisions.add({ threadId: thread.id, prKey: key, ping: true, ...text, reason: lookCloserReason(check.team), source: 'glance', at });
+        this.store.pingDecisions.add({ threadId: thread.id, prKey: key, ping: foldedBy === null, ...text, reason, source: 'glance', at });
       });
+      if (foldedBy !== null) {
+        continue;
+      }
       const place = placeOnBoard(board, key);
       this.waiting.push({ ...text, target: { topicId: place?.topicId ?? null, tileId: place?.tile?.id ?? null, prKey: key }, personal: false });
     }
