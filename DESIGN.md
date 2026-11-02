@@ -8120,8 +8120,26 @@ teammate even".
   tile still shows in To review as before. Personal requests and team
   requests on a teammate's PR keep pinging from the poll (class
   `addressed`).
-- `pings_summarized` counts these as `pinged_glance`, apart from the poll's
-  decisions.
+- One author's series pings once (decided 2026-11-02). When one author opens
+  a run of PRs in one topic (ten frontend perf PRs ten minutes apart, each
+  touching a team-owned script), each used to ping. On Julian's data since
+  2026-10-26 this rule drops 22 of 116 Look closer pings. A Look closer
+  that would ping is folded when a Look closer ping went out in the last 60
+  minutes for a PR in the same topic by the same PR author (core
+  `lookCloserFoldedBy`). Topic and author are read at decision time; a PR
+  in no topic (or in Unsorted) never folds. Only pings that went out count,
+  so a series longer than an hour pings again once an hour has passed. In
+  one batch (7 glances at startup) the first pings and the rest fold.
+- A folded request is handled like a ping (meta `look_closer_ping:<pr>`, so
+  it does not ping once the window ends) and keeps its `look_closer` event:
+  the tile is unread with the Look closer reason in the list, since that
+  event is about the list, not the Mac. No Mac ping goes out, so it never
+  enters `mac_ping` and the Dock badge (tiles PostPile pinged about) stays
+  true. Its `ping_decision` row has ping off, source `glance` and a reason
+  like "Look closer folded: acme/app#12 by alice in this topic pinged 14 min
+  ago" (`lookCloserFoldReason`).
+- `pings_summarized` counts the ones that went out as `pinged_glance`, apart
+  from the poll's decisions; a folded one counts as `withheld_rules`.
 
 **Mac notifications** (desktop main, `MacNotifier`):
 

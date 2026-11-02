@@ -16,6 +16,7 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 - `whats_on_me` lists every unread pull request the app counts. Before, it only read the topics the sidebar lights up and skipped snoozed tiles with an unread thread, so an agent clearing your inbox could mark dozens of pull requests read and barely move the numbers. Unread tiles whose pull requests are all merged or closed, with nothing asked of you, come last as "Unread, nothing to do", one line per topic. The header gives the app's own counts (unread tiles, unread pull requests, your-move tiles) and says how many tiles the filters left out. It lists every state by default now, not only open pull requests.
 - `whats_on_me` says what clears each row. A review request clears when you review or the request is removed on GitHub, a question when you reply; marking read clears neither. Each pull request line says whether it is unread, which one the move is about, and which merged or closed stack layers are only there for context.
 - `pr_context` with `detail: "full"` on several pull requests stays under 40,000 characters, so it fits an agent's tool output instead of spilling to a file. It shortens the activity first, then the topics' dossier and tile list, and says what it cut. One pull request alone still gets everything.
+- A series of Look closer reviews from one author in one topic sends one Mac ping per hour instead of one per pull request. The others still show as unread with their Look closer reason in the list.
 
 ## 0.29.0 (2026-10-29)
 
