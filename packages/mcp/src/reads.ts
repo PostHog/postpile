@@ -19,6 +19,13 @@ import {
   SYNC_PROGRESS_STALE_MS,
   type PrDetail,
   hasLiveNote,
+  inboxTotals,
+  isUnreadNothingToDo,
+  prMarks,
+  prMarksText,
+  READ_CLEARS,
+  rowClears,
+  type InboxTotals,
   type PrKey,
   type PrOverlap,
   type PrOverlapsView,
@@ -114,6 +121,14 @@ export interface ListOptions {
 export interface QueueOptions extends ListOptions {
   /** me: the user's PRs; my_team: a home-team member's (not the user's); others: neither; any. */
   authorScope: AuthorScopeFilter;
+  /** Only tiles in the Unread group: drops your-move tiles the user already read. */
+  unreadOnly: boolean;
+}
+
+/** search_prs' filters: the list ones plus unread. */
+export interface SearchOptions extends ListOptions {
+  /** true: only PRs with the unread dot; false: only read ones; null: either. */
+  unread: boolean | null;
 }
 
 export const DEFAULT_LIMIT = 25;
@@ -1152,18 +1167,30 @@ function verdictSuffix(detail: PrDetail | null | undefined): string {
   return verdict === null ? '' : ` · ${agentVerdictShort(verdict)}`;
 }
 
-/** "Showing 26-50 of 80." plus the line that says how to get the next page, for a cut list. */
-function pageLines(total: number, options: ListOptions, shown: number): { head: string; tail: string[] } {
+/** "3 tiles", "1 tile": a count with its unit. */
+function countOf(count: number, word: string): string {
+  return `${count} ${word}${count === 1 ? '' : 's'}`;
+}
+
+/** "Showing 26-50 of 80 tiles." plus the line that says how to get the next page, for a cut list. */
+function pageLines(total: number, options: ListOptions, shown: number, unit: string): { head: string; tail: string[] } {
   if (shown === 0) {
-    return { head: `Nothing at offset ${options.offset}; there are ${total} in total.`, tail: [] };
+    return { head: `Nothing at offset ${options.offset}; there are ${countOf(total, unit)} in total.`, tail: [] };
   }
-  const head = `Showing ${options.offset + 1}-${options.offset + shown} of ${total}.`;
+  const head = `Showing ${options.offset + 1}-${options.offset + shown} of ${countOf(total, unit)}.`;
   const rest = total - options.offset - shown;
   return { head, tail: rest > 0 ? [`${rest} more: offset: ${options.offset + shown}`] : [] };
 }
 
-function filterWords(options: ListOptions & Partial<Pick<QueueOptions, 'authorScope'>>): string {
-  const words = [`state ${options.state}`];
+/** The filters of either list tool: the shared ones plus each tool's own. */
+type AnyListOptions = ListOptions & Partial<Pick<QueueOptions, 'authorScope' | 'unreadOnly'>> & Partial<Pick<SearchOptions, 'unread'>>;
+
+/** The filters that narrow the list, as words; empty when none does. */
+function activeFilterWords(options: AnyListOptions): string[] {
+  const words: string[] = [];
+  if (options.state !== 'any') {
+    words.push(`state ${options.state}`);
+  }
   if (options.repo) {
     words.push(`repo ${options.repo}`);
   }
@@ -1176,7 +1203,18 @@ function filterWords(options: ListOptions & Partial<Pick<QueueOptions, 'authorSc
   if (options.agentVerdict !== 'any') {
     words.push(`agent verdict ${options.agentVerdict}`);
   }
-  return words.join(', ');
+  if (options.unreadOnly) {
+    words.push('unread only');
+  }
+  if (options.unread === true || options.unread === false) {
+    words.push(options.unread ? 'unread' : 'read');
+  }
+  return words;
+}
+
+function filterWords(options: AnyListOptions): string {
+  const words = activeFilterWords(options);
+  return words.length === 0 ? 'none' : words.join(', ');
 }
 
 /** "Showing 26-50 of 80." as JSON. */
@@ -1186,8 +1224,16 @@ function pageJson(total: number, options: ListOptions, shown: number): { total: 
 }
 
 /** The filters as the caller passed them, for a JSON answer. */
-function filtersJson(options: ListOptions & Partial<Pick<QueueOptions, 'authorScope'>>): Record<string, string | null> {
-  return { state: options.state, repo: options.repo, whoseMove: options.whoseMove, agentVerdict: options.agentVerdict, ...(options.authorScope ? { authorScope: options.authorScope } : {}) };
+function filtersJson(options: AnyListOptions): Record<string, string | boolean | null> {
+  return {
+    state: options.state,
+    repo: options.repo,
+    whoseMove: options.whoseMove,
+    agentVerdict: options.agentVerdict,
+    ...(options.authorScope ? { authorScope: options.authorScope } : {}),
+    ...(options.unreadOnly !== undefined ? { unreadOnly: options.unreadOnly } : {}),
+    ...(options.unread !== undefined ? { unread: options.unread } : {}),
+  };
 }
 
 /** One search hit: the PR's row, the tile it was found in and its topic. */
@@ -1197,33 +1243,83 @@ interface SearchRow {
   topic: TopicDetail;
 }
 
-async function searchJson(ctx: ReadContext, rows: SearchRow[], page: SearchRow[], options: ListOptions, details: Map<PrKey, PrDetail | null>): Promise<ToolAnswer> {
+/** The PR has the unread dot in its tile (`TileView.unreadPrKeys`), as in the app. */
+function isUnreadIn(view: TileView, key: PrKey): boolean {
+  return view.unreadPrKeys.includes(key);
+}
+
+function unreadMatches(row: SearchRow, unread: boolean | null): boolean {
+  return unread === null || isUnreadIn(row.view, row.pr.key) === unread;
+}
+
+async function searchJson(ctx: ReadContext, rows: SearchRow[], page: SearchRow[], options: SearchOptions, details: Map<PrKey, PrDetail | null>): Promise<ToolAnswer> {
   const authors = await readAuthors(ctx.reader);
   const overlaps = await ctx.reader.prOverlaps();
   const data = {
     meta: await readMeta(ctx, authors),
     filters: filtersJson(options),
     page: pageJson(rows.length, options, page.length),
-    prs: page.map((row) => summaryJson(authors, row.pr, details.get(row.pr.key) ?? null, [row.view], row.topic, overlaps)),
+    prs: page.map((row) => ({ ...summaryJson(authors, row.pr, details.get(row.pr.key) ?? null, [row.view], row.topic, overlaps), marks: prMarks(row.view, row.pr) })),
   };
   return jsonAnswer(await header(ctx), data, rows.length > 0);
 }
 
-export async function searchPrs(ctx: ReadContext, query: string, options: ListOptions, format: Format = 'text'): Promise<ToolAnswer> {
+/** A topic to list PRs from: the PR keys the search matched in it, or null for every PR it holds. */
+interface SearchSource {
+  topicId: string;
+  keys: Set<PrKey> | null;
+}
+
+/** The search's matches, or every topic of the user's (no scouted PRs) when there is no query. */
+async function searchSources(reader: PostPileReader, query: string | null): Promise<SearchSource[]> {
+  if (query === null) {
+    return (await reader.listTopics(ALL_REPOS)).map((item) => ({ topicId: item.topic.id, keys: null }));
+  }
+  const result = await reader.search(query, ALL_REPOS_WITH_SCOUTS);
+  return result.topics.map((match) => ({ topicId: match.topicId, keys: new Set(match.prKeys) }));
+}
+
+/** A queryless search needs a filter to narrow it, so it never lists every tracked PR by accident. */
+function needsQueryError(query: string | null, options: SearchOptions): ToolAnswer | null {
+  if (query !== null || activeFilterWords(options).length > 0) {
+    return null;
+  }
+  return toolError(['Pass a query, or a filter to list without one, e.g. search_prs(unread: true) or search_prs(query: "turbo cache").']);
+}
+
+function searchRowText(row: SearchRow, details: Map<PrKey, PrDetail | null>): string {
+  const unread = isUnreadIn(row.view, row.pr.key) ? ' · unread' : '';
+  const verdict = verdictSuffix(details.get(row.pr.key));
+  if (row.topic.scout) {
+    return `${prSummaryLine(row.pr)}  · scouted by ${row.topic.scout.name}, not in the user's inbox (pr_context for why)${verdict}`;
+  }
+  return `${prSummaryLine(row.pr)}  · topic ${row.topic.topic.name} (${row.topic.topic.id}) · ${turnText(row.pr.turn)}${unread}${verdict}`;
+}
+
+/** No row: say which filters dropped the matches, so the caller can widen them. */
+function noSearchMatch(query: string | null, matched: boolean, options: SearchOptions): ToolAnswer {
+  if (query === null) {
+    return { text: `No tracked PR matches the filters: ${filterWords(options)}.`, found: false };
+  }
+  const filters = matched ? ` with filters: ${filterWords(options)}` : '';
+  return { text: `No PR matches "${echo(query)}"${filters}. Every word must appear in the title, #number, author, repo, branch or topic name.`, found: false };
+}
+
+export async function searchPrs(ctx: ReadContext, query: string | null, options: SearchOptions, format: Format = 'text'): Promise<ToolAnswer> {
   const { reader } = ctx;
-  const bad = repoFilterError(options.repo);
+  const bad = repoFilterError(options.repo) ?? needsQueryError(query, options);
   if (bad) {
     return bad;
   }
-  const result = await reader.search(query, ALL_REPOS_WITH_SCOUTS);
-  const wanted = new Map(result.topics.map((match) => [match.topicId, new Set(match.prKeys)]));
+  const sources = await searchSources(reader, query);
+  const wanted = new Map(sources.map((source) => [source.topicId, source.keys]));
   const rows: SearchRow[] = [];
   const seen = new Set<PrKey>();
-  for (const detail of await readTopics(reader, result.topics.map((match) => match.topicId))) {
-    const keys = wanted.get(detail.topic.id) ?? new Set<PrKey>();
+  for (const detail of await readTopics(reader, sources.map((source) => source.topicId))) {
+    const keys = wanted.get(detail.topic.id) ?? null;
     for (const view of detail.tiles) {
       for (const pr of view.prs) {
-        if (!keys.has(pr.key) || seen.has(pr.key) || !stateMatches(pr, options.state) || !repoMatches(pr, options.repo) || !moveMatches(pr, options.whoseMove)) {
+        if ((keys !== null && !keys.has(pr.key)) || seen.has(pr.key) || !stateMatches(pr, options.state) || !repoMatches(pr, options.repo) || !moveMatches(pr, options.whoseMove)) {
           continue;
         }
         seen.add(pr.key);
@@ -1231,7 +1327,7 @@ export async function searchPrs(ctx: ReadContext, query: string, options: ListOp
       }
     }
   }
-  const matching = rows.filter((row) => verdictMatches(row.pr, options.agentVerdict));
+  const matching = rows.filter((row) => verdictMatches(row.pr, options.agentVerdict) && unreadMatches(row, options.unread));
   const page = matching.slice(options.offset, options.offset + options.limit);
   // Each PR line names its verdict with gates from the stored snapshot: read for this page only.
   const details = await readDetails(reader, page.map((row) => row.pr.key));
@@ -1239,16 +1335,10 @@ export async function searchPrs(ctx: ReadContext, query: string, options: ListOp
     return searchJson(ctx, matching, page, options, details);
   }
   if (matching.length === 0) {
-    // Matches that the filters dropped: say which filters, so the caller can widen them.
-    const filters = result.topics.length > 0 ? ` with ${filterWords(options)}` : '';
-    return { text: `No PR matches "${echo(query)}"${filters}. Every word must appear in the title, #number, author, repo, branch or topic name.`, found: false };
+    return noSearchMatch(query, sources.length > 0, options);
   }
-  const lines = page.map((row) =>
-    row.topic.scout
-      ? `${prSummaryLine(row.pr)}  · scouted by ${row.topic.scout.name}, not in the user's inbox (pr_context for why)${verdictSuffix(details.get(row.pr.key))}`
-      : `${prSummaryLine(row.pr)}  · topic ${row.topic.topic.name} (${row.topic.topic.id}) · ${turnText(row.pr.turn)}${verdictSuffix(details.get(row.pr.key))}`,
-  );
-  const { head, tail } = pageLines(matching.length, options, page.length);
+  const lines = page.map((row) => searchRowText(row, details));
+  const { head, tail } = pageLines(matching.length, options, page.length, 'PR');
   return { text: answer([...(await header(ctx)), `${head} Filters: ${filterWords(options)}.`], lines, tail), found: true };
 }
 
@@ -1270,24 +1360,28 @@ function scopeMatches(authors: Authors, pr: PrSummary, scope: AuthorScopeFilter)
   return scope === 'any' || placeOf(authors, pr).scope === scope;
 }
 
+/** " · context layer (merged), unread" after a PR's author, empty without marks. */
+function marksSuffix(view: TileView, pr: PrSummary): string {
+  const words = prMarksText(prMarks(view, pr));
+  return words === '' ? '' : ` · ${words}`;
+}
+
 /**
- * "acme/app#1902 by alice (outside your team) · reviews: 1 human approval,
- * reviewbot approved · team-devex owns 1 of 7 files": one line per PR of a
- * queue row, its agent note under it, on the user's move an effort line
- * under each open PR, and on their own PR a preview of the newest thread
- * waiting on them.
+ * "acme/app#1902 by alice (outside your team) · unread, owns the move:
+ * review · reviews: 1 human approval, reviewbot approved · team-devex owns
+ * 1 of 7 files": one line per PR of a queue row, its agent note under it, on
+ * the user's move an effort line under each open PR, and on their own PR a
+ * preview of the newest thread waiting on them.
  */
-function queuePrLines(prs: PrSummary[], details: Map<PrKey, PrDetail | null>, authors: Authors, overlaps: PrOverlapsView, notes: Map<PrKey, PrNotesView>, now: Date, yourMove: boolean): string[] {
-  return prs.flatMap((pr) => {
+function queuePrLines(view: TileView, details: Map<PrKey, PrDetail | null>, authors: Authors, overlaps: PrOverlapsView, notes: Map<PrKey, PrNotesView>, now: Date, yourMove: boolean): string[] {
+  return view.prs.flatMap((pr) => {
     const detail = details.get(pr.key) ?? null;
     const reviews = detail ? reviewCountsText(reviewerStates(detail.pr)) : 'not stored';
     const owners = detail?.pr.state === 'OPEN' ? ownershipShort(detail.ownership) : '';
-    // A merged or closed layer of a live tile says so: only the open ones are there to act on.
-    const state = pr.state === 'OPEN' ? '' : ` (${stateWord(pr.state, pr.isDraft)})`;
-    const lines = [`  ${pr.key}${state} by ${pr.author}${authorTag(placeOf(authors, pr), authors.known)} · reviews: ${reviews}${verdictSuffix(detail)}${overlapMarker(overlaps, pr.key)}${owners ? ` · ${owners}` : ''}`];
-    const view = notes.get(pr.key);
-    if (view) {
-      lines.push(...queueNoteLines(view, now).map((line) => `    ${line}`));
+    const lines = [`  ${pr.key} by ${pr.author}${authorTag(placeOf(authors, pr), authors.known)}${marksSuffix(view, pr)} · reviews: ${reviews}${verdictSuffix(detail)}${overlapMarker(overlaps, pr.key)}${owners ? ` · ${owners}` : ''}`];
+    const notesView = notes.get(pr.key);
+    if (notesView) {
+      lines.push(...queueNoteLines(notesView, now).map((line) => `    ${line}`));
     }
     if (yourMove && detail?.pr.state === 'OPEN') {
       lines.push(`    ${effortText(detail.pr, detail.ownership, detail.openThreads)}`);
@@ -1300,16 +1394,26 @@ function queuePrLines(prs: PrSummary[], details: Map<PrKey, PrDetail | null>, au
   });
 }
 
-/** your_move: plain your-move tiles; noted: your move, but every PR carries a live agent note; unread: unread, not your move. */
-type QueueGroup = 'your_move' | 'noted' | 'unread';
+/**
+ * your_move: plain your-move tiles; noted: your move, but every PR carries a
+ * live agent note; unread: unread, not your move, with an open PR or an ask;
+ * unread_nothing_to_do: unread, every PR merged or closed, nothing asked
+ * (`isUnreadNothingToDo`).
+ */
+type QueueGroup = 'your_move' | 'noted' | 'unread' | 'unread_nothing_to_do';
 
-const GROUP_ORDER: QueueGroup[] = ['your_move', 'noted', 'unread'];
+const GROUP_ORDER: QueueGroup[] = ['your_move', 'noted', 'unread', 'unread_nothing_to_do'];
 
 const GROUP_TITLES: Record<QueueGroup, string> = {
   your_move: 'Your move',
   noted: 'Your move, but an agent left a note',
   unread: 'Unread, not your move',
+  unread_nothing_to_do: 'Unread, nothing to do (merged or closed, nothing asked)',
 };
+
+function isYourMoveGroup(group: QueueGroup): boolean {
+  return group === 'your_move' || group === 'noted';
+}
 
 interface QueueRow {
   group: QueueGroup;
@@ -1327,6 +1431,42 @@ function yourMoveGroup(prs: PrSummary[], notes: Map<PrKey, PrNotesView>): QueueG
       return view !== undefined && hasLiveNote(view);
     });
   return allNoted ? 'noted' : 'your_move';
+}
+
+/**
+ * The tile's group before agent notes, or null when whats_on_me leaves it
+ * out: a live tile on the user's move, else any tile in the Unread group
+ * (snoozed ones with a thread unread on GitHub too, as the app counts them).
+ */
+function baseGroup(view: TileView): QueueGroup | null {
+  if (isLive(view) && view.turn.kind === 'you') {
+    return 'your_move';
+  }
+  if (view.group !== 'unread') {
+    return null;
+  }
+  return isUnreadNothingToDo(view) ? 'unread_nothing_to_do' : 'unread';
+}
+
+function tileMatches(view: TileView, authors: Authors, options: QueueOptions): boolean {
+  const matching = view.prs.filter((pr) => stateMatches(pr, options.state) && repoMatches(pr, options.repo) && scopeMatches(authors, pr, options.authorScope));
+  if (!matching.some((pr) => verdictMatches(pr, options.agentVerdict)) || !moveMatches(view, options.whoseMove)) {
+    return false;
+  }
+  return !options.unreadOnly || view.group === 'unread';
+}
+
+/** The row's second line: what happened or whose move, and what clears it. */
+function rowDetailText(group: QueueGroup, view: TileView): string {
+  const clears = `clears: ${rowClears(view)}`;
+  if (isYourMoveGroup(group)) {
+    return `  ${view.turn.what} · ${clears}`;
+  }
+  const reason = leadUnreadReason(view.state.unreadBecause);
+  const snoozed = view.state.kind === 'snoozed' ? ' (snoozed)' : '';
+  const landable = landableText(view);
+  const extra = landable ? `\n  ${landable}` : '';
+  return `  ${reason ? unreadReasonText(reason) : 'unread'}${snoozed} · ${turnText(view.turn)} · ${clears}${extra}`;
 }
 
 /** One tile of a scout's section, for whats_on_me's own group. */
@@ -1393,6 +1533,24 @@ function scoutedJson(rows: ScoutedRow[]): object[] {
   }));
 }
 
+/** What the app counts, how many tiles this answer lists and how many the filters left out. */
+interface Coverage {
+  totals: InboxTotals;
+  listedTiles: number;
+  leftOutByFilters: number;
+  filters: string[];
+}
+
+/** The header's coverage line: always printed, each count named by its unit. */
+function coverageLine(coverage: Coverage): string {
+  const { totals } = coverage;
+  const which = coverage.leftOutByFilters > 0 && coverage.filters.length > 0 ? ` (${coverage.filters.join(', ')})` : '';
+  return (
+    `Coverage, as the app counts in all repos: ${countOf(totals.unreadTiles, 'unread tile')}, ${countOf(totals.unreadPrs, 'unread PR')}, ${countOf(totals.yourMoveTiles, 'your-move tile')}. ` +
+    `Listed: ${countOf(coverage.listedTiles, 'tile')}; left out by filters: ${coverage.leftOutByFilters}${which}.`
+  );
+}
+
 function queueJson(
   rows: QueueRow[],
   page: QueueRow[],
@@ -1403,27 +1561,51 @@ function queueJson(
   overlaps: PrOverlapsView,
   now: Date,
   scouted: ScoutedRow[],
+  coverage: Coverage,
 ): object {
   return {
     meta,
     filters: filtersJson(options),
+    coverage: { ...coverage.totals, listedTiles: coverage.listedTiles, leftOutByFilters: coverage.leftOutByFilters, filters: coverage.filters },
     page: pageJson(rows.length, options, page.length),
-    yourMoveTotal: rows.filter((row) => row.group !== 'unread').length,
+    yourMoveTotal: rows.filter((row) => isYourMoveGroup(row.group)).length,
     rows: page.map((row) => ({
-      yourMove: row.group !== 'unread',
+      group: row.group,
+      yourMove: isYourMoveGroup(row.group),
       // Every PR of the tile carries a live agent note (pr_context has them).
       allNoted: row.group === 'noted',
+      clears: rowClears(row.view),
       tile: tileJson(row.view),
       topic: { id: row.topic.topic.id },
       fetchedAt: tileFetchedAt(row.view),
       mayBeStale: mayBeStale(tileFetchedAt(row.view), now),
       untrusted: { topicName: row.topic.topic.name },
-      prs: row.view.prs.map((pr) => summaryJson(authors, pr, details.get(pr.key) ?? null, [row.view], row.topic, overlaps)),
+      prs: row.view.prs.map((pr) => ({ ...summaryJson(authors, pr, details.get(pr.key) ?? null, [row.view], row.topic, overlaps), marks: prMarks(row.view, pr) })),
     })),
     // Outside the user's GitHub inbox: never an ask, never on the user's move.
     scouted: scoutedJson(scoutedPage(scouted, options)),
     scoutedPage: pageJson(scouted.length, options, scoutedPage(scouted, options).length),
   };
+}
+
+/**
+ * The "nothing to do" group, one line per topic: its unread tiles and their
+ * PR keys, so an agent can open them with pr_context and mark them read.
+ */
+function nothingToDoLines(rows: QueueRow[]): string[] {
+  const byTopic = new Map<string, { topic: TopicDetail; views: TileView[] }>();
+  for (const row of rows) {
+    const entry = byTopic.get(row.topic.topic.id);
+    if (entry) {
+      entry.views.push(row.view);
+      continue;
+    }
+    byTopic.set(row.topic.topic.id, { topic: row.topic, views: [row.view] });
+  }
+  return [...byTopic.values()].map(({ topic, views }) => {
+    const keys = views.flatMap((view) => view.prs.map((pr) => (isUnreadIn(view, pr.key) ? `${pr.key} (unread)` : pr.key)));
+    return `- topic ${topic.topic.name} (${topic.topic.id}): ${countOf(views.length, 'tile')} · ${keys.join(', ')} · clears: ${READ_CLEARS}`;
+  });
 }
 
 export async function whatsOnMe(ctx: ReadContext, options: QueueOptions, format: Format = 'text'): Promise<ToolAnswer> {
@@ -1436,35 +1618,35 @@ export async function whatsOnMe(ctx: ReadContext, options: QueueOptions, format:
   if (!authors.known && (options.authorScope === 'my_team' || options.authorScope === 'others')) {
     return toolError([`author_scope "${options.authorScope}" needs the user's team members. ${teamNote(authors).join(' ')} Use author_scope: "me" or "any".`]);
   }
-  const items = (await reader.listTopics(ALL_REPOS)).filter((item) => item.group === 'needs_you');
+  // Every topic, not only the coral ones: a topic whose unread tiles are all merged still counts in the app.
+  const items = await reader.listTopics(ALL_REPOS);
   const now = ctx.now();
-  const candidates: { view: TileView; topic: TopicDetail; line: string }[] = [];
+  const candidates: { group: QueueGroup; view: TileView; topic: TopicDetail; line: string }[] = [];
+  let eligible = 0;
   for (const detail of await readTopics(reader, items.map((item) => item.topic.id))) {
-    for (const view of detail.tiles.filter(isLive)) {
-      const matching = view.prs.filter((pr) => stateMatches(pr, options.state) && repoMatches(pr, options.repo) && scopeMatches(authors, pr, options.authorScope));
-      if (!matching.some((pr) => verdictMatches(pr, options.agentVerdict)) || !moveMatches(view, options.whoseMove)) {
+    for (const view of detail.tiles) {
+      const group = baseGroup(view);
+      if (group === null) {
+        continue;
+      }
+      eligible += 1;
+      if (!tileMatches(view, authors, options)) {
         continue;
       }
       const line = `- ${view.tile.title} (${view.prs.map((pr) => pr.key).join(', ')}) · topic ${detail.topic.name} (${detail.topic.id}) · ${fetchedText(tileFetchedAt(view), now)}`;
-      candidates.push({ view, topic: detail, line });
+      candidates.push({ group, view, topic: detail, line });
     }
   }
   // Agent notes for every listed PR in one read; they only regroup the list, never change a move.
   const noteViews = await reader.listPrNotes([...new Set(candidates.flatMap(({ view }) => view.prs.map((pr) => pr.key)))]);
   const notes = new Map(noteViews.map((view) => [view.prKey, view]));
-  const rows: QueueRow[] = [];
-  for (const { view, topic, line } of candidates) {
-    if (view.turn.kind === 'you') {
-      rows.push({ group: yourMoveGroup(view.prs, notes), text: `${line}\n  ${view.turn.what}`, view, topic });
-    } else if (view.state.kind === 'unread') {
-      const reason = leadUnreadReason(view.state.unreadBecause);
-      const landable = landableText(view);
-      const extra = landable ? `\n  ${landable}` : '';
-      rows.push({ group: 'unread', text: `${line}\n  ${reason ? unreadReasonText(reason) : 'unread'} · ${turnText(view.turn)}${extra}`, view, topic });
-    }
-  }
-  // Your move first, then your move with a note on every PR, then unread ones where it is not.
+  const rows: QueueRow[] = candidates.map(({ group, view, topic, line }) => {
+    const final = group === 'your_move' ? yourMoveGroup(view.prs, notes) : group;
+    return { group: final, text: `${line}\n${rowDetailText(final, view)}`, view, topic };
+  });
+  // Your move first, then your move with a note on every PR, then unread with something open, then unread with nothing to do.
   rows.sort((a, b) => GROUP_ORDER.indexOf(a.group) - GROUP_ORDER.indexOf(b.group));
+  const coverage: Coverage = { totals: inboxTotals(items), listedTiles: rows.length, leftOutByFilters: eligible - rows.length, filters: activeFilterWords(options) };
   const page = rows.slice(options.offset, options.offset + options.limit);
   // Reviews and waiting threads come from each PR's stored snapshot: read only for the rows on this page.
   const details = await readDetails(reader, page.flatMap((row) => row.view.prs.map((pr) => pr.key)));
@@ -1472,30 +1654,34 @@ export async function whatsOnMe(ctx: ReadContext, options: QueueOptions, format:
   const scouted = await scoutedRows(reader, authors, options);
   if (format === 'json') {
     const meta = await readMeta(ctx, authors);
-    return jsonAnswer([...(await header(ctx)), ...teamNote(authors)], queueJson(rows, page, details, authors, options, meta, overlaps, ctx.now(), scouted), rows.length > 0);
+    const data = queueJson(rows, page, details, authors, options, meta, overlaps, ctx.now(), scouted, coverage);
+    return jsonAnswer([...(await header(ctx)), ...teamNote(authors), coverageLine(coverage)], data, rows.length > 0);
   }
+  const head = [...(await header(ctx)), ...teamNote(authors), coverageLine(coverage)];
   const scoutedShown = scoutedPage(scouted, options);
   const scoutedMore = options.offset + scoutedShown.length < scouted.length ? [`${scouted.length - options.offset - scoutedShown.length} more scouted: offset: ${options.offset + options.limit}`] : [];
   const scoutedData = scouted.length === 0 ? [] : ['', `${SCOUTED_TITLE} (${scouted.length} in total):`, ...scoutedShown.map(scoutedText), ...scoutedMore];
   if (rows.length === 0 && scouted.length === 0) {
-    const text = [...(await header(ctx)), ...teamNote(authors), '', `Nothing waits on the user right now (filters: ${filterWords(options)}).`].join('\n');
+    const text = [...head, '', `Nothing waits on the user right now (filters: ${filterWords(options)}).`].join('\n');
     return { text, found: false };
   }
   if (rows.length === 0) {
-    const head = [...(await header(ctx)), ...teamNote(authors), `Nothing waits on the user right now (filters: ${filterWords(options)}).`];
-    return { text: answer(head, scoutedData.slice(1)), found: false };
+    return { text: answer([...head, `Nothing waits on the user right now (filters: ${filterWords(options)}).`], scoutedData.slice(1)), found: false };
   }
-  const { head, tail } = pageLines(rows.length, options, page.length);
-  const shown = page.map((row) => ({ group: row.group, text: [row.text, ...queuePrLines(row.view.prs, details, authors, overlaps, notes, now, row.group !== 'unread')].join('\n') }));
+  const { head: pageHead, tail } = pageLines(rows.length, options, page.length, 'tile');
   const data: string[] = [];
   for (const group of GROUP_ORDER) {
-    const inGroup = shown.filter((row) => row.group === group);
+    const inGroup = page.filter((row) => row.group === group);
     if (inGroup.length === 0) {
       continue;
     }
     const total = rows.filter((row) => row.group === group).length;
-    data.push(...(data.length > 0 ? [''] : []), `${GROUP_TITLES[group]} (${total} in total):`, ...inGroup.map((row) => row.text));
+    const lines =
+      group === 'unread_nothing_to_do'
+        ? nothingToDoLines(inGroup)
+        : inGroup.map((row) => [row.text, ...queuePrLines(row.view, details, authors, overlaps, notes, now, isYourMoveGroup(row.group))].join('\n'));
+    data.push(...(data.length > 0 ? [''] : []), `${GROUP_TITLES[group]} (${countOf(total, 'tile')} in total):`, ...lines);
   }
   data.push(...scoutedData);
-  return { text: answer([...(await header(ctx)), ...teamNote(authors), `${head} Filters: ${filterWords(options)}.`], data, tail), found: true };
+  return { text: answer([...head, `${pageHead} Filters: ${filterWords(options)}.`], data, tail), found: true };
 }

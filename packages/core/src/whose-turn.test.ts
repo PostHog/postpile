@@ -196,6 +196,19 @@ describe('whoseTurn: your move', () => {
     expect(single(pr, [makeEvent({ kind: 'reply_to_user', ruleLoudness: 'loud', actor: 'lyra', at: at(10) })])).toMatchObject({ move: 'reply', what: 'lyra replied to you' });
   });
 
+  it('says a team mention clears on read only when nothing else waits on you once it is read', () => {
+    const pr = makePr({ author: 'rowan' });
+    const team = makeEvent({ id: 'team', kind: 'team_mention', ruleLoudness: 'loud', actor: 'lyra', at: at(20) });
+    expect(single(pr, [team])).toMatchObject({ move: 'reply', teamAsk: true });
+    // An older personal question survives the read.
+    const question = makeEvent({ id: 'question', kind: 'question_to_user', ruleLoudness: 'loud', actor: 'ada', at: at(10) });
+    expect(single(pr, [question, team])).toMatchObject({ move: 'reply', what: 'lyra mentioned your team' });
+    expect(single(pr, [question, team]).teamAsk).toBeUndefined();
+    // So does a team review request: after the read it is a review move.
+    const requested = makePr({ author: 'rowan', reviewerTeams: viewer.teams.slice(0, 1) });
+    expect(single(requested, [team]).teamAsk).toBeUndefined();
+  });
+
   it('counts your push on your own PR as the answer to a mention ("needs a merge-in from master")', () => {
     const own = makePr({ author: me, commits: [makeCommit({ oid: 'c-own', author: me, committedAt: at(20) })] });
     const mention = makeEvent({ kind: 'mention', ruleLoudness: 'loud', actor: 'lyra', at: at(10) });

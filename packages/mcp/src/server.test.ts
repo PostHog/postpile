@@ -138,7 +138,7 @@ describe('PostPile MCP server', () => {
   it('tells which files pull in a team review and sizes the review, inside the fence', async () => {
     const client = await connected();
     const queue = fencedPart(await callText(client, 'whats_on_me'));
-    expect(queue).toContain('acme/app#1932 by ines (outside your team) · reviews: waiting on 1 team · team-platform owns 1 of 3 files');
+    expect(queue).toContain('acme/app#1932 by ines (outside your team) · unread, owns the move: review · reviews: waiting on 1 team · team-platform owns 1 of 3 files');
     expect(queue).toContain("    effort: 1 file, +12 -4 in your team's area (PR +140 -12, 3 files)");
     expect(queue).not.toMatch(/owns 0 of|nothing in your team/);
     const pr = fencedPart(await callText(client, 'pr_context', { pr: 'acme/app#1932' }));
@@ -164,8 +164,8 @@ describe('PostPile MCP server', () => {
     expect(properties).toEqual({
       pr_context: ['detail', 'format', 'pr'],
       topic: ['detail', 'format', 'topic'],
-      search_prs: ['agent_verdict', 'format', 'limit', 'offset', 'query', 'repo', 'state', 'whose_move'],
-      whats_on_me: ['agent_verdict', 'author_scope', 'format', 'limit', 'offset', 'repo', 'state', 'whose_move'],
+      search_prs: ['agent_verdict', 'format', 'limit', 'offset', 'query', 'repo', 'state', 'unread', 'whose_move'],
+      whats_on_me: ['agent_verdict', 'author_scope', 'format', 'limit', 'offset', 'repo', 'state', 'unread_only', 'whose_move'],
       refresh_from_github: ['pr', 'topic'],
       propose_topic_change: ['by', 'dry_run', 'into_topic', 'kind', 'name', 'prs', 'reason', 'topic'],
       note_pr: ['action', 'by', 'cover_token', 'covered_by', 'kind', 'lease_minutes', 'note', 'note_id', 'pr', 'token'],
@@ -357,11 +357,11 @@ describe('PostPile MCP server', () => {
     expect(search).toContain('· topic Move CI to Depot (topic-depot)');
 
     const first = await callText(client, 'search_prs', { query: 'depot', limit: 1 });
-    expect(first).toMatch(/Showing 1-1 of (\d+)\./);
-    const total = Number(/Showing 1-1 of (\d+)\./.exec(first)?.[1]);
+    expect(first).toMatch(/Showing 1-1 of (\d+) PRs\./);
+    const total = Number(/Showing 1-1 of (\d+) PRs\./.exec(first)?.[1]);
     expect(first).toContain(`${total - 1} more: offset: 1`);
     const second = await callText(client, 'search_prs', { query: 'depot', limit: 1, offset: 1 });
-    expect(second).toContain(`Showing 2-2 of ${total}.`);
+    expect(second).toContain(`Showing 2-2 of ${total} PRs.`);
 
     const merged = await callText(client, 'search_prs', { query: 'depot', state: 'merged' });
     expect(fencedPart(merged)).not.toContain('(open');
@@ -382,13 +382,13 @@ describe('PostPile MCP server', () => {
     expect(none.text).toContain('No PR matches');
   });
 
-  it('lists what waits on the user, open PRs by default, and filters by whose move', async () => {
+  it('lists what waits on the user from every state by default, and filters by whose move', async () => {
     const client = await connected();
     const queue = await callText(client, 'whats_on_me');
-    expect(queue).toMatch(/Your move \(\d+ in total\):/);
+    expect(queue).toMatch(/Your move \(\d+ tiles in total\):/);
     expect(queue).toContain('Unread, not your move');
     expect(queue).not.toContain('lyra: lyra');
-    expect(queue).toContain('Filters: state open.');
+    expect(queue).toContain('Filters: none.');
 
     const mine = await callText(client, 'whats_on_me', { whose_move: 'you' });
     expect(mine).toContain('Your move');
@@ -409,9 +409,9 @@ describe('PostPile MCP server', () => {
 
   it('gives every queued PR its author tag and review counts, inside the fence', async () => {
     const queue = fencedPart(await callText(await connected(), 'whats_on_me'));
-    expect(queue).toContain('acme/app#1902 by rowan (your team: team-platform) · reviews: 1 human approval, waiting on 1 person and 1 team');
-    expect(queue).toContain('acme/app#1822 by remy (outside your team) · reviews: 2 human approvals, waiting on 1 team');
-    expect(queue).toContain('acme/app#1808 by you (you) · reviews: reviewbot approved');
+    expect(queue).toContain('acme/app#1902 by rowan (your team: team-platform) · unread, owns the move: reply · reviews: 1 human approval, waiting on 1 person and 1 team');
+    expect(queue).toContain('acme/app#1822 by remy (outside your team) · unread · reviews: 2 human approvals, waiting on 1 team');
+    expect(queue).toContain('acme/app#1808 by you (you) · owns the move: merge · reviews: reviewbot approved');
   });
 
   it('names reviewers in pr_context, agents apart', async () => {
@@ -423,12 +423,12 @@ describe('PostPile MCP server', () => {
   it('filters the queue by whose PRs they are', async () => {
     const client = await connected();
     const others = await callText(client, 'whats_on_me', { author_scope: 'others' });
-    expect(others).toContain('Filters: state open, author others.');
+    expect(others).toContain('Filters: author others.');
     // remy is on no home team; the PR asks team-platform (a home team) for review and still counts as others.
     expect(await callText(client, 'pr_context', { pr: 'acme/app#1822' })).toContain('pending: team-platform');
     expect(others).toContain('acme/app#1822 by remy (outside your team)');
     // A set matches when any of its PRs does, so a teammate's PR can still show beside an outsider's.
-    expect(others).toContain('acme/app#1855 (merged) by jude (outside your team)');
+    expect(others).toContain('acme/app#1855 by jude (outside your team) · context layer (merged)');
     expect(others).not.toContain('acme/app#1870');
     expect(others).not.toContain('(you)');
 
@@ -630,7 +630,7 @@ describe('PostPile MCP server', () => {
     }
     const textQueue = fencedPart(await callText(client, 'whats_on_me'));
     // A your-move tile whose PRs all carry an agent note is listed in its own group (sample data has one on #1955).
-    expect(structured.rows.filter((row) => row.yourMove && !row.allNoted)).toHaveLength(Number(/Your move \((\d+) in total\)/.exec(textQueue)?.[1]));
+    expect(structured.rows.filter((row) => row.yourMove && !row.allNoted)).toHaveLength(Number(/Your move \((\d+) tiles in total\)/.exec(textQueue)?.[1]));
 
     const search = await client.callTool({ name: 'search_prs', arguments: { query: 'depot', limit: 2, format: 'json' } });
     expect(search.structuredContent).toMatchObject({ page: { offset: 0, shown: 2, nextOffset: 2 } });

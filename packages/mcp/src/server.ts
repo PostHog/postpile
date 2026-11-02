@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { AGENT_MARK_READ_MAX_PRS, OUTSIDE_REASON_MAX, PR_NOTE_BY_MAX, PR_NOTE_LEASE_DEFAULT_MINUTES, PR_NOTE_LEASE_MAX_MINUTES, PR_NOTE_LEASE_MIN_MINUTES, PR_NOTE_MAX, TOPIC_NAME_MAX, UNDO_WINDOW_MS } from '@postpile/core';
 import { markRead, notePr, proposeTopicChange, refreshFromGithub, type ActionContext } from './actions.ts';
 import type { AgentRequests } from './agent-requests.ts';
-import { DEFAULT_LIMIT, FULL_MANY_BUDGET, MAX_LIMIT, MAX_PRS_PER_CALL, prContext, searchPrs, topicOverview, whatsOnMe, type ListOptions, type PostPileReader, type QueueOptions, type ToolAnswer } from './reads.ts';
+import { DEFAULT_LIMIT, FULL_MANY_BUDGET, MAX_LIMIT, MAX_PRS_PER_CALL, prContext, searchPrs, topicOverview, whatsOnMe, type ListOptions, type PostPileReader, type QueueOptions, type SearchOptions, type ToolAnswer } from './reads.ts';
 
 export type McpToolName = 'pr_context' | 'topic' | 'search_prs' | 'whats_on_me' | 'refresh_from_github' | 'propose_topic_change' | 'note_pr' | 'mark_read';
 
@@ -82,15 +82,16 @@ Use when: you need the bigger picture around several PRs, or pr_context named th
 Not for: one PR's details (pr_context).
 Example: topic(topic: "depot", detail: "full")`;
 
-const SEARCH_DESCRIPTION = `Find PRs PostPile tracks. Every word must match the title, #number, author, repo, branch or topic name. One line per PR with its topic and whose move, 25 per page.
-Filters: state (open, merged, closed, any; default any), repo (owner/name), whose_move (you, them, any), agent_verdict (declined, approved, any: stamphog's standing verdict). A PR stamphog declined says so on its line. Page with limit (max 100) and offset.
+const SEARCH_DESCRIPTION = `Find PRs PostPile tracks. Every word must match the title, #number, author, repo, branch or topic name. One line per PR with its topic, whose move and "unread" when it has the app's unread dot, 25 per page.
+Filters: state (open, merged, closed, any; default any), repo (owner/name), whose_move (you, them, any), agent_verdict (declined, approved, any: stamphog's standing verdict), unread (true, false, any; default any). A PR stamphog declined says so on its line. With a filter set, query is optional: it lists the PRs in the user's topics (no scouted ones). Page with limit (max 100) and offset.
 Use when: you have a name, number or keyword and need the PR reference or its topic.
 Not for: the user's queue (whats_on_me), or searching GitHub itself: PostPile only knows PRs that reached the user, and ones their scouts pulled in (marked "scouted").
-Example: search_prs(query: "turbo cache", state: "open")`;
+Example: search_prs(query: "turbo cache", state: "open")
+Example: search_prs(unread: true, state: "merged")`;
 
-const WHATS_ON_ME_DESCRIPTION = `The user's queue as PostPile sees it: tiles where it is their move (review, reply, merge), then unread ones where it is not, each with its topic, what happened (bot activity named, not quoted) and when PostPile last fetched it. While the app runs a full sync, the header says so and how far it got. Each PR gets a line with its author, tagged (you), (your team: ...) or (outside your team), and its reviews: human approvals and change requests as counts, who is still asked, agents by name, and how many of its files CODEOWNERS gives each requested team (only teams it gives files); on the user's move an effort line (PR size, open threads, and lines and files in their teams' area when there are any); "overlaps #N" marks another open PR editing the same lines, "near #N" one editing within 10 lines of them (pr_context has the files).
+const WHATS_ON_ME_DESCRIPTION = `The user's queue as PostPile sees it, from every topic: tiles where it is their move (review, reply, merge), then unread ones where it is not, then unread ones with nothing to do (merged or closed, nothing asked; one line per topic). Each row has its topic, what happened (bot activity named, not quoted), when PostPile last fetched it and what clears it: marking read never clears a review request or an ask. The header gives the app's counts (unread tiles, unread PRs, your-move tiles) and what the filters left out. While the app runs a full sync, the header says so and how far it got. Each PR gets a line with its author, tagged (you), (your team: ...) or (outside your team), its marks (unread, owns the move, context layer), and its reviews: human approvals and change requests as counts, who is still asked, agents by name, and how many of its files CODEOWNERS gives each requested team (only teams it gives files); on the user's move an effort line (PR size, open threads, and lines and files in their teams' area when there are any); "overlaps #N" marks another open PR editing the same lines, "near #N" one editing within 10 lines of them (pr_context has the files).
 On the user's own PR with threads waiting on them, a short preview of the newest one's last comment. Last, in a group of its own, PRs the user's scouts pulled in from outside their inbox: never an ask.
-Filters: state (open, merged, closed, any; default open), repo (owner/name), whose_move (you, them, any), author_scope (me, my_team, others, any; "your team" means the user's home teams, never a team a review request names), agent_verdict (declined, approved, any: stamphog's standing verdict; a PR's line names it). A tile matches when any of its PRs does. Page with limit (max 100) and offset.
+Filters: state (open, merged, closed, any; default any), repo (owner/name), whose_move (you, them, any), unread_only (true drops your-move tiles already read), author_scope (me, my_team, others, any; "your team" means the user's home teams, never a team a review request names), agent_verdict (declined, approved, any: stamphog's standing verdict; a PR's line names it). A tile matches when any of its PRs does. Page with limit (max 100) and offset.
 Use when: the user asks what to do next or what waits on them, or you plan a work session.
 Not for: one PR's details (pr_context).
 Example: whats_on_me(whose_move: "you", author_scope: "others", limit: 10)`;
@@ -123,7 +124,7 @@ const UNDO_SECONDS = UNDO_WINDOW_MS / 1000;
 
 const MARK_READ_DESCRIPTION = `Mark PRs read in PostPile for the user, through the running app: the same undo window, GitHub writes lock and pending writes as the app's Mark read button. The user sees it in the app with Undo; once it reaches GitHub (after about ${UNDO_SECONDS} s) it can't be undone, since GitHub can't mark unread.
 Only PRs you went through with the user (summarised, reviewed or discussed). Pass each PR's seen_through token as printed by your pr_context read of it, brief or full (several PRs in one call is fine). It means "nothing new since your read": a PR with activity PostPile stored after it is refused ("new activity since you read it: 2 events"), and so is one whose unread list changed since (e.g. the user undid a mark-read); read it again first. Other PRs in the call still go through. Up to ${AGENT_MARK_READ_MAX_PRS} PRs, named one by one.
-Marking read answers nothing: a personal ask (mention, question, reply) stays under Needs reply until the user replies. A team mention clears on read, as with the button. PRs already read or already queued to mark read, and stack layers PostPile only shows for context, are skipped, so calling again is safe. A PR a scout pulled in (no notification) is only marked seen in PostPile, nothing on GitHub.
+Marking read answers nothing: a personal ask (mention, question, reply) stays under Needs reply until the user replies, and a review request until they review or it is removed. A team mention clears on read, as with the button. whats_on_me says what clears each row. PRs already read or already queued to mark read, and stack layers PostPile only shows for context, are skipped, so calling again is safe. A PR a scout pulled in (no notification) is only marked seen in PostPile, nothing on GitHub.
 Tell the user which PRs you marked, and which were refused and why.
 Use when: you read a PR with pr_context and went through it with the user; call it as part of that flow, without waiting to be asked.
 Not for: PRs you only saw as whats_on_me or search_prs rows (open them with pr_context first), whole topics, or hiding a PR the user has not seen.
@@ -250,8 +251,17 @@ const authorScopeSchema = z
   .default('any')
   .describe("Whose PRs: me (the user's), my_team (a home-team member's, not the user's), others (neither), any (default)");
 
-function queueOptions(args: ListArgs & { author_scope: QueueOptions['authorScope'] }): QueueOptions {
-  return { ...listOptions(args), authorScope: args.author_scope };
+const unreadOnlySchema = z
+  .boolean({ error: 'unread_only must be true or false, e.g. unread_only: true' })
+  .default(false)
+  .describe('true: only tiles in the Unread group, so your-move tiles already read are left out; false (default)');
+
+function queueOptions(args: ListArgs & { author_scope: QueueOptions['authorScope']; unread_only: boolean }): QueueOptions {
+  return { ...listOptions(args), authorScope: args.author_scope, unreadOnly: args.unread_only };
+}
+
+function searchOptions(args: ListArgs & { unread: boolean | 'any' }): SearchOptions {
+  return { ...listOptions(args), unread: args.unread === 'any' ? null : args.unread };
 }
 
 /** Stdout is the protocol channel: anything else printing there would corrupt it, so console.log goes to stderr. */
@@ -365,13 +375,22 @@ export function createMcpServer(reader: PostPileReader, options: McpServerOption
       title: 'Search PostPile PRs',
       description: SEARCH_DESCRIPTION,
       inputSchema: {
-        query: z.string().trim().min(1, { error: 'query needs at least one word, e.g. query: "depot cache"' }).describe('Words to match, e.g. "depot cache" or "rowan"'),
+        query: z
+          .string()
+          .trim()
+          .min(1, { error: 'query needs at least one word, e.g. query: "depot cache"' })
+          .optional()
+          .describe('Words to match, e.g. "depot cache" or "rowan"; optional when a filter such as unread is set'),
         ...listShape('any'),
+        unread: z
+          .union([z.boolean(), z.literal('any')], { error: 'unread must be true, false or "any", e.g. unread: true' })
+          .default('any')
+          .describe("true: only PRs with the app's unread dot; false: only read ones; any (default)"),
         format: formatSchema,
       },
       annotations: READ_ONLY,
     },
-    (args) => reply('search_prs', () => searchPrs(ctx, args.query, listOptions(args), args.format)),
+    (args) => reply('search_prs', () => searchPrs(ctx, args.query ?? null, searchOptions(args), args.format)),
   );
 
   server.registerTool(
@@ -379,7 +398,7 @@ export function createMcpServer(reader: PostPileReader, options: McpServerOption
     {
       title: 'What waits on the user',
       description: WHATS_ON_ME_DESCRIPTION,
-      inputSchema: { ...listShape('open'), author_scope: authorScopeSchema, format: formatSchema },
+      inputSchema: { ...listShape('any'), author_scope: authorScopeSchema, unread_only: unreadOnlySchema, format: formatSchema },
       annotations: READ_ONLY,
     },
     (args) => reply('whats_on_me', () => whatsOnMe(ctx, queueOptions(args), args.format)),

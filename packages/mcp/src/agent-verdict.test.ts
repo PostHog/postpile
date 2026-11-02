@@ -14,7 +14,7 @@ import { prContext, searchPrs, whatsOnMe, type QueueOptions, type ReadContext } 
 
 const VIEWER: Viewer = { login: 'alice', teams: ['acme/team-platform'] };
 const NOW = new Date('2026-09-01T10:00:00Z');
-const LIST: QueueOptions = { limit: 25, offset: 0, state: 'open', repo: null, whoseMove: 'any', agentVerdict: 'any', authorScope: 'any' };
+const LIST: QueueOptions = { limit: 25, offset: 0, state: 'open', repo: null, whoseMove: 'any', agentVerdict: 'any', authorScope: 'any', unreadOnly: false };
 const UPDATED = '2026-09-01T09:00:00Z';
 const BOT = 'stamphog[bot]';
 
@@ -129,7 +129,7 @@ describe('MCP: agent approver verdicts', () => {
     const approved = (await whatsOnMe(ctx, { ...LIST, agentVerdict: 'approved' }, 'json')).structured as { rows: { prs: { key: string }[] }[] };
     expect(approved.rows.flatMap((row) => row.prs.map((pr) => pr.key))).toEqual(['acme/app#4']);
 
-    const search = (await searchPrs(ctx, 'bob', { ...LIST, agentVerdict: 'declined' })).text;
+    const search = (await searchPrs(ctx, 'bob', { ...LIST, agentVerdict: 'declined', unread: null })).text;
     expect(search).toContain('acme/app#3');
     expect(search).toContain('· stamphog declined');
     expect(search).not.toContain('acme/app#4');
