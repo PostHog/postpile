@@ -45,20 +45,17 @@ export class GlancePings {
 
   /**
    * Where the PR sits now and who opened it; Unsorted counts as no topic.
-   * A PR off the hot board (read since it pinged, on a busy install) falls
-   * back to its stored header and topic membership.
+   * The topic comes from the board either way (a stack layer sits in its
+   * stack's topic); a PR off the hot board (read since it pinged, on a busy
+   * install) takes its author from the stored header.
    */
   private seriesPr(board: Board, prKey: PrKey, at: IsoTime): LookCloserSeriesPr | null {
-    const onBoard = board.prs.get(prKey);
-    if (onBoard) {
-      const topicId = board.topicIdOf(prKey);
-      return { prKey, topicId: topicId === UNSORTED_TOPIC_ID ? null : topicId, author: onBoard.author, at };
-    }
-    const stored = this.store.prs.get(prKey);
-    if (stored === null) {
+    const pr = board.prs.get(prKey) ?? this.store.prs.get(prKey);
+    if (!pr) {
       return null;
     }
-    return { prKey, topicId: this.store.memberships.get(prKey)?.topicId ?? null, author: stored.author, at };
+    const topicId = board.topicIdOf(prKey);
+    return { prKey, topicId: topicId === UNSORTED_TOPIC_ID ? null : topicId, author: pr.author, at };
   }
 
   /** The Look closer pings of the last hour, read from the ping decisions. */
