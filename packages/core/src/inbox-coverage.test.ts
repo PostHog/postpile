@@ -58,6 +58,16 @@ describe('rowClears', () => {
     expect(rowClears({ turn: teamMention, prs })).toBe('reply on GitHub; mark_read does not');
   });
 
+  it('clears on read when every move in the tile is a team mention', () => {
+    const first: WhoseTurn = { kind: 'you', move: 'reply', what: 'ines mentioned your team', who: null, prKey: 'acme/app#2', teamAsk: true };
+    const second: WhoseTurn = { ...first, prKey: 'acme/app#3' };
+    const prs = [
+      { key: 'acme/app#2', turn: first },
+      { key: 'acme/app#3', turn: second },
+    ];
+    expect(rowClears({ turn: first, prs })).toBe('mark_read with the seen_through from pr_context (a team mention asks only until read)');
+  });
+
   it('sends a tile without a move to mark_read through pr_context', () => {
     expect(rowClears({ turn: NONE, prs: [] })).toBe('mark_read with the seen_through from pr_context');
   });

@@ -66,9 +66,9 @@ export const READ_CLEARS = 'mark_read with the seen_through from pr_context';
 /** A team mention asks only until it is read. */
 const TEAM_ASK_CLEARS = 'mark_read with the seen_through from pr_context (a team mention asks only until read)';
 
-/** No other PR of the tile has a move of its own, so clearing the turn's PR clears the tile. */
-function onlyMoveOfTile(view: Pick<TileView, 'turn'> & { prs: Pick<PrSummary, 'key' | 'turn'>[] }): boolean {
-  return view.prs.every((pr) => pr.key === view.turn.prKey || pr.turn.kind !== 'you');
+/** Every PR of the tile with a move has one that clears on read (`teamAsk`), so reading the tile's unread PRs clears the row. */
+function allMovesClearOnRead(view: { prs: Pick<PrSummary, 'turn'>[] }): boolean {
+  return view.prs.every((pr) => pr.turn.kind !== 'you' || pr.turn.teamAsk === true);
 }
 
 /** "review, or remove the request on GitHub; mark_read does not": what clears the tile's row. */
@@ -76,7 +76,7 @@ export function rowClears(view: Pick<TileView, 'turn'> & { prs: Pick<PrSummary, 
   if (view.turn.kind !== 'you') {
     return READ_CLEARS;
   }
-  if (view.turn.teamAsk && onlyMoveOfTile(view)) {
+  if (view.turn.teamAsk && allMovesClearOnRead(view)) {
     return TEAM_ASK_CLEARS;
   }
   return MOVE_CLEARS[view.turn.move];
