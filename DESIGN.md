@@ -9087,16 +9087,43 @@ how they answer is under "Tool design" below):
   topic. Brief: goal, status, open questions, one line per tile (15 at
   most). Full: the whole dossier and every PR. Both list pending topic
   suggestions and the ones decided in the last 14 days.
-- `search_prs(query, limit, offset, state, repo, whose_move)`: the search
-  bar's matcher, 25 per page (100 at most).
-- `whats_on_me(limit, offset, state, repo, whose_move, author_scope)`: live
-  tiles in `needs_you` topics where it is the user's move, then unread ones
-  where it is not; open PRs by default. Each tile lists its PRs one line
-  each: key, author with its tag, and review counts. A tile matches the
-  state filter when any of its PRs does, so a live stack tile also lists
-  its merged and closed layers: those say so after the key, "acme/app#1930
-  (closed) by rowan" (2026-10-10; before, nothing told an agent which
-  layers were left to act on).
+- `search_prs(query, limit, offset, state, repo, whose_move, unread)`: the
+  search bar's matcher, 25 per page (100 at most). `unread` (true, false,
+  any; default any) keeps PRs with the app's unread dot (`TileView.unreadPrKeys`)
+  or without; each row says "unread". With any filter set, `query` is
+  optional: it then lists the PRs in the user's topics (no scouted ones),
+  so an agent can list every unread PR without guessing words. A queryless
+  call without a filter is a tool error (2026-11-02).
+- `whats_on_me(limit, offset, state, repo, whose_move, author_scope,
+  unread_only)`: every topic, in four groups: live tiles where it is the
+  user's move (then the ones every PR of which carries an agent note), then
+  tiles in the Unread group (`tileGroup`, so a snoozed tile with a thread
+  unread on GitHub too) with an open PR or an ask, then "Unread, nothing to
+  do" (`isUnreadNothingToDo`: every PR merged or closed, no ask tier, not the
+  user's move). The last group prints one line per topic with its PR keys,
+  "(unread)" on the unread ones, since an agent needs them for
+  `pr_context`. All states by default. `unread_only` drops your-move tiles
+  the user already read. Each tile lists its PRs one line each: key,
+  author with its tag, its marks (`prMarks`: "unread", "owns the move:
+  review" on the PR the tile's turn names, "context layer (merged)" on a
+  merged or closed layer) and review counts. A tile matches the state
+  filter when any of its PRs does, so a live stack tile also lists its
+  merged and closed layers.
+  Every row says what clears it (`rowClears`): a move clears on GitHub
+  ("clears: review, or remove the request on GitHub; mark_read does not"),
+  a team mention (`WhoseTurn.teamAsk`: it asks only until read) and a
+  tile without a move clear with `mark_read`.
+  Before 2026-11-02 the list read `needs_you` topics only, skipped snoozed
+  tiles and said nothing about clearing: an agent clearing the inbox made
+  about 60 mark_read calls and the app's numbers barely moved, since topics
+  whose unread tiles were all merged never showed and review requests
+  stayed.
+  The header always has a coverage line: the app's own counts
+  (`inboxTotals` over `listTopics`: unread tiles, unread PRs counted once
+  across topics, your-move tiles), how many tiles the answer lists and how
+  many the filters left out, and which filters. A paged answer says
+  "Showing 1-25 of 40 tiles". List rows never print `seen_through`:
+  mark_read still needs a `pr_context` read.
   The tile line ends with "fetched N ago",
   the oldest fetch of its PRs (`PrSummary.fetchedAt`, the same
   `pr.fetched_at` that `pr_context` reads), so a list read during a sync
@@ -9148,8 +9175,9 @@ structuredContent on every answer, text ones included.
   (`prOverlaps`: other PR, base-side line ranges, file path under
   `untrusted`, `diffCapped`) and in `pr_context` the merge-after `dependsOn`
   (`dependsOnKey`, the same check as the "Depends on" line).
-- Shapes: `whats_on_me` {meta, filters, page, yourMoveTotal, rows: [{tile,
-  topic, fetchedAt, prs}]}; `search_prs` {meta, filters, page, prs};
+- Shapes: `whats_on_me` {meta, filters, coverage, page, yourMoveTotal,
+  rows: [{group, clears, tile, topic, fetchedAt, prs (each with marks)}]};
+  `search_prs` {meta, filters, page, prs (each with marks)};
   `pr_context` {meta, prs (with stack), topics (with prKeys), errors};
   `topic` {meta, topic, tiles, prs, suggestions (pending and recently
   decided, with their outcome, so a JSON caller does not repeat a rejected
@@ -9322,9 +9350,10 @@ spec, GitHub's, Sentry's and Linear's MCP servers. What it means here:
   tokens; brief answers aim well under 3k.
 - **Paging and filters** on `search_prs` and `whats_on_me`: `limit` (default
   25, max 100), `offset`, and flat optional filters `state` (open, merged,
-  closed, any; default open for `whats_on_me`, any for search), `repo`
-  (`owner/name`), `whose_move` (you, them, any), and on `whats_on_me` also
-  `author_scope` (me, my_team, others, any). A cut list ends with "N more:
+  closed, any; default any, for `whats_on_me` too since 2026-11-02), `repo`
+  (`owner/name`), `whose_move` (you, them, any), on `whats_on_me` also
+  `author_scope` (me, my_team, others, any) and `unread_only`, on
+  `search_prs` also `unread`. A cut list ends with "N more:
   offset: 25". Topic reads are batched, no read per match.
 - **Errors are tool errors** (`isError: true`) with the fix and an example:
   unparseable, ambiguous or unknown PR or topic, a bad filter, a search

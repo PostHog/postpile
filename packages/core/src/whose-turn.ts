@@ -74,6 +74,12 @@ interface TurnFields {
    * Absent on every other turn.
    */
   reviewAsk?: 'picked' | 'pulled_in';
+  /**
+   * you, move reply only: the ask is a team mention, which asks only until
+   * it is read (`isUnansweredAsk`), so marking read clears it. Absent on
+   * every other turn, and when a personal review request rides along.
+   */
+  teamAsk?: true;
 }
 
 /**
@@ -563,7 +569,8 @@ function prTurn(ctx: PrContext): WhoseTurn {
     const reviewToo = isPrOwner(ctx.pr, ctx.viewer.login)
       ? false
       : isPersonalRequest(reviewRequest(ctx.pr, ctx.viewer)) && viewerHeadReview(ctx.pr, ctx.viewer) === null && !isApprovedByViewer(ctx.pr, ctx.userState, ctx.viewer.login);
-    return youSince(ctx, 'reply', askText(ctx, ask, reviewToo), ask.at);
+    const turn = youSince(ctx, 'reply', askText(ctx, ask, reviewToo), ask.at);
+    return askKindOf(ask, ctx.pr, ctx.viewer) === 'team_mention' && !reviewToo ? { ...turn, teamAsk: true } : turn;
   }
   const queue = queueTurn(ctx);
   if (queue) {

@@ -1923,6 +1923,16 @@ the app meanwhile.
 
 ## Decided
 
+- **whats_on_me lists every unread PR and says what clears it**
+  (2026-11-02; DESIGN.md "MCP server"): every topic, a last group "Unread,
+  nothing to do" for unread tiles whose PRs are all merged or closed and
+  ask nothing, snoozed tiles with an unread thread, a coverage line with
+  the app's own counts, per-PR marks and a "clears:" note per row.
+  `search_prs` takes `unread` and works without a query when a filter is
+  set. Rejected: a mark_read token on list rows (`whats_on_me`,
+  `search_prs`); mark_read keeps needing a `pr_context` read. Deferred: a
+  "clear by rule" bulk clear (e.g. every merged, unasked tile); if built,
+  it must need acceptance in the app, never an agent-set confirm flag.
 - **No read or scout for the team's PRs outside the inbox** (2026-10-30,
   owner): PostPile does not read or scout the team's open PRs that never
   reached the user's inbox; teammates may assign reviews to each other on
