@@ -43,17 +43,25 @@ export class GlancePings {
     private readonly now: () => Date,
   ) {}
 
-  /** Where the PR sits now and who opened it; Unsorted counts as no topic. */
+  /**
+   * Where the PR sits now and who opened it; Unsorted counts as no topic.
+   * A PR off the hot board (read since it pinged, on a busy install) falls
+   * back to its stored header and topic membership.
+   */
   private seriesPr(board: Board, prKey: PrKey, at: IsoTime): LookCloserSeriesPr | null {
-    const pr = board.prs.get(prKey);
-    if (!pr) {
+    const onBoard = board.prs.get(prKey);
+    if (onBoard) {
+      const topicId = board.topicIdOf(prKey);
+      return { prKey, topicId: topicId === UNSORTED_TOPIC_ID ? null : topicId, author: onBoard.author, at };
+    }
+    const stored = this.store.prs.get(prKey);
+    if (stored === null) {
       return null;
     }
-    const topicId = board.topicIdOf(prKey);
-    return { prKey, topicId: topicId === UNSORTED_TOPIC_ID ? null : topicId, author: pr.author, at };
+    return { prKey, topicId: this.store.memberships.get(prKey)?.topicId ?? null, author: stored.author, at };
   }
 
-  /** The Look closer pings of the last hour, read from the ping decisions (pings of this batch included). */
+  /** The Look closer pings of the last hour, read from the ping decisions. */
   private recentPings(board: Board, at: IsoTime): LookCloserSeriesPr[] {
     const since = new Date(new Date(at).getTime() - LOOK_CLOSER_FOLD_MS).toISOString();
     const recent: LookCloserSeriesPr[] = [];
@@ -73,6 +81,8 @@ export class GlancePings {
     if (viewer === null) {
       return;
     }
+    // Read once per batch when the first ping is due; this batch's pings are added as they go out.
+    let recent: LookCloserSeriesPr[] | null = null;
     for (const key of new Set(prKeys)) {
       const pr = board.prs.get(key);
       const thread = board.threads.get(key);
@@ -95,7 +105,8 @@ export class GlancePings {
       const text = lookCloserPingText(pr, check.team, glance);
       const event = lookCloserEvent(pr, check.team, check.requestId, at);
       const candidate = this.seriesPr(board, key, at);
-      const foldedBy = candidate === null ? null : lookCloserFoldedBy(candidate, this.recentPings(board, at));
+      recent ??= this.recentPings(board, at);
+      const foldedBy = candidate === null ? null : lookCloserFoldedBy(candidate, recent);
       const reason = foldedBy === null ? lookCloserReason(check.team) : lookCloserFoldReason(foldedBy, at);
       this.store.transaction(() => {
         this.store.meta.set(lookCloserMetaKey(key), check.requestId);
@@ -106,6 +117,9 @@ export class GlancePings {
       });
       if (foldedBy !== null) {
         continue;
+      }
+      if (candidate !== null) {
+        recent.push(candidate);
       }
       const place = placeOnBoard(board, key);
       this.waiting.push({ ...text, target: { topicId: place?.topicId ?? null, tileId: place?.tile?.id ?? null, prKey: key }, personal: false });

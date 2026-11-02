@@ -73,9 +73,9 @@ export class PingDecisionRepo {
     ).map(toDecision);
   }
 
-  /** Look closer pings that went out (source `glance`, ping on) after `since`, newest first. */
+  /** Look closer pings that went out (source `glance`, ping on) after `since`, newest first. Reads through the `at` index. */
   listGlancePingsSince(since: string): PingDecision[] {
-    return all<PingDecisionRow>(this.db, "SELECT * FROM ping_decision WHERE source = 'glance' AND ping = 1 AND at > ? ORDER BY id DESC", since).map(toDecision);
+    return all<PingDecisionRow>(this.db, "SELECT * FROM ping_decision WHERE at > ? AND source = 'glance' AND ping = 1 ORDER BY at DESC, id DESC", since).map(toDecision);
   }
 
   /**
