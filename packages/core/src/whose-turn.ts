@@ -76,8 +76,9 @@ interface TurnFields {
   reviewAsk?: 'picked' | 'pulled_in';
   /**
    * you, move reply only: the ask is a team mention, which asks only until
-   * it is read (`isUnansweredAsk`), so marking read clears it. Absent on
-   * every other turn, and when a personal review request rides along.
+   * it is read (`isUnansweredAsk`), and nothing else waits on the viewer
+   * once it is (no older personal ask, no review or other move), so
+   * marking read clears the move. Absent on every other turn.
    */
   teamAsk?: true;
 }
@@ -551,6 +552,27 @@ function mergedTurn(ctx: PrContext): WhoseTurn {
   return youSince(ctx, 'reply', askText(ctx, ask, false), ask.at);
 }
 
+/** The turn once every ask is answered: the merge queue, then the owner's or reviewer's move. */
+function turnWithoutAsks(ctx: PrContext): WhoseTurn {
+  const queue = queueTurn(ctx);
+  if (queue) {
+    return queue;
+  }
+  return isPrOwner(ctx.pr, ctx.viewer.login) ? ownPrTurn(ctx) : othersPrTurn(ctx);
+}
+
+/**
+ * Reading a team mention clears the whole move only when nothing else asks
+ * the viewer: no older personal ask behind it, and no review or other move
+ * once the asks are gone.
+ */
+function readClearsTeamAsk(ctx: PrContext): boolean {
+  if (unansweredAsk(ctx.pr, ctx.events, ctx.viewer, PERSONAL_ASK_KINDS) !== null) {
+    return false;
+  }
+  return turnWithoutAsks(ctx).kind !== 'you';
+}
+
 function prTurn(ctx: PrContext): WhoseTurn {
   if (ctx.pr.state !== 'OPEN') {
     return mergedTurn(ctx);
@@ -570,13 +592,9 @@ function prTurn(ctx: PrContext): WhoseTurn {
       ? false
       : isPersonalRequest(reviewRequest(ctx.pr, ctx.viewer)) && viewerHeadReview(ctx.pr, ctx.viewer) === null && !isApprovedByViewer(ctx.pr, ctx.userState, ctx.viewer.login);
     const turn = youSince(ctx, 'reply', askText(ctx, ask, reviewToo), ask.at);
-    return askKindOf(ask, ctx.pr, ctx.viewer) === 'team_mention' && !reviewToo ? { ...turn, teamAsk: true } : turn;
+    return askKindOf(ask, ctx.pr, ctx.viewer) === 'team_mention' && readClearsTeamAsk(ctx) ? { ...turn, teamAsk: true } : turn;
   }
-  const queue = queueTurn(ctx);
-  if (queue) {
-    return queue;
-  }
-  return isPrOwner(ctx.pr, ctx.viewer.login) ? ownPrTurn(ctx) : othersPrTurn(ctx);
+  return turnWithoutAsks(ctx);
 }
 
 /** Whose move it is on one PR, as a single-PR tile would say it (tracked or not). */

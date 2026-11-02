@@ -3,9 +3,9 @@
 // tiles have nothing left to do, which PR of a tile owns the move, and what
 // clears a move. Marking read clears the unread, never a move or an ask.
 import { ASK_TIERS, type PrTier } from './pr-tier.ts';
-import type { PrKey, PrState } from './types.ts';
+import type { PrState } from './types.ts';
 import type { PrSummary, TileView, TopicListItem } from './views.ts';
-import type { YourMove } from './whose-turn.ts';
+import type { WhoseTurn, YourMove } from './whose-turn.ts';
 
 export interface InboxTotals {
   /** Tiles in the Unread group, snoozed ones with an unread thread too: the footer's number. */
@@ -66,12 +66,17 @@ export const READ_CLEARS = 'mark_read with the seen_through from pr_context';
 /** A team mention asks only until it is read. */
 const TEAM_ASK_CLEARS = 'mark_read with the seen_through from pr_context (a team mention asks only until read)';
 
+/** No other PR of the tile has a move of its own, so clearing the turn's PR clears the tile. */
+function onlyMoveOfTile(view: Pick<TileView, 'turn'> & { prs: Pick<PrSummary, 'key' | 'turn'>[] }): boolean {
+  return view.prs.every((pr) => pr.key === view.turn.prKey || pr.turn.kind !== 'you');
+}
+
 /** "review, or remove the request on GitHub; mark_read does not": what clears the tile's row. */
-export function rowClears(view: Pick<TileView, 'turn'>): string {
+export function rowClears(view: Pick<TileView, 'turn'> & { prs: Pick<PrSummary, 'key' | 'turn'>[] }): string {
   if (view.turn.kind !== 'you') {
     return READ_CLEARS;
   }
-  if (view.turn.teamAsk) {
+  if (view.turn.teamAsk && onlyMoveOfTile(view)) {
     return TEAM_ASK_CLEARS;
   }
   return MOVE_CLEARS[view.turn.move];
@@ -91,20 +96,23 @@ export interface PrMarks {
   unread: boolean;
   /** The user's move when the tile's turn names this PR (`WhoseTurn.prKey`), else null. */
   ownsMove: YourMove | null;
-  /** merged or closed: a layer kept for context, nothing to act on. Null on an open PR. */
+  /** merged or closed with no move of its own: a layer kept for context. Null on an open PR, and on a merged one with an ask after the merge. */
   contextLayer: 'merged' | 'closed' | null;
 }
 
-function contextLayerOf(state: PrState): PrMarks['contextLayer'] {
+function contextLayerOf(state: PrState, turn: WhoseTurn): PrMarks['contextLayer'] {
+  if (turn.kind === 'you') {
+    return null;
+  }
   if (state === 'MERGED') {
     return 'merged';
   }
   return state === 'CLOSED' ? 'closed' : null;
 }
 
-export function prMarks(view: Pick<TileView, 'turn' | 'unreadPrKeys'>, pr: { key: PrKey; state: PrState }): PrMarks {
+export function prMarks(view: Pick<TileView, 'turn' | 'unreadPrKeys'>, pr: Pick<PrSummary, 'key' | 'state' | 'turn'>): PrMarks {
   const ownsMove = view.turn.kind === 'you' && view.turn.prKey === pr.key ? view.turn.move : null;
-  return { unread: view.unreadPrKeys.includes(pr.key), ownsMove, contextLayer: contextLayerOf(pr.state) };
+  return { unread: view.unreadPrKeys.includes(pr.key), ownsMove, contextLayer: contextLayerOf(pr.state, pr.turn) };
 }
 
 /** "context layer (merged), unread": the marks as words, empty when there are none. */

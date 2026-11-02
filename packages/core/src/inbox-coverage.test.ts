@@ -40,30 +40,45 @@ describe('isUnreadNothingToDo', () => {
 
 describe('rowClears', () => {
   it('says marking read never clears a move', () => {
-    expect(rowClears({ turn: TEAM_REVIEW })).toBe('review, or remove the request on GitHub; mark_read does not');
-    expect(rowClears({ turn: { ...TEAM_REVIEW, move: 'reply' } })).toBe('reply on GitHub; mark_read does not');
+    expect(rowClears({ turn: TEAM_REVIEW, prs: [] })).toBe('review, or remove the request on GitHub; mark_read does not');
+    expect(rowClears({ turn: { ...TEAM_REVIEW, move: 'reply' }, prs: [] })).toBe('reply on GitHub; mark_read does not');
   });
 
   it('clears a team mention on read, the one ask that does', () => {
     const teamMention: WhoseTurn = { kind: 'you', move: 'reply', what: 'ines mentioned your team', who: null, prKey: 'acme/app#2', teamAsk: true };
-    expect(rowClears({ turn: teamMention })).toBe('mark_read with the seen_through from pr_context (a team mention asks only until read)');
+    expect(rowClears({ turn: teamMention, prs: [{ key: 'acme/app#2', turn: teamMention }] })).toBe('mark_read with the seen_through from pr_context (a team mention asks only until read)');
+  });
+
+  it('keeps a team mention on GitHub when another PR of the tile has a move of its own', () => {
+    const teamMention: WhoseTurn = { kind: 'you', move: 'reply', what: 'ines mentioned your team', who: null, prKey: 'acme/app#2', teamAsk: true };
+    const prs = [
+      { key: 'acme/app#2', turn: teamMention },
+      { key: 'acme/app#4', turn: TEAM_REVIEW },
+    ];
+    expect(rowClears({ turn: teamMention, prs })).toBe('reply on GitHub; mark_read does not');
   });
 
   it('sends a tile without a move to mark_read through pr_context', () => {
-    expect(rowClears({ turn: NONE })).toBe('mark_read with the seen_through from pr_context');
+    expect(rowClears({ turn: NONE, prs: [] })).toBe('mark_read with the seen_through from pr_context');
   });
 });
 
 describe('prMarks', () => {
   it('marks merged layers as context and the open top layer as owning the move', () => {
     const tile = { turn: TEAM_REVIEW, unreadPrKeys: ['acme/app#3', 'acme/app#4'] };
-    expect(prMarksText(prMarks(tile, { key: 'acme/app#1', state: 'MERGED' }))).toBe('context layer (merged)');
-    expect(prMarksText(prMarks(tile, { key: 'acme/app#3', state: 'CLOSED' }))).toBe('context layer (closed), unread');
-    expect(prMarks(tile, { key: 'acme/app#4', state: 'OPEN' })).toEqual({ unread: true, ownsMove: 'review', contextLayer: null });
-    expect(prMarksText(prMarks(tile, { key: 'acme/app#4', state: 'OPEN' }))).toBe('unread, owns the move: review');
+    expect(prMarksText(prMarks(tile, { key: 'acme/app#1', state: 'MERGED', turn: NONE }))).toBe('context layer (merged)');
+    expect(prMarksText(prMarks(tile, { key: 'acme/app#3', state: 'CLOSED', turn: NONE }))).toBe('context layer (closed), unread');
+    expect(prMarks(tile, { key: 'acme/app#4', state: 'OPEN', turn: TEAM_REVIEW })).toEqual({ unread: true, ownsMove: 'review', contextLayer: null });
+    expect(prMarksText(prMarks(tile, { key: 'acme/app#4', state: 'OPEN', turn: TEAM_REVIEW }))).toBe('unread, owns the move: review');
+  });
+
+  it('never calls a merged PR with an ask after the merge a context layer', () => {
+    const askAfterMerge: WhoseTurn = { kind: 'you', move: 'reply', what: "Answer jude's question", who: null, prKey: 'acme/app#1' };
+    const marks = prMarks({ turn: askAfterMerge, unreadPrKeys: ['acme/app#1'] }, { key: 'acme/app#1', state: 'MERGED', turn: askAfterMerge });
+    expect(marks).toEqual({ unread: true, ownsMove: 'reply', contextLayer: null });
   });
 
   it('marks nothing on an open, read PR without the move', () => {
-    expect(prMarksText(prMarks({ turn: NONE, unreadPrKeys: [] }, { key: 'acme/app#5', state: 'OPEN' }))).toBe('');
+    expect(prMarksText(prMarks({ turn: NONE, unreadPrKeys: [] }, { key: 'acme/app#5', state: 'OPEN', turn: NONE }))).toBe('');
   });
 });
