@@ -600,14 +600,17 @@ export function talksToBotSpec(pr: Pr, comment: Comment): boolean {
  * reviews only when asked. Bot talk and the empty reviews carrying thread
  * replies are not speaking (2026-10-06).
  */
-/** Every time `login` spoke on the PR: reviews (no carriers) and, unless `reviewsOnly`, comments that do not talk to a bot. */
-function spokeTimes(pr: Pr, login: string, reviewsOnly = false): IsoTime[] {
+/**
+ * Every time `login` spoke on the PR: reviews (no carriers) and, unless
+ * `reviewsOnly`, comments that do not talk to a bot. `peopleOnly` also
+ * leaves out automated comments sent through the account.
+ */
+function spokeTimes(pr: Pr, login: string, reviewsOnly = false, peopleOnly = false): IsoTime[] {
   const reviews = pr.reviews
     .filter((review) => review.state !== 'PENDING' && sameLogin(review.author, login) && !isCarrier(pr, review))
     .map((review) => review.submittedAt);
-  const comments = reviewsOnly
-    ? []
-    : pr.comments.filter((comment) => sameLogin(comment.author, login) && !talksToBotSpec(pr, comment)).map((comment) => comment.createdAt);
+  const spoken = (comment: Comment) => !talksToBotSpec(pr, comment) && !(peopleOnly && isMachineComment(comment));
+  const comments = reviewsOnly ? [] : pr.comments.filter((comment) => sameLogin(comment.author, login) && spoken(comment)).map((comment) => comment.createdAt);
   return [...reviews, ...comments];
 }
 
@@ -630,8 +633,8 @@ export function someonePushedAfter(pr: Pr, reviewer: string, since: IsoTime): bo
 
 export interface SpecChangesAnswer {
   since: IsoTime;
-  /** The first push or owner reply after `since`: it opens the round, the only loud part of the answer. */
-  at: IsoTime;
+  /** The first push or owner reply in a person's words after `since`: it opens the round, the only loud part of the answer. Null when only automated comments answered. */
+  openerAt: IsoTime | null;
   pushed: boolean;
   replied: boolean;
 }
@@ -649,11 +652,12 @@ export function changesAnswer(pr: Pr, viewer: Viewer): SpecChangesAnswer | null 
   const since = lastSpoke(pr, viewer.login)!;
   const pushes = pushTimesAfter(pr, viewer.login, since);
   const replies = specOwners(pr).flatMap((owner) => spokeTimes(pr, owner).filter((time) => time > since));
-  const at = [...pushes, ...replies].sort()[0];
-  if (at === undefined) {
+  if (pushes.length === 0 && replies.length === 0) {
     return null;
   }
-  return { since, at, pushed: pushes.length > 0, replied: replies.length > 0 };
+  const personReplies = specOwners(pr).flatMap((owner) => spokeTimes(pr, owner, false, true).filter((time) => time > since));
+  const openerAt = [...pushes, ...personReplies].sort()[0] ?? null;
+  return { since, openerAt, pushed: pushes.length > 0, replied: replies.length > 0 };
 }
 
 /** Asked to re-review: still asks for changes, pending as a reviewer again, and a human pushed after the verdict. */

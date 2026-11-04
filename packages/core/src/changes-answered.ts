@@ -3,7 +3,9 @@
 // viewer even when the author never pressed "re-request review". Rules only;
 // whose turn, tiers, for whom, loudness and pings all read it from here.
 // DESIGN.md "Whose turn" has the rule.
+import { isBotTalk } from './bot-talk.ts';
 import { isBot } from './bots.ts';
+import { isCarrierReview } from './carrier-reviews.ts';
 import { PUSH_KINDS } from './kinds.ts';
 import { firstSpokeAfter, lastSpokeAt } from './last-touch.ts';
 import { sameLogin } from './mentions.ts';
@@ -115,16 +117,38 @@ export function isChangesAnswerEvent(event: { kind: EventKind; actor: string; at
 }
 
 /**
+ * When `owner` first replied after `since` in a person's words: a comment
+ * that is no bot talk (`isBotTalk` also leaves out automated comments sent
+ * through their account), or a review that is no carrier. Such a comment
+ * counts as speaking for `changesAnswered`, but its event is quiet bot
+ * activity, so it must not open the round.
+ */
+function firstPersonReplyAfter(pr: Pr, owner: string, since: IsoTime): IsoTime | null {
+  const comments = pr.comments
+    .filter((comment) => sameLogin(comment.author, owner) && comment.createdAt > since && !isBotTalk(comment, pr))
+    .map((comment) => comment.createdAt);
+  const reviews = pr.reviews
+    .filter((review) => sameLogin(review.author, owner) && review.state !== 'PENDING' && review.submittedAt > since && !isCarrierReview(review, pr))
+    .map((review) => review.submittedAt);
+  return oldestOf([...comments, ...reviews]);
+}
+
+/**
  * The event opens the round: it is part of the author's answer
- * (`isChangesAnswerEvent`) and is the first push or reply after the
- * viewer's last word (`ChangesAnswer.at`). Later pushes and replies in the
- * same round are still part of the answer, but only the opener is loud, so
- * an author's run of pushes pings once. A new round starts when the viewer
- * speaks again (`since` moves) (2026-11-04).
+ * (`isChangesAnswerEvent`) and is the first push or person's reply after
+ * the viewer's last word (`firstPersonReplyAfter`). Later pushes and
+ * replies in the same round are still part of the answer, but only the
+ * opener is loud, so an author's run of pushes pings once. A new round
+ * starts when the viewer speaks again (`since` moves) (2026-11-04).
  */
 export function opensChangesAnswer(event: { kind: EventKind; actor: string; at: IsoTime }, pr: Pr, viewer: Viewer): boolean {
   const answer = changesAnswered(pr, viewer);
-  if (answer === null || event.at !== answer.at) {
+  if (answer === null) {
+    return false;
+  }
+  const pushAt = firstPushAfter(pr, viewer.login, answer.since);
+  const replyAt = oldestOf(prOwners(pr).map((owner) => firstPersonReplyAfter(pr, owner, answer.since)));
+  if (event.at !== oldestOf([pushAt, replyAt])) {
     return false;
   }
   return isChangesAnswerEvent(event, pr, viewer);

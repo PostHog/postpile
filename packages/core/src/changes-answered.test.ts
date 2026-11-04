@@ -268,6 +268,14 @@ describe('addressed your changes: one ping per round', () => {
     expect(loudness['p1']?.[0]).toBe('quiet');
   });
 
+  it('lets the first push open the round when an automated comment through the owner account came first', () => {
+    const automated = makeComment({ id: 'auto1', author: 'bob', body: 'This is an automated comment: preview deployed', createdAt: '2026-10-02T09:30:00.000Z' });
+    const loudness = loudnessBySource(series({ comments: [automated] }));
+    expect(loudness['auto1']?.[0]).toBe('quiet');
+    expect(loudness['p1']).toEqual(['loud', 'addressed your changes']);
+    expect(loudness['p2']).toEqual(['quiet', 'pushed again after addressing your changes']);
+  });
+
   it('keeps an owner reply aimed at the viewer loud later in the round', () => {
     const viewerThread = makeComment({ id: 'vt1', author: me, body: 'Split this file', createdAt: '2026-10-01T10:00:00.000Z' });
     const ownerReply = makeComment({ id: 'vt2', author: 'bob', body: 'Done, which name do you prefer?', createdAt: '2026-10-02T12:30:00.000Z' });

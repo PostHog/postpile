@@ -321,7 +321,7 @@ function loudnessOf(pr: Pr, viewer: Viewer, event: RawExpected): { loudness: Lou
   }
   // One ping per round of the author's answer (2026-11-04): only the first push or reply after the viewer's last word is loud.
   if (answersChanges(pr, viewer, event)) {
-    if (event.at === changesAnswer(pr, viewer)!.at) {
+    if (event.at === changesAnswer(pr, viewer)!.openerAt) {
       return loud('addressed your changes');
     }
     return quiet(SPEC_PUSH_KINDS.includes(event.kind) ? 'pushed again after addressing your changes' : 'replied again after addressing your changes');
