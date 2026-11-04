@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { at, makeComment, makeEvent, makePr, makeUserState, viewer } from './fixtures.ts';
+import { deriveEvents } from './events.ts';
+import { at, makeComment, makeEvent, makePr, makeTimelineItem, makeUserState, viewer } from './fixtures.ts';
 import { displayState, effectiveLoudness, findLoudnessRow, isUnseenLoud, ruleLoudness, type LoudnessInput } from './loudness.ts';
+import { isAddressedToViewer } from './pings.ts';
 
 function input(overrides: Partial<LoudnessInput>): LoudnessInput {
   return {
@@ -60,6 +62,18 @@ describe('ruleLoudness', () => {
     expect(ruleLoudness(input({ kind: 'review_requested', subject: 'team-platform' })).loudness).toBe('loud');
     expect(ruleLoudness(input({ kind: 'review_requested', subject: 'carol' })).loudness).toBe('quiet');
     expect(ruleLoudness(input({ kind: 'review_requested', subject: null })).loudness).toBe('quiet');
+  });
+
+  it('keeps a team review request on the viewer own PR quiet, whoever made it', () => {
+    const mine = makePr({ author: 'viewer' });
+    const botRequest = input({ kind: 'review_requested', actor: 'pr-assigner-bot', isBot: true, subject: 'acme/team-platform', pr: mine });
+    expect(ruleLoudness(botRequest)).toEqual({ loudness: 'quiet', reason: 'team review requested on your own PR' });
+    expect(ruleLoudness(input({ kind: 'review_requested', subject: 'team-platform', pr: mine })).reason).toBe('team review requested on your own PR');
+    // On someone else's PR the team request is still for the viewer.
+    expect(ruleLoudness(input({ kind: 'review_requested', actor: 'pr-assigner-bot', isBot: true, subject: 'acme/team-platform' }))).toEqual({
+      loudness: 'loud',
+      reason: 'review requested from you',
+    });
   });
 
   it('keeps new commits after approval quiet; only the agent may raise them', () => {
@@ -176,5 +190,24 @@ describe('loudness table', () => {
       }
     }
     expect(gaps).toEqual([]);
+  });
+});
+
+// An assigner bot asks the viewer's team for a review once they mark their own PR ready: nothing for them to review.
+describe('a bot team request on the viewer own PR', () => {
+  const request = makeTimelineItem({ id: 'tl-assign', kind: 'review_requested', actor: 'pr-assigner[bot]', subject: 'acme/team-platform', at: at(5) });
+
+  it('is quiet and never reaches the pings', () => {
+    const own = makePr({ author: 'viewer', timeline: [request] });
+    const event = deriveEvents(own, viewer, null).find((candidate) => candidate.sourceId === 'tl-assign')!;
+    expect([event.ruleLoudness, event.ruleReason]).toEqual(['quiet', 'team review requested on your own PR']);
+    expect(isAddressedToViewer(event, own, viewer)).toBe(false);
+  });
+
+  it('stays loud on someone else PR', () => {
+    const theirs = makePr({ author: 'alice', timeline: [request] });
+    const event = deriveEvents(theirs, viewer, null).find((candidate) => candidate.sourceId === 'tl-assign')!;
+    expect([event.ruleLoudness, event.ruleReason]).toEqual(['loud', 'review requested from you']);
+    expect(isAddressedToViewer(event, theirs, viewer)).toBe(true);
   });
 });

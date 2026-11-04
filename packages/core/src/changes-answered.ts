@@ -22,8 +22,12 @@ export interface ChangesAnswer {
   at: IsoTime;
 }
 
-/** The loudness reason for the author's push or reply; pings read it for the headline. */
+/** The loudness reason for the author's push or reply that opens a round; pings read it for the headline. */
 export const CHANGES_ANSWERED_REASON = 'addressed your changes';
+
+/** The loudness reasons for the author's later pushes and replies in the same round: quiet, no ping. */
+export const PUSHED_AGAIN_REASON = 'pushed again after addressing your changes';
+export const REPLIED_AGAIN_REASON = 'replied again after addressing your changes';
 
 /** Author events that count as answering the changes request. Thread replies are reply_to_user etc. */
 const ANSWER_KINDS: readonly EventKind[] = [
@@ -108,6 +112,22 @@ export function isChangesAnswerEvent(event: { kind: EventKind; actor: string; at
     return isPusher(event.actor, viewer.login);
   }
   return isPrOwner(pr, event.actor);
+}
+
+/**
+ * The event opens the round: it is part of the author's answer
+ * (`isChangesAnswerEvent`) and is the first push or reply after the
+ * viewer's last word (`ChangesAnswer.at`). Later pushes and replies in the
+ * same round are still part of the answer, but only the opener is loud, so
+ * an author's run of pushes pings once. A new round starts when the viewer
+ * speaks again (`since` moves) (2026-11-04).
+ */
+export function opensChangesAnswer(event: { kind: EventKind; actor: string; at: IsoTime }, pr: Pr, viewer: Viewer): boolean {
+  const answer = changesAnswered(pr, viewer);
+  if (answer === null || event.at !== answer.at) {
+    return false;
+  }
+  return isChangesAnswerEvent(event, pr, viewer);
 }
 
 /**

@@ -600,31 +600,38 @@ export function talksToBotSpec(pr: Pr, comment: Comment): boolean {
  * reviews only when asked. Bot talk and the empty reviews carrying thread
  * replies are not speaking (2026-10-06).
  */
-export function lastSpoke(pr: Pr, login: string, reviewsOnly = false): IsoTime | null {
+/** Every time `login` spoke on the PR: reviews (no carriers) and, unless `reviewsOnly`, comments that do not talk to a bot. */
+function spokeTimes(pr: Pr, login: string, reviewsOnly = false): IsoTime[] {
   const reviews = pr.reviews
     .filter((review) => review.state !== 'PENDING' && sameLogin(review.author, login) && !isCarrier(pr, review))
     .map((review) => review.submittedAt);
   const comments = reviewsOnly
     ? []
     : pr.comments.filter((comment) => sameLogin(comment.author, login) && !talksToBotSpec(pr, comment)).map((comment) => comment.createdAt);
-  return [...reviews, ...comments].sort().at(-1) ?? null;
+  return [...reviews, ...comments];
 }
 
-function spokeAfter(pr: Pr, login: string, at: IsoTime, reviewsOnly = false): boolean {
-  const spoke = lastSpoke(pr, login, reviewsOnly);
-  return spoke !== null && spoke > at;
+export function lastSpoke(pr: Pr, login: string, reviewsOnly = false): IsoTime | null {
+  return spokeTimes(pr, login, reviewsOnly).sort().at(-1) ?? null;
+}
+
+/** When a human other than `reviewer` pushed a commit or force-pushed after `since`. */
+function pushTimesAfter(pr: Pr, reviewer: string, since: IsoTime): IsoTime[] {
+  const pusher = (login: string) => !isAutomationLogin(login) && !sameLogin(login, reviewer);
+  const commits = pr.commits.filter((c) => c.committedAt > since && pusher(c.author)).map((c) => c.committedAt);
+  const forces = pr.timeline.filter((item) => item.kind === 'head_ref_force_pushed' && item.at > since && pusher(item.actor)).map((item) => item.at);
+  return [...commits, ...forces];
 }
 
 /** A human other than `reviewer` pushed a commit or force-pushed after `since`. */
 export function someonePushedAfter(pr: Pr, reviewer: string, since: IsoTime): boolean {
-  const pusher = (login: string) => !isAutomationLogin(login) && !sameLogin(login, reviewer);
-  const commit = pr.commits.some((c) => c.committedAt > since && pusher(c.author));
-  const force = pr.timeline.some((item) => item.kind === 'head_ref_force_pushed' && item.at > since && pusher(item.actor));
-  return commit || force;
+  return pushTimesAfter(pr, reviewer, since).length > 0;
 }
 
 export interface SpecChangesAnswer {
   since: IsoTime;
+  /** The first push or owner reply after `since`: it opens the round, the only loud part of the answer. */
+  at: IsoTime;
   pushed: boolean;
   replied: boolean;
 }
@@ -640,9 +647,13 @@ export function changesAnswer(pr: Pr, viewer: Viewer): SpecChangesAnswer | null 
     return null;
   }
   const since = lastSpoke(pr, viewer.login)!;
-  const pushed = someonePushedAfter(pr, viewer.login, since);
-  const replied = specOwners(pr).some((owner) => spokeAfter(pr, owner, since));
-  return pushed || replied ? { since, pushed, replied } : null;
+  const pushes = pushTimesAfter(pr, viewer.login, since);
+  const replies = specOwners(pr).flatMap((owner) => spokeTimes(pr, owner).filter((time) => time > since));
+  const at = [...pushes, ...replies].sort()[0];
+  if (at === undefined) {
+    return null;
+  }
+  return { since, at, pushed: pushes.length > 0, replied: replies.length > 0 };
 }
 
 /** Asked to re-review: still asks for changes, pending as a reviewer again, and a human pushed after the verdict. */

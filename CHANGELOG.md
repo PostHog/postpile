@@ -2,6 +2,13 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## Unreleased
+
+### Fixed
+
+- An author's run of pushes after you asked for changes notifies once, not on every push. The first push or reply after your last word is still news; later ones in the same round show as quiet until you comment or review again. Replies and questions aimed at you still notify.
+- A review request for your team on your own pull request, such as the one an assigner bot adds when you mark it ready, no longer counts as a review request for you and never notifies.
+
 ## 0.30.0 (2026-11-02)
 
 ### Added
