@@ -8,6 +8,11 @@ Notable changes per release. Versions follow semver. PostPile is alpha software:
 
 - Mac pings are calmer. The agent that decides whether a new comment or review request is worth a ping now defaults to no ping unless a person asked you something in person, sees which pings already went out today, and knows the time. Team review requests only ping when the change needs you in particular.
 
+### Fixed
+
+- An author's run of pushes after you asked for changes notifies once, not on every push. The first push or reply after your last word is still news; later ones in the same round show as quiet until you comment or review again. Replies and questions aimed at you still notify.
+- A review request for your team on your own pull request, such as the one an assigner bot adds when you mark it ready, no longer counts as a review request for you and never notifies.
+
 ## 0.30.0 (2026-11-02)
 
 ### Added

@@ -259,9 +259,9 @@ function spokeAfter(pr: Pr, login: string, at: IsoTime, reviewsOnly = false): bo
 /**
  * Loudness by rule, with the reason the event's line gives. Loud: an
  * addressed kind the viewer has not spoken after, the owner's answer to
- * the viewer's changes request, a review on the viewer's PR (one they own), a review
+ * the viewer's changes request (only its first push or reply per round), a review on the viewer's PR (one they own), a review
  * request for the viewer or their team that is still open on a non-draft
- * PR, ready for review when the viewer was asked, a comment on the
+ * PR someone else owns (or for the viewer in person), ready for review when the viewer was asked, a comment on the
  * viewer's PR, a person's comment edit whose body now mentions the viewer or
  * a home team (not spoken after), trunk's comment or edit that took the
  * viewer's own PR out of the merge queue while it is still out. Never loud:
@@ -319,13 +319,21 @@ function loudnessOf(pr: Pr, viewer: Viewer, event: RawExpected): { loudness: Lou
   if (event.kind === 'comment' && isBotCommandBody(event.body ?? '')) {
     return quiet('a command for a bot');
   }
+  // One ping per round of the author's answer (2026-11-04): only the first push or reply after the viewer's last word is loud.
   if (answersChanges(pr, viewer, event)) {
-    return loud('addressed your changes');
+    if (event.at === changesAnswer(pr, viewer)!.openerAt) {
+      return loud('addressed your changes');
+    }
+    return quiet(SPEC_PUSH_KINDS.includes(event.kind) ? 'pushed again after addressing your changes' : 'replied again after addressing your changes');
   }
   if (SPEC_REVIEW_KINDS.includes(event.kind)) {
     return own ? loud('review on your PR') : quiet('review by someone else');
   }
   if (requestForViewer) {
+    // A request for the viewer's team on their own PR (an assigner bot, CODEOWNERS) asks nothing of them (2026-11-04).
+    if (own && !sameLogin(event.subject ?? '', viewer.login)) {
+      return quiet('team review requested on your own PR');
+    }
     if (pr.isDraft && pr.state === 'OPEN') {
       return quiet('review requested on a draft');
     }
