@@ -8088,7 +8088,7 @@ except through the quiet reads at the end of a cycle that stored a change
   as `<github_data>`), rule loudness and reason, whose turn and the why-here
   code. Answer per item (zod): `{ id, ping, title, body, reason }`. The agent
   may veto or rephrase, never add.
-- Calm stance (2026-11-04, pending the user's review; an offline replay of 146
+- Calm stance (2026-11-04, owner; an offline replay of 146
   real decisions: the old "ping by default" sent about 75% of candidates, this
   prompt about 20%, with no misses on items both judges rated worth it). A
   ping interrupts focus and the app's list holds everything, so only a person's
