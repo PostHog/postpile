@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { changesAnswered } from './changes-answered.ts';
 import { deriveEvents } from './events.ts';
-import { makeComment, makeCommit, makePr, makeReview, makeThread, singleTile, viewer } from './fixtures.ts';
+import { makeComment, makeCommit, makePr, makeReview, makeThread, makeTimelineItem, singleTile, viewer } from './fixtures.ts';
 import { forWhom } from './for-whom.ts';
 import { isPersonalPing, pingRule, pingTemplate } from './pings.ts';
 import { boardShape } from './pr-parts.ts';
@@ -96,19 +96,28 @@ describe('addressed your changes: the #4521 timeline', () => {
     }
   });
 
-  it('makes the pushes and the comment loud, and pings for them', () => {
+  it('makes the first answer loud, keeps the rest of the round quiet, and pings once', () => {
     const events = deriveEvents(pr, viewer, null);
     const loudness = Object.fromEntries(events.map((event) => [event.sourceId, [event.ruleLoudness, event.ruleReason]]));
     expect(loudness['c1']).toEqual(['loud', 'addressed your changes']);
-    expect(loudness['c3']).toEqual(['loud', 'addressed your changes']);
-    expect(loudness['ic1']).toEqual(['loud', 'addressed your changes']);
+    expect(loudness['c2']).toEqual(['quiet', 'pushed again after addressing your changes']);
+    expect(loudness['c3']).toEqual(['quiet', 'pushed again after addressing your changes']);
+    expect(loudness['ic1']).toEqual(['quiet', 'replied again after addressing your changes']);
+    // A reply aimed at the viewer stays loud by its own row, later in the round too.
     expect(loudness['tc2']).toEqual(['loud', 'replies to you']);
     // The commit from before the changes request stays quiet.
     expect(loudness['c0']?.[0]).toBe('quiet');
+    // With everything new, the ping is about the newest loud event: bob's reply in the thread.
     const newOnes = events.filter((event) => event.at > changesRequested.submittedAt);
     const rule = pingRule(newOnes, pr, viewer, false);
     expect(rule.class).toBe('addressed');
-    expect(pingTemplate(rule.event!, pr).title).toBe('@bob addressed your changes · app#4521');
+    expect(pingTemplate(rule.event!, pr).title).toBe('@bob replied to you · app#4521');
+    // The first push alone pings as the answer.
+    const firstPush = pingRule(events.filter((event) => event.sourceId === 'c1'), pr, viewer, false);
+    expect(firstPush.class).toBe('addressed');
+    expect(pingTemplate(firstPush.event!, pr).title).toBe('@bob addressed your changes · app#4521');
+    // A later push in the same round does not ping.
+    expect(pingRule(events.filter((event) => event.sourceId === 'c3'), pr, viewer, false).class).toBe('quiet');
   });
 });
 
@@ -208,5 +217,73 @@ describe('addressed your changes: a bot owner', () => {
     expect(changesAnswered(board, viewer)).toEqual(answer);
     expect(forWhom('CM', botPr, viewer)).toEqual({ kind: 'you' });
     expect(forWhom('CM', board, viewer)).toEqual({ kind: 'you' });
+  });
+});
+
+// Real DB, 2026-11: an author's force-push series pinged up to six times a
+// day on one PR. One ping per round: only the answer that opens it is loud.
+describe('addressed your changes: one ping per round', () => {
+  const pushes = [
+    makeCommit({ oid: 'p0', author: 'bob', committedAt: '2026-10-01T09:00:00.000Z' }),
+    makeCommit({ oid: 'p1', author: 'bob', committedAt: '2026-10-02T10:00:00.000Z' }),
+    makeCommit({ oid: 'p2', author: 'bob', committedAt: '2026-10-02T11:00:00.000Z' }),
+    makeCommit({ oid: 'p3', author: 'bob', committedAt: '2026-10-02T12:00:00.000Z' }),
+  ];
+  const request = makeReview({ id: 'r-req', author: me, state: 'CHANGES_REQUESTED', body: 'Please split this', submittedAt: '2026-10-01T10:00:00.000Z', commitOid: 'p0' });
+  const forcePush = makeTimelineItem({ id: 'fp1', kind: 'head_ref_force_pushed', actor: 'bob', at: '2026-10-02T13:00:00.000Z' });
+
+  function series(overrides: Partial<Pr> = {}): Pr {
+    return makePr({ number: 77, author: 'bob', headOid: 'p3', reviewerUsers: [], reviews: [request], commits: pushes, timeline: [forcePush], threads: [], comments: [], ...overrides });
+  }
+
+  function loudnessBySource(pr: Pr): Record<string, [string, string]> {
+    return Object.fromEntries(deriveEvents(pr, viewer, null).map((event) => [event.sourceId, [event.ruleLoudness, event.ruleReason]]));
+  }
+
+  it('makes the first push loud and the rest of the series quiet', () => {
+    const loudness = loudnessBySource(series());
+    expect(loudness['p1']).toEqual(['loud', 'addressed your changes']);
+    expect(loudness['p2']).toEqual(['quiet', 'pushed again after addressing your changes']);
+    expect(loudness['p3']).toEqual(['quiet', 'pushed again after addressing your changes']);
+    expect(loudness['fp1']).toEqual(['quiet', 'pushed again after addressing your changes']);
+  });
+
+  it('keeps whose turn and the tier as they were', () => {
+    const pr = series();
+    expect(turn(pr)).toMatchObject({ kind: 'you', move: 're_review', what: 'bob addressed your changes: re-review', since: '2026-10-02T10:00:00.000Z' });
+    expect(tier(pr)).toBe('changes_requested');
+  });
+
+  it('starts a new round once the viewer speaks again: its first push is loud again', () => {
+    const nudge = makeComment({ id: 'me1', author: me, body: 'Still one thing left', createdAt: '2026-10-02T14:00:00.000Z' });
+    const later = [
+      makeCommit({ oid: 'p4', author: 'bob', committedAt: '2026-10-03T09:00:00.000Z' }),
+      makeCommit({ oid: 'p5', author: 'bob', committedAt: '2026-10-03T10:00:00.000Z' }),
+    ];
+    const pr = series({ headOid: 'p5', commits: [...pushes, ...later], comments: [nudge] });
+    const loudness = loudnessBySource(pr);
+    expect(loudness['p4']).toEqual(['loud', 'addressed your changes']);
+    expect(loudness['p5']).toEqual(['quiet', 'pushed again after addressing your changes']);
+    // The first round is behind the viewer's comment: its answers are no longer part of the answer.
+    expect(loudness['p1']?.[0]).toBe('quiet');
+  });
+
+  it('lets the first push open the round when an automated comment through the owner account came first', () => {
+    const automated = makeComment({ id: 'auto1', author: 'bob', body: 'This is an automated comment: preview deployed', createdAt: '2026-10-02T09:30:00.000Z' });
+    const loudness = loudnessBySource(series({ comments: [automated] }));
+    expect(loudness['auto1']?.[0]).toBe('quiet');
+    expect(loudness['p1']).toEqual(['loud', 'addressed your changes']);
+    expect(loudness['p2']).toEqual(['quiet', 'pushed again after addressing your changes']);
+  });
+
+  it('keeps an owner reply aimed at the viewer loud later in the round', () => {
+    const viewerThread = makeComment({ id: 'vt1', author: me, body: 'Split this file', createdAt: '2026-10-01T10:00:00.000Z' });
+    const ownerReply = makeComment({ id: 'vt2', author: 'bob', body: 'Done, which name do you prefer?', createdAt: '2026-10-02T12:30:00.000Z' });
+    const reviewThread = makeThread('th-split', [viewerThread, ownerReply]);
+    const pr = series({ threads: [reviewThread], comments: reviewThread.comments });
+    const loudness = loudnessBySource(pr);
+    expect(loudness['p1']).toEqual(['loud', 'addressed your changes']);
+    expect(loudness['vt2']?.[0]).toBe('loud');
+    expect(loudness['vt2']?.[1]).not.toContain('again');
   });
 });

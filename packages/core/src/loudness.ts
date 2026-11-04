@@ -1,5 +1,5 @@
 import { isAutomation, isTrunkBot } from './bots.ts';
-import { CHANGES_ANSWERED_REASON, isChangesAnswerEvent } from './changes-answered.ts';
+import { CHANGES_ANSWERED_REASON, isChangesAnswerEvent, opensChangesAnswer, PUSHED_AGAIN_REASON, REPLIED_AGAIN_REASON } from './changes-answered.ts';
 import { ADDRESSED_KINDS, PUSH_KINDS } from './kinds.ts';
 import { isViewerSubject, sameLogin } from './mentions.ts';
 import { mergeQueueFailureAt } from './merge-queue.ts';
@@ -79,6 +79,28 @@ function mergeQueueFailure(input: LoudnessInput) {
 
 function isRequestForViewer(input: LoudnessInput): boolean {
   return input.kind === 'review_requested' && isViewerSubject(input.subject, input.viewer);
+}
+
+/**
+ * A review request for one of the viewer's teams on a PR the viewer owns:
+ * an assigner bot or CODEOWNERS asking the author's own team. Nothing for
+ * the viewer to review (2026-11-04).
+ */
+function isTeamRequestOnOwnPr(input: LoudnessInput): boolean {
+  if (!isRequestForViewer(input) || !isViewersPr(input)) {
+    return false;
+  }
+  return !sameLogin(input.subject ?? '', input.viewer.login);
+}
+
+/** The event is the author's push or reply after the viewer's changes request (needs `at`). */
+function isChangesAnswer(input: LoudnessInput): boolean {
+  return input.at !== undefined && isChangesAnswerEvent({ kind: input.kind, actor: input.actor, at: input.at }, input.pr, input.viewer);
+}
+
+/** The event opens the round of the author's answer (needs `at`). */
+function opensChangesRound(input: LoudnessInput): boolean {
+  return input.at !== undefined && opensChangesAnswer({ kind: input.kind, actor: input.actor, at: input.at }, input.pr, input.viewer);
 }
 
 /** One row of the loudness table: a named condition, what it decides, and why. */
@@ -199,13 +221,18 @@ export const LOUDNESS_TABLE: readonly LoudnessRow[] = [
     reason: 'a command for a bot',
   },
   {
-    // The author pushed or replied after the viewer asked for changes: that is aimed at the viewer.
+    // The author's first push or reply after the viewer asked for changes: that is aimed at the viewer.
     name: 'author answered your changes request',
-    when: (input) =>
-      input.at !== undefined &&
-      isChangesAnswerEvent({ kind: input.kind, actor: input.actor, at: input.at }, input.pr, input.viewer),
+    when: opensChangesRound,
     loudness: 'loud',
     reason: CHANGES_ANSWERED_REASON,
+  },
+  {
+    // One ping per round (2026-11-04): later pushes and replies in the same round are quiet until the viewer speaks again. Replies and asks aimed at the viewer stay loud above.
+    name: 'author answered again in the same round',
+    when: isChangesAnswer,
+    loudness: 'quiet',
+    reason: (input) => (PUSH_KINDS.includes(input.kind) ? PUSHED_AGAIN_REASON : REPLIED_AGAIN_REASON),
   },
   {
     name: 'review on your PR',
@@ -218,6 +245,13 @@ export const LOUDNESS_TABLE: readonly LoudnessRow[] = [
     when: (input) => reviewKinds.includes(input.kind),
     loudness: 'quiet',
     reason: 'review by someone else',
+  },
+  {
+    // An assigner bot asking the viewer's team on their own PR: nothing for them to review (2026-11-04).
+    name: 'team review requested on your own PR',
+    when: isTeamRequestOnOwnPr,
+    loudness: 'quiet',
+    reason: 'team review requested on your own PR',
   },
   {
     // A draft is not up for review yet; marking it ready is what calls for a look.

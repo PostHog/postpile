@@ -231,7 +231,7 @@ agent-grouped among pinged and found PRs; the agent never pulls PRs in.
 
 | loudness | effect | examples |
 |---|---|---|
-| loud | pings, coral "new since you looked", lights up the topic (the tile is unread while its thread is unread on GitHub, loud or not: "GitHub unread is PostPile unread") | mention, review requested, question to the user, a push after the user approved when the agent raises it, the author's push or comment after the user requested changes ("addressed your changes") |
+| loud | pings, coral "new since you looked", lights up the topic (the tile is unread while its thread is unread on GitHub, loud or not: "GitHub unread is PostPile unread") | mention, review requested, question to the user, a push after the user approved when the agent raises it, the author's first push or comment after the user requested changes ("addressed your changes", once per round, see below) |
 | quiet | dot, no ping | bots, deploys, merge queue (except trunk taking your own PR out of it: loud, see "Merge queue"), pushes after the user approved (by default), merged without the user's review (never loud; surfaced by the done rule instead, see "Merged without your review") |
 | muted | hidden as noise, one click to unmute | bot rebase on a draft |
 | seen | already read | any of the above after reading, or before the user's own last action on the PR (see "You already dealt with it") |
@@ -259,6 +259,30 @@ closer" under the pings). Requests to other people or teams stay quiet bot
 activity. Whose turn never names a bot as the requester ("Review for
 team-devex", "Review"), and the ping template says "Review requested for
 team-devex" instead of the bot's name.
+
+**A team request on your own PR is quiet** (decided 2026-11-04). When the
+user marks their own PR ready, an assigner bot (or CODEOWNERS) requests a
+review from the user's team. It matched "review requested from you", so it
+was loud and reached the ping agent, which let some through. Rule: a
+`review_requested` event for one of the user's teams on a PR they own
+(`isPrOwner`) is quiet, "team review requested on your own PR", whoever
+made it. It never pings. For whom stays "Your PR" and whose turn is
+unchanged: neither reads the request's loudness on the user's own PR.
+
+**One ping per round of fixes** (decided 2026-11-04). After the user
+requested changes, every push or owner reply since the user's last word
+used to be loud as "addressed your changes", so an author's force-push
+series pinged up to six times a day on one PR. Rule: only the answer that
+opens the round is loud, the author's first push or reply after the
+user's last word (`changesAnswered().at`, `opensChangesAnswer`). Later
+pushes and replies in the same round are quiet, "pushed again after
+addressing your changes" or "replied again after addressing your
+changes". A new round starts when the user speaks again (a comment or a
+review moves `since`), and its first answer is loud again. A reply,
+question or mention aimed at the user stays loud through its own rows,
+which come first in the table. Whose turn, tiers, for whom and the
+tile's "re-review" line read `changesAnswered`, not loudness, so they do
+not change.
 
 **Tile state is derived, never stored**:
 
@@ -5325,7 +5349,8 @@ before the new loud events. Rules:
   first, then a team mention, a (re-)requested review, a changes request or
   approval by someone else, pushes, then anything else (its summary). The
   newest wins a tie. Pushes count together ("6 commits since your changes
-  request"; these are loud as "addressed your changes", `changesAnswered`).
+  request"; the first of the round is loud as "addressed your changes",
+  `changesAnswered`, the rest quiet).
 - Texts, about 48 characters at most (`STRIP_TEXT_MAX`, else the short form
   without the anchor): "6 commits since your changes request", "lyra
   replied to your review", "lyra replied to your comment", "pushed after
@@ -8036,8 +8061,8 @@ except through the quiet reads at the end of a cycle that stored a change
   team mention, question, reply, and on an open PR: review request (made by
   a person or a bot, see "A review request counts by whom it asks"), a push
   after approval the agent raised, changes requested on their own PR, and
-  on a non-draft PR the author's push or comment after the user's changes
-  request, headline "@pim addressed your changes"). Agent and user
+  on a non-draft PR the author's first push or comment after the user's
+  changes request, once per round, headline "@pim addressed your changes"). Agent and user
   overrides count.
 - `routed` (2026-09-29): a review request routed to the viewer's team on a
   PR from outside the team (not theirs, not a teammate's), made by a person
