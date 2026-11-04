@@ -202,3 +202,6 @@ export const fullContext: PromptContext = {
   recentFeedback: [makeFeedback()],
   standingRules: ['Never approve database migrations at a glance.'],
 };
+
+/** The time ping decision tests pretend it is. */
+export const PING_NOW = '2026-11-04T14:05:00.000Z';

@@ -10,7 +10,7 @@ import { contextBlock, githubData, NO_CI_RULE, OWN_PR_NOTE, viewerLine } from '.
 import { topicAssignmentPrompt } from './prompts/topics.ts';
 import type { Pr, PrSet, Provenance } from '@postpile/core';
 import type { PromptContext } from './service.ts';
-import { emptyContext, fullContext, makeComment, makeEvent, makePr, makeTopic, viewer } from './test-fixtures.ts';
+import { emptyContext, fullContext, makeComment, makeEvent, makePr, makeTopic, PING_NOW, viewer } from './test-fixtures.ts';
 
 /** A glance batch prompt for one PR without a topic. */
 function oneGlancePrompt(pr: Pr, provenance: Provenance, context: PromptContext = emptyContext): string {
@@ -72,8 +72,11 @@ describe('no prompt carries CI status (DESIGN.md "CI is not a signal")', () => {
           events: [mention],
           rule: { loudness: 'loud', reason: 'mentions you', whoseTurn: { kind: 'you', move: 'reply', who: null, what: 'Reply to bob', prKey: failing.key }, why: '@', conversation: false },
           template: { title: 'bob mentioned you', body: 'can you look at the cache key?' },
+          pingsToday: [],
         },
       ],
+      now: PING_NOW,
+      pingsLastHour: 0,
       viewer,
       context: fullContext,
     }),

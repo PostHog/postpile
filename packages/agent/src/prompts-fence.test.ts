@@ -12,7 +12,7 @@ import { pingDecisionPrompt } from './prompts/ping-decision.ts';
 import { setGroupingPrompt } from './prompts/sets.ts';
 import { topicAssignmentPrompt } from './prompts/topics.ts';
 import type { DossierUpdateInput } from './service.ts';
-import { fullContext, makeDelta, makeDossierVersion, makeEvent, makePr, makeTopic, viewer } from './test-fixtures.ts';
+import { fullContext, makeDelta, makeDossierVersion, makeEvent, makePr, makeTopic, PING_NOW, viewer } from './test-fixtures.ts';
 
 // Topic and area names are written by the agent from PR text. Cleaning keeps
 // them on one line, but a printable name can still read as an instruction,
@@ -78,8 +78,11 @@ const prompts: Record<string, string> = {
         events: [event],
         rule: { loudness: 'loud', reason: 'mentions you', whoseTurn: { kind: 'you', move: 'reply', who: null, what: 'Reply to bob', prKey: pr.key }, why: '@', conversation: false },
         template: { title: 'bob mentioned you', body: 'can you look?' },
+        pingsToday: [],
       },
     ],
+    now: PING_NOW,
+    pingsLastHour: 0,
     viewer,
     context: fullContext,
   }),

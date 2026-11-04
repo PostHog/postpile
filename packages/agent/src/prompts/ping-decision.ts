@@ -21,6 +21,20 @@ function turnLine(item: PingDecisionItem): string {
   return 'nobody has a move';
 }
 
+/** "2026-11-04T13:59:00.000Z" to "13:59". UTC, like the now line. */
+function clock(iso: string): string {
+  return iso.slice(11, 16);
+}
+
+/** Ping titles are written from GitHub text, so the line is fenced. */
+function historyLine(item: PingDecisionItem): string {
+  if (item.pingsToday.length === 0) {
+    return 'Not pinged about this PR today.';
+  }
+  const pings = item.pingsToday.map((ping) => `${clock(ping.at)} (${clip(ping.title, 70)})`).join(', ');
+  return githubData(`Already pinged about this PR today: ${pings}`);
+}
+
 function itemSection(item: PingDecisionItem): string {
   // Topic names are written from GitHub text: fenced like it.
   const topic = item.topicName === null ? 'Topic: (not sorted into a topic yet)' : `Topic:\n${githubData(item.topicName)}`;
@@ -39,6 +53,7 @@ function itemSection(item: PingDecisionItem): string {
     lines.push('Live conversation: a person answers what the user said on this PR in the last two hours. It always pings; write the text.');
   }
   lines.push(
+    historyLine(item),
     `New activity, newest first:\n${githubData(`${prLine(item.pr)}\n${item.events.map(eventLine).join('\n')}`)}`,
     // The template quotes the comment, so it is GitHub text too.
     `Default notification:\n${githubData(`title: ${item.template.title}\nbody: ${item.template.body.replaceAll('\n', ' / ')}`)}`,
@@ -54,19 +69,22 @@ function itemSection(item: PingDecisionItem): string {
  */
 export function pingDecisionPrompt(input: PingDecisionInput): string {
   const sections = input.items.map(itemSection).join('\n\n');
+  const now = input.now.slice(0, 16).replace('T', ' ');
   return `You decide whether new GitHub activity is worth a desktop notification that interrupts a developer.
+It is now ${now} UTC; the new activity below is from the last 30 minutes.
 ${viewerLine(input.viewer)}
 ${GITHUB_DATA_RULE}
 ${contextBlock(input.context)}${workContextBlock(input.context)}
 Rules already filtered out bots, CI and anything not aimed at the user. Every item below was
 aimed at them: a mention, a question, a review request, new commits after they approved, or
-changes requested on their own PR. Ping by default. Say no ping only when it is clearly not worth
-an interruption now, for example a thank-you or "no action needed" mention, a review request
-their instructions say they do not care about, or chatter already answered.
-"Why it reached them" codes: RV review asked of them, RT review asked of their team (not them in
-person, so ping only when it looks like it needs them; but when whose turn reads "Review for
-<team>: <author>'s PR" a teammate wrote it and it counts like RV), @ mentioned them, @T mentioned
-their team, AS assigned, AU their own PR, CM they took part, FW following.
+changes requested on their own PR.
+A ping interrupts their focus. The app's list holds everything and they open it when they choose, so a ping is only for what should not wait for that.
+Always ping a person's ask aimed at them in person: a question or reply to them, a mention that asks them something, a review asked of them personally (RV), the first sign that an author answered their changes request, or a person asking something on their own PR. Say no to these only for a thank-you or FYI, or when the same ask already pinged today.
+For everything else, say no ping unless waiting a few hours would cost something real, such as a design call in an area their instructions name. Say no ping for team requests (RT) on small or routine changes that others on the team can take, bots acting on their own PR, and repeat news about a PR they were already pinged about today.
+"Why it reached them" codes: RV review asked of them. RT review asked of their team, not of them. Ping only when the change needs them in particular: a design question in the areas their instructions name, stamphog declined and the PR needs a human with their context, or a topic they drive. A teammate wrote it is not enough on its own.
+Other codes: @ mentioned them, @T mentioned their team, AS assigned, AU their own PR, CM they took part, FW following.
+
+Pings sent in the last hour: ${input.pingsLastHour}
 
 ${sections}
 

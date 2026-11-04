@@ -8088,6 +8088,24 @@ except through the quiet reads at the end of a cycle that stored a change
   as `<github_data>`), rule loudness and reason, whose turn and the why-here
   code. Answer per item (zod): `{ id, ping, title, body, reason }`. The agent
   may veto or rephrase, never add.
+- Calm stance (2026-11-04, owner; an offline replay of 146
+  real decisions: the old "ping by default" sent about 75% of candidates, this
+  prompt about 20%, with no misses on items both judges rated worth it). A
+  ping interrupts focus and the app's list holds everything, so only a person's
+  ask aimed at them in person always pings (a question or reply to them, a
+  mention that asks something, an RV review, the first author answer to their
+  changes request, a person asking on their own PR), except a thank-you, an
+  FYI or an ask that already pinged today. Everything else pings only when
+  waiting a few hours would cost something real. An RT team request needs them
+  in particular (a design question in an area their instructions name,
+  stamphog declined and the PR needs a human with their context, a topic they
+  drive); that a teammate wrote the PR no longer counts like RV on its own.
+  The prompt starts with the current UTC time (`PingDecisionInput.now`; the
+  model has no clock and judged fresh questions stale from dates in the work
+  context) and shows ping history: per item the pings already sent about that
+  PR in the last 24 hours (`PingDecisionRepo.listPingsSince`, fenced because
+  titles come from GitHub text) or "Not pinged about this PR today.", and per
+  batch the number of pings sent in the last hour.
 - Live conversation (2026-10-02, `isLiveConversation`): a mention, reply or
   question from a person at most two hours (`CONVERSATION_WINDOW_MS`) after
   the viewer's own comment or review on the PR (an approval or a push alone

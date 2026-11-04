@@ -1923,6 +1923,15 @@ the app meanwhile.
 
 ## Decided
 
+- **Calm ping prompt** (2026-11-04, owner; DESIGN.md "Live poll and Mac pings"): the
+  ping-decision agent defaults to no ping. A person's ask aimed at the user
+  in person always pings; everything else only when waiting a few hours
+  costs something. An RT team request on a teammate's PR no longer counts
+  like RV. The prompt gets the time, today's pings per PR and the last
+  hour's count. Personal areas (what "needs them in particular") belong in
+  `instructions.md`, not the prompt. Open: gating Look closer pings on a
+  "Design input:" glance (eval favoured it; not decided).
+
 - **whats_on_me lists every unread PR and says what clears it**
   (2026-11-02; DESIGN.md "MCP server"): every topic, a last group "Unread,
   nothing to do" for unread tiles whose PRs are all merged or closed and

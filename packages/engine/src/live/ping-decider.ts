@@ -38,6 +38,7 @@ export const PING_DECISIONS_PER_DAY = 200;
 export const PING_FRESH_MS = 30 * 60 * 1000;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const HOUR_MS = 60 * 60 * 1000;
 
 export interface PingDeciderDeps {
   store: Store;
@@ -173,7 +174,7 @@ export class PingDecider {
     return result;
   }
 
-  private item(board: Board, candidate: Candidate, viewer: Viewer): PingDecisionItem {
+  private item(board: Board, candidate: Candidate, viewer: Viewer, pingsToday: PingDecision[]): PingDecisionItem {
     const { store, contexts } = this.deps;
     const topicId = candidate.target.topicId;
     const topic = topicId && topicId !== UNSORTED_TOPIC_ID ? store.topics.get(topicId) : null;
@@ -200,6 +201,7 @@ export class PingDecider {
         conversation: candidate.conversation !== null,
       },
       template: pingTemplate(leadEvent(candidate), candidate.pr),
+      pingsToday: pingsToday.filter((p) => p.prKey === candidate.pr.key).map((p) => ({ at: p.at, title: p.title })),
     };
   }
 
@@ -211,10 +213,16 @@ export class PingDecider {
     if (agentOff !== null) {
       return addressed.map((c) => this.fallback(c, agentOff));
     }
+    const now = this.deps.now();
+    // "Today" is the last 24 hours, not since local midnight: the store keeps UTC times and a rolling window needs no time zone.
+    const pingsToday = this.deps.store.pingDecisions.listPingsSince(new Date(now.getTime() - DAY_MS).toISOString());
+    const hourAgo = new Date(now.getTime() - HOUR_MS).toISOString();
     let answers: PingDecisionAnswer[];
     try {
       answers = await this.deps.agent.decidePings({
-        items: addressed.map((candidate) => this.item(board, candidate, viewer)),
+        items: addressed.map((candidate) => this.item(board, candidate, viewer, pingsToday)),
+        now: now.toISOString(),
+        pingsLastHour: pingsToday.filter((p) => p.at > hourAgo).length,
         viewer,
         context: this.deps.contexts.forTopic(null),
       });

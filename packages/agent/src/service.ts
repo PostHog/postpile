@@ -687,11 +687,17 @@ export interface PingDecisionItem {
   events: PrEvent[];
   rule: PingRuleView;
   template: { title: string; body: string };
+  /** Pings already sent about this PR in the last 24 hours, oldest first. Empty: none. */
+  pingsToday: { at: string; title: string }[];
 }
 
 /** All new ping-worthy items of one poll cycle, in one call. */
 export interface PingDecisionInput {
   items: PingDecisionItem[];
+  /** ISO time of the decision. The model has no clock and judged fresh questions "stale" from dates in the work context. */
+  now: string;
+  /** Pings sent in the last hour, over all PRs. */
+  pingsLastHour: number;
   viewer: Viewer;
   /** General context (no topic): instructions, recent feedback, standing rules. */
   context: PromptContext;

@@ -73,6 +73,42 @@ describe('Engine.pollOnce', () => {
     ]);
   });
 
+  it('tells the agent the time and that nothing pinged yet', async () => {
+    const h = makeHarness();
+    const mentioned = await syncedPr(h, 1);
+    withActivity(h, mentioned, mention(mentioned), 'etag-2');
+    h.runner.answer('ping_decision', { decisions: [] });
+
+    await h.engine.pollOnce();
+
+    const prompt = h.runner.promptsFor('ping_decision')[0] ?? '';
+    expect(prompt).toContain('It is now 2026-09-02 12:00 UTC;');
+    expect(prompt).toContain('Pings sent in the last hour: 0');
+    expect(prompt).toContain('Not pinged about this PR today.');
+  });
+
+  it('gives the agent the pings of the last 24 hours per PR and of the last hour overall', async () => {
+    const h = makeHarness();
+    const mentioned = await syncedPr(h, 1);
+    withActivity(h, mentioned, mention(mentioned), 'etag-2');
+    const ping = (prKey: string, title: string, at: string, sent = true) =>
+      h.store.pingDecisions.add({ threadId: 'x', prKey, ping: sent, source: 'agent', title, body: '', reason: '', at });
+    ping(mentioned.key, 'two days old', '2026-08-31T10:00:00.000Z');
+    ping(mentioned.key, 'first ask', '2026-09-02T10:15:00.000Z');
+    ping(mentioned.key, 'withheld ask', '2026-09-02T10:20:00.000Z', false);
+    ping(mentioned.key, 'second ask', '2026-09-02T11:30:00.000Z');
+    ping('acme/app#99', 'other PR', '2026-09-02T11:40:00.000Z');
+    h.runner.answer('ping_decision', { decisions: [] });
+
+    await h.engine.pollOnce();
+
+    const prompt = h.runner.promptsFor('ping_decision')[0] ?? '';
+    expect(prompt).toContain('Already pinged about this PR today: 10:15 (first ask), 11:30 (second ask)');
+    expect(prompt).not.toContain('two days old');
+    expect(prompt).not.toContain('other PR');
+    expect(prompt).toContain('Pings sent in the last hour: 2');
+  });
+
   it('drops a ping when the PR was read while the agent decided', async () => {
     const h = makeHarness();
     const mentioned = await syncedPr(h, 1);
