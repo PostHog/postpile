@@ -14,7 +14,7 @@ import { setGroupingPrompt } from './prompts/sets.ts';
 import { topicAssignmentPrompt } from './prompts/topics.ts';
 import type { ObservedCall } from './runner.ts';
 import type { ContextSweepInput, DossierUpdateInput, GlanceBatchInput, PromptContext } from './service.ts';
-import { fullContext, makeDelta, makeEvent, makePr, makeTopic, viewer } from './test-fixtures.ts';
+import { fullContext, makeDelta, makeEvent, makePr, makeTopic, PING_NOW, viewer } from './test-fixtures.ts';
 
 const DIGEST = 'As of 2026-09-28: Alice drives the Depot CI move.\nThreads:\n- Depot runners: rolling out to all repos (topics: Move CI to Depot)';
 const withDigest: PromptContext = { ...fullContext, workContext: DIGEST };
@@ -63,8 +63,11 @@ function promptsWith(context: PromptContext): Record<string, string> {
           events: [makeEvent()],
           rule: { loudness: 'loud', reason: 'mentions you', whoseTurn: { kind: 'you', move: 'reply', who: null, what: 'Reply', prKey: pr.key }, why: '@', conversation: false },
           template: { title: 't', body: 'b' },
+          pingsToday: [],
         },
       ],
+      now: PING_NOW,
+      pingsLastHour: 0,
       viewer,
       context,
     }),

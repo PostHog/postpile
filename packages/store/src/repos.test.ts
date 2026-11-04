@@ -924,6 +924,19 @@ describe('PingDecisionRepo', () => {
     expect(store.pingDecisions.listGlancePingsSince(at(1)).map((decision) => decision.prKey)).toEqual(['acme/app#2']);
     expect(store.pingDecisions.countBetween(at(0), at(9))).toEqual({ pinged: 1, withheldRules: 1, withheldAgent: 0, glance: 2 });
   });
+
+  it('lists the pings that went out after a time, oldest first, whoever decided', () => {
+    const base = { threadId: 't1', prKey: 'acme/app#1', title: '', body: '', reason: 'r' };
+    store.pingDecisions.add({ ...base, ping: true, source: 'agent', at: at(3) });
+    store.pingDecisions.add({ ...base, ping: false, source: 'agent', at: at(4) });
+    store.pingDecisions.add({ ...base, ping: true, source: 'fallback', at: at(2) });
+    store.pingDecisions.add({ ...base, ping: true, source: 'agent', at: at(1) });
+
+    expect(store.pingDecisions.listPingsSince(at(1)).map((decision) => [decision.at, decision.source])).toEqual([
+      [at(2), 'fallback'],
+      [at(3), 'agent'],
+    ]);
+  });
 });
 
 describe('PendingWriteRepo', () => {

@@ -2,6 +2,12 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## Unreleased
+
+### Changed
+
+- Mac pings are calmer. The agent that decides whether a new comment or review request is worth a ping now defaults to no ping unless a person asked you something in person, sees which pings already went out today, and knows the time. Team review requests only ping when the change needs you in particular.
+
 ## 0.30.0 (2026-11-02)
 
 ### Added
