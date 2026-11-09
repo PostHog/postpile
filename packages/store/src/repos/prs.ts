@@ -830,6 +830,35 @@ export class PrRepo {
     return result;
   }
 
+  /**
+   * Keys of stored PRs `login` may own or have reviewed, open or updated at
+   * or after `since`, optionally in one repo: a cheap pre-filter from the
+   * header and review rows for `pnpm cli branches`. Loose on purpose (an
+   * assignee text match, any review state): the core rules decide. Before
+   * the review rows are switched on, every PR in the window is a candidate.
+   */
+  branchCandidateKeys(login: string, since: string, repo: string | null): PrKey[] {
+    const reviewRows = this.readyCollections().has('discussion') ? 1 : 0;
+    const rows = all<{ key: string }>(
+      this.db,
+      `SELECT p.key FROM pr p
+       WHERE (p.state = 'OPEN' OR p.updated_at >= ?)
+         AND (? IS NULL OR p.repo = ? COLLATE NOCASE)
+         AND (? = 0
+           OR p.author = ? COLLATE NOCASE
+           OR instr(lower(p.assignees), lower(?)) > 0
+           OR EXISTS (SELECT 1 FROM pr_review r WHERE r.pr_key = p.key AND r.author = ? COLLATE NOCASE))`,
+      since,
+      repo,
+      repo,
+      reviewRows,
+      login,
+      JSON.stringify(login),
+      login,
+    );
+    return rows.map((row) => row.key);
+  }
+
   /** Open, merged or closed per stored PR. */
   stateByKey(): Map<PrKey, PrState> {
     const rows = all<{ key: string; state: string }>(this.db, 'SELECT key, state FROM pr');

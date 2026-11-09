@@ -47,11 +47,29 @@ describe('parseArgs', () => {
   });
 });
 
+describe('branches flags', () => {
+  it('has defaults and reads every flag', () => {
+    expect(parseArgs(['branches'])).toEqual({ name: 'branches', options: { days: 7, repo: null }, json: false });
+    expect(parseArgs(['branches', '--json', '--days', '3', '--repo', 'acme/app'])).toEqual({ name: 'branches', options: { days: 3, repo: 'acme/app' }, json: true });
+  });
+
+  it('rejects bad values', () => {
+    expect(parseArgs(['branches', '--days', '0'])).toEqual({ name: 'help', problem: 'bad flags for branches: --days 0' });
+    expect(parseArgs(['branches', '--repo', 'acme'])).toMatchObject({ name: 'help', problem: expect.stringContaining('bad flags for branches') });
+    expect(parseArgs(['branches', '--repo'])).toMatchObject({ name: 'help' });
+    expect(parseArgs(['branches', 'acme/app'])).toMatchObject({ name: 'help' });
+  });
+
+  it('takes --read-only', () => {
+    expect(parseInvocation(['branches', '--read-only', '--json'])).toMatchObject({ command: { name: 'branches', json: true }, readOnly: true, error: null });
+  });
+});
+
 describe('parseInvocation', () => {
   it('takes --read-only for read commands only', () => {
     expect(parseInvocation(['topics', '--read-only'])).toEqual({ command: { name: 'topics' }, readOnly: true, error: null });
     expect(parseInvocation(['pr', 'a/b#1'])).toMatchObject({ readOnly: false, error: null });
-    expect(parseInvocation(['sync', '--read-only']).error).toBe('--read-only only works with topics, topic, pr and tools, not sync');
+    expect(parseInvocation(['sync', '--read-only']).error).toBe('--read-only only works with topics, topic, pr, branches and tools, not sync');
     expect(parseInvocation(['poll', '--read-only']).error).toMatch(/not poll/);
   });
 });

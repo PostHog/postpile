@@ -72,6 +72,7 @@ function fakeEngine(overrides: Partial<EngineService>): EngineService {
     getTeamMembers: notImplemented,
     prOverlaps: notImplemented,
     storedPrKeys: notImplemented,
+    listBranches: notImplemented,
     setTeamRole: notImplemented,
     listRepos: notImplemented,
     setRepoScope: notImplemented,

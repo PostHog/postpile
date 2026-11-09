@@ -43,6 +43,7 @@ pnpm cli sync --max-agent-calls 5 --agent-jobs topics,glances
 pnpm cli topics
 pnpm cli topic <id>
 pnpm cli pr owner/repo#123
+pnpm cli branches [--json] [--days 7] [--repo owner/name]   # own and reviewed PRs with signals, read-only
 pnpm cli tools              # is gh and claude usable, and the fix if not
 
 pnpm server                 # HTTP API on 127.0.0.1:4870, prints its token
@@ -51,6 +52,8 @@ pnpm server                 # HTTP API on 127.0.0.1:4870, prints its token
 Dev runs use their own database: `pnpm desktop` (unpackaged Electron), `pnpm cli` and `pnpm server` run with `POSTPILE_PROFILE=dev`, which keeps data in `~/Library/Application Support/PostPile-dev` and instructions in `~/.config/postpile-dev` (seeded once with a copy of the real `instructions.md`). The title bar shows a DEV badge. To read the real database from the repo on purpose: `POSTPILE_PROFILE=default pnpm cli ...`.
 
 Only one process opens a database at a time (`postpile.lock` next to it). While the app runs, `pnpm cli topics --read-only` (also `topic`, `pr`) still reads; sync, poll and sweep refuse.
+
+`pnpm cli branches` is always read-only and skips the lock, so session tools (Herdr and the like) can call it while the app runs. One entry per PR the viewer owns or reviewed: open ones, plus merged or closed ones of the last `--days` (default 7). `--json` prints `{ generatedAt, viewer, prs }`; each entry has the join keys (`repo` as owner/name, `number`, `headRef`, `baseRef`, `headOid`), `role` (`author` or `reviewer`), `whoseMove`, `untrusted.title` and `signals` (`feedback`, `readyToLand`, `ended`, `pushesSinceYourReview`, `repliesSinceYourReview`). It never calls GitHub or an agent; `fetchedAt` says how old each PR's data is.
 
 The packaged app bundles main, preload, renderer, the workspace packages and the server, so it runs without tsx or node_modules. The server runs in-process on a random localhost port, protected by a random token. A Finder launch gets a minimal PATH, so the app adds the folders from `/etc/paths`, `/etc/paths.d` and `toolPath` (see below), and also looks in `/opt/homebrew/bin`, `/usr/local/bin`, `~/.local/bin` and `~/.claude/local` for `gh` and `claude`. It never runs your login shell.
 

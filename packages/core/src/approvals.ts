@@ -3,7 +3,7 @@
 // says in words who it came from, so an agent-only approval is a visible,
 // neutral fact rather than a silent "approved".
 import { isBot } from './bots.ts';
-import type { Pr, Review } from './types.ts';
+import type { IsoTime, Pr, Review } from './types.ts';
 
 export interface Approvals {
   /** Human logins with a standing approval, oldest first. */
@@ -64,3 +64,25 @@ export function agentOnlyApprovers(approvals: Approvals): string[] {
   return approvals.people.length > 0 ? [] : approvals.agents.map(botName);
 }
 
+
+/** A point the viewer reviewed or approved at: when, and the head commit it was made on (null when GitHub did not say). */
+export interface ReviewPoint {
+  at: IsoTime;
+  commitOid: string | null;
+}
+
+/**
+ * The PR's commits pushed after a review point: the ones after its commit
+ * in the PR's commit list. When that commit is gone (a force push) or
+ * unknown, the ones committed after the point's time. Empty without a point.
+ */
+export function commitsAfter(pr: Pick<Pr, 'commits'>, point: ReviewPoint | null): Set<string> {
+  if (!point) {
+    return new Set();
+  }
+  const index = pr.commits.findIndex((commit) => commit.oid === point.commitOid);
+  if (index >= 0) {
+    return new Set(pr.commits.slice(index + 1).map((commit) => commit.oid));
+  }
+  return new Set(pr.commits.filter((commit) => commit.committedAt > point.at).map((commit) => commit.oid));
+}
