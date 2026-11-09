@@ -98,6 +98,10 @@ describe('pushesSinceYourReview', () => {
   it('is null without a review by the viewer', () => {
     expect(pushesSinceYourReview(makePr({ commits, reviews: [makeReview({ author: 'bob' })] }), me)).toBeNull();
   });
+
+  it('is null when nothing was pushed since the review', () => {
+    expect(pushesSinceYourReview(makePr({ commits, reviews: [makeReview({ author: me, commitOid: 'c', submittedAt: at(45) })] }), me)).toBeNull();
+  });
 });
 
 describe('repliesSinceYourReview', () => {
@@ -118,6 +122,11 @@ describe('repliesSinceYourReview', () => {
 
   it('is null when the viewer never spoke', () => {
     expect(repliesSinceYourReview(makePr(), me)).toBeNull();
+  });
+
+  it('is null when nobody replied since', () => {
+    const pr = makePr({ reviews: [makeReview({ author: me, state: 'COMMENTED', submittedAt: at(20) })], comments: [makeComment({ author: 'alice', kind: 'comment', createdAt: at(10) })] });
+    expect(repliesSinceYourReview(pr, me)).toBeNull();
   });
 });
 

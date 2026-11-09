@@ -71,9 +71,9 @@ export interface BranchSignals {
   /** Role author only; false on a reviewer's entry. */
   readyToLand: boolean;
   ended: { state: 'merged' | 'closed'; at: IsoTime } | null;
-  /** Role reviewer only. */
+  /** Role reviewer only; null when nothing was pushed since the viewer's review. */
   pushesSinceYourReview: BranchPushes | null;
-  /** Role reviewer only. */
+  /** Role reviewer only; null when nobody replied since the viewer last spoke. */
   repliesSinceYourReview: BranchReplies | null;
 }
 
@@ -169,7 +169,8 @@ export function branchRole(pr: Pr, login: string): BranchRole | null {
  * count as "commits after approval"): after its commit in the PR's commit
  * list, else, when that commit is gone after a force push, committed after
  * the review. Agents that review as the viewer count as the viewer. Null
- * when the viewer never reviewed.
+ * when the viewer never reviewed or nothing was pushed since, like
+ * `feedback` is null when nothing waits.
  */
 export function pushesSinceYourReview(pr: Pr, login: string): BranchPushes | null {
   const review = viewerLatestReview(pr, login);
@@ -177,7 +178,11 @@ export function pushesSinceYourReview(pr: Pr, login: string): BranchPushes | nul
     return null;
   }
   const point: ReviewPoint = { at: review.submittedAt, commitOid: review.commitOid };
-  return { reviewedAt: review.submittedAt, reviewState: review.state, reviewCommitOid: review.commitOid, commitsSince: commitsAfter(pr, point).size };
+  const commitsSince = commitsAfter(pr, point).size;
+  if (commitsSince === 0) {
+    return null;
+  }
+  return { reviewedAt: review.submittedAt, reviewState: review.state, reviewCommitOid: review.commitOid, commitsSince };
 }
 
 /** Review threads the viewer wrote in. */
@@ -191,7 +196,7 @@ function viewerThreadIds(pr: Pr, login: string): Set<string> {
  * their newest review or comment): conversation comments, and replies in
  * review threads the viewer wrote in. Bot talk (`isBotTalk`) and review
  * bodies never count: a reviewer's own verdict is no reply to the viewer.
- * Null when the viewer never spoke.
+ * Null when the viewer never spoke or nobody replied since.
  */
 export function repliesSinceYourReview(pr: Pr, login: string): BranchReplies | null {
   const since = lastSpokeAt(pr, login);
@@ -208,7 +213,7 @@ export function repliesSinceYourReview(pr: Pr, login: string): BranchReplies | n
     }
     return comment.kind === 'review_comment' && comment.threadId !== null && ownThreads.has(comment.threadId);
   }).length;
-  return { since, count };
+  return count === 0 ? null : { since, count };
 }
 
 function botDecline(pr: Pr): BranchBotDecline | null {

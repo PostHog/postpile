@@ -32,11 +32,11 @@ function signalWords(entry: BranchEntry): string[] {
     }
   }
   const pushes = signals.pushesSinceYourReview;
-  if (pushes && pushes.commitsSince > 0) {
+  if (pushes) {
     words.push(`+${pushes.commitsSince} commit${pushes.commitsSince === 1 ? '' : 's'} since your review`);
   }
   const replies = signals.repliesSinceYourReview;
-  if (replies && replies.count > 0) {
+  if (replies) {
     words.push(`${replies.count} repl${replies.count === 1 ? 'y' : 'ies'} since you spoke`);
   }
   if (signals.ended) {
