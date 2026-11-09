@@ -1,4 +1,6 @@
 import type {
+  BranchesOptions,
+  BranchesView,
   PrOverlapsView,
   ScoutListItem,
   ScoutIntroState,
@@ -279,6 +281,8 @@ export interface EngineService {
   prOverlaps(): Promise<PrOverlapsView>;
   /** Every stored PR's key, in one read: mark_read resolves all its PR references against it. */
   storedPrKeys(): Promise<PrKey[]>;
+  /** The viewer's own and reviewed PRs with their signals, for session-first tools (`pnpm cli branches`). Local, no GitHub or agent call. */
+  listBranches(options: BranchesOptions): Promise<BranchesView>;
   /** Who is on each home team, from the team member cache (no GitHub call); MCP tags PR authors with it. */
   getTeamMembers(): Promise<TeamMembersView>;
   /**

@@ -1,3 +1,4 @@
+import { commitsAfter, type ReviewPoint } from './approvals.ts';
 import { trimBotBody } from './bot-bodies.ts';
 import { isBotCommand } from './bot-talk.ts';
 import { isBotThreadReply, threadReplyOf } from './bot-threads.ts';
@@ -32,11 +33,6 @@ interface RawEvent {
   botCommand?: boolean;
   /** Bot talk that asks the viewer nothing, an edit of it, or a carrier review (`PrEvent.chatter`). */
   chatter?: boolean;
-}
-
-interface ApprovalPoint {
-  at: IsoTime;
-  commitOid: string | null;
 }
 
 const deployBody = /\b(deploy(ed|ment)?|preview)\b/i;
@@ -353,8 +349,8 @@ function reviewEvents(pr: FullPr): RawEvent[] {
 }
 
 /** The latest point the viewer approved, from the app or from GitHub itself. */
-function approvalPoint(pr: Pr, viewer: Viewer, userState: UserPrState | null): ApprovalPoint | null {
-  let point: ApprovalPoint | null = null;
+function approvalPoint(pr: Pr, viewer: Viewer, userState: UserPrState | null): ReviewPoint | null {
+  let point: ReviewPoint | null = null;
   if (userState?.approvedAt) {
     point = { at: userState.approvedAt, commitOid: userState.approvedCommitOid };
   }
@@ -369,17 +365,6 @@ function approvalPoint(pr: Pr, viewer: Viewer, userState: UserPrState | null): A
   return point;
 }
 
-function commitsAfter(pr: Pr, approval: ApprovalPoint | null): Set<string> {
-  if (!approval) {
-    return new Set();
-  }
-  const index = pr.commits.findIndex((c) => c.oid === approval.commitOid);
-  if (index >= 0) {
-    return new Set(pr.commits.slice(index + 1).map((c) => c.oid));
-  }
-  // Approved commit is gone (force push) or unknown: fall back to time.
-  return new Set(pr.commits.filter((c) => c.committedAt > approval.at).map((c) => c.oid));
-}
 
 function commitEvents(pr: Pr, viewer: Viewer, userState: UserPrState | null): RawEvent[] {
   const afterApproval = commitsAfter(pr, approvalPoint(pr, viewer, userState));

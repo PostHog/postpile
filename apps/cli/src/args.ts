@@ -1,4 +1,4 @@
-import { ALL_AGENT_JOBS, SYNC_MAX_PRS, type AgentJob, type ConsolidateOptions, type SyncOptions } from '@postpile/core';
+import { ALL_AGENT_JOBS, BRANCHES_DEFAULT_DAYS, SYNC_MAX_PRS, type AgentJob, type BranchesOptions, type ConsolidateOptions, type SyncOptions } from '@postpile/core';
 import { DEFAULT_SIMULATION_CALLS, parseSimulateRoundFlags, parseSimulateStartFlags, type SimulateRoundOptions, type SimulateStartOptions } from './simulate/simulate-args.ts';
 
 export type Command =
@@ -11,6 +11,8 @@ export type Command =
   | { name: 'topics' }
   | { name: 'topic'; topicId: string }
   | { name: 'pr'; prKey: string }
+  /** Always read-only and without the lock, so it answers while the app runs. */
+  | { name: 'branches'; options: BranchesOptions; json: boolean }
   /** api: the fake server whose engine to share (--api); plain `mcp` opens its own. */
   | { name: 'mcp'; api?: string }
   | { name: 'simulate-start'; options: SimulateStartOptions }
@@ -35,6 +37,10 @@ export const usage = `usage: postpile <command>
   topics               list topics with unread counts
   topic <id>           show a topic: dossier, changes since seen, tiles
   pr <owner/repo#n>    show one PR: glance, facts and events
+  branches [flags]     own and reviewed PRs with their signals, for session tools; read-only, works while the app runs
+    --json               one JSON object: { generatedAt, viewer, prs }
+    --days <n>           merged and closed PRs of the last n days (default ${BRANCHES_DEFAULT_DAYS}); open ones always
+    --repo <owner/name>  only this repo
   mcp                  MCP server on stdin/stdout (always without the lock): claude mcp add postpile -- pnpm -C <repo> cli mcp
                        never writes to GitHub; agents can leave notes on PRs and suggest topic changes, the user accepts or clears them
     --api <url>          sample data only: share the engine of a running POSTPILE_FAKE=1 server (token in POSTPILE_TOKEN)
@@ -48,7 +54,7 @@ export const usage = `usage: postpile <command>
     --now <iso>          default: the newest activity in the source
     --dry-run            everything but agent calls
 
-  --read-only          (topics, topic, pr, tools) read the database while the app holds it; no GitHub writes
+  --read-only          (topics, topic, pr, branches, tools) read the database while the app holds it; no GitHub writes
 
 POSTPILE_FAKE=1 runs on built-in sample data (no GitHub, no agent).
 From the repo (pnpm cli) the dev database is used; POSTPILE_PROFILE=default pnpm cli ... reads the real one.`;
@@ -103,6 +109,33 @@ function parseSyncFlags(flags: string[]): SyncOptions | null {
 }
 
 /** Returns null on a bad flag so the caller shows usage. */
+function parseBranchesFlags(flags: string[]): { options: BranchesOptions; json: boolean } | null {
+  const options: BranchesOptions = { days: BRANCHES_DEFAULT_DAYS, repo: null };
+  let json = false;
+  for (let i = 0; i < flags.length; i++) {
+    const flag = flags[i];
+    if (flag === '--json') {
+      json = true;
+    } else if (flag === '--days') {
+      const days = positiveInt(flags[++i], false);
+      if (days === null) {
+        return null;
+      }
+      options.days = days;
+    } else if (flag === '--repo') {
+      const repo = flags[++i];
+      if (repo === undefined || !/^[\w.-]+\/[\w.-]+$/.test(repo)) {
+        return null;
+      }
+      options.repo = repo;
+    } else {
+      return null;
+    }
+  }
+  return { options, json };
+}
+
+/** Returns null on a bad flag so the caller shows usage. */
 function parseConsolidateFlags(flags: string[]): ConsolidateOptions | null {
   const options: ConsolidateOptions = {};
   for (let i = 0; i < flags.length; i++) {
@@ -151,6 +184,10 @@ export function parseArgs(argv: string[]): Command {
     const options = parseConsolidateFlags(argv.slice(1));
     return options ? { name, options } : badFlags(name, argv.slice(1));
   }
+  if (name === 'branches') {
+    const parsed = parseBranchesFlags(argv.slice(1));
+    return parsed ? { name, ...parsed } : badFlags(name, argv.slice(1));
+  }
   if (name === 'simulate-start') {
     const options = parseSimulateStartFlags(argv.slice(1));
     return options ? { name, options } : badFlags(name, argv.slice(1));
@@ -178,7 +215,7 @@ export function parseArgs(argv: string[]): Command {
 }
 
 /** Commands that only read the store, so they may run next to the app with --read-only. */
-const READ_COMMANDS: Command['name'][] = ['topics', 'topic', 'pr', 'tools', 'help'];
+const READ_COMMANDS: Command['name'][] = ['topics', 'topic', 'pr', 'branches', 'tools', 'help'];
 
 export interface Invocation {
   command: Command;
@@ -192,7 +229,7 @@ export interface Invocation {
 export function parseInvocation(argv: string[]): Invocation {
   const readOnly = argv.includes('--read-only');
   const command = parseArgs(argv.filter((arg) => arg !== '--read-only'));
-  const error = readOnly && !READ_COMMANDS.includes(command.name) ? `--read-only only works with topics, topic, pr and tools, not ${command.name}` : null;
+  const error = readOnly && !READ_COMMANDS.includes(command.name) ? `--read-only only works with topics, topic, pr, branches and tools, not ${command.name}` : null;
   return { command, readOnly, error };
 }
 

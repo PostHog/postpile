@@ -248,6 +248,9 @@ import {
   type OpenedReadResult,
   type QuietReadView,
   withViewerReaction,
+  branchesView,
+  type BranchesOptions,
+  type BranchesView,
 } from '@postpile/core';
 import { AgentRefresher, approveNoteBody, AutoSyncSchedule, LivePoller, MemoryPingHold, muteMessage, NEW_COMMITS_SINCE_LOOKED, nextApproveOpener, NoteCoverReader, PingDelivery, readMessage, topicChatId, unmuteMessage, UNSORTED_TOPIC_ID, type AutoSyncOptions, type EngineService, type GitHubQuota, type LivePollOptions, type PollCycle } from '@postpile/engine';
 import { FakeCatchUp } from './fake-catch-up.ts';
@@ -1429,6 +1432,13 @@ export class FakeEngine implements EngineService {
   /** Like the engine's prs table: the sample's PRs and the ones only a scout holds, so mark_read resolves a bare number. */
   async storedPrKeys(): Promise<PrKey[]> {
     return [...this.prsByKey().keys()].sort();
+  }
+
+  /** Like the engine, over the sample's PRs (scout-only PRs are no one's own or reviewed). */
+  async listBranches(options: BranchesOptions): Promise<BranchesView> {
+    const userState = (key: PrKey) => this.data.userStates.find((state) => state.prKey === key) ?? null;
+    const inputs = this.data.prs.map((pr) => ({ pr, events: this.eventsOf(pr.key), userState: userState(pr.key), fetchedAt: this.fetchedAtOf(pr.key) }));
+    return branchesView(inputs, this.viewer(), this.now(), options);
   }
 
   /** Like the engine: open PRs' diffs only, stack mates left out. The default sample has no diffs; POSTPILE_FAKE_EXTRA=mcp adds some. */

@@ -6,6 +6,13 @@ now".
 
 ## Done
 
+- `pnpm cli branches` (2026-11-09): read-only dev CLI for session-first
+  tools (Herdr) that link worktrees and agent sessions to PRs. Own and
+  reviewed PRs (open, plus merged or closed in the last `--days`) with
+  join keys (repo, headRef) and signals from core `branchesView`: whose
+  move, feedback, ready to land, ended, pushes and replies since the
+  viewer's review. Reads candidates from the store without the lock, no
+  topic detail, no GitHub or agent call; `--json` for tools.
 - Multi-PR full pr_context under a size cap (2026-10-30; DESIGN.md
   "Tools" › pr_context): 40,000 characters of data (`FULL_MANY_BUDGET`),
   cut in steps (activity and unread bodies, then topics to brief, then no

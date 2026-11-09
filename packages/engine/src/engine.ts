@@ -104,6 +104,8 @@ import type {
   WorkThreadForget,
   BoardShapeEvent,
   BusyInboxView,
+  BranchesOptions,
+  BranchesView,
 } from '@postpile/core';
 import { arch, release } from 'node:os';
 import {
@@ -129,6 +131,7 @@ import {
   withQuietRepo,
 } from '@postpile/core';
 import { loadAppVersion, saveAppVersion } from './app-version-meta.ts';
+import { readBranches } from './branches.ts';
 import type { AutoSyncOptions } from './auto-sync.ts';
 import { isPostHogMember } from '@postpile/core/telemetry-identity';
 import { ShedReport } from './telemetry/shed-report.ts';
@@ -1303,6 +1306,10 @@ export class Engine implements EngineService {
 
   async storedPrKeys(): Promise<PrKey[]> {
     return this.deps.store.prs.keys();
+  }
+
+  async listBranches(options: BranchesOptions): Promise<BranchesView> {
+    return readBranches(this.deps.store, this.deps.now(), options);
   }
 
   async getTeamMembers(): Promise<TeamMembersView> {

@@ -9,6 +9,7 @@ import { formatConsolidation } from './format-memory.ts';
 import { formatSweep } from './format-work-context.ts';
 import { formatSetupDraft } from './format-setup.ts';
 import { formatTools } from './format-tools.ts';
+import { formatBranches } from './format-branches.ts';
 import { readFileSync } from 'node:fs';
 import { applyLegacyEnv, runSimulatedRound, type EngineService } from '@postpile/engine';
 import { runMcpFromEnv, runMcpOverApi } from '@postpile/mcp';
@@ -94,6 +95,10 @@ async function runCommand(engine: EngineService, command: Command): Promise<Comm
       const detail = await engine.getPr(command.prKey);
       return detail ? done(formatPr(detail, await engine.listPrEvents(command.prKey))) : { text: `no PR ${command.prKey} in the store`, ok: false };
     }
+    case 'branches': {
+      const view = await engine.listBranches(command.options);
+      return done(command.json ? JSON.stringify(view, null, 2) : formatBranches(view));
+    }
     case 'mcp':
     case 'simulate-start':
     case 'simulate-round':
@@ -145,7 +150,8 @@ async function main(): Promise<void> {
     return;
   }
   // Refuses (DataDirLockedError, exit 1) while the app or a server holds the database, unless --read-only.
-  const engine = engineFromEnv({ lockKind: 'cli', withoutLock: readOnly });
+  // branches is always read-only: session tools call it while the app runs.
+  const engine = engineFromEnv({ lockKind: 'cli', withoutLock: readOnly || command.name === 'branches' });
   try {
     const output = await runCommand(engine, withCallCap(command, syncCallCapFromEnv(process.env.POSTPILE_MAX_AGENT_CALLS)));
     console.log(output.text);
