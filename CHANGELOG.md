@@ -2,6 +2,12 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## 0.32.1 (unreleased)
+
+### Fixed
+
+- The Claude account fallback from 0.32.0 now kicks in. A usage limit was missed because claude prints a long usage report before the error, so every agent call failed instead of moving to the next account. Weekly limits ("resets Nov 22 at 3pm") are recognized too, and the account is tried again at that time.
+
 ## 0.32.0 (2026-11-20)
 
 ### Added

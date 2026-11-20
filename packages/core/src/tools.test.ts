@@ -168,9 +168,31 @@ describe('claudeResetFromText', () => {
     expect(claudeResetFromText('resets 3pm', new Date(2026, 10, 20, 15, 11).getTime())).toBe(new Date(2026, 10, 21, 15, 0).getTime());
   });
 
+  it('reads a weekly limit with a date, rolling to next year when long past', () => {
+    expect(claudeResetFromText("You've hit your weekly limit · resets Nov 22 at 3pm (Europe/Berlin)", now)).toBe(new Date(2026, 10, 22, 15, 0).getTime());
+    expect(claudeResetFromText('resets November 22, at 3:30pm', now)).toBe(new Date(2026, 10, 22, 15, 30).getTime());
+    expect(claudeResetFromText('resets Jan 2 at 9am', now)).toBe(new Date(2027, 0, 2, 9, 0).getTime());
+  });
+
+  it('does not push a dated reset read late to next year', () => {
+    const late = new Date(2026, 10, 22, 15, 11).getTime();
+    expect(claudeResetFromText('resets Nov 22 at 3pm', late)).toBeNull();
+    expect(claudeRetryAtMs(claudeFailure("You've hit your weekly limit · resets Nov 22 at 3pm", late) ?? { state: 'limited', resetAtMs: null }, late)).toBe(
+      late + CLAUDE_LIMIT_PAUSE_MS,
+    );
+  });
+
+  it('treats the rate limit summary from the runner as a limit with its reset', () => {
+    const failure = claudeFailure("claude exited with 1: rate_limit_error (429): You've hit your weekly limit · resets Nov 22 at 3pm (Europe/Berlin)", now);
+    expect(failure).toEqual({ state: 'limited', resetAtMs: new Date(2026, 10, 22, 15, 0).getTime() });
+    expect(claudeFailure("claude exited with 1: You've hit your weekly limit", now)?.state).toBe('limited');
+    expect(claudeFailure('claude exited with 1: (429): slow down', now)?.state).toBe('limited');
+  });
+
   it('gives up on times it cannot read', () => {
     expect(claudeResetFromText('resets 3', now)).toBeNull();
     expect(claudeResetFromText('resets Nov 21', now)).toBeNull();
+    expect(claudeResetFromText('resets Foo 21 at 3pm', now)).toBeNull();
     expect(claudeResetFromText('resets 25:00', now)).toBeNull();
     expect(claudeResetFromText('no time here', now)).toBeNull();
   });

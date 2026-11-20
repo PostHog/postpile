@@ -77,11 +77,35 @@ describe('claude cli runner', () => {
     await expect(new ClaudeCliRunner({ binary, cwd }).run(request)).rejects.toThrow('claude exited with 1: not logged in');
   });
 
-  it('keeps the usage limit JSON from stdout on a non-zero exit', async () => {
+  it('keeps the usage limit from stdout on a non-zero exit', async () => {
     const binary = fakeClaude(
       'cat >/dev/null; echo "warning" >&2; printf \'{"is_error":true,"api_error_status":429,"result":"You have hit your limit"}\'; exit 1',
     );
-    await expect(new ClaudeCliRunner({ binary, cwd }).run(request)).rejects.toThrow(/warning \| .*"api_error_status":429/);
+    await expect(new ClaudeCliRunner({ binary, cwd }).run(request)).rejects.toThrow('claude exited with 1: warning | (429): You have hit your limit');
+  });
+
+  it('finds the limit behind the long usage block real claude prints first', async () => {
+    // The shape claude 2.x prints: usage and session fields first, the error
+    // fields far past the first 500 characters.
+    const envelope = {
+      duration_api_ms: 0,
+      stop_reason: 'stop_sequence',
+      session_id: '00000000-0000-0000-0000-000000000000',
+      total_cost_usd: 0,
+      usage: { input_tokens: 0, output_tokens: 0, server_tool_use: { web_search_requests: 0 }, padding: 'x'.repeat(600) },
+      type: 'result',
+      subtype: 'success',
+      is_error: true,
+      api_error_status: 429,
+      api_error_type: 'rate_limit_error',
+      result: "You've hit your weekly limit · resets Nov 22 at 3pm (Europe/Berlin)",
+    };
+    const outFile = join(mkdtempSync(join(tmpdir(), 'postpile-agent-out-')), 'out.json');
+    writeFileSync(outFile, JSON.stringify(envelope));
+    const binary = fakeClaude(`cat >/dev/null; cat '${outFile}'; exit 1`);
+    await expect(new ClaudeCliRunner({ binary, cwd }).run(request)).rejects.toThrow(
+      "claude exited with 1: rate_limit_error (429): You've hit your weekly limit · resets Nov 22 at 3pm (Europe/Berlin)",
+    );
   });
 
   it('picks the account through CLAUDE_CONFIG_DIR, unset for the default', async () => {
