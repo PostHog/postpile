@@ -77,6 +77,31 @@ describe('claude cli runner', () => {
     await expect(new ClaudeCliRunner({ binary, cwd }).run(request)).rejects.toThrow('claude exited with 1: not logged in');
   });
 
+  it('keeps the usage limit JSON from stdout on a non-zero exit', async () => {
+    const binary = fakeClaude(
+      'cat >/dev/null; echo "warning" >&2; printf \'{"is_error":true,"api_error_status":429,"result":"You have hit your limit"}\'; exit 1',
+    );
+    await expect(new ClaudeCliRunner({ binary, cwd }).run(request)).rejects.toThrow(/warning \| .*"api_error_status":429/);
+  });
+
+  it('picks the account through CLAUDE_CONFIG_DIR, unset for the default', async () => {
+    const binary = fakeClaude('cat >/dev/null; printf \'{"type":"result","is_error":false,"result":"%s"}\' "${CLAUDE_CONFIG_DIR-unset}"');
+    const runner = new ClaudeCliRunner({ binary, cwd });
+    const before = process.env.CLAUDE_CONFIG_DIR;
+    process.env.CLAUDE_CONFIG_DIR = '/from/the/app/env';
+    try {
+      expect((await runner.runWithConfigDir(request, null)).text).toBe('unset');
+      expect((await runner.runWithConfigDir(request, '/Users/alice/.claude-work')).text).toBe('/Users/alice/.claude-work');
+      expect((await runner.run(request)).text).toBe('/from/the/app/env');
+    } finally {
+      if (before === undefined) {
+        delete process.env.CLAUDE_CONFIG_DIR;
+      } else {
+        process.env.CLAUDE_CONFIG_DIR = before;
+      }
+    }
+  });
+
   it('kills a call that runs past its timeout', async () => {
     const binary = fakeClaude('sleep 5');
     await expect(new ClaudeCliRunner({ binary, cwd }).run({ ...request, timeoutMs: 100 })).rejects.toThrow('timed out after 100ms');

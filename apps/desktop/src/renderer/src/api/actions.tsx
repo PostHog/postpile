@@ -12,6 +12,7 @@ import type {
   ChatReply,
   CleanupRequest,
   SafeCleanupRequest,
+  ClaudeAccountsView,
   FeedbackInput,
   GitHubWritesChange,
   GitHubWritesStatus,
@@ -299,6 +300,12 @@ export interface Actions {
   setInterruptions(mode: InterruptionsMode, from?: 'sidebar' | 'prompt'): Promise<boolean>;
   /** "Send a test notification" (desktop app only, over the preload). Says in a toast what happened. */
   sendTestNotification(): Promise<void>;
+  /** The footer's Claude menu: make an account the preferred one. No toast unless it fails. */
+  preferClaudeAccount(id: string): Promise<void>;
+  /** The footer's Claude menu: "When it hits its limit, use the next account". No toast unless it fails. */
+  setClaudeFallback(on: boolean): Promise<void>;
+  /** The footer's Claude menu opened: look for logged-in accounts again. Quiet. */
+  refreshClaudeAccounts(): Promise<void>;
   /** Quiet: no toast. Called when the user leaves a topic. */
   markTopicSeen(topicId: string): Promise<void>;
   /** "Archive now" on a topic with nothing left. Local, not a GitHub write. */
@@ -960,6 +967,24 @@ export function ActionsProvider(props: { children: ReactNode }) {
     }
   }
 
+  async function changeClaudeAccounts(busyKey: string, method: 'PUT' | 'POST', path: string, body?: unknown): Promise<void> {
+    try {
+      const view = await withBusy(busyKey, () => request<ClaudeAccountsView>(method, path, body));
+      queryClient.setQueryData(queryKeys.claudeAccounts, view);
+    } catch (error) {
+      show('error', `Could not change the Claude account: ${errorText(error)}`);
+    }
+  }
+
+  async function refreshClaudeAccounts(): Promise<void> {
+    try {
+      const view = await request<ClaudeAccountsView>('POST', '/api/claude-accounts/refresh');
+      queryClient.setQueryData(queryKeys.claudeAccounts, view);
+    } catch {
+      // The menu keeps showing what it had.
+    }
+  }
+
   async function sendTestNotification(): Promise<void> {
     const send = window.postpile?.sendTestNotification;
     if (!send) {
@@ -1259,6 +1284,9 @@ export function ActionsProvider(props: { children: ReactNode }) {
     setTeamRole,
     setInterruptions,
     sendTestNotification,
+    preferClaudeAccount: (id) => changeClaudeAccounts('claude-accounts', 'PUT', '/api/claude-accounts/preferred', { id }),
+    setClaudeFallback: (on) => changeClaudeAccounts('claude-accounts', 'PUT', '/api/claude-accounts/fallback', { on }),
+    refreshClaudeAccounts,
     // One busy key each: withBusy drops every copy of a key when one run ends.
     clearInbox: (cleanupRequest) => run(CLEANUP_BUSY.clear, 'cleanup', () => request('POST', '/api/inbox-cleanup/clear', cleanupRequest)),
     clearSafeMerged: (safeRequest) => run(CLEANUP_BUSY.clearSafe, 'cleanup', () => request('POST', '/api/inbox-cleanup/clear-safe', safeRequest)),

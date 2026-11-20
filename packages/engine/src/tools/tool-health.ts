@@ -18,6 +18,7 @@ import {
   type ToolsView,
 } from '@postpile/core';
 import type { CommandRunner } from '../setup/setup-checks.ts';
+import type { ClaudeAccounts } from './claude-accounts.ts';
 
 export interface ToolHealthDeps {
   /** Runs gh and claude without a shell. */
@@ -34,6 +35,8 @@ export interface ToolHealthDeps {
   log?: (line: string) => void;
   /** A tool moved into a broken state (never on recovery back to ok). For the tool_missing telemetry event. */
   onBroken?: (tool: 'gh' | 'claude', state: BrokenToolState) => void;
+  /** Several Claude logins: each check looks for them again and asks `auth status` of the one in use. */
+  claudeAccounts?: Pick<ClaudeAccounts, 'refresh' | 'checkEnv'>;
 }
 
 /** GhState/ClaudeState with 'ok' and 'unchecked' excluded: what onBroken actually ever reports. */
@@ -229,7 +232,7 @@ export class ToolHealth {
 
   /** A claude call failed. Returns what it meant for the tool, null for an ordinary failure. */
   noteClaudeFailure(message: string): ClaudeFailure | null {
-    const failure = claudeFailure(message);
+    const failure = claudeFailure(message, this.nowMs());
     if (failure === null) {
       return null;
     }
@@ -285,7 +288,12 @@ export class ToolHealth {
     }
     const versionLine = firstLine(version.stdout);
     if (claudeHasAuthStatus(versionLine)) {
-      const auth = await this.deps.commands(path, ['auth', 'status', '--json']);
+      const accounts = this.deps.claudeAccounts;
+      if (accounts) {
+        await accounts.refresh();
+      }
+      const env = accounts ? await accounts.checkEnv() : undefined;
+      const auth = await this.deps.commands(path, ['auth', 'status', '--json'], env ? { env } : undefined);
       if (claudeLoggedIn(auth.stdout) === false) {
         return { state: 'logged_out', path, version: versionLine };
       }

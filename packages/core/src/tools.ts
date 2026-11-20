@@ -190,21 +190,57 @@ export interface ClaudeFailure {
 }
 
 /**
+ * "You've hit your limit · resets 3pm" (also "3:30pm", "15:00"): the next
+ * time of day with that clock time, in local time, as epoch ms. Null when the
+ * text names no time this understands (a date, a weekday, a bare number).
+ */
+export function claudeResetFromText(message: string, nowMs: number): number | null {
+  const match = /resets (?:at )?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?(?![\d:])/i.exec(message);
+  if (!match) {
+    return null;
+  }
+  const meridiem = match[3]?.toLowerCase();
+  if (meridiem === undefined && match[2] === undefined) {
+    return null;
+  }
+  let hours = Number(match[1]);
+  const minutes = Number(match[2] ?? '0');
+  if (meridiem === 'pm' && hours < 12) {
+    hours += 12;
+  }
+  if (meridiem === 'am' && hours === 12) {
+    hours = 0;
+  }
+  if (hours > 23 || minutes > 59) {
+    return null;
+  }
+  const reset = new Date(nowMs);
+  reset.setHours(hours, minutes, 0, 0);
+  if (reset.getTime() <= nowMs) {
+    reset.setDate(reset.getDate() + 1);
+  }
+  return reset.getTime();
+}
+
+/**
  * The claude state a failed call means, or null when it is an ordinary
  * failure (timeout, bad JSON, a model error) that says nothing about the
  * tool. Matches the CLI's own wording; unknown text stays an ordinary failure.
+ * `-p --output-format json` reports a limit as JSON on stdout with
+ * "api_error_status": 429, which counts as a limit too. `nowMs` is only
+ * needed to read a "resets 3pm" time.
  */
-export function claudeFailure(message: string): ClaudeFailure | null {
+export function claudeFailure(message: string, nowMs: number = Date.now()): ClaudeFailure | null {
   if (/could not start .*ENOENT|spawn \S+ ENOENT/i.test(message)) {
     return { state: 'missing', resetAtMs: null };
   }
   if (/please run \/login|not logged in|invalid api key|oauth token (has )?expired|authentication_error/i.test(message)) {
     return { state: 'logged_out', resetAtMs: null };
   }
-  if (/usage limit|limit reached|hit your limit|rate_limit_error|rate limit/i.test(message)) {
+  if (/usage limit|limit reached|hit your limit|rate_limit_error|rate limit|"api_error_status":\s*429/i.test(message)) {
     // Older CLIs print "Claude AI usage limit reached|<epoch seconds>".
     const epoch = /limit reached\|(\d{10})/i.exec(message)?.[1];
-    return { state: 'limited', resetAtMs: epoch ? Number(epoch) * 1000 : null };
+    return { state: 'limited', resetAtMs: epoch ? Number(epoch) * 1000 : claudeResetFromText(message, nowMs) };
   }
   return null;
 }

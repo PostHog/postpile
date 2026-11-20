@@ -4,6 +4,7 @@ export const queryKeys = {
   githubWrites: ['github-writes'] as const,
   live: ['live'] as const,
   tools: ['tools'] as const,
+  claudeAccounts: ['claude-accounts'] as const,
   update: ['update'] as const,
   mcpConnection: ['mcp-connection'] as const,
   lastSync: ['last-sync'] as const,

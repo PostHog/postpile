@@ -89,6 +89,7 @@ import type {
   TeamMembersView,
   TeamRolesView,
   ToolsView,
+  ClaudeAccountsView,
   TeachLessonResult,
   TopicDetail,
   TopicListItem,
@@ -208,6 +209,7 @@ import { readPrOverlaps } from './pr-overlaps.ts';
 import { saveViewerFollowingRoles } from './team-role-events.ts';
 import { TeamRoleKeeper } from './team-roles.ts';
 import { ToolHealth } from './tools/tool-health.ts';
+import type { ClaudeAccounts } from './tools/claude-accounts.ts';
 import { claudeDirFromEnv } from './work-context/collector.ts';
 import { WorkContextSchedule } from './work-context/schedule.ts';
 import { storageJobs } from './storage-jobs/jobs.ts';
@@ -283,6 +285,8 @@ export interface EngineDeps {
    * working, for tests that do not care.
    */
   tools?: ToolHealth;
+  /** The Claude accounts the agent runner picks from (createEngine wires the same one into it). Missing: none, the menu stays empty. */
+  claudeAccounts?: ClaudeAccounts | null;
   /** Product analytics (DESIGN.md "Usage analytics"). Defaults to a no-op: never required, safe in every test. */
   telemetry?: Telemetry;
   /** For the app_version person property; the identify call is skipped without one. */
@@ -356,6 +360,7 @@ export class Engine implements EngineService {
   private readonly cleanup: InboxCleanup;
   private readonly setup: SetupFlow;
   private readonly toolHealth: ToolHealth;
+  private readonly claudeAccountsKeeper: ClaudeAccounts | null;
   private readonly mcp: McpConnection;
   private syncing: Promise<SyncReport> | null = null;
   private consolidating: Promise<ConsolidationReport> | null = null;
@@ -416,6 +421,7 @@ export class Engine implements EngineService {
       deps.syncLog ?? ((line) => console.log(line)),
     );
     this.toolHealth = deps.tools ?? ToolHealth.assumeOk(now);
+    this.claudeAccountsKeeper = deps.claudeAccounts ?? null;
     const timers = deps.timers ?? systemTimers;
     this.quota = deps.quota ?? new GitHubQuota(() => timers.now());
     const agentOff = (): string | null => this.toolHealth.agentOffReason();
@@ -622,7 +628,8 @@ export class Engine implements EngineService {
       now,
     });
     const commands = deps.setupCommands ?? systemCommands(tmpdir());
-    const setupChecks = new SetupChecks(deps.reader, commands);
+    const accounts = this.claudeAccountsKeeper;
+    const setupChecks = new SetupChecks(deps.reader, commands, undefined, async () => accounts?.checkEnv());
     this.setup = new SetupFlow(store, deps.agent, history, setupChecks, setupSweep, now);
     this.mcp = new McpConnection({ store, commands, tools: this.toolHealth, launcher: deps.mcpLauncher ?? null, now, telemetry: this.telemetry });
     this.outsideProposals = new OutsideProposals(store, now);
@@ -1851,6 +1858,33 @@ export class Engine implements EngineService {
 
   checkTools(): Promise<ToolsView> {
     return this.toolHealth.check();
+  }
+
+  async claudeAccounts(): Promise<ClaudeAccountsView> {
+    if (!this.claudeAccountsKeeper) {
+      return { accounts: [], fallback: true };
+    }
+    await this.claudeAccountsKeeper.ensureDiscovered();
+    return this.claudeAccountsKeeper.view();
+  }
+
+  async refreshClaudeAccounts(): Promise<ClaudeAccountsView> {
+    await this.claudeAccountsKeeper?.refresh();
+    return this.claudeAccounts();
+  }
+
+  async setPreferredClaudeAccount(id: string): Promise<ClaudeAccountsView> {
+    if (!this.claudeAccountsKeeper) {
+      throw new Error('no Claude accounts in this run');
+    }
+    return this.claudeAccountsKeeper.setPreferred(id);
+  }
+
+  async setClaudeFallback(on: boolean): Promise<ClaudeAccountsView> {
+    if (!this.claudeAccountsKeeper) {
+      throw new Error('no Claude accounts in this run');
+    }
+    return this.claudeAccountsKeeper.setFallback(on);
   }
 
   mcpConnection(): Promise<McpConnectionView> {

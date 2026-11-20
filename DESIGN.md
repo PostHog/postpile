@@ -3276,10 +3276,65 @@ need it, and never retry per call.
 
 `pnpm cli tools` prints the same status. Sample data simulates each state
 with `POSTPILE_FAKE_MISSING` (comma separated: `gh`, `gh-auth`, `gh-token`,
-`gh-offline`, `claude`, `claude-auth`, `claude-limit`); `gh` and `gh-auth`
-read as a first run (no topics), `gh-token` keeps the topics.
+`gh-offline`, `claude`, `claude-auth`, `claude-limit`, `claude-account-limit`);
+`gh` and `gh-auth` read as a first run (no topics), `gh-token` keeps the
+topics.
 
 Routes: `GET /api/tools`, `POST /api/tools/check`.
+
+### Claude accounts (2026-11-20)
+
+A user can have several Claude subscriptions on one Mac, each logged in
+under its own claude config folder (`CLAUDE_CONFIG_DIR=~/.claude-work`,
+a team plan) next to the default login (CLAUDE_CONFIG_DIR unset, a
+personal plan). Before this, every call ran on whatever the app's
+environment implied, so one account at its limit paused the agent while
+another sat idle.
+
+- **Accounts.** An account is a config folder, or `default`: the variable
+  unset, which is not the same as setting it to `~/.claude`. Discovery
+  (`claudeAccountCandidates` in core, `ClaudeAccounts` in the engine): the
+  default, every `~/.claude-*` folder with a `.claude.json`, the app's own
+  CLAUDE_CONFIG_DIR, and folders listed in config.json. Each is asked
+  `claude auth status --json` with its own environment; logged-in ones stay.
+  Only from claude 2.x (older ones take `auth status` as a prompt). Labels
+  are org plus plan ("Acme · team"); the organization claude.ai makes for
+  one person reads "Personal". Discovery runs before the first call, on
+  every tools check and when the footer menu opens; calls use the cached
+  list. Nothing found (claude too old, nothing logged in): calls run with
+  the app's environment as before.
+- **Order and fallback.** `claudeAccounts` in
+  `~/.config/postpile/config.json` lists folders in call order, the
+  preferred first, `"default"` for the unset one; logged-in accounts not
+  listed come after, in discovery order (`claudeAccountOrder`). No list:
+  the default first, so a single-account setup sees no change.
+  `claudeFallback` (default true) lets a call move on to the next account.
+- **The rule.** Each call runs on the first account in order that is not
+  at its limit (`pickClaudeAccount`). A call that hits a usage limit
+  (`claudeFailure`: the CLI's wordings, `"api_error_status": 429` in the
+  JSON stdout, also on a non-zero exit) marks its account limited until the
+  reset (`limit reached|<epoch>`, or "resets 3pm" read as the next 15:00
+  local time, else 30 minutes) and runs again at once on the next account
+  (`ClaudeAccountRunner`). Only when no account is left (or fallback is
+  off) does the limit reach `GatedRunner`, worded with the soonest reset,
+  and the agent pauses as before. A limited account is used again once its
+  time is up. Kept in memory, no table; a restart tries every account
+  again. One log line per change: "claude account X at limit until …,
+  using Y".
+- **Checks.** `ToolHealth`'s `claude auth status` and the setup check run
+  with the environment of the account in use, so "logged out" is about the
+  account calls actually use.
+- **UI.** A quiet footer item, only with two or more accounts: "Claude ·
+  Acme", after a fallback "Claude · Personal (Acme at limit)". Its menu
+  lists the accounts in order with a check on the preferred one (a click
+  makes it preferred), a quiet status per account ("at limit, back 15:00",
+  "in use", else the email) and "When it hits its limit, use the next
+  account". Muted words, no warning colour: a fallback is the app doing its
+  job, not something to fix.
+
+Routes: `GET /api/claude-accounts`, `POST /api/claude-accounts/refresh`,
+`PUT /api/claude-accounts/preferred` (`{ id }`), `PUT
+/api/claude-accounts/fallback` (`{ on }`).
 
 ## Stack completion
 

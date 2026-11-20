@@ -99,6 +99,7 @@ import type {
   FullComment,
   ReviewNoteKind,
   ToolsView,
+  ClaudeAccountsView,
   Topic,
   TopicArchiveBox,
   TopicDetail,
@@ -262,6 +263,7 @@ import { FakePrNotes } from './fake-pr-notes.ts';
 import type { FakeExtra } from './fake-extras.ts';
 import { fakeQuota, type FakeQuotaLevel } from './fake-quota.ts';
 import { FakeTools, type FakeToolProblem } from './fake-tools.ts';
+import { FakeClaudeAccounts } from './fake-claude-accounts.ts';
 import { FakeWorkContext } from './fake-work-context.ts';
 import { FakeTileFeedback } from './fake-tile-feedback.ts';
 import { FakeScouts, sampleScouts } from './fake-scouts.ts';
@@ -483,6 +485,7 @@ export class FakeEngine implements EngineService {
   private readonly setup: FakeSetup;
   private readonly teamRoles: FakeTeamRoles;
   private readonly toolStatus: FakeTools;
+  private readonly claudeAccountsStatus: FakeClaudeAccounts;
   private readonly mcp: FakeMcp;
   private readonly topicChanges: FakeTopicChanges;
   private readonly prNotes: FakePrNotes;
@@ -565,6 +568,7 @@ export class FakeEngine implements EngineService {
     const catchUpStepMs = options.catchUpStepMs ?? 4000;
     this.catchUp = new FakeCatchUp(this.data, this.now, { queuedMs: catchUpStepMs, writingMs: catchUpStepMs * 1.5 });
     this.toolStatus = new FakeTools(options.missingTools ?? [], this.now);
+    this.claudeAccountsStatus = new FakeClaudeAccounts(this.now, (options.missingTools ?? []).includes('claude-account-limit'));
     // A first run has no report yet; otherwise the one the sample PRs were fetched by, as a restart finds it.
     this.lastSync = this.firstRun || this.toolStatus.neverSynced() ? null : sampleLastSync(this.startedAt);
     this.quota = fakeQuota(options.quota ?? null, this.now);
@@ -3034,6 +3038,22 @@ export class FakeEngine implements EngineService {
   async checkTools(): Promise<ToolsView> {
     await new Promise((resolve) => setTimeout(resolve, this.checkDelayMs));
     return this.toolStatus.check();
+  }
+
+  async claudeAccounts(): Promise<ClaudeAccountsView> {
+    return this.claudeAccountsStatus.view();
+  }
+
+  async refreshClaudeAccounts(): Promise<ClaudeAccountsView> {
+    return this.claudeAccountsStatus.view();
+  }
+
+  async setPreferredClaudeAccount(id: string): Promise<ClaudeAccountsView> {
+    return this.claudeAccountsStatus.setPreferred(id);
+  }
+
+  async setClaudeFallback(on: boolean): Promise<ClaudeAccountsView> {
+    return this.claudeAccountsStatus.setFallback(on);
   }
 
   async mcpConnection(): Promise<McpConnectionView> {

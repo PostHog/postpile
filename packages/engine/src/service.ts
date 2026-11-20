@@ -88,6 +88,7 @@ import type {
   TeamMembersView,
   TeamRolesView,
   ToolsView,
+  ClaudeAccountsView,
   TeachLessonResult,
   TopicDetail,
   TopicListItem,
@@ -608,6 +609,19 @@ export interface EngineService {
   tools(): Promise<ToolsView>;
   /** "Check again": checks gh and claude now, whatever the backoff says. */
   checkTools(): Promise<ToolsView>;
+
+  /**
+   * The logged-in Claude accounts in call order, the preferred one first,
+   * which one calls run on now and which are at their usage limit (DESIGN.md
+   * "Claude accounts"). Looks for accounts once, then answers from memory.
+   */
+  claudeAccounts(): Promise<ClaudeAccountsView>;
+  /** Looks for logged-in accounts again (the footer menu opens). */
+  refreshClaudeAccounts(): Promise<ClaudeAccountsView>;
+  /** Makes an account the preferred one (first in config.json's claudeAccounts). */
+  setPreferredClaudeAccount(id: string): Promise<ClaudeAccountsView>;
+  /** "When it hits its limit, use the next account" (config.json's claudeFallback). */
+  setClaudeFallback(on: boolean): Promise<ClaudeAccountsView>;
 
   /**
    * Whether Claude Code has PostPile's MCP server (`claude mcp get postpile`

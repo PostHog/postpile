@@ -48,6 +48,22 @@ export const claudeEnv = {
   ENABLE_CLAUDEAI_MCP_SERVERS: 'false',
 };
 
+/**
+ * The environment one claude process runs with. `configDir` picks the
+ * account (a claude config folder): undefined keeps whatever the app's own
+ * environment says, null removes CLAUDE_CONFIG_DIR for the default account
+ * (unset is not the same as ~/.claude), a path sets it.
+ */
+export function claudeProcessEnv(base: NodeJS.ProcessEnv, configDir: string | null | undefined): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...base, ...claudeEnv };
+  if (configDir === null) {
+    delete env.CLAUDE_CONFIG_DIR;
+  } else if (configDir !== undefined) {
+    env.CLAUDE_CONFIG_DIR = configDir;
+  }
+  return env;
+}
+
 interface ClaudeJsonResult {
   result?: string;
   is_error?: boolean;
@@ -146,15 +162,20 @@ export class ClaudeCliRunner implements AgentRunner {
   }
 
   run(request: AgentRequest): Promise<AgentResponse> {
-    return this.limiter.run(() => this.spawnClaude(request));
+    return this.limiter.run(() => this.spawnClaude(request, undefined));
   }
 
-  private spawnClaude(request: AgentRequest): Promise<AgentResponse> {
+  /** One call on one account: a claude config folder, or null for the default (CLAUDE_CONFIG_DIR unset). */
+  runWithConfigDir(request: AgentRequest, configDir: string | null): Promise<AgentResponse> {
+    return this.limiter.run(() => this.spawnClaude(request, configDir));
+  }
+
+  private spawnClaude(request: AgentRequest, configDir: string | null | undefined): Promise<AgentResponse> {
     const started = Date.now();
     return new Promise((resolve, reject) => {
       const child = spawn(this.binary, claudeArgs(request.model), {
         cwd: this.cwd,
-        env: { ...process.env, ...claudeEnv },
+        env: claudeProcessEnv(process.env, configDir),
       });
       let stdout = '';
       let stderr = '';
@@ -185,7 +206,10 @@ export class ClaudeCliRunner implements AgentRunner {
       child.on('error', (error) => settle(new Error(`could not start ${this.binary}: ${error.message}`)));
       child.on('close', (code) => {
         if (code !== 0) {
-          settle(new Error(`claude exited with ${code}: ${stderr.trim() || stdout.slice(0, 500)}`));
+          // A usage limit comes as JSON on stdout even when claude exits
+          // non-zero, so both go into the message for claudeFailure to read.
+          const output = [stderr.trim(), stdout.trim().slice(0, 500)].filter((part) => part !== '').join(' | ');
+          settle(new Error(`claude exited with ${code}: ${output}`));
           return;
         }
         try {

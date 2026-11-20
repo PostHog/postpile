@@ -1,4 +1,4 @@
-import { arch, release } from 'node:os';
+import { arch, homedir, release } from 'node:os';
 import { dirname, join } from 'node:path';
 import { ClaudeCliRunner, RunnerAgentService } from '@postpile/agent';
 import { AGENT_REQUESTS_FOLDER, systemTimers, UNDO_WINDOW_MS, type McpLauncher } from '@postpile/core';
@@ -18,6 +18,8 @@ import { GitHubWrites } from './writes/github-writes.ts';
 import { PendingWrites } from './writes/pending-writes.ts';
 import { systemCommands } from './setup/setup-checks.ts';
 import { GitHubQuota, quotaFetch } from './github-quota.ts';
+import { ClaudeAccountRunner } from './tools/account-runner.ts';
+import { ClaudeAccounts } from './tools/claude-accounts.ts';
 import { GatedRunner } from './tools/gated-runner.ts';
 import { ToolHealth } from './tools/tool-health.ts';
 import { WatchedTokenSource, watchedFetch } from './tools/watched-github.ts';
@@ -116,8 +118,13 @@ export function wireEngine(options: CreateEngineOptions = {}): Engine {
   const agentCwd = agentCwdFor(paths.databaseFile);
   const commands = systemCommands(agentCwd);
   const ghTokens = new GhCliTokenSource(agentCwd);
+  const userConfig = paths.configFile ? new UserConfigFile(paths.configFile) : null;
+  // Several Claude logins (claude config folders): each call runs on the
+  // first one not at its usage limit, the next one takes over at a limit.
+  const claudeAccounts = new ClaudeAccounts({ commands, userConfig, home: homedir(), now });
   const tools = new ToolHealth({ commands,
     now,
+    claudeAccounts,
     forgetToken: () => ghTokens.forget(),
     onBroken: (tool, reason) => telemetry.capture('tool_missing', { tool, reason }),
   });
@@ -154,7 +161,9 @@ export function wireEngine(options: CreateEngineOptions = {}): Engine {
     store,
     reader,
     writes,
-    agent: new RunnerAgentService(new GatedRunner(new ClaudeCliRunner({ cwd: agentCwd }), tools), { observer: callLog }),
+    agent: new RunnerAgentService(new GatedRunner(new ClaudeAccountRunner(new ClaudeCliRunner({ cwd: agentCwd }), claudeAccounts), tools), {
+      observer: callLog,
+    }),
     callLog,
     markReadQueue: new MarkReadQueue(
       writes,
@@ -174,7 +183,8 @@ export function wireEngine(options: CreateEngineOptions = {}): Engine {
     catchUpCallsPerDay: catchUpCapFromEnv(process.env.POSTPILE_CATCHUP_CAP, process.env.POSTPILE_MAX_AGENT_CALLS),
     topicDigest: process.env.POSTPILE_TOPIC_DIGEST === '1',
     dataLock: lock,
-    userConfig: paths.configFile ? new UserConfigFile(paths.configFile) : null,
+    userConfig,
+    claudeAccounts,
     setupCommands: commands,
     mcpLauncher: options.mcpLauncher ?? null,
     tools,
