@@ -192,22 +192,16 @@ export interface ClaudeFailure {
 /** A stated reset time at most this far in the past counts as due now. */
 const RESET_JUST_PASSED_MS = 10 * 60_000;
 
-/**
- * "You've hit your limit · resets 3pm" (also "3:30pm", "15:00"): the next
- * time of day with that clock time, in local time, as epoch ms. Null when the
- * text names no time this understands (a date, a weekday, a bare number).
- */
-export function claudeResetFromText(message: string, nowMs: number): number | null {
-  const match = /resets (?:at )?(\d{1,2})(?::(\d{2}))? ?(am|pm)?(?![\d:])/i.exec(message);
-  if (!match) {
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+
+/** "3", "30", "pm" -> 15:30. Null for a bare number ("resets 3") or a time that does not exist. */
+function clockTime(hoursText: string, minutesText: string | undefined, meridiemText: string | undefined): { hours: number; minutes: number } | null {
+  const meridiem = meridiemText?.toLowerCase();
+  if (meridiem === undefined && minutesText === undefined) {
     return null;
   }
-  const meridiem = match[3]?.toLowerCase();
-  if (meridiem === undefined && match[2] === undefined) {
-    return null;
-  }
-  let hours = Number(match[1]);
-  const minutes = Number(match[2] ?? '0');
+  let hours = Number(hoursText);
+  const minutes = Number(minutesText ?? '0');
   if (meridiem === 'pm' && hours < 12) {
     hours += 12;
   }
@@ -217,8 +211,56 @@ export function claudeResetFromText(message: string, nowMs: number): number | nu
   if (hours > 23 || minutes > 59) {
     return null;
   }
+  return { hours, minutes };
+}
+
+/**
+ * "resets Nov 22 at 3pm" (a weekly limit): that day and time, in local time,
+ * as epoch ms; next year's when this year's is long past. Null when the text
+ * names no date this understands.
+ */
+function claudeDatedReset(message: string, nowMs: number): number | null {
+  const match = /resets ([a-z]{3})[a-z]* (\d{1,2}),? at (\d{1,2})(?::(\d{2}))? ?(am|pm)?(?![\d:])/i.exec(message);
+  if (!match) {
+    return null;
+  }
+  const [, monthText = '', dayText = '', hoursText = '', minutesText, meridiemText] = match;
+  const month = MONTHS.indexOf(monthText.toLowerCase());
+  const time = clockTime(hoursText, minutesText, meridiemText);
+  if (month === -1 || time === null) {
+    return null;
+  }
   const reset = new Date(nowMs);
-  reset.setHours(hours, minutes, 0, 0);
+  reset.setMonth(month, Number(dayText));
+  reset.setHours(time.hours, time.minutes, 0, 0);
+  if (reset.getTime() < nowMs - RESET_JUST_PASSED_MS) {
+    reset.setFullYear(reset.getFullYear() + 1);
+  }
+  return reset.getTime();
+}
+
+/**
+ * "You've hit your limit · resets 3pm" (also "3:30pm", "15:00"): the next
+ * time of day with that clock time, in local time, as epoch ms. "resets Nov
+ * 22 at 3pm" (a weekly limit): that day. Null when the text names no time
+ * this understands (a weekday, a bare number).
+ */
+export function claudeResetFromText(message: string, nowMs: number): number | null {
+  const dated = claudeDatedReset(message, nowMs);
+  if (dated !== null) {
+    return dated;
+  }
+  const match = /resets (?:at )?(\d{1,2})(?::(\d{2}))? ?(am|pm)?(?![\d:])/i.exec(message);
+  if (!match) {
+    return null;
+  }
+  const [, hoursText = '', minutesText, meridiemText] = match;
+  const time = clockTime(hoursText, minutesText, meridiemText);
+  if (time === null) {
+    return null;
+  }
+  const reset = new Date(nowMs);
+  reset.setHours(time.hours, time.minutes, 0, 0);
   // "resets 3pm" read at 15:00:10 means it is due now, not tomorrow: a
   // time only just past stays today, and claudeRetryAtMs makes it a minute.
   if (reset.getTime() < nowMs - RESET_JUST_PASSED_MS) {
@@ -243,7 +285,7 @@ export function claudeFailure(message: string, nowMs: number = Date.now()): Clau
   if (/please run \/login|not logged in|invalid api key|oauth token (has )?expired|authentication_error/i.test(message)) {
     return { state: 'logged_out', resetAtMs: null };
   }
-  if (/usage limit|limit reached|hit your limit|rate_limit_error|rate limit|"api_error_status": ?429/i.test(message)) {
+  if (/usage limit|limit reached|hit your (?:weekly |daily |monthly |session )?limit|rate_limit_error|rate limit|"api_error_status": ?429|\(429\)/i.test(message)) {
     // Older CLIs print "Claude AI usage limit reached|<epoch seconds>".
     const epoch = /limit reached\|(\d{10})/i.exec(message)?.[1];
     return { state: 'limited', resetAtMs: epoch ? Number(epoch) * 1000 : claudeResetFromText(message, nowMs) };

@@ -77,6 +77,9 @@ export function claudeProcessEnv(base: NodeJS.ProcessEnv, configDir: string | nu
 interface ClaudeJsonResult {
   result?: string;
   is_error?: boolean;
+  /** On an API error: the HTTP status (429 for a usage limit) and the error type ("rate_limit_error"). */
+  api_error_status?: number | null;
+  api_error_type?: string | null;
   total_cost_usd?: number;
   duration_ms?: number;
   /** Per model that answered, keyed by its full id (e.g. "claude-sonnet-5-5"). */
@@ -101,6 +104,36 @@ function answeringModel(parsed: ClaudeJsonResult): string | null {
   return best;
 }
 
+/**
+ * What a failed run says, short enough for a log line and for claudeFailure
+ * to read: the error fields of claude's JSON ("rate_limit_error (429): You've
+ * hit your weekly limit · resets Nov 22 at 3pm"), else the start of the raw
+ * output. The JSON opens with a long usage block, so its first few hundred
+ * characters never reach the error.
+ */
+export function claudeErrorSummary(stdout: string): string {
+  const raw = stdout.trim().slice(0, 500);
+  let parsed: ClaudeJsonResult;
+  try {
+    parsed = JSON.parse(stdout) as ClaudeJsonResult;
+  } catch {
+    return raw;
+  }
+  if (parsed === null || typeof parsed !== 'object') {
+    return raw;
+  }
+  const kind: string[] = [];
+  if (typeof parsed.api_error_type === 'string') {
+    kind.push(parsed.api_error_type);
+  }
+  if (typeof parsed.api_error_status === 'number') {
+    kind.push(`(${parsed.api_error_status})`);
+  }
+  const result = typeof parsed.result === 'string' ? parsed.result.trim().slice(0, 500) : '';
+  const summary = [kind.join(' '), result].filter((part) => part !== '').join(': ');
+  return summary === '' ? raw : summary;
+}
+
 export function parseClaudeOutput(stdout: string): { text: string; costUsd: number | null; model: string | null } {
   let parsed: ClaudeJsonResult;
   try {
@@ -109,7 +142,7 @@ export function parseClaudeOutput(stdout: string): { text: string; costUsd: numb
     throw new Error(`claude printed something that is not JSON: ${stdout.slice(0, 500)}`);
   }
   if (parsed.is_error || typeof parsed.result !== 'string') {
-    throw new Error(`claude returned an error: ${stdout.slice(0, 500)}`);
+    throw new Error(`claude returned an error: ${claudeErrorSummary(stdout)}`);
   }
   return { text: parsed.result.trim(), costUsd: parsed.total_cost_usd ?? null, model: answeringModel(parsed) };
 }
@@ -228,7 +261,7 @@ export class ClaudeCliRunner implements AgentRunner {
         if (code !== 0) {
           // A usage limit comes as JSON on stdout even when claude exits
           // non-zero, so both go into the message for claudeFailure to read.
-          const output = [stderr.trim(), stdout.trim().slice(0, 500)].filter((part) => part !== '').join(' | ');
+          const output = [stderr.trim(), claudeErrorSummary(stdout)].filter((part) => part !== '').join(' | ');
           settle(new Error(`claude exited with ${code}: ${output}`));
           return;
         }
