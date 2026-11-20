@@ -198,7 +198,7 @@ const RESET_JUST_PASSED_MS = 10 * 60_000;
  * text names no time this understands (a date, a weekday, a bare number).
  */
 export function claudeResetFromText(message: string, nowMs: number): number | null {
-  const match = /resets (?:at )?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?(?![\d:])/i.exec(message);
+  const match = /resets (?:at )?(\d{1,2})(?::(\d{2}))? ?(am|pm)?(?![\d:])/i.exec(message);
   if (!match) {
     return null;
   }
@@ -242,7 +242,7 @@ export function claudeFailure(message: string, nowMs: number = Date.now()): Clau
   if (/please run \/login|not logged in|invalid api key|oauth token (has )?expired|authentication_error/i.test(message)) {
     return { state: 'logged_out', resetAtMs: null };
   }
-  if (/usage limit|limit reached|hit your limit|rate_limit_error|rate limit|"api_error_status":\s*429/i.test(message)) {
+  if (/usage limit|limit reached|hit your limit|rate_limit_error|rate limit|"api_error_status": ?429/i.test(message)) {
     // Older CLIs print "Claude AI usage limit reached|<epoch seconds>".
     const epoch = /limit reached\|(\d{10})/i.exec(message)?.[1];
     return { state: 'limited', resetAtMs: epoch ? Number(epoch) * 1000 : claudeResetFromText(message, nowMs) };
