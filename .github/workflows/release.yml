@@ -55,7 +55,7 @@ permissions:
 jobs:
     build:
         # Apple silicon runner: the app is arm64 only.
-        runs-on: macos-14
+        runs-on: macos-15
         # Notarization waits on Apple, usually minutes, sometimes much longer.
         timeout-minutes: 60
         if: github.repository == 'PostHog/postpile'
