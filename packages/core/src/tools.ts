@@ -236,7 +236,8 @@ export function claudeResetFromText(message: string, nowMs: number): number | nu
  * needed to read a "resets 3pm" time.
  */
 export function claudeFailure(message: string, nowMs: number = Date.now()): ClaudeFailure | null {
-  if (/could not start .*ENOENT|spawn \S+ ENOENT/i.test(message)) {
+  const notStarted = message.includes('could not start ') && message.includes('ENOENT');
+  if (notStarted || /spawn \S+ ENOENT/i.test(message)) {
     return { state: 'missing', resetAtMs: null };
   }
   if (/please run \/login|not logged in|invalid api key|oauth token (has )?expired|authentication_error/i.test(message)) {
