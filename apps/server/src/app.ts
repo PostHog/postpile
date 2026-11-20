@@ -511,6 +511,17 @@ export function createApp(
   // gh and claude status with the fix commands; the check is local and reads nothing from GitHub.
   app.get('/api/tools', async (c) => c.json(await engine.tools()));
   app.post('/api/tools/check', async (c) => c.json(await engine.checkTools()));
+  // Claude accounts (claude config folders): the footer menu. Changes go to config.json.
+  app.get('/api/claude-accounts', async (c) => c.json(await engine.claudeAccounts()));
+  app.post('/api/claude-accounts/refresh', async (c) => c.json(await engine.refreshClaudeAccounts()));
+  app.put('/api/claude-accounts/preferred', async (c) => {
+    const body = z.object({ id: z.string().min(1).max(500) }).parse(await c.req.json());
+    return c.json(await engine.setPreferredClaudeAccount(body.id));
+  });
+  app.put('/api/claude-accounts/fallback', async (c) => {
+    const body = z.object({ on: z.boolean() }).parse(await c.req.json());
+    return c.json(await engine.setClaudeFallback(body.on));
+  });
   app.get('/api/setup', async (c) => c.json(await engine.setupStatus()));
   app.get('/api/setup/checks', async (c) => c.json(await engine.setupChecks()));
   // The sweep can take tens of seconds: POST starts it and answers at once, GET is polled.

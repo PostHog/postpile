@@ -1,10 +1,12 @@
 import type { ReactNode } from 'react';
 import type { LivePollStatus, TopicDetail, TopicListItem } from '@postpile/core';
 import { useActions } from '../api/actions.tsx';
+import { useClaudeAccounts } from '../api/claude-accounts.ts';
 import { useInboxCleanup } from '../api/cleanup.ts';
 import { useMcpConnection } from '../api/mcp.ts';
 import { useTools } from '../api/tools.ts';
 import { callStatsWords } from '../lib/agent-stats.ts';
+import { claudeAccountsFooterText } from '../lib/claude-accounts.ts';
 import { progressLabel } from '../lib/cleanup.ts';
 import { liveLabel, quotaLabel } from '../lib/live.ts';
 import { queueText } from '../lib/pending.ts';
@@ -13,6 +15,7 @@ import { syncReportDetail } from '../lib/sync-report.ts';
 import { useNow } from '../lib/use-now.ts';
 import { countPrs } from '../lib/tiles.ts';
 import { toolsFooter } from '../lib/tools.ts';
+import { ClaudeAccountFooterItem } from './ClaudeAccountFooterItem.tsx';
 import { McpFooterItem } from './McpFooterItem.tsx';
 import { WritesLock } from './WritesLock.tsx';
 
@@ -37,7 +40,7 @@ function withDividers(items: ReactNode[]): ReactNode[] {
 }
 
 /**
- * 26px strip: unread count, PR counts for the open topic, the GitHub writes lock (an icon while writes are on), an inbox cleanup while it runs, live poll, the GitHub quota while low, what gh or claude leave off, agent calls of the last sync, the MCP offer while not connected, mark-read queue, app version.
+ * 26px strip: unread count, PR counts for the open topic, the GitHub writes lock (an icon while writes are on), an inbox cleanup while it runs, live poll, the GitHub quota while low, what gh or claude leave off, the Claude account with several, agent calls of the last sync, the MCP offer while not connected, mark-read queue, app version.
  */
 export function StatusFooter(props: { topics: TopicListItem[]; detail: TopicDetail | undefined; live: LivePollStatus | undefined }) {
   const actions = useActions();
@@ -52,6 +55,8 @@ export function StatusFooter(props: { topics: TopicListItem[]; detail: TopicDeta
   const mcp = useMcpConnection().data;
   const mcpShows = mcp !== undefined && mcpFooterShows(mcp);
   const cleanup = useInboxCleanup().data?.running ?? null;
+  const claudeAccounts = useClaudeAccounts().data;
+  const claudeAccountsShow = claudeAccounts !== undefined && claudeAccountsFooterText(claudeAccounts) !== null;
   const left = withDividers([
     <span key="unread" className="flex items-center gap-1.5">
       <span className={`size-1.5 rounded-full ${unread > 0 ? 'bg-unread ring-2 ring-unread/16' : 'bg-dot-quiet'}`} />
@@ -104,6 +109,8 @@ export function StatusFooter(props: { topics: TopicListItem[]; detail: TopicDeta
         {tools.text}
       </span>
     ),
+    // The item hides itself with one account; asked here too so no divider is left dangling.
+    claudeAccountsShow && <ClaudeAccountFooterItem key="claude-accounts" />,
     lastSync && (
       <span key="sync" title={syncReportDetail(lastSync)} className={lastSync.errors.length > 0 ? 'text-status-bad' : ''}>
         last full sync: <Num>{lastSync.agentCallStats.total}</Num> {callStatsWords(lastSync.agentCallStats)}

@@ -118,6 +118,7 @@ export * from './setup.ts';
 export * from './setup-draft.ts';
 export * from './setup-fit.ts';
 export * from './tools.ts';
+export * from './claude-accounts.ts';
 export * from './github-quota.ts';
 export * from './mac-privacy.ts';
 export * from './updates.ts';

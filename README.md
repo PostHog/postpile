@@ -102,7 +102,7 @@ Requirements:
 
 - macOS 12 or later on Apple silicon (arm64)
 - [GitHub CLI](https://cli.github.com) (`gh`), logged in: `brew install gh`, then `gh auth login`. Without it nothing syncs.
-- [Claude Code](https://docs.claude.com/en/docs/claude-code) (`claude`), logged in: `curl -fsSL https://claude.ai/install.sh | bash`, then `claude auth login`. PostPile uses it for every agent call, on your own Claude plan or API key. Without it the app runs on rules only: tiles, whose turn and notifications work, and topics, dossiers, glances and chat do not.
+- [Claude Code](https://docs.claude.com/en/docs/claude-code) (`claude`), logged in: `curl -fsSL https://claude.ai/install.sh | bash`, then `claude auth login`. PostPile uses it for every agent call, on your own Claude plan or API key. Without it the app runs on rules only: tiles, whose turn and notifications work, and topics, dossiers, glances and chat do not. With several Claude logins (the default one plus folders like `~/.claude-work` used through `CLAUDE_CONFIG_DIR`), PostPile uses the preferred one and moves on to the next when it hits its usage limit; pick the preferred one from the "Claude" item in the footer.
 
 With Homebrew:
 

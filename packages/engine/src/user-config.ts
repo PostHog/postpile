@@ -19,6 +19,14 @@ export interface UserConfigData {
   toolPath?: string[];
   /** When the Scouts intro card was answered ("Not now", or a scout turned on): it never opens by itself again. */
   scoutsIntroDismissedAt?: string;
+  /**
+   * Claude accounts (claude config folders) in the order agent calls try
+   * them, the preferred one first; "default" is the one with
+   * CLAUDE_CONFIG_DIR unset. Logged-in accounts not listed come after.
+   */
+  claudeAccounts?: string[];
+  /** When the account in use hits its usage limit, use the next one. Default true. */
+  claudeFallback?: boolean;
 }
 
 /** A list of strings, trimmed, empties dropped; null when the value is not a list of strings. */
@@ -80,6 +88,13 @@ export class UserConfigFile {
     if (typeof raw.scoutsIntroDismissedAt === 'string') {
       data.scoutsIntroDismissedAt = raw.scoutsIntroDismissedAt;
     }
+    const claudeAccounts = this.listSetting(raw, 'claudeAccounts');
+    if (claudeAccounts !== null) {
+      data.claudeAccounts = claudeAccounts;
+    }
+    if (typeof raw.claudeFallback === 'boolean') {
+      data.claudeFallback = raw.claudeFallback;
+    }
     return data;
   }
 
@@ -100,5 +115,14 @@ export class UserConfigFile {
   /** The Scouts intro card was answered: it never opens by itself again. */
   setScoutsIntroDismissedAt(at: string): void {
     this.write({ scoutsIntroDismissedAt: at });
+  }
+
+  /** The Claude account order, preferred first. */
+  setClaudeAccounts(order: string[]): void {
+    this.write({ claudeAccounts: stringList(order) ?? [] });
+  }
+
+  setClaudeFallback(on: boolean): void {
+    this.write({ claudeFallback: on });
   }
 }

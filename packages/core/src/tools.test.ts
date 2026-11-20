@@ -6,6 +6,7 @@ import {
   claudeFailure,
   claudeHasAuthStatus,
   claudeLoggedIn,
+  claudeResetFromText,
   claudeRetryAtMs,
   claudeStatus,
   etcPathsEntries,
@@ -125,14 +126,53 @@ describe('claudeFailure', () => {
 
   it('spots usage and rate limits, with the reset time when the CLI gives one', () => {
     expect(claudeFailure('claude exited with 1: Claude AI usage limit reached|1790000000')).toEqual({ state: 'limited', resetAtMs: 1_790_000_000_000 });
-    expect(claudeFailure('claude returned an error: {"result":"5-hour limit reached ∙ resets 3pm"}')).toEqual({ state: 'limited', resetAtMs: null });
+    const now = new Date(2026, 10, 20, 10, 0).getTime();
+    expect(claudeFailure('claude returned an error: {"result":"5-hour limit reached ∙ resets 3pm"}', now)).toEqual({
+      state: 'limited',
+      resetAtMs: new Date(2026, 10, 20, 15, 0).getTime(),
+    });
     expect(claudeFailure("claude exited with 1: You've hit your limit · resets 4pm")?.state).toBe('limited');
     expect(claudeFailure('claude exited with 1: API Error: 429 {"type":"rate_limit_error"}')?.state).toBe('limited');
+  });
+
+  it('spots a limit that -p --output-format json reports on stdout with a 429', () => {
+    const stdout = '{"type":"result","is_error":true,"api_error_status":429,"result":"Something about the plan"}';
+    expect(claudeFailure(`claude exited with 1: ${stdout}`)).toEqual({ state: 'limited', resetAtMs: null });
   });
 
   it('leaves ordinary failures alone', () => {
     expect(claudeFailure('claude timed out after 60000ms (ping_decision)')).toBeNull();
     expect(claudeFailure('claude exited with 1: something broke')).toBeNull();
+  });
+});
+
+describe('claudeResetFromText', () => {
+  const now = new Date(2026, 10, 20, 10, 0).getTime();
+
+  it('reads the clock time as the next one coming, in local time', () => {
+    expect(claudeResetFromText('resets 3pm', now)).toBe(new Date(2026, 10, 20, 15, 0).getTime());
+    expect(claudeResetFromText('resets 3:30 pm', now)).toBe(new Date(2026, 10, 20, 15, 30).getTime());
+    expect(claudeResetFromText('resets 15:00', now)).toBe(new Date(2026, 10, 20, 15, 0).getTime());
+    expect(claudeResetFromText('resets 12am', now)).toBe(new Date(2026, 10, 21, 0, 0).getTime());
+  });
+
+  it('rolls over to tomorrow when the time already passed today', () => {
+    expect(claudeResetFromText('resets 9am', now)).toBe(new Date(2026, 10, 21, 9, 0).getTime());
+  });
+
+  it('treats a time only just past as due now, not tomorrow', () => {
+    const justAfter = new Date(2026, 10, 20, 15, 0, 10).getTime();
+    const reset = claudeResetFromText('resets 3pm', justAfter);
+    expect(reset).toBe(new Date(2026, 10, 20, 15, 0).getTime());
+    expect(claudeRetryAtMs({ state: 'limited', resetAtMs: reset }, justAfter)).toBe(justAfter + 60_000);
+    expect(claudeResetFromText('resets 3pm', new Date(2026, 10, 20, 15, 11).getTime())).toBe(new Date(2026, 10, 21, 15, 0).getTime());
+  });
+
+  it('gives up on times it cannot read', () => {
+    expect(claudeResetFromText('resets 3', now)).toBeNull();
+    expect(claudeResetFromText('resets Nov 21', now)).toBeNull();
+    expect(claudeResetFromText('resets 25:00', now)).toBeNull();
+    expect(claudeResetFromText('no time here', now)).toBeNull();
   });
 });
 

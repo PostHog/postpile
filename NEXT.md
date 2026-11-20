@@ -6,6 +6,18 @@ now".
 
 ## Done
 
+- Several Claude accounts (2026-11-20; DESIGN.md "Claude accounts"):
+  discovery over the default login, `~/.claude-*` folders, the app's
+  CLAUDE_CONFIG_DIR and config.json's `claudeAccounts`; each agent call
+  runs on the first account not at its limit (`ClaudeAccountRunner`), a
+  usage limit marks the account until its reset and the same call goes
+  again on the next one; only with none left does `GatedRunner` pause the
+  agent. Limits in memory. Footer item "Claude · Acme" with a menu (pick
+  the preferred one, fallback switch), hidden with one account. Sample
+  data has two accounts; `POSTPILE_FAKE_MISSING=claude-account-limit` puts
+  the preferred one at its limit. Open: `claude mcp get/add` (MCP
+  connection) and the work context sweep still read the app's own
+  environment, not the account in use.
 - Multi-PR full pr_context under a size cap (2026-10-30; DESIGN.md
   "Tools" › pr_context): 40,000 characters of data (`FULL_MANY_BUDGET`),
   cut in steps (activity and unread bodies, then topics to brief, then no
@@ -1923,6 +1935,9 @@ the app meanwhile.
 
 ## Decided
 
+- **Several Claude accounts** (2026-11-20, owner; DESIGN.md "Claude
+  accounts"): preferred account plus automatic fallback on usage limit,
+  shown in a footer item.
 - **Calm ping prompt** (2026-11-04, owner; DESIGN.md "Live poll and Mac pings"): the
   ping-decision agent defaults to no ping. A person's ask aimed at the user
   in person always pings; everything else only when waiting a few hours
@@ -3150,7 +3165,9 @@ Env switches:
   one; its Accept sends the pick.
 - `POSTPILE_FAKE_MISSING` (with `POSTPILE_FAKE=1`): simulates missing
   tools, comma separated `gh`, `gh-auth`, `gh-token`, `gh-offline`,
-  `claude`, `claude-auth`, `claude-limit`. `gh` and `gh-auth` read as a
+  `claude`, `claude-auth`, `claude-limit`, `claude-account-limit` (the
+  preferred of the two sample Claude accounts at its limit, so the
+  footer shows the fallback). `gh` and `gh-auth` read as a
   first run (no topics, proposals or counts), like `POSTPILE_FAKE_SETUP=1`
   until its first sync. `gh-offline` fails every sync and poll with a
   fetch error. Without claude the setup draft fails into the blank draft:

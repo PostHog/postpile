@@ -2,7 +2,7 @@ import { chmodSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ClaudeCliRunner, claudeArgs, inputHash, parseClaudeOutput } from './index.ts';
+import { ClaudeCliRunner, claudeArgs, claudeProcessEnv, inputHash, parseClaudeOutput } from './index.ts';
 
 /** A stand-in `claude` binary: a shell script, so no real model is ever called. */
 function fakeClaude(script: string): string {
@@ -75,6 +75,47 @@ describe('claude cli runner', () => {
   it('reports a non-zero exit with stderr', async () => {
     const binary = fakeClaude('cat >/dev/null; echo "not logged in" >&2; exit 1');
     await expect(new ClaudeCliRunner({ binary, cwd }).run(request)).rejects.toThrow('claude exited with 1: not logged in');
+  });
+
+  it('keeps the usage limit JSON from stdout on a non-zero exit', async () => {
+    const binary = fakeClaude(
+      'cat >/dev/null; echo "warning" >&2; printf \'{"is_error":true,"api_error_status":429,"result":"You have hit your limit"}\'; exit 1',
+    );
+    await expect(new ClaudeCliRunner({ binary, cwd }).run(request)).rejects.toThrow(/warning \| .*"api_error_status":429/);
+  });
+
+  it('picks the account through CLAUDE_CONFIG_DIR, unset for the default', async () => {
+    const binary = fakeClaude('cat >/dev/null; printf \'{"type":"result","is_error":false,"result":"%s"}\' "${CLAUDE_CONFIG_DIR-unset}"');
+    const runner = new ClaudeCliRunner({ binary, cwd });
+    const before = process.env.CLAUDE_CONFIG_DIR;
+    process.env.CLAUDE_CONFIG_DIR = '/from/the/app/env';
+    try {
+      expect((await runner.runWithConfigDir(request, null)).text).toBe('unset');
+      expect((await runner.runWithConfigDir(request, '/Users/alice/.claude-work')).text).toBe('/Users/alice/.claude-work');
+      expect((await runner.run(request)).text).toBe('/from/the/app/env');
+    } finally {
+      if (before === undefined) {
+        delete process.env.CLAUDE_CONFIG_DIR;
+      } else {
+        process.env.CLAUDE_CONFIG_DIR = before;
+      }
+    }
+  });
+
+  it('drops token variables for a picked account, keeps them for the app environment', () => {
+    const base = { ANTHROPIC_API_KEY: 'k', ANTHROPIC_AUTH_TOKEN: 't', CLAUDE_CODE_OAUTH_TOKEN: 'o', PATH: '/bin' };
+    for (const configDir of [null, '/Users/alice/.claude-work']) {
+      const env = claudeProcessEnv(base, configDir);
+      expect([env.ANTHROPIC_API_KEY, env.ANTHROPIC_AUTH_TOKEN, env.CLAUDE_CODE_OAUTH_TOKEN, env.PATH]).toEqual([undefined, undefined, undefined, '/bin']);
+    }
+    expect(claudeProcessEnv(base, undefined).ANTHROPIC_API_KEY).toBe('k');
+  });
+
+  it('picks the account inside the slot and starts claude there', async () => {
+    const binary = fakeClaude('cat >/dev/null; printf \'{"type":"result","is_error":false,"result":"%s"}\' "${CLAUDE_CONFIG_DIR-unset}"');
+    const runner = new ClaudeCliRunner({ binary, cwd, maxConcurrent: 1 });
+    const response = await runner.runInSlot(request, (spawnOn) => spawnOn('/Users/alice/.claude-work'));
+    expect(response.text).toBe('/Users/alice/.claude-work');
   });
 
   it('kills a call that runs past its timeout', async () => {

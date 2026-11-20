@@ -30,6 +30,8 @@ export { PING_DECISIONS_PER_DAY, PING_FRESH_MS } from './live/ping-decider.ts';
 export type { LivePollOptions, PollCycle } from './live/poll-cycle.ts';
 export { isExecutableFile, ToolHealth, type BrokenToolState, type ToolHealthDeps } from './tools/tool-health.ts';
 export { AgentOffError, GatedRunner } from './tools/gated-runner.ts';
+export { ClaudeAccounts, type ClaudeAccountsDeps } from './tools/claude-accounts.ts';
+export { ClaudeAccountRunner, type SlotRunner, type SpawnOn } from './tools/account-runner.ts';
 export { GhOffError, WatchedTokenSource, watchedFetch } from './tools/watched-github.ts';
 export {
   NoopTelemetry,

@@ -1,5 +1,5 @@
 export type { AgentCallObserver, AgentPurpose, AgentRequest, AgentResponse, AgentRunner, ObservedCall } from './runner.ts';
-export { ClaudeCliRunner, claudeArgs, claudeEnv, parseClaudeOutput } from './claude-cli.ts';
+export { ClaudeCliRunner, claudeArgs, claudeEnv, claudeProcessEnv, parseClaudeOutput } from './claude-cli.ts';
 export type { ClaudeCliRunnerOptions } from './claude-cli.ts';
 export { ConcurrencyLimiter } from './limiter.ts';
 export { FakeRunner } from './fake-runner.ts';

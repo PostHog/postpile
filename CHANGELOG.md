@@ -2,6 +2,12 @@
 
 Notable changes per release. Versions follow semver. PostPile is alpha software: each release counts the minor version up (0.2.0, 0.3.0), quick fixes bump the patch (0.2.1). The first build was 0.1.0-alpha.0; later versions drop the `-alpha` suffix.
 
+## 0.32.0 (unreleased)
+
+### Added
+
+- Use another Claude account when the current one hits its usage limit. With several Claude logins on the Mac (the default one and folders like `~/.claude-work`), agent calls run on the preferred account and move on to the next one at its limit, so the agent keeps going. Pick the preferred account, or turn the fallback off, from the "Claude" item in the footer; it only shows with two or more accounts. The order lives in `claudeAccounts` in `~/.config/postpile/config.json`.
+
 ## 0.31.0 (2026-11-04)
 
 ### Changed

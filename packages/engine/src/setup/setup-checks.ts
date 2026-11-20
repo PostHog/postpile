@@ -11,8 +11,13 @@ export interface CommandResult {
   stderr: string;
 }
 
+export interface CommandOptions {
+  /** The whole environment for the program; the app's own when absent. */
+  env?: NodeJS.ProcessEnv;
+}
+
 /** Runs a program without a shell. Tests pass a fake; the checks never need more than this. */
-export type CommandRunner = (command: string, args: string[]) => Promise<CommandResult>;
+export type CommandRunner = (command: string, args: string[], options?: CommandOptions) => Promise<CommandResult>;
 
 const COMMAND_TIMEOUT_MS = 10_000;
 
@@ -23,9 +28,9 @@ const COMMAND_TIMEOUT_MS = 10_000;
  * macOS asks for permissions in PostPile's name.
  */
 export function systemCommands(cwd: string): CommandRunner {
-  return (command, args) =>
+  return (command, args, options) =>
     new Promise((resolve) => {
-      execFile(command, args, { cwd, timeout: COMMAND_TIMEOUT_MS }, (error, stdout, stderr) => {
+      execFile(command, args, { cwd, timeout: COMMAND_TIMEOUT_MS, env: options?.env }, (error, stdout, stderr) => {
         const missing = (error as NodeJS.ErrnoException | null)?.code === 'ENOENT';
         resolve({ ok: error === null, missing, stdout: String(stdout), stderr: String(stderr) });
       });
@@ -50,6 +55,8 @@ export class SetupChecks {
     private readonly reader: GitHubReader,
     private readonly commands: CommandRunner,
     private readonly claudeBinary: string = process.env.POSTPILE_CLAUDE_BIN || 'claude',
+    /** The environment of the Claude account calls run on (ClaudeAccounts); the app's own when absent. */
+    private readonly claudeAccountEnv: () => Promise<NodeJS.ProcessEnv | undefined> = async () => undefined,
   ) {}
 
   private async ghInstalled(): Promise<SetupCheck> {
@@ -97,7 +104,7 @@ export class SetupChecks {
     if (result.ok) {
       const version = firstLine(result.stdout);
       if (claudeHasAuthStatus(version)) {
-        const auth = await this.commands(this.claudeBinary, ['auth', 'status', '--json']);
+        const auth = await this.commands(this.claudeBinary, ['auth', 'status', '--json'], { env: await this.claudeAccountEnv() });
         if (claudeLoggedIn(auth.stdout) === false) {
           const detail = `${version}, but not logged in. Agent features will not work until it is.`;
           return { id: 'claude', label, state: 'warn', detail, fix: TOOL_FIXES.claudeLogin };

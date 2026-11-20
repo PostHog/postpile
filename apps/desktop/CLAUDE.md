@@ -484,7 +484,15 @@ detail and fix commands); `lib/tools.ts` only picks where it shows, and
   error toast.
 - gh offline only shows in the footer ("GitHub unreachable"); the poll backs
   off by itself.
-- Check with `POSTPILE_FAKE_MISSING=gh|gh-auth|gh-token|gh-offline|claude|claude-auth|claude-limit`.
+- Check with `POSTPILE_FAKE_MISSING=gh|gh-auth|gh-token|gh-offline|claude|claude-auth|claude-limit|claude-account-limit`.
+- Several Claude accounts: `ClaudeAccountFooterItem` in the footer
+  (`useClaudeAccounts`, `api/claude-accounts.ts`, every minute from the
+  server's memory; words in `lib/claude-accounts.ts`), hidden with fewer
+  than two. Muted like the MCP item, never `amber-*`: a fallback is the
+  app doing its job. Opening the menu refreshes the accounts
+  (`refreshClaudeAccounts`); a pick (`preferClaudeAccount`) and the
+  fallback switch (`setClaudeFallback`) are local config, no toast unless
+  they fail.
 
 ## Components: small files, extract for behavior
 

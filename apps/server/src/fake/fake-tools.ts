@@ -14,9 +14,10 @@ import {
 /**
  * What POSTPILE_FAKE_MISSING can simulate, so every missing-tool state can be
  * looked at in the static renderer build: gh not installed, not logged in,
- * token refused, offline; claude not installed, not logged in, at its limit.
+ * token refused, offline; claude not installed, not logged in, at its limit;
+ * the preferred of two Claude accounts at its limit (the footer's fallback look).
  */
-export const FAKE_TOOL_PROBLEMS = ['gh', 'gh-auth', 'gh-token', 'gh-offline', 'claude', 'claude-auth', 'claude-limit'] as const;
+export const FAKE_TOOL_PROBLEMS = ['gh', 'gh-auth', 'gh-token', 'gh-offline', 'claude', 'claude-auth', 'claude-limit', 'claude-account-limit'] as const;
 export type FakeToolProblem = (typeof FAKE_TOOL_PROBLEMS)[number];
 
 const GH_STATES: Partial<Record<FakeToolProblem, GhState>> = { gh: 'missing', 'gh-auth': 'logged_out', 'gh-token': 'rejected', 'gh-offline': 'offline' };

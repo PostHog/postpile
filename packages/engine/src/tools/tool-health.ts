@@ -18,6 +18,7 @@ import {
   type ToolsView,
 } from '@postpile/core';
 import type { CommandRunner } from '../setup/setup-checks.ts';
+import type { ClaudeAccounts } from './claude-accounts.ts';
 
 export interface ToolHealthDeps {
   /** Runs gh and claude without a shell. */
@@ -34,6 +35,8 @@ export interface ToolHealthDeps {
   log?: (line: string) => void;
   /** A tool moved into a broken state (never on recovery back to ok). For the tool_missing telemetry event. */
   onBroken?: (tool: 'gh' | 'claude', state: BrokenToolState) => void;
+  /** Several Claude logins: each check looks for them again and asks `auth status` of the one in use. */
+  claudeAccounts?: Pick<ClaudeAccounts, 'refresh' | 'checkEnv'>;
 }
 
 /** GhState/ClaudeState with 'ok' and 'unchecked' excluded: what onBroken actually ever reports. */
@@ -229,7 +232,7 @@ export class ToolHealth {
 
   /** A claude call failed. Returns what it meant for the tool, null for an ordinary failure. */
   noteClaudeFailure(message: string): ClaudeFailure | null {
-    const failure = claudeFailure(message);
+    const failure = claudeFailure(message, this.nowMs());
     if (failure === null) {
       return null;
     }
@@ -242,6 +245,18 @@ export class ToolHealth {
       this.scheduleRecheck();
     }
     return failure;
+  }
+
+  /**
+   * A usage limit no longer holds because a free Claude account is now in
+   * play (the user picked another one or turned fallback on). Lifts the
+   * pause; the next call finds out. Other states stay.
+   */
+  clearClaudeLimit(): void {
+    if (this.claude.state === 'limited') {
+      this.claudeRetryAtMs = null;
+      this.setClaude({ ...this.claude, state: 'ok' });
+    }
   }
 
   noteClaudeWorked(): void {
@@ -285,24 +300,38 @@ export class ToolHealth {
     }
     const versionLine = firstLine(version.stdout);
     if (claudeHasAuthStatus(versionLine)) {
-      const auth = await this.deps.commands(path, ['auth', 'status', '--json']);
+      const accounts = this.deps.claudeAccounts;
+      if (accounts) {
+        await accounts.refresh();
+      }
+      const env = accounts ? await accounts.checkEnv() : undefined;
+      const auth = await this.deps.commands(path, ['auth', 'status', '--json'], env ? { env } : undefined);
       if (claudeLoggedIn(auth.stdout) === false) {
         return { state: 'logged_out', path, version: versionLine };
       }
     }
-    // A usage limit is not visible from here; it holds until its time is up.
-    const limited = this.claude.state === 'limited' && this.claudeRetryAtMs !== null && this.nowMs() < this.claudeRetryAtMs;
-    return { state: limited ? 'limited' : 'ok', path, version: versionLine };
+    return { state: 'ok', path, version: versionLine };
+  }
+
+  /**
+   * A usage limit is not visible to a check; it holds until its time is up.
+   * Read after the check's awaits, so a limit set or cleared meanwhile (a
+   * call, an account choice) counts, not the state the check started with.
+   */
+  private limitStillHolds(): boolean {
+    return this.claude.state === 'limited' && this.claudeRetryAtMs !== null && this.nowMs() < this.claudeRetryAtMs;
   }
 
   private async runCheck(): Promise<ToolsView> {
     this.deps.forgetToken?.();
     const [gh, claude] = await Promise.all([this.checkGh(), this.checkClaude()]);
     this.setGh(gh);
-    if (claude.state !== 'limited') {
+    if (claude.state === 'ok' && this.limitStillHolds()) {
+      this.setClaude({ ...claude, state: 'limited' });
+    } else {
       this.claudeRetryAtMs = null;
+      this.setClaude(claude);
     }
-    this.setClaude(claude);
     this.checkedAtMs = this.nowMs();
     this.scheduleRecheck();
     return this.view();

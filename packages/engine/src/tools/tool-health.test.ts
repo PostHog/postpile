@@ -229,3 +229,34 @@ describe('watched GitHub', () => {
     expect(health.view().gh.state).toBe('ok');
   });
 });
+
+describe('ToolHealth check racing an account choice', () => {
+  it('does not bring back a limit cleared while the check still waited on gh', async () => {
+    const commands = new FakeCommands();
+    const clock = new Clock();
+    let releaseGh = (): void => {};
+    const ghWait = new Promise<void>((resolve) => (releaseGh = resolve));
+    const health = new ToolHealth({
+      commands: async (command, args, options) => {
+        if (command.endsWith('/gh') && args.includes('token')) {
+          await ghWait;
+        }
+        return commands.run(command, args, options);
+      },
+      now: clock.now,
+      path: () => '/usr/bin',
+      isExecutable: commands.isExecutable,
+      claudeBinary: 'claude',
+      log: () => {},
+    });
+    health.noteClaudeFailure(`claude exited with 1: Claude AI usage limit reached|${Math.floor((START + 60 * MINUTE) / 1000)}`);
+
+    const check = health.check();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    health.clearClaudeLimit();
+    releaseGh();
+    await check;
+
+    expect(health.agentOffReason()).toBeNull();
+  });
+});
