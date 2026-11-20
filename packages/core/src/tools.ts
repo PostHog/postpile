@@ -192,6 +192,8 @@ export interface ClaudeFailure {
 /** A stated reset time at most this far in the past counts as due now. */
 const RESET_JUST_PASSED_MS = 10 * 60_000;
 
+const HALF_YEAR_MS = 182 * 24 * 60 * 60_000;
+
 const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
 
 /** "3", "30", "pm" -> 15:30. Null for a bare number ("resets 3") or a time that does not exist. */
@@ -216,8 +218,8 @@ function clockTime(hoursText: string, minutesText: string | undefined, meridiemT
 
 /**
  * "resets Nov 22 at 3pm" (a weekly limit): that day and time, in local time,
- * as epoch ms; next year's when this year's is long past. Null when the text
- * names no date this understands.
+ * as epoch ms; next year's when this year's is more than half a year past.
+ * Null when the text names no date this understands, or one a little past.
  */
 function claudeDatedReset(message: string, nowMs: number): number | null {
   const match = /resets ([a-z]{3})[a-z]* (\d{1,2}),? at (\d{1,2})(?::(\d{2}))? ?(am|pm)?(?![\d:])/i.exec(message);
@@ -233,10 +235,16 @@ function claudeDatedReset(message: string, nowMs: number): number | null {
   const reset = new Date(nowMs);
   reset.setMonth(month, Number(dayText));
   reset.setHours(time.hours, time.minutes, 0, 0);
-  if (reset.getTime() < nowMs - RESET_JUST_PASSED_MS) {
-    reset.setFullYear(reset.getFullYear() + 1);
+  if (reset.getTime() >= nowMs - RESET_JUST_PASSED_MS) {
+    return reset.getTime();
   }
-  return reset.getTime();
+  // "Jan 2" read in December is next year's. A date only a little past is
+  // stale text, not next year: null, so the fixed pause applies.
+  if (reset.getTime() < nowMs - HALF_YEAR_MS) {
+    reset.setFullYear(reset.getFullYear() + 1);
+    return reset.getTime();
+  }
+  return null;
 }
 
 /**
