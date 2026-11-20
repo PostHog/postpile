@@ -71,6 +71,9 @@ export class ClaudeAccounts {
   private discoveredOnce = false;
   private discovering: Promise<void> | null = null;
   private readonly limitedUntil = new Map<string, number>();
+  /** Counts up with every limit noted, so a call can tell a limit noted while it ran from an older one. */
+  private limitCount = 0;
+  private readonly limitNotedAt = new Map<string, number>();
   private memoryOrder: string[] = [];
   private memoryFallback = true;
   private readonly env: NodeJS.ProcessEnv;
@@ -210,6 +213,8 @@ export class ClaudeAccounts {
       return false;
     }
     const wasLimited = this.limitedUntil.has(id);
+    this.limitCount += 1;
+    this.limitNotedAt.set(id, this.limitCount);
     const until = Math.max(claudeRetryAtMs(failure, this.nowMs()), this.limitedUntil.get(id) ?? 0);
     this.limitedUntil.set(id, until);
     if (!wasLimited) {
@@ -220,8 +225,20 @@ export class ClaudeAccounts {
     return true;
   }
 
-  /** A call on `id` worked: whatever limit was noted for it is over. */
-  noteWorked(id: string): void {
+  /** Taken before a call starts and handed back to noteWorked. */
+  limitMark(id: string): number {
+    return this.limitNotedAt.get(id) ?? 0;
+  }
+
+  /**
+   * A call on `id` worked: whatever limit was noted for it before it started
+   * is over. A limit another call noted while this one ran is newer than
+   * this answer and stays.
+   */
+  noteWorked(id: string, markAtStart: number): void {
+    if (this.limitMark(id) !== markAtStart) {
+      return;
+    }
     if (this.limitedUntil.delete(id)) {
       this.log(`claude account ${this.label(id)} works again`);
     }

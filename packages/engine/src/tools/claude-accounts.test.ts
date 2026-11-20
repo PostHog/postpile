@@ -218,6 +218,20 @@ describe('ClaudeAccountRunner', () => {
     expect(cli.calls).toEqual([null]);
   });
 
+  it('keeps a limit another call noted while an earlier call on the account still ran', async () => {
+    const { accounts } = makeAccounts();
+    await accounts.ensureDiscovered();
+
+    const markAtStart = accounts.limitMark('default');
+    accounts.noteFailure('default', 'Claude AI usage limit reached');
+    accounts.noteWorked('default', markAtStart);
+    expect(accounts.pick()).toBe(WORK);
+
+    // A call that started after the limit and worked does lift it.
+    accounts.noteWorked('default', accounts.limitMark('default'));
+    expect(accounts.pick()).toBe('default');
+  });
+
   it('passes other failures through without marking the account', async () => {
     const { accounts } = makeAccounts();
     const cli = new FakeCli({ default: 'error:claude timed out after 1000ms (chat)' });

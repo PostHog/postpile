@@ -310,19 +310,28 @@ export class ToolHealth {
         return { state: 'logged_out', path, version: versionLine };
       }
     }
-    // A usage limit is not visible from here; it holds until its time is up.
-    const limited = this.claude.state === 'limited' && this.claudeRetryAtMs !== null && this.nowMs() < this.claudeRetryAtMs;
-    return { state: limited ? 'limited' : 'ok', path, version: versionLine };
+    return { state: 'ok', path, version: versionLine };
+  }
+
+  /**
+   * A usage limit is not visible to a check; it holds until its time is up.
+   * Read after the check's awaits, so a limit set or cleared meanwhile (a
+   * call, an account choice) counts, not the state the check started with.
+   */
+  private limitStillHolds(): boolean {
+    return this.claude.state === 'limited' && this.claudeRetryAtMs !== null && this.nowMs() < this.claudeRetryAtMs;
   }
 
   private async runCheck(): Promise<ToolsView> {
     this.deps.forgetToken?.();
     const [gh, claude] = await Promise.all([this.checkGh(), this.checkClaude()]);
     this.setGh(gh);
-    if (claude.state !== 'limited') {
+    if (claude.state === 'ok' && this.limitStillHolds()) {
+      this.setClaude({ ...claude, state: 'limited' });
+    } else {
       this.claudeRetryAtMs = null;
+      this.setClaude(claude);
     }
-    this.setClaude(claude);
     this.checkedAtMs = this.nowMs();
     this.scheduleRecheck();
     return this.view();

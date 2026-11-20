@@ -44,8 +44,9 @@ export class ClaudeAccountRunner implements AgentRunner {
         throw this.allLimitedError(lastLimit);
       }
       try {
+        const mark = this.accounts.limitMark(id);
         const response = await spawnOn(this.accounts.configDirOf(id));
-        this.accounts.noteWorked(id);
+        this.accounts.noteWorked(id, mark);
         return response;
       } catch (error) {
         if (!this.accounts.noteFailure(id, errorText(error))) {
