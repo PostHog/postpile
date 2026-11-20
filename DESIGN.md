@@ -3314,8 +3314,17 @@ another sat idle.
   (`claudeFailure`: the CLI's wordings, `"api_error_status": 429` in the
   JSON stdout, also on a non-zero exit) marks its account limited until the
   reset (`limit reached|<epoch>`, or "resets 3pm" read as the next 15:00
-  local time, else 30 minutes) and runs again at once on the next account
-  (`ClaudeAccountRunner`). Only when no account is left (or fallback is
+  local time, a time at most 10 minutes past counting as due now, else 30
+  minutes) and runs again at once on the next account, in the same
+  concurrency slot (`ClaudeAccountRunner`). The account is picked once the
+  call has its slot, so queued calls see limits found meanwhile. A picked
+  account's process gets no `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN` or
+  `CLAUDE_CODE_OAUTH_TOKEN`: claude prefers those over the folder's login,
+  so every account would run on the same key. Only the no-accounts path
+  keeps the app's environment as it is. Picking another account or turning
+  fallback on lifts a running pause when an account is free again
+  (`ToolHealth.clearClaudeLimit`). A pick saved to config.json keeps listed
+  folders that are not logged in right now, after the found ones. Only when no account is left (or fallback is
   off) does the limit reach `GatedRunner`, worded with the soonest reset,
   and the agent pauses as before. A limited account is used again once its
   time is up. Kept in memory, no table; a restart tries every account

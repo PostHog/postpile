@@ -28,6 +28,8 @@ describe('parseClaudeAuthStatus', () => {
 describe('normalizeClaudeAccountId', () => {
   it('expands ~ and drops a trailing slash, keeps "default"', () => {
     expect(normalizeClaudeAccountId('~/.claude-work/', home)).toBe('/Users/alice/.claude-work');
+    expect(normalizeClaudeAccountId('/x///', home)).toBe('/x');
+    expect(normalizeClaudeAccountId('/', home)).toBe('/');
     expect(normalizeClaudeAccountId('default', home)).toBe('default');
     // ~/.claude is a folder like any other, not the unset default.
     expect(normalizeClaudeAccountId('~/.claude', home)).toBe('/Users/alice/.claude');

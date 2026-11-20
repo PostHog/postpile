@@ -48,14 +48,24 @@ export const claudeEnv = {
   ENABLE_CLAUDEAI_MCP_SERVERS: 'false',
 };
 
+/** Credentials in the environment that win over a config folder's login. */
+const CLAUDE_TOKEN_VARIABLES = ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_OAUTH_TOKEN'];
+
 /**
  * The environment one claude process runs with. `configDir` picks the
  * account (a claude config folder): undefined keeps whatever the app's own
  * environment says, null removes CLAUDE_CONFIG_DIR for the default account
- * (unset is not the same as ~/.claude), a path sets it.
+ * (unset is not the same as ~/.claude), a path sets it. For a picked
+ * account the token variables go too: claude prefers them over the folder's
+ * login, so every account would otherwise run on the same key.
  */
 export function claudeProcessEnv(base: NodeJS.ProcessEnv, configDir: string | null | undefined): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...base, ...claudeEnv };
+  if (configDir !== undefined) {
+    for (const name of CLAUDE_TOKEN_VARIABLES) {
+      delete env[name];
+    }
+  }
   if (configDir === null) {
     delete env.CLAUDE_CONFIG_DIR;
   } else if (configDir !== undefined) {
@@ -168,6 +178,16 @@ export class ClaudeCliRunner implements AgentRunner {
   /** One call on one account: a claude config folder, or null for the default (CLAUDE_CONFIG_DIR unset). */
   runWithConfigDir(request: AgentRequest, configDir: string | null): Promise<AgentResponse> {
     return this.limiter.run(() => this.spawnClaude(request, configDir));
+  }
+
+  /**
+   * Waits for a free slot, then hands `task` a way to start claude on an
+   * account. The account is picked inside the slot, so a call that queued
+   * behind one that hit a limit sees that limit; retries on the next
+   * account stay in the same slot instead of queueing again.
+   */
+  runInSlot(request: AgentRequest, task: (spawnOn: (configDir: string | null | undefined) => Promise<AgentResponse>) => Promise<AgentResponse>): Promise<AgentResponse> {
+    return this.limiter.run(() => task((configDir) => this.spawnClaude(request, configDir)));
   }
 
   private spawnClaude(request: AgentRequest, configDir: string | null | undefined): Promise<AgentResponse> {

@@ -1860,6 +1860,14 @@ export class Engine implements EngineService {
     return this.toolHealth.check();
   }
 
+  /** After an account choice: when some account is free now, the agent need not wait for the old limit. */
+  private liftClaudeLimitIfFree(): void {
+    if (!this.claudeAccountsKeeper || this.claudeAccountsKeeper.pick() === null) {
+      return;
+    }
+    this.toolHealth.clearClaudeLimit();
+  }
+
   async claudeAccounts(): Promise<ClaudeAccountsView> {
     if (!this.claudeAccountsKeeper) {
       return { accounts: [], fallback: true };
@@ -1877,14 +1885,18 @@ export class Engine implements EngineService {
     if (!this.claudeAccountsKeeper) {
       throw new Error('no Claude accounts in this run');
     }
-    return this.claudeAccountsKeeper.setPreferred(id);
+    const view = await this.claudeAccountsKeeper.setPreferred(id);
+    this.liftClaudeLimitIfFree();
+    return view;
   }
 
   async setClaudeFallback(on: boolean): Promise<ClaudeAccountsView> {
     if (!this.claudeAccountsKeeper) {
       throw new Error('no Claude accounts in this run');
     }
-    return this.claudeAccountsKeeper.setFallback(on);
+    const view = this.claudeAccountsKeeper.setFallback(on);
+    this.liftClaudeLimitIfFree();
+    return view;
   }
 
   mcpConnection(): Promise<McpConnectionView> {

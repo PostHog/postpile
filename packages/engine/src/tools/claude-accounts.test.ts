@@ -5,7 +5,9 @@ import { describe, expect, it } from 'vitest';
 import type { AgentRequest, AgentResponse } from '@postpile/agent';
 import type { CommandResult, CommandRunner } from '../setup/setup-checks.ts';
 import { UserConfigFile } from '../user-config.ts';
-import { ClaudeAccountRunner, type ConfigDirRunner } from './account-runner.ts';
+import { ConcurrencyLimiter } from '@postpile/agent';
+import { makeHarness } from '../testing/fakes.ts';
+import { ClaudeAccountRunner, type SlotRunner, type SpawnOn } from './account-runner.ts';
 import { ClaudeAccounts } from './claude-accounts.ts';
 import { GatedRunner } from './gated-runner.ts';
 import { ToolHealth } from './tool-health.ts';
@@ -55,26 +57,29 @@ function makeAccounts(options: { logins?: Record<string, object | null>; config?
   return { accounts, clock, log, commands };
 }
 
-/** Answers per config folder: an error message, or a reply. */
-class FakeCli implements ConfigDirRunner {
+/**
+ * Answers per config folder: an error message, or a reply. One slot at a
+ * time like a real limiter of 1; `gate` holds the first call open until the
+ * test lets it go, so a second call can queue behind it.
+ */
+class FakeCli implements SlotRunner {
   readonly calls: (string | null | undefined)[] = [];
+  private readonly limiter = new ConcurrencyLimiter(1);
+  gate: Promise<void> = Promise.resolve();
   constructor(private readonly answers: Record<string, string>) {}
 
-  private answer(key: string | null | undefined): Promise<AgentResponse> {
+  private async answer(key: string | null | undefined): Promise<AgentResponse> {
     this.calls.push(key);
+    await this.gate;
     const answer = this.answers[key ?? 'default'] ?? 'ok';
     if (answer.startsWith('error:')) {
-      return Promise.reject(new Error(answer.slice('error:'.length)));
+      throw new Error(answer.slice('error:'.length));
     }
-    return Promise.resolve({ text: answer, model: 'sonnet', durationMs: 1, costUsd: null });
+    return { text: answer, model: 'sonnet', durationMs: 1, costUsd: null };
   }
 
-  run(): Promise<AgentResponse> {
-    return this.answer(undefined);
-  }
-
-  runWithConfigDir(_request: AgentRequest, configDir: string | null): Promise<AgentResponse> {
-    return this.answer(configDir);
+  runInSlot(_request: AgentRequest, task: (spawnOn: SpawnOn) => Promise<AgentResponse>): Promise<AgentResponse> {
+    return this.limiter.run(() => task((configDir) => this.answer(configDir)));
   }
 }
 
@@ -105,6 +110,40 @@ describe('ClaudeAccounts discovery', () => {
     expect(accounts.view().accounts).toEqual([]);
   });
 
+  it('keeps listed folders that are not logged in right now when saving a pick', async () => {
+    const config = new UserConfigFile(join(mkdtempSync(join(tmpdir(), 'postpile-accounts-')), 'config.json'), () => {});
+    config.setClaudeAccounts(['~/.claude-gone', 'default', WORK]);
+    const { accounts } = makeAccounts({ config });
+    await accounts.setPreferred(WORK);
+    expect(config.read().claudeAccounts).toEqual([WORK, 'default', '/Users/alice/.claude-gone']);
+  });
+
+  it('drops token variables for picked accounts, also for auth status, and keeps them for the app environment', async () => {
+    const env = { ANTHROPIC_API_KEY: 'k', ANTHROPIC_AUTH_TOKEN: 't', CLAUDE_CODE_OAUTH_TOKEN: 'o', HOME };
+    const seen: NodeJS.ProcessEnv[] = [];
+    const accounts = new ClaudeAccounts({
+      commands: async (_command, args, options) => {
+        if (options?.env) {
+          seen.push(options.env);
+        }
+        return { ok: true, missing: false, stdout: args[0] === '--version' ? '2.1.0' : JSON.stringify(PERSONAL), stderr: '' };
+      },
+      userConfig: null,
+      home: HOME,
+      now: () => new Date(START),
+      env,
+      homeConfigDirs: () => [],
+      log: () => {},
+    });
+    await accounts.ensureDiscovered();
+    expect(seen.length).toBeGreaterThan(0);
+    for (const childEnv of seen) {
+      expect([childEnv.ANTHROPIC_API_KEY, childEnv.ANTHROPIC_AUTH_TOKEN, childEnv.CLAUDE_CODE_OAUTH_TOKEN]).toEqual([undefined, undefined, undefined]);
+    }
+    expect(accounts.envFor(WORK).ANTHROPIC_API_KEY).toBeUndefined();
+    expect(accounts.envFor('app-env').ANTHROPIC_API_KEY).toBe('k');
+  });
+
   it('saves the preferred account first in config.json', async () => {
     const config = new UserConfigFile(join(mkdtempSync(join(tmpdir(), 'postpile-accounts-')), 'config.json'), () => {});
     const { accounts } = makeAccounts({ config });
@@ -117,6 +156,23 @@ describe('ClaudeAccounts discovery', () => {
 });
 
 describe('ClaudeAccountRunner', () => {
+  it('sends a call that queued behind a limit straight to the next account', async () => {
+    const { accounts } = makeAccounts();
+    const cli = new FakeCli({ default: LIMIT, [WORK]: 'from work' });
+    let release = (): void => {};
+    cli.gate = new Promise((resolve) => (release = resolve));
+    const runner = new ClaudeAccountRunner(cli, accounts);
+
+    const first = runner.run(request);
+    const second = runner.run(request);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    release();
+    await Promise.all([first, second]);
+
+    // The queued call never tries the account the first one found at its limit.
+    expect(cli.calls).toEqual([null, WORK, WORK]);
+  });
+
   it('runs on the preferred account, CLAUDE_CONFIG_DIR unset for the default', async () => {
     const { accounts } = makeAccounts();
     const cli = new FakeCli({});
@@ -171,6 +227,31 @@ describe('ClaudeAccountRunner', () => {
 });
 
 describe('ToolHealth with accounts', () => {
+  it('lifts the agent pause when an account choice frees one', async () => {
+    const { accounts } = makeAccounts();
+    await accounts.ensureDiscovered();
+    const { engine, tools } = makeHarness({ claudeAccounts: accounts });
+    await engine.setClaudeFallback(false);
+    accounts.noteFailure('default', 'Claude AI usage limit reached');
+    tools.noteClaudeFailure('Claude AI usage limit reached');
+    expect(tools.agentOffReason()).not.toBeNull();
+
+    await engine.setClaudeFallback(true);
+    expect(tools.agentOffReason()).toBeNull();
+  });
+
+  it('keeps the pause when the choice frees nothing', async () => {
+    const { accounts } = makeAccounts();
+    await accounts.ensureDiscovered();
+    const { engine, tools } = makeHarness({ claudeAccounts: accounts });
+    accounts.noteFailure('default', 'Claude AI usage limit reached');
+    accounts.noteFailure(WORK, 'Claude AI usage limit reached');
+    tools.noteClaudeFailure('Claude AI usage limit reached');
+
+    await engine.setPreferredClaudeAccount(WORK);
+    expect(tools.agentOffReason()).not.toBeNull();
+  });
+
   it('checks the login of the account in use', async () => {
     const { accounts, commands } = makeAccounts();
     const clock = new Clock();

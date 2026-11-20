@@ -271,7 +271,11 @@ export class ClaudeAccounts {
     if (!order.includes(id)) {
       throw new Error(`no logged-in Claude account ${id}`);
     }
-    const next = preferClaudeAccount(order, id);
+    // Listed accounts not logged in right now (a login that expired) keep
+    // their place in the file, after the found ones, so they count again later.
+    const found = preferClaudeAccount(order, id);
+    const notFound = this.configuredOrder().filter((entry) => !found.includes(entry));
+    const next = [...found, ...notFound];
     if (this.deps.userConfig) {
       this.deps.userConfig.setClaudeAccounts(next);
     } else {

@@ -43,6 +43,15 @@ export function parseClaudeAuthStatus(stdout: string): ClaudeAuthStatus | null {
   };
 }
 
+/** "/a/b//" -> "/a/b"; "/" stays. A loop, not a regex: config text is user input. */
+function withoutTrailingSlashes(path: string): string {
+  let end = path.length;
+  while (end > 1 && path[end - 1] === '/') {
+    end -= 1;
+  }
+  return path.slice(0, end);
+}
+
 /** "default" stays as is, "~/x" points into the home folder, a trailing slash is dropped. */
 export function normalizeClaudeAccountId(entry: string, home: string): string {
   const trimmed = entry.trim();
@@ -50,7 +59,7 @@ export function normalizeClaudeAccountId(entry: string, home: string): string {
     return trimmed;
   }
   const expanded = trimmed === '~' ? home : trimmed.startsWith('~/') ? `${home}/${trimmed.slice(2)}` : trimmed;
-  return expanded.length > 1 ? expanded.replace(/\/+$/, '') : expanded;
+  return withoutTrailingSlashes(expanded);
 }
 
 export interface ClaudeAccountCandidateParts {

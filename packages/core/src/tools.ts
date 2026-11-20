@@ -189,6 +189,9 @@ export interface ClaudeFailure {
   resetAtMs: number | null;
 }
 
+/** A stated reset time at most this far in the past counts as due now. */
+const RESET_JUST_PASSED_MS = 10 * 60_000;
+
 /**
  * "You've hit your limit · resets 3pm" (also "3:30pm", "15:00"): the next
  * time of day with that clock time, in local time, as epoch ms. Null when the
@@ -216,7 +219,9 @@ export function claudeResetFromText(message: string, nowMs: number): number | nu
   }
   const reset = new Date(nowMs);
   reset.setHours(hours, minutes, 0, 0);
-  if (reset.getTime() <= nowMs) {
+  // "resets 3pm" read at 15:00:10 means it is due now, not tomorrow: a
+  // time only just past stays today, and claudeRetryAtMs makes it a minute.
+  if (reset.getTime() < nowMs - RESET_JUST_PASSED_MS) {
     reset.setDate(reset.getDate() + 1);
   }
   return reset.getTime();

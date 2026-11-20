@@ -2,28 +2,27 @@ import type { AgentRequest, AgentResponse, AgentRunner } from '@postpile/agent';
 import { errorText } from '../errors.ts';
 import type { ClaudeAccounts } from './claude-accounts.ts';
 
-/** The claude runner as this needs it: one call with a given CLAUDE_CONFIG_DIR (ClaudeCliRunner). */
-export interface ConfigDirRunner {
-  run(request: AgentRequest): Promise<AgentResponse>;
-  runWithConfigDir(request: AgentRequest, configDir: string | null): Promise<AgentResponse>;
+/** Starts one claude process on an account: a config folder, null for the default, undefined for the app's own environment. */
+export type SpawnOn = (configDir: string | null | undefined) => Promise<AgentResponse>;
+
+/** The claude runner as this needs it (ClaudeCliRunner): a concurrency slot in which `task` starts claude on accounts. */
+export interface SlotRunner {
+  runInSlot(request: AgentRequest, task: (spawnOn: SpawnOn) => Promise<AgentResponse>): Promise<AgentResponse>;
 }
 
 /**
  * Runs each call on the first Claude account that is not at its usage limit.
- * A call that hits the limit marks its account and goes again on the next
- * one at once. Only when no account is left does the limit reach the
- * GatedRunner around this, which pauses the agent until the soonest reset.
+ * The account is picked once the call has its slot, so calls that waited
+ * see limits found meanwhile. A call that hits the limit marks its account
+ * and goes again on the next one at once, in the same slot. Only when no
+ * account is left does the limit reach the GatedRunner around this, which
+ * pauses the agent until the soonest reset.
  */
 export class ClaudeAccountRunner implements AgentRunner {
   constructor(
-    private readonly cli: ConfigDirRunner,
+    private readonly cli: SlotRunner,
     private readonly accounts: ClaudeAccounts,
   ) {}
-
-  private callOn(id: string, request: AgentRequest): Promise<AgentResponse> {
-    const configDir = this.accounts.configDirOf(id);
-    return configDir === undefined ? this.cli.run(request) : this.cli.runWithConfigDir(request, configDir);
-  }
 
   /**
    * Worded so claudeFailure reads it as a limit with the soonest reset
@@ -36,8 +35,7 @@ export class ClaudeAccountRunner implements AgentRunner {
     return new Error(`${reset} (no Claude account left under its limit)${lastText}`);
   }
 
-  async run(request: AgentRequest): Promise<AgentResponse> {
-    await this.accounts.ensureDiscovered();
+  private async runOnAccounts(spawnOn: SpawnOn): Promise<AgentResponse> {
     let lastLimit: unknown = null;
     // Ends: every limit marks one more account, and pick() skips marked ones.
     for (;;) {
@@ -46,7 +44,7 @@ export class ClaudeAccountRunner implements AgentRunner {
         throw this.allLimitedError(lastLimit);
       }
       try {
-        const response = await this.callOn(id, request);
+        const response = await spawnOn(this.accounts.configDirOf(id));
         this.accounts.noteWorked(id);
         return response;
       } catch (error) {
@@ -56,5 +54,10 @@ export class ClaudeAccountRunner implements AgentRunner {
         lastLimit = error;
       }
     }
+  }
+
+  async run(request: AgentRequest): Promise<AgentResponse> {
+    await this.accounts.ensureDiscovered();
+    return this.cli.runInSlot(request, (spawnOn) => this.runOnAccounts(spawnOn));
   }
 }

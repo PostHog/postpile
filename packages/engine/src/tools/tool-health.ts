@@ -247,6 +247,18 @@ export class ToolHealth {
     return failure;
   }
 
+  /**
+   * A usage limit no longer holds because a free Claude account is now in
+   * play (the user picked another one or turned fallback on). Lifts the
+   * pause; the next call finds out. Other states stay.
+   */
+  clearClaudeLimit(): void {
+    if (this.claude.state === 'limited') {
+      this.claudeRetryAtMs = null;
+      this.setClaude({ ...this.claude, state: 'ok' });
+    }
+  }
+
   noteClaudeWorked(): void {
     if (this.claude.state !== 'ok') {
       this.claudeRetryAtMs = null;

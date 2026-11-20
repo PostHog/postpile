@@ -39,6 +39,7 @@ import type {
 import { scoutFolderKey } from '@postpile/github';
 import type { UserConfigFile } from '../user-config.ts';
 import type { CommandResult, CommandRunner } from '../setup/setup-checks.ts';
+import type { ClaudeAccounts } from '../tools/claude-accounts.ts';
 import type { Telemetry, TelemetryPersonInfo } from '../telemetry/telemetry.ts';
 import { Store } from '@postpile/store';
 import { putBackNotTaken } from '../actions/local-change.ts';
@@ -571,6 +572,8 @@ export interface Harness {
 }
 
 export interface HarnessOptions {
+  /** The Claude accounts the engine's menu routes use. Missing: none. */
+  claudeAccounts?: ClaudeAccounts;
   instructionsFile?: string;
   /** The user's scouts.md; none by default, so the sync runs no scouts. */
   scoutsFile?: string;
@@ -675,6 +678,7 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
     setupCommands: commands.run,
     mcpLauncher: options.mcpLauncher ?? null,
     tools,
+    claudeAccounts: options.claudeAccounts ?? null,
     telemetry,
     quota,
     agentRequestsFolder: options.agentRequestsFolder ?? null,

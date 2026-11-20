@@ -160,6 +160,14 @@ describe('claudeResetFromText', () => {
     expect(claudeResetFromText('resets 9am', now)).toBe(new Date(2026, 10, 21, 9, 0).getTime());
   });
 
+  it('treats a time only just past as due now, not tomorrow', () => {
+    const justAfter = new Date(2026, 10, 20, 15, 0, 10).getTime();
+    const reset = claudeResetFromText('resets 3pm', justAfter);
+    expect(reset).toBe(new Date(2026, 10, 20, 15, 0).getTime());
+    expect(claudeRetryAtMs({ state: 'limited', resetAtMs: reset }, justAfter)).toBe(justAfter + 60_000);
+    expect(claudeResetFromText('resets 3pm', new Date(2026, 10, 20, 15, 11).getTime())).toBe(new Date(2026, 10, 21, 15, 0).getTime());
+  });
+
   it('gives up on times it cannot read', () => {
     expect(claudeResetFromText('resets 3', now)).toBeNull();
     expect(claudeResetFromText('resets Nov 21', now)).toBeNull();
