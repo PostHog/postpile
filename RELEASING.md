@@ -110,12 +110,12 @@ What the workflow does:
 
 - `pnpm build` writes hidden source maps (`.map` files without a `sourceMappingURL` comment). `electron-builder.yml` leaves `*.map` out of the app, so they never ship, with or without the upload.
 - "Check PostHog CLI secret": no `POSTHOG_CLI_API_KEY` means a `::warning::` and no upload. The release still goes out.
-- "Upload source maps to PostHog", for `apps/desktop/out/main` and `apps/desktop/out/renderer`: `posthog-cli sourcemap inject` (pinned `@posthog/cli`) prepends a snippet with the file's chunk id and the id of the `postpile` release at this version (created on first use), then `posthog-cli sourcemap upload --delete-after` sends the maps and deletes them. Only after that is the app packaged, because the injected files are what must ship. A failed upload fails the job: rerun it, or remove the secret to release without source maps.
+- "Upload source maps to PostHog", for `apps/desktop/out/main` and `apps/desktop/out/renderer`: `hog error-tracking process --delete-after` (a pinned `hog` release, checked against its SHA256SUMS) prepends a snippet with the file's chunk id and the id of the `postpile` release at this version (created on first use), then sends the maps and deletes them. Only after that is the app packaged, because the injected files are what must ship. A failed upload fails the job: rerun it, or remove the secret to release without source maps.
 - Project `635117` (PostPile, US cloud) and the host are set in the workflow; neither is a secret.
 
 One-time setup (the repo owner):
 
-1. On us.posthog.com, Settings › Personal API keys: create a key, for example "postpile release source maps", limited to the PostPile project, with the scopes **error tracking: write** and **organization: read** (what `posthog-cli` needs, per PostHog's upload docs). The key acts as the person who made it; rotate it when they leave.
+1. On us.posthog.com, Settings › Personal API keys: create a key, for example "postpile release source maps", limited to the PostPile project, with the scopes **error tracking: write** and **organization: read**. The key acts as the person who made it; rotate it when they leave.
 2. Put it into the `desktop-signing` environment, so only `v*` tag runs can read it. `gh` asks for the value, so it never lands in the shell history:
 
    ```
@@ -124,7 +124,7 @@ One-time setup (the repo owner):
 
 3. The next release shows a green "Upload source maps to PostHog" step. Check the first issue after it in PostHog: its frames should show TypeScript file names and the release.
 
-`posthog-cli` still accepts the old names `POSTHOG_CLI_TOKEN` and `POSTHOG_CLI_ENV_ID`; the workflow uses the current `POSTHOG_CLI_API_KEY` and `POSTHOG_CLI_PROJECT_ID`.
+The secret keeps its name `POSTHOG_CLI_API_KEY`; the workflow passes it to `hog` as `HOG_PERSONAL_API_KEY`. To upgrade `hog`, change `HOG_VERSION` in the workflow and copy the `hog-darwin-arm64.tar.gz` checksum from that release's `SHA256SUMS`.
 
 ## Notes
 

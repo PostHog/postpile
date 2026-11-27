@@ -60,7 +60,7 @@ const RENDERER_MECHANISMS: Record<RendererExceptionProps['source'], string> = {
   react_render: 'react_error_boundary',
 };
 
-/** Set by posthog-cli's injected snippet in release builds (RELEASING.md); undefined otherwise. */
+/** Set by hog's injected snippet in release builds (RELEASING.md); undefined otherwise. */
 function posthogChunkIds(): unknown {
   return (globalThis as { _posthogChunkIds?: unknown })._posthogChunkIds;
 }
@@ -151,7 +151,7 @@ export class PostHogTelemetry implements Telemetry {
   /**
    * Sends the scrubbed exception with an `$exception_list` built here rather
    * than parsed by posthog-node from a stack string: the frames carry the
-   * bundle-relative file, line, column and posthog-cli chunk id, which is
+   * bundle-relative file, line, column and hog chunk id, which is
    * what PostHog needs to find the uploaded source map (the SDK would look
    * chunk ids up by the full, unscrubbed path). The list passed as a
    * property replaces the one the SDK builds. posthog-node still adds

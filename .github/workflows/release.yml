@@ -25,7 +25,7 @@
 # whose signature does not match the running app, so an ad-hoc release leaves
 # it out and installed apps fall back to the brew command.
 #
-# Between the bundle build and packaging, posthog-cli injects chunk ids into
+# Between the bundle build and packaging, hog injects chunk ids into
 # the bundle and uploads its source maps to PostHog Error Tracking, so error
 # stacks resolve to the TypeScript source and exceptions carry the release.
 # Skipped with a warning when POSTHOG_CLI_API_KEY is not set.
@@ -165,26 +165,38 @@ jobs:
                   fi
 
             # Before packaging, because the injected files are what must ship:
-            # inject prepends a snippet that records each file's chunk id and the
+            # process prepends a snippet that records each file's chunk id and the
             # release id (the "postpile" release at this version, created on first
-            # use), and upload sends the maps keyed by chunk id, then deletes them.
+            # use), then sends the maps keyed by chunk id and deletes them.
+            # hog is pinned to a release archive and its checksum from that release's
+            # SHA256SUMS; it runs hog-worker from its own folder, so the archive is
+            # extracted whole.
             # main and renderer only: the preload has no error reporting, and the
             # snippet in front of its "use strict" would turn that directive off.
             # A failed upload fails the job, like a half-set signing setup.
             - name: Upload source maps to PostHog
               if: steps.posthog.outputs.upload == 'true'
               env:
-                  POSTHOG_CLI_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY }}
+                  HOG_PERSONAL_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY }}
                   # PostHog's own "PostPile" project (US cloud); not a secret, see packages/engine/src/telemetry/telemetry.ts.
-                  POSTHOG_CLI_PROJECT_ID: '635117'
-                  POSTHOG_CLI_HOST: https://us.posthog.com
+                  HOG_PROJECT_ID: '635117'
+                  HOG_HOST: https://us.posthog.com
+                  HOG_NO_TELEMETRY: '1'
+                  HOG_NO_UPDATE_CHECK: '1'
+                  HOG_VERSION: 0.3.0
+                  HOG_SHA256: cb7caf2f18d5e9200ab840e8b07c3b4f5d98364a2ab0eac047500afd6d66c515
                   VERSION: ${{ steps.version.outputs.version }}
               run: |
                   set -euo pipefail
-                  npm install --global @posthog/cli@0.18.9
+                  hog_dir="$RUNNER_TEMP/hog"
+                  mkdir -p "$hog_dir"
+                  curl --proto '=https' --tlsv1.2 -fsSL --retry 5 --retry-all-errors --retry-max-time 60 --connect-timeout 10 \
+                      -o "$hog_dir/hog.tar.gz" \
+                      "https://github.com/PostHog/posthog/releases/download/hog%2Fv$HOG_VERSION/hog-darwin-arm64.tar.gz"
+                  echo "$HOG_SHA256  $hog_dir/hog.tar.gz" | shasum -a 256 -c -
+                  tar -xzf "$hog_dir/hog.tar.gz" -C "$hog_dir"
                   for dir in apps/desktop/out/main apps/desktop/out/renderer; do
-                      posthog-cli sourcemap inject --directory "$dir" --release-name postpile --release-version "$VERSION"
-                      posthog-cli sourcemap upload --directory "$dir" --release-name postpile --release-version "$VERSION" --delete-after
+                      "$hog_dir/hog" error-tracking process "$dir" --kind js --release-name postpile --release-version "$VERSION" --delete-after
                   done
                   grep -q '_posthogChunkIds' apps/desktop/out/main/index.js
 
