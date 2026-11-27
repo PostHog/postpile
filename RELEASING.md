@@ -19,7 +19,7 @@ Done once, on 2026-09-28, when the repo went public. Kept here so a new repo or 
 
   - The app needs no change. The token is scoped to `PostHog/homebrew-tap`.
 - **Signing environment.** Repo settings › Environments: `desktop-signing`, with a deployment tag rule `v*` (no branches). It holds the Apple secrets, see [Signing and notarization](#signing-and-notarization). Until it has them, releases go out ad-hoc signed.
-- **PostHog source maps.** `POSTHOG_CLI_API_KEY` in the `desktop-signing` environment, see [Error tracking source maps](#error-tracking-source-maps). Until it is set, releases go out with bundled, release-less error stacks.
+- **PostHog source maps.** A trust policy in the PostPile project for this repository's `desktop-signing` environment, see [Error tracking source maps](#error-tracking-source-maps). Without it, the upload step fails the release.
 - **Still open:** a ruleset on `main` that requires the CI `check` job, and secret scanning plus Dependabot alerts under Security.
 
 ## Every release
@@ -54,7 +54,7 @@ Done once, on 2026-09-28, when the repo went public. Kept here so a new repo or 
    - `shasum -a 256 -c PostPile-<version>-mac-arm64.zip.sha256` passes on the downloaded zip.
    - PostHog/homebrew-tap has a commit "chore: update postpile cask to <version>" with the right version and sha256.
    - The build log says which way the app was signed: a "building an ad-hoc signed, not notarized release" warning, or a green "Verify signing and notarization" step.
-   - The build log has a green "Upload source maps to PostHog" step, or the "POSTHOG_CLI_API_KEY is not set" warning. With the upload, the `postpile` release at the new version and its uploaded symbol sets show up in PostHog Error Tracking (project PostPile).
+   - The build log has a green "Upload source maps to PostHog" step. With the upload, the `postpile` release at the new version and its uploaded symbol sets show up in PostHog Error Tracking (project PostPile).
    - On a Mac: `brew update && brew install --cask posthog/tap/postpile` (or `brew upgrade --cask postpile`), open the app (for an ad-hoc release, clear the quarantine flag first as the caveats say). About PostPile shows the version, the status bar shows it too.
    - `brew audit --cask --tap posthog/tap postpile` has no errors worth fixing in the template.
 
@@ -109,22 +109,21 @@ Why: the app ships bundled JavaScript, so without source maps an error stack in 
 What the workflow does:
 
 - `pnpm build` writes hidden source maps (`.map` files without a `sourceMappingURL` comment). `electron-builder.yml` leaves `*.map` out of the app, so they never ship, with or without the upload.
-- "Check PostHog CLI secret": no `POSTHOG_CLI_API_KEY` means a `::warning::` and no upload. The release still goes out.
-- "Upload source maps to PostHog", for `apps/desktop/out/main` and `apps/desktop/out/renderer`: `hog error-tracking process --delete-after` (a pinned `hog` release, checked against its SHA256SUMS) prepends a snippet with the file's chunk id and the id of the `postpile` release at this version (created on first use), then sends the maps and deletes them. Only after that is the app packaged, because the injected files are what must ship. A failed upload fails the job: rerun it, or remove the secret to release without source maps.
+- "Upload source maps to PostHog", for `apps/desktop/out/main` and `apps/desktop/out/renderer`: `hog error-tracking process --delete-after` (a pinned `hog` release, checked against its SHA256SUMS) prepends a snippet with the file's chunk id and the id of the `postpile` release at this version (created on first use), then sends the maps and deletes them. Only after that is the app packaged, because the injected files are what must ship. A failed upload fails the job: rerun it.
 - Project `635117` (PostPile, US cloud) and the host are set in the workflow; neither is a secret.
 
 One-time setup (the repo owner):
 
-1. On us.posthog.com, Settings › Personal API keys: create a key, for example "postpile release source maps", limited to the PostPile project, with the scopes **error tracking: write** and **organization: read**. The key acts as the person who made it; rotate it when they leave.
-2. Put it into the `desktop-signing` environment, so only `v*` tag runs can read it. `gh` asks for the value, so it never lands in the shell history:
+1. `hog` logs in with the build job's GitHub OIDC token, so no PostHog key is stored. The PostPile project needs a trust policy that lets this repository's `desktop-signing` environment, which only `v*` tags reach, get a token with **error tracking: write**. Request it from a clone, logged in to the PostPile project:
 
    ```
-   gh secret set POSTHOG_CLI_API_KEY -R PostHog/postpile --env desktop-signing
+   hog ci setup --preset environment=desktop-signing --scope error_tracking:write
    ```
 
+2. An organization admin approves the request in PostHog.
 3. The next release shows a green "Upload source maps to PostHog" step. Check the first issue after it in PostHog: its frames should show TypeScript file names and the release.
 
-The secret keeps its name `POSTHOG_CLI_API_KEY`; the workflow passes it to `hog` as `HOG_PERSONAL_API_KEY`. To upgrade `hog`, change `HOG_VERSION` in the workflow and copy the `hog-darwin-arm64.tar.gz` checksum from that release's `SHA256SUMS`.
+To upgrade `hog`, change `HOG_VERSION` in the workflow and copy the `hog-darwin-arm64.tar.gz` checksum from that release's `SHA256SUMS`.
 
 ## Notes
 

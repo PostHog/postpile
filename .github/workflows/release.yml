@@ -28,7 +28,7 @@
 # Between the bundle build and packaging, hog injects chunk ids into
 # the bundle and uploads its source maps to PostHog Error Tracking, so error
 # stacks resolve to the TypeScript source and exceptions carry the release.
-# Skipped with a warning when POSTHOG_CLI_API_KEY is not set.
+# hog logs in with the job's OIDC token, so no PostHog key is stored.
 
 name: Release
 
@@ -62,6 +62,8 @@ jobs:
         environment: desktop-signing
         permissions:
             contents: write
+            # hog uploads the source maps with this job's OIDC token.
+            id-token: write
         outputs:
             version: ${{ steps.version.outputs.version }}
             sha256: ${{ steps.checksum.outputs.sha256 }}
@@ -148,26 +150,12 @@ jobs:
             - name: Build the app bundle
               run: pnpm build
 
-            # A personal API key with "error tracking write" and "organization read"
-            # (RELEASING.md > Error tracking source maps). Not set means a release
-            # with unreadable, release-less error stacks, not a failed release.
-            - name: Check PostHog CLI secret
-              id: posthog
-              env:
-                  POSTHOG_CLI_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY }}
-              run: |
-                  set -euo pipefail
-                  if [ -z "$POSTHOG_CLI_API_KEY" ]; then
-                      echo "::warning::POSTHOG_CLI_API_KEY is not set in the desktop-signing environment: no source maps uploaded, error stacks of this release stay bundled and have no release. See RELEASING.md > Error tracking source maps."
-                      echo "upload=false" >> "$GITHUB_OUTPUT"
-                  else
-                      echo "upload=true" >> "$GITHUB_OUTPUT"
-                  fi
-
             # Before packaging, because the injected files are what must ship:
             # process prepends a snippet that records each file's chunk id and the
             # release id (the "postpile" release at this version, created on first
             # use), then sends the maps keyed by chunk id and deletes them.
+            # hog logs in with the job's OIDC token, through the PostPile project's
+            # trust policy for the desktop-signing environment (RELEASING.md).
             # hog is pinned to a release archive and its checksum from that release's
             # SHA256SUMS; it runs hog-worker from its own folder, so the archive is
             # extracted whole.
@@ -175,14 +163,10 @@ jobs:
             # snippet in front of its "use strict" would turn that directive off.
             # A failed upload fails the job, like a half-set signing setup.
             - name: Upload source maps to PostHog
-              if: steps.posthog.outputs.upload == 'true'
               env:
-                  HOG_PERSONAL_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY }}
                   # PostHog's own "PostPile" project (US cloud); not a secret, see packages/engine/src/telemetry/telemetry.ts.
                   HOG_PROJECT_ID: '635117'
                   HOG_HOST: https://us.posthog.com
-                  HOG_NO_TELEMETRY: '1'
-                  HOG_NO_UPDATE_CHECK: '1'
                   HOG_VERSION: 0.3.0
                   HOG_SHA256: cb7caf2f18d5e9200ab840e8b07c3b4f5d98364a2ab0eac047500afd6d66c515
                   VERSION: ${{ steps.version.outputs.version }}
