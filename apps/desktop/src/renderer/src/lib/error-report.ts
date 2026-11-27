@@ -17,7 +17,7 @@ const MAX_CHUNK_ID = 100;
 /** Per window load: an error in a render loop must not post forever. */
 const MAX_REPORTS_PER_LOAD = 20;
 
-/** posthog-cli's injected `globalThis._posthogChunkIds` (stack -> chunk id), trimmed to what the server accepts. */
+/** hog's injected `globalThis._posthogChunkIds` (stack -> chunk id), trimmed to what the server accepts. */
 function chunkIdsFrom(injected: unknown): Record<string, string> {
   const ids: Record<string, string> = {};
   if (typeof injected !== 'object' || injected === null) {

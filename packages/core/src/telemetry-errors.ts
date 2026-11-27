@@ -13,7 +13,7 @@ export interface SafeStackFrame {
   file: string;
   line: number;
   column: number | null;
-  /** posthog-cli's chunk id for that file (release builds only, see RELEASING.md); PostHog looks the source map up by it. */
+  /** hog's chunk id for that file (release builds only, see RELEASING.md); PostHog looks the source map up by it. */
   chunkId: string | null;
 }
 
@@ -83,7 +83,7 @@ function parseFrame(line: string): Omit<SafeStackFrame, 'chunkId'> | null {
 }
 
 /**
- * posthog-cli's injected snippet runs `globalThis._posthogChunkIds[new
+ * hog's injected snippet runs `globalThis._posthogChunkIds[new
  * Error().stack] = chunkId` as each bundle file loads. The first bundle frame
  * of that stack is the file itself, so this maps bundle file to chunk id.
  * Anything not of that shape gives an empty map.

@@ -71,7 +71,7 @@ describe('safeExceptionInfo', () => {
 });
 
 describe('chunk ids for source maps', () => {
-  // The shape posthog-cli's injected snippet leaves: the load-time stack of each bundle file, mapped to its chunk id.
+  // The shape hog's injected snippet leaves: the load-time stack of each bundle file, mapped to its chunk id.
   const chunkIds = {
     [`Error\n    at file://${APP}/renderer/assets/index-B4x_9z.js:1:120`]: '0197e6db-9a73-7b91-9e80-4e1b7158db5c',
     [`Error\n    at ${APP}/main/chunks/engine-from-env-Dk2a.js:1:88\n    at ModuleJob.run (node:internal/modules/esm/module_job:271:25)`]:

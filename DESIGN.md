@@ -8811,7 +8811,7 @@ topic names are never event props.
   non-Error value gets no frames.
 - *Source maps*: electron-vite writes hidden source maps (no
   `sourceMappingURL`, left out of the app by `electron-builder.yml`). The
-  release workflow runs `posthog-cli sourcemap inject` on `out/main` and
+  release workflow runs `hog error-tracking process` on `out/main` and
   `out/renderer`, which prepends a snippet recording each file's chunk id in
   `globalThis._posthogChunkIds`, and uploads the maps keyed by chunk id
   (RELEASING.md). The scrubber maps each frame's bundle file to its chunk id,

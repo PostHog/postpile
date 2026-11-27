@@ -4,7 +4,7 @@ import { defineConfig } from 'electron-vite';
 
 // Source maps for PostHog Error Tracking: "hidden" writes the .map files
 // without a sourceMappingURL comment. The release workflow uploads them with
-// posthog-cli (RELEASING.md) and electron-builder.yml keeps them out of the
+// hog (RELEASING.md) and electron-builder.yml keeps them out of the
 // app, so they never ship to users.
 const sourcemap = 'hidden' as const;
 
